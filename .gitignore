@@ -1,0 +1,17 @@
+# macOS system files
+.DS_Store
+
+# Python bytecode and cache
+__pycache__/
+*.pyc
+
+# VS Code / Cursor config
+.vscode/
+*.code-workspace
+
+# QGIS junk
+*.qgz
+.qgis2/
+
+# Project-specific
+.idea/
