@@ -9,24 +9,20 @@ import re # ### NEW: Import regular expressions for filename sanitization
 from typing import Union, Dict, Optional, List, Any, Tuple
 
 # --- Qt Imports ---
-from qgis.PyQt import QtWidgets, QtCore
+from qgis.PyQt import QtCore
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant, QDateTime
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox, QPushButton, QDialogButtonBox, QFileDialog
+from qgis.PyQt.QtWidgets import QAction, QMessageBox, QPushButton
 
 # --- QGIS Imports ---
 from qgis.core import (
-    QgsProject, QgsVectorLayer, QgsVectorDataProvider,
-    QgsFields, QgsField, QgsFeature, QgsGeometry, QgsGeometryUtils,
+    QgsProject, QgsVectorLayer, QgsFields,
+    QgsField, QgsFeature, QgsGeometry,
     QgsLineString, QgsPointXY, QgsPolygon, QgsPoint,
-    QgsLayerTreeGroup, QgsLayerTreeNode,  QgsLayerTreeLayer,
+    QgsLayerTreeGroup, QgsLayerTreeNode, QgsLayerTreeLayer,
     QgsMessageLog, Qgis, QgsCoordinateReferenceSystem,
-    QgsVectorFileWriter, QgsCoordinateTransformContext,
-    QgsVectorLayerUtils, QgsCoordinateTransform, QgsDistanceArea,
-    QgsFeatureRequest, QgsError, QgsWkbTypes
+    QgsVectorFileWriter, QgsDistanceArea, QgsWkbTypes
 )
-from qgis.gui import QgsMessageBar
-
 # --- Local Imports ---
 from . import cns_dimensions
 from . import ols_dimensions
