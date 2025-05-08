@@ -15,17 +15,15 @@ import json
 from typing import List, Optional, Dict, Any, Tuple
 
 # --- QGIS Imports ---
-from qgis.core import (
+from qgis.core import ( # type: ignore
     QgsMessageLog, Qgis, QgsPointXY, QgsProject, QgsCoordinateReferenceSystem,
-    QgsCoordinateTransform, QgsGeometry, QgsVectorFileWriter
+    QgsGeometry,
 )
-from qgis.PyQt import uic, QtWidgets, QtGui, QtCore
-from qgis.PyQt.QtWidgets import (
-    QFileDialog, QMessageBox, QTableWidget, QTableWidgetItem, QComboBox,
-    QAbstractItemView, QRadioButton, QGroupBox
+from qgis.PyQt import uic, QtWidgets, QtGui, QtCore # type: ignore
+from qgis.PyQt.QtWidgets import ( # type: ignore
+    QFileDialog, QMessageBox, QTableWidgetItem, QComboBox,
+    QAbstractItemView
 )
-
-from qgis.gui import QgsFileWidget
 
 # --- Constants for UI Placeholders/Messages ---
 CALC_PLACEHOLDER = "(Calculated)"
@@ -1407,7 +1405,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
 
 if __name__ == '__main__':
     import sys
-    from qgis.PyQt.QtWidgets import QApplication
+    from qgis.PyQt.QtWidgets import QApplication # type: ignore
     # --- Mock QGIS environment if running standalone ---
     class MockQgisInterface: pass
     class MockQgsProject:
