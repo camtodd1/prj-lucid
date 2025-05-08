@@ -8,7 +8,6 @@ and performs real-time calculations for display.
 CNS coordinates are assumed to be in the current Project CRS.
 """
 
-import functools
 import math
 import os
 import json
