@@ -9,13 +9,13 @@ import re # ### NEW: Import regular expressions for filename sanitization
 from typing import Union, Dict, Optional, List, Any, Tuple
 
 # --- Qt Imports ---
-from qgis.PyQt import QtCore
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant, QDateTime
-from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction, QMessageBox, QPushButton
+from qgis.PyQt import QtCore # type: ignore
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant, QDateTime # type: ignore
+from qgis.PyQt.QtGui import QIcon # type: ignore
+from qgis.PyQt.QtWidgets import QAction, QMessageBox, QPushButton # type: ignore  
 
 # --- QGIS Imports ---
-from qgis.core import (
+from qgis.core import ( # type: ignore
     QgsProject, QgsVectorLayer, QgsFields,
     QgsField, QgsFeature, QgsGeometry,
     QgsLineString, QgsPointXY, QgsPolygon, QgsPoint,
@@ -1352,7 +1352,7 @@ class SafeguardingBuilder:
         arp_geom: Optional[QgsGeometry] = None
         if arp_elevation is not None:
           try: # QgsPoint requires QGIS 3.x, use QgsPointXY as fallback if needed
-            from qgis.core import QgsPoint
+            from qgis.core import QgsPoint # type: ignore
             arp_geom = QgsGeometry(QgsPoint(arp_point.x(), arp_point.y(), arp_elevation))
           except ImportError:
             arp_geom = QgsGeometry.fromPointXY(arp_point) # Fallback to 2D
