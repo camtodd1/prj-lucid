@@ -1305,9 +1305,9 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         if not has_data and self._runway_groups: has_data = True
         cns_table = getattr(self, 'table_cns_facility', self.findChild(QtWidgets.QTableWidget, 'table_cns_facility'))
         if not has_data and cns_table and cns_table.rowCount() > 0: has_data = True
-        if has_data:
-            reply = QtWidgets.QMessageBox.question(self, self.tr('Confirm Load'), self.tr("This will clear current inputs and load data from the selected file. Continue?"), QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No, QtWidgets.QMessageBox.StandardButton.No)
-            if reply == QtWidgets.QMessageBox.StandardButton.No: return
+        # if has_data:
+        #     reply = QtWidgets.QMessageBox.question(self, self.tr('Confirm Load'), self.tr("This will clear current inputs and load data from the selected file. Continue?"), QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No, QtWidgets.QMessageBox.StandardButton.No)
+        #     if reply == QtWidgets.QMessageBox.StandardButton.No: return
 
         file_path, _ = QFileDialog.getOpenFileName(self, self.tr("Load Inputs"), "", self.tr("JSON Files (*.json)"))
         if not file_path: return
@@ -1386,7 +1386,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                    except Exception as e: QgsMessageLog.logMessage(f"Load CNS error item {item_data}: {e}", DIALOG_LOG_TAG, level=Qgis.Warning)
 
             self._update_dialog_height()
-            QMessageBox.information(self, self.tr("Load Successful"), self.tr("Input data loaded from:\n{path}").format(path=file_path))
+            # QMessageBox.information(self, self.tr("Load Successful"), self.tr("Input data loaded from:\n{path}").format(path=file_path))
 
         except (IOError, json.JSONDecodeError, ValueError) as e:
             error_details = f"{type(e).__name__}: {e}"; log_msg = f"Load Error ({file_path}): {error_details}"; user_msg = self.tr("Error loading data from file:") + f"\n{file_path}\n\n{self.tr('Error')}: {error_details}"
