@@ -2661,7 +2661,6 @@ class SafeguardingBuilder:
             dist_area = QgsDistanceArea()
             transform_context = QgsProject.instance().transformContext()
             dist_area.setSourceCrs(target_crs, transform_context)
-            dist_area.setEllipsoid(QgsProject.instance().ellipsoid())
           
             line_geom = QgsGeometry.fromPolylineXY([line_start_pt, line_end_pt])
             if line_geom.isNull():
