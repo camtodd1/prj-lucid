@@ -61,12 +61,14 @@ GUIDELINE_C_RADIUS_C_M = 13000.0
 GUIDELINE_C_BUFFER_SEGMENTS = 144 # Increased segments for smoother circles
 
 GUIDELINE_E_ZONE_PARAMS = {
-    'A': {'ext': 1000.0, 'half_w': 300.0, 'desc': "Lighting Zone A (0-1km ext, 300m HW)"},
-    'B': {'ext': 2000.0, 'half_w': 450.0, 'desc': "Lighting Zone B (1-2km ext, 450m HW)"},
-    'C': {'ext': 3000.0, 'half_w': 600.0, 'desc': "Lighting Zone C (2-3km ext, 600m HW)"},
-    'D': {'ext': 4500.0, 'half_w': 750.0, 'desc': "Lighting Zone D (3-4.5km ext, 750m HW)"}
+    'A': {'ext': 1000.0, 'half_w': 300.0, 'desc': "Lighting Zone A (0-1km ext, 300m HW)", 'max_intensity': "0cd"},
+    'B': {'ext': 2000.0, 'half_w': 450.0, 'desc': "Lighting Zone B (1-2km ext, 450m HW)", 'max_intensity': "50cd"},
+    'C': {'ext': 3000.0, 'half_w': 600.0, 'desc': "Lighting Zone C (2-3km ext, 600m HW)", 'max_intensity': "150cd"},
+    'D': {'ext': 4500.0, 'half_w': 750.0, 'desc': "Lighting Zone D (3-4.5km ext, 750m HW)", 'max_intensity': "450cd"}
 }
 GUIDELINE_E_ZONE_ORDER = ['A', 'B', 'C', 'D']
+MOS_REF_GUIDELINE_E = "MOS 139 9.144(2)"
+NASF_REF_GUIDELINE_E = "NASF Guideline E"
 
 GUIDELINE_I_PSA_LENGTH = 1000.0
 GUIDELINE_I_PSA_INNER_WIDTH = 350.0
@@ -100,7 +102,6 @@ class SafeguardingBuilder:
         self.output_format_driver: Optional[str] = None
         self.output_format_extension: Optional[str] = None
         self.dissolve_output: bool = False
-        self._gpkg_created_this_run: bool = False # Flag for GeoPackage handling
         
         self._init_locale()
 
@@ -344,7 +345,6 @@ class SafeguardingBuilder:
       self.output_format_driver = None
       self.output_format_extension = None
       self.dissolve_output = False
-      self._gpkg_created_this_run = False # Reset GPKG flag
       
       if self.dlg is None:
         QgsMessageLog.logMessage("Processing aborted: Dialog reference missing.", plugin_tag, level=Qgis.Critical)
@@ -1026,7 +1026,7 @@ class SafeguardingBuilder:
         
         # --- Determine Actual Output Path and Layer Name Option ---
         actual_layer_path = ""
-        # Sanitize the display name early for use in GPKG layer names or SHP filenames
+        # Sanitize the display name early for use in SHP filenames or GeoJSON
         layer_name_option = self._sanitize_filename(display_name) 
         
         # self.output_path now contains the selected DIRECTORY path
@@ -1036,21 +1036,9 @@ class SafeguardingBuilder:
           QgsMessageLog.logMessage(f"Selected output path is not a valid directory: '{selected_directory}'. Cannot save layer '{display_name}'.", plugin_tag, level=Qgis.Critical)
           return None # This check is important!
         
-        is_gpkg = self.output_format_extension.lower() == '.gpkg'
-        
-        if is_gpkg:
-          # Construct GPKG filename within the selected directory. Use ICAO code.
-          # Ensure self.icao_code was set in run_safeguarding_processing
-          if not hasattr(self, 'icao_code') or not self.icao_code:
-                self.icao_code = "DEFAULT_ICAO" # Fallback if not set
-                QgsMessageLog.logMessage(f"Warning: self.icao_code not set. Using fallback '{self.icao_code}' for GPKG filename.", plugin_tag, Qgis.Warning)
-          gpkg_filename = f"{self._sanitize_filename(self.icao_code)}_safeguarding{self.output_format_extension}"
-          actual_layer_path = os.path.join(selected_directory, gpkg_filename)
-          # layer_name_option is already the sanitized display name for the table inside GPKG
-        else: # Shapefile, GeoJSON, etc.
-          # Construct unique filename within the selected directory
-          actual_layer_path = os.path.join(selected_directory, f"{layer_name_option}{self.output_format_extension}")
-          # layer_name_option is already the sanitized display name, used as filename base
+        # Construct unique filename within the selected directory
+        actual_layer_path = os.path.join(selected_directory, f"{layer_name_option}{self.output_format_extension}")
+        # layer_name_option is already the sanitized display name, used as filename base
         
         # --- Create Temporary Layer for writing ---
         temp_layer_uri = f"{geometry_type_str}?crs={target_crs.authid()}&index=yes"
@@ -1071,27 +1059,6 @@ class SafeguardingBuilder:
         
         # --- Prepare Layer Options for writeAsVectorFormat ---
         layer_options_list = []
-        if is_gpkg:
-            layer_options_list.append(f"LAYER_NAME={layer_name_option}")
-            geom_type_upper = geometry_type_str.upper()
-            if geom_type_upper == "POINT":
-                layer_options_list.append("GEOMETRY_TYPE=POINT")
-            elif geom_type_upper == "LINESTRING" or geom_type_upper == "LINE":
-                layer_options_list.append("GEOMETRY_TYPE=LINESTRING")
-            elif geom_type_upper == "POLYGON":
-                layer_options_list.append("GEOMETRY_TYPE=POLYGON")
-            QgsMessageLog.logMessage(f"GPKG Layer Options for '{display_name}' (GeomType: {geometry_type_str}): {layer_options_list}", plugin_tag, Qgis.Info)
-          
-            # Handle potential GPKG file overwrite ONCE per run for the specific path
-            if os.path.exists(actual_layer_path):
-                if not self._gpkg_created_this_run: 
-                    try:
-                        os.remove(actual_layer_path)
-                        QgsMessageLog.logMessage(f"Removed existing GPKG '{actual_layer_path}' for overwrite as it's the first layer in this run.", plugin_tag, level=Qgis.Info)
-                        # We will set _gpkg_created_this_run = True only AFTER successful write
-                    except OSError as e_rm:
-                        QgsMessageLog.logMessage(f"Warning: Could not remove GPKG '{actual_layer_path}': {e_rm}. Driver will attempt to append/overwrite layer.", plugin_tag, level=Qgis.Warning)
-            # else: File doesn't exist, will be created.
                       
         # --- Call writeAsVectorFormat ---
         returned_value_from_writer = QgsVectorFileWriter.writeAsVectorFormat(
@@ -1118,13 +1085,9 @@ class SafeguardingBuilder:
           
         # --- Handle Write Result ---
         if write_status_code_to_check == QgsVectorFileWriter.WriterError.NoError:
-            if is_gpkg and not self._gpkg_created_this_run: # Set flag after first successful write
-                self._gpkg_created_this_run = True
           
             # --- Load Saved Layer Back ---
             uri_to_load = actual_layer_path
-            if is_gpkg: # For GPKG, specify the layer name in the URI
-                uri_to_load = f"{actual_layer_path}|layername={layer_name_option}"
           
             loaded_layer = self.iface.addVectorLayer(uri_to_load, display_name, "ogr")
             if loaded_layer and loaded_layer.isValid():
@@ -1299,17 +1262,8 @@ class SafeguardingBuilder:
         # ### NEW: Add output path information if files were saved ###
         output_destination_message = ""
         if self.output_mode == 'file' and self.output_path:
-          # self.output_path is the directory.
-          # If GPKG, the actual file is self.icao_code + "_safeguarding.gpkg" inside self.output_path
-          # If SHP/GeoJSON, files are directly in self.output_path (or a subfolder if you made one)
-          
-          final_output_location = self.output_path # Default to the selected directory
-          if self.output_format_extension.lower() == '.gpkg':
-            gpkg_filename = f"{self._sanitize_filename(self.icao_code)}_safeguarding{self.output_format_extension}"
-            final_output_location = os.path.join(self.output_path, gpkg_filename)
-            output_destination_message = self.tr("Output GeoPackage: {path}").format(path=final_output_location)
-          else: # SHP, GeoJSON etc. - files are in the directory
-            output_destination_message = self.tr("Output files saved to directory: {path}").format(path=self.output_path)
+          # For SHP, GeoJSON etc. - files are in the directory
+          output_destination_message = self.tr("Output files saved to directory: {path}").format(path=self.output_path)
           
           msg_parts.append(output_destination_message)
         elif self.output_mode == 'memory':
@@ -3058,27 +3012,75 @@ class SafeguardingBuilder:
         if not all([thr_point, rec_thr_point, layer_group]) or thr_point.compare(rec_thr_point, 1e-6): return False
         full_geoms: Dict[str, Optional[QgsGeometry]] = {}; final_geoms: Dict[str, Optional[QgsGeometry]] = {}; overall_success = False
         try:
+            # This is the updated create_lcz_layer function
             def create_lcz_layer(zone: str, geom: Optional[QgsGeometry]) -> bool:
                 if not geom: return False
                 params = GUIDELINE_E_ZONE_PARAMS[zone]; display_name = f"{self.tr('LCZ')} {zone} {runway_name}"; internal_name = f"LCZ_{zone}_{runway_name.replace('/', '_')}"
-                fields=QgsFields([QgsField("RWY", QVariant.String), QgsField("Zone", QVariant.String), QgsField("Desc", QVariant.String), QgsField("Ext_m", QVariant.Double), QgsField("HW_m", QVariant.Double)])
-                feature = QgsFeature(fields); feature.setGeometry(geom); feature.setAttributes([runway_name, zone, params['desc'], params['ext'], params['half_w']])
+                fields=QgsFields([
+                    QgsField("Runway", QVariant.String), 
+                    QgsField("Zone", QVariant.String), 
+                    QgsField("Desc", QVariant.String),
+                    QgsField("Inner extent", QVariant.Double), # New
+                    QgsField("Outer extent", QVariant.Double), # Renamed from Ext_m
+                    QgsField("Width", QVariant.Double),      # Renamed from HW_m, value is doubled
+                    QgsField("Max intensity", QVariant.String), # New
+                    QgsField("MOS Ref", QVariant.String),     # New
+                    QgsField("NASF Ref", QVariant.String)     # New
+                ])
+                
+                inner_extent_val = 0.0
+                zone_index = GUIDELINE_E_ZONE_ORDER.index(zone)
+                if zone_index > 0:
+                    previous_zone_id = GUIDELINE_E_ZONE_ORDER[zone_index - 1]
+                    inner_extent_val = GUIDELINE_E_ZONE_PARAMS[previous_zone_id]['ext']
+                
+                attributes = [
+                    runway_name, 
+                    zone, 
+                    params['desc'], 
+                    inner_extent_val,             # Inner extent value
+                    params['ext'],                # Outer extent value
+                    params['half_w'] * 2,         # Full width
+                    params['max_intensity'],      # Max intensity from constant
+                    MOS_REF_GUIDELINE_E,          # MOS Ref from constant
+                    NASF_REF_GUIDELINE_E          # NASF Ref from constant
+                ]
+                feature = QgsFeature(fields); feature.setGeometry(geom); feature.setAttributes(attributes)
+                # Using f-string for style_key to match "LCZ A", "LCZ B", etc.
                 layer = self._create_and_add_layer("Polygon", internal_name, display_name, fields, [feature], layer_group, f"LCZ {zone}")
                 return layer is not None
 
-            for zone_id in GUIDELINE_E_ZONE_ORDER:
-                params = GUIDELINE_E_ZONE_PARAMS[zone_id]; geom = self._create_runway_aligned_rectangle(thr_point, rec_thr_point, params['ext'], params['half_w'], f"LCZ Full {zone_id}")
-                full_geoms[zone_id] = geom.makeValid() if geom and not geom.isGeosValid() else geom
-            geom_prev = full_geoms.get('A'); final_geoms['A'] = geom_prev
-            for i, zone_id in enumerate(GUIDELINE_E_ZONE_ORDER[1:]):
-                geom_curr = full_geoms.get(zone_id); prev_zone_id = GUIDELINE_E_ZONE_ORDER[i]; geom_prev_valid = full_geoms.get(prev_zone_id)
-                if geom_curr and geom_prev_valid: diff = geom_curr.difference(geom_prev_valid); final_geoms[zone_id] = diff.makeValid() if diff and not diff.isGeosValid() else diff
-                else: final_geoms[zone_id] = geom_curr
-            for zone_id in GUIDELINE_E_ZONE_ORDER:
-                if final_geoms.get(zone_id):
-                     if create_lcz_layer(zone_id, final_geoms[zone_id]): overall_success = True
+            # Geometry generation loop (should be present once)
+            for zone_id_geom_gen in GUIDELINE_E_ZONE_ORDER: # Use a different loop variable name to avoid confusion if any old code remains
+                params_geom = GUIDELINE_E_ZONE_PARAMS[zone_id_geom_gen]
+                geom_full = self._create_runway_aligned_rectangle(thr_point, rec_thr_point, params_geom['ext'], params_geom['half_w'], f"LCZ Full {zone_id_geom_gen}")
+                full_geoms[zone_id_geom_gen] = geom_full.makeValid() if geom_full and not geom_full.isGeosValid() else geom_full
+            
+            # Calculate final geometries (difference logic)
+            geom_prev_for_diff = full_geoms.get('A') # Start with Zone A as the first "previous"
+            final_geoms['A'] = geom_prev_for_diff # Zone A is just its full geometry
+
+            for i, zone_id_diff in enumerate(GUIDELINE_E_ZONE_ORDER[1:]): # Start from Zone B
+                geom_curr_for_diff = full_geoms.get(zone_id_diff)
+                # The previous zone ID for difference is GUIDELINE_E_ZONE_ORDER[i] because we sliced from [1:]
+                prev_zone_id_for_diff = GUIDELINE_E_ZONE_ORDER[i] 
+                geom_prev_valid_for_diff = full_geoms.get(prev_zone_id_for_diff)
+
+                if geom_curr_for_diff and geom_prev_valid_for_diff:
+                    diff_geom = geom_curr_for_diff.difference(geom_prev_valid_for_diff)
+                    final_geoms[zone_id_diff] = diff_geom.makeValid() if diff_geom and not diff_geom.isGeosValid() else diff_geom
+                elif geom_curr_for_diff: # If previous was None, current is just itself (should not happen if A exists)
+                    final_geoms[zone_id_diff] = geom_curr_for_diff
+                else:
+                    final_geoms[zone_id_diff] = None # Current geom is None
+
+            # Layer creation loop (should be present once, calling the updated create_lcz_layer)
+            for zone_id_create in GUIDELINE_E_ZONE_ORDER:
+                if final_geoms.get(zone_id_create):
+                     if create_lcz_layer(zone_id_create, final_geoms[zone_id_create]): # Call the single, updated helper
+                         overall_success = True
             return overall_success
-        except Exception as e: QgsMessageLog.logMessage(f"Error Guideline E {runway_name}: {e}", PLUGIN_TAG, level=Qgis.Critical); return False
+        except Exception as e: QgsMessageLog.logMessage(f"Error Guideline E {runway_name}: {e}\n{traceback.format_exc()}", PLUGIN_TAG, level=Qgis.Critical); return False
 
 # ============================================================
 # Guideline F: OLS Processing Helpers
