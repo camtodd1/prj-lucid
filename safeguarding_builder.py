@@ -1594,12 +1594,22 @@ class SafeguardingBuilder:
             QgsMessageLog.logMessage(f"Failed to calculate valid length/azimuth for runway parameters (L:{length}, Az P->R:{azimuth_p_r}, Az R->P:{azimuth_r_p}).", plugin_tag, level=Qgis.Warning)
             return None
       
+          # Perpendicular azimuths (calculated from original azimuth_p_r before its normalization for this return dict)
+          # These calculations already ensure results are in the 0-360 range.
           azimuth_perp_r = (azimuth_p_r + 90.0) % 360.0
-          azimuth_perp_l = (azimuth_p_r - 90.0 + 360.0) % 360.0
-          return {'length': length, 'azimuth_p_r': azimuth_p_r, 'azimuth_r_p': azimuth_r_p,
-              'azimuth_perp_l': azimuth_perp_l, 'azimuth_perp_r': azimuth_perp_r}
+          azimuth_perp_l = (azimuth_p_r - 90.0 + 360.0) % 360.0 # Ensure positive before modulo
+          
+          # Normalize main azimuths to be in the 0-360 degree range.
+          # (value + 360.0) % 360.0 ensures a positive result in [0, 360.0).
+          azimuth_p_r_norm = (azimuth_p_r + 360.0) % 360.0
+          azimuth_r_p_norm = (azimuth_r_p + 360.0) % 360.0
+            
+          return {'length': length, 
+                  'azimuth_p_r': azimuth_p_r_norm, 
+                  'azimuth_r_p': azimuth_r_p_norm,
+                  'azimuth_perp_l': azimuth_perp_l, 
+                  'azimuth_perp_r': azimuth_perp_r}
         except Exception as e:
-          # Downgraded from Critical to Warning
           QgsMessageLog.logMessage(f"Warning: Unexpected error calculating runway parameters: {e}", plugin_tag, level=Qgis.Warning)
           return None
         
