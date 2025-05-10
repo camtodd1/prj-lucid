@@ -888,6 +888,9 @@ class SafeguardingBuilder:
           try:
             designator_num = runway_data.get('designator_num'); suffix = runway_data.get('suffix', '')
             thr_point = runway_data.get('thr_point'); rec_thr_point = runway_data.get('rec_thr_point')
+            # ### NEW: Get ARC Number and Letter from runway_data ###
+            arc_num_val = runway_data.get('arc_num')
+            arc_let_val = runway_data.get('arc_let')
             # Basic validation of essential data for this step
             if designator_num is None or thr_point is None or rec_thr_point is None:
               QgsMessageLog.logMessage(f"Skipping centreline for Runway Index {index}: Missing essential data (Designator Num/Points).", plugin_tag, level=Qgis.Warning)
@@ -904,8 +907,10 @@ class SafeguardingBuilder:
             
             # Call the helper to create the layer
             # Pass target_crs as it might be needed by distance calcs inside helpers called by create_runway_centreline_layer
+            # ### MODIFIED: Pass arc_num_val and arc_let_val ###
             centreline_layer = self.create_runway_centreline_layer(
-              thr_point, rec_thr_point, short_runway_name, target_crs, main_group
+              thr_point, rec_thr_point, short_runway_name, target_crs, main_group,
+              arc_num_val, arc_let_val
             )
             
             # Check the result from the helper
@@ -1349,7 +1354,10 @@ class SafeguardingBuilder:
 
     def create_runway_centreline_layer(self, point1: QgsPointXY, point2: QgsPointXY, runway_name: str,
                       crs: QgsCoordinateReferenceSystem, # CRS needed by caller, not directly used here now
-                      layer_group: QgsLayerTreeGroup) -> Optional[QgsVectorLayer]:
+                      layer_group: QgsLayerTreeGroup,
+                      arc_num_val: Optional[str] = None, # ### NEW ###
+                      arc_let_val: Optional[str] = None  # ### NEW ###
+                      ) -> Optional[QgsVectorLayer]:
         """Creates the runway centreline layer using the helper."""
         plugin_tag = PLUGIN_TAG
       
@@ -1371,7 +1379,9 @@ class SafeguardingBuilder:
               QgsField("TODA", QVariant.String),
               QgsField("TORA", QVariant.String),
               QgsField("LDA", QVariant.String),
-              QgsField("ASDA", QVariant.String)
+              QgsField("ASDA", QVariant.String),
+              QgsField("ARC Number", QVariant.String, "ARC Number", 5), # ### NEW ###
+              QgsField("ARC Letter", QVariant.String, "ARC Letter", 5)  # ### NEW ###
           ])
           
           # Create geometry
@@ -1405,7 +1415,9 @@ class SafeguardingBuilder:
               None, # TODA - blank for now
               None, # TORA - blank for now
               None, # LDA - blank for now
-              None  # ASDA - blank for now
+              None, # ASDA - blank for now
+              arc_num_val, # ### NEW ###
+              arc_let_val  # ### NEW ###
           ])
           
           # Call the layer creation helper (which now handles its own logging)
