@@ -77,6 +77,7 @@ GUIDELINE_I_MOS_REF_VAL = "n/a"
 GUIDELINE_I_NASF_REF_VAL = "Guideline I"
 
 RAOA_MOS_REF_VAL = "MOS 139 6.20"
+MOS_REF_TAXIWAY_SEPARATION = "MOS 139 6.53" # <<< NEW CONSTANT
 
 CONICAL_CONTOUR_INTERVAL = 10.0 # Height interval in meters for conical surface
 APPROACH_CONTOUR_INTERVAL = 10.0 # Height interval in meters for approach surfaces
@@ -4065,11 +4066,14 @@ class SafeguardingBuilder:
     def _get_taxiway_separation_fields(self) -> QgsFields:
       """Returns the QgsFields definition for the Taxiway Separation layer."""
       fields = QgsFields([
-        QgsField("RWY_Name", QVariant.String, self.tr("Runway"), 50),
-        QgsField("Surface", QVariant.String, self.tr("Surface Type"), 30),
-        QgsField("Side", QVariant.String, self.tr("Side (L/R)"), 5),
-        QgsField("Offset_m", QVariant.Double, self.tr("Offset (m)"), 10, 2),
-        QgsField("Ref", QVariant.String, self.tr("Reference"), 100),
+        QgsField("Runway", QVariant.String, self.tr("Runway Name"), 50),
+        QgsField("Desc", QVariant.String, self.tr("Description"), 100), # Renamed Alias, updated length
+        QgsField("Offset (m)", QVariant.Double, self.tr("Offset (m)"), 10, 2),
+        QgsField("MOS Ref", QVariant.String, self.tr("MOS Reference"), 100), # Renamed field and Alias
+        QgsField("Approach Type", QVariant.String, self.tr("Approach Type"), 50), # New field
+        QgsField("ARC Number", QVariant.String, self.tr("ARC Number"), 5), # New field
+        QgsField("ARC Letter", QVariant.String, self.tr("ARC Letter"), 5), # New field
+        QgsField("Side", QVariant.String, self.tr("Side (L/R)"), 5)
       ])
       return fields
     
@@ -4084,7 +4088,7 @@ class SafeguardingBuilder:
         # Essential Checks
         if not all([thr_point, rec_thr_point, layer_group, arc_num_str]):
           QgsMessageLog.logMessage(f"Taxiway Sep skipped {runway_name}: Missing essential data.", plugin_tag, level=Qgis.Warning); return False
-        try: arc_num = int(arc_num_str)
+        try: arc_num = int(arc_num_str) # Keep as int for logic, convert to str for attribute
         except (ValueError, TypeError): QgsMessageLog.logMessage(f"Taxiway Sep skipped {runway_name}: Invalid ARC Number '{arc_num_str}'.", plugin_tag, level=Qgis.Warning); return False
       
         # Validate ARC Letter
@@ -4104,7 +4108,8 @@ class SafeguardingBuilder:
         # Get Offset Parameter
         offset_params = ols_dimensions.get_taxiway_separation_offset(arc_num, arc_let, governing_type_str)
         if not offset_params: QgsMessageLog.logMessage(f"Skipping Taxiway Sep for {runway_name}: No offset parameters found for classification (ARC={arc_num}, Let='{arc_let}', Type='{governing_type_str}').", plugin_tag, level=Qgis.Warning); return False
-        offset_m = offset_params.get('offset_m'); ref = offset_params.get('ref', 'MOS 139 T9.1 (Verify)')
+        offset_m = offset_params.get('offset_m'); 
+        # ref = offset_params.get('ref', 'MOS 139 T9.1 (Verify)') # Original ref from offset_params, now using constant
         if offset_m is None or offset_m <= 0: QgsMessageLog.logMessage(f"Skipping Taxiway Sep for {runway_name}: Invalid offset value ({offset_m}).", plugin_tag, level=Qgis.Warning); return False
       
         # Calculate Geometry (keep logic)
@@ -4114,6 +4119,7 @@ class SafeguardingBuilder:
       
         features_to_add: List[QgsFeature] = []
         geom_ok = True
+        surface_description = f"Minimum Taxiway Separation {runway_name}"
         # Left Line
         try:
           pt_start_l = line_start_cl.project(offset_m, rwy_params['azimuth_perp_l']); pt_end_l = line_end_cl.project(offset_m, rwy_params['azimuth_perp_l'])
@@ -4121,29 +4127,70 @@ class SafeguardingBuilder:
             geom_l = QgsGeometry.fromPolylineXY([pt_start_l, pt_end_l])
             if geom_l and not geom_l.isEmpty():
               fields = self._get_taxiway_separation_fields(); feat_l = QgsFeature(fields); feat_l.setGeometry(geom_l)
-              attr_map = {"RWY_Name": runway_name, "Surface": "Taxiway Separation", "Side": "L", "Offset_m": offset_m, "Ref": ref}
-              for name, value in attr_map.items(): idx = fields.indexFromName(name);
-              if idx != -1: feat_l.setAttribute(idx, value)
+              
+              # Defensively prepare variables for attr_map
+              attr_runway_name = runway_name if runway_name and runway_name.strip() else "N/A"
+              attr_surface_description = surface_description if surface_description and surface_description.strip() else "N/A"
+              # offset_m is confirmed to be a valid float by prior checks
+              attr_mos_ref = MOS_REF_TAXIWAY_SEPARATION # This is a module-level constant
+              attr_app_type = governing_type_str if governing_type_str and governing_type_str.strip() else "N/A"
+              attr_arc_num_str = str(arc_num) # arc_num is an int, str() is safe
+              attr_arc_let = arc_let if arc_let and arc_let.strip() else "N/A"
+
+              attr_map = {
+                  "Runway": attr_runway_name,
+                  "Desc": attr_surface_description,
+                  "Offset (m)": offset_m, 
+                  "MOS Ref": attr_mos_ref,
+                  "Approach Type": attr_app_type,
+                  "ARC Number": attr_arc_num_str,
+                  "ARC Letter": attr_arc_let,
+                  "Side": "L"
+              }
+              QgsMessageLog.logMessage(f"Taxiway Sep Left Attr Map for {runway_name}: {attr_map}", plugin_tag, level=Qgis.Info)
+
+              for name, value in attr_map.items(): 
+                idx = fields.indexFromName(name)
+                if idx != -1: 
+                  feat_l.setAttribute(idx, value)
+                else: 
+                  QgsMessageLog.logMessage(f"Warning: Field '{name}' not found in layer for Taxiway Separation (Left Line).", plugin_tag, level=Qgis.Warning)
               features_to_add.append(feat_l)
             else: geom_ok = False
           else: geom_ok = False
-        except Exception as e: geom_ok = False; QgsMessageLog.logMessage(f"Warning: Error generating Left Taxi Sep line for {runway_name}: {e}", plugin_tag, level=Qgis.Warning)
+        except Exception as e: geom_ok = False; QgsMessageLog.logMessage(f"Warning: Error generating Left Taxi Sep line for {runway_name}: {e}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Warning)
       
-        # Right Line (similar try-except block)
+        # Right Line (similar try-except block and attribute setting)
         try:
           pt_start_r = line_start_cl.project(offset_m, rwy_params['azimuth_perp_r']); pt_end_r = line_end_cl.project(offset_m, rwy_params['azimuth_perp_r'])
           if pt_start_r and pt_end_r:
             geom_r = QgsGeometry.fromPolylineXY([pt_start_r, pt_end_r])
             if geom_r and not geom_r.isEmpty():
               fields = self._get_taxiway_separation_fields(); feat_r = QgsFeature(fields); feat_r.setGeometry(geom_r)
-              attr_map = {"RWY_Name": runway_name, "Surface": "Taxiway Separation", "Side": "R", "Offset_m": offset_m, "Ref": ref}
-              for name, value in attr_map.items(): idx = fields.indexFromName(name);
-              if idx != -1: feat_r.setAttribute(idx, value)
+
+              # Reuse defensively prepared variables from the Left Line section as they are identical for the Right Line
+              attr_map_right = {
+                  "Runway": attr_runway_name,
+                  "Desc": attr_surface_description,
+                  "Offset (m)": offset_m,
+                  "MOS Ref": attr_mos_ref,
+                  "Approach Type": attr_app_type,
+                  "ARC Number": attr_arc_num_str,
+                  "ARC Letter": attr_arc_let,
+                  "Side": "R"
+              }
+              QgsMessageLog.logMessage(f"Taxiway Sep Right Attr Map for {runway_name}: {attr_map_right}", plugin_tag, level=Qgis.Info)
+              
+              for name, value in attr_map_right.items(): 
+                idx = fields.indexFromName(name)
+                if idx != -1: 
+                  feat_r.setAttribute(idx, value)
+                else: 
+                  QgsMessageLog.logMessage(f"Warning: Field '{name}' not found in layer for Taxiway Separation (Right Line).", plugin_tag, level=Qgis.Warning)
               features_to_add.append(feat_r)
             else: geom_ok = False
           else: geom_ok = False
-        except Exception as e: geom_ok = False; QgsMessageLog.logMessage(f"Warning: Error generating Right Taxi Sep line for {runway_name}: {e}", plugin_tag, level=Qgis.Warning)
-      
+        except Exception as e: geom_ok = False; QgsMessageLog.logMessage(f"Warning: Error generating Right Taxi Sep line for {runway_name}: {e}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Warning)
       
         if not geom_ok and not features_to_add: # If geometry failed AND no features were added
           QgsMessageLog.logMessage(f"Failed to generate taxiway separation line geometries for {runway_name}", plugin_tag, level=Qgis.Warning)
