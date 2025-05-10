@@ -1363,7 +1363,16 @@ class SafeguardingBuilder:
             return None
           
           # Define fields
-          fields = QgsFields([QgsField("RWY_Name", QVariant.String), QgsField("Length_m", QVariant.Double)])
+          fields = QgsFields([
+              QgsField("Runway", QVariant.String), 
+              QgsField("Length (m)", QVariant.Double),
+              QgsField("Runway Heading", QVariant.Double, "Runway Heading (degrees)", 10, 3),
+              QgsField("Reciprocal Heading", QVariant.Double, "Reciprocal Heading (degrees)", 10, 3),
+              QgsField("TODA", QVariant.String),
+              QgsField("TORA", QVariant.String),
+              QgsField("LDA", QVariant.String),
+              QgsField("ASDA", QVariant.String)
+          ])
           
           # Create geometry
           line_geom = QgsGeometry(QgsLineString([point1, point2]))
@@ -1374,11 +1383,30 @@ class SafeguardingBuilder:
           # Calculate length (handle potential None)
           length = line_geom.length()
           length_attr = round(length, 3) if length is not None else None
+
+          # Get Azimuths
+          rwy_params = self._get_runway_parameters(point1, point2)
+          azimuth_attr = None
+          reciprocal_azimuth_attr = None
+          if rwy_params:
+              azimuth_attr = round(rwy_params.get('azimuth_p_r'), 3) if rwy_params.get('azimuth_p_r') is not None else None
+              reciprocal_azimuth_attr = round(rwy_params.get('azimuth_r_p'), 3) if rwy_params.get('azimuth_r_p') is not None else None
+          else:
+              QgsMessageLog.logMessage(f"Could not calculate azimuths for centreline {runway_name}", plugin_tag, level=Qgis.Warning)
           
           # Prepare feature
           feature = QgsFeature(fields)
           feature.setGeometry(line_geom)
-          feature.setAttributes([runway_name, length_attr])
+          feature.setAttributes([
+              runway_name, 
+              length_attr,
+              azimuth_attr,
+              reciprocal_azimuth_attr,
+              None, # TODA - blank for now
+              None, # TORA - blank for now
+              None, # LDA - blank for now
+              None  # ASDA - blank for now
+          ])
           
           # Call the layer creation helper (which now handles its own logging)
           layer = self._create_and_add_layer(
