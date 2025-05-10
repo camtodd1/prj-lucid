@@ -76,6 +76,8 @@ GUIDELINE_I_PSA_OUTER_WIDTH = 250.0
 GUIDELINE_I_MOS_REF_VAL = "n/a"
 GUIDELINE_I_NASF_REF_VAL = "Guideline I"
 
+RAOA_MOS_REF_VAL = "MOS 139 6.20"
+
 CONICAL_CONTOUR_INTERVAL = 10.0 # Height interval in meters for conical surface
 APPROACH_CONTOUR_INTERVAL = 10.0 # Height interval in meters for approach surfaces
 
@@ -3933,12 +3935,12 @@ class SafeguardingBuilder:
     def _get_raoa_fields(self) -> QgsFields:
       """Returns the QgsFields definition for the RAOA layer."""
       fields = QgsFields([
-        QgsField("RWY_Name", QVariant.String, self.tr("Runway"), 50),
-        QgsField("Surface", QVariant.String, self.tr("Surface Type"), 20),
-        QgsField("End_Desig", QVariant.String, self.tr("End Designator"), 10),
+        QgsField("Runway", QVariant.String, self.tr("Runway"), 50),
+        QgsField("Description", QVariant.String, self.tr("Description"), 50),
+        QgsField("Runway_End", QVariant.String, self.tr("Runway End"), 10),
         QgsField("Length_m", QVariant.Double, self.tr("Length (m)"), 10, 2),
         QgsField("Width_m", QVariant.Double, self.tr("Width (m)"), 10, 2),
-        QgsField("Ref", QVariant.String, self.tr("Reference"), 100), # Optional reference field
+        QgsField("MOS_Reference", QVariant.String, self.tr("MOS Reference"), 100),
       ])
       return fields
     
@@ -3965,9 +3967,15 @@ class SafeguardingBuilder:
             geom = self._create_rectangle_from_start(thr_point, outward_azimuth, RAOA_LENGTH, RAOA_HALF_WIDTH, f"RAOA {primary_desig}")
             if geom:
               fields = self._get_raoa_fields(); feature = QgsFeature(fields); feature.setGeometry(geom)
-              attr_map = {"RWY_Name": runway_name, "Surface": "RAOA", "End_Desig": primary_desig, "Length_m": RAOA_LENGTH, "Width_m": RAOA_WIDTH, "Ref": "MOS 139 Ch 9 (Verify)"}
-              for name, value in attr_map.items(): idx = fields.indexFromName(name);
-              if idx != -1: feature.setAttribute(idx, value)
+              attributes = [
+                  runway_name,
+                  f"RAOA {primary_desig}",
+                  primary_desig,
+                  RAOA_LENGTH,
+                  RAOA_WIDTH,
+                  RAOA_MOS_REF_VAL
+              ]
+              feature.setAttributes(attributes)
               features_to_add.append(feature)
           except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating RAOA for {primary_desig}: {e}", plugin_tag, level=Qgis.Warning)
           
@@ -3978,9 +3986,15 @@ class SafeguardingBuilder:
             geom = self._create_rectangle_from_start(rec_thr_point, outward_azimuth, RAOA_LENGTH, RAOA_HALF_WIDTH, f"RAOA {reciprocal_desig}")
             if geom:
               fields = self._get_raoa_fields(); feature = QgsFeature(fields); feature.setGeometry(geom)
-              attr_map = {"RWY_Name": runway_name, "Surface": "RAOA", "End_Desig": reciprocal_desig, "Length_m": RAOA_LENGTH, "Width_m": RAOA_WIDTH, "Ref": "MOS 139 Ch 9 (Verify)"}
-              for name, value in attr_map.items(): idx = fields.indexFromName(name);
-              if idx != -1: feature.setAttribute(idx, value)
+              attributes = [
+                  runway_name,
+                  f"RAOA {reciprocal_desig}",
+                  reciprocal_desig,
+                  RAOA_LENGTH,
+                  RAOA_WIDTH,
+                  RAOA_MOS_REF_VAL
+              ]
+              feature.setAttributes(attributes)
               features_to_add.append(feature)
           except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating RAOA for {reciprocal_desig}: {e}", plugin_tag, level=Qgis.Warning)
           
