@@ -73,6 +73,8 @@ NASF_REF_GUIDELINE_E = "NASF Guideline E"
 GUIDELINE_I_PSA_LENGTH = 1000.0
 GUIDELINE_I_PSA_INNER_WIDTH = 350.0
 GUIDELINE_I_PSA_OUTER_WIDTH = 250.0
+GUIDELINE_I_MOS_REF_VAL = "n/a"
+GUIDELINE_I_NASF_REF_VAL = "Guideline I"
 
 CONICAL_CONTOUR_INTERVAL = 10.0 # Height interval in meters for conical surface
 APPROACH_CONTOUR_INTERVAL = 10.0 # Height interval in meters for approach surfaces
@@ -3885,15 +3887,40 @@ class SafeguardingBuilder:
         psa_inner_half_w = GUIDELINE_I_PSA_INNER_WIDTH / 2.0; psa_outer_half_w = GUIDELINE_I_PSA_OUTER_WIDTH / 2.0
         if psa_inner_half_w < 0 or psa_outer_half_w < 0: return False
 
-        fields = QgsFields([QgsField("RWY", QVariant.String), QgsField("Zone", QVariant.String), QgsField("End", QVariant.String), QgsField("Len", QVariant.Double), QgsField("InW", QVariant.Double), QgsField("OutW", QVariant.Double)])
+        fields = QgsFields([
+            QgsField("Runway", QVariant.String), 
+            QgsField("Desc", QVariant.String), 
+            QgsField("Runway End", QVariant.String), 
+            QgsField("Length", QVariant.Double), 
+            QgsField("Inner Width", QVariant.Double), 
+            QgsField("Outer Width", QVariant.Double),
+            QgsField("MOS Ref", QVariant.String),
+            QgsField("NASF Ref", QVariant.String)
+        ])
         features_to_add = []; primary_desig, reciprocal_desig = runway_name.split('/') if '/' in runway_name else ("Primary", "Reciprocal")
         try:
             geom_p = self._create_trapezoid(thr_point, params['azimuth_r_p'], GUIDELINE_I_PSA_LENGTH, psa_inner_half_w, psa_outer_half_w, f"PSA {primary_desig}")
-            if geom_p: feat = QgsFeature(fields); feat.setGeometry(geom_p); feat.setAttributes([runway_name,"PSA",primary_desig,GUIDELINE_I_PSA_LENGTH,GUIDELINE_I_PSA_INNER_WIDTH,GUIDELINE_I_PSA_OUTER_WIDTH]); features_to_add.append(feat)
+            if geom_p: 
+                feat = QgsFeature(fields)
+                feat.setGeometry(geom_p)
+                feat.setAttributes([
+                    runway_name, f"Public Safety Area {primary_desig}", primary_desig, 
+                    GUIDELINE_I_PSA_LENGTH, GUIDELINE_I_PSA_INNER_WIDTH, GUIDELINE_I_PSA_OUTER_WIDTH,
+                    GUIDELINE_I_MOS_REF_VAL, GUIDELINE_I_NASF_REF_VAL
+                ])
+                features_to_add.append(feat)
         except Exception as e: QgsMessageLog.logMessage(f"Error PSA Primary {runway_name}: {e}", PLUGIN_TAG, level=Qgis.Warning)
         try:
             geom_r = self._create_trapezoid(rec_thr_point, params['azimuth_p_r'], GUIDELINE_I_PSA_LENGTH, psa_inner_half_w, psa_outer_half_w, f"PSA {reciprocal_desig}")
-            if geom_r: feat = QgsFeature(fields); feat.setGeometry(geom_r); feat.setAttributes([runway_name,"PSA",reciprocal_desig,GUIDELINE_I_PSA_LENGTH,GUIDELINE_I_PSA_INNER_WIDTH,GUIDELINE_I_PSA_OUTER_WIDTH]); features_to_add.append(feat)
+            if geom_r: 
+                feat = QgsFeature(fields)
+                feat.setGeometry(geom_r)
+                feat.setAttributes([
+                    runway_name, f"Public Safety Area {reciprocal_desig}", reciprocal_desig, 
+                    GUIDELINE_I_PSA_LENGTH, GUIDELINE_I_PSA_INNER_WIDTH, GUIDELINE_I_PSA_OUTER_WIDTH,
+                    GUIDELINE_I_MOS_REF_VAL, GUIDELINE_I_NASF_REF_VAL
+                ])
+                features_to_add.append(feat)
         except Exception as e: QgsMessageLog.logMessage(f"Error PSA Reciprocal {runway_name}: {e}", PLUGIN_TAG, level=Qgis.Warning)
 
         layer_created = self._create_and_add_layer("Polygon", f"PSA_{runway_name.replace('/', '_')}", f"PSA {self.tr('Runway')} {runway_name}", fields, features_to_add, layer_group, "PSA Runway")
