@@ -516,16 +516,20 @@ class SafeguardingBuilder:
         any_physical_or_protection_ok = False # Combined success flag
         
         if processed_runway_data_list and any_runway_base_data_ok:
+          if physical_geom_group and protection_area_group: # Check both groups created ok
+                # Define fields (keep this part)
+                common_fields = [ QgsField("RWY_Name", QVariant.String, self.tr("Runway"), 30), QgsField("Type", QVariant.String, self.tr("Desc"), 50), QgsField("Length_m", QVariant.Double, self.tr("Length (m)"), 12, 3), QgsField("Width_m", QVariant.Double, self.tr("Width (m)"), 12, 3), QgsField("MOS_Ref", QVariant.String, self.tr("MOS Reference"), 250)]
+                stopway_resa_fields = common_fields + [QgsField("End_Desig", QVariant.String, self.tr("End Designator"), 10)]
           # Create Parent Groups
           physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
           protection_area_group = main_group.addGroup(self.tr("Runway Protection Areas")) # NEW
           
           if physical_geom_group and protection_area_group: # Check both groups created ok
                 # Define fields (keep this part)
-                common_fields = [ QgsField("RWY_Name", QVariant.String, self.tr("Runway Name"), 30), QgsField("Type", QVariant.String, self.tr("Element Type"), 50), QgsField("Length_m", QVariant.Double, self.tr("Length (m)"), 12, 3), QgsField("Width_m", QVariant.Double, self.tr("Width (m)"), 12, 3), QgsField("MOS_Ref", QVariant.String, self.tr("MOS Reference"), 250)]
-                stopway_resa_fields = common_fields + [QgsField("End_Desig", QVariant.String, self.tr("End Designator"), 10)]
-                pre_threshold_fields = common_fields + [QgsField("End_Desig", QVariant.String, self.tr("End Designator"), 10)]
-                marking_fields = [ QgsField("RWY_Name", QVariant.String, self.tr("Runway Name"), 30), QgsField("Type", QVariant.String, self.tr("Element Type"), 50), QgsField("Length_m", QVariant.Double, self.tr("Length (m)"), 12, 3), QgsField("End_Desig", QVariant.String, self.tr("End Designator"), 10), QgsField("MOS_Ref", QVariant.String, self.tr("MOS Reference"), 250) ]
+                common_fields = [ QgsField("Runway", QVariant.String, self.tr("Runway Name"), 30), QgsField("Desc", QVariant.String, self.tr("Element Type"), 50), QgsField("Length (m)", QVariant.Double, self.tr("Length (m)"), 12, 3), QgsField("Width (m)", QVariant.Double, self.tr("Width (m)"), 12, 3), QgsField("MOS Ref", QVariant.String, self.tr("MOS Reference"), 250)]
+                stopway_resa_fields = common_fields + [QgsField("Runway End", QVariant.String, self.tr("End Designator"), 10)]
+                pre_threshold_fields = common_fields + [QgsField("Runway End", QVariant.String, self.tr("End Designator"), 10)]
+                marking_fields = [ QgsField("Runway", QVariant.String, self.tr("Runway Name"), 30), QgsField("Desc", QVariant.String, self.tr("Element Type"), 50), QgsField("Length (m)", QVariant.Double, self.tr("Length (m)"), 12, 3), QgsField("Runway End", QVariant.String, self.tr("End Designator"), 10), QgsField("MOS Ref", QVariant.String, self.tr("MOS Reference"), 250) ]
                 flyover_fields = common_fields
               
                 layer_definitions = {
