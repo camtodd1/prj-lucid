@@ -15,3 +15,5 @@ __pycache__/
 
 # Project-specific
 .idea/
+*.rej
+*.orig
