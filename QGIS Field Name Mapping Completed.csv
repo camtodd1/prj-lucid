@@ -1,0 +1,68 @@
+Field Name,New Field Name,Alias,Description,Unit
+ARC Letter,arc_let,ARC Letter,ARC Letter,code
+ARC Number,arc_num,ARC Number,ARC Number,count
+ASDA,asda,ASDA,Accelerated Stop Distance Available,-
+Approach Type,appr_type,Approach Type,Runway Approach Type,-
+Buffer_m,buffer_m,Buffer (m),-,metres
+Contour_Elev_AMSL,contour_elev_am,Contour Elev Amsl,Contour elevation AMSL,metres
+Contour_Hgt_Abv_IHS,contour_hgt_abv,Contour Hgt Abv Ihs,-,metres
+Desc,desc,Description,-,text
+Description,desc,Description,-,text
+Diverg_Perc,diverg_perc,,-,-
+Easting,coord_east,Easting,-,-
+Elevation,elev_m,Elevation,-,metres
+End_Desig,end_desig,Runway End,-,-
+FacType,factype,Factype,-,-
+Guideline,guideline,Guideline,-,-
+HeightRule,heightrule,Heightrule,-,metres
+Height_AGL,height_agl,Height Agl,-,metres
+Height_Extent,height_extent,Height Extent,-,metres
+ICAO,icao_code,ICAO Code,-,-
+Inner Width,inner_width,Inner Width,-,metres
+Inner extent,inner_extent,Inner Extent,-,metres
+InnerKm,innerkm,Innerkm,-,kilometres
+InnerRad_m,innerrad_m,Innerrad M,-,metres
+InnerW_m,innerw_m,Innerw M,-,metres
+LDA,lda,Landing Distance Available,-,metres
+Length,len_m,Length (m),-,metres
+Length (m),len_m,Length (m),-,metres
+Length_m,len_m,Length (m),-,metres
+MOS Ref,ref_mos,MOS Reference,-,-
+MOS_Reference,ref_mos,MOS Reference,-,-
+Max intensity,max_intensity,Max Intensity,-,-
+NASF Ref,ref_nasf,NASF Reference,-,-
+Name,name,Name,-,text
+Northing,coord_north,Northing,-,-
+Offset (m),offset_m,Offset (m),-,metres
+Origin_Offset,origin_offset,Origin Offset,-,metres
+Outer Width,outer_width,Outer Width,-,metres
+Outer extent,outer_extent,Outer Extent,-,metres
+OuterKm,outerkm,Outerkm,-,kilometres
+OuterRad_m,outerrad_m,Outerrad M,-,metres
+OuterW_m,outerw_m,Outerw M,-,metres
+RWY_Name,rwy_name,Rwy Name,-,text
+Radius_m,radius_m,Radius M,-,metres
+Reciprocal Heading,reciprocal_head,Reciprocal Heading,-,-
+Ref,ref_mos,MOS Reference,-,-
+ReqHeight,reqheight,Reqheight,-,metres
+Runway,rwy,Runway,-,-
+Runway End,end_desig,Runway End,-,-
+Runway Heading,rwy_head,Runway Heading,-,-
+Runway_End,end_desig,Runway End,-,-
+Section_Desc,section_desc,Section Desc,-,text
+Shape,shape,Shape,-,-
+Shape_Desc,shape_desc,Shape Desc,-,text
+Side,side,Side,-,-
+Side_m,side_m,Side M,-,metres
+Slope_Perc,slope_perc,Slope Perc,-,-
+SourceFacID,sourcefacid,Sourcefacid,-,-
+SurfName,surfname,Surfname,-,text
+Surface,surface,Surface,-,-
+TODA,toda,Take Off Distance Available,-,metres
+TORA,tora,Take Off Run Available,-,metres
+Type,type,Type,-,-
+Width,wid_m,Width (m),-,metres
+Width (m),wid_m,Width (m),-,metres
+Width_m,wid_m,Width (m),-,metres
+Zone,zone,Zone,-,-
+Zone_Type,zone,Zone Type,-,-
