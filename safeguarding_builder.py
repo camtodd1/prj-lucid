@@ -897,7 +897,6 @@ class SafeguardingBuilder:
             if not grp: QgsMessageLog.logMessage(f"Failed create group: {name}", PLUGIN_TAG, level=Qgis.Warning)
         return guideline_groups
     
-    # ### NEW: Filename Sanitization Helper ###
     def _sanitize_filename(self, name: str, replace_char: str = '_') -> str:
       """Removes or replaces characters invalid for filenames."""
       # Remove leading/trailing whitespace
@@ -1169,6 +1168,18 @@ class SafeguardingBuilder:
       except Exception as e:
         QgsMessageLog.logMessage(f"Error trying to get ARP elevation from layer: {e}", PLUGIN_TAG, level=Qgis.Warning)
       return None
+    
+    def _get_runway_midpoint(self, thr_point: QgsPointXY, rec_thr_point: QgsPointXY) -> Optional[QgsPointXY]:
+      """Calculates the midpoint of the line segment between two points."""
+      if not thr_point or not rec_thr_point:
+          return None
+      try:
+          mid_x = (thr_point.x() + rec_thr_point.x()) / 2.0
+          mid_y = (thr_point.y() + rec_thr_point.y()) / 2.0
+          return QgsPointXY(mid_x, mid_y)
+      except Exception as e:
+          QgsMessageLog.logMessage(f"Error calculating runway midpoint: {e}", PLUGIN_TAG, level=Qgis.Warning)
+          return None
 
     def _process_runways_part2(self, processed_runway_data_list: List[dict], guideline_groups: Dict[str, Optional[QgsLayerTreeGroup]],
       specialised_group_node: Optional[QgsLayerTreeGroup]) -> bool:
@@ -2965,81 +2976,148 @@ class SafeguardingBuilder:
         except Exception as e: QgsMessageLog.logMessage(f"Error Guideline C: {e}", PLUGIN_TAG, level=Qgis.Critical); return False
 
     def process_guideline_e(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
-        """Processes Guideline E: Lighting Control Zone."""
+        """Processes Guideline E: Lighting Control Zone and the new LCZ Area circle."""
         runway_name = runway_data.get('short_name', f"RWY_{runway_data.get('original_index','?')}")
         thr_point = runway_data.get('thr_point'); rec_thr_point = runway_data.get('rec_thr_point')
-        if not all([thr_point, rec_thr_point, layer_group]) or thr_point.compare(rec_thr_point, 1e-6): return False
+        
+        if not all([thr_point, rec_thr_point, layer_group]): # Basic check for core data
+            QgsMessageLog.logMessage(f"Guideline E skipped for {runway_name}: Missing threshold points or layer group.", PLUGIN_TAG, level=Qgis.Warning)
+            return False
+        if thr_point.compare(rec_thr_point, 1e-6): # Check if points are identical
+            QgsMessageLog.logMessage(f"Guideline E skipped for {runway_name}: Threshold points are identical.", PLUGIN_TAG, level=Qgis.Warning)
+            return False
+
         full_geoms: Dict[str, Optional[QgsGeometry]] = {}; final_geoms: Dict[str, Optional[QgsGeometry]] = {}; overall_success = False
+        
+        # --- Standard LCZ Zones (A, B, C, D) ---
         try:
             # This is the updated create_lcz_layer function
-            def create_lcz_layer(zone: str, geom: Optional[QgsGeometry]) -> bool:
+            def create_lcz_layer(zone_letter: str, geom: Optional[QgsGeometry]) -> bool: # Renamed 'zone' to 'zone_letter'
                 if not geom: return False
-                params = GUIDELINE_E_ZONE_PARAMS[zone]; display_name = f"{self.tr('LCZ')} {zone} {runway_name}"; internal_name = f"LCZ_{zone}_{runway_name.replace('/', '_')}"
+                params = GUIDELINE_E_ZONE_PARAMS[zone_letter]; display_name = f"{self.tr('LCZ')} {zone_letter} {runway_name}"; internal_name = f"LCZ_{zone_letter}_{runway_name.replace('/', '_')}"
                 fields=QgsFields([
                     QgsField("rwy", QVariant.String), 
                     QgsField("zone", QVariant.String), 
                     QgsField("desc", QVariant.String),
-                    QgsField("inner_extent", QVariant.Double),
-                    QgsField("outer_extent", QVariant.Double),
-                    QgsField("wid_m", QVariant.Double),
-                    QgsField("max_intensity", QVariant.String),
-                    QgsField("ref_mos", QVariant.String),
-                    QgsField("ref_nasf", QVariant.String)
+                    QgsField("inner_extent", QVariant.Double), 
+                    QgsField("outer_extent", QVariant.Double), 
+                    QgsField("wid_m", QVariant.Double),      
+                    QgsField("max_intensity", QVariant.String), 
+                    QgsField("ref_mos", QVariant.String),     
+                    QgsField("ref_nasf", QVariant.String)     
                 ])
                 
                 inner_extent_val = 0.0
-                zone_index = GUIDELINE_E_ZONE_ORDER.index(zone)
+                zone_index = GUIDELINE_E_ZONE_ORDER.index(zone_letter)
                 if zone_index > 0:
                     previous_zone_id = GUIDELINE_E_ZONE_ORDER[zone_index - 1]
                     inner_extent_val = GUIDELINE_E_ZONE_PARAMS[previous_zone_id]['ext']
                 
                 attributes = [
                     runway_name, 
-                    zone, 
+                    zone_letter, # Use the letter A, B, C, D
                     params['desc'], 
-                    inner_extent_val,             # Inner extent value
-                    params['ext'],                # Outer extent value
-                    params['half_w'] * 2,         # Full width
-                    params['max_intensity'],      # Max intensity from constant
-                    MOS_REF_GUIDELINE_E,          # MOS Ref from constant
-                    NASF_REF_GUIDELINE_E          # NASF Ref from constant
+                    inner_extent_val,             
+                    params['ext'],                
+                    params['half_w'] * 2,         
+                    params['max_intensity'],      
+                    MOS_REF_GUIDELINE_E,          
+                    NASF_REF_GUIDELINE_E          
                 ]
                 feature = QgsFeature(fields); feature.setGeometry(geom); feature.setAttributes(attributes)
-                # Using f-string for style_key to match "LCZ A", "LCZ B", etc.
-                layer = self._create_and_add_layer("Polygon", internal_name, display_name, fields, [feature], layer_group, f"LCZ {zone}")
+                layer = self._create_and_add_layer("Polygon", internal_name, display_name, fields, [feature], layer_group, f"LCZ {zone_letter}")
                 return layer is not None
 
-            # Geometry generation loop (should be present once)
-            for zone_id_geom_gen in GUIDELINE_E_ZONE_ORDER: # Use a different loop variable name to avoid confusion if any old code remains
+            for zone_id_geom_gen in GUIDELINE_E_ZONE_ORDER: 
                 params_geom = GUIDELINE_E_ZONE_PARAMS[zone_id_geom_gen]
-                geom_full = self._create_runway_aligned_rectangle(thr_point, rec_thr_point, params_geom['ext'], params_geom['half_w'], f"LCZ Full {zone_id_geom_gen}")
+                geom_full = self._create_runway_aligned_rectangle(thr_point, rec_thr_point, params_geom['ext'], params_geom['half_w'], f"LCZ Full {zone_id_geom_gen} {runway_name}")
                 full_geoms[zone_id_geom_gen] = geom_full.makeValid() if geom_full and not geom_full.isGeosValid() else geom_full
             
-            # Calculate final geometries (difference logic)
-            geom_prev_for_diff = full_geoms.get('A') # Start with Zone A as the first "previous"
-            final_geoms['A'] = geom_prev_for_diff # Zone A is just its full geometry
+            geom_prev_for_diff = full_geoms.get('A') 
+            final_geoms['A'] = geom_prev_for_diff 
 
-            for i, zone_id_diff in enumerate(GUIDELINE_E_ZONE_ORDER[1:]): # Start from Zone B
+            for i, zone_id_diff in enumerate(GUIDELINE_E_ZONE_ORDER[1:]): 
                 geom_curr_for_diff = full_geoms.get(zone_id_diff)
-                # The previous zone ID for difference is GUIDELINE_E_ZONE_ORDER[i] because we sliced from [1:]
                 prev_zone_id_for_diff = GUIDELINE_E_ZONE_ORDER[i] 
                 geom_prev_valid_for_diff = full_geoms.get(prev_zone_id_for_diff)
 
                 if geom_curr_for_diff and geom_prev_valid_for_diff:
                     diff_geom = geom_curr_for_diff.difference(geom_prev_valid_for_diff)
                     final_geoms[zone_id_diff] = diff_geom.makeValid() if diff_geom and not diff_geom.isGeosValid() else diff_geom
-                elif geom_curr_for_diff: # If previous was None, current is just itself (should not happen if A exists)
+                elif geom_curr_for_diff: 
                     final_geoms[zone_id_diff] = geom_curr_for_diff
                 else:
-                    final_geoms[zone_id_diff] = None # Current geom is None
+                    final_geoms[zone_id_diff] = None 
 
-            # Layer creation loop (should be present once, calling the updated create_lcz_layer)
             for zone_id_create in GUIDELINE_E_ZONE_ORDER:
                 if final_geoms.get(zone_id_create):
-                     if create_lcz_layer(zone_id_create, final_geoms[zone_id_create]): # Call the single, updated helper
+                     if create_lcz_layer(zone_id_create, final_geoms[zone_id_create]): 
                          overall_success = True
-            return overall_success
-        except Exception as e: QgsMessageLog.logMessage(f"Error Guideline E {runway_name}: {e}\n{traceback.format_exc()}", PLUGIN_TAG, level=Qgis.Critical); return False
+        except Exception as e: 
+            QgsMessageLog.logMessage(f"Error processing standard LCZ zones for {runway_name}: {e}\n{traceback.format_exc()}", PLUGIN_TAG, level=Qgis.Critical)
+            # overall_success might still be true if the new LCZ Area succeeds below
+
+        # --- NEW: LCZ Area (6000m circle from runway midpoint) ---
+        lcz_area_success = False
+        try:
+            midpoint = self._get_runway_midpoint(thr_point, rec_thr_point)
+            if midpoint:
+                midpoint_geom = QgsGeometry.fromPointXY(midpoint)
+                if not midpoint_geom.isNull():
+                    radius_m = 6000.0
+                    lcz_area_circle_geom = midpoint_geom.buffer(radius_m, GUIDELINE_C_BUFFER_SEGMENTS) # Use same buffer segments as Guideline C for smoothness
+                    
+                    if lcz_area_circle_geom and not lcz_area_circle_geom.isEmpty():
+                        valid_lcz_area_geom = lcz_area_circle_geom.makeValid()
+                        if valid_lcz_area_geom and valid_lcz_area_geom.isGeosValid():
+                            lcz_area_fields = QgsFields([
+                                QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
+                                QgsField("desc", QVariant.String, self.tr("Description"), 50),
+                                QgsField("radius_m", QVariant.Double, self.tr("Radius (m)"), 10, 1),
+                                QgsField("ref_nasf", QVariant.String, self.tr("NASF Guideline"), 50) # Example reference
+                            ])
+                            
+                            feature = QgsFeature(lcz_area_fields)
+                            feature.setGeometry(valid_lcz_area_geom)
+                            attributes = [
+                                runway_name,
+                                "Lighting Control Zone Area (6km Radius)", # Description
+                                radius_m,
+                                NASF_REF_GUIDELINE_E # Re-using Guideline E NASF ref, or a new one if needed
+                            ]
+                            feature.setAttributes(attributes)
+                            
+                            display_name = f"{self.tr('LCZ Area')} {runway_name}"
+                            internal_name = f"LCZ_Area_{runway_name.replace('/', '_')}"
+                            # Add a style key for this new layer type if you intend to style it uniquely
+                            style_key_lcz_area = "LCZ Area" # Example, add to self.style_map if specific .qml exists
+                            if style_key_lcz_area not in self.style_map:
+                                self.style_map[style_key_lcz_area] = "default_zone_polygon.qml" # Fallback style
+
+                            layer = self._create_and_add_layer(
+                                "Polygon", 
+                                internal_name, 
+                                display_name, 
+                                lcz_area_fields, 
+                                [feature], 
+                                layer_group, 
+                                style_key_lcz_area
+                            )
+                            if layer:
+                                lcz_area_success = True
+                                overall_success = True # If this succeeds, the whole Guideline E processing is a success
+                        else:
+                            QgsMessageLog.logMessage(f"Failed to create valid LCZ Area circle geometry for {runway_name} after makeValid.", PLUGIN_TAG, level=Qgis.Warning)
+                    else:
+                        QgsMessageLog.logMessage(f"Failed to buffer LCZ Area circle for {runway_name}.", PLUGIN_TAG, level=Qgis.Warning)
+                else:
+                    QgsMessageLog.logMessage(f"Failed to create geometry from midpoint for LCZ Area {runway_name}.", PLUGIN_TAG, level=Qgis.Warning)
+            else:
+                QgsMessageLog.logMessage(f"Failed to calculate midpoint for LCZ Area {runway_name}.", PLUGIN_TAG, level=Qgis.Warning)
+        except Exception as e_lcz_area:
+            QgsMessageLog.logMessage(f"Error processing LCZ Area (6km circle) for {runway_name}: {e_lcz_area}\n{traceback.format_exc()}", PLUGIN_TAG, level=Qgis.Critical)
+
+        return overall_success # True if either standard LCZs or the new LCZ Area was created
 
 # ============================================================
 # Guideline F: OLS Processing Helpers
