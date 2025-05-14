@@ -58,7 +58,7 @@ GUIDELINE_B_ZONE_HALF_WIDTH = 1200.0
 GUIDELINE_C_RADIUS_A_M = 3000.0
 GUIDELINE_C_RADIUS_B_M = 8000.0
 GUIDELINE_C_RADIUS_C_M = 13000.0
-GUIDELINE_C_BUFFER_SEGMENTS = 144 # Increased segments for smoother circles
+GUIDELINE_C_BUFFER_SEGMENTS = 144 # Increase segments for smoother circles
 
 GUIDELINE_E_ZONE_PARAMS = {
     'A': {'ext': 1000.0, 'half_w': 300.0, 'desc': "Lighting Zone A (0-1km ext, 300m HW)", 'max_intensity': "0cd"},
@@ -77,7 +77,7 @@ GUIDELINE_I_MOS_REF_VAL = "n/a"
 GUIDELINE_I_NASF_REF_VAL = "Guideline I"
 
 RAOA_MOS_REF_VAL = "MOS 139 6.20"
-MOS_REF_TAXIWAY_SEPARATION = "MOS 139 6.53" # <<< NEW CONSTANT
+MOS_REF_TAXIWAY_SEPARATION = "MOS 139 6.53"
 
 CONICAL_CONTOUR_INTERVAL = 10.0 # Height interval in meters for conical surface
 APPROACH_CONTOUR_INTERVAL = 10.0 # Height interval in meters for approach surfaces
@@ -339,511 +339,459 @@ class SafeguardingBuilder:
       return reference_elevation_datum
 
     def run_safeguarding_processing(self):
-      """Orchestrates the creation of safeguarding surfaces using validated input data."""
-      plugin_tag = PLUGIN_TAG # Local variable
-      QgsMessageLog.logMessage("--- Safeguarding Processing Started ---", plugin_tag, level=Qgis.Info)
-      self.successfully_generated_layers = []
-      self.reference_elevation_datum = None
-      self.arp_elevation_amsl = None
-      self.output_mode = 'memory' # Reset to default
-      self.output_path = None
-      self.output_format_driver = None
-      self.output_format_extension = None
-      self.dissolve_output = False
-      
-      if self.dlg is None:
-        QgsMessageLog.logMessage("Processing aborted: Dialog reference missing.", plugin_tag, level=Qgis.Critical)
-        # No need for message bar here, the UI likely closed unexpectedly.
-        return
-      
-      # User feedback: Starting validation
-      # self.iface.messageBar().pushMessage(self.tr("Info"), self.tr("Validating inputs..."), level=Qgis.Info, duration=3)
-      
-      project = QgsProject.instance()
-      target_crs = project.crs()
-      if not target_crs or not target_crs.isValid():
-        # Critical: Cannot proceed without a valid CRS.
-        QgsMessageLog.logMessage("Processing aborted: Project CRS is invalid or not set.", plugin_tag, level=Qgis.Critical)
-        self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Project CRS is invalid or not set. Please set a valid Projected CRS."), level=Qgis.Critical, duration=10)
-        return
-      # Info: Log the CRS being used.
-      QgsMessageLog.logMessage(f"Using Project CRS: {target_crs.authid()} ({target_crs.description()})", plugin_tag, level=Qgis.Info)
-      
-      # Get ALL Validated Input Data
-      input_data = None
-      try:
-        input_data = self.dlg.get_all_input_data() # Assumes this method performs validation and shows messages
-        if input_data is None:
-          # Warning: Input validation failed (details should be logged by get_all_input_data or shown in UI)
-          QgsMessageLog.logMessage("Processing aborted: Input validation failed (check previous messages or dialog).", plugin_tag, level=Qgis.Warning)
-          # No extra message bar needed if validation already showed errors.
-          return
-      except Exception as e:
-        # Critical: Unexpected error retrieving data.
-        QgsMessageLog.logMessage(f"Critical error getting input data: {e}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
-        self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Failed to retrieve input data. See log for details."), level=Qgis.Critical, duration=10)
-        return
-      
-      # ### MOD: Store output options as instance variables ###
-      self.output_mode = input_data.get('output_mode', 'memory')
-      self.icao_code = input_data.get('icao_code', 'UNKNOWN_ICAO') # Store ICAO code
-      self.output_path = input_data.get('output_path')
-      self.output_format_driver = input_data.get('output_format_driver')
-      self.output_format_extension = input_data.get('output_format_extension')
-      self.dissolve_output = input_data.get('dissolve_output', False)
-      QgsMessageLog.logMessage(
-          f"Processing Mode: {self.output_mode}. "
-          f"Path: {self.output_path or 'N/A'}. "
-          f"Format: {self.output_format_driver or 'N/A'}. "
-          f"Dissolve: {self.dissolve_output}",
-          plugin_tag, level=Qgis.Info
-      )
-      
-      # Extract data (keep this part)
-      icao_code = input_data.get('icao_code', 'UNKNOWN')
-      arp_point = input_data.get('arp_point'); arp_east = input_data.get('arp_easting'); arp_north = input_data.get('arp_northing')
-      met_point = input_data.get('met_point'); runway_input_list = input_data.get('runways', [])
-      cns_input_list = input_data.get('cns_facilities', [])
-      self.arp_elevation_amsl = input_data.get('arp_elevation')
-      
-      if not runway_input_list:
-        # Warning: No runways to process after validation.
-        QgsMessageLog.logMessage("No valid runway data found to process.", plugin_tag, level=Qgis.Warning)
-        self.iface.messageBar().pushMessage(self.tr("Warning"), self.tr("No valid runway data found after validation."), level=Qgis.Warning, duration=5)
-        # Don't necessarily return here, might still process ARP, MET, CNS if present.
-        # Let the rest of the code handle empty lists gracefully.
-        # return # Original code returned here, decide if that's desired behavior
-        
-      # User feedback: Processing runways.
-      if runway_input_list:
-        # self.iface.messageBar().pushMessage(
-          # self.tr("Info"),
-          # self.tr("Processing {n} runway(s) for {icao}...").format(n=len(runway_input_list), icao=icao_code),
-          # level=Qgis.Info, duration=4
-        # )
-
-        # Define Style Map
-        self.style_map = { "ARP": "arp_point.qml", 
-          "Runway Centreline": "rwy_centreline_line.qml",
-          "MET Station Location": "default_point.qml",
-          "MET Instrument Enclosure": "default_zone_polygon.qml",
-          "MET Buffer Zone": "default_zone_polygon.qml",
-          "MET Obstacle Buffer Zone": "default_zone_polygon.qml",
-          "Runway Pavement": "physical_runway.qml",
-          "PreThreshold Runway": "physical_prethreshold_runway.qml",
-          "PreThreshold Area": "physical_prethreshold_area.qml",
-          "DisplacedThresholdMarking": "physical_displaced_marking.qml",
-          "PreThresholdAreaMarking": "physical_pre_area_marking.qml",
-          "Runway Shoulders": "physical_runway_shoulder.qml",
-          "Runway Graded Strips": "physical_graded_strips.qml",
-          "Runway Overall Strips": "physical_overall_strips.qml",
-          "Runway End Safety Areas (RESA)": "physical_resa.qml",
-          "Stopways": "physical_stopway.qml",
-          "RAOA": "default_zone_polygon.qml",
-          "Taxiway Separation Line": "twy_separation_line.qml",
-          "WSZ Runway": "guideline_b_wsz.qml",
-          "WMZ A": "default_zone_polygon.qml",
-          "WMZ B": "default_zone_polygon.qml",
-          "WMZ C": "default_zone_polygon.qml",
-          "LCZ A": "default_zone_polygon.qml",
-          "LCZ B": "default_zone_polygon.qml",
-          "LCZ C": "default_zone_polygon.qml",
-          "LCZ D": "default_zone_polygon.qml",
-          "OLS Approach": "default_ols_polygon.qml",
-          "OLS Approach Contour": "default_ols_line.qml",
-          "OLS Inner Approach": "default_ols_polygon.qml",
-          "OLS TOCS": "default_ols_polygon.qml",
-          "OLS IHS": "default_ols_polygon.qml",
-          "OLS Transitional": "default_ols_polygon.qml",
-          "OLS Conical": "default_ols_polygon.qml",
-          "OLS Conical Contour": "default_ols_polygon.qml",
-          "OLS OHS": "default_ols_polygon.qml",
-          "CNS Circle Zone": "default_cns_zone_polygon.qml",
-          "CNS Donut Zone": "default_cns_zone_polygon.qml",
-          "Default CNS": "default_cns_zone_polygon.qml",
-          "PSA Runway": "guideline_i_psa.qml",
-          "Default Polygon": "default_zone_polygon.qml",
-          "Default Line": "default_line.qml",
-          "Default Point": "default_point.qml" }
-
-        # Setup Layer Tree (keep this part)
-        root = project.layerTreeRoot()
-        main_group_name = f"{icao_code} {self.tr('Safeguarding Surfaces')}"
-        main_group = self._setup_main_group(root, main_group_name, project)
-        if main_group is None:
-            # Error already logged in _setup_main_group
-            self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Failed to create main layer group."), level=Qgis.Critical, duration=10)
+          """Orchestrates the creation of safeguarding surfaces using validated input data."""
+          plugin_tag = PLUGIN_TAG # Local variable
+          QgsMessageLog.logMessage("--- Safeguarding Processing Started ---", plugin_tag, level=Qgis.Info)
+          self.successfully_generated_layers = []
+          self.reference_elevation_datum = None
+          self.arp_elevation_amsl = None
+          self.output_mode = 'memory' # Reset to default
+          self.output_path = None
+          self.output_format_driver = None
+          self.output_format_extension = None
+          self.dissolve_output = False
+          
+          if self.dlg is None:
+            QgsMessageLog.logMessage("Processing aborted: Dialog reference missing.", plugin_tag, level=Qgis.Critical)
             return
-        
-        # Create ARP Layer (keep this part, logs inside helper)
-        arp_layer_created = False
-        if arp_point:
-            arp_layer = self.create_arp_layer(arp_point, arp_east, arp_north, icao_code, target_crs, main_group, self.arp_elevation_amsl)
-            if arp_layer: arp_layer_created = True
-            if self.arp_elevation_amsl is None and arp_layer:
-                fetched_elev = self._try_get_arp_elevation_from_layer(arp_layer) # Assume this helper exists
-                if fetched_elev is not None:
-                    # Warning: Found elevation after RED calc might have failed (if it needed it)
-                    QgsMessageLog.logMessage(f"Note: ARP Elevation ({fetched_elev:.2f}m) found on layer after RED calculation might have failed.", plugin_tag, level=Qgis.Warning)
-                  
-        # Create MET Station Layers (keep this part, logs inside helper)
-        met_layers_created_ok = False
-        if met_point:
-            met_group = main_group.addGroup(self.tr("Meteorological Instrument Station"))
-            if met_group:
-              met_layers_created_ok, _ = self.process_met_station_surfaces(met_point, icao_code, target_crs, met_group)
-            else:
-                QgsMessageLog.logMessage("Failed to create 'Meteorological Instrument Station' subgroup.", plugin_tag, level=Qgis.Warning)
-        else:
-            # Info: Log skipping MET station generation.
-            QgsMessageLog.logMessage("Skipping MET Station processing: No valid coordinates provided.", plugin_tag, level=Qgis.Info)
           
-        # Runway Loop (Part 1) - Creates Centrelines (keep this part, logs inside helper)
-        processed_runway_data_list, any_runway_base_data_ok = self._process_runways_part1(
-            main_group, project, target_crs, icao_code, runway_input_list
-        )
-        
-        # Style Centrelines (keep this part, logs inside helper)
-        if any_runway_base_data_ok:
-            for rwy_data in processed_runway_data_list:
-                cl_layer = rwy_data.get("centreline_layer")
-                if cl_layer: self._apply_style(cl_layer, self.style_map)
-              
-        # Setup & Generate Physical Geometry
-        physical_geom_group = None  # Group for pavement, shoulders, pre-thr, markings
-        protection_area_group = None # NEW group for strips, resa
-        physical_layers = {}      # Dictionary to hold all generated layers
-        any_physical_or_protection_ok = False # Combined success flag
-        
-        if processed_runway_data_list and any_runway_base_data_ok:
-          if physical_geom_group and protection_area_group: # Check both groups created ok
-                # Define fields (keep this part)
-                common_fields = [ QgsField("rwy_name", QVariant.String, self.tr("rwy"), 30), QgsField("type", QVariant.String, self.tr("desc"), 50), QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3), QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3), QgsField("MOS_Ref", QVariant.String, self.tr("MOS Reference"), 250)]
-                stopway_resa_fields = common_fields + [QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)]
-          # Create Parent Groups
-          physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
-          protection_area_group = main_group.addGroup(self.tr("Runway Protection Areas")) # NEW
+          project = QgsProject.instance()
+          target_crs = project.crs()
+          if not target_crs or not target_crs.isValid():
+            QgsMessageLog.logMessage("Processing aborted: Project CRS is invalid or not set.", plugin_tag, level=Qgis.Critical)
+            self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Project CRS is invalid or not set. Please set a valid Projected CRS."), level=Qgis.Critical, duration=10)
+            return
+          QgsMessageLog.logMessage(f"Using Project CRS: {target_crs.authid()} ({target_crs.description()})", plugin_tag, level=Qgis.Info)
           
-          if physical_geom_group and protection_area_group: # Check both groups created ok
-                # Define fields (keep this part)
-                common_fields = [ QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30), QgsField("desc", QVariant.String, self.tr("Element Type"), 50), QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3), QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3), QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250)]
-                stopway_resa_fields = common_fields + [QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)]
-                pre_threshold_fields = common_fields + [QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)]
-                marking_fields = [ QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30), QgsField("desc", QVariant.String, self.tr("Element Type"), 50), QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3), QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10), QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250) ]
-                flyover_fields = common_fields
-              
-                layer_definitions = {
-                    # Physical Geometry Layers
-                    'rwy': {'name': self.tr('Runway Pavement'), 'fields': common_fields, 'group': physical_geom_group},
-                    'PreThresholdRunway': {'name': self.tr('Pre-Threshold Runway'), 'fields': pre_threshold_fields, 'group': physical_geom_group},
-                    'PreThresholdArea': {'name': self.tr('Pre-Threshold Area'), 'fields': pre_threshold_fields, 'group': physical_geom_group},
-                    'DisplacedThresholdMarking': {'name': self.tr('Displaced Threshold Markings'), 'fields': marking_fields, 'geom_type': 'LineString', 'group': physical_geom_group},
-                    'PreThresholdAreaMarking': {'name': self.tr('Pre-Threshold Area Markings'), 'fields': marking_fields, 'geom_type': 'LineString', 'group': physical_geom_group},
-                    'Shoulder': {'name': self.tr('Runway Shoulders'), 'fields': common_fields, 'group': physical_geom_group},
-                    # Protection Area Layers
-                    'Stopway': {'name': self.tr('Stopways'), 'fields': stopway_resa_fields, 'group': protection_area_group},
-                    'GradedStrip': {'name': self.tr('Runway Graded Strip'), 'fields': common_fields, 'group': protection_area_group},
-                    'FlyoverStrip': {'name': self.tr('Runway Strip Flyover Area'), 'fields': flyover_fields, 'group': protection_area_group},
-                    'OverallStrip': {'name': self.tr('Runway Overall Strip'), 'fields': common_fields, 'group': protection_area_group},
-                    'RESA': {'name': self.tr('Runway End Safety Area (RESA)'), 'fields': stopway_resa_fields, 'group': protection_area_group}
-                    }
-                style_key_map = { # Keep map
-                  "rwy": "Runway Pavement", "PreThresholdRunway": "PreThreshold Runway", "PreThresholdArea": "PreThreshold Area",
-                  "DisplacedThresholdMarking": "DisplacedThresholdMarking", "PreThresholdAreaMarking": "PreThresholdAreaMarking",
-                  "Shoulder": "Runway Shoulders", "Stopway": "Stopways", "GradedStrip": "Runway Graded Strips",
-                  "FlyoverStrip": "Runway Strip Flyover Area", "OverallStrip": "Runway Overall Strips",
-                  "RESA": "Runway End Safety Areas (RESA)"
-                }
-              
-                # Create layer structures (keep this part, but refine logging inside)
-                for element_type, definition in layer_definitions.items():
-                    target_group = definition.get('group')
-                    if not target_group: # Fallback if group somehow missing
-                      QgsMessageLog.logMessage(f"Warning: No target group defined for {element_type}, skipping layer setup.", plugin_tag, level=Qgis.Warning)
-                      continue
-                    geom_type_str = definition.get('geom_type', 'Polygon')
-                    layer_name_internal = f"physical_{element_type}_{icao_code}_{id(self)}_{QtCore.QDateTime.currentMSecsSinceEpoch()}"
-                    layer_display_name = f"{icao_code} {definition['name']}"
-                    layer_uri = ""
-                    if geom_type_str == 'LineString': layer_uri = f"LineString?crs={target_crs.authid()}&index=yes"
-                    elif geom_type_str == 'Polygon': layer_uri = f"Polygon?crs={target_crs.authid()}&index=yes"
-                    else: QgsMessageLog.logMessage(f"Warning: Unsupported geometry type '{geom_type_str}' for layer URI.", plugin_tag, level=Qgis.Warning); continue
-                    layer = QgsVectorLayer(layer_uri, layer_name_internal, "memory")
+          input_data = None
+          try:
+            input_data = self.dlg.get_all_input_data() 
+            if input_data is None:
+              QgsMessageLog.logMessage("Processing aborted: Input validation failed (check previous messages or dialog).", plugin_tag, level=Qgis.Warning)
+              return
+          except Exception as e:
+            QgsMessageLog.logMessage(f"Critical error getting input data: {e}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
+            self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Failed to retrieve input data. See log for details."), level=Qgis.Critical, duration=10)
+            return
           
-                    if layer.isValid() and layer.dataProvider() and layer.dataProvider().addAttributes(definition['fields']):
-                      layer.updateFields(); layer.setName(layer_display_name)
-                      # Store the target group node on the layer object temporarily
-                      layer.setCustomProperty("target_group_node", target_group.name()) # Store group name
-                      layer.setCustomProperty("safeguarding_style_key", style_key_map.get(element_type))
-                      if layer.startEditing():
-                        physical_layers[element_type] = layer
-                      else:
-                        QgsMessageLog.logMessage(f"Warning: Failed startEditing for layer '{layer_display_name}'.", plugin_tag, level=Qgis.Warning)
-                        physical_layers[element_type] = None
-                    else:
-                      QgsMessageLog.logMessage(f"Critical: Failed initialize layer '{layer_display_name}'.", plugin_tag, level=Qgis.Critical)
-                      physical_layers[element_type] = None
+          self.output_mode = input_data.get('output_mode', 'memory')
+          self.icao_code = input_data.get('icao_code', 'UNKNOWN_ICAO') 
+          self.output_path = input_data.get('output_path')
+          self.output_format_driver = input_data.get('output_format_driver')
+          self.output_format_extension = input_data.get('output_format_extension')
+          self.dissolve_output = input_data.get('dissolve_output', False)
+          QgsMessageLog.logMessage(
+              f"Processing Mode: {self.output_mode}. "
+              f"Path: {self.output_path or 'N/A'}. "
+              f"Format: {self.output_format_driver or 'N/A'}. "
+              f"Dissolve: {self.dissolve_output}",
+              plugin_tag, level=Qgis.Info
+          )
+          
+          icao_code = input_data.get('icao_code', 'UNKNOWN')
+          arp_point = input_data.get('arp_point'); arp_east = input_data.get('arp_easting'); arp_north = input_data.get('arp_northing')
+          met_point = input_data.get('met_point'); runway_input_list = input_data.get('runways', [])
+          cns_input_list = input_data.get('cns_facilities', [])
+          self.arp_elevation_amsl = input_data.get('arp_elevation')
+          
+          if not runway_input_list:
+            QgsMessageLog.logMessage("No valid runway data found to process.", plugin_tag, level=Qgis.Warning)
+            self.iface.messageBar().pushMessage(self.tr("Warning"), self.tr("No valid runway data found after validation."), level=Qgis.Warning, duration=5)
+            
+          if runway_input_list:
+            self.style_map = { "ARP": "arp_point.qml", 
+              "Runway Centreline": "rwy_centreline_line.qml",
+              "MET Station Location": "default_point.qml",
+              "MET Instrument Enclosure": "default_zone_polygon.qml",
+              "MET Buffer Zone": "default_zone_polygon.qml",
+              "MET Obstacle Buffer Zone": "default_zone_polygon.qml",
+              "Runway Pavement": "physical_runway.qml",
+              "PreThreshold Runway": "physical_prethreshold_runway.qml",
+              "PreThreshold Area": "physical_prethreshold_area.qml",
+              "DisplacedThresholdMarking": "physical_displaced_marking.qml",
+              "PreThresholdAreaMarking": "physical_pre_area_marking.qml",
+              "Runway Shoulders": "physical_runway_shoulder.qml",
+              "Runway Graded Strips": "physical_graded_strips.qml", # Corrected style key
+              "Runway Overall Strips": "physical_overall_strips.qml", # Corrected style key
+              "Runway Strip Flyover Area": "default_zone_polygon.qml", # Added a style for flyover
+              "Runway End Safety Areas (RESA)": "physical_resa.qml",
+              "Stopways": "physical_stopway.qml",
+              "RAOA": "default_zone_polygon.qml",
+              "Taxiway Separation Line": "twy_separation_line.qml",
+              "WSZ Runway": "guideline_b_wsz.qml",
+              "WMZ A": "default_zone_polygon.qml",
+              "WMZ B": "default_zone_polygon.qml",
+              "WMZ C": "default_zone_polygon.qml",
+              "LCZ A": "default_zone_polygon.qml",
+              "LCZ B": "default_zone_polygon.qml",
+              "LCZ C": "default_zone_polygon.qml",
+              "LCZ D": "default_zone_polygon.qml",
+              "OLS Approach": "default_ols_polygon.qml",
+              "OLS Approach Contour": "default_ols_line.qml",
+              "OLS Inner Approach": "default_ols_polygon.qml",
+              "OLS TOCS": "default_ols_polygon.qml",
+              "OLS IHS": "default_ols_polygon.qml",
+              "OLS Transitional": "default_ols_polygon.qml",
+              "OLS Conical": "default_ols_polygon.qml",
+              "OLS Conical Contour": "default_ols_polygon.qml", 
+              "OLS OHS": "default_ols_polygon.qml",
+              "CNS Circle Zone": "default_cns_zone_polygon.qml",
+              "CNS Donut Zone": "default_cns_zone_polygon.qml",
+              "Default CNS": "default_cns_zone_polygon.qml",
+              "PSA Runway": "guideline_i_psa.qml",
+              "Default Polygon": "default_zone_polygon.qml",
+              "Default Line": "default_line.qml",
+              "Default Point": "default_point.qml" }
+
+            root = project.layerTreeRoot()
+            main_group_name = f"{icao_code} {self.tr('Safeguarding Surfaces')}"
+            main_group = self._setup_main_group(root, main_group_name, project)
+            if main_group is None:
+                self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Failed to create main layer group."), level=Qgis.Critical, duration=10)
+                return
+            
+            arp_layer_created = False
+            if arp_point:
+                arp_layer = self.create_arp_layer(arp_point, arp_east, arp_north, icao_code, target_crs, main_group, self.arp_elevation_amsl)
+                if arp_layer: arp_layer_created = True
+                if self.arp_elevation_amsl is None and arp_layer:
+                    fetched_elev = self._try_get_arp_elevation_from_layer(arp_layer) 
+                    if fetched_elev is not None:
+                        QgsMessageLog.logMessage(f"Note: ARP Elevation ({fetched_elev:.2f}m) found on layer after RED calculation might have failed.", plugin_tag, level=Qgis.Warning)
                       
-                # --- Populate layers (needs modification for FlyoverStrip) ---
-                physical_geom_features_added = {element_type: False for element_type in physical_layers.keys()}
-                QgsMessageLog.logMessage("Populating physical geometry & protection area layers...", plugin_tag, level=Qgis.Info) # Update log message
+            met_layers_created_ok = False
+            if met_point:
+                met_group = main_group.addGroup(self.tr("Meteorological Instrument Station"))
+                if met_group:
+                  met_layers_created_ok, _ = self.process_met_station_surfaces(met_point, icao_code, target_crs, met_group)
+                else:
+                    QgsMessageLog.logMessage("Failed to create 'Meteorological Instrument Station' subgroup.", plugin_tag, level=Qgis.Warning)
+            else:
+                QgsMessageLog.logMessage("Skipping MET Station processing: No valid coordinates provided.", plugin_tag, level=Qgis.Info)
+              
+            processed_runway_data_list, any_runway_base_data_ok = self._process_runways_part1(
+                main_group, project, target_crs, icao_code, runway_input_list
+            )
+            
+            if any_runway_base_data_ok:
                 for rwy_data in processed_runway_data_list:
-                  runway_name_log = rwy_data.get('short_name', f"RWY_{rwy_data.get('original_index','?')}")
-                  generated_elements_map = {} # Store generated geoms by type for difference calc
-                  try:
-                    # Generate base physical geometry (Pavement, Shoulders, Strips, RESA, etc.)
-                    generated_elements_list = self.generate_physical_geometry(rwy_data)
-                    if generated_elements_list is None: continue
-                    
-                    # Add generated elements to layers and store strip geoms
-                    graded_strip_geom: Optional[QgsGeometry] = None
-                    overall_strip_geom: Optional[QgsGeometry] = None
-                    graded_strip_attrs: Optional[dict] = None
-                    overall_strip_attrs: Optional[dict] = None
-                    
-                    for element_type, geometry, attributes in generated_elements_list:
-                      target_layer = physical_layers.get(element_type)
-                      if target_layer is None or not target_layer.isEditable(): continue
-                      if geometry is None or geometry.isEmpty(): continue
-                      if not geometry.isGeosValid(): geometry = geometry.makeValid()
-                      if geometry is None or geometry.isEmpty() or not geometry.isGeosValid(): continue
-                      
-                      # Store strip geometries for later difference calculation
-                      if element_type == 'GradedStrip':
-                        graded_strip_geom = geometry
-                        graded_strip_attrs = attributes # Keep attrs for potential reuse
-                      elif element_type == 'OverallStrip':
-                        overall_strip_geom = geometry
-                        overall_strip_attrs = attributes
-                        
-                      # Add feature to its respective layer
-                      feature = QgsFeature(target_layer.fields())
-                      feature.setGeometry(geometry)
-                      for field_name, value in attributes.items():
-                        idx = feature.fieldNameIndex(field_name)
-                        if idx != -1: feature.setAttribute(idx, value)
-                        
-                      add_ok, _ = target_layer.dataProvider().addFeatures([feature])
-                      if add_ok:
-                        physical_geom_features_added[element_type] = True
-                        any_physical_or_protection_ok = True # Update combined flag
-                      else:
-                        QgsMessageLog.logMessage(f"Warning: Failed add feature {element_type} for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
-                        
-                    # --- Generate Flyover Area (Difference) ---
-                    flyover_layer = physical_layers.get('FlyoverStrip')
-                    if flyover_layer and flyover_layer.isEditable() and graded_strip_geom and overall_strip_geom:
-                      try:
-                        # Ensure inputs are valid before difference
-                        if not graded_strip_geom.isGeosValid(): graded_strip_geom = graded_strip_geom.makeValid()
-                        if not overall_strip_geom.isGeosValid(): overall_strip_geom = overall_strip_geom.makeValid()
-                        
-                        if graded_strip_geom and overall_strip_geom and graded_strip_geom.isGeosValid() and overall_strip_geom.isGeosValid():
-                          flyover_geom = overall_strip_geom.difference(graded_strip_geom)
-                          if flyover_geom and not flyover_geom.isEmpty():
-                            flyover_geom = flyover_geom.makeValid() # Validate result
-                            if flyover_geom and not flyover_geom.isEmpty() and flyover_geom.isGeosValid():
-                              # Create feature for flyover area
-                              flyover_feat = QgsFeature(flyover_layer.fields())
-                              flyover_feat.setGeometry(flyover_geom)
-                              # Set attributes (reuse overall strip's attrs? Or define specific ones?)
-                              # Example: Reuse overall strip name/ref, but set type and maybe dims based on difference?
-                              flyover_attrs = overall_strip_attrs.copy() if overall_strip_attrs else {}
-                              flyover_attrs['type'] = 'Flyover Strip Area'
-                              # Width/Length might be complex to calculate accurately from difference, maybe omit?
-                              # flyover_attrs['wid_m'] = (overall_strip_attrs.get('wid_m', 0) - graded_strip_attrs.get('wid_m', 0)) if overall_strip_attrs and graded_strip_attrs else None
-                              # flyover_attrs['len_m'] = overall_strip_attrs.get('len_m') if overall_strip_attrs else None
-                              
-                              for field_name, value in flyover_attrs.items():
-                                idx = flyover_feat.fieldNameIndex(field_name)
-                                if idx != -1: flyover_feat.setAttribute(idx, value)
-                                
-                              add_fly_ok, _ = flyover_layer.dataProvider().addFeatures([flyover_feat])
-                              if add_fly_ok:
-                                physical_geom_features_added['FlyoverStrip'] = True
-                                any_physical_or_protection_ok = True
-                              else:
-                                QgsMessageLog.logMessage(f"Warning: Failed add feature FlyoverStrip for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
-                            else: QgsMessageLog.logMessage(f"Warning: FlyoverStrip geometry invalid after difference/makeValid for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
-                          else: QgsMessageLog.logMessage(f"Warning: FlyoverStrip geometry is empty after difference for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
-                        else: QgsMessageLog.logMessage(f"Warning: Cannot calculate FlyoverStrip difference due to invalid input strip geometries for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
-                      except Exception as e_diff:
-                        QgsMessageLog.logMessage(f"Warning: Error calculating FlyoverStrip difference for {runway_name_log}: {e_diff}", plugin_tag, level=Qgis.Warning)
-                    elif flyover_layer and flyover_layer.isEditable():
-                      QgsMessageLog.logMessage(f"Info: Skipping FlyoverStrip for {runway_name_log}: Graded or Overall strip geometry missing.", plugin_tag, level=Qgis.Info)
-                      
-                      
-                  except Exception as e_phys:
-                    QgsMessageLog.logMessage(f"Critical Error populating layers for {runway_name_log}: {e_phys}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
-                    continue
+                    cl_layer = rwy_data.get("centreline_layer")
+                    if cl_layer: self._apply_style(cl_layer, self.style_map)
                   
-                # --- Finalize temporary layers, extract features, and call _create_and_add_layer ---
-                QgsMessageLog.logMessage("Finalizing and saving physical geometry & protection area layers...", plugin_tag, level=Qgis.Info)
-                any_layer_successfully_processed_in_this_block = False # Local flag for this block's success
-                project_root = QgsProject.instance().layerTreeRoot() # Ensure project_root is defined
-          
-                for element_type, temp_memory_layer in physical_layers.items():
-                  if temp_memory_layer and temp_memory_layer.isValid():
-                    # If the temp_memory_layer was in edit mode, commit its changes.
-                    # However, if features were added directly to provider without startEditing(),
-                    # this might not be strictly necessary or could even error if not in edit mode.
-                    # For safety, if it was in edit mode, let's commit.
-                    # This assumes your earlier loop *did* call temp_memory_layer.startEditing().
-                    # If not, this commitChanges() call can be removed or made conditional.
-                    # Based on your logs "Committed changes for...", it seems it was in edit mode.
-                    if temp_memory_layer.isEditable():
-                      if not temp_memory_layer.commitChanges():
-                        QgsMessageLog.logMessage(f"Warning: Failed to commit changes on temporary layer '{temp_memory_layer.name()}'. Features might be incomplete. Errors: {temp_memory_layer.commitErrors()}", plugin_tag, Qgis.Warning)
-                        
-                    if temp_memory_layer.featureCount() > 0:
-                      display_name_for_final_layer = temp_memory_layer.name()
-                      fields_for_final_layer = temp_memory_layer.fields()
-                      
-                      qgis_geom_type_enum = temp_memory_layer.geometryType() # This is QgsWkbTypes.Type enum (0=Point, 1=Line, 2=Polygon)
-                      geom_type_str_for_final_layer = "Unknown"
-                      if qgis_geom_type_enum == 0: # QgsWkbTypes.PointGeometry often maps to 0
-                        geom_type_str_for_final_layer = "Point"
-                      elif qgis_geom_type_enum == 1: # QgsWkbTypes.LineGeometry often maps to 1
-                        geom_type_str_for_final_layer = "LineString"
-                      elif qgis_geom_type_enum == 2: # QgsWkbTypes.PolygonGeometry often maps to 2
-                        geom_type_str_for_final_layer = "Polygon"
-                      else:
-                        QgsMessageLog.logMessage(f"Warning: Unknown QGIS geometry type enum {qgis_geom_type_enum} for temp layer '{display_name_for_final_layer}'. Defaulting to 'Unknown'.", plugin_tag, Qgis.Warning)
-                        
-                      features_to_write = [QgsFeature(f) for f in temp_memory_layer.getFeatures()]
-                      
-                      target_group_name = temp_memory_layer.customProperty("target_group_node")
-                      style_key_for_final_layer = str(temp_memory_layer.customProperty("safeguarding_style_key", "Default Polygon")) # Ensure string, provide default
-                      
-                      target_group_node: Optional[QgsLayerTreeGroup] = None
-                      if target_group_name and isinstance(target_group_name, str):
-                        target_group_node = project_root.findGroup(target_group_name)
-                        
-                      if not target_group_node:
-                        QgsMessageLog.logMessage(f"Warning: Target group '{target_group_name}' not found for '{display_name_for_final_layer}'. Using main plugin group.", plugin_tag, Qgis.Warning)
-                        target_group_node = main_group # main_group should be defined earlier in run_safeguarding_processing
-                      
-                      final_layer = self._create_and_add_layer(
-                        geometry_type_str=geom_type_str_for_final_layer,
-                        internal_name_base=element_type, 
-                        display_name=display_name_for_final_layer,
-                        fields=fields_for_final_layer,
-                        features=features_to_write,
-                        layer_group=target_group_node,
-                        style_key=style_key_for_final_layer
-                      )
-                      if final_layer:
-                        any_physical_or_protection_ok = True # This flag is used in _final_feedback
-                        any_layer_successfully_processed_in_this_block = True 
-                    else:
-                      QgsMessageLog.logMessage(f"Skipping final processing for '{temp_memory_layer.name()}': No features were present in its temporary layer.", plugin_tag, level=Qgis.Info)
-                  else:
-                    QgsMessageLog.logMessage(f"Skipping final processing for element_type '{element_type}': Its temporary memory layer was None or invalid.", plugin_tag, Qgis.Warning)
-                    
-                # This `any_physical_or_protection_ok` flag is used by _final_feedback
-                # No specific user message needed here if individual errors are logged by _create_and_add_layer
-                if not any_layer_successfully_processed_in_this_block and physical_layers: # Check if physical_layers was not empty
-                  QgsMessageLog.logMessage("Warning: No physical geometry or protection area layers were successfully processed/saved in this block.", plugin_tag, Qgis.Warning)
-                  
-                # Move Centrelines to the Physical Geometry group AFTER they are created/styled
-                if physical_geom_group:
-                    for rwy_data in processed_runway_data_list:
-                         cl_layer = rwy_data.get("centreline_layer")
-                         if cl_layer:
-                             cl_node = project_root.findLayer(cl_layer.id())
-                             if cl_node:
-                                 cloned_node = cl_node.clone()
-                                 physical_geom_group.insertChildNode(0, cloned_node) # Add to top of group
-                                 cl_node.parent().removeChildNode(cl_node) # Remove original node
-                                
-          else: # One or both groups failed to create
-            if not physical_geom_group: QgsMessageLog.logMessage("Failed to create 'Physical Geometry' subgroup.", plugin_tag, level=Qgis.Warning)
-            if not protection_area_group: QgsMessageLog.logMessage("Failed to create 'Runway Protection Areas' subgroup.", plugin_tag, level=Qgis.Warning)
+            physical_geom_group = None  
+            protection_area_group = None 
+            physical_layers = {}      
+            any_physical_or_protection_ok = False 
+            
+            if processed_runway_data_list and any_runway_base_data_ok:
+              physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
+              protection_area_group = main_group.addGroup(self.tr("Runway Protection Areas")) 
               
-        # Create Guideline Groups (keep this part, logs inside helper)
-        guideline_groups = self._create_guideline_groups(main_group)
-        
-        # Create Specialised Safeguarding Group (keep this part)
-        specialised_group_node = main_group.addGroup(self.tr("Specialised Safeguarding"))
-        if not specialised_group_node:
-            QgsMessageLog.logMessage("Failed create group: Specialised Safeguarding", plugin_tag, level=Qgis.Warning)
-          
-        # Calculate Reference Elevation Datum (Uses revised method with improved logging)
-        self.reference_elevation_datum = self._calculate_reference_elevation_datum(
-            self.arp_elevation_amsl,
-            runway_input_list # Pass original validated list
-        )
-        # Check RED result and handle consequences (keep this part)
-        pa_runways_exist = any('PA' in rwy.get('type1','') or 'PA' in rwy.get('type2','') for rwy in runway_input_list if rwy) # Check if any precision runways exist
-        if self.reference_elevation_datum is None and pa_runways_exist:
-            # Critical: RED failed and is needed for PA OLS.
-            QgsMessageLog.logMessage("Aborting OLS generation: RED calculation failed and precision approach runways exist.", plugin_tag, level=Qgis.Critical)
-            self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Reference Elevation Datum calculation failed. Cannot generate OLS for precision runways."), level=Qgis.Critical, duration=10)
-            # Consider if processing should stop entirely or just skip OLS steps
-            # For now, let it continue but Airport-Wide OLS will be skipped later.
-          
-        # Process Airport-Wide Guidelines (C, G) (keep this part, logs inside helpers)
-        guideline_c_processed = False; guideline_g_processed = False
-        if arp_point and guideline_groups.get('C'):
-            guideline_c_processed = self.process_guideline_c(arp_point, icao_code, target_crs, guideline_groups['C'])
-        if cns_input_list and guideline_groups.get('G'):
-            try:
-                guideline_g_processed = self.process_guideline_g(cns_input_list, icao_code, target_crs, guideline_groups['G'])
-            except Exception as e_proc_g:
-                QgsMessageLog.logMessage(f"Critical error processing Guideline G (CNS): {e_proc_g}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
-        elif not cns_input_list:
-            QgsMessageLog.logMessage("Guideline G (CNS) skipped: No valid CNS facilities data provided.", plugin_tag, level=Qgis.Info)
-          
-        # Runway Loop (Part 2 - Per-Runway Guidelines) (keep this part, logs inside helper)
-        any_guideline_processed_ok = self._process_runways_part2(
-            processed_runway_data_list, guideline_groups, specialised_group_node
-        )
-        
-        # Process Airport-Wide OLS (IHS, Conical, Transitional) (keep this part, logs inside helper)
-        airport_wide_ols_processed = False
-        if guideline_groups.get('F') and processed_runway_data_list:
-            if self.reference_elevation_datum is not None:
+              if physical_geom_group and protection_area_group: 
+                    common_fields = [ QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30), QgsField("desc", QVariant.String, self.tr("Element Type"), 50), QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3), QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3), QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250)]
+                    stopway_resa_fields = common_fields + [QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)]
+                    pre_threshold_fields = common_fields + [QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)]
+                    marking_fields = [ QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30), QgsField("desc", QVariant.String, self.tr("Element Type"), 50), QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3), QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10), QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250) ]
+                  
+                    layer_definitions = {
+                        'rwy': {'name': self.tr('Runway Pavement'), 'fields': common_fields, 'group': physical_geom_group},
+                        'PreThresholdRunway': {'name': self.tr('Pre-Threshold Runway'), 'fields': pre_threshold_fields, 'group': physical_geom_group},
+                        'PreThresholdArea': {'name': self.tr('Pre-Threshold Area'), 'fields': pre_threshold_fields, 'group': physical_geom_group},
+                        'DisplacedThresholdMarking': {'name': self.tr('Displaced Threshold Markings'), 'fields': marking_fields, 'geom_type': 'LineString', 'group': physical_geom_group},
+                        'PreThresholdAreaMarking': {'name': self.tr('Pre-Threshold Area Markings'), 'fields': marking_fields, 'geom_type': 'LineString', 'group': physical_geom_group},
+                        'Shoulder': {'name': self.tr('Runway Shoulders'), 'fields': common_fields, 'group': physical_geom_group},
+                        'Stopway': {'name': self.tr('Stopways'), 'fields': stopway_resa_fields, 'group': protection_area_group},
+                        'GradedStrip': {'name': self.tr('Runway Graded Strip'), 'fields': common_fields, 'group': protection_area_group},
+                        'FlyoverStrip': {'name': self.tr('Runway Strip Flyover Area'), 'fields': common_fields, 'group': protection_area_group},
+                        'OverallStrip': {'name': self.tr('Runway Overall Strip'), 'fields': common_fields, 'group': protection_area_group},
+                        'RESA': {'name': self.tr('Runway End Safety Area (RESA)'), 'fields': stopway_resa_fields, 'group': protection_area_group}
+                        }
+                    style_key_map = { 
+                      "rwy": "Runway Pavement", "PreThresholdRunway": "PreThreshold Runway", "PreThresholdArea": "PreThreshold Area",
+                      "DisplacedThresholdMarking": "DisplacedThresholdMarking", "PreThresholdAreaMarking": "PreThresholdAreaMarking",
+                      "Shoulder": "Runway Shoulders", "Stopway": "Stopways", "GradedStrip": "Runway Graded Strips",
+                      "FlyoverStrip": "Runway Strip Flyover Area", "OverallStrip": "Runway Overall Strips",
+                      "RESA": "Runway End Safety Areas (RESA)"
+                    }
+                  
+                    for element_type, definition in layer_definitions.items():
+                        target_group = definition.get('group')
+                        if not target_group: 
+                          QgsMessageLog.logMessage(f"Warning: No target group defined for {element_type}, skipping layer setup.", plugin_tag, level=Qgis.Warning)
+                          continue
+                        geom_type_str = definition.get('geom_type', 'Polygon')
+                        layer_name_internal = f"physical_{element_type}_{icao_code}_{id(self)}_{QtCore.QDateTime.currentMSecsSinceEpoch()}"
+                        layer_display_name = f"{icao_code} {definition['name']}"
+                        layer_uri = ""
+                        if geom_type_str == 'LineString': layer_uri = f"LineString?crs={target_crs.authid()}&index=yes"
+                        elif geom_type_str == 'Polygon': layer_uri = f"Polygon?crs={target_crs.authid()}&index=yes"
+                        else: QgsMessageLog.logMessage(f"Warning: Unsupported geometry type '{geom_type_str}' for layer URI.", plugin_tag, level=Qgis.Warning); continue
+                        layer = QgsVectorLayer(layer_uri, layer_name_internal, "memory")
+              
+                        if layer.isValid() and layer.dataProvider() and layer.dataProvider().addAttributes(definition['fields']):
+                          layer.updateFields(); layer.setName(layer_display_name)
+                          layer.setCustomProperty("target_group_node", target_group.name()) 
+                          layer.setCustomProperty("safeguarding_style_key", style_key_map.get(element_type))
+                          if layer.startEditing():
+                            physical_layers[element_type] = layer
+                          else:
+                            QgsMessageLog.logMessage(f"Warning: Failed startEditing for layer '{layer_display_name}'.", plugin_tag, level=Qgis.Warning)
+                            physical_layers[element_type] = None
+                        else:
+                          QgsMessageLog.logMessage(f"Critical: Failed initialize layer '{layer_display_name}'.", plugin_tag, level=Qgis.Critical)
+                          physical_layers[element_type] = None
+                          
+                    physical_geom_features_added = {element_type: False for element_type in physical_layers.keys()}
+                    QgsMessageLog.logMessage("Populating physical geometry & protection area layers...", plugin_tag, level=Qgis.Info) 
+                    for rwy_data in processed_runway_data_list:
+                      runway_name_log = rwy_data.get('short_name', f"RWY_{rwy_data.get('original_index','?')}")
+                      generated_elements_map = {} 
+                      try:
+                        generated_elements_list = self.generate_physical_geometry(rwy_data)
+                        if generated_elements_list is None: continue
+                        
+                        graded_strip_geom: Optional[QgsGeometry] = None
+                        overall_strip_geom: Optional[QgsGeometry] = None
+                        graded_strip_attrs: Optional[dict] = None
+                        overall_strip_attrs: Optional[dict] = None
+                        
+                        for element_type, geometry, attributes in generated_elements_list:
+                          target_layer = physical_layers.get(element_type)
+                          if target_layer is None or not target_layer.isEditable(): continue
+                          if geometry is None or geometry.isEmpty(): continue
+                          if not geometry.isGeosValid(): geometry = geometry.makeValid()
+                          if geometry is None or geometry.isEmpty() or not geometry.isGeosValid(): continue
+                          
+                          if element_type == 'GradedStrip':
+                            graded_strip_geom = geometry
+                            graded_strip_attrs = attributes 
+                          elif element_type == 'OverallStrip':
+                            overall_strip_geom = geometry
+                            overall_strip_attrs = attributes
+                            
+                          feature = QgsFeature(target_layer.fields())
+                          feature.setGeometry(geometry)
+                          for field_name, value in attributes.items():
+                            idx = feature.fieldNameIndex(field_name)
+                            if idx != -1: feature.setAttribute(idx, value)
+                            
+                          add_ok, _ = target_layer.dataProvider().addFeatures([feature])
+                          if add_ok:
+                            physical_geom_features_added[element_type] = True
+                            any_physical_or_protection_ok = True 
+                          else:
+                            QgsMessageLog.logMessage(f"Warning: Failed add feature {element_type} for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
+                            
+                        flyover_layer = physical_layers.get('FlyoverStrip')
+                        if flyover_layer and flyover_layer.isEditable() and graded_strip_geom and overall_strip_geom:
+                          try:
+                            # Ensure inputs are valid before difference
+                            if not graded_strip_geom.isGeosValid(): graded_strip_geom = graded_strip_geom.makeValid()
+                            if not overall_strip_geom.isGeosValid(): overall_strip_geom = overall_strip_geom.makeValid()
+                            
+                            if graded_strip_geom and overall_strip_geom and graded_strip_geom.isGeosValid() and overall_strip_geom.isGeosValid():
+                              flyover_geom = overall_strip_geom.difference(graded_strip_geom)
+                              if flyover_geom and not flyover_geom.isEmpty():
+                                flyover_geom = flyover_geom.makeValid() # Validate result
+                                if flyover_geom and not flyover_geom.isEmpty() and flyover_geom.isGeosValid():
+                                  # Create feature for flyover area
+                                  flyover_feat = QgsFeature(flyover_layer.fields())
+                                  flyover_feat.setGeometry(flyover_geom)
+                                  
+                                  # --- MODIFIED ATTRIBUTE CALCULATION FOR FLYOVER ---
+                                  flyover_attrs = {} # Start with an empty dict for flyover-specific attributes
+                                  
+                                  # 'rwy' and 'ref_mos' can be taken from overall_strip_attrs if available
+                                  if overall_strip_attrs:
+                                      flyover_attrs['rwy'] = overall_strip_attrs.get('rwy')
+                                      flyover_attrs['ref_mos'] = overall_strip_attrs.get('ref_mos')
+                                      
+                                  flyover_attrs['desc'] = 'Flyover Strip Area'
+
+                                  # Calculate len_m and wid_m as per your logic
+                                  # len_m can be taken from either graded or overall strip length
+                                  if graded_strip_attrs and 'len_m' in graded_strip_attrs:
+                                      flyover_attrs['len_m'] = graded_strip_attrs['len_m']
+                                  elif overall_strip_attrs and 'len_m' in overall_strip_attrs: # Fallback to overall
+                                      flyover_attrs['len_m'] = overall_strip_attrs['len_m']
+                                  else:
+                                      flyover_attrs['len_m'] = None # Or some default if neither is available
+
+                                  # wid_m = (OverallStripWidth - GradedStripWidth) / 2
+                                  # This represents the width of ONE SIDE of the flyover area.
+                                  # If the `wid_m` field in `common_fields` is meant to be the total width
+                                  # of the element, then this would be (OverallStripWidth - GradedStripWidth).
+                                  # Given the context of other elements, wid_m usually refers to the total width of that element.
+                                  # Let's assume wid_m for FlyoverStrip should be the width of one of the side bands.
+                                  if graded_strip_attrs and overall_strip_attrs and \
+                                    'wid_m' in graded_strip_attrs and 'wid_m' in overall_strip_attrs and \
+                                    isinstance(graded_strip_attrs['wid_m'], (int, float)) and \
+                                    isinstance(overall_strip_attrs['wid_m'], (int, float)):
+                                      
+                                      overall_w = overall_strip_attrs['wid_m']
+                                      graded_w = graded_strip_attrs['wid_m']
+                                      if overall_w > graded_w:
+                                          flyover_attrs['wid_m'] = (overall_w - graded_w) / 2.0
+                                      else:
+                                          flyover_attrs['wid_m'] = 0.0 # Or None, if width is not positive
+                                          QgsMessageLog.logMessage(f"Warning: Overall strip width not greater than graded strip width for {runway_name_log}. Flyover width set to 0.", plugin_tag, level=Qgis.Warning)
+                                  else:
+                                      flyover_attrs['wid_m'] = None
+                                  # --- END MODIFIED ATTRIBUTE CALCULATION ---
+                                    
+                                  for field_name, value in flyover_attrs.items():
+                                    idx = flyover_feat.fieldNameIndex(field_name)
+                                    if idx != -1: flyover_feat.setAttribute(idx, value)
+                                    
+                                  add_fly_ok, _ = flyover_layer.dataProvider().addFeatures([flyover_feat])
+                                  if add_fly_ok:
+                                    physical_geom_features_added['FlyoverStrip'] = True
+                                    any_physical_or_protection_ok = True
+                                  else:
+                                    QgsMessageLog.logMessage(f"Warning: Failed add feature FlyoverStrip for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
+                                else: QgsMessageLog.logMessage(f"Warning: FlyoverStrip geometry invalid after difference/makeValid for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
+                              else: QgsMessageLog.logMessage(f"Warning: FlyoverStrip geometry is empty after difference for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
+                            else: QgsMessageLog.logMessage(f"Warning: Cannot calculate FlyoverStrip difference due to invalid input strip geometries for {runway_name_log}.", plugin_tag, level=Qgis.Warning)
+                          except Exception as e_diff:
+                            QgsMessageLog.logMessage(f"Warning: Error calculating FlyoverStrip difference for {runway_name_log}: {e_diff}", plugin_tag, level=Qgis.Warning)
+                        elif flyover_layer and flyover_layer.isEditable():
+                          QgsMessageLog.logMessage(f"Info: Skipping FlyoverStrip for {runway_name_log}: Graded or Overall strip geometry missing.", plugin_tag, level=Qgis.Info)
+                          
+                      except Exception as e_phys:
+                        QgsMessageLog.logMessage(f"Critical Error populating layers for {runway_name_log}: {e_phys}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
+                        continue
+                      
+                    QgsMessageLog.logMessage("Finalizing and saving physical geometry & protection area layers...", plugin_tag, level=Qgis.Info)
+                    any_layer_successfully_processed_in_this_block = False 
+                    project_root = QgsProject.instance().layerTreeRoot() 
+              
+                    for element_type, temp_memory_layer in physical_layers.items():
+                      if temp_memory_layer and temp_memory_layer.isValid():
+                        if temp_memory_layer.isEditable():
+                          if not temp_memory_layer.commitChanges():
+                            QgsMessageLog.logMessage(f"Warning: Failed to commit changes on temporary layer '{temp_memory_layer.name()}'. Features might be incomplete. Errors: {temp_memory_layer.commitErrors()}", plugin_tag, Qgis.Warning)
+                            
+                        if temp_memory_layer.featureCount() > 0:
+                          display_name_for_final_layer = temp_memory_layer.name()
+                          fields_for_final_layer = temp_memory_layer.fields()
+                          
+                          qgis_geom_type_enum = temp_memory_layer.geometryType() 
+                          geom_type_str_for_final_layer = "Unknown"
+                          if qgis_geom_type_enum == Qgis.GeometryType.Point : 
+                            geom_type_str_for_final_layer = "Point"
+                          elif qgis_geom_type_enum == Qgis.GeometryType.Line: 
+                            geom_type_str_for_final_layer = "LineString"
+                          elif qgis_geom_type_enum == Qgis.GeometryType.Polygon:
+                            geom_type_str_for_final_layer = "Polygon"
+                          else:
+                            QgsMessageLog.logMessage(f"Warning: Unknown QGIS geometry type enum {qgis_geom_type_enum} for temp layer '{display_name_for_final_layer}'. Defaulting to 'Unknown'.", plugin_tag, Qgis.Warning)
+                            
+                          features_to_write = [QgsFeature(f) for f in temp_memory_layer.getFeatures()]
+                          
+                          target_group_name = temp_memory_layer.customProperty("target_group_node")
+                          style_key_for_final_layer = str(temp_memory_layer.customProperty("safeguarding_style_key", "Default Polygon")) 
+                          
+                          target_group_node: Optional[QgsLayerTreeGroup] = None
+                          if target_group_name and isinstance(target_group_name, str):
+                            target_group_node = project_root.findGroup(target_group_name)
+                            
+                          if not target_group_node:
+                            QgsMessageLog.logMessage(f"Warning: Target group '{target_group_name}' not found for '{display_name_for_final_layer}'. Using main plugin group.", plugin_tag, Qgis.Warning)
+                            target_group_node = main_group 
+                          
+                          final_layer = self._create_and_add_layer(
+                            geometry_type_str=geom_type_str_for_final_layer,
+                            internal_name_base=element_type, 
+                            display_name=display_name_for_final_layer,
+                            fields=fields_for_final_layer,
+                            features=features_to_write,
+                            layer_group=target_group_node,
+                            style_key=style_key_for_final_layer
+                          )
+                          if final_layer:
+                            any_physical_or_protection_ok = True 
+                            any_layer_successfully_processed_in_this_block = True 
+                        else:
+                          QgsMessageLog.logMessage(f"Skipping final processing for '{temp_memory_layer.name()}': No features were present in its temporary layer.", plugin_tag, level=Qgis.Info)
+                      else:
+                        QgsMessageLog.logMessage(f"Skipping final processing for element_type '{element_type}': Its temporary memory layer was None or invalid.", plugin_tag, Qgis.Warning)
+                        
+                    if not any_layer_successfully_processed_in_this_block and physical_layers: 
+                      QgsMessageLog.logMessage("Warning: No physical geometry or protection area layers were successfully processed/saved in this block.", plugin_tag, Qgis.Warning)
+                      
+                    if physical_geom_group:
+                        for rwy_data in processed_runway_data_list:
+                            cl_layer = rwy_data.get("centreline_layer")
+                            if cl_layer:
+                                cl_node = project_root.findLayer(cl_layer.id())
+                                if cl_node:
+                                    cloned_node = cl_node.clone()
+                                    physical_geom_group.insertChildNode(0, cloned_node) 
+                                    cl_node.parent().removeChildNode(cl_node) 
+                                    
+              else: 
+                if not physical_geom_group: QgsMessageLog.logMessage("Failed to create 'Physical Geometry' subgroup.", plugin_tag, level=Qgis.Warning)
+                if not protection_area_group: QgsMessageLog.logMessage("Failed to create 'Runway Protection Areas' subgroup.", plugin_tag, level=Qgis.Warning)
+                  
+            guideline_groups = self._create_guideline_groups(main_group)
+            
+            specialised_group_node = main_group.addGroup(self.tr("Specialised Safeguarding"))
+            if not specialised_group_node:
+                QgsMessageLog.logMessage("Failed create group: Specialised Safeguarding", plugin_tag, level=Qgis.Warning)
+              
+            self.reference_elevation_datum = self._calculate_reference_elevation_datum(
+                self.arp_elevation_amsl,
+                runway_input_list 
+            )
+            pa_runways_exist = any('PA' in rwy.get('type1','') or 'PA' in rwy.get('type2','') for rwy in runway_input_list if rwy) 
+            if self.reference_elevation_datum is None and pa_runways_exist:
+                QgsMessageLog.logMessage("Aborting OLS generation: RED calculation failed and precision approach runways exist.", plugin_tag, level=Qgis.Critical)
+                self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Reference Elevation Datum calculation failed. Cannot generate OLS for precision runways."), level=Qgis.Critical, duration=10)
+              
+            guideline_c_processed = False; guideline_g_processed = False
+            if arp_point and guideline_groups.get('C'):
+                guideline_c_processed = self.process_guideline_c(arp_point, icao_code, target_crs, guideline_groups['C'])
+            if cns_input_list and guideline_groups.get('G'):
                 try:
-                    airport_wide_ols_processed = self._generate_airport_wide_ols(
-                        processed_runway_data_list, guideline_groups['F'],
-                        self.reference_elevation_datum, icao_code
-                    )
-                    if airport_wide_ols_processed: any_guideline_processed_ok = True
-                except Exception as e_ols_wide:
-                    # Critical: Unhandled error during Airport-Wide OLS generation.
-                    QgsMessageLog.logMessage(f"Critical Error generating Airport-Wide OLS: {e_ols_wide}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
-                    self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Failed to generate airport-wide OLS surfaces. Check logs."), level=Qgis.Critical, duration=10)
+                    guideline_g_processed = self.process_guideline_g(cns_input_list, icao_code, target_crs, guideline_groups['G'])
+                except Exception as e_proc_g:
+                    QgsMessageLog.logMessage(f"Critical error processing Guideline G (CNS): {e_proc_g}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
+            elif not cns_input_list:
+                QgsMessageLog.logMessage("Guideline G (CNS) skipped: No valid CNS facilities data provided.", plugin_tag, level=Qgis.Info)
+              
+            any_guideline_processed_ok = self._process_runways_part2(
+                processed_runway_data_list, guideline_groups, specialised_group_node
+            )
+            
+            airport_wide_ols_processed = False
+            if guideline_groups.get('F') and processed_runway_data_list:
+                if self.reference_elevation_datum is not None:
+                    try:
+                        airport_wide_ols_processed = self._generate_airport_wide_ols(
+                            processed_runway_data_list, guideline_groups['F'],
+                            self.reference_elevation_datum, icao_code
+                        )
+                        if airport_wide_ols_processed: any_guideline_processed_ok = True
+                    except Exception as e_ols_wide:
+                        QgsMessageLog.logMessage(f"Critical Error generating Airport-Wide OLS: {e_ols_wide}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
+                        self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Failed to generate airport-wide OLS surfaces. Check logs."), level=Qgis.Critical, duration=10)
+                else:
+                    QgsMessageLog.logMessage("Skipping Airport-Wide OLS (IHS, Conical, etc.): Reference Elevation Datum calculation failed or was not possible.", plugin_tag, level=Qgis.Warning)
+            elif not processed_runway_data_list:
+                QgsMessageLog.logMessage("Skipping Airport-Wide OLS (IHS, Conical, etc.): No valid runway data was processed.", plugin_tag, level=Qgis.Info)
+            
+            self._final_feedback( main_group, root, icao_code, arp_layer_created, met_layers_created_ok,
+                      any_runway_base_data_ok, guideline_c_processed, guideline_g_processed,
+                      any_guideline_processed_ok, len(processed_runway_data_list),
+                      len(runway_input_list), any_physical_or_protection_ok ) 
+            
+            QgsMessageLog.logMessage("--- Safeguarding Processing Finished ---", plugin_tag, level=Qgis.Info)
+            
+            if self.successfully_generated_layers: 
+              if self.dlg:
+                self.dlg.accept() 
             else:
-                # Warning: Skipping because RED is missing (previous error logged).
-                QgsMessageLog.logMessage("Skipping Airport-Wide OLS (IHS, Conical, etc.): Reference Elevation Datum calculation failed or was not possible.", plugin_tag, level=Qgis.Warning)
-        elif not processed_runway_data_list:
-            # Info or Warning: No runways, so no OLS.
-             QgsMessageLog.logMessage("Skipping Airport-Wide OLS (IHS, Conical, etc.): No valid runway data was processed.", plugin_tag, level=Qgis.Info)
-        
-        # Final Feedback (keep this part, logs inside helper)
-        self._final_feedback( main_group, root, icao_code, arp_layer_created, met_layers_created_ok,
-                  any_runway_base_data_ok, guideline_c_processed, guideline_g_processed,
-                  any_guideline_processed_ok, len(processed_runway_data_list),
-                  len(runway_input_list), any_physical_or_protection_ok ) # Use combined flag
-        
-        # Info: Log overall completion.
-        QgsMessageLog.logMessage("--- Safeguarding Processing Finished ---", plugin_tag, level=Qgis.Info)
-        
-        # --- NEW: Close dialog on success ---
-        # Check if any layers were actually generated or if the process was generally successful
-        # The 'anything_created' flag in _final_feedback is a good indicator,
-        # or self.successfully_generated_layers list.
-        if self.successfully_generated_layers: # Or a more specific success flag from your processing
-          if self.dlg:
-            self.dlg.accept() # Signals success and closes dialog
-        else:
-          # If nothing was generated, or a critical error occurred that prevented generation,
-          # you might choose *not* to close the dialog, allowing the user to see error messages
-          # or correct inputs. Or, you could use self.dlg.done(QDialog.Accepted) if you still
-          # want to close it but differentiate from a true "cancel".
-          # For now, let's assume if no layers, it doesn't auto-close from here.
-          # The user can then use the 'X' button.
-          pass
+              pass
 
 
     # ============================================================
@@ -1815,410 +1763,362 @@ class SafeguardingBuilder:
         return None
 
     def generate_physical_geometry(self, runway_data: dict) -> Optional[List[Tuple[str, QgsGeometry, dict]]]:
-      """
-      Calculates geometry and attributes for physical runway components.
-      Returns a list of tuples: (element_type_key, geometry, attributes)
-      or None if basic parameters are missing or calculation fails critically.
-      Logs warnings for non-critical issues (e.g., single element failure).
-      """
-      plugin_tag = PLUGIN_TAG
-      # Use QgsGeometry explicitly if needed, though mostly handled by helpers
-      # from qgis.core import QgsGeometry
-      
-      # --- Get Essential Data ---
-      thr_point = runway_data.get('thr_point'); rec_thr_point = runway_data.get('rec_thr_point')
-      runway_width = runway_data.get('width'); shoulder_width = runway_data.get('shoulder')
-      runway_name = runway_data.get('short_name', 'RWY')
-      log_name = runway_name if runway_name != 'RWY' else f"RWY_{runway_data.get('original_index','?')}"
-      
-      # --- Robustly Get Displacement and Pre-Threshold Lengths ---
-      disp_val_1 = runway_data.get('thr_displaced_1') # Get raw value (could be None)
-      disp_val_2 = runway_data.get('thr_displaced_2') # Get raw value
-      pre_val_1 = runway_data.get('thr_pre_area_1')  # Raw value
-      pre_val_2 = runway_data.get('thr_pre_area_2')  # Raw value
-      
-      disp_thr_1: float = 0.0
-      disp_thr_2: float = 0.0
-      pre_area_len_1: float = 0.0
-      pre_area_len_2: float = 0.0
-      
-      try:
-        if disp_val_1 is not None:
-          disp_thr_1 = float(disp_val_1)
-        # else: default 0.0 is already set
-      except (ValueError, TypeError):
-        QgsMessageLog.logMessage(f"Warning: Invalid Displacement 1 value '{disp_val_1}' for {log_name}, using 0.0.", plugin_tag, level=Qgis.Warning)
-        # disp_thr_1 remains 0.0
-        
-      try:
-        if disp_val_2 is not None:
-          disp_thr_2 = float(disp_val_2)
-        # else: default 0.0 is already set
-      except (ValueError, TypeError):
-        QgsMessageLog.logMessage(f"Warning: Invalid Displacement 2 value '{disp_val_2}' for {log_name}, using 0.0.", plugin_tag, level=Qgis.Warning)
-        # disp_thr_2 remains 0.0
-        
-      try:
-        if pre_val_1 is not None:
-          pre_area_len_1 = float(pre_val_1)
-        # else: default 0.0 is already set
-      except (ValueError, TypeError):
-        QgsMessageLog.logMessage(f"Warning: Invalid Pre-Threshold Area 1 length '{pre_val_1}' for {log_name}, using 0.0.", plugin_tag, level=Qgis.Warning)
-        # pre_area_len_1 remains 0.0
-        
-      try:
-        if pre_val_2 is not None:
-          pre_area_len_2 = float(pre_val_2)
-        # else: default 0.0 is already set
-      except (ValueError, TypeError):
-        QgsMessageLog.logMessage(f"Warning: Invalid Pre-Threshold Area 2 length '{pre_val_2}' for {log_name}, using 0.0.", plugin_tag, level=Qgis.Warning)
-        # pre_area_len_2 remains 0.0
-        
-      # --- Continue with the rest of the function ---
-      if not thr_point or not rec_thr_point:
-        QgsMessageLog.logMessage(f"Skipping physical geom generation for {log_name}: Missing threshold points.", plugin_tag, level=Qgis.Warning)
-        return None
-      
-      # --- Get Base Runway Parameters (between thresholds) ---
-      rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
-      if rwy_params is None:
-        # Warning: Calculation failed in helper (already logged there).
-        QgsMessageLog.logMessage(f"Skipping physical geom generation for {log_name}: Failed to get base runway parameters.", plugin_tag, level=Qgis.Warning)
-        return None
-      
-      # --- Get Physical Runway Endpoints & Length ---
-      physical_endpoints_result = self._get_physical_runway_endpoints(
-        thr_point, rec_thr_point, disp_thr_1, disp_thr_2, rwy_params
-      )
-      if physical_endpoints_result is None:
-        # Warning: Calculation failed in helper (already logged there).
-        QgsMessageLog.logMessage(f"Skipping physical geom generation for {log_name}: Failed to calculate physical endpoints.", plugin_tag, level=Qgis.Warning)
-        return None
-      phys_p_start, phys_p_end, physical_length = physical_endpoints_result
-      
-      # --- Initialize Result List ---
-      generated_elements: List[Tuple[str, QgsGeometry, dict]] = []
-      
-      # --- 1. Runway Pavement (Landing Area: Between Thresholds) ---
-      if runway_width is not None and runway_width > 0:
-        try:
-          half_width = runway_width / 2.0
-          thr_l = thr_point.project(half_width, rwy_params['azimuth_perp_l'])
-          thr_r = thr_point.project(half_width, rwy_params['azimuth_perp_r'])
-          rec_l = rec_thr_point.project(half_width, rwy_params['azimuth_perp_l'])
-          rec_r = rec_thr_point.project(half_width, rwy_params['azimuth_perp_r'])
-          if all([thr_l, thr_r, rec_l, rec_r]):
-            # Use the helper, which logs failures internally
-            landing_pavement_geom = self._create_polygon_from_corners([thr_l, thr_r, rec_r, rec_l], f"Landing Pavement {log_name}")
-            if landing_pavement_geom:
-              landing_length = rwy_params['length']
-              physical_refs = ols_dimensions.get_physical_refs()
-              pavement_ref = physical_refs.get('pavement', "MOS 139 6.2.3")
-              attributes = {'rwy_name': runway_name, 'type': 'Runway Pavement', 'wid_m': runway_width, 'len_m': round(landing_length, 3), 'MOS_Ref': pavement_ref}
-              generated_elements.append(('rwy', landing_pavement_geom, attributes))
-            # else: Failure logged by _create_polygon_from_corners
+          """
+          Calculates geometry and attributes for physical runway components.
+          Returns a list of tuples: (element_type_key, geometry, attributes)
+          or None if basic parameters are missing or calculation fails critically.
+          Logs warnings for non-critical issues (e.g., single element failure).
+          """
+          plugin_tag = PLUGIN_TAG
+          
+          thr_point = runway_data.get('thr_point'); rec_thr_point = runway_data.get('rec_thr_point')
+          runway_width = runway_data.get('width'); shoulder_width = runway_data.get('shoulder')
+          runway_name = runway_data.get('short_name', 'RWY')
+          log_name = runway_name if runway_name != 'RWY' else f"RWY_{runway_data.get('original_index','?')}"
+          
+          disp_val_1 = runway_data.get('thr_displaced_1'); disp_val_2 = runway_data.get('thr_displaced_2')
+          pre_val_1 = runway_data.get('thr_pre_area_1'); pre_val_2 = runway_data.get('thr_pre_area_2')
+          
+          disp_thr_1: float = 0.0; disp_thr_2: float = 0.0
+          pre_area_len_1: float = 0.0; pre_area_len_2: float = 0.0
+          
+          try:
+            if disp_val_1 is not None: disp_thr_1 = float(disp_val_1)
+          except (ValueError, TypeError):
+            QgsMessageLog.logMessage(f"Warning: Invalid Displacement 1 value '{disp_val_1}' for {log_name}, using 0.0.", plugin_tag, level=Qgis.Warning)
+          try:
+            if disp_val_2 is not None: disp_thr_2 = float(disp_val_2)
+          except (ValueError, TypeError):
+            QgsMessageLog.logMessage(f"Warning: Invalid Displacement 2 value '{disp_val_2}' for {log_name}, using 0.0.", plugin_tag, level=Qgis.Warning)
+          try:
+            if pre_val_1 is not None: pre_area_len_1 = float(pre_val_1)
+          except (ValueError, TypeError):
+            QgsMessageLog.logMessage(f"Warning: Invalid Pre-Threshold Area 1 length '{pre_val_1}' for {log_name}, using 0.0.", plugin_tag, level=Qgis.Warning)
+          try:
+            if pre_val_2 is not None: pre_area_len_2 = float(pre_val_2)
+          except (ValueError, TypeError):
+            QgsMessageLog.logMessage(f"Warning: Invalid Pre-Threshold Area 2 length '{pre_val_2}' for {log_name}, using 0.0.", plugin_tag, level=Qgis.Warning)
+            
+          if not thr_point or not rec_thr_point:
+            QgsMessageLog.logMessage(f"Skipping physical geom generation for {log_name}: Missing threshold points.", plugin_tag, level=Qgis.Warning)
+            return None
+          
+          rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
+          if rwy_params is None:
+            QgsMessageLog.logMessage(f"Skipping physical geom generation for {log_name}: Failed to get base runway parameters.", plugin_tag, level=Qgis.Warning)
+            return None
+          
+          physical_endpoints_result = self._get_physical_runway_endpoints(
+            thr_point, rec_thr_point, disp_thr_1, disp_thr_2, rwy_params
+          )
+          if physical_endpoints_result is None:
+            QgsMessageLog.logMessage(f"Skipping physical geom generation for {log_name}: Failed to calculate physical endpoints.", plugin_tag, level=Qgis.Warning)
+            return None
+          phys_p_start, phys_p_end, physical_length = physical_endpoints_result
+          
+          generated_elements: List[Tuple[str, QgsGeometry, dict]] = []
+          
+          # --- 1. Runway Pavement (Landing Area: Between Thresholds) ---
+          if runway_width is not None and runway_width > 0:
+            try:
+              half_width = runway_width / 2.0
+              thr_l = thr_point.project(half_width, rwy_params['azimuth_perp_l'])
+              thr_r = thr_point.project(half_width, rwy_params['azimuth_perp_r'])
+              rec_l = rec_thr_point.project(half_width, rwy_params['azimuth_perp_l'])
+              rec_r = rec_thr_point.project(half_width, rwy_params['azimuth_perp_r'])
+              if all([thr_l, thr_r, rec_l, rec_r]):
+                landing_pavement_geom = self._create_polygon_from_corners([thr_l, thr_r, rec_r, rec_l], f"Landing Pavement {log_name}")
+                if landing_pavement_geom:
+                  landing_length = rwy_params['length']
+                  physical_refs = ols_dimensions.get_physical_refs()
+                  pavement_ref = physical_refs.get('pavement', "MOS 139 6.2.3")
+                  # Use correct field names: 'rwy', 'desc', 'ref_mos'
+                  attributes = {'rwy': runway_name, 'desc': 'Runway Pavement', 'wid_m': runway_width, 'len_m': round(landing_length, 3), 'ref_mos': pavement_ref}
+                  generated_elements.append(('rwy', landing_pavement_geom, attributes))
+              else:
+                QgsMessageLog.logMessage(f"Warning: Failed to calculate landing pavement corners for {log_name}.", plugin_tag, level=Qgis.Warning)
+            except Exception as e:
+              QgsMessageLog.logMessage(f"Warning: Error calculating Landing Pavement for {log_name}: {e}", plugin_tag, level=Qgis.Warning)
           else:
-            QgsMessageLog.logMessage(f"Warning: Failed to calculate landing pavement corners for {log_name}.", plugin_tag, level=Qgis.Warning)
-        except Exception as e:
-          QgsMessageLog.logMessage(f"Warning: Error calculating Landing Pavement for {log_name}: {e}", plugin_tag, level=Qgis.Warning)
-      else:
-        QgsMessageLog.logMessage(f"Info: Skipping Landing Pavement for {log_name}: Width ({runway_width}) not specified or invalid.", plugin_tag, level=Qgis.Info)
-        
-      # --- 1b. Pre-Threshold Runway Areas (Displaced Areas) ---
-      if runway_width is not None and runway_width > 0:
-        pre_threshold_features = [] # Collect features for this sub-section
-        half_width = runway_width / 2.0
-        primary_desig = runway_name.split('/')[0] if '/' in runway_name else "Primary"
-        reciprocal_desig = runway_name.split('/')[1] if '/' in runway_name else "Reciprocal"
-        
-        # Primary End Displacement
-        if disp_thr_1 > 1e-6:
-          try:
-            start_point = phys_p_start; end_point = thr_point
-            p_start_l = start_point.project(half_width, rwy_params['azimuth_perp_l'])
-            p_start_r = start_point.project(half_width, rwy_params['azimuth_perp_r'])
-            p_end_l = end_point.project(half_width, rwy_params['azimuth_perp_l'])
-            p_end_r = end_point.project(half_width, rwy_params['azimuth_perp_r'])
-            if all([p_start_l, p_start_r, p_end_l, p_end_r]):
-              geom = self._create_polygon_from_corners([p_start_l, p_start_r, p_end_r, p_end_l], f"Pre-Threshold {primary_desig}")
-              if geom:
-                physical_refs = ols_dimensions.get_physical_refs()
-                pavement_ref = physical_refs.get('pavement', "MOS 139 6.2.3")
-                attributes = {'rwy_name': runway_name, 'type': f'Pre-Threshold Pavement ({primary_desig})', 'wid_m': runway_width, 'len_m': round(disp_thr_1, 3), 'MOS_Ref': pavement_ref}
-                pre_threshold_features.append(('PreThresholdRunway', geom, attributes))
-              # else: Failure logged by helper
-            else: QgsMessageLog.logMessage(f"Warning: Failed calculate corners for Pre-Threshold Pavement {primary_desig}.", plugin_tag, level=Qgis.Warning)
-          except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Pre-Threshold Pavement {primary_desig}: {e}", plugin_tag, level=Qgis.Warning)
-          
-        # Reciprocal End Displacement (similar logic)
-        if disp_thr_2 > 1e-6:
-          try:
-            start_point = phys_p_end; end_point = rec_thr_point
-            r_start_l = start_point.project(half_width, rwy_params['azimuth_perp_l'])
-            r_start_r = start_point.project(half_width, rwy_params['azimuth_perp_r'])
-            r_end_l = end_point.project(half_width, rwy_params['azimuth_perp_l'])
-            r_end_r = end_point.project(half_width, rwy_params['azimuth_perp_r'])
-            if all([r_start_l, r_start_r, r_end_l, r_end_r]):
-              geom = self._create_polygon_from_corners([r_start_l, r_start_r, r_end_r, r_end_l], f"Pre-Threshold {reciprocal_desig}")
-              if geom:
-                physical_refs = ols_dimensions.get_physical_refs()
-                pavement_ref = physical_refs.get('pavement', "MOS 139 6.2.3")
-                attributes = {'rwy_name': runway_name, 'type': f'Pre-Threshold Pavement ({reciprocal_desig})', 'wid_m': runway_width, 'len_m': round(disp_thr_2, 3), 'MOS_Ref': pavement_ref}
-                pre_threshold_features.append(('PreThresholdRunway', geom, attributes))
-              # else: Failure logged by helper
-            else: QgsMessageLog.logMessage(f"Warning: Failed calculate corners for Pre-Threshold Pavement {reciprocal_desig}.", plugin_tag, level=Qgis.Warning)
-          except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Pre-Threshold Pavement {reciprocal_desig}: {e}", plugin_tag, level=Qgis.Warning)
-          
-        generated_elements.extend(pre_threshold_features)
-        
-      # --- 1c. Pre-Threshold Area (Blast Pad, etc.) ---
-      if runway_width is not None and runway_width > 0:
-        pre_threshold_area_features = []
-        half_width = runway_width / 2.0
-        primary_desig = runway_name.split('/')[0] if '/' in runway_name else "Primary"
-        reciprocal_desig = runway_name.split('/')[1] if '/' in runway_name else "Reciprocal"
-        
-        # Area beyond Primary Physical End
-        if pre_area_len_1 > 1e-6:
-          try:
-            area_start_point = phys_p_start
-            outward_azimuth = rwy_params['azimuth_r_p']
-            geom = self._create_rectangle_from_start(area_start_point, outward_azimuth, pre_area_len_1, half_width, f"Pre-Threshold Area {primary_desig}")
-            if geom:
-              attributes = {'rwy_name': runway_name, 'type': f'Pre-Threshold Area ({primary_desig})', 'wid_m': runway_width, 'len_m': round(pre_area_len_1, 3), 'MOS_Ref': "N/A"}
-              pre_threshold_area_features.append(('PreThresholdArea', geom, attributes))
-            # else: Failure logged by helper
-          except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Pre-Threshold Area {primary_desig}: {e}", plugin_tag, level=Qgis.Warning)
-          
-        # Area beyond Reciprocal Physical End (similar logic)
-        if pre_area_len_2 > 1e-6:
-          try:
-            area_start_point = phys_p_end
-            outward_azimuth = rwy_params['azimuth_p_r']
-            geom = self._create_rectangle_from_start(area_start_point, outward_azimuth, pre_area_len_2, half_width, f"Pre-Threshold Area {reciprocal_desig}")
-            if geom:
-              attributes = {'rwy_name': runway_name, 'type': f'Pre-Threshold Area ({reciprocal_desig})', 'wid_m': runway_width, 'len_m': round(pre_area_len_2, 3), 'MOS_Ref': "N/A"}
-              pre_threshold_area_features.append(('PreThresholdArea', geom, attributes))
-            # else: Failure logged by helper
-          except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Pre-Threshold Area {reciprocal_desig}: {e}", plugin_tag, level=Qgis.Warning)
-          
-        generated_elements.extend(pre_threshold_area_features)
-        
-      # --- 1d. Displaced Threshold Markings ---
-      displaced_marking_features = []
-      primary_desig = runway_name.split('/')[0] if '/' in runway_name else "Primary"
-      reciprocal_desig = runway_name.split('/')[1] if '/' in runway_name else "Reciprocal"
-      marking_ref = 'Marking Standard (Verify)' # Generic reference
-      
-      # Marking for Primary Displaced Threshold
-      if disp_thr_1 > 1e-6:
-        try:
-          line_geom = QgsGeometry.fromPolylineXY([phys_p_start, thr_point])
-          if line_geom and not line_geom.isEmpty():
-            line_len = line_geom.length()
-            attributes = {'rwy_name': runway_name, 'type': 'Displaced Threshold Marking', 'end_desig': primary_desig, 'len_m': round(line_len, 3) if line_len else None, 'MOS_Ref': marking_ref}
-            displaced_marking_features.append(('DisplacedThresholdMarking', line_geom, attributes))
-          else: QgsMessageLog.logMessage(f"Warning: Failed generate geometry for Primary Displaced Marking {log_name}.", plugin_tag, level=Qgis.Warning)
-        except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Primary Displaced Marking {log_name}: {e}", plugin_tag, level=Qgis.Warning)
-        
-      # Marking for Reciprocal Displaced Threshold (similar logic)
-      if disp_thr_2 > 1e-6:
-        try:
-          line_geom = QgsGeometry.fromPolylineXY([phys_p_end, rec_thr_point])
-          if line_geom and not line_geom.isEmpty():
-            line_len = line_geom.length()
-            attributes = {'rwy_name': runway_name, 'type': 'Displaced Threshold Marking', 'end_desig': reciprocal_desig, 'len_m': round(line_len, 3) if line_len else None, 'MOS_Ref': marking_ref}
-            displaced_marking_features.append(('DisplacedThresholdMarking', line_geom, attributes))
-          else: QgsMessageLog.logMessage(f"Warning: Failed generate geometry for Reciprocal Displaced Marking {log_name}.", plugin_tag, level=Qgis.Warning)
-        except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Reciprocal Displaced Marking {log_name}: {e}", plugin_tag, level=Qgis.Warning)
-        
-      generated_elements.extend(displaced_marking_features)
-      
-      # --- 1e. Pre-Threshold Area Markings ---
-      pre_area_marking_features = []
-      # Marking for Primary Pre-Threshold Area
-      if pre_area_len_1 > 1e-6:
-        try:
-          outermost_p = phys_p_start.project(pre_area_len_1, rwy_params['azimuth_r_p'])
-          if not outermost_p: raise ValueError("Projection failed")
-          line_geom = QgsGeometry.fromPolylineXY([outermost_p, phys_p_start])
-          if line_geom and not line_geom.isEmpty():
-            line_len = line_geom.length()
-            attributes = {'rwy_name': runway_name, 'type': 'Pre-Threshold Area Marking', 'end_desig': primary_desig, 'len_m': round(line_len, 3) if line_len else None, 'MOS_Ref': marking_ref}
-            pre_area_marking_features.append(('PreThresholdAreaMarking', line_geom, attributes))
-          else: QgsMessageLog.logMessage(f"Warning: Failed generate geometry for Primary Pre-Area Marking {log_name}.", plugin_tag, level=Qgis.Warning)
-        except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Primary Pre-Area Marking {log_name}: {e}", plugin_tag, level=Qgis.Warning)
-        
-      # Marking for Reciprocal Pre-Threshold Area (similar logic)
-      if pre_area_len_2 > 1e-6:
-        try:
-          outermost_r = phys_p_end.project(pre_area_len_2, rwy_params['azimuth_p_r'])
-          if not outermost_r: raise ValueError("Projection failed")
-          line_geom = QgsGeometry.fromPolylineXY([outermost_r, phys_p_end])
-          if line_geom and not line_geom.isEmpty():
-            line_len = line_geom.length()
-            attributes = {'rwy_name': runway_name, 'type': 'Pre-Threshold Area Marking', 'end_desig': reciprocal_desig, 'len_m': round(line_len, 3) if line_len else None, 'MOS_Ref': marking_ref}
-            pre_area_marking_features.append(('PreThresholdAreaMarking', line_geom, attributes))
-          else: QgsMessageLog.logMessage(f"Warning: Failed generate geometry for Reciprocal Pre-Area Marking {log_name}.", plugin_tag, level=Qgis.Warning)
-        except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Reciprocal Pre-Area Marking {log_name}: {e}", plugin_tag, level=Qgis.Warning)
-        
-      generated_elements.extend(pre_area_marking_features)
-      
-      # --- 2. Runway Shoulders ---
-      if shoulder_width is not None and shoulder_width > 0 and runway_width is not None and runway_width > 0:
-        try:
-          half_width = runway_width / 2.0
-          phys_start_l = phys_p_start.project(half_width, rwy_params['azimuth_perp_l'])
-          phys_start_r = phys_p_start.project(half_width, rwy_params['azimuth_perp_r'])
-          phys_end_l = phys_p_end.project(half_width, rwy_params['azimuth_perp_l'])
-          phys_end_r = phys_p_end.project(half_width, rwy_params['azimuth_perp_r'])
-          if not all([phys_start_l, phys_start_r, phys_end_l, phys_end_r]):
-            raise ValueError("Failed to calculate physical pavement corners for shoulders.")
+            QgsMessageLog.logMessage(f"Info: Skipping Landing Pavement for {log_name}: Width ({runway_width}) not specified or invalid.", plugin_tag, level=Qgis.Info)
             
-          outer_start_l = phys_start_l.project(shoulder_width, rwy_params['azimuth_perp_l'])
-          outer_start_r = phys_start_r.project(shoulder_width, rwy_params['azimuth_perp_r'])
-          outer_end_l = phys_end_l.project(shoulder_width, rwy_params['azimuth_perp_l'])
-          outer_end_r = phys_end_r.project(shoulder_width, rwy_params['azimuth_perp_r'])
-          
-          physical_refs = ols_dimensions.get_physical_refs()
-          shoulder_ref = physical_refs.get('shoulder', "MOS 139 6.2.4")
-          shoulder_attrs = {'rwy_name': runway_name, 'type': 'Runway Shoulder', 'wid_m': shoulder_width, 'len_m': round(physical_length, 3), 'MOS_Ref': shoulder_ref}
-          
-          # Create Left Shoulder Polygon
-          if all([outer_start_l, outer_end_l]):
-            left_corners = [phys_start_l, outer_start_l, outer_end_l, phys_end_l]
-            left_shoulder_poly = self._create_polygon_from_corners(left_corners, f"Left Shoulder {log_name}")
-            if left_shoulder_poly: generated_elements.append(('Shoulder', left_shoulder_poly, shoulder_attrs.copy()))
-            # else: Failure logged by helper
-          else: QgsMessageLog.logMessage(f"Warning: Failed calculate outer corners for left shoulder for {log_name}.", plugin_tag, level=Qgis.Warning)
-          
-          # Create Right Shoulder Polygon
-          if all([outer_start_r, outer_end_r]):
-            right_corners = [phys_start_r, phys_end_r, outer_end_r, outer_start_r]
-            right_shoulder_poly = self._create_polygon_from_corners(right_corners, f"Right Shoulder {log_name}")
-            if right_shoulder_poly: generated_elements.append(('Shoulder', right_shoulder_poly, shoulder_attrs.copy()))
-            # else: Failure logged by helper
-          else: QgsMessageLog.logMessage(f"Warning: Failed calculate outer corners for right shoulder for {log_name}.", plugin_tag, level=Qgis.Warning)
-          
-        except Exception as e_shld: QgsMessageLog.logMessage(f"Warning: Error calculating Shoulders {log_name}: {e_shld}", plugin_tag, level=Qgis.Warning)
-      elif shoulder_width is not None and shoulder_width > 0:
-        QgsMessageLog.logMessage(f"Info: Skipping Shoulders for {log_name}: Runway width missing.", plugin_tag, level=Qgis.Info)
-        
-        
-      # --- 3. Runway Strips ---
-      strip_dims = None; strip_end_center_p = None; strip_end_center_r = None; strip_length = None
-      try:
-        arc_num_val = runway_data.get('arc_num')
-        arc_num = int(arc_num_val) if arc_num_val is not None else 0
-        type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get('type1'))
-        runway_width = runway_data.get('width') # Ensure width is retrieved
-        
-        strip_dims = ols_dimensions.get_strip_params(arc_num, type1_abbr, runway_width)
-        runway_data['calculated_strip_dims'] = strip_dims # Store result (even if None)
-        
-        # --- Add this Warning Log ---
-        if strip_dims is None:
-            QgsMessageLog.logMessage(
-              f"Warning (Physical Geom): Failed to calculate strip parameters for {log_name} "
-              f"(ARC={arc_num}, Type={type1_abbr}, Width={runway_width}). "
-              "Dependent elements (Strips, RESA, IHS Base) may fail.",
-              plugin_tag, level=Qgis.Warning
-            )
-        # --- End Added Warning Log ---
-        
-        if strip_dims and all(strip_dims.get(dim) is not None for dim in ['overall_width', 'graded_width', 'extension_length']):
-          # --- DEBUG LOG REMOVED ---
-          # QgsMessageLog.logMessage(f"DEBUG (generate_physical_geometry): Stored strip_dims for {log_name}: {strip_dims!r}", plugin_tag, level=Qgis.Info)
-          
-          extension = strip_dims['extension_length']; graded_width = strip_dims['graded_width']; overall_width = strip_dims['overall_width']
-          graded_half_width = graded_width / 2.0; overall_half_width = overall_width / 2.0
-          
-          strip_end_center_p = phys_p_start.project(extension, rwy_params['azimuth_r_p'])
-          strip_end_center_r = phys_p_end.project(extension, rwy_params['azimuth_p_r'])
-          
-          if strip_end_center_p and strip_end_center_r:
-            strip_length = strip_end_center_p.distance(strip_end_center_r)
-            if strip_length is None: raise ValueError("Failed to calculate strip length.")
+          # --- 1b. Pre-Threshold Runway Areas (Displaced Areas) ---
+          if runway_width is not None and runway_width > 0:
+            pre_threshold_features = [] 
+            half_width = runway_width / 2.0
+            primary_desig = runway_name.split('/')[0] if '/' in runway_name else "Primary"
+            reciprocal_desig = runway_name.split('/')[1] if '/' in runway_name else "Reciprocal"
             
-            # 3a. Graded Strip
-            graded_strip_geom = self._create_runway_aligned_rectangle(strip_end_center_p, strip_end_center_r, 0.0, graded_half_width, f"Graded Strip {log_name}")
-            if graded_strip_geom:
-              graded_ref = f"{strip_dims.get('mos_graded_width_ref','')}; {strip_dims.get('mos_extension_length_ref','')}"
-              graded_attrs = {'rwy_name': runway_name, 'type': 'Graded Strip', 'wid_m': graded_width, 'len_m': round(strip_length, 3), 'MOS_Ref': graded_ref}
-              generated_elements.append(('GradedStrip', graded_strip_geom, graded_attrs))
-            # else: Failure logged by helper
+            if disp_thr_1 > 1e-6:
+              try:
+                start_point = phys_p_start; end_point = thr_point
+                p_start_l = start_point.project(half_width, rwy_params['azimuth_perp_l'])
+                p_start_r = start_point.project(half_width, rwy_params['azimuth_perp_r'])
+                p_end_l = end_point.project(half_width, rwy_params['azimuth_perp_l'])
+                p_end_r = end_point.project(half_width, rwy_params['azimuth_perp_r'])
+                if all([p_start_l, p_start_r, p_end_l, p_end_r]):
+                  geom = self._create_polygon_from_corners([p_start_l, p_start_r, p_end_r, p_end_l], f"Pre-Threshold {primary_desig}")
+                  if geom:
+                    physical_refs = ols_dimensions.get_physical_refs()
+                    pavement_ref = physical_refs.get('pavement', "MOS 139 6.2.3")
+                    # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
+                    attributes = {'rwy': runway_name, 'desc': f'Pre-Threshold Pavement ({primary_desig})', 'wid_m': runway_width, 'len_m': round(disp_thr_1, 3), 'ref_mos': pavement_ref, 'end_desig': primary_desig}
+                    pre_threshold_features.append(('PreThresholdRunway', geom, attributes))
+                else: QgsMessageLog.logMessage(f"Warning: Failed calculate corners for Pre-Threshold Pavement {primary_desig}.", plugin_tag, level=Qgis.Warning)
+              except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Pre-Threshold Pavement {primary_desig}: {e}", plugin_tag, level=Qgis.Warning)
               
-            # 3b. Overall Strip
-            overall_strip_geom = self._create_runway_aligned_rectangle(strip_end_center_p, strip_end_center_r, 0.0, overall_half_width, f"Overall Strip {log_name}")
-            if overall_strip_geom:
-              overall_ref = f"{strip_dims.get('mos_overall_width_ref','')}; {strip_dims.get('mos_extension_length_ref','')}"
-              overall_attrs = {'rwy_name': runway_name, 'type': 'Overall Strip', 'wid_m': overall_width, 'len_m': round(strip_length, 3), 'MOS_Ref': overall_ref}
-              generated_elements.append(('OverallStrip', overall_strip_geom, overall_attrs))
-            # else: Failure logged by helper
-          else:
-            QgsMessageLog.logMessage(f"Warning: Skipping Strips for {log_name}: Invalid strip end points calculation.", plugin_tag, level=Qgis.Warning)
-            strip_dims = None # Ensure strip_dims is None if ends failed
-        else:
-          QgsMessageLog.logMessage(f"Info: Skipping Strips for {log_name}: Strip dimensions calculation failed or incomplete.", plugin_tag, level=Qgis.Info)
-          strip_dims = None # Ensure strip_dims is None if calculation failed
-      except Exception as e:
-        QgsMessageLog.logMessage(f"Warning: Error calculating Strips for {log_name}: {e}", plugin_tag, level=Qgis.Warning)
-        strip_dims = None
-        
-      # --- 4. RESAs ---
-      try:
-        type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get('type1'))
-        type2_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get('type2'))
-        resa_dims = ols_dimensions.get_resa_params(
-          int(runway_data.get('arc_num', 0)), type1_abbr, type2_abbr
-        )
-        
-        # Check if RESAs required AND strip ends were validly calculated earlier
-        if resa_dims and resa_dims.get('required') and strip_end_center_p and strip_end_center_r and runway_width is not None and runway_width > 0:
-          resa_length = resa_dims.get('length')
-          resa_width = 2.0 * runway_width # Based on runway width
-          resa_half_width = resa_width / 2.0
-          
-          if resa_length is None or resa_length <= 0:
-            raise ValueError("Required RESA length missing or invalid.")
+            if disp_thr_2 > 1e-6:
+              try:
+                start_point = phys_p_end; end_point = rec_thr_point
+                r_start_l = start_point.project(half_width, rwy_params['azimuth_perp_l'])
+                r_start_r = start_point.project(half_width, rwy_params['azimuth_perp_r'])
+                r_end_l = end_point.project(half_width, rwy_params['azimuth_perp_l'])
+                r_end_r = end_point.project(half_width, rwy_params['azimuth_perp_r'])
+                if all([r_start_l, r_start_r, r_end_l, r_end_r]):
+                  geom = self._create_polygon_from_corners([r_start_l, r_start_r, r_end_r, r_end_l], f"Pre-Threshold {reciprocal_desig}")
+                  if geom:
+                    physical_refs = ols_dimensions.get_physical_refs()
+                    pavement_ref = physical_refs.get('pavement', "MOS 139 6.2.3")
+                    # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
+                    attributes = {'rwy': runway_name, 'desc': f'Pre-Threshold Pavement ({reciprocal_desig})', 'wid_m': runway_width, 'len_m': round(disp_thr_2, 3), 'ref_mos': pavement_ref, 'end_desig': reciprocal_desig}
+                    pre_threshold_features.append(('PreThresholdRunway', geom, attributes))
+                else: QgsMessageLog.logMessage(f"Warning: Failed calculate corners for Pre-Threshold Pavement {reciprocal_desig}.", plugin_tag, level=Qgis.Warning)
+              except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Pre-Threshold Pavement {reciprocal_desig}: {e}", plugin_tag, level=Qgis.Warning)
+              
+            generated_elements.extend(pre_threshold_features)
             
+          # --- 1c. Pre-Threshold Area (Blast Pad, etc.) ---
+          if runway_width is not None and runway_width > 0:
+            pre_threshold_area_features = []
+            half_width = runway_width / 2.0
+            primary_desig = runway_name.split('/')[0] if '/' in runway_name else "Primary"
+            reciprocal_desig = runway_name.split('/')[1] if '/' in runway_name else "Reciprocal"
+            
+            if pre_area_len_1 > 1e-6:
+              try:
+                area_start_point = phys_p_start
+                outward_azimuth = rwy_params['azimuth_r_p']
+                geom = self._create_rectangle_from_start(area_start_point, outward_azimuth, pre_area_len_1, half_width, f"Pre-Threshold Area {primary_desig}")
+                if geom:
+                  # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
+                  attributes = {'rwy': runway_name, 'desc': f'Pre-Threshold Area ({primary_desig})', 'wid_m': runway_width, 'len_m': round(pre_area_len_1, 3), 'ref_mos': "N/A", 'end_desig': primary_desig}
+                  pre_threshold_area_features.append(('PreThresholdArea', geom, attributes))
+              except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Pre-Threshold Area {primary_desig}: {e}", plugin_tag, level=Qgis.Warning)
+              
+            if pre_area_len_2 > 1e-6:
+              try:
+                area_start_point = phys_p_end
+                outward_azimuth = rwy_params['azimuth_p_r']
+                geom = self._create_rectangle_from_start(area_start_point, outward_azimuth, pre_area_len_2, half_width, f"Pre-Threshold Area {reciprocal_desig}")
+                if geom:
+                  # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
+                  attributes = {'rwy': runway_name, 'desc': f'Pre-Threshold Area ({reciprocal_desig})', 'wid_m': runway_width, 'len_m': round(pre_area_len_2, 3), 'ref_mos': "N/A", 'end_desig': reciprocal_desig}
+                  pre_threshold_area_features.append(('PreThresholdArea', geom, attributes))
+              except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Pre-Threshold Area {reciprocal_desig}: {e}", plugin_tag, level=Qgis.Warning)
+              
+            generated_elements.extend(pre_threshold_area_features)
+            
+          # --- 1d. Displaced Threshold Markings ---
+          displaced_marking_features = []
           primary_desig = runway_name.split('/')[0] if '/' in runway_name else "Primary"
           reciprocal_desig = runway_name.split('/')[1] if '/' in runway_name else "Reciprocal"
-          resa_ref = f"{resa_dims.get('mos_applicability_ref','')}; {resa_dims.get('mos_width_ref','')}; {resa_dims.get('mos_length_ref','')}"
-          resa_base_attrs = {'rwy_name': runway_name, 'type': 'RESA', 'len_m': resa_length, 'wid_m': resa_width, 'MOS_Ref': resa_ref}
+          marking_ref = 'Marking Standard (Verify)' 
           
-          # RESA 1 (Primary End)
+          if disp_thr_1 > 1e-6:
+            try:
+              line_geom = QgsGeometry.fromPolylineXY([phys_p_start, thr_point])
+              if line_geom and not line_geom.isEmpty():
+                line_len = line_geom.length()
+                # Use correct field names: 'rwy', 'desc', 'ref_mos'
+                attributes = {'rwy': runway_name, 'desc': 'Displaced Threshold Marking', 'end_desig': primary_desig, 'len_m': round(line_len, 3) if line_len else None, 'ref_mos': marking_ref}
+                displaced_marking_features.append(('DisplacedThresholdMarking', line_geom, attributes))
+              else: QgsMessageLog.logMessage(f"Warning: Failed generate geometry for Primary Displaced Marking {log_name}.", plugin_tag, level=Qgis.Warning)
+            except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Primary Displaced Marking {log_name}: {e}", plugin_tag, level=Qgis.Warning)
+            
+          if disp_thr_2 > 1e-6:
+            try:
+              line_geom = QgsGeometry.fromPolylineXY([phys_p_end, rec_thr_point])
+              if line_geom and not line_geom.isEmpty():
+                line_len = line_geom.length()
+                # Use correct field names: 'rwy', 'desc', 'ref_mos'
+                attributes = {'rwy': runway_name, 'desc': 'Displaced Threshold Marking', 'end_desig': reciprocal_desig, 'len_m': round(line_len, 3) if line_len else None, 'ref_mos': marking_ref}
+                displaced_marking_features.append(('DisplacedThresholdMarking', line_geom, attributes))
+              else: QgsMessageLog.logMessage(f"Warning: Failed generate geometry for Reciprocal Displaced Marking {log_name}.", plugin_tag, level=Qgis.Warning)
+            except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Reciprocal Displaced Marking {log_name}: {e}", plugin_tag, level=Qgis.Warning)
+            
+          generated_elements.extend(displaced_marking_features)
+          
+          # --- 1e. Pre-Threshold Area Markings ---
+          pre_area_marking_features = []
+          if pre_area_len_1 > 1e-6:
+            try:
+              outermost_p = phys_p_start.project(pre_area_len_1, rwy_params['azimuth_r_p'])
+              if not outermost_p: raise ValueError("Projection failed")
+              line_geom = QgsGeometry.fromPolylineXY([outermost_p, phys_p_start])
+              if line_geom and not line_geom.isEmpty():
+                line_len = line_geom.length()
+                # Use correct field names: 'rwy', 'desc', 'ref_mos'
+                attributes = {'rwy': runway_name, 'desc': 'Pre-Threshold Area Marking', 'end_desig': primary_desig, 'len_m': round(line_len, 3) if line_len else None, 'ref_mos': marking_ref}
+                pre_area_marking_features.append(('PreThresholdAreaMarking', line_geom, attributes))
+              else: QgsMessageLog.logMessage(f"Warning: Failed generate geometry for Primary Pre-Area Marking {log_name}.", plugin_tag, level=Qgis.Warning)
+            except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Primary Pre-Area Marking {log_name}: {e}", plugin_tag, level=Qgis.Warning)
+            
+          if pre_area_len_2 > 1e-6:
+            try:
+              outermost_r = phys_p_end.project(pre_area_len_2, rwy_params['azimuth_p_r'])
+              if not outermost_r: raise ValueError("Projection failed")
+              line_geom = QgsGeometry.fromPolylineXY([outermost_r, phys_p_end])
+              if line_geom and not line_geom.isEmpty():
+                line_len = line_geom.length()
+                # Use correct field names: 'rwy', 'desc', 'ref_mos'
+                attributes = {'rwy': runway_name, 'desc': 'Pre-Threshold Area Marking', 'end_desig': reciprocal_desig, 'len_m': round(line_len, 3) if line_len else None, 'ref_mos': marking_ref}
+                pre_area_marking_features.append(('PreThresholdAreaMarking', line_geom, attributes))
+              else: QgsMessageLog.logMessage(f"Warning: Failed generate geometry for Reciprocal Pre-Area Marking {log_name}.", plugin_tag, level=Qgis.Warning)
+            except Exception as e: QgsMessageLog.logMessage(f"Warning: Error generating Reciprocal Pre-Area Marking {log_name}: {e}", plugin_tag, level=Qgis.Warning)
+            
+          generated_elements.extend(pre_area_marking_features)
+          
+          # --- 2. Runway Shoulders ---
+          if shoulder_width is not None and shoulder_width > 0 and runway_width is not None and runway_width > 0:
+            try:
+              half_width = runway_width / 2.0
+              phys_start_l = phys_p_start.project(half_width, rwy_params['azimuth_perp_l'])
+              phys_start_r = phys_p_start.project(half_width, rwy_params['azimuth_perp_r'])
+              phys_end_l = phys_p_end.project(half_width, rwy_params['azimuth_perp_l'])
+              phys_end_r = phys_p_end.project(half_width, rwy_params['azimuth_perp_r'])
+              if not all([phys_start_l, phys_start_r, phys_end_l, phys_end_r]):
+                raise ValueError("Failed to calculate physical pavement corners for shoulders.")
+                
+              outer_start_l = phys_start_l.project(shoulder_width, rwy_params['azimuth_perp_l'])
+              outer_start_r = phys_start_r.project(shoulder_width, rwy_params['azimuth_perp_r'])
+              outer_end_l = phys_end_l.project(shoulder_width, rwy_params['azimuth_perp_l'])
+              outer_end_r = phys_end_r.project(shoulder_width, rwy_params['azimuth_perp_r'])
+              
+              physical_refs = ols_dimensions.get_physical_refs()
+              shoulder_ref = physical_refs.get('shoulder', "MOS 139 6.2.4")
+              # Use correct field names: 'rwy', 'desc', 'ref_mos'
+              shoulder_attrs = {'rwy': runway_name, 'desc': 'Runway Shoulder', 'wid_m': shoulder_width, 'len_m': round(physical_length, 3), 'ref_mos': shoulder_ref}
+              
+              if all([outer_start_l, outer_end_l]):
+                left_corners = [phys_start_l, outer_start_l, outer_end_l, phys_end_l]
+                left_shoulder_poly = self._create_polygon_from_corners(left_corners, f"Left Shoulder {log_name}")
+                if left_shoulder_poly: generated_elements.append(('Shoulder', left_shoulder_poly, shoulder_attrs.copy()))
+              else: QgsMessageLog.logMessage(f"Warning: Failed calculate outer corners for left shoulder for {log_name}.", plugin_tag, level=Qgis.Warning)
+              
+              if all([outer_start_r, outer_end_r]):
+                right_corners = [phys_start_r, phys_end_r, outer_end_r, outer_start_r]
+                right_shoulder_poly = self._create_polygon_from_corners(right_corners, f"Right Shoulder {log_name}")
+                if right_shoulder_poly: generated_elements.append(('Shoulder', right_shoulder_poly, shoulder_attrs.copy()))
+              else: QgsMessageLog.logMessage(f"Warning: Failed calculate outer corners for right shoulder for {log_name}.", plugin_tag, level=Qgis.Warning)
+              
+            except Exception as e_shld: QgsMessageLog.logMessage(f"Warning: Error calculating Shoulders {log_name}: {e_shld}", plugin_tag, level=Qgis.Warning)
+          elif shoulder_width is not None and shoulder_width > 0:
+            QgsMessageLog.logMessage(f"Info: Skipping Shoulders for {log_name}: Runway width missing.", plugin_tag, level=Qgis.Info)
+            
+            
+          # --- 3. Runway Strips ---
+          strip_dims = None; strip_end_center_p = None; strip_end_center_r = None; strip_length = None
           try:
-            resa1_geom = self._create_rectangle_from_start(strip_end_center_p, rwy_params['azimuth_r_p'], resa_length, resa_half_width, f"RESA {primary_desig}")
-            if resa1_geom:
-              resa1_attrs = resa_base_attrs.copy(); resa1_attrs['end_desig'] = primary_desig
-              generated_elements.append(('RESA', resa1_geom, resa1_attrs))
-            # else: Failure logged by helper
-          except Exception as e_resa1: QgsMessageLog.logMessage(f"Warning: Error RESA {primary_desig} for {log_name}: {e_resa1}", plugin_tag, level=Qgis.Warning)
-          
-          # RESA 2 (Reciprocal End)
+            arc_num_val = runway_data.get('arc_num')
+            arc_num = int(arc_num_val) if arc_num_val is not None else 0
+            type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get('type1'))
+            runway_width_for_strip = runway_data.get('width') 
+            
+            strip_dims = ols_dimensions.get_strip_params(arc_num, type1_abbr, runway_width_for_strip)
+            runway_data['calculated_strip_dims'] = strip_dims 
+            
+            if strip_dims is None:
+                QgsMessageLog.logMessage(
+                  f"Warning (Physical Geom): Failed to calculate strip parameters for {log_name} "
+                  f"(ARC={arc_num}, Type={type1_abbr}, Width={runway_width_for_strip}). "
+                  "Dependent elements (Strips, RESA, IHS Base) may fail.",
+                  plugin_tag, level=Qgis.Warning
+                )
+            
+            if strip_dims and all(strip_dims.get(dim) is not None for dim in ['overall_width', 'graded_width', 'extension_length']):
+              extension = strip_dims['extension_length']; graded_width = strip_dims['graded_width']; overall_width = strip_dims['overall_width']
+              graded_half_width = graded_width / 2.0; overall_half_width = overall_width / 2.0
+              
+              strip_end_center_p = phys_p_start.project(extension, rwy_params['azimuth_r_p'])
+              strip_end_center_r = phys_p_end.project(extension, rwy_params['azimuth_p_r'])
+              
+              if strip_end_center_p and strip_end_center_r:
+                strip_length = strip_end_center_p.distance(strip_end_center_r)
+                if strip_length is None: raise ValueError("Failed to calculate strip length.")
+                
+                graded_strip_geom = self._create_runway_aligned_rectangle(strip_end_center_p, strip_end_center_r, 0.0, graded_half_width, f"Graded Strip {log_name}")
+                if graded_strip_geom:
+                  graded_ref = f"{strip_dims.get('mos_graded_width_ref','')}; {strip_dims.get('mos_extension_length_ref','')}"
+                  # Use correct field names: 'rwy', 'desc', 'ref_mos'
+                  graded_attrs = {'rwy': runway_name, 'desc': 'Graded Strip', 'wid_m': graded_width, 'len_m': round(strip_length, 3), 'ref_mos': graded_ref}
+                  generated_elements.append(('GradedStrip', graded_strip_geom, graded_attrs))
+                  
+                overall_strip_geom = self._create_runway_aligned_rectangle(strip_end_center_p, strip_end_center_r, 0.0, overall_half_width, f"Overall Strip {log_name}")
+                if overall_strip_geom:
+                  overall_ref = f"{strip_dims.get('mos_overall_width_ref','')}; {strip_dims.get('mos_extension_length_ref','')}"
+                  # Use correct field names: 'rwy', 'desc', 'ref_mos'
+                  overall_attrs = {'rwy': runway_name, 'desc': 'Overall Strip', 'wid_m': overall_width, 'len_m': round(strip_length, 3), 'ref_mos': overall_ref}
+                  generated_elements.append(('OverallStrip', overall_strip_geom, overall_attrs))
+              else:
+                QgsMessageLog.logMessage(f"Warning: Skipping Strips for {log_name}: Invalid strip end points calculation.", plugin_tag, level=Qgis.Warning)
+                strip_dims = None 
+            else:
+              QgsMessageLog.logMessage(f"Info: Skipping Strips for {log_name}: Strip dimensions calculation failed or incomplete.", plugin_tag, level=Qgis.Info)
+              strip_dims = None 
+          except Exception as e:
+            QgsMessageLog.logMessage(f"Warning: Error calculating Strips for {log_name}: {e}", plugin_tag, level=Qgis.Warning)
+            strip_dims = None
+            
+          # --- 4. RESAs ---
           try:
-            resa2_geom = self._create_rectangle_from_start(strip_end_center_r, rwy_params['azimuth_p_r'], resa_length, resa_half_width, f"RESA {reciprocal_desig}")
-            if resa2_geom:
-              resa2_attrs = resa_base_attrs.copy(); resa2_attrs['end_desig'] = reciprocal_desig
-              generated_elements.append(('RESA', resa2_geom, resa2_attrs))
-            # else: Failure logged by helper
-          except Exception as e_resa2: QgsMessageLog.logMessage(f"Warning: Error RESA {reciprocal_desig} for {log_name}: {e_resa2}", plugin_tag, level=Qgis.Warning)
+            type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get('type1'))
+            type2_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get('type2'))
+            resa_dims = ols_dimensions.get_resa_params(
+              int(runway_data.get('arc_num', 0)), type1_abbr, type2_abbr
+            )
+            
+            if resa_dims and resa_dims.get('required') and strip_end_center_p and strip_end_center_r and runway_width is not None and runway_width > 0:
+              resa_length = resa_dims.get('length')
+              resa_width_val = 2.0 * runway_width 
+              resa_half_width = resa_width_val / 2.0
+              
+              if resa_length is None or resa_length <= 0:
+                raise ValueError("Required RESA length missing or invalid.")
+                
+              primary_desig = runway_name.split('/')[0] if '/' in runway_name else "Primary"
+              reciprocal_desig = runway_name.split('/')[1] if '/' in runway_name else "Reciprocal"
+              resa_ref = f"{resa_dims.get('mos_applicability_ref','')}; {resa_dims.get('mos_width_ref','')}; {resa_dims.get('mos_length_ref','')}"
+              # Use correct field names: 'rwy', 'desc', 'ref_mos'
+              resa_base_attrs = {'rwy': runway_name, 'desc': 'RESA', 'len_m': resa_length, 'wid_m': resa_width_val, 'ref_mos': resa_ref}
+              
+              try:
+                resa1_geom = self._create_rectangle_from_start(strip_end_center_p, rwy_params['azimuth_r_p'], resa_length, resa_half_width, f"RESA {primary_desig}")
+                if resa1_geom:
+                  resa1_attrs = resa_base_attrs.copy(); resa1_attrs['end_desig'] = primary_desig
+                  generated_elements.append(('RESA', resa1_geom, resa1_attrs))
+              except Exception as e_resa1: QgsMessageLog.logMessage(f"Warning: Error RESA {primary_desig} for {log_name}: {e_resa1}", plugin_tag, level=Qgis.Warning)
+              
+              try:
+                resa2_geom = self._create_rectangle_from_start(strip_end_center_r, rwy_params['azimuth_p_r'], resa_length, resa_half_width, f"RESA {reciprocal_desig}")
+                if resa2_geom:
+                  resa2_attrs = resa_base_attrs.copy(); resa2_attrs['end_desig'] = reciprocal_desig
+                  generated_elements.append(('RESA', resa2_geom, resa2_attrs))
+              except Exception as e_resa2: QgsMessageLog.logMessage(f"Warning: Error RESA {reciprocal_desig} for {log_name}: {e_resa2}", plugin_tag, level=Qgis.Warning)
+              
+            elif resa_dims and resa_dims.get('required'):
+              QgsMessageLog.logMessage(f"Info: Skipping RESAs for {log_name}: Required but prerequisite data (strip ends/runway width) incomplete.", plugin_tag, level=Qgis.Info)
+              
+          except Exception as e_resa_section:
+            QgsMessageLog.logMessage(f"Warning: Error processing RESA Section for {log_name}: {e_resa_section}", plugin_tag, level=Qgis.Warning)
+            
+          # --- 5. Stopways ---
+          # Placeholder: Add logic here if needed.
+          # If Stopways are implemented, ensure attribute keys match 'stopway_resa_fields':
+          # e.g., attributes = {'rwy': runway_name, 'desc': 'Stopway', ..., 'end_desig': ..., 'ref_mos': ...}
+            
+          QgsMessageLog.logMessage(f"Finished physical geometry processing for {log_name}. Generated {len(generated_elements)} element features.", plugin_tag, level=Qgis.Success)
           
-        elif resa_dims and resa_dims.get('required'):
-          QgsMessageLog.logMessage(f"Info: Skipping RESAs for {log_name}: Required but prerequisite data (strip ends/runway width) incomplete.", plugin_tag, level=Qgis.Info)
-        # else: RESAs not required, no message needed.
-          
-      except Exception as e_resa_section:
-        QgsMessageLog.logMessage(f"Warning: Error processing RESA Section for {log_name}: {e_resa_section}", plugin_tag, level=Qgis.Warning)
-        
-      # --- 5. Stopways ---
-      # (Placeholder: Add logic here if needed)
-        
-      # --- Final Log for this Runway ---
-      QgsMessageLog.logMessage(f"Finished physical geometry processing for {log_name}. Generated {len(generated_elements)} element features.", plugin_tag, level=Qgis.Success)
-      
-      return generated_elements if generated_elements else None # Return None only if completely failed or nothing generated
+          return generated_elements if generated_elements else None
   
     def _generate_airport_wide_ols(self, processed_runway_data_list: List[dict],
                       ols_layer_group: QgsLayerTreeGroup,
@@ -3046,7 +2946,7 @@ class SafeguardingBuilder:
             def create_wzm_layer(zone: str, geom: Optional[QgsGeometry], desc: str, r_in: float, r_out: float) -> bool:
                 if not geom: return False
                 display_name = f"{self.tr('WMZ')} {zone} ({r_in:.0f}-{r_out:.0f}km)"; internal_name = f"WMZ_{zone}_{icao_code}"
-                fields = QgsFields([QgsField("zone", QVariant.String), QgsField("desc", QVariant.String), QgsField("innerkm", QVariant.Double), QgsField("outerkm", QVariant.Double)])
+                fields = QgsFields([QgsField("zone", QVariant.String), QgsField("desc", QVariant.String), QgsField("inner_rad_km", QVariant.Double), QgsField("outer_rad_km", QVariant.Double)])
                 feature = QgsFeature(fields); feature.setGeometry(geom); feature.setAttributes([f"Area {zone}", desc, r_in, r_out])
                 layer = self._create_and_add_layer("Polygon", internal_name, display_name, fields, [feature], layer_group, f"WMZ {zone}")
                 return layer is not None
@@ -3079,12 +2979,12 @@ class SafeguardingBuilder:
                     QgsField("rwy", QVariant.String), 
                     QgsField("zone", QVariant.String), 
                     QgsField("desc", QVariant.String),
-                    QgsField("inner_extent", QVariant.Double), # New
-                    QgsField("outer_extent", QVariant.Double), # Renamed from Ext_m
-                    QgsField("wid_m", QVariant.Double),      # Renamed from HW_m, value is doubled
-                    QgsField("max_intensity", QVariant.String), # New
-                    QgsField("ref_mos", QVariant.String),     # New
-                    QgsField("ref_nasf", QVariant.String)     # New
+                    QgsField("inner_extent", QVariant.Double),
+                    QgsField("outer_extent", QVariant.Double),
+                    QgsField("wid_m", QVariant.Double),
+                    QgsField("max_intensity", QVariant.String),
+                    QgsField("ref_mos", QVariant.String),
+                    QgsField("ref_nasf", QVariant.String)
                 ])
                 
                 inner_extent_val = 0.0
