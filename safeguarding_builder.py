@@ -486,8 +486,11 @@ class SafeguardingBuilder:
             if processed_runway_data_list and any_runway_base_data_ok:
               physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
               protection_area_group = main_group.addGroup(self.tr("Runway Protection Areas")) 
+              specialised_safeguarding_group = main_group.findGroup(self.tr("Specialised Safeguarding"))
+              if not specialised_safeguarding_group: # Should have been created earlier
+                  specialised_safeguarding_group = main_group.addGroup(self.tr("Specialised Safeguarding"))
               
-              if physical_geom_group and protection_area_group: 
+              if physical_geom_group and protection_area_group and specialised_safeguarding_group: 
                     common_fields = [ QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30), QgsField("desc", QVariant.String, self.tr("Element Type"), 50), QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3), QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3), QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250)]
                     stopway_resa_fields = common_fields + [QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)]
                     pre_threshold_fields = common_fields + [QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)]
@@ -735,9 +738,9 @@ class SafeguardingBuilder:
                   
             guideline_groups = self._create_guideline_groups(main_group)
             
-            specialised_group_node = main_group.addGroup(self.tr("Specialised Safeguarding"))
-            if not specialised_group_node:
-                QgsMessageLog.logMessage("Failed create group: Specialised Safeguarding", plugin_tag, level=Qgis.Warning)
+            # specialised_group_node = main_group.addGroup(self.tr("Specialised Safeguarding"))
+            # if not specialised_group_node:
+            #     QgsMessageLog.logMessage("Failed create group: Specialised Safeguarding", plugin_tag, level=Qgis.Warning)
               
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl,
@@ -760,7 +763,7 @@ class SafeguardingBuilder:
                 QgsMessageLog.logMessage("Guideline G (CNS) skipped: No valid CNS facilities data provided.", plugin_tag, level=Qgis.Info)
               
             any_guideline_processed_ok = self._process_runways_part2(
-                processed_runway_data_list, guideline_groups, specialised_group_node
+                processed_runway_data_list, guideline_groups, specialised_safeguarding_group
             )
             
             airport_wide_ols_processed = False
@@ -4129,7 +4132,7 @@ class SafeguardingBuilder:
                   "arc_let": attr_arc_let,
                   "side": "L"
               }
-              QgsMessageLog.logMessage(f"Taxiway Sep Left Attr Map for {runway_name}: {attr_map}", plugin_tag, level=Qgis.Info)
+              # QgsMessageLog.logMessage(f"Taxiway Sep Left Attr Map for {runway_name}: {attr_map}", plugin_tag, level=Qgis.Info)
 
               for name, value in attr_map.items(): 
                 idx = fields.indexFromName(name)
@@ -4161,7 +4164,7 @@ class SafeguardingBuilder:
                   "arc_let": attr_arc_let,
                   "side": "R"
               }
-              QgsMessageLog.logMessage(f"Taxiway Sep Right Attr Map for {runway_name}: {attr_map_right}", plugin_tag, level=Qgis.Info)
+              # QgsMessageLog.logMessage(f"Taxiway Sep Right Attr Map for {runway_name}: {attr_map_right}", plugin_tag, level=Qgis.Info)
               
               for name, value in attr_map_right.items(): 
                 idx = fields.indexFromName(name)
