@@ -250,6 +250,17 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.type2_combo.currentIndexChanged.connect(self.inputChanged.emit)
         self.remove_button.clicked.connect(self._emit_remove_request)
 
+    def _arc_number_for_length(self, length_m: float) -> Optional[str]:
+        """Returns the ARC code number (1–4) based on runway length."""
+        if length_m < 800:
+            return "1"
+        elif length_m < 1200:
+            return "2"
+        elif length_m < 1800:
+            return "3"
+        else:
+            return "4"
+
     def _emit_remove_request(self):
         """Emits the removeRequested signal with this group's index."""
         self.removeRequested.emit(self.index)
@@ -703,6 +714,12 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                         p1 = QgsPointXY(float(thr_east_str), float(thr_north_str))
                         p2 = QgsPointXY(float(rec_thr_east_str), float(rec_thr_north_str))
                         dist = p1.distance(p2)
+                        arc_code = group_widget._arc_number_for_length(dist) 
+                        if arc_code and not group_widget.arc_num_combo.currentData():
+                            idx = group_widget.arc_num_combo.findData(arc_code)
+                            if idx != -1:
+                                group_widget.arc_num_combo.setCurrentIndex(idx)
+
                         distance_str = f"{dist:.2f}"
                         ZERO_TOL, NEAR_TOL = 1e-6, 0.1
                         if math.isclose(dist, 0.0, abs_tol=ZERO_TOL):
