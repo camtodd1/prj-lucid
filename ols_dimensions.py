@@ -21,14 +21,14 @@ from typing import Optional, Dict, Any, Tuple, List
 # =========================================================================
 PAVEMENT_MOS_REF = "MOS 139 6.2.3"
 SHOULDER_MOS_REF = "MOS 139 6.2.4"
-IHS_BASE_HEIGHT_AGL = 45.0 # Standard IHS height - Verify MOS 139 8.2.18
+IHS_BASE_HEIGHT_AGL = 45.0  # Standard IHS height - Verify MOS 139 8.2.18
 
 # =========================================================================
 # == Runway Approach Types
 # =========================================================================
 
 RUNWAY_TYPE_MAP = {
-    "": "NI", # Treat empty string as Non-Instrument
+    "": "NI",  # Treat empty string as Non-Instrument
     "Non-Instrument (NI)": "NI",
     "Non-Precision Approach (NPA)": "NPA",
     "Precision Approach CAT I": "PA_I",
@@ -42,33 +42,55 @@ RUNWAY_TYPE_MAP = {
 # --- Strip Parameter Dictionaries ---
 STRIP_WIDTH_PARAMS = {
     # Key: arc_num
-    1: {'graded': 60.0, 'overall_ni_npa': 140.0, 'overall_pa': 280.0, 'ref_graded': "MOS T6.17(1) Code 1", 'ref_overall': "MOS T6.17(4) Code 1/2"},
-    2: {'graded': 80.0, 'overall_ni_npa': 140.0, 'overall_pa': 280.0, 'ref_graded': "MOS T6.17(1) Code 2", 'ref_overall': "MOS T6.17(4) Code 1/2"},
-    3: {'graded_lt_45': 90.0, 'graded_ge_45': 150.0, 'overall': 280.0, 'ref_graded': "MOS T6.17(1) Code 3/4", 'ref_overall': "MOS T6.17(4) Code 3/4"},
-    4: {'graded_lt_45': 90.0, 'graded_ge_45': 150.0, 'overall': 280.0, 'ref_graded': "MOS T6.17(1) Code 3/4", 'ref_overall': "MOS T6.17(4) Code 3/4"},
+    1: {
+        "graded": 60.0,
+        "overall_ni_npa": 140.0,
+        "overall_pa": 280.0,
+        "ref_graded": "MOS T6.17(1) Code 1",
+        "ref_overall": "MOS T6.17(4) Code 1/2",
+    },
+    2: {
+        "graded": 80.0,
+        "overall_ni_npa": 140.0,
+        "overall_pa": 280.0,
+        "ref_graded": "MOS T6.17(1) Code 2",
+        "ref_overall": "MOS T6.17(4) Code 1/2",
+    },
+    3: {
+        "graded_lt_45": 90.0,
+        "graded_ge_45": 150.0,
+        "overall": 280.0,
+        "ref_graded": "MOS T6.17(1) Code 3/4",
+        "ref_overall": "MOS T6.17(4) Code 3/4",
+    },
+    4: {
+        "graded_lt_45": 90.0,
+        "graded_ge_45": 150.0,
+        "overall": 280.0,
+        "ref_graded": "MOS T6.17(1) Code 3/4",
+        "ref_overall": "MOS T6.17(4) Code 3/4",
+    },
 }
 STRIP_EXTENSION_PARAMS = {
     # Key logic: ('NI_1_2') for Non-Instrument Code 1/2, ('OTHER') for all others
-    ('NI_1_2'): {'length': 30.0, 'ref': "MOS 6.2.5.6(a) NI Code 1/2"},
-    ('OTHER'): {'length': 60.0, 'ref': "MOS 6.2.5.6(b) Other"},
+    ("NI_1_2"): {"length": 30.0, "ref": "MOS 6.2.5.6(a) NI Code 1/2"},
+    ("OTHER"): {"length": 60.0, "ref": "MOS 6.2.5.6(b) Other"},
 }
 
 RESA_PARAMS = {
     # Constant References
-    'width_ref': "MOS 6.2.6.5",
-    
+    "width_ref": "MOS 6.2.6.5",
     # Conditional Length Rules (based on ARC group '1_2' or '3_4')
-    'length_rules': {
-        '1_2': {'length': 120.0, 'ref': "MOS 6.2.6 & T6.18 (Code 1/2 Pref)"},
-        '3_4': {'length': 240.0, 'ref': "MOS 6.2.6 & T6.18 (Code 3/4 Pref)"},
+    "length_rules": {
+        "1_2": {"length": 120.0, "ref": "MOS 6.2.6 & T6.18 (Code 1/2 Pref)"},
+        "3_4": {"length": 240.0, "ref": "MOS 6.2.6 & T6.18 (Code 3/4 Pref)"},
     },
-    
     # Conditional Applicability References
-    'applicability_refs': {
-        'required_3_4': "MOS 6.2.6.1/2 (Code 3/4)",
-        'required_1_2_instr': "MOS 6.2.6.1/2 (Code 1/2 Instr)",
-        'not_required': "MOS 6.2.6.1/2 (Not Required)"
-    }
+    "applicability_refs": {
+        "required_3_4": "MOS 6.2.6.1/2 (Code 3/4)",
+        "required_1_2_instr": "MOS 6.2.6.1/2 (Code 1/2 Instr)",
+        "not_required": "MOS 6.2.6.1/2 (Not Required)",
+    },
     # Optional: Add 'width_multiplier': 2.0 here if you want to centralize that too
 }
 
@@ -81,143 +103,306 @@ RESA_PARAMS = {
 
 APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
     # --- Non-Instrument (NI) ---
-    (1, 'NI'): [
-        {'length': 1600.0, 'slope': 0.05, 'divergence': 0.10, 'start_dist_from_thr': 30.0, 'start_width': 60.0, 'ref': "MOS T8.2-1 (1-NI)"}
+    (1, "NI"): [
+        {
+            "length": 1600.0,
+            "slope": 0.05,
+            "divergence": 0.10,
+            "start_dist_from_thr": 30.0,
+            "start_width": 60.0,
+            "ref": "MOS T8.2-1 (1-NI)",
+        }
     ],
-    (2, 'NI'): [
-        {'length': 2500.0, 'slope': 0.04, 'divergence': 0.10, 'start_dist_from_thr': 60.0, 'start_width': 80.0, 'ref': "MOS T8.2-1 (2-NI)"}
+    (2, "NI"): [
+        {
+            "length": 2500.0,
+            "slope": 0.04,
+            "divergence": 0.10,
+            "start_dist_from_thr": 60.0,
+            "start_width": 80.0,
+            "ref": "MOS T8.2-1 (2-NI)",
+        }
     ],
-    (3, 'NI'): [
+    (3, "NI"): [
         # Footnote 'a' on width 150m - check text
-        {'length': 3000.0, 'slope': 0.0333, 'divergence': 0.10, 'start_dist_from_thr': 60.0, 'start_width': 150.0, 'ref': "MOS T8.2-1 (3-NI)"}
+        {
+            "length": 3000.0,
+            "slope": 0.0333,
+            "divergence": 0.10,
+            "start_dist_from_thr": 60.0,
+            "start_width": 150.0,
+            "ref": "MOS T8.2-1 (3-NI)",
+        }
     ],
-    (4, 'NI'): [
-        {'length': 3000.0, 'slope': 0.025, 'divergence': 0.10, 'start_dist_from_thr': 60.0, 'start_width': 150.0, 'ref': "MOS T8.2-1 (4-NI)"}
+    (4, "NI"): [
+        {
+            "length": 3000.0,
+            "slope": 0.025,
+            "divergence": 0.10,
+            "start_dist_from_thr": 60.0,
+            "start_width": 150.0,
+            "ref": "MOS T8.2-1 (4-NI)",
+        }
     ],
-    
     # --- Non-Precision Approach (NPA) ---
-    (1, 'NPA'): [
-        {'length': 2500.0, 'slope': 0.0333, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 140.0, 'ref': "MOS T8.2-1 (1/2-NPA)"}
+    (1, "NPA"): [
+        {
+            "length": 2500.0,
+            "slope": 0.0333,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 140.0,
+            "ref": "MOS T8.2-1 (1/2-NPA)",
+        }
     ],
-    (2, 'NPA'): [ # Same as Code 1
-        {'length': 2500.0, 'slope': 0.0333, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 140.0, 'ref': "MOS T8.2-1 (1/2-NPA)"}
+    (2, "NPA"): [  # Same as Code 1
+        {
+            "length": 2500.0,
+            "slope": 0.0333,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 140.0,
+            "ref": "MOS T8.2-1 (1/2-NPA)",
+        }
     ],
-    (3, 'NPA'): [
+    (3, "NPA"): [
         # Section 1
-        {'length': 3000.0, 'slope': 0.02, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 280.0, 'ref': "MOS T8.2-1 (3-NPA S1)"},
+        {
+            "length": 3000.0,
+            "slope": 0.02,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 280.0,
+            "ref": "MOS T8.2-1 (3-NPA S1)",
+        },
         # Section 2
-        {'length': 3600.0, 'slope': 0.025, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3-NPA S2)"}, # Footnote c?
+        {
+            "length": 3600.0,
+            "slope": 0.025,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3-NPA S2)",
+        },  # Footnote c?
         # Horizontal Section (Section 3)
-        {'length': 8400.0, 'slope': 0.0, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3-NPA S3/Horiz)"} # Footnote c? Check Total Length d=15000 -> 3000+3600+8400 = 15000
+        {
+            "length": 8400.0,
+            "slope": 0.0,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3-NPA S3/Horiz)",
+        },  # Footnote c? Check Total Length d=15000 -> 3000+3600+8400 = 15000
     ],
-    (4, 'NPA'): [
+    (4, "NPA"): [
         # Section 1
-        {'length': 3000.0, 'slope': 0.02, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 280.0, 'ref': "MOS T8.2-1 (4-NPA S1)"},
+        {
+            "length": 3000.0,
+            "slope": 0.02,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 280.0,
+            "ref": "MOS T8.2-1 (4-NPA S1)",
+        },
         # Section 2
-        {'length': 3600.0, 'slope': 0.025, 'divergence': 0.15, 'ref': "MOS T8.2-1 (4-NPA S2)"},
+        {
+            "length": 3600.0,
+            "slope": 0.025,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (4-NPA S2)",
+        },
         # Horizontal Section (Section 3)
-        {'length': 8400.0, 'slope': 0.0, 'divergence': 0.15, 'ref': "MOS T8.2-1 (4-NPA S3/Horiz)"} # Check Total Length 15000 -> 3000+3600+8400 = 15000
+        {
+            "length": 8400.0,
+            "slope": 0.0,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (4-NPA S3/Horiz)",
+        },  # Check Total Length 15000 -> 3000+3600+8400 = 15000
     ],
-    
     # --- Precision Approach CAT I (PA_I) ---
-    (1, 'PA_I'): [
+    (1, "PA_I"): [
         # Section 1
-        {'length': 3000.0, 'slope': 0.025, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 140.0, 'ref': "MOS T8.2-1 (1/2-PAI S1)"},
+        {
+            "length": 3000.0,
+            "slope": 0.025,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 140.0,
+            "ref": "MOS T8.2-1 (1/2-PAI S1)",
+        },
         # Section 2
-        {'length': 12000.0, 'slope': 0.03, 'divergence': 0.15, 'ref': "MOS T8.2-1 (1/2-PAI S2)"} # Check Total Length 15000 -> 3000+12000 = 15000. No horizontal section.
+        {
+            "length": 12000.0,
+            "slope": 0.03,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (1/2-PAI S2)",
+        },  # Check Total Length 15000 -> 3000+12000 = 15000. No horizontal section.
     ],
-    (2, 'PA_I'): [ # Same as Code 1
+    (2, "PA_I"): [  # Same as Code 1
         # Section 1
-        {'length': 3000.0, 'slope': 0.025, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 140.0, 'ref': "MOS T8.2-1 (1/2-PAI S1)"},
+        {
+            "length": 3000.0,
+            "slope": 0.025,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 140.0,
+            "ref": "MOS T8.2-1 (1/2-PAI S1)",
+        },
         # Section 2
-        {'length': 12000.0, 'slope': 0.03, 'divergence': 0.15, 'ref': "MOS T8.2-1 (1/2-PAI S2)"}
+        {
+            "length": 12000.0,
+            "slope": 0.03,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (1/2-PAI S2)",
+        },
     ],
-    (3, 'PA_I'): [
+    (3, "PA_I"): [
         # Section 1
-        {'length': 3000.0, 'slope': 0.02, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 280.0, 'ref': "MOS T8.2-1 (3/4-PAI S1)"},
+        {
+            "length": 3000.0,
+            "slope": 0.02,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 280.0,
+            "ref": "MOS T8.2-1 (3/4-PAI S1)",
+        },
         # Section 2
-        {'length': 3600.0, 'slope': 0.025, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3/4-PAI S2)"},
+        {
+            "length": 3600.0,
+            "slope": 0.025,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3/4-PAI S2)",
+        },
         # Horizontal Section (Section 3)
-        {'length': 8400.0, 'slope': 0.0, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3/4-PAI S3/Horiz)"} # Check Total Length 15000 -> 3000+3600+8400 = 15000
+        {
+            "length": 8400.0,
+            "slope": 0.0,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3/4-PAI S3/Horiz)",
+        },  # Check Total Length 15000 -> 3000+3600+8400 = 15000
     ],
-    (4, 'PA_I'): [ # Same as Code 3
+    (4, "PA_I"): [  # Same as Code 3
         # Section 1
-        {'length': 3000.0, 'slope': 0.02, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 280.0, 'ref': "MOS T8.2-1 (3/4-PAI S1)"},
+        {
+            "length": 3000.0,
+            "slope": 0.02,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 280.0,
+            "ref": "MOS T8.2-1 (3/4-PAI S1)",
+        },
         # Section 2
-        {'length': 3600.0, 'slope': 0.025, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3/4-PAI S2)"},
+        {
+            "length": 3600.0,
+            "slope": 0.025,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3/4-PAI S2)",
+        },
         # Horizontal Section (Section 3)
-        {'length': 8400.0, 'slope': 0.0, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3/4-PAI S3/Horiz)"}
+        {
+            "length": 8400.0,
+            "slope": 0.0,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3/4-PAI S3/Horiz)",
+        },
     ],
-    
     # --- Precision Approach CAT II/III (PA_II_III) ---
     # Codes 1 & 2 not applicable
-    (3, 'PA_II_III'): [
+    (3, "PA_II_III"): [
         # Section 1
-        {'length': 3000.0, 'slope': 0.02, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 280.0, 'ref': "MOS T8.2-1 (3/4-PAII/III S1)"},
+        {
+            "length": 3000.0,
+            "slope": 0.02,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 280.0,
+            "ref": "MOS T8.2-1 (3/4-PAII/III S1)",
+        },
         # Section 2
-        {'length': 3600.0, 'slope': 0.025, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3/4-PAII/III S2)"},
+        {
+            "length": 3600.0,
+            "slope": 0.025,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3/4-PAII/III S2)",
+        },
         # Horizontal Section (Section 3)
-        {'length': 8400.0, 'slope': 0.0, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3/4-PAII/III S3/Horiz)"} # Check Total Length 15000 -> 3000+3600+8400 = 15000
+        {
+            "length": 8400.0,
+            "slope": 0.0,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3/4-PAII/III S3/Horiz)",
+        },  # Check Total Length 15000 -> 3000+3600+8400 = 15000
     ],
-    (4, 'PA_II_III'): [ # Same as Code 3
+    (4, "PA_II_III"): [  # Same as Code 3
         # Section 1
-        {'length': 3000.0, 'slope': 0.02, 'divergence': 0.15, 'start_dist_from_thr': 60.0, 'start_width': 280.0, 'ref': "MOS T8.2-1 (3/4-PAII/III S1)"},
+        {
+            "length": 3000.0,
+            "slope": 0.02,
+            "divergence": 0.15,
+            "start_dist_from_thr": 60.0,
+            "start_width": 280.0,
+            "ref": "MOS T8.2-1 (3/4-PAII/III S1)",
+        },
         # Section 2
-        {'length': 3600.0, 'slope': 0.025, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3/4-PAII/III S2)"},
+        {
+            "length": 3600.0,
+            "slope": 0.025,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3/4-PAII/III S2)",
+        },
         # Horizontal Section (Section 3)
-        {'length': 8400.0, 'slope': 0.0, 'divergence': 0.15, 'ref': "MOS T8.2-1 (3/4-PAII/III S3/Horiz)"}
-    ]
+        {
+            "length": 8400.0,
+            "slope": 0.0,
+            "divergence": 0.15,
+            "ref": "MOS T8.2-1 (3/4-PAII/III S3/Horiz)",
+        },
+    ],
 }
 
 # --- Inner Approach Surface ---
 # Applicable only for Precision Approach runways. Based on Table 7.15(1)
 INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Precision CAT I
-    (1, 'PA_I'): {
-        'width': 90.0,
-        'start_dist_from_thr': 60.0,
-        'length': 900.0,
-        'slope': 0.025, # 2.5%
-        'ref': "MOS 139 7.10 (Inner App, PA-I, 1/2)"
+    (1, "PA_I"): {
+        "width": 90.0,
+        "start_dist_from_thr": 60.0,
+        "length": 900.0,
+        "slope": 0.025,  # 2.5%
+        "ref": "MOS 139 7.10 (Inner App, PA-I, 1/2)",
     },
-    (2, 'PA_I'): { # Same as Code 1
-        'width': 90.0,
-        'start_dist_from_thr': 60.0,
-        'length': 900.0,
-        'slope': 0.025, # 2.5%
-        'ref': "MOS 139 7.10 (Inner App, PA-I, 1/2)"
+    (2, "PA_I"): {  # Same as Code 1
+        "width": 90.0,
+        "start_dist_from_thr": 60.0,
+        "length": 900.0,
+        "slope": 0.025,  # 2.5%
+        "ref": "MOS 139 7.10 (Inner App, PA-I, 1/2)",
     },
-    (3, 'PA_I'): {
-        'width': 120.0,
-        'start_dist_from_thr': 60.0,
-        'length': 900.0,
-        'slope': 0.020, # 2.0%
-        'ref': "MOS 139 7.10 (Inner App, PA-I, 3/4)"
+    (3, "PA_I"): {
+        "width": 120.0,
+        "start_dist_from_thr": 60.0,
+        "length": 900.0,
+        "slope": 0.020,  # 2.0%
+        "ref": "MOS 139 7.10 (Inner App, PA-I, 3/4)",
     },
-    (4, 'PA_I'): { # Same as Code 3
-        'width': 120.0,
-        'start_dist_from_thr': 60.0,
-        'length': 900.0,
-        'slope': 0.020, # 2.0%
-        'ref': "MOS 139 7.10 (Inner App, PA-I, 3/4)"
+    (4, "PA_I"): {  # Same as Code 3
+        "width": 120.0,
+        "start_dist_from_thr": 60.0,
+        "length": 900.0,
+        "slope": 0.020,  # 2.0%
+        "ref": "MOS 139 7.10 (Inner App, PA-I, 3/4)",
     },
-    
     # Precision CAT II & III
-    (3, 'PA_II_III'): {
-        'width': 120.0,
-        'start_dist_from_thr': 60.0,
-        'length': 900.0,
-        'slope': 0.020, # 2.0%
-        'ref': "MOS 139 7.10 (Inner App, PA-II/III, 3/4)"
+    (3, "PA_II_III"): {
+        "width": 120.0,
+        "start_dist_from_thr": 60.0,
+        "length": 900.0,
+        "slope": 0.020,  # 2.0%
+        "ref": "MOS 139 7.10 (Inner App, PA-II/III, 3/4)",
     },
-    (4, 'PA_II_III'): { # Same as Code 3
-        'width': 120.0,
-        'start_dist_from_thr': 60.0,
-        'length': 900.0,
-        'slope': 0.020, # 2.0%
-        'ref': "MOS 139 7.10 (Inner App, PA-II/III, 3/4)"
+    (4, "PA_II_III"): {  # Same as Code 3
+        "width": 120.0,
+        "start_dist_from_thr": 60.0,
+        "length": 900.0,
+        "slope": 0.020,  # 2.0%
+        "ref": "MOS 139 7.10 (Inner App, PA-II/III, 3/4)",
     },
-    
     # Non-Instrument ('NI') and Non-Precision ('NPA') types are not listed as the Inner Approach Surface does not apply
     # The get_ols_params function will return None if lookup fails.
 }
@@ -228,43 +413,42 @@ INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 TOCS_PARAMS: Dict[int, Dict[str, Any]] = {
     # Key: ARC Number (Code 1, 2, 3, 4)
     # Note: Code 4 uses the same parameters as Code 3
-    
     1: {
-        'inner_edge_width': 60.0,             # Length of inner edge (m)
-        'origin_offset': 30.0,              # Minimum distance of inner edge from runway end/clearway (m)
-        'divergence': 0.10,                 # Rate of divergence (each side) as gradient (10% = 0.10)
-        'final_width': 380.0,               # Final width (m)
-        'length': 1600.0,                   # Overall length (m)
-        'slope': 0.05,                      # Slope as gradient (5% = 0.05)
-        'ref': "MOS 139 7.16 (Code 1)"
-        },
+        "inner_edge_width": 60.0,  # Length of inner edge (m)
+        "origin_offset": 30.0,  # Minimum distance of inner edge from runway end/clearway (m)
+        "divergence": 0.10,  # Rate of divergence (each side) as gradient (10% = 0.10)
+        "final_width": 380.0,  # Final width (m)
+        "length": 1600.0,  # Overall length (m)
+        "slope": 0.05,  # Slope as gradient (5% = 0.05)
+        "ref": "MOS 139 7.16 (Code 1)",
+    },
     2: {
-        'inner_edge_width': 80.0,
-        'origin_offset': 60.0,
-        'divergence': 0.10,                 # 10% = 0.10
-        'final_width': 580.0,
-        'length': 2500.0,
-        'slope': 0.04,                      # 4% = 0.04
-        'ref': "MOS 139 7.16 (Code 2)"
-        },
+        "inner_edge_width": 80.0,
+        "origin_offset": 60.0,
+        "divergence": 0.10,  # 10% = 0.10
+        "final_width": 580.0,
+        "length": 2500.0,
+        "slope": 0.04,  # 4% = 0.04
+        "ref": "MOS 139 7.16 (Code 2)",
+    },
     3: {
-        'inner_edge_width': 180.0,
-        'origin_offset': 60.0,
-        'divergence': 0.125,                # 12.5% = 0.125
-        'final_width': 1800.0,              # Note 'b' in table, regarding reduced width exception
-        'length': 15000.0,                  # Overall length (m)
-        'slope': 0.02,                      # 2% = 0.02
-        'ref': "MOS 139 7.16 (Code 3/4)"
-        },
-    4: { # Code 4 uses the same values as Code 3 according to the table
-        'inner_edge_width': 180.0,
-        'origin_offset': 60.0,
-        'divergence': 0.125,                # 12.5% = 0.125
-        'final_width': 1800.0,
-        'length': 15000.0,
-        'slope': 0.02,                      # 2% = 0.02 - See note above re: PA runways 1.2% possibility
-        'ref': "MOS 139 7.16 (Code 3/4)"
-        }
+        "inner_edge_width": 180.0,
+        "origin_offset": 60.0,
+        "divergence": 0.125,  # 12.5% = 0.125
+        "final_width": 1800.0,  # Note 'b' in table, regarding reduced width exception
+        "length": 15000.0,  # Overall length (m)
+        "slope": 0.02,  # 2% = 0.02
+        "ref": "MOS 139 7.16 (Code 3/4)",
+    },
+    4: {  # Code 4 uses the same values as Code 3 according to the table
+        "inner_edge_width": 180.0,
+        "origin_offset": 60.0,
+        "divergence": 0.125,  # 12.5% = 0.125
+        "final_width": 1800.0,
+        "length": 15000.0,
+        "slope": 0.02,  # 2% = 0.02 - See note above re: PA runways 1.2% possibility
+        "ref": "MOS 139 7.16 (Code 3/4)",
+    },
 }
 
 # --- Inner Horizontal Surface (IHS) ---
@@ -273,23 +457,79 @@ TOCS_PARAMS: Dict[int, Dict[str, Any]] = {
 # Radius values from Table 8.2-1 are stored for reference only.
 IHS_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Non-Instrument
-    (1, 'NI'): {'height_agl': 45.0, 'radius': 2000.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (2, 'NI'): {'height_agl': 45.0, 'radius': 2500.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (3, 'NI'): {'height_agl': 45.0, 'radius': 4000.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (4, 'NI'): {'height_agl': 45.0, 'radius': 4000.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
+    (1, "NI"): {
+        "height_agl": 45.0,
+        "radius": 2000.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (2, "NI"): {
+        "height_agl": 45.0,
+        "radius": 2500.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (3, "NI"): {
+        "height_agl": 45.0,
+        "radius": 4000.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (4, "NI"): {
+        "height_agl": 45.0,
+        "radius": 4000.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
     # Non-Precision Instrument
-    (1, 'NPA'): {'height_agl': 45.0, 'radius': 3500.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (2, 'NPA'): {'height_agl': 45.0, 'radius': 3500.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (3, 'NPA'): {'height_agl': 45.0, 'radius': 4000.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (4, 'NPA'): {'height_agl': 45.0, 'radius': 4000.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
+    (1, "NPA"): {
+        "height_agl": 45.0,
+        "radius": 3500.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (2, "NPA"): {
+        "height_agl": 45.0,
+        "radius": 3500.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (3, "NPA"): {
+        "height_agl": 45.0,
+        "radius": 4000.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (4, "NPA"): {
+        "height_agl": 45.0,
+        "radius": 4000.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
     # Precision CAT I Instrument
-    (1, 'PA_I'): {'height_agl': 45.0, 'radius': 3500.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (2, 'PA_I'): {'height_agl': 45.0, 'radius': 3500.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (3, 'PA_I'): {'height_agl': 45.0, 'radius': 4000.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (4, 'PA_I'): {'height_agl': 45.0, 'radius': 4000.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
+    (1, "PA_I"): {
+        "height_agl": 45.0,
+        "radius": 3500.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (2, "PA_I"): {
+        "height_agl": 45.0,
+        "radius": 3500.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (3, "PA_I"): {
+        "height_agl": 45.0,
+        "radius": 4000.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (4, "PA_I"): {
+        "height_agl": 45.0,
+        "radius": 4000.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
     # Precision CAT II & III Instrument
-    (3, 'PA_II_III'): {'height_agl': 45.0, 'radius': 4000.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
-    (4, 'PA_II_III'): {'height_agl': 45.0, 'radius': 4000.0, 'ref': "MOS 139 8.2.18 / T8.2-1 (Verify)"},
+    (3, "PA_II_III"): {
+        "height_agl": 45.0,
+        "radius": 4000.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
+    (4, "PA_II_III"): {
+        "height_agl": 45.0,
+        "radius": 4000.0,
+        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+    },
 }
 
 # --- Conical Surface ---
@@ -300,23 +540,79 @@ IHS_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 # VERIFY interpretation against MOS 139 8.2.19.
 CONICAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Non-Instrument
-    (1, 'NI'): {'slope': 0.05, 'height_extent_agl': 35.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"}, # 35m above IHS
-    (2, 'NI'): {'slope': 0.05, 'height_extent_agl': 55.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"}, # 55m above IHS
-    (3, 'NI'): {'slope': 0.05, 'height_extent_agl': 75.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"}, # 75m above IHS
-    (4, 'NI'): {'slope': 0.05, 'height_extent_agl': 100.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"},# 100m above IHS
+    (1, "NI"): {
+        "slope": 0.05,
+        "height_extent_agl": 35.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 35m above IHS
+    (2, "NI"): {
+        "slope": 0.05,
+        "height_extent_agl": 55.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 55m above IHS
+    (3, "NI"): {
+        "slope": 0.05,
+        "height_extent_agl": 75.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 75m above IHS
+    (4, "NI"): {
+        "slope": 0.05,
+        "height_extent_agl": 100.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 100m above IHS
     # Non-Precision Instrument
-    (1, 'NPA'): {'slope': 0.05, 'height_extent_agl': 60.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"}, # 60m above IHS
-    (2, 'NPA'): {'slope': 0.05, 'height_extent_agl': 60.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"}, # 60m above IHS
-    (3, 'NPA'): {'slope': 0.05, 'height_extent_agl': 75.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"}, # 75m above IHS
-    (4, 'NPA'): {'slope': 0.05, 'height_extent_agl': 100.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"},# 100m above IHS
+    (1, "NPA"): {
+        "slope": 0.05,
+        "height_extent_agl": 60.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 60m above IHS
+    (2, "NPA"): {
+        "slope": 0.05,
+        "height_extent_agl": 60.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 60m above IHS
+    (3, "NPA"): {
+        "slope": 0.05,
+        "height_extent_agl": 75.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 75m above IHS
+    (4, "NPA"): {
+        "slope": 0.05,
+        "height_extent_agl": 100.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 100m above IHS
     # Precision CAT I Instrument
-    (1, 'PA_I'): {'slope': 0.05, 'height_extent_agl': 60.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"}, # 60m above IHS
-    (2, 'PA_I'): {'slope': 0.05, 'height_extent_agl': 60.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"}, # 60m above IHS
-    (3, 'PA_I'): {'slope': 0.05, 'height_extent_agl': 100.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"},# 100m above IHS
-    (4, 'PA_I'): {'slope': 0.05, 'height_extent_agl': 100.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"},# 100m above IHS
+    (1, "PA_I"): {
+        "slope": 0.05,
+        "height_extent_agl": 60.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 60m above IHS
+    (2, "PA_I"): {
+        "slope": 0.05,
+        "height_extent_agl": 60.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 60m above IHS
+    (3, "PA_I"): {
+        "slope": 0.05,
+        "height_extent_agl": 100.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 100m above IHS
+    (4, "PA_I"): {
+        "slope": 0.05,
+        "height_extent_agl": 100.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 100m above IHS
     # Precision CAT II & III Instrument
-    (3, 'PA_II_III'): {'slope': 0.05, 'height_extent_agl': 100.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"},# 100m above IHS
-    (4, 'PA_II_III'): {'slope': 0.05, 'height_extent_agl': 100.0, 'ref': "MOS 139 8.2.19 / T8.2-1 (Verify Height)"},# 100m above IHS
+    (3, "PA_II_III"): {
+        "slope": 0.05,
+        "height_extent_agl": 100.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 100m above IHS
+    (4, "PA_II_III"): {
+        "slope": 0.05,
+        "height_extent_agl": 100.0,
+        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+    },  # 100m above IHS
 }
 
 # --- Outer Horizontal Surface (OHS) ---
@@ -324,11 +620,11 @@ CONICAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 # Height is 150m above RED. Radius is 15000m from ARP.
 OHS_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Precision CAT I Instrument
-    (3, 'PA_I'): {'height_agl': 150.0, 'radius': 15000.0, 'ref': "MOS 139 8.2.20"},
-    (4, 'PA_I'): {'height_agl': 150.0, 'radius': 15000.0, 'ref': "MOS 139 8.2.20"},
+    (3, "PA_I"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 139 8.2.20"},
+    (4, "PA_I"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 139 8.2.20"},
     # Precision CAT II & III Instrument
-    (3, 'PA_II_III'): {'height_agl': 150.0, 'radius': 15000.0, 'ref': "MOS 139 8.2.20"},
-    (4, 'PA_II_III'): {'height_agl': 150.0, 'radius': 15000.0, 'ref': "MOS 139 8.2.20"},
+    (3, "PA_II_III"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 139 8.2.20"},
+    (4, "PA_II_III"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 139 8.2.20"},
 }
 
 # --- Transitional Surface ---
@@ -337,10 +633,10 @@ OHS_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 # VERIFY ALL VALUES AGAINST MOS 139.
 TRANSITIONAL_PARAMS: Dict[int, Dict[str, Any]] = {
     # Key: ARC Number
-    1: {'slope': 0.200, 'ref': "MOS 139 8.2.17 (Code 1/2)"}, # 1:5
-    2: {'slope': 0.200, 'ref': "MOS 139 8.2.17 (Code 1/2)"}, # 1:5
-    3: {'slope': 0.143, 'ref': "MOS 139 8.2.17 (Code 3/4)"}, # 1:7
-    4: {'slope': 0.143, 'ref': "MOS 139 8.2.17 (Code 3/4)"}, # 1:7
+    1: {"slope": 0.200, "ref": "MOS 139 8.2.17 (Code 1/2)"},  # 1:5
+    2: {"slope": 0.200, "ref": "MOS 139 8.2.17 (Code 1/2)"},  # 1:5
+    3: {"slope": 0.143, "ref": "MOS 139 8.2.17 (Code 3/4)"},  # 1:7
+    4: {"slope": 0.143, "ref": "MOS 139 8.2.17 (Code 3/4)"},  # 1:7
     # Inner Transitional for PA CAT II/III has slope 1:3 (0.333) - see 8.2.16(b)
     # Need logic in get_ols_params or calling function to handle this.
 }
@@ -350,27 +646,24 @@ TRANSITIONAL_PARAMS: Dict[int, Dict[str, Any]] = {
 
 TRANSITIONAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Non-Instrument
-    (1, 'NI'): {'slope': 0.20, 'ref': "MOS 139 7.09 (NI-1)"}, # 20%
-    (2, 'NI'): {'slope': 0.20, 'ref': "MOS 139 7.09 (NI-2)"}, # 20%
-    (3, 'NI'): {'slope': 0.143, 'ref': "MOS 139 7.09 (NI-3)"},# 14.3% (1:7)
-    (4, 'NI'): {'slope': 0.143, 'ref': "MOS 139 7.09 (NI-4)"},# 14.3% (1:7)
-    
+    (1, "NI"): {"slope": 0.20, "ref": "MOS 139 7.09 (NI-1)"},  # 20%
+    (2, "NI"): {"slope": 0.20, "ref": "MOS 139 7.09 (NI-2)"},  # 20%
+    (3, "NI"): {"slope": 0.143, "ref": "MOS 139 7.09 (NI-3)"},  # 14.3% (1:7)
+    (4, "NI"): {"slope": 0.143, "ref": "MOS 139 7.09 (NI-4)"},  # 14.3% (1:7)
     # Non-Precision Approach
-    (1, 'NPA'): {'slope': 0.20, 'ref': "MOS 139 7.09 (NPA-1/2)"},# 20%
-    (2, 'NPA'): {'slope': 0.20, 'ref': "MOS 139 7.09 (NPA-1/2)"},# 20%
-    (3, 'NPA'): {'slope': 0.143, 'ref': "MOS 139 7.09 (NPA-3)"}, # 14.3%
-    (4, 'NPA'): {'slope': 0.143, 'ref': "MOS 139 7.09 (NPA-4)"}, # 14.3%
-    
+    (1, "NPA"): {"slope": 0.20, "ref": "MOS 139 7.09 (NPA-1/2)"},  # 20%
+    (2, "NPA"): {"slope": 0.20, "ref": "MOS 139 7.09 (NPA-1/2)"},  # 20%
+    (3, "NPA"): {"slope": 0.143, "ref": "MOS 139 7.09 (NPA-3)"},  # 14.3%
+    (4, "NPA"): {"slope": 0.143, "ref": "MOS 139 7.09 (NPA-4)"},  # 14.3%
     # Precision Approach CAT I
-    (1, 'PA_I'): {'slope': 0.143, 'ref': "MOS 139 7.09 (PAI-1/2)"},# 14.3%
-    (2, 'PA_I'): {'slope': 0.143, 'ref': "MOS 139 7.09 (PAI-1/2)"},# 14.3%
-    (3, 'PA_I'): {'slope': 0.143, 'ref': "MOS 139 7.09 (PAI-3/4)"},# 14.3%
-    (4, 'PA_I'): {'slope': 0.143, 'ref': "MOS 139 7.09 (PAI-3/4)"},# 14.3%
-    
+    (1, "PA_I"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAI-1/2)"},  # 14.3%
+    (2, "PA_I"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAI-1/2)"},  # 14.3%
+    (3, "PA_I"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAI-3/4)"},  # 14.3%
+    (4, "PA_I"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAI-3/4)"},  # 14.3%
     # Precision Approach CAT II & III
     # Codes 1 & 2 not applicable for PA CAT II/III in general
-    (3, 'PA_II_III'): {'slope': 0.143, 'ref': "MOS 139 7.09 (PAII/III-3/4)"}, # 14.3%
-    (4, 'PA_II_III'): {'slope': 0.143, 'ref': "MOS 139 7.09 (PAII/III-3/4)"}, # 14.3%
+    (3, "PA_II_III"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAII/III-3/4)"},  # 14.3%
+    (4, "PA_II_III"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAII/III-3/4)"},  # 14.3%
 }
 
 # =========================================================================
@@ -383,190 +676,211 @@ TRANSITIONAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 TAXIWAY_SEPARATION_PARAMS: Dict[Tuple[int, str, str], Dict[str, Any]] = {
     # --- Precision Approach Runways (CAT I, II, III) ---
     # ARC Code 1
-    (1, 'A', 'PA_I'): {'offset_m': 77.5, 'ref': "MOS 139 T9.1 (Verify 1A-PA)"},
-    (1, 'B', 'PA_I'): {'offset_m': 82.0, 'ref': "MOS 139 T9.1 (Verify 1B-PA)"},
-    (1, 'C', 'PA_I'): {'offset_m': 88.0, 'ref': "MOS 139 T9.1 (Verify 1C-PA)"},
-    (1, 'A', 'PA_II_III'): {'offset_m': 77.5, 'ref': "MOS 139 T9.1 (Verify 1A-PA)"},
-    (1, 'B', 'PA_II_III'): {'offset_m': 82.0, 'ref': "MOS 139 T9.1 (Verify 1B-PA)"},
-    (1, 'C', 'PA_II_III'): {'offset_m': 88.0, 'ref': "MOS 139 T9.1 (Verify 1C-PA)"},
+    (1, "A", "PA_I"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 1A-PA)"},
+    (1, "B", "PA_I"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 1B-PA)"},
+    (1, "C", "PA_I"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 1C-PA)"},
+    (1, "A", "PA_II_III"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 1A-PA)"},
+    (1, "B", "PA_II_III"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 1B-PA)"},
+    (1, "C", "PA_II_III"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 1C-PA)"},
     # ARC Code 2
-    (2, 'A', 'PA_I'): {'offset_m': 77.5, 'ref': "MOS 139 T9.1 (Verify 2A-PA)"},
-    (2, 'B', 'PA_I'): {'offset_m': 82.0, 'ref': "MOS 139 T9.1 (Verify 2B-PA)"},
-    (2, 'C', 'PA_I'): {'offset_m': 88.0, 'ref': "MOS 139 T9.1 (Verify 2C-PA)"},
-    (2, 'A', 'PA_II_III'): {'offset_m': 77.5, 'ref': "MOS 139 T9.1 (Verify 2A-PA)"},
-    (2, 'B', 'PA_II_III'): {'offset_m': 82.0, 'ref': "MOS 139 T9.1 (Verify 2B-PA)"},
-    (2, 'C', 'PA_II_III'): {'offset_m': 88.0, 'ref': "MOS 139 T9.1 (Verify 2C-PA)"},
+    (2, "A", "PA_I"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 2A-PA)"},
+    (2, "B", "PA_I"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 2B-PA)"},
+    (2, "C", "PA_I"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 2C-PA)"},
+    (2, "A", "PA_II_III"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 2A-PA)"},
+    (2, "B", "PA_II_III"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 2B-PA)"},
+    (2, "C", "PA_II_III"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 2C-PA)"},
     # ARC Code 3
-    (3, 'A', 'PA_I'): {'offset_m': 152.0, 'ref': "MOS 139 T9.1 (Verify 3A-PA)"},
-    (3, 'B', 'PA_I'): {'offset_m': 152.0, 'ref': "MOS 139 T9.1 (Verify 3B-PA)"},
-    (3, 'C', 'PA_I'): {'offset_m': 158.0, 'ref': "MOS 139 T9.1 (Verify 3C-PA)"},
-    (3, 'D', 'PA_I'): {'offset_m': 166.0, 'ref': "MOS 139 T9.1 (Verify 3D-PA)"},
-    (3, 'E', 'PA_I'): {'offset_m': 172.5, 'ref': "MOS 139 T9.1 (Verify 3E-PA)"},
-    (3, 'F', 'PA_I'): {'offset_m': 180.0, 'ref': "MOS 139 T9.1 (Verify 3F-PA)"},
-    (3, 'A', 'PA_II_III'): {'offset_m': 152.0, 'ref': "MOS 139 T9.1 (Verify 3A-PA)"},
-    (3, 'B', 'PA_II_III'): {'offset_m': 152.0, 'ref': "MOS 139 T9.1 (Verify 3B-PA)"},
-    (3, 'C', 'PA_II_III'): {'offset_m': 158.0, 'ref': "MOS 139 T9.1 (Verify 3C-PA)"},
-    (3, 'D', 'PA_II_III'): {'offset_m': 166.0, 'ref': "MOS 139 T9.1 (Verify 3D-PA)"},
-    (3, 'E', 'PA_II_III'): {'offset_m': 172.5, 'ref': "MOS 139 T9.1 (Verify 3E-PA)"},
-    (3, 'F', 'PA_II_III'): {'offset_m': 180.0, 'ref': "MOS 139 T9.1 (Verify 3F-PA)"},
+    (3, "A", "PA_I"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3A-PA)"},
+    (3, "B", "PA_I"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3B-PA)"},
+    (3, "C", "PA_I"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 3C-PA)"},
+    (3, "D", "PA_I"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 3D-PA)"},
+    (3, "E", "PA_I"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 3E-PA)"},
+    (3, "F", "PA_I"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 3F-PA)"},
+    (3, "A", "PA_II_III"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3A-PA)"},
+    (3, "B", "PA_II_III"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3B-PA)"},
+    (3, "C", "PA_II_III"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 3C-PA)"},
+    (3, "D", "PA_II_III"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 3D-PA)"},
+    (3, "E", "PA_II_III"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 3E-PA)"},
+    (3, "F", "PA_II_III"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 3F-PA)"},
     # ARC Code 4
-    (4, 'C', 'PA_I'): {'offset_m': 158.0, 'ref': "MOS 139 T9.1 (Verify 4C-PA)"},
-    (4, 'D', 'PA_I'): {'offset_m': 166.0, 'ref': "MOS 139 T9.1 (Verify 4D-PA)"},
-    (4, 'E', 'PA_I'): {'offset_m': 172.5, 'ref': "MOS 139 T9.1 (Verify 4E-PA)"},
-    (4, 'F', 'PA_I'): {'offset_m': 180.0, 'ref': "MOS 139 T9.1 (Verify 4F-PA)"},
-    (4, 'C', 'PA_II_III'): {'offset_m': 158.0, 'ref': "MOS 139 T9.1 (Verify 4C-PA)"},
-    (4, 'D', 'PA_II_III'): {'offset_m': 166.0, 'ref': "MOS 139 T9.1 (Verify 4D-PA)"},
-    (4, 'E', 'PA_II_III'): {'offset_m': 172.5, 'ref': "MOS 139 T9.1 (Verify 4E-PA)"},
-    (4, 'F', 'PA_II_III'): {'offset_m': 180.0, 'ref': "MOS 139 T9.1 (Verify 4F-PA)"},
-    
+    (4, "C", "PA_I"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 4C-PA)"},
+    (4, "D", "PA_I"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 4D-PA)"},
+    (4, "E", "PA_I"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 4E-PA)"},
+    (4, "F", "PA_I"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 4F-PA)"},
+    (4, "C", "PA_II_III"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 4C-PA)"},
+    (4, "D", "PA_II_III"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 4D-PA)"},
+    (4, "E", "PA_II_III"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 4E-PA)"},
+    (4, "F", "PA_II_III"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 4F-PA)"},
     # --- Non-Precision Approach (NPA) Runways ---
     # ARC Code 1
-    (1, 'A', 'NPA'): {'offset_m': 77.5, 'ref': "MOS 139 T9.1 (Verify 1A-NPA)"},
-    (1, 'B', 'NPA'): {'offset_m': 82.0, 'ref': "MOS 139 T9.1 (Verify 1B-NPA)"},
-    (1, 'C', 'NPA'): {'offset_m': 88.0, 'ref': "MOS 139 T9.1 (Verify 1C-NPA)"},
+    (1, "A", "NPA"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 1A-NPA)"},
+    (1, "B", "NPA"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 1B-NPA)"},
+    (1, "C", "NPA"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 1C-NPA)"},
     # ARC Code 2
-    (2, 'A', 'NPA'): {'offset_m': 77.5, 'ref': "MOS 139 T9.1 (Verify 2A-NPA)"},
-    (2, 'B', 'NPA'): {'offset_m': 82.0, 'ref': "MOS 139 T9.1 (Verify 2B-NPA)"},
-    (2, 'C', 'NPA'): {'offset_m': 88.0, 'ref': "MOS 139 T9.1 (Verify 2C-NPA)"},
+    (2, "A", "NPA"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 2A-NPA)"},
+    (2, "B", "NPA"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 2B-NPA)"},
+    (2, "C", "NPA"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 2C-NPA)"},
     # ARC Code 3
-    (3, 'A', 'NPA'): {'offset_m': 152.0, 'ref': "MOS 139 T9.1 (Verify 3A-NPA)"},
-    (3, 'B', 'NPA'): {'offset_m': 152.0, 'ref': "MOS 139 T9.1 (Verify 3B-NPA)"},
-    (3, 'C', 'NPA'): {'offset_m': 158.0, 'ref': "MOS 139 T9.1 (Verify 3C-NPA)"},
-    (3, 'D', 'NPA'): {'offset_m': 166.0, 'ref': "MOS 139 T9.1 (Verify 3D-NPA)"},
-    (3, 'E', 'NPA'): {'offset_m': 172.5, 'ref': "MOS 139 T9.1 (Verify 3E-NPA)"},
-    (3, 'F', 'NPA'): {'offset_m': 180.0, 'ref': "MOS 139 T9.1 (Verify 3F-NPA)"},
+    (3, "A", "NPA"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3A-NPA)"},
+    (3, "B", "NPA"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3B-NPA)"},
+    (3, "C", "NPA"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 3C-NPA)"},
+    (3, "D", "NPA"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 3D-NPA)"},
+    (3, "E", "NPA"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 3E-NPA)"},
+    (3, "F", "NPA"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 3F-NPA)"},
     # ARC Code 4
-    (4, 'C', 'NPA'): {'offset_m': 158.0, 'ref': "MOS 139 T9.1 (Verify 4C-NPA)"},
-    (4, 'D', 'NPA'): {'offset_m': 166.0, 'ref': "MOS 139 T9.1 (Verify 4D-NPA)"},
-    (4, 'E', 'NPA'): {'offset_m': 172.5, 'ref': "MOS 139 T9.1 (Verify 4E-NPA)"},
-    (4, 'F', 'NPA'): {'offset_m': 180.0, 'ref': "MOS 139 T9.1 (Verify 4F-NPA)"},
-    
+    (4, "C", "NPA"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 4C-NPA)"},
+    (4, "D", "NPA"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 4D-NPA)"},
+    (4, "E", "NPA"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 4E-NPA)"},
+    (4, "F", "NPA"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 4F-NPA)"},
     # --- Non-Instrument (NI) Runways --- <<< ADD THIS SECTION >>>
     # ARC Code 1
-    (1, 'A', 'NI'): {'offset_m': 37.5, 'ref': "MOS 139 T9.1 (Verify 1A-NI)"},
-    (1, 'B', 'NI'): {'offset_m': 42.0, 'ref': "MOS 139 T9.1 (Verify 1B-NI)"},
-    (1, 'C', 'NI'): {'offset_m': 48.0, 'ref': "MOS 139 T9.1 (Verify 1C-NI)"},
+    (1, "A", "NI"): {"offset_m": 37.5, "ref": "MOS 139 T9.1 (Verify 1A-NI)"},
+    (1, "B", "NI"): {"offset_m": 42.0, "ref": "MOS 139 T9.1 (Verify 1B-NI)"},
+    (1, "C", "NI"): {"offset_m": 48.0, "ref": "MOS 139 T9.1 (Verify 1C-NI)"},
     # ARC Code 2
-    (2, 'A', 'NI'): {'offset_m': 47.5, 'ref': "MOS 139 T9.1 (Verify 2A-NI)"},
-    (2, 'B', 'NI'): {'offset_m': 52.0, 'ref': "MOS 139 T9.1 (Verify 2B-NI)"},
-    (2, 'C', 'NI'): {'offset_m': 58.0, 'ref': "MOS 139 T9.1 (Verify 2C-NI)"},
+    (2, "A", "NI"): {"offset_m": 47.5, "ref": "MOS 139 T9.1 (Verify 2A-NI)"},
+    (2, "B", "NI"): {"offset_m": 52.0, "ref": "MOS 139 T9.1 (Verify 2B-NI)"},
+    (2, "C", "NI"): {"offset_m": 58.0, "ref": "MOS 139 T9.1 (Verify 2C-NI)"},
     # ARC Code 3
-    (3, 'A', 'NI'): {'offset_m': 52.5, 'ref': "MOS 139 T9.1 (Verify 3A-NI)"},
-    (3, 'B', 'NI'): {'offset_m': 87.0, 'ref': "MOS 139 T9.1 (Verify 3B-NI)"},
-    (3, 'C', 'NI'): {'offset_m': 93.0, 'ref': "MOS 139 T9.1 (Verify 3C-NI)"},
-    (3, 'D', 'NI'): {'offset_m': 101.0, 'ref': "MOS 139 T9.1 (Verify 3D-NI)"},
-    (3, 'E', 'NI'): {'offset_m': 107.5, 'ref': "MOS 139 T9.1 (Verify 3E-NI)"},
-    (3, 'F', 'NI'): {'offset_m': 115.0, 'ref': "MOS 139 T9.1 (Verify 3F-NI)"},
+    (3, "A", "NI"): {"offset_m": 52.5, "ref": "MOS 139 T9.1 (Verify 3A-NI)"},
+    (3, "B", "NI"): {"offset_m": 87.0, "ref": "MOS 139 T9.1 (Verify 3B-NI)"},
+    (3, "C", "NI"): {"offset_m": 93.0, "ref": "MOS 139 T9.1 (Verify 3C-NI)"},
+    (3, "D", "NI"): {"offset_m": 101.0, "ref": "MOS 139 T9.1 (Verify 3D-NI)"},
+    (3, "E", "NI"): {"offset_m": 107.5, "ref": "MOS 139 T9.1 (Verify 3E-NI)"},
+    (3, "F", "NI"): {"offset_m": 115.0, "ref": "MOS 139 T9.1 (Verify 3F-NI)"},
     # ARC Code 4
-    (4, 'C', 'NI'): {'offset_m': 93.0, 'ref': "MOS 139 T9.1 (Verify 4C-NI)"},
-    (4, 'D', 'NI'): {'offset_m': 101.0, 'ref': "MOS 139 T9.1 (Verify 4D-NI)"},
-    (4, 'E', 'NI'): {'offset_m': 107.5, 'ref': "MOS 139 T9.1 (Verify 4E-NI)"},
-    (4, 'F', 'NI'): {'offset_m': 115.0, 'ref': "MOS 139 T9.1 (Verify 4F-NI)"},
+    (4, "C", "NI"): {"offset_m": 93.0, "ref": "MOS 139 T9.1 (Verify 4C-NI)"},
+    (4, "D", "NI"): {"offset_m": 101.0, "ref": "MOS 139 T9.1 (Verify 4D-NI)"},
+    (4, "E", "NI"): {"offset_m": 107.5, "ref": "MOS 139 T9.1 (Verify 4E-NI)"},
+    (4, "F", "NI"): {"offset_m": 115.0, "ref": "MOS 139 T9.1 (Verify 4F-NI)"},
 }
 
 # =========================================================================
 # == Helper Functions
 # =========================================================================
 
+
 def get_runway_type_abbr(runway_type_str: Optional[str]) -> str:
     """Maps the exact descriptive runway type string from UI to a simplified abbreviation."""
     if runway_type_str is None:
-        return "NI" # Default if None is passed
-    
+        return "NI"  # Default if None is passed
+
     # Use .get() with a default value for safety, handle potential whitespace
     abbr = RUNWAY_TYPE_MAP.get(runway_type_str.strip())
-    
+
     if abbr is None:
         # This case should ideally not happen if input comes only from the known combo box list
         # or if callers pass valid strings
-        print(f"[ols_dimensions WARNING] Unknown runway type string '{runway_type_str}' could not be mapped, defaulting to NI.")
+        print(
+            f"[ols_dimensions WARNING] Unknown runway type string '{runway_type_str}' could not be mapped, defaulting to NI."
+        )
         return "NI"
     else:
         return abbr
 
+
 def get_physical_refs():
     """Returns MOS references for basic physical components."""
     # Ensure constants are defined *before* this function in the file
-    return {'pavement': PAVEMENT_MOS_REF, 'shoulder': SHOULDER_MOS_REF}
+    return {"pavement": PAVEMENT_MOS_REF, "shoulder": SHOULDER_MOS_REF}
+
 
 def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]):
     """Calculates strip dimensions based on stored parameters."""
     # Ensure constants/dicts are defined *before* this function
-    results = {'overall_width': None, 'graded_width': None, 'extension_length': None,
-               'mos_overall_width_ref': "N/A", 'mos_graded_width_ref': "N/A", 'mos_extension_length_ref': "N/A"}
-    if not isinstance(arc_num, int) or arc_num not in [1,2,3,4]: return results
-    
+    results = {
+        "overall_width": None,
+        "graded_width": None,
+        "extension_length": None,
+        "mos_overall_width_ref": "N/A",
+        "mos_graded_width_ref": "N/A",
+        "mos_extension_length_ref": "N/A",
+    }
+    if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
+        return results
+
     width_rules = STRIP_WIDTH_PARAMS.get(arc_num, {})
-    results['mos_graded_width_ref'] = width_rules.get('ref_graded', "N/A")
-    results['mos_overall_width_ref'] = width_rules.get('ref_overall', "N/A")
-    
+    results["mos_graded_width_ref"] = width_rules.get("ref_graded", "N/A")
+    results["mos_overall_width_ref"] = width_rules.get("ref_overall", "N/A")
+
     # Graded Width Logic
-    if 'graded' in width_rules:
-        results['graded_width'] = width_rules['graded']
-    elif 'graded_lt_45' in width_rules:
+    if "graded" in width_rules:
+        results["graded_width"] = width_rules["graded"]
+    elif "graded_lt_45" in width_rules:
         if runway_width is not None and runway_width < 45.0:
-             results['graded_width'] = width_rules['graded_lt_45']
-             results['mos_graded_width_ref'] += " (<45m)"
+            results["graded_width"] = width_rules["graded_lt_45"]
+            results["mos_graded_width_ref"] += " (<45m)"
         else:
-             results['graded_width'] = width_rules['graded_ge_45']
-             results['mos_graded_width_ref'] += " (>=45m)"
-            
+            results["graded_width"] = width_rules["graded_ge_45"]
+            results["mos_graded_width_ref"] += " (>=45m)"
+
     # Overall Width Logic
-    is_ni_or_npa = type_abbr in ['NI', 'NPA']
+    is_ni_or_npa = type_abbr in ["NI", "NPA"]
     if arc_num in [1, 2] and is_ni_or_npa:
-        results['overall_width'] = width_rules.get('overall_ni_npa')
-        results['mos_overall_width_ref'] += " (Code 1/2 NI/NPA)"
-    elif arc_num in [1, 2] and type_abbr.startswith('PA'):
-        results['overall_width'] = width_rules.get('overall_pa')
-        results['mos_overall_width_ref'] += " (Code 1/2 PA)"
+        results["overall_width"] = width_rules.get("overall_ni_npa")
+        results["mos_overall_width_ref"] += " (Code 1/2 NI/NPA)"
+    elif arc_num in [1, 2] and type_abbr.startswith("PA"):
+        results["overall_width"] = width_rules.get("overall_pa")
+        results["mos_overall_width_ref"] += " (Code 1/2 PA)"
     elif arc_num in [3, 4]:
-        results['overall_width'] = width_rules.get('overall')
-        results['mos_overall_width_ref'] += " (Code 3/4)"
-        
+        results["overall_width"] = width_rules.get("overall")
+        results["mos_overall_width_ref"] += " (Code 3/4)"
+
     # Extension Length Logic
-    is_ni_code_1_or_2 = (type_abbr == "NI" and arc_num in [1, 2])
-    ext_key = 'NI_1_2' if is_ni_code_1_or_2 else 'OTHER'
+    is_ni_code_1_or_2 = type_abbr == "NI" and arc_num in [1, 2]
+    ext_key = "NI_1_2" if is_ni_code_1_or_2 else "OTHER"
     ext_params = STRIP_EXTENSION_PARAMS.get(ext_key)
     if ext_params:
-        results['extension_length'] = ext_params.get('length')
-        results['mos_extension_length_ref'] = ext_params.get('ref', "N/A")
-        
+        results["extension_length"] = ext_params.get("length")
+        results["mos_extension_length_ref"] = ext_params.get("ref", "N/A")
+
     return results
+
 
 def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str):
     """Determines RESA requirements based on the consolidated RESA_PARAMS."""
     # Ensure RESA_PARAMS is defined before this function
-    results = {'required': False, 'length': None, 'mos_applicability_ref': "N/A",
-                'mos_length_ref': "N/A",
-                'mos_width_ref': RESA_PARAMS.get('width_ref', "N/A")} # Get constant ref
-    
-    is_instrument = type1_abbr in ['NPA', 'PA_I', 'PA_II_III'] or \
-                        type2_abbr in ['NPA', 'PA_I', 'PA_II_III']
-    
+    results = {
+        "required": False,
+        "length": None,
+        "mos_applicability_ref": "N/A",
+        "mos_length_ref": "N/A",
+        "mos_width_ref": RESA_PARAMS.get("width_ref", "N/A"),
+    }  # Get constant ref
+
+    is_instrument = type1_abbr in ["NPA", "PA_I", "PA_II_III"] or type2_abbr in [
+        "NPA",
+        "PA_I",
+        "PA_II_III",
+    ]
+
     # Get nested dictionaries safely
-    applicability_refs = RESA_PARAMS.get('applicability_refs', {})
-    length_rules = RESA_PARAMS.get('length_rules', {})
-    
+    applicability_refs = RESA_PARAMS.get("applicability_refs", {})
+    length_rules = RESA_PARAMS.get("length_rules", {})
+
     # Determine applicability and get the reference
     if arc_num in [3, 4]:
-        results['required'] = True
-        results['mos_applicability_ref'] = applicability_refs.get('required_3_4', "N/A")
+        results["required"] = True
+        results["mos_applicability_ref"] = applicability_refs.get("required_3_4", "N/A")
     elif arc_num in [1, 2] and is_instrument:
-        results['required'] = True
-        results['mos_applicability_ref'] = applicability_refs.get('required_1_2_instr', "N/A")
+        results["required"] = True
+        results["mos_applicability_ref"] = applicability_refs.get(
+            "required_1_2_instr", "N/A"
+        )
     else:
-        results['required'] = False
-        results['mos_applicability_ref'] = applicability_refs.get('not_required', "N/A")
-        
+        results["required"] = False
+        results["mos_applicability_ref"] = applicability_refs.get("not_required", "N/A")
+
     # Determine length and reference if required
-    if results['required']:
-        len_key = '1_2' if arc_num in [1, 2] else '3_4'
+    if results["required"]:
+        len_key = "1_2" if arc_num in [1, 2] else "3_4"
         len_params = length_rules.get(len_key)
         if len_params:
-            results['length'] = len_params.get('length')
-            results['mos_length_ref'] = len_params.get('ref', "N/A")
-            
+            results["length"] = len_params.get("length")
+            results["mos_length_ref"] = len_params.get("ref", "N/A")
+
     return results
+
 
 def get_ihs_base_height() -> Optional[float]:
     """Returns the standard base height (AGL) for the Inner Horizontal Surface."""
@@ -576,15 +890,20 @@ def get_ihs_base_height() -> Optional[float]:
         print("[ols_dimensions ERROR] IHS_BASE_HEIGHT_AGL constant is not defined.")
         return None
 
-def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: str) -> Optional[Dict[str, Any]]:
+
+def get_ols_params(
+    arc_num: int, runway_type_str: Optional[str], surface_type: str
+) -> Optional[Dict[str, Any]]:
     """
     Retrieves OLS parameters based on ARC number, runway type, and surface type.
     Returns None if parameters are not found for the specific combination.
     Handles simplified runway type mapping and potential fallbacks for Approach.
     """
     # Add print/log at the beginning to see exact inputs received
-    print(f"[ols_dimensions DEBUG] get_ols_params received: arc_num={arc_num!r}, type_str={runway_type_str!r}, surface={surface_type!r}")
-    
+    print(
+        f"[ols_dimensions DEBUG] get_ols_params received: arc_num={arc_num!r}, type_str={runway_type_str!r}, surface={surface_type!r}"
+    )
+
     if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
         print(f"Error: Invalid ARC Number '{arc_num}' for OLS lookup.")
         return None
@@ -592,57 +911,65 @@ def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: s
     rwy_abbr = get_runway_type_abbr(runway_type_str)
     key = (arc_num, rwy_abbr)
     surface_type_upper = surface_type.upper()
-    print(f"[ols_dimensions DEBUG] Using key: {key!r} for surface: {surface_type_upper!r}") # Log the key being used
+    print(
+        f"[ols_dimensions DEBUG] Using key: {key!r} for surface: {surface_type_upper!r}"
+    )  # Log the key being used
 
-    params_dict: Optional[Dict] = None # The dictionary containing parameters for the surface type
-    lookup_key: Any = key # The key to use for lookup (might change for TOCS/Transitional)
+    params_dict: Optional[Dict] = (
+        None  # The dictionary containing parameters for the surface type
+    )
+    lookup_key: Any = (
+        key  # The key to use for lookup (might change for TOCS/Transitional)
+    )
 
-    if surface_type_upper == 'APPROACH':
+    if surface_type_upper == "APPROACH":
         params_dict = APPROACH_PARAMS
         lookup_key = key
         params = params_dict.get(lookup_key)
         # Fallback logic specifically for Approach if PA type not found
-        if not params and rwy_abbr.startswith('PA'):
-             key_npa = (arc_num, 'NPA')
-             params = params_dict.get(key_npa)
-             if not params:
-                 key_ni = (arc_num, 'NI')
-                 params = params_dict.get(key_ni)
+        if not params and rwy_abbr.startswith("PA"):
+            key_npa = (arc_num, "NPA")
+            params = params_dict.get(key_npa)
+            if not params:
+                key_ni = (arc_num, "NI")
+                params = params_dict.get(key_ni)
         # Return here for Approach after fallback check
         return params.copy() if params else None
 
-    elif surface_type_upper == 'INNERAPPROACH':
+    elif surface_type_upper == "INNERAPPROACH":
         params_dict = INNER_APPROACH_PARAMS
-        lookup_key = key # Keyed by ARC and Type
-        params = params_dict.get(lookup_key) # Perform lookup
+        lookup_key = key  # Keyed by ARC and Type
+        params = params_dict.get(lookup_key)  # Perform lookup
         # No fallback defined for inner approach based on table
-    
-    elif surface_type_upper == 'TOCS':
+
+    elif surface_type_upper == "TOCS":
         params_dict = TOCS_PARAMS
-        lookup_key = arc_num # TOCS params keyed only by ARC number in current dict
+        lookup_key = arc_num  # TOCS params keyed only by ARC number in current dict
 
-    elif surface_type_upper == 'IHS':
+    elif surface_type_upper == "IHS":
         params_dict = IHS_PARAMS
-        lookup_key = key # Keyed by ARC and Type
+        lookup_key = key  # Keyed by ARC and Type
 
-    elif surface_type_upper == 'CONICAL':
+    elif surface_type_upper == "CONICAL":
         params_dict = CONICAL_PARAMS
-        lookup_key = key # Keyed by ARC and Type
+        lookup_key = key  # Keyed by ARC and Type
 
-    elif surface_type_upper == 'OHS':
+    elif surface_type_upper == "OHS":
         params_dict = OHS_PARAMS
         lookup_key = key
-        print(f"[ols_dimensions DEBUG] Attempting lookup in OHS_PARAMS with key {lookup_key!r}") # Log before lookup
+        print(
+            f"[ols_dimensions DEBUG] Attempting lookup in OHS_PARAMS with key {lookup_key!r}"
+        )  # Log before lookup
 
-    elif surface_type_upper == 'TRANSITIONAL':
-        params_dict = TRANSITIONAL_PARAMS # <<< Use the updated dictionary
-        lookup_key = key                # <<< Use the (arc_num, rwy_abbr) tuple key
+    elif surface_type_upper == "TRANSITIONAL":
+        params_dict = TRANSITIONAL_PARAMS  # <<< Use the updated dictionary
+        lookup_key = key  # <<< Use the (arc_num, rwy_abbr) tuple key
         params = params_dict.get(lookup_key)
         # NOTE: Add logic here later if needed to fetch/modify for Inner Transitional
 
     else:
         print(f"Error: Unknown OLS surface type '{surface_type}' requested.")
-        return None # Unknown surface type
+        return None  # Unknown surface type
 
     # Perform the lookup for non-Approach types
     if params_dict:
@@ -651,8 +978,11 @@ def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: s
     else:
         # Should not happen if surface_type_upper matched a known type
         return None
-    
-def get_taxiway_separation_offset(arc_num: int, arc_let: Optional[str], runway_type_str: Optional[str]) -> Optional[Dict[str, Any]]:
+
+
+def get_taxiway_separation_offset(
+    arc_num: int, arc_let: Optional[str], runway_type_str: Optional[str]
+) -> Optional[Dict[str, Any]]:
     """
     Retrieves Taxiway Minimum Separation offset based on classification.
     Returns None if parameters are not found.
@@ -660,31 +990,36 @@ def get_taxiway_separation_offset(arc_num: int, arc_let: Optional[str], runway_t
     if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
         print(f"Error: Invalid ARC Number '{arc_num}' for Taxiway Sep lookup.")
         return None
-    
+
     # Use most restrictive type if different ends provided (relevant if called outside loop)
     # For per-runway call, runway_type_str should represent the governing type already
     rwy_abbr = get_runway_type_abbr(runway_type_str)
-    
+
     # Handle missing ARC Letter - Default to empty string or highest possible? Check standard. Assume empty for now.
     arc_let_str = arc_let.strip().upper() if arc_let else ""
     if not arc_let_str:
-        print(f"[ols_dimensions WARNING] Missing ARC Letter for Taxiway Sep lookup (Code {arc_num}, Type {rwy_abbr}). Lookup might fail if parameters require a letter.")
-        
+        print(
+            f"[ols_dimensions WARNING] Missing ARC Letter for Taxiway Sep lookup (Code {arc_num}, Type {rwy_abbr}). Lookup might fail if parameters require a letter."
+        )
+
     key = (arc_num, arc_let_str, rwy_abbr)
     print(f"[ols_dimensions DEBUG] Using key: {key!r} for surface: TAXIWAY_SEPARATION")
-    
+
     params = TAXIWAY_SEPARATION_PARAMS.get(key)
-    
+
     # Basic Fallback attempt: If key with letter fails, try without letter (key = (arc_num, '', rwy_abbr))
     if not params and arc_let_str != "":
-        print(f"[ols_dimensions DEBUG] Taxiway Sep lookup failed for key {key!r}. Trying without ARC Letter.")
-        key_no_letter = (arc_num, '', rwy_abbr)
+        print(
+            f"[ols_dimensions DEBUG] Taxiway Sep lookup failed for key {key!r}. Trying without ARC Letter."
+        )
+        key_no_letter = (arc_num, "", rwy_abbr)
         params = TAXIWAY_SEPARATION_PARAMS.get(key_no_letter)
-        
+
     # Another Fallback: Try falling back to a less restrictive type if specific type missing? (e.g., PA_I -> NPA -> NI)
     # Requires more complex logic - omit for now unless necessary based on MOS 139 data structure.
-        
+
     return params.copy() if params else None
+
 
 # =========================================================================
 # == End of File
