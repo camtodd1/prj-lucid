@@ -350,7 +350,6 @@ class SafeguardingBuilder:
           self.output_format_driver = None
           self.output_format_extension = None
           self.dissolve_output = False
-          specialised_safeguarding_group = None
           
           if self.dlg is None:
             QgsMessageLog.logMessage("Processing aborted: Dialog reference missing.", plugin_tag, level=Qgis.Critical)
@@ -358,11 +357,12 @@ class SafeguardingBuilder:
           
           project = QgsProject.instance()
           target_crs = project.crs()
+          target_crs_authid = target_crs.authid()
           if not target_crs or not target_crs.isValid():
             QgsMessageLog.logMessage("Processing aborted: Project CRS is invalid or not set.", plugin_tag, level=Qgis.Critical)
             self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Project CRS is invalid or not set. Please set a valid Projected CRS."), level=Qgis.Critical, duration=10)
             return
-          QgsMessageLog.logMessage(f"Using Project CRS: {target_crs.authid()} ({target_crs.description()})", plugin_tag, level=Qgis.Info)
+          QgsMessageLog.logMessage(f"Using Project CRS: {target_crs_authid} ({target_crs.description()})", plugin_tag, level=Qgis.Info)
           
           input_data = None
           try:
@@ -527,8 +527,8 @@ class SafeguardingBuilder:
                         layer_name_internal = f"physical_{element_type}_{icao_code}_{id(self)}_{QtCore.QDateTime.currentMSecsSinceEpoch()}"
                         layer_display_name = f"{icao_code} {definition['name']}"
                         layer_uri = ""
-                        if geom_type_str == 'LineString': layer_uri = f"LineString?crs={target_crs.authid()}&index=yes"
-                        elif geom_type_str == 'Polygon': layer_uri = f"Polygon?crs={target_crs.authid()}&index=yes"
+                        if geom_type_str == 'LineString': layer_uri = f"LineString?crs={target_crs_authid}&index=yes"
+                        elif geom_type_str == 'Polygon': layer_uri = f"Polygon?crs={target_crs_authid}&index=yes"
                         else: QgsMessageLog.logMessage(f"Warning: Unsupported geometry type '{geom_type_str}' for layer URI.", plugin_tag, level=Qgis.Warning); continue
                         layer = QgsVectorLayer(layer_uri, layer_name_internal, "memory")
               
@@ -848,7 +848,6 @@ class SafeguardingBuilder:
             # ### NEW: Get ARC Number and Letter from runway_data ###
             arc_num_val = runway_data.get('arc_num')
             arc_let_val = runway_data.get('arc_let')
-            QgsMessageLog.logMessage(f"Runway ARC values: num='{arc_num_val}', let='{arc_let_val}'", PLUGIN_TAG, level=Qgis.Info)
             # Basic validation of essential data for this step
             if designator_num is None or thr_point is None or rec_thr_point is None:
               QgsMessageLog.logMessage(f"Skipping centreline for Runway Index {index}: Missing essential data (Designator Num/Points).", plugin_tag, level=Qgis.Warning)
@@ -929,6 +928,7 @@ class SafeguardingBuilder:
       plugin_tag = PLUGIN_TAG
       project = QgsProject.instance()
       target_crs = project.crs()
+      target_crs_authid = target_crs.authid()
       
       if not features:
         QgsMessageLog.logMessage(f"Skipping layer '{display_name}': No features generated.", plugin_tag, level=Qgis.Info)
@@ -945,7 +945,7 @@ class SafeguardingBuilder:
       # --- MEMORY LAYER MODE ---
       if self.output_mode == 'memory':
         layer_name_internal = f"{internal_name_base}_{id(self)}_{QDateTime.currentMSecsSinceEpoch()}"
-        layer_uri = f"{geometry_type_str}?crs={target_crs.authid()}&index=yes"
+        layer_uri = f"{geometry_type_str}?crs={target_crs_authid}&index=yes"
         layer = QgsVectorLayer(layer_uri, layer_name_internal, "memory")
         
         if not layer or not layer.isValid():
@@ -1007,7 +1007,7 @@ class SafeguardingBuilder:
         # layer_name_option is already the sanitized display name, used as filename base
         
         # --- Create Temporary Layer for writing ---
-        temp_layer_uri = f"{geometry_type_str}?crs={target_crs.authid()}&index=yes"
+        temp_layer_uri = f"{geometry_type_str}?crs={target_crs_authid}&index=yes"
         temp_layer = QgsVectorLayer(temp_layer_uri, f"temp_{internal_name_base}", "memory")
         if not temp_layer or not temp_layer.isValid():
           QgsMessageLog.logMessage(f"Failed create temporary memory layer for writing '{display_name}'.", plugin_tag, level=Qgis.Warning)
