@@ -350,6 +350,7 @@ class SafeguardingBuilder:
           self.output_format_driver = None
           self.output_format_extension = None
           self.dissolve_output = False
+          specialised_safeguarding_group = None
           
           if self.dlg is None:
             QgsMessageLog.logMessage("Processing aborted: Dialog reference missing.", plugin_tag, level=Qgis.Critical)
@@ -847,6 +848,7 @@ class SafeguardingBuilder:
             # ### NEW: Get ARC Number and Letter from runway_data ###
             arc_num_val = runway_data.get('arc_num')
             arc_let_val = runway_data.get('arc_let')
+            QgsMessageLog.logMessage(f"Runway ARC values: num='{arc_num_val}', let='{arc_let_val}'", PLUGIN_TAG, level=Qgis.Info)
             # Basic validation of essential data for this step
             if designator_num is None or thr_point is None or rec_thr_point is None:
               QgsMessageLog.logMessage(f"Skipping centreline for Runway Index {index}: Missing essential data (Designator Num/Points).", plugin_tag, level=Qgis.Warning)
