@@ -185,10 +185,32 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.shoulder_le.setValidator(self.distance_validator)
         detailsLayout.addWidget(label_runway_shoulder, current_details_row, 0); detailsLayout.addWidget(self.shoulder_le, current_details_row, 1); current_details_row += 1
         label_arc_num = QtWidgets.QLabel("ARC Number:"); label_arc_num.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.arc_num_combo = QtWidgets.QComboBox(); self.arc_num_combo.setObjectName(f"comboBox_arc_num_{self.index}"); self.arc_num_combo.addItems(["", "1", "2", "3", "4"]); self.arc_num_combo.setToolTip("Select Aerodrome Reference Code Number"); self.arc_num_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.arc_num_combo = QtWidgets.QComboBox(); self.arc_num_combo.setObjectName(f"comboBox_arc_num_{self.index}"); 
+        arc_num_items = [
+            ("", ""),
+            ("1 (<800m)", "1"),
+            ("2 (800 – 1200m)", "2"),
+            ("3 (1200 – 1800m)", "3"),
+            ("4 (≥1800m)", "4")
+        ]
+        for label, value in arc_num_items:
+            self.arc_num_combo.addItem(label, userData=value)
+        self.arc_num_combo.setToolTip("Select Aerodrome Reference Code Number"); self.arc_num_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         detailsLayout.addWidget(label_arc_num, current_details_row, 0); detailsLayout.addWidget(self.arc_num_combo, current_details_row, 1); current_details_row += 1
         label_arc_let = QtWidgets.QLabel("ARC Letter:"); label_arc_let.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.arc_let_combo = QtWidgets.QComboBox(); self.arc_let_combo.setObjectName(f"comboBox_arc_let_{self.index}"); self.arc_let_combo.addItems(["", "A", "B", "C", "D", "E", "F"]); self.arc_let_combo.setToolTip("Select Aerodrome Reference Code Letter"); self.arc_let_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.arc_let_combo = QtWidgets.QComboBox(); self.arc_let_combo.setObjectName(f"comboBox_arc_let_{self.index}")
+        arc_let_items = [
+            ("", ""),
+            ("A (Cessna 172)", "A"),
+            ("B (Pilatus PC-12)", "B"),
+            ("C (DHC-8, B737)", "C"),
+            ("D (B767)", "D"),
+            ("E (B777, A330, B787)", "E"),
+            ("F (A380, B747)", "F"),
+        ]
+        for label, value in arc_let_items:
+            self.arc_let_combo.addItem(label, userData=value)
+        self.arc_let_combo.setToolTip("Select Aerodrome Reference Code Letter"); self.arc_let_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         detailsLayout.addWidget(label_arc_let, current_details_row, 0); detailsLayout.addWidget(self.arc_let_combo, current_details_row, 1); current_details_row += 1
         runway_types = ["", "Non-Instrument (NI)", "Non-Precision Approach (NPA)", "Precision Approach CAT I", "Precision Approach CAT II/III"]
         self.type1_lbl = QtWidgets.QLabel("(Primary End) Type:"); self.type1_lbl.setObjectName(f"label_type_desig1_{self.index}"); self.type1_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -249,8 +271,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
                     "thr_pre_area_2": self.thr_pre_area_2_le.text(), # <<< NEW FIELD >>>
                     "width": self.width_le.text(),
                     "shoulder": self.shoulder_le.text(),
-                    "arc_num": self.arc_num_combo.currentText(),
-                    "arc_let": self.arc_let_combo.currentText(),
+                    "arc_num": self.arc_num_combo.currentData(),
+                    "arc_let": self.arc_let_combo.currentData(),
                     "type1": self.type1_combo.currentText(),
                     "type2": self.type2_combo.currentText(),
             }
