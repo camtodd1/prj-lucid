@@ -36,6 +36,7 @@ from qgis.core import (  # type: ignore
     QgsVectorFileWriter,
     QgsDistanceArea,
     QgsWkbTypes,
+    QgsCoordinateTransform,
 )
 
 # --- Local Imports ---
@@ -127,15 +128,28 @@ class SafeguardingBuilder:
         self.dlg: Optional[SafeguardingBuilderDialog] = None
         self.style_map: Dict[str, str] = {}
         self.reference_elevation_datum: Optional[float] = None
-        self.arp_elevation_amsl: Optional[float] = None  # Added for consistency
+        self.arp_elevation_amsl: Optional[float] = None
 
-        self.output_mode: str = "memory"  # Default
+        self.output_mode: str = "memory"
         self.output_path: Optional[str] = None
         self.output_format_driver: Optional[str] = None
         self.output_format_extension: Optional[str] = None
         self.dissolve_output: bool = False
 
         self._init_locale()
+
+    def _initialise_crs(self):
+        """Force QGIS to initialise CRS subsystems by adding and removing a dummy layer."""
+        plugin_tag = PLUGIN_TAG
+        crs_authid = QgsProject.instance().crs().authid()
+        QgsMessageLog.logMessage(f"Initialising CRS: {crs_authid}", plugin_tag, Qgis.Info)
+        dummy = QgsVectorLayer(f"Point?crs={crs_authid}", "crs_init_dummy", "memory")
+        if dummy.isValid():
+            QgsProject.instance().addMapLayer(dummy, False)
+            QgsProject.instance().removeMapLayer(dummy)
+            QgsMessageLog.logMessage("CRS initialisation dummy layer added and removed successfully.", plugin_tag, Qgis.Info)
+        else:
+            QgsMessageLog.logMessage("CRS initialisation dummy layer failed to create.", plugin_tag, Qgis.Warning)
 
     def _init_locale(self):
         """Load translation file."""
@@ -464,51 +478,41 @@ class SafeguardingBuilder:
         return reference_elevation_datum
 
     def run_safeguarding_processing(self):
-        """Orchestrates the creation of safeguarding surfaces using validated input data."""
-        plugin_tag = PLUGIN_TAG  # Local variable
-        QgsMessageLog.logMessage(
-            "--- Safeguarding Processing Started ---", plugin_tag, level=Qgis.Info
-        )
+        plugin_tag = PLUGIN_TAG
+        QgsMessageLog.logMessage("--- Safeguarding Processing Started ---", plugin_tag, level=Qgis.Info)
+
         self.successfully_generated_layers = []
         self.reference_elevation_datum = None
         self.arp_elevation_amsl = None
-        self.output_mode = "memory"  # Reset to default
+        self.output_mode = "memory"
         self.output_path = None
         self.output_format_driver = None
         self.output_format_extension = None
         self.dissolve_output = False
 
         if self.dlg is None:
-            QgsMessageLog.logMessage(
-                "Processing aborted: Dialog reference missing.",
-                plugin_tag,
-                level=Qgis.Critical,
-            )
+            QgsMessageLog.logMessage("Processing aborted: Dialog reference missing.", plugin_tag, level=Qgis.Critical)
             return
 
         project = QgsProject.instance()
         target_crs = project.crs()
         target_crs_authid = target_crs.authid()
         if not target_crs or not target_crs.isValid():
-            QgsMessageLog.logMessage(
-                "Processing aborted: Project CRS is invalid or not set.",
-                plugin_tag,
-                level=Qgis.Critical,
-            )
-            self.iface.messageBar().pushMessage(
-                self.tr("Error"),
-                self.tr(
-                    "Project CRS is invalid or not set. Please set a valid Projected CRS."
-                ),
-                level=Qgis.Critical,
-                duration=10,
-            )
+            QgsMessageLog.logMessage("Processing aborted: Project CRS is invalid or not set.", plugin_tag, level=Qgis.Critical)
+            self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Project CRS is invalid or not set. Please set a valid Projected CRS."), level=Qgis.Critical, duration=10)
             return
+
+        QgsMessageLog.logMessage(f"Using Project CRS: {target_crs_authid} ({target_crs.description()})", plugin_tag, level=Qgis.Info)
+
+        # Force CRS subsystem to initialise properly
+        self._initialise_crs()
         QgsMessageLog.logMessage(
-            f"Using Project CRS: {target_crs_authid} ({target_crs.description()})",
+            f"CRS initialisation complete. Project CRS is now active: {target_crs.authid()}",
             plugin_tag,
             level=Qgis.Info,
         )
+
+        specialised_safeguarding_group = None
 
         input_data = None
         try:
@@ -1589,270 +1593,369 @@ class SafeguardingBuilder:
         target_crs_authid = target_crs.authid()
 
         if not features:
-            QgsMessageLog.logMessage(
-                f"Skipping layer '{display_name}': No features generated.",
-                plugin_tag,
-                level=Qgis.Info,
-            )
-            return None
-        if not target_crs or not target_crs.isValid():
-            QgsMessageLog.logMessage(
-                f"Cannot create layer '{display_name}': Invalid Project CRS.",
-                plugin_tag,
-                level=Qgis.Critical,
-            )
-            return None
-        if not layer_group:
-            QgsMessageLog.logMessage(
-                f"Cannot add layer '{display_name}': Invalid layer group provided.",
-                plugin_tag,
-                level=Qgis.Critical,
-            )
+            QgsMessageLog.logMessage(f"Skipping layer '{display_name}': No features generated.", plugin_tag, level=Qgis.Info)
             return None
 
-        added_layer: Optional[QgsVectorLayer] = None
-
-        # --- MEMORY LAYER MODE ---
-        if self.output_mode == "memory":
-            layer_name_internal = (
-                f"{internal_name_base}_{id(self)}_{QDateTime.currentMSecsSinceEpoch()}"
-            )
-            layer_uri = f"{geometry_type_str}?crs={target_crs_authid}&index=yes"
-            layer = QgsVectorLayer(layer_uri, layer_name_internal, "memory")
-
-            if not layer or not layer.isValid():
-                QgsMessageLog.logMessage(
-                    f"Failed create valid memory layer object for '{display_name}'.",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
+        try:
+            uri = f"{geometry_type_str}?crs={target_crs.authid()}"
+            layer = QgsVectorLayer(uri, display_name, "memory")
+            if not layer.isValid():
+                QgsMessageLog.logMessage(f"Failed to create layer '{display_name}' with URI '{uri}'", plugin_tag, Qgis.Critical)
                 return None
 
-            provider = layer.dataProvider()
-            if not provider or not provider.addAttributes(fields):
-                QgsMessageLog.logMessage(
-                    f"Failed setup provider/attributes for memory layer '{display_name}'. Provider exists: {provider is not None}",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
-                return None
+            layer.startEditing()
+            layer.dataProvider().addAttributes(fields)
             layer.updateFields()
-            layer.setName(display_name)
+            layer.dataProvider().addFeatures(features)
+            layer.commitChanges()
 
-            if layer.startEditing():
-                add_ok, _ = provider.addFeatures(features)
-                if add_ok:
-                    if layer.commitChanges():
-                        layer.updateExtents()
-                        project.addMapLayer(layer, False)
-                        node = layer_group.addLayer(layer)
-                        if node:
-                            node.setName(layer.name())
-                            layer.setCustomProperty("safeguarding_style_key", style_key)
-                            self._apply_style(layer, self.style_map)
-                            self.successfully_generated_layers.append(layer)
-                            added_layer = layer
-                        else:
-                            QgsMessageLog.logMessage(
-                                f"Warning: Memory layer '{display_name}' added to project but failed add node to group '{layer_group.name()}'.",
-                                plugin_tag,
-                                level=Qgis.Warning,
-                            )
-                            if project.mapLayer(layer.id()):
-                                project.removeMapLayer(layer.id())
+            # Apply style if available
+            if style_key in self.style_map:
+                style_filename = self.style_map[style_key]
+                style_path = os.path.join(self.plugin_dir, style_filename)
+                if os.path.exists(style_path):
+                    result, error_msg = layer.loadNamedStyle(style_path)
+                    if result:
+                        layer.triggerRepaint()
+                        QgsMessageLog.logMessage(f"Style '{style_key}' applied to layer '{display_name}'.", plugin_tag, Qgis.Info)
                     else:
-                        QgsMessageLog.logMessage(
-                            f"Failed commit changes for memory layer '{display_name}'. Error: {layer.commitErrors()}",
-                            plugin_tag,
-                            level=Qgis.Warning,
-                        )
-                        layer.rollBack()
+                        QgsMessageLog.logMessage(f"Failed to load style '{style_key}' for layer '{display_name}': {error_msg}", plugin_tag, Qgis.Warning)
                 else:
+                    QgsMessageLog.logMessage(f"Style file not found: '{style_path}' for key '{style_key}'", plugin_tag, Qgis.Warning)
+
+            # Save to file if using file output
+            if self.output_mode == "file":
+                if not all([self.output_path, self.output_format_driver, self.output_format_extension]):
                     QgsMessageLog.logMessage(
-                        f"Failed addFeatures for memory layer '{display_name}'.",
+                        f"Skipping file save for '{display_name}': Output path/driver/extension missing.",
                         plugin_tag,
-                        level=Qgis.Warning,
+                        level=Qgis.Critical
                     )
-                    layer.rollBack()
-            else:
-                QgsMessageLog.logMessage(
-                    f"Failed startEditing for memory layer '{display_name}'.",
-                    plugin_tag,
-                    level=Qgis.Warning,
+                    return layer
+
+                # Sanitize filename and construct full path
+                safe_name = self._sanitize_filename(display_name)
+                full_path = os.path.join(self.output_path, f"{safe_name}.{self.output_format_extension}")
+
+                temp_layer = QgsVectorLayer(uri, f"temp_{internal_name_base}", "memory")
+                temp_layer.dataProvider().addAttributes(fields)
+                temp_layer.updateFields()
+                temp_layer.dataProvider().addFeatures(features)
+
+                result = QgsVectorFileWriter.writeAsVectorFormat(
+                    temp_layer,
+                    full_path,
+                    "UTF-8",
+                    temp_layer.crs(),
+                    self.output_format_driver
                 )
 
-        # --- FILE OUTPUT MODE ---
-        elif self.output_mode == "file":
-            if not all(
-                [
-                    self.output_path,
-                    self.output_format_driver,
-                    self.output_format_extension,
-                ]
-            ):
-                QgsMessageLog.logMessage(
-                    f"Skipping file save for '{display_name}': Output path/driver/extension missing.",
-                    plugin_tag,
-                    level=Qgis.Critical,
-                )
-                return None
-
-            # --- Determine Actual Output Path and Layer Name Option ---
-            actual_layer_path = ""
-            # Sanitize the display name early for use in SHP filenames or GeoJSON
-            layer_name_option = self._sanitize_filename(display_name)
-
-            # self.output_path now contains the selected DIRECTORY path
-            selected_directory = self.output_path
-            # Ensure the selected directory exists (QgsFileWidget should ensure this, but double-check)
-            if not os.path.isdir(selected_directory):
-                QgsMessageLog.logMessage(
-                    f"Selected output path is not a valid directory: '{selected_directory}'. Cannot save layer '{display_name}'.",
-                    plugin_tag,
-                    level=Qgis.Critical,
-                )
-                return None  # This check is important!
-
-            # Construct unique filename within the selected directory
-            actual_layer_path = os.path.join(
-                selected_directory, f"{layer_name_option}{self.output_format_extension}"
-            )
-            # layer_name_option is already the sanitized display name, used as filename base
-
-            # --- Create Temporary Layer for writing ---
-            temp_layer_uri = f"{geometry_type_str}?crs={target_crs_authid}&index=yes"
-            temp_layer = QgsVectorLayer(
-                temp_layer_uri, f"temp_{internal_name_base}", "memory"
-            )
-            if not temp_layer or not temp_layer.isValid():
-                QgsMessageLog.logMessage(
-                    f"Failed create temporary memory layer for writing '{display_name}'.",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
-                return None
-            temp_provider = temp_layer.dataProvider()
-            if not temp_provider or not temp_provider.addAttributes(fields):
-                QgsMessageLog.logMessage(
-                    f"Failed setup provider/attributes for temp layer '{display_name}'.",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
-                return None
-            temp_layer.updateFields()
-
-            add_temp_ok, _ = temp_provider.addFeatures(features)
-            if not add_temp_ok:
-                QgsMessageLog.logMessage(
-                    f"Failed add features to temporary layer for '{display_name}'.",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
-                return None
-
-            # --- Prepare Layer Options for writeAsVectorFormat ---
-            layer_options_list = []
-
-            # --- Call writeAsVectorFormat ---
-            returned_value_from_writer = QgsVectorFileWriter.writeAsVectorFormat(
-                temp_layer,
-                actual_layer_path,
-                "UTF-8",
-                temp_layer.crs(),
-                self.output_format_driver,
-                layerOptions=layer_options_list,
-            )
-
-            # --- Interpret Write Result ---
-            write_status_code_to_check: int = -1
-            error_message_from_writer: str = ""
-            if (
-                isinstance(returned_value_from_writer, tuple)
-                and len(returned_value_from_writer) > 0
-            ):
-                if isinstance(returned_value_from_writer[0], int):
-                    write_status_code_to_check = returned_value_from_writer[0]
-                if len(returned_value_from_writer) > 1 and isinstance(
-                    returned_value_from_writer[1], str
-                ):
-                    error_message_from_writer = returned_value_from_writer[1]
-            elif isinstance(returned_value_from_writer, int):
-                write_status_code_to_check = returned_value_from_writer
-            else:
-                QgsMessageLog.logMessage(
-                    f"Unexpected return type from writeAsVectorFormat for '{display_name}': {type(returned_value_from_writer)} value: {returned_value_from_writer}",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
-
-            # --- Handle Write Result ---
-            if write_status_code_to_check == QgsVectorFileWriter.WriterError.NoError:
-
-                # --- Load Saved Layer Back ---
-                uri_to_load = actual_layer_path
-
-                loaded_layer = self.iface.addVectorLayer(
-                    uri_to_load, display_name, "ogr"
-                )
-                if loaded_layer and loaded_layer.isValid():
-                    root = project.layerTreeRoot()
-                    loaded_node = root.findLayer(loaded_layer.id())
-                    if loaded_node:
-                        cloned_node = loaded_node.clone()
-                        layer_group.insertChildNode(0, cloned_node)
-                        parent_of_loaded_node = loaded_node.parent()
-                        if parent_of_loaded_node:
-                            parent_of_loaded_node.removeChildNode(loaded_node)
-                        loaded_layer.setCustomProperty(
-                            "safeguarding_style_key", style_key
-                        )
+                if isinstance(result, tuple) and result[0] == QgsVectorFileWriter.NoError:
+                    QgsMessageLog.logMessage(f"Layer '{display_name}' successfully written to '{full_path}'.", plugin_tag, Qgis.Info)
+                    loaded_layer = self.iface.addVectorLayer(full_path, display_name, "ogr")
+                    if loaded_layer and loaded_layer.isValid():
+                        root = project.layerTreeRoot()
+                        loaded_node = root.findLayer(loaded_layer.id())
+                        if loaded_node:
+                            cloned_node = loaded_node.clone()
+                            layer_group.insertChildNode(0, cloned_node)
+                            loaded_node.parent().removeChildNode(loaded_node)
+                        loaded_layer.setCustomProperty("safeguarding_style_key", style_key)
                         self._apply_style(loaded_layer, self.style_map)
                         self.successfully_generated_layers.append(loaded_layer)
-                        added_layer = loaded_layer
+                        return loaded_layer
                     else:
-                        QgsMessageLog.logMessage(
-                            f"Warning: Failed find layer node for saved layer '{display_name}'. Style/grouping may be incorrect.",
-                            plugin_tag,
-                            level=Qgis.Warning,
-                        )
-                        self.successfully_generated_layers.append(loaded_layer)
-                        added_layer = loaded_layer
+                        QgsMessageLog.logMessage(f"Failed to reload written layer '{display_name}' from '{full_path}'.", plugin_tag, Qgis.Warning)
                 else:
-                    QgsMessageLog.logMessage(
-                        f"Error: Failed to load saved layer back: '{uri_to_load}'. Layer reported as written successfully, but load failed. Check file and QGIS logs.",
-                        plugin_tag,
-                        level=Qgis.Critical,
-                    )
-            else:  # Write failed
-                error_type_str = f"WriterError (Code: {write_status_code_to_check})"
-                error_msg_detail = (
-                    error_message_from_writer
-                    if error_message_from_writer
-                    else "Details may be in GDAL/OGR logs or QGIS Message Log Panel."
-                )
+                    QgsMessageLog.logMessage(f"Error writing layer '{display_name}' to file: {result}", plugin_tag, Qgis.Warning)
 
-                QgsMessageLog.logMessage(
-                    f"CRITICAL: Failed to write layer '{display_name}' to '{actual_layer_path}'. "
-                    f"Status: {error_type_str}. Details: '{error_msg_detail}'",
-                    plugin_tag,
-                    level=Qgis.Critical,
-                )
-                self.iface.messageBar().pushMessage(
-                    self.tr("File Write Error"),
-                    self.tr(
-                        "Failed to write '{layer}'. Error code: {code}. Check logs."
-                    ).format(layer=display_name, code=write_status_code_to_check),
-                    level=Qgis.Critical,
-                    duration=10,
-                )
-        else:
-            QgsMessageLog.logMessage(
-                f"Error: Unknown output_mode '{self.output_mode}' for layer '{display_name}'.",
-                plugin_tag,
-                level=Qgis.Critical,
-            )
+            # Add to group in TOC for memory output
+            QgsProject.instance().addMapLayer(layer, False)
+            layer_group.addLayer(layer)
+            self.successfully_generated_layers.append(layer)
 
-        return added_layer
+            QgsMessageLog.logMessage(f"Layer '{display_name}' created and added successfully.", plugin_tag, Qgis.Info)
+            return layer
+
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error creating/adding layer '{display_name}': {e}", plugin_tag, Qgis.Critical)
+            return None
+
+        # if not features:
+        #     QgsMessageLog.logMessage(f"Skipping layer '{display_name}': No features generated.", plugin_tag, level=Qgis.Info)
+        #     return None
+
+        # transformed_features = []
+        # for feat in features:
+        #     try:
+        #         geom = feat.geometry()
+        #         if not geom.isGeosValid():
+        #             geom = geom.makeValid()
+        #         feat.setGeometry(geom)
+        #         transformed_features.append(feat)
+        #     except Exception as e:
+        #         QgsMessageLog.logMessage(f"Geometry validation failed: {e}", plugin_tag, Qgis.Warning)
+
+        # features = transformed_features
+        
+        # if not target_crs or not target_crs.isValid():
+        #     QgsMessageLog.logMessage(
+        #         f"Cannot create layer '{display_name}': Invalid Project CRS.",
+        #         plugin_tag,
+        #         level=Qgis.Critical,
+        #     )
+        #     return None
+        # if not layer_group:
+        #     QgsMessageLog.logMessage(
+        #         f"Cannot add layer '{display_name}': Invalid layer group provided.",
+        #         plugin_tag,
+        #         level=Qgis.Critical,
+        #     )
+        #     return None
+
+        # added_layer: Optional[QgsVectorLayer] = None
+
+        # # --- MEMORY LAYER MODE ---
+        # if self.output_mode == "memory":
+        #     layer_name_internal = (
+        #         f"{internal_name_base}_{id(self)}_{QDateTime.currentMSecsSinceEpoch()}"
+        #     )
+        #     layer_uri = f"{geometry_type_str}?crs={target_crs_authid}&index=yes"
+        #     layer = QgsVectorLayer(layer_uri, layer_name_internal, "memory")
+
+        #     if not layer or not layer.isValid():
+        #         QgsMessageLog.logMessage(
+        #             f"Failed create valid memory layer object for '{display_name}'.",
+        #             plugin_tag,
+        #             level=Qgis.Warning,
+        #         )
+        #         return None
+
+        #     provider = layer.dataProvider()
+        #     if not provider or not provider.addAttributes(fields):
+        #         QgsMessageLog.logMessage(
+        #             f"Failed setup provider/attributes for memory layer '{display_name}'. Provider exists: {provider is not None}",
+        #             plugin_tag,
+        #             level=Qgis.Warning,
+        #         )
+        #         return None
+        #     layer.updateFields()
+        #     layer.setName(display_name)
+
+        #     if layer.startEditing():
+        #         add_ok, _ = provider.addFeatures(features)
+        #         if add_ok:
+        #             if layer.commitChanges():
+        #                 layer.updateExtents()
+        #                 project.addMapLayer(layer, False)
+        #                 node = layer_group.addLayer(layer)
+        #                 if node:
+        #                     node.setName(layer.name())
+        #                     layer.setCustomProperty("safeguarding_style_key", style_key)
+        #                     self._apply_style(layer, self.style_map)
+        #                     self.successfully_generated_layers.append(layer)
+        #                     added_layer = layer
+        #                 else:
+        #                     QgsMessageLog.logMessage(
+        #                         f"Warning: Memory layer '{display_name}' added to project but failed add node to group '{layer_group.name()}'.",
+        #                         plugin_tag,
+        #                         level=Qgis.Warning,
+        #                     )
+        #                     if project.mapLayer(layer.id()):
+        #                         project.removeMapLayer(layer.id())
+        #             else:
+        #                 QgsMessageLog.logMessage(
+        #                     f"Failed commit changes for memory layer '{display_name}'. Error: {layer.commitErrors()}",
+        #                     plugin_tag,
+        #                     level=Qgis.Warning,
+        #                 )
+        #                 layer.rollBack()
+        #         else:
+        #             QgsMessageLog.logMessage(
+        #                 f"Failed addFeatures for memory layer '{display_name}'.",
+        #                 plugin_tag,
+        #                 level=Qgis.Warning,
+        #             )
+        #             layer.rollBack()
+        #     else:
+        #         QgsMessageLog.logMessage(
+        #             f"Failed startEditing for memory layer '{display_name}'.",
+        #             plugin_tag,
+        #             level=Qgis.Warning,
+        #         )
+
+        # # --- FILE OUTPUT MODE ---
+        # elif self.output_mode == "file":
+        #     if not all(
+        #         [
+        #             self.output_path,
+        #             self.output_format_driver,
+        #             self.output_format_extension,
+        #         ]
+        #     ):
+        #         QgsMessageLog.logMessage(
+        #             f"Skipping file save for '{display_name}': Output path/driver/extension missing.",
+        #             plugin_tag,
+        #             level=Qgis.Critical,
+        #         )
+        #         return None
+
+        #     # --- Determine Actual Output Path and Layer Name Option ---
+        #     actual_layer_path = ""
+        #     # Sanitize the display name early for use in SHP filenames or GeoJSON
+        #     layer_name_option = self._sanitize_filename(display_name)
+
+        #     # self.output_path now contains the selected DIRECTORY path
+        #     selected_directory = self.output_path
+        #     # Ensure the selected directory exists (QgsFileWidget should ensure this, but double-check)
+        #     if not os.path.isdir(selected_directory):
+        #         QgsMessageLog.logMessage(
+        #             f"Selected output path is not a valid directory: '{selected_directory}'. Cannot save layer '{display_name}'.",
+        #             plugin_tag,
+        #             level=Qgis.Critical,
+        #         )
+        #         return None  # This check is important!
+
+        #     # Construct unique filename within the selected directory
+        #     actual_layer_path = os.path.join(
+        #         selected_directory, f"{layer_name_option}{self.output_format_extension}"
+        #     )
+        #     # layer_name_option is already the sanitized display name, used as filename base
+
+        #     # --- Create Temporary Layer for writing ---
+        #     temp_layer_uri = f"{geometry_type_str}?crs={target_crs_authid}&index=yes"
+        #     temp_layer = QgsVectorLayer(
+        #         temp_layer_uri, f"temp_{internal_name_base}", "memory"
+        #     )
+        #     if not temp_layer or not temp_layer.isValid():
+        #         QgsMessageLog.logMessage(
+        #             f"Failed create temporary memory layer for writing '{display_name}'.",
+        #             plugin_tag,
+        #             level=Qgis.Warning,
+        #         )
+        #         return None
+        #     temp_provider = temp_layer.dataProvider()
+        #     if not temp_provider or not temp_provider.addAttributes(fields):
+        #         QgsMessageLog.logMessage(
+        #             f"Failed setup provider/attributes for temp layer '{display_name}'.",
+        #             plugin_tag,
+        #             level=Qgis.Warning,
+        #         )
+        #         return None
+        #     temp_layer.updateFields()
+
+        #     add_temp_ok, _ = temp_provider.addFeatures(features)
+        #     if not add_temp_ok:
+        #         QgsMessageLog.logMessage(
+        #             f"Failed add features to temporary layer for '{display_name}'.",
+        #             plugin_tag,
+        #             level=Qgis.Warning,
+        #         )
+        #         return None
+
+        #     # --- Prepare Layer Options for writeAsVectorFormat ---
+        #     layer_options_list = []
+
+        #     # --- Call writeAsVectorFormat ---
+        #     returned_value_from_writer = QgsVectorFileWriter.writeAsVectorFormat(
+        #         temp_layer,
+        #         actual_layer_path,
+        #         "UTF-8",
+        #         temp_layer.crs(),
+        #         self.output_format_driver,
+        #         layerOptions=layer_options_list,
+        #     )
+
+        #     # --- Interpret Write Result ---
+        #     write_status_code_to_check: int = -1
+        #     error_message_from_writer: str = ""
+        #     if (
+        #         isinstance(returned_value_from_writer, tuple)
+        #         and len(returned_value_from_writer) > 0
+        #     ):
+        #         if isinstance(returned_value_from_writer[0], int):
+        #             write_status_code_to_check = returned_value_from_writer[0]
+        #         if len(returned_value_from_writer) > 1 and isinstance(
+        #             returned_value_from_writer[1], str
+        #         ):
+        #             error_message_from_writer = returned_value_from_writer[1]
+        #     elif isinstance(returned_value_from_writer, int):
+        #         write_status_code_to_check = returned_value_from_writer
+        #     else:
+        #         QgsMessageLog.logMessage(
+        #             f"Unexpected return type from writeAsVectorFormat for '{display_name}': {type(returned_value_from_writer)} value: {returned_value_from_writer}",
+        #             plugin_tag,
+        #             level=Qgis.Warning,
+        #         )
+
+        #     # --- Handle Write Result ---
+        #     if write_status_code_to_check == QgsVectorFileWriter.WriterError.NoError:
+
+        #         # --- Load Saved Layer Back ---
+        #         uri_to_load = actual_layer_path
+
+        #         loaded_layer = self.iface.addVectorLayer(
+        #             uri_to_load, display_name, "ogr"
+        #         )
+        #         if loaded_layer and loaded_layer.isValid():
+        #             root = project.layerTreeRoot()
+        #             loaded_node = root.findLayer(loaded_layer.id())
+        #             if loaded_node:
+        #                 cloned_node = loaded_node.clone()
+        #                 layer_group.insertChildNode(0, cloned_node)
+        #                 parent_of_loaded_node = loaded_node.parent()
+        #                 if parent_of_loaded_node:
+        #                     parent_of_loaded_node.removeChildNode(loaded_node)
+        #                 loaded_layer.setCustomProperty(
+        #                     "safeguarding_style_key", style_key
+        #                 )
+        #                 self._apply_style(loaded_layer, self.style_map)
+        #                 self.successfully_generated_layers.append(loaded_layer)
+        #                 added_layer = loaded_layer
+        #             else:
+        #                 QgsMessageLog.logMessage(
+        #                     f"Warning: Failed find layer node for saved layer '{display_name}'. Style/grouping may be incorrect.",
+        #                     plugin_tag,
+        #                     level=Qgis.Warning,
+        #                 )
+        #                 self.successfully_generated_layers.append(loaded_layer)
+        #                 added_layer = loaded_layer
+        #         else:
+        #             QgsMessageLog.logMessage(
+        #                 f"Error: Failed to load saved layer back: '{uri_to_load}'. Layer reported as written successfully, but load failed. Check file and QGIS logs.",
+        #                 plugin_tag,
+        #                 level=Qgis.Critical,
+        #             )
+        #     else:  # Write failed
+        #         error_type_str = f"WriterError (Code: {write_status_code_to_check})"
+        #         error_msg_detail = (
+        #             error_message_from_writer
+        #             if error_message_from_writer
+        #             else "Details may be in GDAL/OGR logs or QGIS Message Log Panel."
+        #         )
+
+        #         QgsMessageLog.logMessage(
+        #             f"CRITICAL: Failed to write layer '{display_name}' to '{actual_layer_path}'. "
+        #             f"Status: {error_type_str}. Details: '{error_msg_detail}'",
+        #             plugin_tag,
+        #             level=Qgis.Critical,
+        #         )
+        #         self.iface.messageBar().pushMessage(
+        #             self.tr("File Write Error"),
+        #             self.tr(
+        #                 "Failed to write '{layer}'. Error code: {code}. Check logs."
+        #             ).format(layer=display_name, code=write_status_code_to_check),
+        #             level=Qgis.Critical,
+        #             duration=10,
+        #         )
+        # else:
+        #     QgsMessageLog.logMessage(
+        #         f"Error: Unknown output_mode '{self.output_mode}' for layer '{display_name}'.",
+        #         plugin_tag,
+        #         level=Qgis.Critical,
+        #     )
+
+        # return added_layer
 
     def _apply_style(self, layer: QgsVectorLayer, style_map: Dict[str, str]):
         """
