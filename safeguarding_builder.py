@@ -68,6 +68,9 @@ GUIDELINE_C_RADIUS_B_M = 8000.0
 GUIDELINE_C_RADIUS_C_M = 13000.0
 GUIDELINE_C_BUFFER_SEGMENTS = 144  # Increase segments for smoother circles
 
+GUIDELINE_D_TURBINE_RADIUS_M = 30000.0
+GUIDELINE_D_BUFFER_SEGMENTS = 144  # Segments for smoother circle
+
 GUIDELINE_E_ZONE_PARAMS = {
     "A": {
         "ext": 1000.0,
@@ -598,6 +601,7 @@ class SafeguardingBuilder:
                 "WMZ A": "default_zone_polygon.qml",
                 "WMZ B": "default_zone_polygon.qml",
                 "WMZ C": "default_zone_polygon.qml",
+                "Wind Turbine Assessment Zone": "default_zone_polygon.qml",
                 "LCZ A": "default_zone_polygon.qml",
                 "LCZ B": "default_zone_polygon.qml",
                 "LCZ C": "default_zone_polygon.qml",
@@ -1300,11 +1304,20 @@ class SafeguardingBuilder:
                 )
 
             guideline_c_processed = False
+            guideline_d_processed = False
             guideline_g_processed = False
             if arp_point and guideline_groups.get("C"):
                 guideline_c_processed = self.process_guideline_c(
                     arp_point, icao_code, target_crs, guideline_groups["C"]
                 )
+
+            if arp_point and guideline_groups.get("D"):
+                guideline_d_processed = self.process_guideline_d(
+                    arp_point, icao_code, target_crs, guideline_groups["D"]
+                )
+            elif not arp_point and guideline_groups.get("D"):
+                QgsMessageLog.logMessage("Guideline D (Wind Turbine) skipped: ARP point not available.", plugin_tag, level=Qgis.Info)
+
             if cns_input_list and guideline_groups.get("G"):
                 try:
                     guideline_g_processed = self.process_guideline_g(
@@ -1376,6 +1389,7 @@ class SafeguardingBuilder:
                 met_layers_created_ok,
                 any_runway_base_data_ok,
                 guideline_c_processed,
+                guideline_d_processed,
                 guideline_g_processed,
                 any_guideline_processed_ok,
                 len(processed_runway_data_list),
@@ -1539,6 +1553,7 @@ class SafeguardingBuilder:
             "A": "Guideline A: Noise",
             "B": "Guideline B: Windshear",
             "C": "Guideline C: Wildlife",
+            "D": "Guideline D: Wind Turbine",
             "E": "Guideline E: Lighting",
             "F": "Guideline F: Airspace",
             "G": "Guideline G: CNS",
@@ -1612,7 +1627,7 @@ class SafeguardingBuilder:
             # Apply style if available
             if style_key in self.style_map:
                 style_filename = self.style_map[style_key]
-                style_path = os.path.join(self.plugin_dir, style_filename)
+                style_path = os.path.join(self.plugin_dir, "styles", style_filename)
                 if os.path.exists(style_path):
                     result, error_msg = layer.loadNamedStyle(style_path)
                     if result:
@@ -2144,6 +2159,7 @@ class SafeguardingBuilder:
         met_ok: bool,
         rwy_base_ok: bool,
         guide_c_ok: bool,
+        guide_d_ok: bool,
         guide_g_ok: bool,
         guide_rwy_ok: bool,
         processed_rwy_count: int,
@@ -6007,6 +6023,73 @@ class SafeguardingBuilder:
             QgsMessageLog.logMessage(
                 f"Error Guideline C: {e}", PLUGIN_TAG, level=Qgis.Critical
             )
+            return False
+        
+    def process_guideline_d(
+        self,
+        arp_point: QgsPointXY,
+        icao_code: str,
+        target_crs: QgsCoordinateReferenceSystem, # For consistency, though buffer uses geom's CRS
+        layer_group: QgsLayerTreeGroup
+    ) -> bool:
+        """Processes Guideline D: Wind Turbine Assessment Zone."""
+        plugin_tag = PLUGIN_TAG
+        if not all([arp_point, icao_code, layer_group]):
+            QgsMessageLog.logMessage("Guideline D (Wind Turbine) skipped: Missing ARP point, ICAO code, or layer group.", plugin_tag, level=Qgis.Warning)
+            return False
+
+        # Constants are defined at the top of the file
+        # GUIDELINE_D_TURBINE_RADIUS_M
+        # GUIDELINE_D_BUFFER_SEGMENTS
+
+        try:
+            arp_geom = QgsGeometry.fromPointXY(arp_point)
+            if arp_geom.isNull():
+                QgsMessageLog.logMessage("Guideline D (Wind Turbine) skipped: ARP geometry is null.", plugin_tag, level=Qgis.Warning)
+                return False
+
+            turbine_zone_geom = arp_geom.buffer(GUIDELINE_D_TURBINE_RADIUS_M, GUIDELINE_D_BUFFER_SEGMENTS)
+            if not turbine_zone_geom or turbine_zone_geom.isEmpty():
+                QgsMessageLog.logMessage("Guideline D: Failed to create turbine zone buffer.", plugin_tag, level=Qgis.Warning)
+                return False
+
+            valid_geom = turbine_zone_geom.makeValid()
+            if not valid_geom or not valid_geom.isGeosValid() or valid_geom.isEmpty():
+                QgsMessageLog.logMessage("Guideline D: Turbine zone geometry invalid after makeValid.", plugin_tag, level=Qgis.Warning)
+                return False
+
+            fields = QgsFields([
+                QgsField("icao_code", QVariant.String, self.tr("ICAO Code"), 10),
+                QgsField("description", QVariant.String, self.tr("Description"), 100),
+                QgsField("radius_km", QVariant.Double, self.tr("Radius (km)"), 8, 2),
+                QgsField("ref_guideline", QVariant.String, self.tr("Guideline Ref."), 50)
+            ])
+
+            feature = QgsFeature(fields)
+            feature.setGeometry(valid_geom)
+            feature.setAttributes([
+                icao_code,
+                self.tr("Wind Turbine Assessment Zone (30km Radius)"),
+                GUIDELINE_D_TURBINE_RADIUS_M / 1000.0,
+                self.tr("NASF Guideline D (Draft)") # Example reference
+            ])
+
+            layer_display_name = f"{icao_code} {self.tr('Wind Turbine Assessment Zone')}"
+            internal_name_base = f"Guideline_D_TurbineZone_{icao_code}"
+            style_key = "Wind Turbine Assessment Zone" # Matches style_map key
+
+            layer_created = self._create_and_add_layer(
+                "Polygon",
+                internal_name_base,
+                layer_display_name,
+                fields,
+                [feature],
+                layer_group,
+                style_key
+            )
+            return layer_created is not None
+        except Exception as e:
+            QgsMessageLog.logMessage(f"Error processing Guideline D (Wind Turbine): {e}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
             return False
 
     def process_guideline_e(
