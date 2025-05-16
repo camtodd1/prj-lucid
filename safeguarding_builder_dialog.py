@@ -51,7 +51,7 @@ FORM_CLASS, _ = uic.loadUiType(
 DIALOG_LOG_TAG = "SafeguardingBuilderDialog"
 
 OUTPUT_FORMATS = {
-    # "GeoPackage": ("GPKG", "GeoPackage", ".gpkg"),
+    "GeoPackage": ("GPKG", "GeoPackage", ".gpkg"),
     "ESRI Shapefile": ("ESRI Shapefile", "ESRI Shapefile", ".shp"),
     "GeoJSON": ("GeoJSON", "GeoJSON", ".geojson"),
 }

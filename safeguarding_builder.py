@@ -1569,7 +1569,7 @@ class SafeguardingBuilder:
                     f"Failed create group: {name}", PLUGIN_TAG, level=Qgis.Warning
                 )
         return guideline_groups
-
+    
     def _sanitize_filename(self, name: str, replace_char: str = "_") -> str:
         """Removes or replaces characters invalid for filenames."""
         # Remove leading/trailing whitespace
@@ -1585,7 +1585,9 @@ class SafeguardingBuilder:
         # if len(name) > max_len: name = name[:max_len].strip(replace_char)
         if not name:
             name = "unnamed_layer"  # Fallback if sanitization results in empty string
-        return name
+
+        return name.rstrip('.') or "unnamed_layer"
+
 
     def _create_and_add_layer(
         self,
@@ -1647,10 +1649,13 @@ class SafeguardingBuilder:
                         level=Qgis.Critical
                     )
                     return layer
+                
+                QgsMessageLog.logMessage(f"display_name = '{display_name}'", plugin_tag, Qgis.Info)
 
                 # Sanitize filename and construct full path
-                safe_name = self._sanitize_filename(display_name)
-                full_path = os.path.join(self.output_path, f"{safe_name}.{self.output_format_extension}")
+                name_without_ext = os.path.splitext(display_name)[0]
+                safe_name = self._sanitize_filename(name_without_ext)
+                full_path = os.path.join(self.output_path, f"{safe_name}{self.output_format_extension}")
 
                 temp_layer = QgsVectorLayer(uri, f"temp_{internal_name_base}", "memory")
                 temp_layer.dataProvider().addAttributes(fields)
@@ -4679,10 +4684,6 @@ class SafeguardingBuilder:
                         found_arp_point_layer = lyr
                         break  # Found a suitable point layer
 
-                # --- TEMPORARY BYPASS FOR GPKG ARP POLYGON ISSUE ---
-                OHS_GENERATION_BYPASSED_DUE_TO_ARP_GEOM = False  # Flag
-                # --- END TEMPORARY BYPASS ---
-
                 if found_arp_point_layer:
                     arp_feat = next(found_arp_point_layer.getFeatures(), None)
                     if (
@@ -4732,19 +4733,7 @@ class SafeguardingBuilder:
                                 PLUGIN_TAG,
                                 level=Qgis.Warning,
                             )
-                            # --- TEMPORARY BYPASS FOR GPKG ARP POLYGON ISSUE ---
-                            if (
-                                self.output_mode == "file"
-                                and self.output_format_extension.lower() == ".gpkg"
-                            ):
-                                QgsMessageLog.logMessage(
-                                    "TEMP BYPASS: GPKG output detected, and ARP geom is not point. Skipping OHS point extraction. OHS will likely fail or be incorrect.",
-                                    PLUGIN_TAG,
-                                    Qgis.Warning,
-                                )
-                                OHS_GENERATION_BYPASSED_DUE_TO_ARP_GEOM = True
-                                arp_point_xy = None  # Ensure it's None so OHS block is skipped cleanly
-                            # --- END TEMPORARY BYPASS ---
+
                     else:
                         QgsMessageLog.logMessage(
                             f"ARP layer '{found_arp_point_layer.name()}' found, but no valid features/geometry for OHS.",
@@ -4758,18 +4747,9 @@ class SafeguardingBuilder:
                         level=Qgis.Warning,
                     )
 
-                # The rest of the OHS logic depends on arp_point_xy being valid
-                # --- TEMPORARY BYPASS CHECK ---
-                if OHS_GENERATION_BYPASSED_DUE_TO_ARP_GEOM:
-                    QgsMessageLog.logMessage(
-                        "OHS generation for GPKG bypassed due to ARP geometry issue.",
-                        PLUGIN_TAG,
-                        level=Qgis.Info,
-                    )
-                # --- END TEMPORARY BYPASS CHECK ---
-                elif (
+                if (
                     arp_point_xy
-                ):  # Only proceed if arp_point_xy was successfully set AND NOT BYPASSED
+                ):  # Only proceed if arp_point_xy was successfully set
                     try:
                         center_geom = QgsGeometry.fromPointXY(arp_point_xy)
                         ohs_full_circle_geom = center_geom.buffer(
