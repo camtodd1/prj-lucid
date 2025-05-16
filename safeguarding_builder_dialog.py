@@ -50,7 +50,6 @@ FORM_CLASS, _ = uic.loadUiType(
 # Plugin-specific constant for logging within this module
 DIALOG_LOG_TAG = "SafeguardingBuilderDialog"
 
-# ### NEW: Supported output formats (driver name for QgsVectorFileWriter, user-friendly name, default extension)
 OUTPUT_FORMATS = {
     # "GeoPackage": ("GPKG", "GeoPackage", ".gpkg"),
     "ESRI Shapefile": ("ESRI Shapefile", "ESRI Shapefile", ".shp"),
@@ -88,7 +87,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             QtGui.QDoubleValidator.Notation.StandardNotation
         )
         self.coord_validator = coord_validator
-        # <<< NEW/REUSED >>> Validator for non-negative distances (Displaced, Pre-Threshold Area, Shoulder)
         self.distance_validator = QtGui.QDoubleValidator(
             0.0, 9999.9, 1, self
         )  # Min 0.0, Max 9999.9, 1 decimal
@@ -212,7 +210,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.distance_validator
         )  # Use distance validator
 
-        # <<< NEW >>> Pre-threshold Area LineEdits
         self.thr_pre_area_1_le = QtWidgets.QLineEdit()
         self.thr_pre_area_1_le.setObjectName(f"lineEdit_thr_pre_area_1_{self.index}")
         self.thr_pre_area_1_le.setPlaceholderText("e.g., 60")
@@ -435,10 +432,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.thr_displaced_2_le.textChanged.connect(self.inputChanged.emit)
         self.thr_pre_area_1_le.textChanged.connect(
             self.inputChanged.emit
-        )  # <<< NEW FIELD >>>
+        )
         self.thr_pre_area_2_le.textChanged.connect(
             self.inputChanged.emit
-        )  # <<< NEW FIELD >>>
+        )
         self.width_le.textChanged.connect(self.inputChanged.emit)
         self.shoulder_le.textChanged.connect(self.inputChanged.emit)
         self.arc_num_combo.currentIndexChanged.connect(self.inputChanged.emit)
@@ -475,8 +472,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "thr_elev_2": self.thr_elev_2_le.text(),
             "thr_displaced_1": self.thr_displaced_1_le.text(),
             "thr_displaced_2": self.thr_displaced_2_le.text(),
-            "thr_pre_area_1": self.thr_pre_area_1_le.text(),  # <<< NEW FIELD >>>
-            "thr_pre_area_2": self.thr_pre_area_2_le.text(),  # <<< NEW FIELD >>>
+            "thr_pre_area_1": self.thr_pre_area_1_le.text(),
+            "thr_pre_area_2": self.thr_pre_area_2_le.text(),
             "width": self.width_le.text(),
             "shoulder": self.shoulder_le.text(),
             "arc_num": self.arc_num_combo.currentData(),
@@ -500,7 +497,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.thr_displaced_1_le,
             self.thr_displaced_2_le,
             self.thr_pre_area_1_le,
-            self.thr_pre_area_2_le,  # <<< NEW FIELDS >>>
+            self.thr_pre_area_2_le,
             self.width_le,
             self.shoulder_le,
             self.arc_num_combo,
@@ -538,25 +535,28 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             if self.thr_pre_area_1_le:
                 self.thr_pre_area_1_le.setText(
                     data.get("thr_pre_area_1", "")
-                )  # <<< NEW FIELD >>>
+                )
             if self.thr_pre_area_2_le:
                 self.thr_pre_area_2_le.setText(
                     data.get("thr_pre_area_2", "")
-                )  # <<< NEW FIELD >>>
+                )
             if self.width_le:
                 self.width_le.setText(data.get("width", ""))
             if self.shoulder_le:
                 self.shoulder_le.setText(data.get("shoulder", ""))
+            
             if self.arc_num_combo:
-                idx = self.arc_num_combo.findText(
-                    data.get("arc_num", ""), QtCore.Qt.MatchFlag.MatchFixedString
-                )
+                arc_num_value_to_find = data.get("arc_num", "")
+                # Use default flags for findData, which include MatchExactly and MatchCaseSensitive
+                idx = self.arc_num_combo.findData(arc_num_value_to_find) 
                 self.arc_num_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            
             if self.arc_let_combo:
-                idx = self.arc_let_combo.findText(
-                    data.get("arc_let", ""), QtCore.Qt.MatchFlag.MatchFixedString
-                )
+                arc_let_value_to_find = data.get("arc_let", "")
+                # Use default flags for findData, which include MatchExactly and MatchCaseSensitive
+                idx = self.arc_let_combo.findData(arc_let_value_to_find) 
                 self.arc_let_combo.setCurrentIndex(idx if idx >= 0 else 0)
+            
             if self.type1_combo:
                 idx = self.type1_combo.findText(
                     data.get("type1", ""), QtCore.Qt.MatchFlag.MatchFixedString
@@ -608,7 +608,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.thr_displaced_1_le,
             self.thr_displaced_2_le,
             self.thr_pre_area_1_le,
-            self.thr_pre_area_2_le,  # <<< NEW FIELDS >>>
+            self.thr_pre_area_2_le,
             self.width_le,
             self.shoulder_le,
             self.arc_num_combo,
@@ -641,9 +641,9 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             if self.thr_displaced_2_le:
                 self.thr_displaced_2_le.clear()
             if self.thr_pre_area_1_le:
-                self.thr_pre_area_1_le.clear()  # <<< NEW FIELD >>>
+                self.thr_pre_area_1_le.clear()
             if self.thr_pre_area_2_le:
-                self.thr_pre_area_2_le.clear()  # <<< NEW FIELD >>>
+                self.thr_pre_area_2_le.clear()
             if self.width_le:
                 self.width_le.clear()
             if self.shoulder_le:
@@ -749,9 +749,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
 
         self._setup_cns_manual_entry()
 
-        # ### NEW: Setup for output options ###
         self._setup_output_options_ui_connections()
-        # ### END NEW ###
 
         if self.scroll_area_layout:
             self.add_runway_group()  # Add the first group
@@ -764,20 +762,13 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
 
         QtCore.QTimer.singleShot(0, self._update_dialog_height)
 
-    ### NEW: Method to setup output options UI and connections ###
+    ### Method to setup output options UI and connections ###
     def _setup_output_options_ui_connections(self):
         """
         Sets up the UI elements related to output options (memory vs. file).
         Assumes widgets like self.radioMemoryOutput, self.radioFileOutput,
         self.fileWidgetOutputPath, self.comboOutputFormat exist from the .ui file.
         """
-        # --- Get references to the new UI elements ---
-        # These should be attributes after self.setupUi() if named correctly in Qt Designer
-        # Example object names:
-        # self.radioMemoryOutput (QRadioButton)
-        # self.radioFileOutput (QRadioButton)
-        # self.fileWidgetOutputPath (QgsFileWidget)
-        # self.comboOutputFormat (QComboBox)
 
         missing_widgets = []
         if not hasattr(self, "radioMemoryOutput"):
@@ -872,9 +863,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         else:
             self.fileWidgetOutputPath.setFilter(self.tr("All files (*.*)"))
 
-    ### END NEW ###
-
-    # --- Initialization Helpers (no changes needed here) ---
+    # --- Initialization Helpers ---
     def _setup_arp_validators(
         self,
         coord_validator: QtGui.QDoubleValidator,
@@ -1013,7 +1002,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             ]
         )
 
-    # --- Runway Group Management (no changes needed here) ---
+    # --- Runway Group Management ---
     def _get_next_runway_id(self) -> int:
         """Generates the next unique ID for a new runway group."""
         self._runway_id_counter += 1
@@ -1063,7 +1052,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             rwy_suffix = input_data.get("suffix", "")
             # Initialize placeholders for calculated values
             full_desig_1_str, full_desig_2_str = "??", "??"
-            compact_desig_1, compact_desig_2 = "??", "??"  # <<< NEW: For compact format
+            compact_desig_1, compact_desig_2 = "??", "??"
             type1_label_str, type2_label_str = (
                 calculation_results["type1_label_text"],
                 calculation_results["type2_label_text"],
@@ -1121,13 +1110,13 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             calculation_results.update(
                 {
                     "reciprocal_desig_full": full_desig_2_str,  # Used for the header label above coords
-                    "runway_name": rwy_name_str,  # <<< Uses the newly formatted string >>>
+                    "runway_name": rwy_name_str,
                     "type1_label_text": type1_label_str,
                     "type2_label_text": type2_label_str,
                 }
             )
 
-            # Distance & Azimuth (calculation logic remains the same)
+            # Distance & Azimuth calculation
             thr_east_str = input_data.get("thr_easting")
             thr_north_str = input_data.get("thr_northing")
             rec_thr_east_str = input_data.get("rec_easting")
@@ -1183,7 +1172,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         # --- Update the group's display labels ---
         group_widget.update_display_labels(
             calculation_results
-        )  # This will now use the correctly formatted "runway_name"
+        )
 
     def add_runway_group(self):
         """Creates and adds a new RunwayWidgetGroup instance."""
@@ -1229,7 +1218,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             return
 
         group_to_remove = self._runway_groups[runway_index_to_remove]
-        runway_display_name = f"Runway {runway_index_to_remove}"  # Default
+        runway_display_name = f"Runway {runway_index_to_remove}"
         try:
             name = group_to_remove.rwy_name_lbl.text()
             placeholders = [
@@ -1286,7 +1275,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         """Adjusts the dialog height to fit its contents."""
         QtCore.QTimer.singleShot(0, self.adjustSize)
 
-    # --- CNS Manual Entry Methods (no changes needed here) ---
+    # --- CNS Manual Entry Methods ---
     def add_cns_row(self):
         """Adds a new, empty row to the CNS facilities table."""
         cns_table = getattr(
@@ -1466,10 +1455,10 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                     validated_runway.setdefault("thr_displaced_2", None)
                     validated_runway.setdefault(
                         "thr_pre_area_1", None
-                    )  # <<< NEW KEY CHECK >>>
+                    )
                     validated_runway.setdefault(
                         "thr_pre_area_2", None
-                    )  # <<< NEW KEY CHECK >>>
+                    )
                     runway_data_list.append(validated_runway)
                 else:
                     validation_ok = False  # Error messages added by validator
@@ -1553,18 +1542,12 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                 )
                 final_data["output_format_driver"] = driver_name
                 final_data["output_format_extension"] = extension
-                # The block that adjusted output_path based on extension is removed,
-                # as self.output_path is now a directory, not a full file path.
-                # The backend (_create_and_add_layer) now constructs the full file path.
 
         else:
             validation_ok = False
             error_messages.append("No output mode selected (memory or file).")
 
         # --- Final Validation Check and Return ---
-        # This part should be OUTSIDE the 'Output Options' if/elif/else block,
-        # but still within get_all_input_data before returning.
-        # The 'validation_ok' flag and 'error_messages' list are accumulated throughout.
         if not validation_ok:
             QMessageBox.critical(
                 self,
@@ -1574,7 +1557,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             )
             return None
 
-        # Add dissolve option (this was correctly placed)
+        # Add dissolve option
         if hasattr(self, "checkBox_dissolveLayers") and self.checkBox_dissolveLayers:
             final_data["dissolve_output"] = self.checkBox_dissolveLayers.isChecked()
         else:
@@ -1582,7 +1565,6 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
 
         return final_data
 
-    # <<< UPDATED >>>
     def _validate_runway_data(
         self, index: int, inputs: Dict[str, str], errors: List[str]
     ) -> Optional[Dict[str, Any]]:
@@ -1692,7 +1674,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             current_errors += 1
             validated["thr_displaced_2"] = None
 
-        # <<< NEW VALIDATION >>> Pre-threshold Area (Optional, non-negative)
+        # Pre-threshold Area validation (Optional, non-negative)
         try:  # Primary Pre-threshold Area
             pre_area1_str = inputs.get("thr_pre_area_1", "").strip()
             if pre_area1_str:
@@ -2061,8 +2043,6 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         return cns_facilities_data
 
     # --- Action Button Handlers ---
-    # <<< UPDATED load_input_data for compatibility >>>
-    # clear_all_inputs and save_input_data need no changes here
 
     def clear_all_inputs(self, confirm: bool = True) -> None:
         """Clears all inputs, removes all runways, adds one back, clears CNS."""
@@ -2342,12 +2322,11 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                 )
                 if first_group:
                     first_runway_data = loaded_runways_list[0]
-                    # <<< NEW COMPATIBILITY >>> Ensure new keys exist with default ""
                     first_runway_data.setdefault("thr_pre_area_1", "")
                     first_runway_data.setdefault("thr_pre_area_2", "")
                     first_runway_data.setdefault(
                         "thr_displaced_1", ""
-                    )  # Also ensure displaced keys
+                    )
                     first_runway_data.setdefault("thr_displaced_2", "")
                     first_group.set_input_data(first_runway_data)
                 else:
@@ -2363,12 +2342,11 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                         new_index = self._runway_id_counter
                         new_group = self._runway_groups.get(new_index)
                         if new_group:
-                            # <<< NEW COMPATIBILITY >>> Ensure new keys exist with default ""
                             runway_data_item.setdefault("thr_pre_area_1", "")
                             runway_data_item.setdefault("thr_pre_area_2", "")
                             runway_data_item.setdefault(
                                 "thr_displaced_1", ""
-                            )  # Also ensure displaced keys
+                            )
                             runway_data_item.setdefault("thr_displaced_2", "")
                             new_group.set_input_data(runway_data_item)
                         else:
