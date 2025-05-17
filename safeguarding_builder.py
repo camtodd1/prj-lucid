@@ -75,40 +75,40 @@ GUIDELINE_E_ZONE_PARAMS = {
     "A": {
         "ext": 1000.0,
         "half_w": 300.0,
-        "desc": "Lighting Zone A (0-1km ext, 300m HW)",
+        "desc": "Lighting Control Zone A",
         "max_intensity": "0cd",
     },
     "B": {
         "ext": 2000.0,
         "half_w": 450.0,
-        "desc": "Lighting Zone B (1-2km ext, 450m HW)",
+        "desc": "Lighting Control Zone B",
         "max_intensity": "50cd",
     },
     "C": {
         "ext": 3000.0,
         "half_w": 600.0,
-        "desc": "Lighting Zone C (2-3km ext, 600m HW)",
+        "desc": "Lighting Control Zone C",
         "max_intensity": "150cd",
     },
     "D": {
         "ext": 4500.0,
         "half_w": 750.0,
-        "desc": "Lighting Zone D (3-4.5km ext, 750m HW)",
+        "desc": "Lighting Control Zone D",
         "max_intensity": "450cd",
     },
 }
 GUIDELINE_E_ZONE_ORDER = ["A", "B", "C", "D"]
-MOS_REF_GUIDELINE_E = "MOS 139 9.144(2)"
+MOS_REF_GUIDELINE_E = "MOS 9.144(2)"
 NASF_REF_GUIDELINE_E = "NASF Guideline E"
 
 GUIDELINE_I_PSA_LENGTH = 1000.0
 GUIDELINE_I_PSA_INNER_WIDTH = 350.0
 GUIDELINE_I_PSA_OUTER_WIDTH = 250.0
 GUIDELINE_I_MOS_REF_VAL = "n/a"
-GUIDELINE_I_NASF_REF_VAL = "Guideline I"
+GUIDELINE_I_NASF_REF_VAL = "NASF Guideline I"
 
-RAOA_MOS_REF_VAL = "MOS 139 6.20"
-MOS_REF_TAXIWAY_SEPARATION = "MOS 139 6.53"
+RAOA_MOS_REF_VAL = "MOS 6.20"
+MOS_REF_TAXIWAY_SEPARATION = "MOS 6.53"
 
 CONICAL_CONTOUR_INTERVAL = 10.0  # Height interval in meters for conical surface
 APPROACH_CONTOUR_INTERVAL = 10.0  # Height interval in meters for approach surfaces
@@ -1034,12 +1034,6 @@ class SafeguardingBuilder:
                                                         None  # Or some default if neither is available
                                                     )
 
-                                                # wid_m = (OverallStripWidth - GradedStripWidth) / 2
-                                                # This represents the width of ONE SIDE of the flyover area.
-                                                # If the `wid_m` field in `common_fields` is meant to be the total width
-                                                # of the element, then this would be (OverallStripWidth - GradedStripWidth).
-                                                # Given the context of other elements, wid_m usually refers to the total width of that element.
-                                                # Let's assume wid_m for FlyoverStrip should be the width of one of the side bands.
                                                 if (
                                                     graded_strip_attrs
                                                     and overall_strip_attrs
@@ -1076,7 +1070,6 @@ class SafeguardingBuilder:
                                                         )
                                                 else:
                                                     flyover_attrs["wid_m"] = None
-                                                # --- END MODIFIED ATTRIBUTE CALCULATION ---
 
                                                 for (
                                                     field_name,
@@ -2256,15 +2249,14 @@ class SafeguardingBuilder:
     ) -> Optional[QgsVectorLayer]:  # Added elevation param
         """Creates the ARP point layer using the helper."""
         # Add Elevation field
-        fields = QgsFields(
-            [
-                QgsField("icao_code", QVariant.String),
-                QgsField("name", QVariant.String),
-                QgsField("coord_east", QVariant.Double),
-                QgsField("coord_north", QVariant.Double),
-                QgsField("elev_m", QVariant.Double, "Elevation (AMSL)", 10, 2),  # Added
-            ]
-        )
+        fields = QgsFields()
+        fields.append(QgsField("icao_code", QVariant.String))
+        fields.append(QgsField("desc", QVariant.String))
+        fields.append(QgsField("coord_east", QVariant.Double))
+        fields.append(QgsField("coord_north", QVariant.Double))
+        fields.append(QgsField("elev_m", QVariant.Double, "Elevation (AMSL)", 10, 2))
+        # fields.append(QgsField("red", QVariant.Double, "Reference Elevation Datum", 10, 2))
+        
         try:
             # Attempt to create geometry with Z value if elevation provided
             arp_geom: Optional[QgsGeometry] = None
@@ -2294,7 +2286,7 @@ class SafeguardingBuilder:
             north_attr = arp_north if arp_north is not None else arp_point.y()
             # Set attributes including elevation
             feature.setAttributes(
-                [icao_code, f"{icao_code} ARP", east_attr, north_attr, arp_elevation]
+                [icao_code, f"Aerodrome Reference Point", east_attr, north_attr, arp_elevation,]
             )
             return self._create_and_add_layer(
                 "Point",
@@ -2761,14 +2753,14 @@ class SafeguardingBuilder:
             results.update(
                 {
                     "extension_length": 30.0,
-                    "mos_extension_length_ref": "MOS 6.2.5.6(a) NI Code 1/2",
+                    "mos_extension_length_ref": "MOS 6.16(a) NI Code 1/2",
                 }
             )
         else:  # Includes NPA, PA, or NI Code 3/4
             results.update(
                 {
                     "extension_length": 60.0,
-                    "mos_extension_length_ref": "MOS 6.2.5.6(b) Other",
+                    "mos_extension_length_ref": "MOS 6.16(b)",
                 }
             )
 
@@ -2786,7 +2778,7 @@ class SafeguardingBuilder:
             "required": False,
             "width": None,
             "length": None,
-            "mos_applicability_ref": "MOS 6.2.6.1/2",
+            # "mos_applicability_ref": "MOS 6.2.6.1/2",
             "mos_width_ref": "N/A",
             "mos_length_ref": "N/A",
         }
@@ -3357,7 +3349,7 @@ class SafeguardingBuilder:
                     if landing_pavement_geom:
                         landing_length = rwy_params["length"]
                         physical_refs = ols_dimensions.get_physical_refs()
-                        pavement_ref = physical_refs.get("pavement", "MOS 139 6.2.3")
+                        pavement_ref = physical_refs.get("pavement", "MOS 6.2.3")
                         # Use correct field names: 'rwy', 'desc', 'ref_mos'
                         attributes = {
                             "rwy": runway_name,
@@ -3423,7 +3415,7 @@ class SafeguardingBuilder:
                         if geom:
                             physical_refs = ols_dimensions.get_physical_refs()
                             pavement_ref = physical_refs.get(
-                                "pavement", "MOS 139 6.2.3"
+                                "pavement", "MOS 6.04"
                             )
                             # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
                             attributes = {
@@ -3474,7 +3466,7 @@ class SafeguardingBuilder:
                         if geom:
                             physical_refs = ols_dimensions.get_physical_refs()
                             pavement_ref = physical_refs.get(
-                                "pavement", "MOS 139 6.2.3"
+                                "pavement", "MOS 6.04"
                             )
                             # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
                             attributes = {
@@ -3532,7 +3524,7 @@ class SafeguardingBuilder:
                             "desc": f"Pre-Threshold Area ({primary_desig})",
                             "wid_m": runway_width,
                             "len_m": round(pre_area_len_1, 3),
-                            "ref_mos": "N/A",
+                            "ref_mos": "MOS 8.16",
                             "end_desig": primary_desig,
                         }
                         pre_threshold_area_features.append(
@@ -3563,7 +3555,7 @@ class SafeguardingBuilder:
                             "desc": f"Pre-Threshold Area ({reciprocal_desig})",
                             "wid_m": runway_width,
                             "len_m": round(pre_area_len_2, 3),
-                            "ref_mos": "N/A",
+                            "ref_mos": "MOS 8.16",
                             "end_desig": reciprocal_desig,
                         }
                         pre_threshold_area_features.append(
@@ -3584,7 +3576,7 @@ class SafeguardingBuilder:
         reciprocal_desig = (
             runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
         )
-        marking_ref = "Marking Standard (Verify)"
+        marking_ref = "MOS 8.26"
 
         if disp_thr_1 > 1e-6:
             try:
@@ -3664,7 +3656,7 @@ class SafeguardingBuilder:
                         "desc": "Pre-Threshold Area Marking",
                         "end_desig": primary_desig,
                         "len_m": round(line_len, 3) if line_len else None,
-                        "ref_mos": marking_ref,
+                        "ref_mos": "MOS 8.16(2)",
                     }
                     pre_area_marking_features.append(
                         ("PreThresholdAreaMarking", line_geom, attributes)
@@ -3698,7 +3690,7 @@ class SafeguardingBuilder:
                         "desc": "Pre-Threshold Area Marking",
                         "end_desig": reciprocal_desig,
                         "len_m": round(line_len, 3) if line_len else None,
-                        "ref_mos": marking_ref,
+                        "ref_mos": "MOS 8.16(2)",
                     }
                     pre_area_marking_features.append(
                         ("PreThresholdAreaMarking", line_geom, attributes)
@@ -3758,7 +3750,7 @@ class SafeguardingBuilder:
                 )
 
                 physical_refs = ols_dimensions.get_physical_refs()
-                shoulder_ref = physical_refs.get("shoulder", "MOS 139 6.2.4")
+                shoulder_ref = physical_refs.get("shoulder", "MOS 6.2.4")
                 # Use correct field names: 'rwy', 'desc', 'ref_mos'
                 shoulder_attrs = {
                     "rwy": runway_name,
@@ -4378,9 +4370,9 @@ class SafeguardingBuilder:
                     highest_arc_num, highest_precision_type_str, "IHS"
                 )
                 ref_text = (
-                    ihs_ref_params.get("ref", "MOS 139 8.2.18")
+                    ihs_ref_params.get("ref", "MOS 8.2.18")
                     if ihs_ref_params
-                    else "MOS 139 8.2.18"
+                    else "MOS 8.2.18"
                 )
                 fields = self._get_ols_fields("IHS")
                 feature = QgsFeature(fields)
@@ -4425,7 +4417,7 @@ class SafeguardingBuilder:
             if conical_params:
                 height_extent_agl = conical_params.get("height_extent_agl")
                 slope = conical_params.get("slope")
-                ref = conical_params.get("ref", "MOS 139 8.2.19")
+                ref = conical_params.get("ref", "MOS 8.2.19")
                 if (
                     slope is not None
                     and slope > 0
@@ -4549,7 +4541,7 @@ class SafeguardingBuilder:
                 contour_features: List[QgsFeature] = []
                 # ... (contour loop logic as before, no DEBUG logs needed inside normally) ...
                 previous_contour_geom = QgsGeometry(ihs_base_geom)
-                ref = conical_params.get("ref", "MOS 139 8.2.19")
+                ref = conical_params.get("ref", "MOS 8.2.19")
                 if IHS_ELEVATION_AMSL % CONICAL_CONTOUR_INTERVAL == 0:
                     first_contour_elev_amsl = (
                         IHS_ELEVATION_AMSL + CONICAL_CONTOUR_INTERVAL
@@ -4660,7 +4652,7 @@ class SafeguardingBuilder:
         if ohs_params:
             radius = ohs_params.get("radius")
             height_agl = ohs_params.get("height_agl")
-            ref = ohs_params.get("ref", "MOS 139 8.2.20")
+            ref = ohs_params.get("ref", "MOS 8.2.20")
             QgsMessageLog.logMessage(
                 f"OHS required (Code {highest_arc_num}, Type {highest_precision_type_str}). Radius={radius}m, Height={height_agl}m AGL.",
                 plugin_tag,
@@ -5385,7 +5377,7 @@ class SafeguardingBuilder:
                 )
                 continue
             transitional_slope = trans_params["slope"]
-            transitional_ref = trans_params.get("ref", "MOS 139 8.2.17 (Verify)")
+            transitional_ref = trans_params.get("ref", "MOS 8.2.17 (Verify)")
 
             # --- Recalculate Overall Strip Geometry (keep logic) ---
             strip_overall_width = calculated_strip_dims.get("overall_width")
@@ -5665,20 +5657,23 @@ class SafeguardingBuilder:
 
         # Layer 1: Point
         try:
-            fields = QgsFields(
-                [
-                    QgsField("name", QVariant.String),
-                    QgsField("coord_east", QVariant.Double),
-                    QgsField("coord_north", QVariant.Double),
-                ]
-            )
-            feat = QgsFeature(fields)
+            # Build a QgsFields object, not a list
+            fields = QgsFields()
+            fields.append(QgsField("desc", QVariant.String))
+            fields.append(QgsField("coord_east", QVariant.Double))
+            fields.append(QgsField("coord_north", QVariant.Double))
+            fields.append(QgsField("elev_m", QVariant.Double))
+            fields.append(QgsField("ref_mos", QVariant.String, "MOS Reference", 20))
+
+            feat = QgsFeature(fields)  # Pass QgsFields, not list!
             feat.setGeometry(met_geom_target_crs)
             feat.setAttributes(
                 [
                     self.tr("MET Station Location"),
                     met_point_proj_crs.x(),
                     met_point_proj_crs.y(),
+                    0.0,  # Elevation not provided, set to 0.0
+                    "MOS 19.17",
                 ]
             )
             if self._create_and_add_layer(
@@ -5705,13 +5700,16 @@ class SafeguardingBuilder:
                 enclosure_geom = geom
                 fields = QgsFields(
                     [
-                        QgsField("type", QVariant.String),
+                        QgsField("desc", QVariant.String),
+                        QgsField("coord_east", QVariant.Double),
+                        QgsField("coord_north", QVariant.Double),
                         QgsField("side_m", QVariant.Double),
+                        QgsField("ref_mos", QVariant.String, "MOS Reference", 20),
                     ]
                 )
                 feat = QgsFeature(fields)
                 feat.setGeometry(geom)
-                feat.setAttributes(["Enclosure", side])
+                feat.setAttributes(["MET Instrument Enclosure", met_point_proj_crs.x(), met_point_proj_crs.y(), side, "MOS 19.18(2)(a)"])
             if self._create_and_add_layer(
                 "Polygon",
                 f"met_enc_{icao_code}",
@@ -5735,13 +5733,16 @@ class SafeguardingBuilder:
             if geom:
                 fields = QgsFields(
                     [
-                        QgsField("type", QVariant.String),
+                        QgsField("desc", QVariant.String),
+                        QgsField("coord_east", QVariant.Double),
+                        QgsField("coord_north", QVariant.Double),
                         QgsField("side_m", QVariant.Double),
+                        QgsField("ref_mos", QVariant.String, "MOS Reference", 20),
                     ]
                 )
                 feat = QgsFeature(fields)
                 feat.setGeometry(geom)
-                feat.setAttributes(["30m Buffer", side])
+                feat.setAttributes(["MET Buffer Zone", met_point_proj_crs.x(), met_point_proj_crs.y(), side, "MOS 19.18(2)(a)"])
             if self._create_and_add_layer(
                 "Polygon",
                 f"met_buf_{icao_code}",
@@ -5771,13 +5772,16 @@ class SafeguardingBuilder:
                 if buffered_geom and not buffered_geom.isEmpty():
                     fields = QgsFields(
                         [
-                            QgsField("type", QVariant.String),
+                            QgsField("desc", QVariant.String),
+                            QgsField("coord_east", QVariant.Double),
+                            QgsField("coord_north", QVariant.Double),
                             QgsField("buffer_m", QVariant.Double),
+                            QgsField("ref_mos", QVariant.String, "MOS Reference", 20),
                         ]
                     )
                     feat = QgsFeature(fields)
                     feat.setGeometry(buffered_geom)
-                    feat.setAttributes(["Obstruction Buffer", dist])
+                    feat.setAttributes(["MET Obstacle Buffer Zone", met_point_proj_crs.x(), met_point_proj_crs.y(), dist, "MOS 19.18(2)(a)"])
                 if self._create_and_add_layer(
                     "Polygon",
                     f"met_obs_{icao_code}",
@@ -5825,8 +5829,9 @@ class SafeguardingBuilder:
         fields = QgsFields(
             [
                 QgsField("rwy_name", QVariant.String),
-                QgsField("zone", QVariant.String),
+                QgsField("desc", QVariant.String),
                 QgsField("end_desig", QVariant.String),
+                QgsField("ref_nasf", QVariant.String),
             ]
         )
         features_to_add = []
@@ -5845,7 +5850,7 @@ class SafeguardingBuilder:
             if geom_p:
                 feat = QgsFeature(fields)
                 feat.setGeometry(geom_p)
-                feat.setAttributes([runway_name, "Windshear", primary_desig])
+                feat.setAttributes([runway_name, "Windshear Assessment Zone", primary_desig, "NASF Guideline B"])
                 features_to_add.append(feat)
         except Exception as e:
             QgsMessageLog.logMessage(
@@ -5863,7 +5868,7 @@ class SafeguardingBuilder:
             if geom_r:
                 feat = QgsFeature(fields)
                 feat.setGeometry(geom_r)
-                feat.setAttributes([runway_name, "Windshear", reciprocal_desig])
+                feat.setAttributes([runway_name, "Windshear Assessment Zone", primary_desig, "NASF Guideline B"])
                 features_to_add.append(feat)
         except Exception as e:
             QgsMessageLog.logMessage(
@@ -5918,11 +5923,13 @@ class SafeguardingBuilder:
                         QgsField("desc", QVariant.String),
                         QgsField("inner_rad_km", QVariant.Double),
                         QgsField("outer_rad_km", QVariant.Double),
+                        QgsField("ref_mos", QVariant.String),
+                        QgsField("ref_nasf", QVariant.String),
                     ]
                 )
                 feature = QgsFeature(fields)
                 feature.setGeometry(geom)
-                feature.setAttributes([f"Area {zone}", desc, r_in, r_out])
+                feature.setAttributes([f"Area {zone}", desc, r_in, r_out, "MOS 17.01(2)", "NASF Guideline C"])
                 layer = self._create_and_add_layer(
                     "Polygon",
                     internal_name,
@@ -5979,13 +5986,13 @@ class SafeguardingBuilder:
                 )
 
             if create_wzm_layer(
-                "A", geom_a, self.tr("0-3km Zone"), 0.0, GUIDELINE_C_RADIUS_A_M / 1000.0
+                "A", geom_a, self.tr("Wildlife Management Zone A (0-3km)"), 0.0, GUIDELINE_C_RADIUS_A_M / 1000.0
             ):
                 overall_success = True
             if create_wzm_layer(
                 "B",
                 geom_b,
-                self.tr("3-8km Zone"),
+                self.tr("Wildlife Management Zone B (3-8km)"),
                 GUIDELINE_C_RADIUS_A_M / 1000.0,
                 GUIDELINE_C_RADIUS_B_M / 1000.0,
             ):
@@ -5993,7 +6000,7 @@ class SafeguardingBuilder:
             if create_wzm_layer(
                 "C",
                 geom_c,
-                self.tr("8-13km Zone"),
+                self.tr("Wildlife Management Zone C (8-13km)"),
                 GUIDELINE_C_RADIUS_B_M / 1000.0,
                 GUIDELINE_C_RADIUS_C_M / 1000.0,
             ):
@@ -6042,7 +6049,7 @@ class SafeguardingBuilder:
                 QgsField("icao_code", QVariant.String, self.tr("ICAO Code"), 10),
                 QgsField("description", QVariant.String, self.tr("Description"), 100),
                 QgsField("radius_km", QVariant.Double, self.tr("Radius (km)"), 8, 2),
-                QgsField("ref_guideline", QVariant.String, self.tr("Guideline Ref."), 50)
+                QgsField("ref_nasf", QVariant.String, self.tr("Guideline Ref."), 50)
             ])
 
             feature = QgsFeature(fields)
@@ -6051,7 +6058,7 @@ class SafeguardingBuilder:
                 icao_code,
                 self.tr("Wind Turbine Assessment Zone (30km Radius)"),
                 GUIDELINE_D_TURBINE_RADIUS_M / 1000.0,
-                self.tr("NASF Guideline D (Draft)") # Example reference
+                self.tr("NASF Guideline D")
             ])
 
             layer_display_name = f"{icao_code} {self.tr('Wind Turbine Assessment Zone')}"
@@ -6119,8 +6126,8 @@ class SafeguardingBuilder:
                         QgsField("rwy", QVariant.String),
                         QgsField("zone", QVariant.String),
                         QgsField("desc", QVariant.String),
-                        QgsField("inner_extent", QVariant.Double),
-                        QgsField("outer_extent", QVariant.Double),
+                        QgsField("inner_extent_m", QVariant.Double),
+                        QgsField("outer_extent_m", QVariant.Double),
                         QgsField("wid_m", QVariant.Double),
                         QgsField("max_intensity", QVariant.String),
                         QgsField("ref_mos", QVariant.String),
@@ -6206,7 +6213,7 @@ class SafeguardingBuilder:
             )
             # overall_success might still be true if the new LCZ Area succeeds below
 
-        # --- NEW: LCZ Area (6000m circle from runway midpoint) ---
+        # --- LCZ Area (6000m circle from runway midpoint) ---
         try:
             midpoint = self._get_runway_midpoint(thr_point, rec_thr_point)
             if midpoint:
@@ -6242,11 +6249,17 @@ class SafeguardingBuilder:
                                         1,
                                     ),
                                     QgsField(
+                                        "ref_mos",
+                                        QVariant.String,
+                                        self.tr("MOS Reference"),
+                                        50,
+                                    ),
+                                    QgsField(
                                         "ref_nasf",
                                         QVariant.String,
-                                        self.tr("NASF Guideline"),
+                                        self.tr("NASF Guideline Reference"),
                                         50,
-                                    ),  # Example reference
+                                    ),
                                 ]
                             )
 
@@ -6254,8 +6267,9 @@ class SafeguardingBuilder:
                             feature.setGeometry(valid_lcz_area_geom)
                             attributes = [
                                 runway_name,
-                                "Lighting Control Zone Area (6km Radius)",  # Description
+                                "Lighting Control Area (6km Radius)",  # Description
                                 radius_m,
+                                "MOS 9.144(2)",  # Reference for LCZ Area
                                 NASF_REF_GUIDELINE_E,  # Re-using Guideline E NASF ref, or a new one if needed
                             ]
                             feature.setAttributes(attributes)
@@ -6354,7 +6368,6 @@ class SafeguardingBuilder:
                     10,
                     2,
                 ),
-                QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
             ]
         )
         return fields
@@ -6588,7 +6601,7 @@ class SafeguardingBuilder:
             section_length = section_params.get("length", 0.0)
             section_slope = section_params.get("slope", 0.0)
             section_divergence = section_params.get("divergence", 0.0)  # Per side
-            ref = section_params.get("ref", "MOS 139 T8.2-1 (Check)")
+            ref = section_params.get("ref", "MOS T8.2-1 (Check)")
 
             if section_length <= 0:
                 continue  # Skip sections with no length
@@ -6750,44 +6763,50 @@ class SafeguardingBuilder:
 
             # --- Generate Contours within this Section ---
             # (Contour generation logic remains the same, using current_elevation_amsl, section_outer_elevation, etc.)
-            if (
-                current_elevation_amsl is not None
-                and section_outer_elevation is not None
-                and abs(section_slope) > 1e-9
-            ):
-                if current_elevation_amsl % APPROACH_CONTOUR_INTERVAL == 0:
-                    target_elev = current_elevation_amsl
-                    if target_elev < current_elevation_amsl:
-                        target_elev += APPROACH_CONTOUR_INTERVAL
+            if current_elevation_amsl is not None and section_outer_elevation is not None:
+                start_elev = current_elevation_amsl
+                end_elev = section_outer_elevation
+
+                contour_elevs = set()
+
+                if abs(section_slope) < 1e-9 and i > 0:
+                    # Horizontal section (non-initial): add start and end
+                    contour_elevs.add(round(start_elev, 6))
+                    contour_elevs.add(round(end_elev, 6))
                 else:
-                    target_elev = (
-                        math.ceil(current_elevation_amsl / APPROACH_CONTOUR_INTERVAL)
-                        * APPROACH_CONTOUR_INTERVAL
-                    )
-                if target_elev < current_elevation_amsl - 1e-6:
-                    target_elev += APPROACH_CONTOUR_INTERVAL
+                    # Sloped section: intervals + start
+                    first_contour = math.ceil(start_elev / APPROACH_CONTOUR_INTERVAL) * APPROACH_CONTOUR_INTERVAL
+                    if first_contour < start_elev - 1e-6:
+                        first_contour += APPROACH_CONTOUR_INTERVAL
 
-                while target_elev <= section_outer_elevation + 1e-6:
-                    delta_h = target_elev - current_elevation_amsl
+                    c_elev = first_contour
+                    while c_elev <= end_elev + 1e-6:
+                        contour_elevs.add(round(c_elev, 6))
+                        c_elev += APPROACH_CONTOUR_INTERVAL
+
+                    contour_elevs.add(round(start_elev, 6))
+
+                # --- NEW: Always add a contour at the very end of the final section if it's horizontal ---
+                print(f"[Contour DEBUG] Section {i}/{len(sections)-1}: slope={section_slope}, abs(slope)<1e-9={abs(section_slope)<1e-9}, is_last={i==len(sections)-1}, start={start_elev}, end={end_elev}")
+                if abs(section_slope) < 1e-9 and i == len(sections) - 1:
+                    contour_elevs.add(round(end_elev, 6))
+
+                contour_elevs = sorted(contour_elevs)
+
+                for target_elev in contour_elevs:
+                    delta_h = target_elev - start_elev
                     max_delta_h = section_length * section_slope
-                    if delta_h > max_delta_h + 1e-6:
-                        break
-                    if delta_h < -1e-6:
-                        target_elev += APPROACH_CONTOUR_INTERVAL
-                        continue
-                    if abs(section_slope) < 1e-9:
-                        break  # Avoid division by zero if somehow slope is tiny
 
-                    dist_along = delta_h / section_slope
-                    if dist_along < 0:
+                    # For horizontal, just plot start/end at 0 distance; for sloped, use normal logic
+                    if abs(section_slope) < 1e-9:
                         dist_along = 0
-                    if dist_along > section_length + 1e-6:
-                        break
+                    else:
+                        if delta_h < -1e-6 or delta_h > max_delta_h + 1e-6:
+                            continue  # Skip contours outside this section
+                        dist_along = delta_h / section_slope
 
                     cl_point = current_start_point.project(dist_along, outward_azimuth)
-                    current_width_at_dist = current_start_width + (
-                        2 * dist_along * section_divergence
-                    )
+                    current_width_at_dist = current_start_width + (2 * dist_along * section_divergence)
                     half_width = current_width_at_dist / 2.0
 
                     if cl_point and half_width > 0:
@@ -6805,14 +6824,10 @@ class SafeguardingBuilder:
                                 contour_attr_map = {
                                     "rwy_name": runway_data.get("short_name", "N/A"),
                                     "end_desig": end_desig,
-                                    "surface": f"Approach Contour {target_elev:.0f}m",
+                                    "surface": "Approach",
                                     "contour_elev_am": target_elev,
-                                    "ref_mos": ref,
                                 }
-                                for name, value in contour_attr_map.items():
-                                    idx = contour_fields.indexFromName(name)
-                                if idx != -1:
-                                    contour_feature.setAttribute(idx, value)
+                                contour_feature.setAttributes([contour_attr_map[k] for k in contour_attr_map])
                                 contour_line_features.append(contour_feature)
 
                     target_elev += APPROACH_CONTOUR_INTERVAL
@@ -6865,7 +6880,7 @@ class SafeguardingBuilder:
             overall_length = params.get("length")
             final_width = params.get("final_width")
             slope = params.get("slope")
-            ref = params.get("ref", "MOS 139 T8.2-1 (Check)")
+            ref = params.get("ref", "MOS T8.2-1 (Check)")
 
             # Check if any essential numeric parameter is None
             essential_params = [
@@ -6920,7 +6935,7 @@ class SafeguardingBuilder:
         overall_length = params.get("length", 0.0)  # Renamed for clarity
         final_width = params.get("final_width", 0.0)
         slope = params.get("slope", 0.0)
-        ref = params.get("ref", "MOS 139 T8.2-1 (Check)")
+        ref = params.get("ref", "MOS T8.2-1 (Check)")
 
         inner_hw = inner_width / 2.0
         final_hw = final_width / 2.0
@@ -7267,7 +7282,7 @@ class SafeguardingBuilder:
                 start_dist_p = inner_app_params_p.get("start_dist_from_thr")
                 inner_app_length = inner_app_params_p.get("length")
                 inner_app_width = inner_app_params_p.get("width")
-                inner_app_ref = inner_app_params_p.get("ref", "MOS 139 T8.2-1 (Verify)")
+                inner_app_ref = inner_app_params_p.get("ref", "MOS T8.2-1 (Verify)")
 
                 if all(
                     v is not None
@@ -7398,7 +7413,7 @@ class SafeguardingBuilder:
                 start_dist_r = inner_app_params_r.get("start_dist_from_thr")
                 inner_app_length = inner_app_params_r.get("length")
                 inner_app_width = inner_app_params_r.get("width")
-                inner_app_ref = inner_app_params_r.get("ref", "MOS 139 T8.2-1 (Verify)")
+                inner_app_ref = inner_app_params_r.get("ref", "MOS T8.2-1 (Verify)")
 
                 if all(
                     v is not None

@@ -19,9 +19,9 @@ from typing import Optional, Dict, Any, Tuple, List
 # =========================================================================
 # == Constant Definitions (Basic Refs, etc. - MUST come BEFORE functions)
 # =========================================================================
-PAVEMENT_MOS_REF = "MOS 139 6.2.3"
-SHOULDER_MOS_REF = "MOS 139 6.2.4"
-IHS_BASE_HEIGHT_AGL = 45.0  # Standard IHS height - Verify MOS 139 8.2.18
+PAVEMENT_MOS_REF = "MOS 4.01"
+SHOULDER_MOS_REF = "MOS 6.11"
+IHS_BASE_HEIGHT_AGL = 45.0  # Standard IHS height - MOS 7.07 Table 7.15(1)
 
 # =========================================================================
 # == Runway Approach Types
@@ -71,25 +71,26 @@ STRIP_WIDTH_PARAMS = {
         "ref_overall": "MOS T6.17(4) Code 3/4",
     },
 }
+
 STRIP_EXTENSION_PARAMS = {
     # Key logic: ('NI_1_2') for Non-Instrument Code 1/2, ('OTHER') for all others
-    ("NI_1_2"): {"length": 30.0, "ref": "MOS 6.2.5.6(a) NI Code 1/2"},
-    ("OTHER"): {"length": 60.0, "ref": "MOS 6.2.5.6(b) Other"},
+    ("NI_1_2"): {"length": 30.0, "ref": "MOS 6.16(a) NI Code 1/2"},
+    ("OTHER"): {"length": 60.0, "ref": "MOS 6.16(b)"},
 }
 
 RESA_PARAMS = {
     # Constant References
-    "width_ref": "MOS 6.2.6.5",
+    "width_ref": "MOS 6.26(6) (Width)",
     # Conditional Length Rules (based on ARC group '1_2' or '3_4')
     "length_rules": {
-        "1_2": {"length": 120.0, "ref": "MOS 6.2.6 & T6.18 (Code 1/2 Pref)"},
-        "3_4": {"length": 240.0, "ref": "MOS 6.2.6 & T6.18 (Code 3/4 Pref)"},
+        "1_2": {"length": 120.0, "ref": "MOS 6.26(5) (Code 1/2 Preferred length)"},
+        "3_4": {"length": 240.0, "ref": "MOS 6.26(5) (Code 3/4 Preferred length)"},
     },
     # Conditional Applicability References
     "applicability_refs": {
-        "required_3_4": "MOS 6.2.6.1/2 (Code 3/4)",
-        "required_1_2_instr": "MOS 6.2.6.1/2 (Code 1/2 Instr)",
-        "not_required": "MOS 6.2.6.1/2 (Not Required)",
+        "required_3_4": "MOS 6.26(1) (Code 3/4)",
+        "required_1_2_instr": "6.26(1) (Code 1/2 Instr)",
+        "not_required": "6.26(2) (Not Required)",
     },
     # Optional: Add 'width_multiplier': 2.0 here if you want to centralize that too
 }
@@ -110,7 +111,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.10,
             "start_dist_from_thr": 30.0,
             "start_width": 60.0,
-            "ref": "MOS T8.2-1 (1-NI)",
+            "ref": "MOS 7.08 Table 7.15(1) (1-NI)",
         }
     ],
     (2, "NI"): [
@@ -120,7 +121,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.10,
             "start_dist_from_thr": 60.0,
             "start_width": 80.0,
-            "ref": "MOS T8.2-1 (2-NI)",
+            "ref": "MOS 7.08 Table 7.15(1) (2-NI)",
         }
     ],
     (3, "NI"): [
@@ -131,7 +132,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.10,
             "start_dist_from_thr": 60.0,
             "start_width": 150.0,
-            "ref": "MOS T8.2-1 (3-NI)",
+            "ref": "MOS 7.08 Table 7.15(1) (3-NI)",
         }
     ],
     (4, "NI"): [
@@ -141,7 +142,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.10,
             "start_dist_from_thr": 60.0,
             "start_width": 150.0,
-            "ref": "MOS T8.2-1 (4-NI)",
+            "ref": "MOS 7.08 Table 7.15(1) (4-NI)",
         }
     ],
     # --- Non-Precision Approach (NPA) ---
@@ -152,7 +153,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 140.0,
-            "ref": "MOS T8.2-1 (1/2-NPA)",
+            "ref": "MOS 7.08 Table 7.15(1) (1/2-NPA)",
         }
     ],
     (2, "NPA"): [  # Same as Code 1
@@ -162,7 +163,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 140.0,
-            "ref": "MOS T8.2-1 (1/2-NPA)",
+            "ref": "MOS 7.08 Table 7.15(1) (1/2-NPA)",
         }
     ],
     (3, "NPA"): [
@@ -173,21 +174,21 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 280.0,
-            "ref": "MOS T8.2-1 (3-NPA S1)",
+            "ref": "MOS 7.08 Table 7.15(1) (3-NPA S1)",
         },
         # Section 2
         {
             "length": 3600.0,
             "slope": 0.025,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3-NPA S2)",
+            "ref": "MOS 7.08 Table 7.15(1) (3-NPA S2)",
         },  # Footnote c?
         # Horizontal Section (Section 3)
         {
             "length": 8400.0,
             "slope": 0.0,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3-NPA S3/Horiz)",
+            "ref": "MOS 7.08 Table 7.15(1) (3-NPA S3/Horiz)",
         },  # Footnote c? Check Total Length d=15000 -> 3000+3600+8400 = 15000
     ],
     (4, "NPA"): [
@@ -198,21 +199,21 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 280.0,
-            "ref": "MOS T8.2-1 (4-NPA S1)",
+            "ref": "MOS 7.08 Table 7.15(1) (4-NPA S1)",
         },
         # Section 2
         {
             "length": 3600.0,
             "slope": 0.025,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (4-NPA S2)",
+            "ref": "MOS 7.08 Table 7.15(1) (4-NPA S2)",
         },
         # Horizontal Section (Section 3)
         {
             "length": 8400.0,
             "slope": 0.0,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (4-NPA S3/Horiz)",
+            "ref": "MOS 7.08 Table 7.15(1) (4-NPA S3/Horiz)",
         },  # Check Total Length 15000 -> 3000+3600+8400 = 15000
     ],
     # --- Precision Approach CAT I (PA_I) ---
@@ -224,14 +225,14 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 140.0,
-            "ref": "MOS T8.2-1 (1/2-PAI S1)",
+            "ref": "MOS 7.08 Table 7.15(1) (1/2-PA-CatI S1)",
         },
         # Section 2
         {
             "length": 12000.0,
             "slope": 0.03,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (1/2-PAI S2)",
+            "ref": "MOS 7.08 Table 7.15(1) (1/2-PA-CatI S2)",
         },  # Check Total Length 15000 -> 3000+12000 = 15000. No horizontal section.
     ],
     (2, "PA_I"): [  # Same as Code 1
@@ -242,14 +243,14 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 140.0,
-            "ref": "MOS T8.2-1 (1/2-PAI S1)",
+            "ref": "MOS 7.08 Table 7.15(1) (1/2-PA-CatI S1)",
         },
         # Section 2
         {
             "length": 12000.0,
             "slope": 0.03,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (1/2-PAI S2)",
+            "ref": "MOS 7.08 Table 7.15(1) (1/2-PA-CatI S2)",
         },
     ],
     (3, "PA_I"): [
@@ -260,21 +261,21 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 280.0,
-            "ref": "MOS T8.2-1 (3/4-PAI S1)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatI S1)",
         },
         # Section 2
         {
             "length": 3600.0,
             "slope": 0.025,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3/4-PAI S2)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatI S2)",
         },
         # Horizontal Section (Section 3)
         {
             "length": 8400.0,
             "slope": 0.0,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3/4-PAI S3/Horiz)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatI S3/Horiz)",
         },  # Check Total Length 15000 -> 3000+3600+8400 = 15000
     ],
     (4, "PA_I"): [  # Same as Code 3
@@ -285,21 +286,21 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 280.0,
-            "ref": "MOS T8.2-1 (3/4-PAI S1)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatI S1)",
         },
         # Section 2
         {
             "length": 3600.0,
             "slope": 0.025,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3/4-PAI S2)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatI S2)",
         },
         # Horizontal Section (Section 3)
         {
             "length": 8400.0,
             "slope": 0.0,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3/4-PAI S3/Horiz)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatI S3/Horiz)",
         },
     ],
     # --- Precision Approach CAT II/III (PA_II_III) ---
@@ -312,21 +313,21 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 280.0,
-            "ref": "MOS T8.2-1 (3/4-PAII/III S1)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatII/III S1)",
         },
         # Section 2
         {
             "length": 3600.0,
             "slope": 0.025,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3/4-PAII/III S2)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatII/III S2)",
         },
         # Horizontal Section (Section 3)
         {
             "length": 8400.0,
             "slope": 0.0,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3/4-PAII/III S3/Horiz)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatII/III S3/Horiz)",
         },  # Check Total Length 15000 -> 3000+3600+8400 = 15000
     ],
     (4, "PA_II_III"): [  # Same as Code 3
@@ -337,21 +338,21 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "start_dist_from_thr": 60.0,
             "start_width": 280.0,
-            "ref": "MOS T8.2-1 (3/4-PAII/III S1)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatII/III S1)",
         },
         # Section 2
         {
             "length": 3600.0,
             "slope": 0.025,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3/4-PAII/III S2)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatII/III S2)",
         },
         # Horizontal Section (Section 3)
         {
             "length": 8400.0,
             "slope": 0.0,
             "divergence": 0.15,
-            "ref": "MOS T8.2-1 (3/4-PAII/III S3/Horiz)",
+            "ref": "MOS 7.08 Table 7.15(1) (3/4-PA-CatII/III S3/Horiz)",
         },
     ],
 }
@@ -365,28 +366,28 @@ INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.025,  # 2.5%
-        "ref": "MOS 139 7.10 (Inner App, PA-I, 1/2)",
+        "ref": "MOS 7.10 (PA-CatI, 1/2)",
     },
     (2, "PA_I"): {  # Same as Code 1
         "width": 90.0,
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.025,  # 2.5%
-        "ref": "MOS 139 7.10 (Inner App, PA-I, 1/2)",
+        "ref": "MOS 7.10 (PA-CatI, 1/2)",
     },
     (3, "PA_I"): {
         "width": 120.0,
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.020,  # 2.0%
-        "ref": "MOS 139 7.10 (Inner App, PA-I, 3/4)",
+        "ref": "MOS 7.10 (PA-CatI, 3/4)",
     },
     (4, "PA_I"): {  # Same as Code 3
         "width": 120.0,
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.020,  # 2.0%
-        "ref": "MOS 139 7.10 (Inner App, PA-I, 3/4)",
+        "ref": "MOS 7.10 (PA-CatI, 3/4)",
     },
     # Precision CAT II & III
     (3, "PA_II_III"): {
@@ -394,14 +395,14 @@ INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.020,  # 2.0%
-        "ref": "MOS 139 7.10 (Inner App, PA-II/III, 3/4)",
+        "ref": "MOS 7.10 (PA-CatII/III, 3/4)",
     },
     (4, "PA_II_III"): {  # Same as Code 3
         "width": 120.0,
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.020,  # 2.0%
-        "ref": "MOS 139 7.10 (Inner App, PA-II/III, 3/4)",
+        "ref": "MOS 7.10 (PA-CatII/III, 3/4)",
     },
     # Non-Instrument ('NI') and Non-Precision ('NPA') types are not listed as the Inner Approach Surface does not apply
     # The get_ols_params function will return None if lookup fails.
@@ -420,7 +421,7 @@ TOCS_PARAMS: Dict[int, Dict[str, Any]] = {
         "final_width": 380.0,  # Final width (m)
         "length": 1600.0,  # Overall length (m)
         "slope": 0.05,  # Slope as gradient (5% = 0.05)
-        "ref": "MOS 139 7.16 (Code 1)",
+        "ref": "MOS 7.16 (Code 1)",
     },
     2: {
         "inner_edge_width": 80.0,
@@ -429,7 +430,7 @@ TOCS_PARAMS: Dict[int, Dict[str, Any]] = {
         "final_width": 580.0,
         "length": 2500.0,
         "slope": 0.04,  # 4% = 0.04
-        "ref": "MOS 139 7.16 (Code 2)",
+        "ref": "MOS 7.16 (Code 2)",
     },
     3: {
         "inner_edge_width": 180.0,
@@ -438,7 +439,7 @@ TOCS_PARAMS: Dict[int, Dict[str, Any]] = {
         "final_width": 1800.0,  # Note 'b' in table, regarding reduced width exception
         "length": 15000.0,  # Overall length (m)
         "slope": 0.02,  # 2% = 0.02
-        "ref": "MOS 139 7.16 (Code 3/4)",
+        "ref": "MOS 7.16 (Code 3/4)",
     },
     4: {  # Code 4 uses the same values as Code 3 according to the table
         "inner_edge_width": 180.0,
@@ -447,88 +448,88 @@ TOCS_PARAMS: Dict[int, Dict[str, Any]] = {
         "final_width": 1800.0,
         "length": 15000.0,
         "slope": 0.02,  # 2% = 0.02 - See note above re: PA runways 1.2% possibility
-        "ref": "MOS 139 7.16 (Code 3/4)",
+        "ref": "MOS 7.16 (Code 3/4)",
     },
 }
 
 # --- Inner Horizontal Surface (IHS) ---
-# Height is 45m above RED (MOS 139 8.2.18).
-# Shape derived from strip ends (MOS 139 8.2.18).
+# Height is 45m above RED (MOS 8.2.18).
+# Shape derived from strip ends (MOS 8.2.18).
 # Radius values from Table 8.2-1 are stored for reference only.
 IHS_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Non-Instrument
     (1, "NI"): {
         "height_agl": 45.0,
         "radius": 2000.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (2, "NI"): {
         "height_agl": 45.0,
         "radius": 2500.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (3, "NI"): {
         "height_agl": 45.0,
         "radius": 4000.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (4, "NI"): {
         "height_agl": 45.0,
         "radius": 4000.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     # Non-Precision Instrument
     (1, "NPA"): {
         "height_agl": 45.0,
         "radius": 3500.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (2, "NPA"): {
         "height_agl": 45.0,
         "radius": 3500.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (3, "NPA"): {
         "height_agl": 45.0,
         "radius": 4000.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (4, "NPA"): {
         "height_agl": 45.0,
         "radius": 4000.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     # Precision CAT I Instrument
     (1, "PA_I"): {
         "height_agl": 45.0,
         "radius": 3500.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (2, "PA_I"): {
         "height_agl": 45.0,
         "radius": 3500.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (3, "PA_I"): {
         "height_agl": 45.0,
         "radius": 4000.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (4, "PA_I"): {
         "height_agl": 45.0,
         "radius": 4000.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     # Precision CAT II & III Instrument
     (3, "PA_II_III"): {
         "height_agl": 45.0,
         "radius": 4000.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
     (4, "PA_II_III"): {
         "height_agl": 45.0,
         "radius": 4000.0,
-        "ref": "MOS 139 8.2.18 / T8.2-1 (Verify)",
+        "ref": "MOS 7.07 Table 7.15(1)",
     },
 }
 
@@ -543,88 +544,88 @@ CONICAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     (1, "NI"): {
         "slope": 0.05,
         "height_extent_agl": 35.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 35m above IHS
     (2, "NI"): {
         "slope": 0.05,
         "height_extent_agl": 55.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 55m above IHS
     (3, "NI"): {
         "slope": 0.05,
         "height_extent_agl": 75.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 75m above IHS
     (4, "NI"): {
         "slope": 0.05,
         "height_extent_agl": 100.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 100m above IHS
     # Non-Precision Instrument
     (1, "NPA"): {
         "slope": 0.05,
         "height_extent_agl": 60.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 60m above IHS
     (2, "NPA"): {
         "slope": 0.05,
         "height_extent_agl": 60.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 60m above IHS
     (3, "NPA"): {
         "slope": 0.05,
         "height_extent_agl": 75.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 75m above IHS
     (4, "NPA"): {
         "slope": 0.05,
         "height_extent_agl": 100.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 100m above IHS
     # Precision CAT I Instrument
     (1, "PA_I"): {
         "slope": 0.05,
         "height_extent_agl": 60.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 60m above IHS
     (2, "PA_I"): {
         "slope": 0.05,
         "height_extent_agl": 60.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 60m above IHS
     (3, "PA_I"): {
         "slope": 0.05,
         "height_extent_agl": 100.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 100m above IHS
     (4, "PA_I"): {
         "slope": 0.05,
         "height_extent_agl": 100.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 100m above IHS
     # Precision CAT II & III Instrument
     (3, "PA_II_III"): {
         "slope": 0.05,
         "height_extent_agl": 100.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 100m above IHS
     (4, "PA_II_III"): {
         "slope": 0.05,
         "height_extent_agl": 100.0,
-        "ref": "MOS 139 8.2.19 / T8.2-1 (Verify Height)",
+        "ref": "MOS 7.06 Table 7.15(1)",
     },  # 100m above IHS
 }
 
 # --- Outer Horizontal Surface (OHS) ---
-# Applies only to Precision runways Code 3 & 4 (MOS 139 8.2.20).
+# Applies only to Precision runways Code 3 & 4 (MOS 139 7.05 Table 7.15(1)).
 # Height is 150m above RED. Radius is 15000m from ARP.
 OHS_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Precision CAT I Instrument
-    (3, "PA_I"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 139 8.2.20"},
-    (4, "PA_I"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 139 8.2.20"},
+    (3, "PA_I"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 7.05 Table 7.15(1)"},
+    (4, "PA_I"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 7.05 Table 7.15(1)"},
     # Precision CAT II & III Instrument
-    (3, "PA_II_III"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 139 8.2.20"},
-    (4, "PA_II_III"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 139 8.2.20"},
+    (3, "PA_II_III"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 7.05 Table 7.15(1)"},
+    (4, "PA_II_III"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 7.05 Table 7.15(1)"},
 }
 
 # --- Transitional Surface ---
@@ -633,10 +634,10 @@ OHS_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 # VERIFY ALL VALUES AGAINST MOS 139.
 TRANSITIONAL_PARAMS: Dict[int, Dict[str, Any]] = {
     # Key: ARC Number
-    1: {"slope": 0.200, "ref": "MOS 139 8.2.17 (Code 1/2)"},  # 1:5
-    2: {"slope": 0.200, "ref": "MOS 139 8.2.17 (Code 1/2)"},  # 1:5
-    3: {"slope": 0.143, "ref": "MOS 139 8.2.17 (Code 3/4)"},  # 1:7
-    4: {"slope": 0.143, "ref": "MOS 139 8.2.17 (Code 3/4)"},  # 1:7
+    1: {"slope": 0.200, "ref": "MOS 8.2.17 (Code 1/2)"},  # 1:5
+    2: {"slope": 0.200, "ref": "MOS 8.2.17 (Code 1/2)"},  # 1:5
+    3: {"slope": 0.143, "ref": "MOS 8.2.17 (Code 3/4)"},  # 1:7
+    4: {"slope": 0.143, "ref": "MOS 8.2.17 (Code 3/4)"},  # 1:7
     # Inner Transitional for PA CAT II/III has slope 1:3 (0.333) - see 8.2.16(b)
     # Need logic in get_ols_params or calling function to handle this.
 }
@@ -646,24 +647,24 @@ TRANSITIONAL_PARAMS: Dict[int, Dict[str, Any]] = {
 
 TRANSITIONAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Non-Instrument
-    (1, "NI"): {"slope": 0.20, "ref": "MOS 139 7.09 (NI-1)"},  # 20%
-    (2, "NI"): {"slope": 0.20, "ref": "MOS 139 7.09 (NI-2)"},  # 20%
-    (3, "NI"): {"slope": 0.143, "ref": "MOS 139 7.09 (NI-3)"},  # 14.3% (1:7)
-    (4, "NI"): {"slope": 0.143, "ref": "MOS 139 7.09 (NI-4)"},  # 14.3% (1:7)
+    (1, "NI"): {"slope": 0.20, "ref": "MOS 7.09 Table 7.15(1) (NI-1)"},  # 20%
+    (2, "NI"): {"slope": 0.20, "ref": "MOS 7.09 Table 7.15(1) (NI-2)"},  # 20%
+    (3, "NI"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (NI-3)"},  # 14.3% (1:7)
+    (4, "NI"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (NI-4)"},  # 14.3% (1:7)
     # Non-Precision Approach
-    (1, "NPA"): {"slope": 0.20, "ref": "MOS 139 7.09 (NPA-1/2)"},  # 20%
-    (2, "NPA"): {"slope": 0.20, "ref": "MOS 139 7.09 (NPA-1/2)"},  # 20%
-    (3, "NPA"): {"slope": 0.143, "ref": "MOS 139 7.09 (NPA-3)"},  # 14.3%
-    (4, "NPA"): {"slope": 0.143, "ref": "MOS 139 7.09 (NPA-4)"},  # 14.3%
+    (1, "NPA"): {"slope": 0.20, "ref": "MOS 7.09 Table 7.15(1) (NPA-1/2)"},  # 20%
+    (2, "NPA"): {"slope": 0.20, "ref": "MOS 7.09 Table 7.15(1) (NPA-1/2)"},  # 20%
+    (3, "NPA"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (NPA-3)"},  # 14.3%
+    (4, "NPA"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (NPA-4)"},  # 14.3%
     # Precision Approach CAT I
-    (1, "PA_I"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAI-1/2)"},  # 14.3%
-    (2, "PA_I"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAI-1/2)"},  # 14.3%
-    (3, "PA_I"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAI-3/4)"},  # 14.3%
-    (4, "PA_I"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAI-3/4)"},  # 14.3%
+    (1, "PA_I"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (PA-CatI-1/2)"},  # 14.3%
+    (2, "PA_I"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (PA-CatI-1/2)"},  # 14.3%
+    (3, "PA_I"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (PA-CatI-3/4)"},  # 14.3%
+    (4, "PA_I"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (PA-CatI-3/4)"},  # 14.3%
     # Precision Approach CAT II & III
     # Codes 1 & 2 not applicable for PA CAT II/III in general
-    (3, "PA_II_III"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAII/III-3/4)"},  # 14.3%
-    (4, "PA_II_III"): {"slope": 0.143, "ref": "MOS 139 7.09 (PAII/III-3/4)"},  # 14.3%
+    (3, "PA_II_III"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (PA-CatII/III-3/4)"},  # 14.3%
+    (4, "PA_II_III"): {"slope": 0.143, "ref": "MOS 7.09 Table 7.15(1) (PA-CatII/III-3/4)"},  # 14.3%
 }
 
 # =========================================================================
@@ -672,87 +673,87 @@ TRANSITIONAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 
 # Stores offset distance (m) from runway centerline to parallel taxiway centerline.
 # Key: (ARC Num, ARC Letter, Runway Type Abbreviation)
-# VERIFY ALL VALUES AGAINST MOS 139 Section 9.3 / Table 9.1
+# VERIFY ALL VALUES AGAINST MOS Section 9.3 / Table 9.1
 TAXIWAY_SEPARATION_PARAMS: Dict[Tuple[int, str, str], Dict[str, Any]] = {
     # --- Precision Approach Runways (CAT I, II, III) ---
     # ARC Code 1
-    (1, "A", "PA_I"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 1A-PA)"},
-    (1, "B", "PA_I"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 1B-PA)"},
-    (1, "C", "PA_I"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 1C-PA)"},
-    (1, "A", "PA_II_III"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 1A-PA)"},
-    (1, "B", "PA_II_III"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 1B-PA)"},
-    (1, "C", "PA_II_III"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 1C-PA)"},
+    (1, "A", "PA_I"): {"offset_m": 77.5, "ref": "MOS T9.1 (Verify 1A-PA)"},
+    (1, "B", "PA_I"): {"offset_m": 82.0, "ref": "MOS T9.1 (Verify 1B-PA)"},
+    (1, "C", "PA_I"): {"offset_m": 88.0, "ref": "MOS T9.1 (Verify 1C-PA)"},
+    (1, "A", "PA_II_III"): {"offset_m": 77.5, "ref": "MOS T9.1 (Verify 1A-PA)"},
+    (1, "B", "PA_II_III"): {"offset_m": 82.0, "ref": "MOS T9.1 (Verify 1B-PA)"},
+    (1, "C", "PA_II_III"): {"offset_m": 88.0, "ref": "MOS T9.1 (Verify 1C-PA)"},
     # ARC Code 2
-    (2, "A", "PA_I"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 2A-PA)"},
-    (2, "B", "PA_I"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 2B-PA)"},
-    (2, "C", "PA_I"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 2C-PA)"},
-    (2, "A", "PA_II_III"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 2A-PA)"},
-    (2, "B", "PA_II_III"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 2B-PA)"},
-    (2, "C", "PA_II_III"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 2C-PA)"},
+    (2, "A", "PA_I"): {"offset_m": 77.5, "ref": "MOS T9.1 (Verify 2A-PA)"},
+    (2, "B", "PA_I"): {"offset_m": 82.0, "ref": "MOS T9.1 (Verify 2B-PA)"},
+    (2, "C", "PA_I"): {"offset_m": 88.0, "ref": "MOS T9.1 (Verify 2C-PA)"},
+    (2, "A", "PA_II_III"): {"offset_m": 77.5, "ref": "MOS T9.1 (Verify 2A-PA)"},
+    (2, "B", "PA_II_III"): {"offset_m": 82.0, "ref": "MOS T9.1 (Verify 2B-PA)"},
+    (2, "C", "PA_II_III"): {"offset_m": 88.0, "ref": "MOS T9.1 (Verify 2C-PA)"},
     # ARC Code 3
-    (3, "A", "PA_I"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3A-PA)"},
-    (3, "B", "PA_I"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3B-PA)"},
-    (3, "C", "PA_I"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 3C-PA)"},
-    (3, "D", "PA_I"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 3D-PA)"},
-    (3, "E", "PA_I"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 3E-PA)"},
-    (3, "F", "PA_I"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 3F-PA)"},
-    (3, "A", "PA_II_III"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3A-PA)"},
-    (3, "B", "PA_II_III"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3B-PA)"},
-    (3, "C", "PA_II_III"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 3C-PA)"},
-    (3, "D", "PA_II_III"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 3D-PA)"},
-    (3, "E", "PA_II_III"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 3E-PA)"},
-    (3, "F", "PA_II_III"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 3F-PA)"},
+    (3, "A", "PA_I"): {"offset_m": 152.0, "ref": "MOS T9.1 (Verify 3A-PA)"},
+    (3, "B", "PA_I"): {"offset_m": 152.0, "ref": "MOS T9.1 (Verify 3B-PA)"},
+    (3, "C", "PA_I"): {"offset_m": 158.0, "ref": "MOS T9.1 (Verify 3C-PA)"},
+    (3, "D", "PA_I"): {"offset_m": 166.0, "ref": "MOS T9.1 (Verify 3D-PA)"},
+    (3, "E", "PA_I"): {"offset_m": 172.5, "ref": "MOS T9.1 (Verify 3E-PA)"},
+    (3, "F", "PA_I"): {"offset_m": 180.0, "ref": "MOS T9.1 (Verify 3F-PA)"},
+    (3, "A", "PA_II_III"): {"offset_m": 152.0, "ref": "MOS T9.1 (Verify 3A-PA)"},
+    (3, "B", "PA_II_III"): {"offset_m": 152.0, "ref": "MOS T9.1 (Verify 3B-PA)"},
+    (3, "C", "PA_II_III"): {"offset_m": 158.0, "ref": "MOS T9.1 (Verify 3C-PA)"},
+    (3, "D", "PA_II_III"): {"offset_m": 166.0, "ref": "MOS T9.1 (Verify 3D-PA)"},
+    (3, "E", "PA_II_III"): {"offset_m": 172.5, "ref": "MOS T9.1 (Verify 3E-PA)"},
+    (3, "F", "PA_II_III"): {"offset_m": 180.0, "ref": "MOS T9.1 (Verify 3F-PA)"},
     # ARC Code 4
-    (4, "C", "PA_I"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 4C-PA)"},
-    (4, "D", "PA_I"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 4D-PA)"},
-    (4, "E", "PA_I"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 4E-PA)"},
-    (4, "F", "PA_I"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 4F-PA)"},
-    (4, "C", "PA_II_III"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 4C-PA)"},
-    (4, "D", "PA_II_III"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 4D-PA)"},
-    (4, "E", "PA_II_III"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 4E-PA)"},
-    (4, "F", "PA_II_III"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 4F-PA)"},
+    (4, "C", "PA_I"): {"offset_m": 158.0, "ref": "MOS T9.1 (Verify 4C-PA)"},
+    (4, "D", "PA_I"): {"offset_m": 166.0, "ref": "MOS T9.1 (Verify 4D-PA)"},
+    (4, "E", "PA_I"): {"offset_m": 172.5, "ref": "MOS T9.1 (Verify 4E-PA)"},
+    (4, "F", "PA_I"): {"offset_m": 180.0, "ref": "MOS T9.1 (Verify 4F-PA)"},
+    (4, "C", "PA_II_III"): {"offset_m": 158.0, "ref": "MOS T9.1 (Verify 4C-PA)"},
+    (4, "D", "PA_II_III"): {"offset_m": 166.0, "ref": "MOS T9.1 (Verify 4D-PA)"},
+    (4, "E", "PA_II_III"): {"offset_m": 172.5, "ref": "MOS T9.1 (Verify 4E-PA)"},
+    (4, "F", "PA_II_III"): {"offset_m": 180.0, "ref": "MOS T9.1 (Verify 4F-PA)"},
     # --- Non-Precision Approach (NPA) Runways ---
     # ARC Code 1
-    (1, "A", "NPA"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 1A-NPA)"},
-    (1, "B", "NPA"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 1B-NPA)"},
-    (1, "C", "NPA"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 1C-NPA)"},
+    (1, "A", "NPA"): {"offset_m": 77.5, "ref": "MOS T9.1 (Verify 1A-NPA)"},
+    (1, "B", "NPA"): {"offset_m": 82.0, "ref": "MOS T9.1 (Verify 1B-NPA)"},
+    (1, "C", "NPA"): {"offset_m": 88.0, "ref": "MOS T9.1 (Verify 1C-NPA)"},
     # ARC Code 2
-    (2, "A", "NPA"): {"offset_m": 77.5, "ref": "MOS 139 T9.1 (Verify 2A-NPA)"},
-    (2, "B", "NPA"): {"offset_m": 82.0, "ref": "MOS 139 T9.1 (Verify 2B-NPA)"},
-    (2, "C", "NPA"): {"offset_m": 88.0, "ref": "MOS 139 T9.1 (Verify 2C-NPA)"},
+    (2, "A", "NPA"): {"offset_m": 77.5, "ref": "MOS T9.1 (Verify 2A-NPA)"},
+    (2, "B", "NPA"): {"offset_m": 82.0, "ref": "MOS T9.1 (Verify 2B-NPA)"},
+    (2, "C", "NPA"): {"offset_m": 88.0, "ref": "MOS T9.1 (Verify 2C-NPA)"},
     # ARC Code 3
-    (3, "A", "NPA"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3A-NPA)"},
-    (3, "B", "NPA"): {"offset_m": 152.0, "ref": "MOS 139 T9.1 (Verify 3B-NPA)"},
-    (3, "C", "NPA"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 3C-NPA)"},
-    (3, "D", "NPA"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 3D-NPA)"},
-    (3, "E", "NPA"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 3E-NPA)"},
-    (3, "F", "NPA"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 3F-NPA)"},
+    (3, "A", "NPA"): {"offset_m": 152.0, "ref": "MOS T9.1 (Verify 3A-NPA)"},
+    (3, "B", "NPA"): {"offset_m": 152.0, "ref": "MOS T9.1 (Verify 3B-NPA)"},
+    (3, "C", "NPA"): {"offset_m": 158.0, "ref": "MOS T9.1 (Verify 3C-NPA)"},
+    (3, "D", "NPA"): {"offset_m": 166.0, "ref": "MOS T9.1 (Verify 3D-NPA)"},
+    (3, "E", "NPA"): {"offset_m": 172.5, "ref": "MOS T9.1 (Verify 3E-NPA)"},
+    (3, "F", "NPA"): {"offset_m": 180.0, "ref": "MOS T9.1 (Verify 3F-NPA)"},
     # ARC Code 4
-    (4, "C", "NPA"): {"offset_m": 158.0, "ref": "MOS 139 T9.1 (Verify 4C-NPA)"},
-    (4, "D", "NPA"): {"offset_m": 166.0, "ref": "MOS 139 T9.1 (Verify 4D-NPA)"},
-    (4, "E", "NPA"): {"offset_m": 172.5, "ref": "MOS 139 T9.1 (Verify 4E-NPA)"},
-    (4, "F", "NPA"): {"offset_m": 180.0, "ref": "MOS 139 T9.1 (Verify 4F-NPA)"},
+    (4, "C", "NPA"): {"offset_m": 158.0, "ref": "MOS T9.1 (Verify 4C-NPA)"},
+    (4, "D", "NPA"): {"offset_m": 166.0, "ref": "MOS T9.1 (Verify 4D-NPA)"},
+    (4, "E", "NPA"): {"offset_m": 172.5, "ref": "MOS T9.1 (Verify 4E-NPA)"},
+    (4, "F", "NPA"): {"offset_m": 180.0, "ref": "MOS T9.1 (Verify 4F-NPA)"},
     # --- Non-Instrument (NI) Runways --- <<< ADD THIS SECTION >>>
     # ARC Code 1
-    (1, "A", "NI"): {"offset_m": 37.5, "ref": "MOS 139 T9.1 (Verify 1A-NI)"},
-    (1, "B", "NI"): {"offset_m": 42.0, "ref": "MOS 139 T9.1 (Verify 1B-NI)"},
-    (1, "C", "NI"): {"offset_m": 48.0, "ref": "MOS 139 T9.1 (Verify 1C-NI)"},
+    (1, "A", "NI"): {"offset_m": 37.5, "ref": "MOS T9.1 (Verify 1A-NI)"},
+    (1, "B", "NI"): {"offset_m": 42.0, "ref": "MOS T9.1 (Verify 1B-NI)"},
+    (1, "C", "NI"): {"offset_m": 48.0, "ref": "MOS T9.1 (Verify 1C-NI)"},
     # ARC Code 2
-    (2, "A", "NI"): {"offset_m": 47.5, "ref": "MOS 139 T9.1 (Verify 2A-NI)"},
-    (2, "B", "NI"): {"offset_m": 52.0, "ref": "MOS 139 T9.1 (Verify 2B-NI)"},
-    (2, "C", "NI"): {"offset_m": 58.0, "ref": "MOS 139 T9.1 (Verify 2C-NI)"},
+    (2, "A", "NI"): {"offset_m": 47.5, "ref": "MOS T9.1 (Verify 2A-NI)"},
+    (2, "B", "NI"): {"offset_m": 52.0, "ref": "MOS T9.1 (Verify 2B-NI)"},
+    (2, "C", "NI"): {"offset_m": 58.0, "ref": "MOS T9.1 (Verify 2C-NI)"},
     # ARC Code 3
-    (3, "A", "NI"): {"offset_m": 52.5, "ref": "MOS 139 T9.1 (Verify 3A-NI)"},
-    (3, "B", "NI"): {"offset_m": 87.0, "ref": "MOS 139 T9.1 (Verify 3B-NI)"},
-    (3, "C", "NI"): {"offset_m": 93.0, "ref": "MOS 139 T9.1 (Verify 3C-NI)"},
-    (3, "D", "NI"): {"offset_m": 101.0, "ref": "MOS 139 T9.1 (Verify 3D-NI)"},
-    (3, "E", "NI"): {"offset_m": 107.5, "ref": "MOS 139 T9.1 (Verify 3E-NI)"},
-    (3, "F", "NI"): {"offset_m": 115.0, "ref": "MOS 139 T9.1 (Verify 3F-NI)"},
+    (3, "A", "NI"): {"offset_m": 52.5, "ref": "MOS T9.1 (Verify 3A-NI)"},
+    (3, "B", "NI"): {"offset_m": 87.0, "ref": "MOS T9.1 (Verify 3B-NI)"},
+    (3, "C", "NI"): {"offset_m": 93.0, "ref": "MOS T9.1 (Verify 3C-NI)"},
+    (3, "D", "NI"): {"offset_m": 101.0, "ref": "MOS T9.1 (Verify 3D-NI)"},
+    (3, "E", "NI"): {"offset_m": 107.5, "ref": "MOS T9.1 (Verify 3E-NI)"},
+    (3, "F", "NI"): {"offset_m": 115.0, "ref": "MOS T9.1 (Verify 3F-NI)"},
     # ARC Code 4
-    (4, "C", "NI"): {"offset_m": 93.0, "ref": "MOS 139 T9.1 (Verify 4C-NI)"},
-    (4, "D", "NI"): {"offset_m": 101.0, "ref": "MOS 139 T9.1 (Verify 4D-NI)"},
-    (4, "E", "NI"): {"offset_m": 107.5, "ref": "MOS 139 T9.1 (Verify 4E-NI)"},
-    (4, "F", "NI"): {"offset_m": 115.0, "ref": "MOS 139 T9.1 (Verify 4F-NI)"},
+    (4, "C", "NI"): {"offset_m": 93.0, "ref": "MOS T9.1 (Verify 4C-NI)"},
+    (4, "D", "NI"): {"offset_m": 101.0, "ref": "MOS T9.1 (Verify 4D-NI)"},
+    (4, "E", "NI"): {"offset_m": 107.5, "ref": "MOS T9.1 (Verify 4E-NI)"},
+    (4, "F", "NI"): {"offset_m": 115.0, "ref": "MOS T9.1 (Verify 4F-NI)"},
 }
 
 # =========================================================================
