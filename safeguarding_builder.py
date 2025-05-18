@@ -6371,6 +6371,14 @@ class SafeguardingBuilder:
             ]
         )
         return fields
+    
+    def _get_tocs_contour_fields(self) -> QgsFields:
+        return QgsFields([
+            QgsField("rwy_name", QVariant.String),
+            QgsField("end_desig", QVariant.String),
+            QgsField("surface", QVariant.String),
+            QgsField("contour_elev_am", QVariant.Double),
+        ])
 
     def _get_ols_fields(self, surface_type: str) -> QgsFields:
         """Returns the QgsFields definition for a given OLS surface type."""
@@ -6762,7 +6770,6 @@ class SafeguardingBuilder:
                     # return [], contour_line_features # Example: Stop if one section fails
 
             # --- Generate Contours within this Section ---
-            # (Contour generation logic remains the same, using current_elevation_amsl, section_outer_elevation, etc.)
             if current_elevation_amsl is not None and section_outer_elevation is not None:
                 start_elev = current_elevation_amsl
                 end_elev = section_outer_elevation
@@ -6787,7 +6794,6 @@ class SafeguardingBuilder:
                     contour_elevs.add(round(start_elev, 6))
 
                 # --- NEW: Always add a contour at the very end of the final section if it's horizontal ---
-                print(f"[Contour DEBUG] Section {i}/{len(sections)-1}: slope={section_slope}, abs(slope)<1e-9={abs(section_slope)<1e-9}, is_last={i==len(sections)-1}, start={start_elev}, end={end_elev}")
                 if abs(section_slope) < 1e-9 and i == len(sections) - 1:
                     contour_elevs.add(round(end_elev, 6))
 
@@ -6797,7 +6803,6 @@ class SafeguardingBuilder:
                     delta_h = target_elev - start_elev
                     max_delta_h = section_length * section_slope
 
-                    # For horizontal, just plot start/end at 0 distance; for sloped, use normal logic
                     if abs(section_slope) < 1e-9:
                         dist_along = 0
                     else:
@@ -6818,19 +6823,26 @@ class SafeguardingBuilder:
                         if pt_l and pt_r:
                             contour_geom = QgsGeometry.fromPolylineXY([pt_l, pt_r])
                             if contour_geom and not contour_geom.isEmpty():
-                                contour_fields = self._get_approach_contour_fields()
-                                contour_feature = QgsFeature(contour_fields)
-                                contour_feature.setGeometry(contour_geom)
-                                contour_attr_map = {
-                                    "rwy_name": runway_data.get("short_name", "N/A"),
-                                    "end_desig": end_desig,
-                                    "surface": "Approach",
-                                    "contour_elev_am": target_elev,
-                                }
-                                contour_feature.setAttributes([contour_attr_map[k] for k in contour_attr_map])
-                                contour_line_features.append(contour_feature)
-
-                    target_elev += APPROACH_CONTOUR_INTERVAL
+                                # --- CLIP CONTOUR TO CURRENT SECTION POLYGON ---
+                                if valid_geom:  # Clip to current section
+                                    clipped_geom = contour_geom.intersection(valid_geom)
+                                    if clipped_geom and not clipped_geom.isEmpty():
+                                        contour_fields = QgsFields([
+                                            QgsField("rwy_name", QVariant.String),
+                                            QgsField("end_desig", QVariant.String),
+                                            QgsField("surface", QVariant.String),
+                                            QgsField("contour_elev_am", QVariant.Double),
+                                        ])
+                                        contour_feature = QgsFeature(contour_fields)
+                                        contour_feature.setGeometry(clipped_geom)
+                                        contour_attr_map = {
+                                            "rwy_name": runway_data.get("short_name", "N/A"),
+                                            "end_desig": end_desig,
+                                            "surface": "Approach",  # <-- Fix here!
+                                            "contour_elev_am": target_elev,
+                                        }
+                                        contour_feature.setAttributes([contour_attr_map[k] for k in contour_attr_map])
+                                        contour_line_features.append(contour_feature)
 
             # --- Update for next iteration ---
             current_start_point = end_point
@@ -6851,16 +6863,20 @@ class SafeguardingBuilder:
         rwy_params: dict,
         arc_num: int,
         end_type: str,
-        runway_phys_end_point: QgsPointXY,  # Renamed for clarity - this is the physical end
-        clearway_len: float,  # Verified float
+        runway_phys_end_point: QgsPointXY,
+        clearway_len: float,
         outward_azimuth: float,
         end_desig: str,
         origin_elevation: Optional[float],
-    ) -> Optional[QgsFeature]:  # Elevation at the OTHER threshold
+    ) -> Tuple[Optional[QgsFeature], List[QgsFeature]]:
         """
-        Generates a single Take-Off Climb Surface (TOCS) feature.
+        Generates a single Take-Off Climb Surface (TOCS) feature and a list of contour features.
         Shape can be a composite trapezoid + rectangle based on parameters.
         """
+
+        # Always define these!
+        final_geom = None
+        tocs_contour_features = []
 
         # 1. Get Parameters
         params = ols_dimensions.get_ols_params(arc_num, None, "TOCS")
@@ -6870,10 +6886,9 @@ class SafeguardingBuilder:
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
-            return None
+            return None, []
 
         try:
-            # Attempt to get and potentially convert parameters, checking for None
             origin_offset = params.get("origin_offset")
             inner_width = params.get("inner_edge_width")
             divergence = params.get("divergence")
@@ -6882,7 +6897,6 @@ class SafeguardingBuilder:
             slope = params.get("slope")
             ref = params.get("ref", "MOS T8.2-1 (Check)")
 
-            # Check if any essential numeric parameter is None
             essential_params = [
                 origin_offset,
                 inner_width,
@@ -6895,15 +6909,8 @@ class SafeguardingBuilder:
                 missing_keys = [
                     k
                     for k, v in params.items()
-                    if v is None
-                    and k
-                    in [
-                        "origin_offset",
-                        "inner_edge_width",
-                        "divergence",
-                        "length",
-                        "final_width",
-                        "slope",
+                    if v is None and k in [
+                        "origin_offset", "inner_edge_width", "divergence", "length", "final_width", "slope",
                     ]
                 ]
                 QgsMessageLog.logMessage(
@@ -6911,9 +6918,8 @@ class SafeguardingBuilder:
                     PLUGIN_TAG,
                     level=Qgis.Critical,
                 )
-                return None
+                return None, []
 
-            # Convert to float explicitly *after* checking for None (belt-and-braces)
             origin_offset = float(origin_offset)
             inner_width = float(inner_width)
             divergence = float(divergence)
@@ -6927,20 +6933,11 @@ class SafeguardingBuilder:
                 PLUGIN_TAG,
                 level=Qgis.Critical,
             )
-            return None
-
-        origin_offset = params.get("origin_offset", 0.0)
-        inner_width = params.get("inner_edge_width", 0.0)
-        divergence = params.get("divergence", 0.0)  # Per side
-        overall_length = params.get("length", 0.0)  # Renamed for clarity
-        final_width = params.get("final_width", 0.0)
-        slope = params.get("slope", 0.0)
-        ref = params.get("ref", "MOS T8.2-1 (Check)")
+            return None, []
 
         inner_hw = inner_width / 2.0
         final_hw = final_width / 2.0
 
-        # Use stricter checks including divergence being non-negative
         if (
             overall_length <= 0
             or inner_width <= 0
@@ -6953,25 +6950,21 @@ class SafeguardingBuilder:
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
-            return None
+            return None, []
 
         # 2. Calculate Start Point of TOCS Inner Edge
-        # Start from the provided physical end point
-        effective_takeoff_start = runway_phys_end_point  # Renamed variable for clarity
-        if clearway_len > 1e-6:  # Use tolerance
-            projected_clearway_end = effective_takeoff_start.project(
-                clearway_len, outward_azimuth
-            )
+        effective_takeoff_start = runway_phys_end_point
+        if clearway_len > 1e-6:
+            projected_clearway_end = effective_takeoff_start.project(clearway_len, outward_azimuth)
             if not projected_clearway_end:
                 QgsMessageLog.logMessage(
                     f"Failed calc TOCS clearway end point {end_desig}",
                     PLUGIN_TAG,
                     level=Qgis.Warning,
                 )
-                return None
+                return None, []
             effective_takeoff_start = projected_clearway_end
 
-        # Project forward by origin_offset
         start_point = effective_takeoff_start.project(origin_offset, outward_azimuth)
         if not start_point:
             QgsMessageLog.logMessage(
@@ -6979,33 +6972,15 @@ class SafeguardingBuilder:
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
-            return None
+            return None, []
 
         # 3. Calculate Length of Divergence Section
         width_increase_per_side = final_hw - inner_hw
-        # If final width is already met or exceeded by inner width, divergence length is 0
-        length_divergence = (
-            width_increase_per_side / divergence if width_increase_per_side > 0 else 0.0
-        )
-
-        QgsMessageLog.logMessage(
-            f"TOCS {end_desig}: OverallLen={overall_length:.1f}, DivergLen={length_divergence:.1f}",
-            PLUGIN_TAG,
-            level=Qgis.Info,
-        )
+        length_divergence = width_increase_per_side / divergence if width_increase_per_side > 0 else 0.0
 
         # 4. Generate Geometry
-        final_geom: Optional[QgsGeometry] = None
         try:
-            if (
-                length_divergence >= overall_length - 1e-6
-            ):  # Use tolerance - Essentially single trapezoid
-                QgsMessageLog.logMessage(
-                    f"TOCS {end_desig}: Generating as single trapezoid (divergence >= overall length).",
-                    PLUGIN_TAG,
-                    level=Qgis.Info,
-                )
-                # Calculate outer half-width at the overall_length distance
+            if length_divergence >= overall_length - 1e-6:
                 outer_hw_at_overall = inner_hw + (overall_length * divergence)
                 final_geom = self._create_trapezoid(
                     start_point,
@@ -7015,9 +6990,7 @@ class SafeguardingBuilder:
                     outer_hw_at_overall,
                     f"TOCS Trapezoid {end_desig}",
                 )
-
-            else:  # Composite shape: Trapezoid + Rectangle
-                # Generate Trapezoid part
+            else:
                 trap_geom = self._create_trapezoid(
                     start_point,
                     outward_azimuth,
@@ -7026,22 +6999,11 @@ class SafeguardingBuilder:
                     final_hw,
                     f"TOCS Trapezoid Part {end_desig}",
                 )
-
-                # Calculate start point and length of Rectangle part
-                rect_start_point = start_point.project(
-                    length_divergence, outward_azimuth
-                )
+                rect_start_point = start_point.project(length_divergence, outward_azimuth)
                 length_rectangle = overall_length - length_divergence
 
-                if (
-                    not rect_start_point or length_rectangle < 1e-6
-                ):  # Check if rectangle has valid start/length
-                    QgsMessageLog.logMessage(
-                        f"TOCS {end_desig}: Invalid parameters for rectangular part (Start: {rect_start_point}, Len: {length_rectangle:.2f}). Using only trapezoid part.",
-                        PLUGIN_TAG,
-                        level=Qgis.Warning,
-                    )
-                    final_geom = trap_geom  # Fallback to just the trapezoid part if rect params invalid
+                if not rect_start_point or length_rectangle < 1e-6:
+                    final_geom = trap_geom
                 else:
                     rect_geom = self._create_rectangle_from_start(
                         rect_start_point,
@@ -7050,34 +7012,16 @@ class SafeguardingBuilder:
                         final_hw,
                         f"TOCS Rectangle Part {end_desig}",
                     )
-
-                    # Combine
                     if trap_geom and rect_geom:
-                        # Use unaryUnion for potentially cleaner joins
                         combined = QgsGeometry.unaryUnion([trap_geom, rect_geom])
                         if combined and not combined.isEmpty():
-                            final_geom = combined.makeValid()  # Ensure validity
+                            final_geom = combined.makeValid()
                         else:
-                            QgsMessageLog.logMessage(
-                                f"TOCS {end_desig}: Union of trapezoid and rectangle failed. Using only trapezoid part.",
-                                PLUGIN_TAG,
-                                level=Qgis.Warning,
-                            )
-                            final_geom = trap_geom  # Fallback
+                            final_geom = trap_geom
                     elif trap_geom:
-                        QgsMessageLog.logMessage(
-                            f"TOCS {end_desig}: Rectangle part failed. Using only trapezoid part.",
-                            PLUGIN_TAG,
-                            level=Qgis.Warning,
-                        )
-                        final_geom = trap_geom  # Fallback
+                        final_geom = trap_geom
                     else:
-                        QgsMessageLog.logMessage(
-                            f"TOCS {end_desig}: Both trapezoid and rectangle parts failed.",
-                            PLUGIN_TAG,
-                            level=Qgis.Warning,
-                        )
-                        final_geom = None  # Complete failure
+                        final_geom = None
 
         except Exception as e_geom:
             QgsMessageLog.logMessage(
@@ -7085,55 +7029,134 @@ class SafeguardingBuilder:
                 PLUGIN_TAG,
                 level=Qgis.Critical,
             )
-            return None
+            return None, []
 
-        # 5. Create Feature
         if not final_geom or final_geom.isEmpty() or not final_geom.isGeosValid():
             QgsMessageLog.logMessage(
                 f"Failed create valid TOCS geometry for {end_desig}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
-            return None
+            return None, []
 
-        # Calculate elevation and offset based on OVERALL length
-        height_agl = overall_length * slope  # Should be float * float
-        # Check origin_elevation before adding
-        elevation_amsl = (
-            (origin_elevation + height_agl) if origin_elevation is not None else None
-        )
-        # Calculate distance from the physical end point used as the base reference
-        total_offset_from_phys_end = (
-            runway_phys_end_point.distance(start_point)
-            if start_point and runway_phys_end_point
-            else None
-        )
+        # 5. Create TOCS Polygon Feature
+        height_agl = overall_length * slope
+        elevation_amsl = (origin_elevation + height_agl) if origin_elevation is not None else None
 
         fields = self._get_ols_fields("TOCS")
         feature = QgsFeature(fields)
         feature.setGeometry(final_geom)
-        # Set attributes based *only* on the fields present in 'fields'
         attr_map = {
             "rwy_name": runway_data.get("short_name", "N/A"),
             "surface": "TOCS",
             "end_desig": end_desig,
-            "elev_m": elevation_amsl,  # Elevation at outer end
-            "height_agl": height_agl,  # Height difference over total length
+            "elev_m": elevation_amsl,
+            "height_agl": height_agl,
             "slope_perc": slope * 100.0 if slope is not None else None,
             "ref_mos": ref,
-            "len_m": overall_length,  # Report overall length
+            "len_m": overall_length,
             "innerw_m": inner_width,
-            "outerw_m": final_width,  # Report final width reached
+            "outerw_m": final_width,
             "diverg_perc": divergence * 100.0 if divergence is not None else None,
-            "origin_offset": origin_offset,  # The parameter used, distance from runway/clearway end
-            # Add total_offset_from_phys_end as a separate field if needed?
+            "origin_offset": origin_offset,
         }
         for name, value in attr_map.items():
             idx = fields.indexFromName(name)
             if idx != -1:
                 feature.setAttribute(idx, value)
 
-        return feature
+        # ---- TOCS Contour Features with Clipping ----
+        TOCS_CONTOUR_INTERVAL = 10.0  # Adjust as needed
+        tocs_contour_features = []
+        if origin_elevation is not None and overall_length > 0:
+            start_elev = origin_elevation
+            end_elev = origin_elevation + height_agl
+
+            contour_elevs = set()
+
+            # Add interval contours
+            first_contour = math.ceil(start_elev / TOCS_CONTOUR_INTERVAL) * TOCS_CONTOUR_INTERVAL
+            if first_contour < start_elev - 1e-6:
+                first_contour += TOCS_CONTOUR_INTERVAL
+
+            c_elev = first_contour
+            while c_elev <= end_elev + 1e-6:
+                contour_elevs.add(round(c_elev, 6))
+                c_elev += TOCS_CONTOUR_INTERVAL
+
+            # Always add start and end elevation
+            contour_elevs.add(round(start_elev, 6))
+            contour_elevs.add(round(end_elev, 6))
+
+            contour_elevs = sorted(contour_elevs)
+
+            for target_elev in contour_elevs:
+                delta_h = target_elev - start_elev
+                if slope == 0:
+                    dist_along = 0
+                else:
+                    if delta_h < -1e-6 or delta_h > height_agl + 1e-6:
+                        continue
+                    dist_along = delta_h / slope
+
+                is_last_contour = abs(target_elev - end_elev) < 1e-6
+
+                if is_last_contour:
+                    # At the end: use polygon outer width, no clipping
+                    cl_point = start_point.project(overall_length, outward_azimuth)
+                    current_width_at_dist = final_width
+                    half_width = current_width_at_dist / 2.0
+
+                    if cl_point and half_width > 0:
+                        az_perp_l = (outward_azimuth - 90.0 + 360.0) % 360.0
+                        az_perp_r = (outward_azimuth + 90.0) % 360.0
+                        pt_l = cl_point.project(half_width, az_perp_l)
+                        pt_r = cl_point.project(half_width, az_perp_r)
+
+                        if pt_l and pt_r:
+                            contour_geom = QgsGeometry.fromPolylineXY([pt_l, pt_r])
+                            # No clipping for the last contour
+                            final_contour_geom = contour_geom
+                else:
+                    # Intermediate contours: project as normal, then clip
+                    cl_point = start_point.project(dist_along, outward_azimuth)
+                    current_width_at_dist = inner_width + (2 * dist_along * divergence)
+                    half_width = current_width_at_dist / 2.0
+
+                    if cl_point and half_width > 0:
+                        az_perp_l = (outward_azimuth - 90.0 + 360.0) % 360.0
+                        az_perp_r = (outward_azimuth + 90.0) % 360.0
+                        pt_l = cl_point.project(half_width, az_perp_l)
+                        pt_r = cl_point.project(half_width, az_perp_r)
+
+                        if pt_l and pt_r:
+                            contour_geom = QgsGeometry.fromPolylineXY([pt_l, pt_r])
+                            # Clip to TOCS polygon
+                            final_contour_geom = contour_geom.intersection(final_geom)
+                # If valid, create the feature
+                if 'final_contour_geom' in locals() and final_contour_geom and not final_contour_geom.isEmpty():
+                    contour_fields = QgsFields([
+                        QgsField("rwy_name", QVariant.String),
+                        QgsField("end_desig", QVariant.String),
+                        QgsField("surface", QVariant.String),
+                        QgsField("contour_elev_am", QVariant.Double),
+                    ])
+                    contour_feature = QgsFeature(contour_fields)
+                    contour_feature.setGeometry(final_contour_geom)
+                    contour_attr_map = {
+                        "rwy_name": runway_data.get("short_name", "N/A"),
+                        "end_desig": end_desig,
+                        "surface": "TOCS",
+                        "contour_elev_am": target_elev,
+                    }
+                    contour_feature.setAttributes([contour_attr_map[k] for k in contour_attr_map])
+                    tocs_contour_features.append(contour_feature)
+                # Clean up variable for next loop
+                if 'final_contour_geom' in locals():
+                    del final_contour_geom
+
+        # Return both the polygon and the contour features list
+        return feature, tocs_contour_features
 
     def process_guideline_f(
         self, runway_data: dict, layer_group: QgsLayerTreeGroup
@@ -7266,6 +7289,7 @@ class SafeguardingBuilder:
         approach_poly_features: List[QgsFeature] = []
         approach_contour_features: List[QgsFeature] = []
         tocs_poly_features: List[QgsFeature] = []
+        approach_contour_features_tocs: List[QgsFeature] = []
 
         # --- Process Primary End (Designator 1) ---
         # Use a broader try-except here to catch any error within this block and provide traceback
@@ -7366,23 +7390,22 @@ class SafeguardingBuilder:
                 approach_contour_features.extend(contour_features_p)
 
             # --- 1c. Generate Take-off Climb Surface (TOCS) (Primary End) ---
-            origin_elev_tocs_p = (
-                rec_thr_elev  # Elevation reference = Reciprocal THR elev
-            )
-            # Log the arguments being passed
-            feat_tocs1 = self._generate_tocs(
+            origin_elev_tocs_p = rec_thr_elev  # Elevation reference = Reciprocal THR elev
+            feat_tocs1, contour_features_tocs1 = self._generate_tocs(
                 runway_data,
                 rwy_params,
                 arc_num,
                 type1_str,
-                phys_p_end,  # Use RECIPROCAL physical end as reference point
-                clearway2_len,  # Use clearway associated with reciprocal end
-                rwy_params["azimuth_p_r"],  # Takeoff direction Primary -> Reciprocal
-                primary_desig,  # Labelled for the takeoff direction/designator
-                origin_elev_tocs_p,  # Elevation reference point (reciprocal threshold)
+                phys_p_end,           # Use RECIPROCAL physical end as reference point
+                clearway2_len,        # Use clearway associated with reciprocal end
+                rwy_params["azimuth_p_r"],
+                primary_desig,
+                origin_elev_tocs_p,
             )
             if feat_tocs1:
                 tocs_poly_features.append(feat_tocs1)
+            if contour_features_tocs1:
+                approach_contour_features_tocs.extend(contour_features_tocs1)
 
         except Exception as e:
             # Catch any exception during primary end processing
@@ -7500,20 +7523,21 @@ class SafeguardingBuilder:
 
             # --- 2c. Generate Take-off Climb Surface (TOCS) (Reciprocal End) ---
             origin_elev_tocs_r = thr_elev  # Elevation reference = Primary THR elev
-            # Log the arguments being passed
-            feat_tocs2 = self._generate_tocs(
+            feat_tocs2, contour_features_tocs2 = self._generate_tocs(
                 runway_data,
                 rwy_params,
                 arc_num,
                 type2_str,
-                phys_p_start,  # Use PRIMARY physical end as reference point
-                clearway1_len,  # Use clearway associated with primary end
-                rwy_params["azimuth_r_p"],  # Takeoff direction Reciprocal -> Primary
-                reciprocal_desig,  # Labelled for the takeoff direction/designator
-                origin_elev_tocs_r,  # Elevation reference point (primary threshold)
+                phys_p_start,         # Use PRIMARY physical end as reference point
+                clearway1_len,        # Use clearway associated with primary end
+                rwy_params["azimuth_r_p"],
+                reciprocal_desig,
+                origin_elev_tocs_r,
             )
             if feat_tocs2:
                 tocs_poly_features.append(feat_tocs2)
+            if contour_features_tocs2:
+                approach_contour_features_tocs.extend(contour_features_tocs2)
 
         except Exception as e:
             # Catch any exception during reciprocal end processing
@@ -7593,6 +7617,21 @@ class SafeguardingBuilder:
                 tocs_poly_features,
                 layer_group,
                 "OLS TOCS",
+            )
+            if layer:
+                overall_success = True
+
+        # --- NEW: Create TOCS Contour Layer ---
+        if approach_contour_features_tocs:
+            fields = self._get_tocs_contour_fields()
+            layer = self._create_and_add_layer(
+                "LineString",
+                f"OLS_TOCS_Contours_{runway_name.replace('/', '_')}",
+                f"{self.tr('OLS')} TOCS Contours {runway_name}",
+                fields,
+                approach_contour_features_tocs,
+                layer_group,
+                "OLS TOCS Contour",
             )
             if layer:
                 overall_success = True
