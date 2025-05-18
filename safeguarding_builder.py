@@ -606,14 +606,15 @@ class SafeguardingBuilder:
                 "LCZ B": "default_zone_polygon.qml",
                 "LCZ C": "default_zone_polygon.qml",
                 "LCZ D": "default_zone_polygon.qml",
-                "OLS Approach": "default_ols_polygon.qml",
-                "OLS Approach Contour": "default_ols_line.qml",
+                "OLS Approach": "ols_approach_polygon.qml",
+                "OLS Approach Contour": "ols_approach_contours.qml",
                 "OLS Inner Approach": "default_ols_polygon.qml",
-                "OLS TOCS": "default_ols_polygon.qml",
+                "OLS TOCS": "ols_tocs_polygon.qml",
+                "OLS TOCS Contour": "ols_tocs_contours.qml",
                 "OLS IHS": "default_ols_polygon.qml",
                 "OLS Transitional": "default_ols_polygon.qml",
                 "OLS Conical": "default_ols_polygon.qml",
-                "OLS Conical Contour": "default_ols_polygon.qml",
+                "OLS Conical Contour": "ols_conical_contours.qml",
                 "OLS OHS": "default_ols_polygon.qml",
                 "CNS Circle Zone": "default_cns_zone_polygon.qml",
                 "CNS Donut Zone": "default_cns_zone_polygon.qml",
@@ -4523,127 +4524,140 @@ class SafeguardingBuilder:
                     level=Qgis.Warning,
                 )
 
-            # --- 4b. Generate Conical CONTOURS ---
-            if (
-                conical_layer_created
-                and ihs_base_geom
-                and outer_conical_geom
-                and slope
-                and height_extent_agl
-                and height_extent_agl > 0
-                and conical_outer_elevation is not None
-            ):
-                QgsMessageLog.logMessage(
-                    f"Generating Conical Contours at {CONICAL_CONTOUR_INTERVAL}m intervals...",
-                    plugin_tag,
-                    level=Qgis.Info,
-                )
-                contour_features: List[QgsFeature] = []
-                # ... (contour loop logic as before, no DEBUG logs needed inside normally) ...
-                previous_contour_geom = QgsGeometry(ihs_base_geom)
-                ref = conical_params.get("ref", "MOS 8.2.19")
-                if IHS_ELEVATION_AMSL % CONICAL_CONTOUR_INTERVAL == 0:
-                    first_contour_elev_amsl = (
-                        IHS_ELEVATION_AMSL + CONICAL_CONTOUR_INTERVAL
+        # --- 4b. Generate Conical CONTOURS ---
+        if (
+            conical_layer_created
+            and ihs_base_geom
+            and outer_conical_geom
+            and slope
+            and height_extent_agl
+            and height_extent_agl > 0
+            and conical_outer_elevation is not None
+        ):
+            QgsMessageLog.logMessage(
+                f"Generating Conical Contours at {CONICAL_CONTOUR_INTERVAL}m intervals...",
+                plugin_tag,
+                level=Qgis.Info,
+            )
+            contour_features: List[QgsFeature] = []
+            ref = conical_params.get("ref", "MOS 8.2.19")
+            fields = self._get_conical_contour_fields()
+
+            def _extract_exterior_ring_line(geom: QgsGeometry) -> Optional[QgsGeometry]:
+                # Returns a LineString geometry of the exterior ring, or None if not available.
+                poly = geom.asPolygon()
+                if poly and len(poly) > 0 and len(poly[0]) > 1:
+                    return QgsGeometry.fromPolylineXY(poly[0])
+                multipoly = geom.asMultiPolygon()
+                if multipoly and len(multipoly) > 0 and len(multipoly[0]) > 0:
+                    return QgsGeometry.fromPolylineXY(multipoly[0][0])
+                return None
+
+            # 1. Start contour at IHS base
+            start_geom = QgsGeometry(ihs_base_geom)
+            if start_geom and not start_geom.isEmpty() and start_geom.isGeosValid():
+                line_geom = _extract_exterior_ring_line(start_geom)
+                if line_geom and not line_geom.isEmpty() and line_geom.isGeosValid():
+                    feat = QgsFeature(fields)
+                    feat.setGeometry(line_geom)
+                    feat.setAttribute(fields.indexFromName("surface"), f"Conical Contour {IHS_ELEVATION_AMSL:.0f}m")
+                    feat.setAttribute(fields.indexFromName("contour_elev_am"), IHS_ELEVATION_AMSL)
+                    feat.setAttribute(fields.indexFromName("contour_hgt_abv"), 0)
+                    feat.setAttribute(fields.indexFromName("ref_mos"), ref)
+                    contour_features.append(feat)
+                    QgsMessageLog.logMessage(
+                        f"Conical start contour at {IHS_ELEVATION_AMSL:.2f}m AMSL.", plugin_tag, Qgis.Info
                     )
                 else:
-                    first_contour_elev_amsl = (
-                        math.ceil(IHS_ELEVATION_AMSL / CONICAL_CONTOUR_INTERVAL)
-                        * CONICAL_CONTOUR_INTERVAL
-                    )
-                current_target_contour_elev_amsl = first_contour_elev_amsl
-                while (
-                    current_target_contour_elev_amsl <= conical_outer_elevation + 1e-6
-                ):
-                    contour_h_above_ihs = min(
-                        current_target_contour_elev_amsl - IHS_ELEVATION_AMSL,
-                        height_extent_agl,
-                    )
-                    if contour_h_above_ihs < 1e-6:
-                        current_target_contour_elev_amsl += CONICAL_CONTOUR_INTERVAL
-                        continue
-                    try:
-                        horizontal_dist = contour_h_above_ihs / slope
-                        outer_geom = ihs_base_geom.buffer(
-                            horizontal_dist, BUFFER_SEGMENTS
-                        )
-                        if outer_geom and not outer_geom.isEmpty():
-                            outer_geom = outer_geom.makeValid()
-                            if outer_geom.isGeosValid():
-                                if (
-                                    previous_contour_geom
-                                    and not previous_contour_geom.isGeosValid()
-                                ):
-                                    previous_contour_geom = (
-                                        previous_contour_geom.makeValid()
-                                    )
-                                if (
-                                    previous_contour_geom
-                                    and previous_contour_geom.isGeosValid()
-                                ):
-                                    ring_geom = outer_geom.difference(
-                                        previous_contour_geom
-                                    )
-                                    if ring_geom:
-                                        ring_geom = ring_geom.makeValid()
-                                    if (
-                                        ring_geom
-                                        and not ring_geom.isEmpty()
-                                        and ring_geom.isGeosValid()
-                                    ):
-                                        fields = self._get_conical_contour_fields()
-                                        feature = QgsFeature(fields)
-                                        feature.setGeometry(ring_geom)
-                                        attr_map = {
-                                            "surface": f"Conical Contour {current_target_contour_elev_amsl:.0f}m",
-                                            "contour_elev_am": current_target_contour_elev_amsl,
-                                            "contour_hgt_abv": contour_h_above_ihs,
-                                            "ref_mos": ref,
-                                        }
-                                        for name, value in attr_map.items():
-                                            idx = fields.indexFromName(name)
-                                        if idx != -1:
-                                            feature.setAttribute(idx, value)
-                                        contour_features.append(feature)
-                                previous_contour_geom = QgsGeometry(outer_geom)
-                            else:
-                                QgsMessageLog.logMessage(
-                                    f"Warning: makeValid failed for contour geom at elev={current_target_contour_elev_amsl}m.",
-                                    plugin_tag,
-                                    level=Qgis.Warning,
-                                )
-                                break
-                        else:
-                            QgsMessageLog.logMessage(
-                                f"Warning: Buffer failed for contour geom at elev={current_target_contour_elev_amsl}m.",
-                                plugin_tag,
-                                level=Qgis.Warning,
-                            )
-                            break
-                    except Exception as e_contour:
-                        QgsMessageLog.logMessage(
-                            f"Error generating contour ring at elev={current_target_contour_elev_amsl}m: {e_contour}",
-                            plugin_tag,
-                            level=Qgis.Warning,
-                        )
-                        break
-                    if contour_h_above_ihs >= height_extent_agl - 1e-6:
-                        break
+                    QgsMessageLog.logMessage("Failed to extract exterior ring for IHS base.", plugin_tag, Qgis.Warning)
+
+            # 2. Interval contours (main loop)
+            if IHS_ELEVATION_AMSL % CONICAL_CONTOUR_INTERVAL == 0:
+                first_contour_elev_amsl = IHS_ELEVATION_AMSL + CONICAL_CONTOUR_INTERVAL
+            else:
+                first_contour_elev_amsl = (
+                    math.ceil(IHS_ELEVATION_AMSL / CONICAL_CONTOUR_INTERVAL)
+                    * CONICAL_CONTOUR_INTERVAL
+                )
+            current_target_contour_elev_amsl = first_contour_elev_amsl
+
+            while current_target_contour_elev_amsl < conical_outer_elevation - 1e-6:
+                contour_h_above_ihs = min(
+                    current_target_contour_elev_amsl - IHS_ELEVATION_AMSL,
+                    height_extent_agl,
+                )
+                if contour_h_above_ihs < 1e-6:
                     current_target_contour_elev_amsl += CONICAL_CONTOUR_INTERVAL
-                # Create contour layer if features exist
-                if contour_features:
-                    fields = self._get_conical_contour_fields()
-                    contour_layer = self._create_and_add_layer(
-                        "Polygon",
-                        f"OLS_Conical_Contours_{icao_code}",
-                        f"{self.tr('OLS')} Conical Contours {icao_code}",
-                        fields,
-                        contour_features,
-                        ols_layer_group,
-                        "OLS Conical Contour",
+                    continue
+                try:
+                    horizontal_dist = contour_h_above_ihs / slope
+                    outer_geom = ihs_base_geom.buffer(horizontal_dist, BUFFER_SEGMENTS)
+                    if outer_geom and not outer_geom.isEmpty() and outer_geom.isGeosValid():
+                        line_geom = _extract_exterior_ring_line(outer_geom)
+                        if line_geom and not line_geom.isEmpty() and line_geom.isGeosValid():
+                            feat = QgsFeature(fields)
+                            feat.setGeometry(line_geom)
+                            feat.setAttribute(fields.indexFromName("surface"), f"Conical Contour {current_target_contour_elev_amsl:.0f}m")
+                            feat.setAttribute(fields.indexFromName("contour_elev_am"), current_target_contour_elev_amsl)
+                            feat.setAttribute(fields.indexFromName("contour_hgt_abv"), contour_h_above_ihs)
+                            feat.setAttribute(fields.indexFromName("ref_mos"), ref)
+                            contour_features.append(feat)
+                            QgsMessageLog.logMessage(
+                                f"Conical interval contour at {current_target_contour_elev_amsl:.2f}m AMSL.", plugin_tag, Qgis.Info
+                            )
+                except Exception as e_contour:
+                    QgsMessageLog.logMessage(
+                        f"Error generating conical interval contour at elev={current_target_contour_elev_amsl}: {e_contour}",
+                        plugin_tag,
+                        Qgis.Warning,
                     )
-                    if contour_layer:
-                        overall_success = True
+                current_target_contour_elev_amsl += CONICAL_CONTOUR_INTERVAL
+
+            # 3. End contour at conical outer elevation
+            final_dist = height_extent_agl / slope  # buffer distance to outer edge
+            end_geom = ihs_base_geom.buffer(final_dist, BUFFER_SEGMENTS)
+            if end_geom and not end_geom.isEmpty() and end_geom.isGeosValid():
+                line_geom = _extract_exterior_ring_line(end_geom)
+                if line_geom and not line_geom.isEmpty() and line_geom.isGeosValid():
+                    # Avoid duplicate (shouldn't happen but check)
+                    if not any(abs(f.attribute("contour_elev_am") - conical_outer_elevation) < 1e-3 for f in contour_features):
+                        feat = QgsFeature(fields)
+                        feat.setGeometry(line_geom)
+                        feat.setAttribute(fields.indexFromName("surface"), f"Conical Contour {conical_outer_elevation:.0f}m")
+                        feat.setAttribute(fields.indexFromName("contour_elev_am"), conical_outer_elevation)
+                        feat.setAttribute(fields.indexFromName("contour_hgt_abv"), height_extent_agl)
+                        feat.setAttribute(fields.indexFromName("ref_mos"), ref)
+                        contour_features.append(feat)
+                        QgsMessageLog.logMessage(
+                            f"Conical end contour at {conical_outer_elevation:.2f}m AMSL.", plugin_tag, Qgis.Info
+                        )
+                else:
+                    QgsMessageLog.logMessage("Failed to extract exterior ring for conical outer edge.", plugin_tag, Qgis.Warning)
+
+            # 4. Layer creation
+            if contour_features:
+                contour_layer = self._create_and_add_layer(
+                    "LineString",
+                    f"OLS_Conical_Contours_{icao_code}",
+                    f"{self.tr('OLS')} Conical Contours {icao_code}",
+                    fields,
+                    contour_features,
+                    ols_layer_group,
+                    "OLS Conical Contour",
+                )
+                if contour_layer:
+                    overall_success = True
+                    QgsMessageLog.logMessage(
+                        f"Created conical contour layer for {icao_code}, {len(contour_features)} features.",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
+            else:
+                QgsMessageLog.logMessage(
+                    f"No conical contours generated for {icao_code}.",
+                    plugin_tag,
+                    Qgis.Warning,
+                )
 
         # --- 5. Generate Outer Horizontal Surface (OHS) ---
         ohs_params = ols_dimensions.get_ols_params(
@@ -6379,6 +6393,21 @@ class SafeguardingBuilder:
             QgsField("surface", QVariant.String),
             QgsField("contour_elev_am", QVariant.Double),
         ])
+
+    def get_exterior_ring_as_linestring(geom: QgsGeometry) -> Optional[QgsGeometry]:
+        """
+        Returns the exterior ring as a LineString geometry (QgsGeometry) from a polygon or multipolygon.
+        Returns None if not possible.
+        """
+        # Try asPolygon (single polygon)
+        poly = geom.asPolygon()
+        if poly and len(poly) > 0 and len(poly[0]) > 1:
+            return QgsGeometry.fromPolylineXY(poly[0])
+        # Try asMultiPolygon (multi-polygon)
+        multi = geom.asMultiPolygon()
+        if multi and len(multi) > 0 and len(multi[0]) > 0 and len(multi[0][0]) > 1:
+            return QgsGeometry.fromPolylineXY(multi[0][0])
+        return None
 
     def _get_ols_fields(self, surface_type: str) -> QgsFields:
         """Returns the QgsFields definition for a given OLS surface type."""
