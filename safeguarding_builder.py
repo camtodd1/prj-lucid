@@ -4381,15 +4381,16 @@ class SafeguardingBuilder:
                 attr_map = {
                     "rwy_name": self.tr("Airport Wide"),
                     "surface": "IHS",
+                    "section_desc": "Inner Horizontal Surface",
                     "elev_m": IHS_ELEVATION_AMSL,
                     "height_agl": ihs_base_height_agl,
                     "ref_mos": ref_text,
-                    "shape_desc": "Convex Hull Approximation",
                 }
                 for name, value in attr_map.items():
                     idx = fields.indexFromName(name)
-                if idx != -1:
-                    feature.setAttribute(idx, value)
+                    print(f"Assigning {name} = {value}, idx = {idx}")  # DEBUG
+                    if idx != -1:
+                        feature.setAttribute(idx, value)
                 layer = self._create_and_add_layer(
                     "Polygon",
                     f"OLS_IHS_{icao_code}",
@@ -4459,6 +4460,7 @@ class SafeguardingBuilder:
                                     attr_map = {
                                         "rwy_name": self.tr("Airport Wide"),
                                         "surface": "Conical",
+                                        "section_desc": "Conical Surface",
                                         "elev_m": conical_outer_elevation,
                                         "height_agl": conical_total_height_agl,
                                         "slope_perc": slope * 100.0,
@@ -4467,8 +4469,8 @@ class SafeguardingBuilder:
                                     }
                                     for name, value in attr_map.items():
                                         idx = fields.indexFromName(name)
-                                    if idx != -1:
-                                        feature.setAttribute(idx, value)
+                                        if idx != -1:
+                                            feature.setAttribute(idx, value)
                                     layer = self._create_and_add_layer(
                                         "Polygon",
                                         f"OLS_Conical_{icao_code}",
@@ -4819,6 +4821,7 @@ class SafeguardingBuilder:
                                 feature.setGeometry(ohs_final_geom)
                                 attr_map = {
                                     "surface": "OHS",
+                                    "section_desc": "Outer Horizontal Surface",
                                     "elev_m": ohs_elevation_amsl,
                                     "height_agl": height_agl,
                                     "ref_mos": ref,
@@ -4828,8 +4831,9 @@ class SafeguardingBuilder:
                                     attr_map["rwy_name"] = self.tr("Airport Wide")
                                 for name, value in attr_map.items():
                                     idx = fields.indexFromName(name)
-                                if idx != -1:
-                                    feature.setAttribute(idx, value)
+                                    print(f"Assigning {name} = {value}, idx = {idx}")  # DEBUG
+                                    if idx != -1:
+                                        feature.setAttribute(idx, value)
                                 layer = self._create_and_add_layer(
                                     "Polygon",
                                     f"OLS_OHS_{icao_code}",
@@ -5498,15 +5502,17 @@ class SafeguardingBuilder:
                     attr_map = {
                         "rwy_name": runway_name,
                         "surface": "Transitional",
-                        "section_desc": "Strip Side",
+                        "section_desc": "Transitional Strip Adjacent Surface",
+                        "elev_m": IHS_ELEVATION_AMSL,  # <-- upper elevation
+                        "height_agl": IHS_ELEVATION_AMSL - min(z_start, z_end),  # <-- height gain (from lowest base)
                         "side": side_label,
                         "slope_perc": transitional_slope * 100.0,
                         "ref_mos": transitional_ref,
                     }
                     for name, value in attr_map.items():
                         idx = transitional_fields.indexFromName(name)
-                    if idx != -1:
-                        feat.setAttribute(idx, value)
+                        if idx != -1:
+                            feat.setAttribute(idx, value)
                     transitional_features.append(feat)
                 # else: Failure logged by helper
 
@@ -5631,15 +5637,17 @@ class SafeguardingBuilder:
                                         "rwy_name": runway_name,
                                         "surface": "Transitional",
                                         "end_desig": end_desig,
-                                        "section_desc": f"Approach Sec {i+1}",
+                                        "section_desc": f"Transitional {end_desig} Approach Adjacent Surface",
+                                        "elev_m": IHS_ELEVATION_AMSL,  # <-- upper elevation
+                                        "height_agl": IHS_ELEVATION_AMSL - min(za_start_clipped, za_end_clipped),  # <-- height gain (from lowest base)
                                         "side": side_label,
                                         "slope_perc": transitional_slope * 100.0,
                                         "ref_mos": transitional_ref,
                                     }
                                     for name, value in attr_map.items():
                                         idx = transitional_fields.indexFromName(name)
-                                    if idx != -1:
-                                        feat.setAttribute(idx, value)
+                                        if idx != -1:
+                                            feat.setAttribute(idx, value)
                                     transitional_features.append(feat)
                                 # else: Failure logged by helper
                     current_section_start_elev = section_end_elev
@@ -6416,7 +6424,7 @@ class SafeguardingBuilder:
             QgsField("rwy_name", QVariant.String, self.tr("rwy"), 50),
             QgsField("surface", QVariant.String, self.tr("Surface Type"), 50),
             QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
-            QgsField("section_desc", QVariant.String, self.tr("Section Desc"), 20),
+            QgsField("section_desc", QVariant.String, self.tr("Section Desc"), 50),
             QgsField(
                 "elev_m", QVariant.Double, self.tr("Outer Elev (AMSL)"), 10, 2
             ),  # Clarify: Elevation at outer edge of this section
@@ -6453,14 +6461,6 @@ class SafeguardingBuilder:
                         10,
                         2,
                     ),  # Clarify: Dist from THR to start of this section
-                ]
-            )
-        elif surface_type == "IHS":
-            fields_list.extend(
-                [
-                    QgsField(
-                        "shape_desc", QVariant.String, self.tr("Shape Description"), 50
-                    )
                 ]
             )
         elif surface_type == "Conical":
@@ -6565,7 +6565,7 @@ class SafeguardingBuilder:
             if field.name() not in fields_to_remove:
                 # Update labels for clarity
                 if field.name() == "elev_m":
-                    field.setAlias(self.tr("Section Outer Elev (AMSL)"))
+                    field.setAlias(self.tr("Section Upper Elev (AMSL)"))
                 elif field.name() == "height_agl":
                     field.setAlias(self.tr("Section Height Gain (m)"))
                 elif field.name() == "len_m":
