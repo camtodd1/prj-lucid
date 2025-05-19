@@ -112,7 +112,7 @@ MOS_REF_TAXIWAY_SEPARATION = "MOS 6.53"
 
 CONICAL_CONTOUR_INTERVAL = 10.0  # Height interval in meters for conical surface
 APPROACH_CONTOUR_INTERVAL = 10.0  # Height interval in meters for approach surfaces
-TOCS_CONTOUR_INTERVAL = 5.0  # Height interval in meters for TOCS surfaces
+TOCS_CONTOUR_INTERVAL = 10.0  # Height interval in meters for TOCS surfaces
 TRANSITIONAL_CONTOUR_INTERVAL = 10.0    # Height interval in meters for transitional surfaces
 
 
@@ -2034,6 +2034,21 @@ class SafeguardingBuilder:
                 plugin_tag,
                 level=Qgis.Critical,
             )
+
+    def _interpolate_along_edge(self, edge_pts, target_elev):
+        """
+        Interpolates along an edge (list of (QgsPointXY, elev)) to find XY at target elevation.
+        Returns QgsPointXY or None if out of range.
+        """
+        for i in range(len(edge_pts) - 1):
+            elev1, elev2 = edge_pts[i][1], edge_pts[i+1][1]
+            if (elev1 - target_elev) * (elev2 - target_elev) <= 0:
+                # target_elev is between elev1 and elev2, or equal to one
+                t = (target_elev - elev1) / (elev2 - elev1) if abs(elev2 - elev1) > 1e-9 else 0
+                x = edge_pts[i][0].x() + t * (edge_pts[i+1][0].x() - edge_pts[i][0].x())
+                y = edge_pts[i][0].y() + t * (edge_pts[i+1][0].y() - edge_pts[i][0].y())
+                return QgsPointXY(x, y)
+        return None
 
     # Make sure _try_get_arp_elevation_from_layer helper exists or is implemented
     def _try_get_arp_elevation_from_layer(
@@ -5205,6 +5220,101 @@ class SafeguardingBuilder:
         # Return the segment from the original lower point (p1) to the intersection point
         return p1, p_intersect
 
+    def _generate_transitional_approach_adjacent(
+        self,
+        approach_edge_left_pts,     # List[(QgsPointXY, elev)]
+        approach_edge_right_pts,    # List[(QgsPointXY, elev)]
+        az_perp_l,                  # Perpendicular azimuth (left)
+        az_perp_r,                  # Perpendicular azimuth (right)
+        IHS_ELEVATION_AMSL,
+        transitional_slope,
+        transitional_fields,        # Polygon fields
+        contour_fields,             # Contour fields
+        contour_interval,
+        runway_name,
+        end_desig,
+        transitional_ref,
+        section_desc_base="Transitional Approach Adjacent Surface"
+    ):
+        """
+        Generates the approach-adjacent transitional polygon and contour features.
+        Returns (polygon_feature, list_of_contour_features)
+        """
+        # 1. Build lower edge (approach edge) and corresponding upper edge (IHS)
+        lower_left = []
+        lower_right = []
+        upper_left = []
+        upper_right = []
+        elevations = []
+
+        # Edge points should be ordered from inner to outer (away from THR)
+        for (pt, elev) in approach_edge_left_pts:
+            lower_left.append(pt)
+            horiz = (IHS_ELEVATION_AMSL - elev) / transitional_slope
+            upper_left.append(pt.project(horiz, az_perp_l))
+            elevations.append(elev)
+        for (pt, elev) in approach_edge_right_pts:
+            lower_right.append(pt)
+            horiz = (IHS_ELEVATION_AMSL - elev) / transitional_slope
+            upper_right.append(pt.project(horiz, az_perp_r))
+
+        # Polygon ring: lower edge (left+right), then upper edge (right reversed + left reversed)
+        polygon_ring = lower_left + lower_right[::-1] + upper_right[::-1] + upper_left
+
+        poly_feat = QgsFeature(transitional_fields)
+        poly_feat.setGeometry(QgsGeometry.fromPolygonXY([polygon_ring]))
+        attr_map = {
+            "rwy_name": runway_name,
+            "surface": "Transitional",
+            "end_desig": end_desig,
+            "section_desc": section_desc_base,
+            "elev_m": IHS_ELEVATION_AMSL,
+            "height_agl": IHS_ELEVATION_AMSL - min(elevations) if elevations else None,
+            "ref_mos": transitional_ref,
+        }
+        for name, value in attr_map.items():
+            idx = transitional_fields.indexFromName(name)
+            if idx != -1:
+                poly_feat.setAttribute(idx, value)
+
+        # 2. Contour lines: for each contour elevation between min_elev and IHS
+        contour_feats = []
+        min_elev = min([e for (_, e) in approach_edge_left_pts + approach_edge_right_pts])
+        max_elev = IHS_ELEVATION_AMSL
+        first_contour = math.ceil(min_elev / contour_interval) * contour_interval
+        contour_elevs = []
+        c_elev = first_contour
+        while c_elev < max_elev - 1e-6:
+            contour_elevs.append(round(c_elev, 6))
+            c_elev += contour_interval
+        # Optionally always add min and max?
+        # contour_elevs.append(min_elev)
+        # contour_elevs.append(max_elev)
+
+        for c_elev in contour_elevs:
+            left_base = self._interpolate_along_edge(approach_edge_left_pts, c_elev)
+            right_base = self._interpolate_along_edge(approach_edge_right_pts, c_elev)
+            if left_base and right_base:
+                dist_out = (IHS_ELEVATION_AMSL - c_elev) / transitional_slope
+                contour_left = left_base.project(dist_out, az_perp_l)
+                contour_right = right_base.project(dist_out, az_perp_r)
+                contour_geom = QgsGeometry.fromPolylineXY([contour_left, contour_right])
+                contour_feat = QgsFeature(contour_fields)
+                contour_feat.setGeometry(contour_geom)
+                attr_map = {
+                    "rwy_name": runway_name,
+                    "surface": "Transitional",
+                    "section_desc": section_desc_base,
+                    "contour_elev_am": c_elev,
+                }
+                for name, value in attr_map.items():
+                    idx = contour_fields.indexFromName(name)
+                    if idx != -1:
+                        contour_feat.setAttribute(idx, value)
+                contour_feats.append(contour_feat)
+
+        return poly_feat, contour_feats
+
     def _generate_transitional_features(
         self,
         processed_runway_data_list: List[dict],
@@ -5238,13 +5348,7 @@ class SafeguardingBuilder:
 
         approach_edges_cache = {}
 
-        # --- Pass 1: Generate Approach Section Edge Geometries (Needed for lookup) ---
-        # This is slightly inefficient but avoids complex data passing from process_guideline_f
-        QgsMessageLog.logMessage(
-            "Transitional: Pre-calculating Approach edge geometries...",
-            PLUGIN_TAG,
-            level=Qgis.Info,
-        )
+        # --- Pass 1: Pre-calculate Approach Section Edge Geometries for Lookups ---
         for runway_data in processed_runway_data_list:
             runway_name = runway_data.get("short_name")
             thr_point = runway_data.get("thr_point")
@@ -5264,16 +5368,10 @@ class SafeguardingBuilder:
             primary_desig, reciprocal_desig = (
                 runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
             )
-
             for end_idx, (end_desig, end_type, end_thr_pt, outward_az) in enumerate(
                 [
                     (primary_desig, type1_str, thr_point, rwy_params["azimuth_r_p"]),
-                    (
-                        reciprocal_desig,
-                        type2_str,
-                        rec_thr_point,
-                        rwy_params["azimuth_p_r"],
-                    ),
+                    (reciprocal_desig, type2_str, rec_thr_point, rwy_params["azimuth_p_r"]),
                 ]
             ):
                 approach_sections_params = ols_dimensions.get_ols_params(
@@ -5319,23 +5417,11 @@ class SafeguardingBuilder:
                         edge_r = QgsLineString([p_start_r, p_end_r])
                         approach_edges_cache[(runway_name, end_desig, i, "L")] = edge_l
                         approach_edges_cache[(runway_name, end_desig, i, "R")] = edge_r
-                    # else: Warning logged if corners fail
                     current_section_start_pt = end_pt
                     current_section_start_width = end_width
-        QgsMessageLog.logMessage(
-            "Transitional: Finished pre-calculating Approach edges.",
-            plugin_tag,
-            level=Qgis.Info,
-        )
 
         # --- Pass 2: Generate Transitional Features ---
-        # Info: Log start of feature generation part.
-        QgsMessageLog.logMessage(
-            "Transitional: Generating features...", plugin_tag, level=Qgis.Info
-        )
-        # ... (keep the main loop iterating through runways) ...
         for runway_data in processed_runway_data_list:
-            # --- Get Runway Data (keep checks as before) ---
             runway_name = runway_data.get("short_name")
             thr_point = runway_data.get("thr_point")
             rec_thr_point = runway_data.get("rec_thr_point")
@@ -5383,7 +5469,7 @@ class SafeguardingBuilder:
                 runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
             )
 
-            # --- Get Transitional Slope (keep logic as before) ---
+            # --- Get Transitional Slope ---
             type_abbr_1 = ols_dimensions.get_runway_type_abbr(type1_str)
             type_abbr_2 = ols_dimensions.get_runway_type_abbr(type2_str)
             type_order_abbr = ["", "NI", "NPA", "PA_I", "PA_II_III"]
@@ -5428,7 +5514,7 @@ class SafeguardingBuilder:
             transitional_slope = trans_params["slope"]
             transitional_ref = trans_params.get("ref", "MOS 8.2.17 (Verify)")
 
-            # --- Recalculate Overall Strip Geometry (keep logic) ---
+            # --- Strip-Adjacent Sides (original rectangular logic) ---
             strip_overall_width = calculated_strip_dims.get("overall_width")
             strip_extension = calculated_strip_dims.get("extension_length")
             if strip_overall_width is None or strip_extension is None:
@@ -5474,7 +5560,7 @@ class SafeguardingBuilder:
             strip_edge_l = QgsLineString([strip_corner_p_l, strip_corner_r_l])
             strip_edge_r = QgsLineString([strip_corner_p_r, strip_corner_r_r])
 
-            # --- Generate Strip Transitional Sides (keep logic, logs warnings on failure) ---
+            # --- Generate Strip Transitional Sides (rectangular) ---
             for side_label, strip_edge, outward_azimuth in [
                 ("L", strip_edge_l, rwy_params["azimuth_perp_l"]),
                 ("R", strip_edge_r, rwy_params["azimuth_perp_r"]),
@@ -5542,7 +5628,7 @@ class SafeguardingBuilder:
                     )
                     transitional_contour_features.extend(strip_contours)
 
-            # --- Approach-adjacent surfaces ---
+        # --- Approach-Adjacent Transitional Surfaces (this section is updated) ---
             for end_idx, (
                 end_desig,
                 end_type,
@@ -5558,12 +5644,15 @@ class SafeguardingBuilder:
                 )
                 if not approach_sections_params:
                     continue
+
                 current_section_start_elev = end_thr_elev
                 current_section_start_pt_ctr = None
                 prev_section_length = 0.0
+
                 for i, section_params in enumerate(approach_sections_params):
                     section_length = section_params.get("length", 0.0)
                     section_slope = section_params.get("slope", 0.0)
+                    section_divergence = section_params.get("divergence", 0.0)
                     if section_length <= 0:
                         continue
                     if i == 0:
@@ -5594,77 +5683,124 @@ class SafeguardingBuilder:
                         pa_end = approach_edge.endPoint()
                         za_start = current_section_start_elev
                         za_end = section_end_elev
-                        p1_3d = QgsPoint(pa_start.x(), pa_start.y(), za_start)
-                        p2_3d = QgsPoint(pa_end.x(), pa_end.y(), za_end)
-                        clipped_segment = self._clip_3d_segment_to_elevation(
-                            p1_3d, p2_3d, IHS_ELEVATION_AMSL
-                        )
-                        if clipped_segment:
-                            pa_start_clipped, pa_end_clipped = clipped_segment
-                            za_start_clipped, za_end_clipped = (
-                                pa_start_clipped.z(),
-                                pa_end_clipped.z(),
-                            )
-                            h_dist_app_start = max(
-                                0.0, (IHS_ELEVATION_AMSL - za_start_clipped) / transitional_slope
-                            )
-                            h_dist_app_end = max(
-                                0.0, (IHS_ELEVATION_AMSL - za_end_clipped) / transitional_slope
-                            )
-                            pa_upper_start = QgsPointXY(pa_start_clipped.x(), pa_start_clipped.y()).project(
-                                h_dist_app_start, outward_perp_azimuth
-                            )
-                            pa_upper_end = QgsPointXY(pa_end_clipped.x(), pa_end_clipped.y()).project(
-                                h_dist_app_end, outward_perp_azimuth
-                            )
-                            if pa_upper_start and pa_upper_end:
-                                corners = [
-                                    QgsPointXY(pa_start_clipped.x(), pa_start_clipped.y()),
-                                    QgsPointXY(pa_end_clipped.x(), pa_end_clipped.y()),
-                                    pa_upper_end,
-                                    pa_upper_start,
-                                ]
-                                poly_geom = self._create_polygon_from_corners(
-                                    corners, f"Trans App {end_desig} Sec{i+1} {side_label}",
-                                )
-                                if poly_geom:
-                                    feat = QgsFeature(transitional_fields)
-                                    feat.setGeometry(poly_geom)
-                                    attr_map = {
-                                        "rwy_name": runway_name,
-                                        "surface": "Transitional",
-                                        "end_desig": end_desig,
-                                        "section_desc": f"Transitional {end_desig} Approach Adjacent Surface",
-                                        "elev_m": IHS_ELEVATION_AMSL,
-                                        "height_agl": IHS_ELEVATION_AMSL - min(za_start_clipped, za_end_clipped),
-                                        "side": side_label,
-                                        "slope_perc": transitional_slope * 100.0,
-                                        "ref_mos": transitional_ref,
-                                    }
-                                    for name, value in attr_map.items():
-                                        idx = transitional_fields.indexFromName(name)
-                                        if idx != -1:
-                                            feat.setAttribute(idx, value)
-                                    transitional_features.append(feat)
 
-                                    # ---- Generate contours for this approach-adjacent section ----
-                                    approach_contours = self._generate_transitional_approach_contours(
-                                        base_start=QgsPointXY(pa_start_clipped.x(), pa_start_clipped.y()),
-                                        base_end=QgsPointXY(pa_end_clipped.x(), pa_end_clipped.y()),
-                                        top_start=pa_upper_start,
-                                        top_end=pa_upper_end,
-                                        z_start=za_start_clipped,
-                                        z_end=za_end_clipped,
-                                        IHS_ELEVATION_AMSL=IHS_ELEVATION_AMSL,
-                                        contour_fields=contour_fields,
-                                        contour_interval=contour_interval,
-                                        section_desc=f"Transitional {end_desig} Approach Adjacent Surface",
-                                        side_label=side_label,
-                                        runway_name=runway_name,
-                                        end_desig=end_desig,
-                                        transitional_ref=transitional_ref,
-)
-                                    transitional_contour_features.extend(approach_contours)
+                        # --- Clip approach side at IHS elevation ---
+                        # Find where the approach edge meets the IHS (if at all)
+                        approach_edge_points = [
+                            (pa_start, za_start),
+                            (pa_end, za_end)
+                        ]
+                        # Interpolate for IHS
+                        pa_start_clipped = pa_start
+                        pa_end_clipped = pa_end
+                        za_start_clipped = za_start
+                        za_end_clipped = za_end
+
+                        if za_start < IHS_ELEVATION_AMSL and za_end > IHS_ELEVATION_AMSL:
+                            # Crossing from below to above IHS: interpolate where it meets
+                            frac = (IHS_ELEVATION_AMSL - za_start) / (za_end - za_start)
+                            pa_end_clipped = QgsPoint(
+                                pa_start.x() + frac * (pa_end.x() - pa_start.x()),
+                                pa_start.y() + frac * (pa_end.y() - pa_start.y()),
+                                IHS_ELEVATION_AMSL
+                            )
+                            za_end_clipped = IHS_ELEVATION_AMSL
+                        elif za_end < IHS_ELEVATION_AMSL and za_start > IHS_ELEVATION_AMSL:
+                            frac = (IHS_ELEVATION_AMSL - za_end) / (za_start - za_end)
+                            pa_start_clipped = QgsPoint(
+                                pa_end.x() + frac * (pa_start.x() - pa_end.x()),
+                                pa_end.y() + frac * (pa_start.y() - pa_end.y()),
+                                IHS_ELEVATION_AMSL
+                            )
+                            za_start_clipped = IHS_ELEVATION_AMSL
+                        elif za_start >= IHS_ELEVATION_AMSL and za_end >= IHS_ELEVATION_AMSL:
+                            # Both above IHS: skip
+                            continue
+
+                        # For each base point along the clipped edge, generate the transitional polygon and contours
+                        # For simple implementation, just use start and end
+                        points_base = [
+                            QgsPointXY(pa_start_clipped.x(), pa_start_clipped.y()),
+                            QgsPointXY(pa_end_clipped.x(), pa_end_clipped.y())
+                        ]
+                        elevations_base = [za_start_clipped, za_end_clipped]
+
+                        # Now, for each point, project outward at right angles up to the IHS at the transitional slope
+                        points_top = []
+                        for base_pt, base_elev in zip(points_base, elevations_base):
+                            h_dist = max(0.0, (IHS_ELEVATION_AMSL - base_elev) / transitional_slope)
+                            top_pt = base_pt.project(h_dist, outward_perp_azimuth)
+                            points_top.append(top_pt)
+
+                        # Construct polygon (base edge + top edge)
+                        corners = [
+                            points_base[0], points_base[1],
+                            points_top[1], points_top[0]
+                        ]
+                        poly_geom = self._create_polygon_from_corners(
+                            corners, f"Trans App {end_desig} Sec{i+1} {side_label}",
+                        )
+                        if poly_geom:
+                            feat = QgsFeature(transitional_fields)
+                            feat.setGeometry(poly_geom)
+                            attr_map = {
+                                "rwy_name": runway_name,
+                                "surface": "Transitional",
+                                "end_desig": end_desig,
+                                "section_desc": f"Transitional {end_desig} Approach Adjacent Surface",
+                                "elev_m": IHS_ELEVATION_AMSL,
+                                "height_agl": IHS_ELEVATION_AMSL - min(za_start_clipped, za_end_clipped),
+                                "side": side_label,
+                                "slope_perc": transitional_slope * 100.0,
+                                "ref_mos": transitional_ref,
+                            }
+                            for name, value in attr_map.items():
+                                idx = transitional_fields.indexFromName(name)
+                                if idx != -1:
+                                    feat.setAttribute(idx, value)
+                            transitional_features.append(feat)
+
+                            # ---- Generate contours for this approach-adjacent section ----
+                            # Find contour elevations from min(base elevations) to IHS at intervals
+                            min_elev = min(za_start_clipped, za_end_clipped)
+                            max_elev = IHS_ELEVATION_AMSL
+                            current_z = (
+                                math.ceil(min_elev / contour_interval) * contour_interval
+                                if min_elev < max_elev else min_elev
+                            )
+                            while current_z < max_elev - 1e-6:
+                                # Interpolate along the base edge for current_z
+                                if za_end_clipped == za_start_clipped:
+                                    frac = 0.0
+                                else:
+                                    frac = (current_z - za_start_clipped) / (za_end_clipped - za_start_clipped)
+                                if not (0.0 <= frac <= 1.0):
+                                    current_z += contour_interval
+                                    continue
+                                base_interp = QgsPointXY(
+                                    pa_start_clipped.x() + frac * (pa_end_clipped.x() - pa_start_clipped.x()),
+                                    pa_start_clipped.y() + frac * (pa_end_clipped.y() - pa_start_clipped.y())
+                                )
+                                # Project outward at the transitional slope to IHS
+                                h_dist = max(0.0, (IHS_ELEVATION_AMSL - current_z) / transitional_slope)
+                                top_interp = base_interp.project(h_dist, outward_perp_azimuth)
+                                # Build contour line (base to top)
+                                contour_geom = QgsGeometry.fromPolylineXY([base_interp, top_interp])
+                                feat_contour = QgsFeature(contour_fields)
+                                feat_contour.setGeometry(contour_geom)
+                                attr_map_c = {
+                                    "rwy_name": runway_name,
+                                    "surface": "Transitional",
+                                    "section_desc": f"Transitional {end_desig} Approach Adjacent Surface",
+                                    "contour_elev_am": current_z,
+                                }
+                                for name, value in attr_map_c.items():
+                                    idx = contour_fields.indexFromName(name)
+                                    if idx != -1:
+                                        feat_contour.setAttribute(idx, value)
+                                transitional_contour_features.append(feat_contour)
+                                current_z += contour_interval
+
                     current_section_start_elev = section_end_elev
                     prev_section_length = section_length
 
@@ -6733,8 +6869,6 @@ class SafeguardingBuilder:
         and a list of contour line features.
         Returns a tuple: (list_of_main_polygon_features, list_of_contour_features)
         """
-        # --- Define Contour Interval ---
-        # APPROACH_CONTOUR_INTERVAL = 10.0 # Defined elsewhere or use self.
 
         # --- Get Section Parameters ---
         sections = ols_dimensions.get_ols_params(arc_num, end_type, "APPROACH")
