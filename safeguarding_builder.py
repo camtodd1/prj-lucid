@@ -36,7 +36,6 @@ from qgis.core import (  # type: ignore
     QgsVectorFileWriter,
     QgsDistanceArea,
     QgsWkbTypes,
-    QgsCoordinateTransform,
 )
 
 # --- Local Imports ---
@@ -113,7 +112,9 @@ MOS_REF_TAXIWAY_SEPARATION = "MOS 6.53"
 CONICAL_CONTOUR_INTERVAL = 10.0  # Height interval in meters for conical surface
 APPROACH_CONTOUR_INTERVAL = 10.0  # Height interval in meters for approach surfaces
 TOCS_CONTOUR_INTERVAL = 10.0  # Height interval in meters for TOCS surfaces
-TRANSITIONAL_CONTOUR_INTERVAL = 10.0    # Height interval in meters for transitional surfaces
+TRANSITIONAL_CONTOUR_INTERVAL = (
+    10.0  # Height interval in meters for transitional surfaces
+)
 
 
 # ============================================================
@@ -154,7 +155,11 @@ class SafeguardingBuilder:
             QgsProject.instance().removeMapLayer(dummy)
             # QgsMessageLog.logMessage("CRS initialisation dummy layer added and removed successfully.", plugin_tag, Qgis.Info)
         else:
-            QgsMessageLog.logMessage("CRS initialisation dummy layer failed to create.", plugin_tag, Qgis.Warning)
+            QgsMessageLog.logMessage(
+                "CRS initialisation dummy layer failed to create.",
+                plugin_tag,
+                Qgis.Warning,
+            )
 
     def _init_locale(self):
         """Load translation file."""
@@ -486,7 +491,9 @@ class SafeguardingBuilder:
 
     def run_safeguarding_processing(self):
         plugin_tag = PLUGIN_TAG
-        QgsMessageLog.logMessage("--- Safeguarding Processing Started ---", plugin_tag, level=Qgis.Info)
+        QgsMessageLog.logMessage(
+            "--- Safeguarding Processing Started ---", plugin_tag, level=Qgis.Info
+        )
 
         self.successfully_generated_layers = []
         self.reference_elevation_datum = None
@@ -498,18 +505,37 @@ class SafeguardingBuilder:
         self.dissolve_output = False
 
         if self.dlg is None:
-            QgsMessageLog.logMessage("Processing aborted: Dialog reference missing.", plugin_tag, level=Qgis.Critical)
+            QgsMessageLog.logMessage(
+                "Processing aborted: Dialog reference missing.",
+                plugin_tag,
+                level=Qgis.Critical,
+            )
             return
 
         project = QgsProject.instance()
         target_crs = project.crs()
         target_crs_authid = target_crs.authid()
         if not target_crs or not target_crs.isValid():
-            QgsMessageLog.logMessage("Processing aborted: Project CRS is invalid or not set.", plugin_tag, level=Qgis.Critical)
-            self.iface.messageBar().pushMessage(self.tr("Error"), self.tr("Project CRS is invalid or not set. Please set a valid Projected CRS."), level=Qgis.Critical, duration=10)
+            QgsMessageLog.logMessage(
+                "Processing aborted: Project CRS is invalid or not set.",
+                plugin_tag,
+                level=Qgis.Critical,
+            )
+            self.iface.messageBar().pushMessage(
+                self.tr("Error"),
+                self.tr(
+                    "Project CRS is invalid or not set. Please set a valid Projected CRS."
+                ),
+                level=Qgis.Critical,
+                duration=10,
+            )
             return
 
-        QgsMessageLog.logMessage(f"Using Project CRS: {target_crs_authid} ({target_crs.description()})", plugin_tag, level=Qgis.Info)
+        QgsMessageLog.logMessage(
+            f"Using Project CRS: {target_crs_authid} ({target_crs.description()})",
+            plugin_tag,
+            level=Qgis.Info,
+        )
 
         # Force CRS subsystem to initialise properly
         # self._initialise_crs()
@@ -1314,7 +1340,11 @@ class SafeguardingBuilder:
                     arp_point, icao_code, target_crs, guideline_groups["D"]
                 )
             elif not arp_point and guideline_groups.get("D"):
-                QgsMessageLog.logMessage("Guideline D (Wind Turbine) skipped: ARP point not available.", plugin_tag, level=Qgis.Info)
+                QgsMessageLog.logMessage(
+                    "Guideline D (Wind Turbine) skipped: ARP point not available.",
+                    plugin_tag,
+                    level=Qgis.Info,
+                )
 
             if cns_input_list and guideline_groups.get("G"):
                 try:
@@ -1567,7 +1597,7 @@ class SafeguardingBuilder:
                     f"Failed create group: {name}", PLUGIN_TAG, level=Qgis.Warning
                 )
         return guideline_groups
-    
+
     def _sanitize_filename(self, name: str, replace_char: str = "_") -> str:
         """Removes or replaces characters invalid for filenames."""
         # Remove leading/trailing whitespace
@@ -1584,8 +1614,7 @@ class SafeguardingBuilder:
         if not name:
             name = "unnamed_layer"  # Fallback if sanitization results in empty string
 
-        return name.rstrip('.') or "unnamed_layer"
-
+        return name.rstrip(".") or "unnamed_layer"
 
     def _create_and_add_layer(
         self,
@@ -1605,17 +1634,25 @@ class SafeguardingBuilder:
         plugin_tag = PLUGIN_TAG
         project = QgsProject.instance()
         target_crs = project.crs()
-        target_crs_authid = target_crs.authid()
+        target_crs.authid()
 
         if not features:
-            QgsMessageLog.logMessage(f"Skipping layer '{display_name}': No features generated.", plugin_tag, level=Qgis.Info)
+            QgsMessageLog.logMessage(
+                f"Skipping layer '{display_name}': No features generated.",
+                plugin_tag,
+                level=Qgis.Info,
+            )
             return None
 
         try:
             uri = f"{geometry_type_str}?crs={target_crs.authid()}"
             layer = QgsVectorLayer(uri, display_name, "memory")
             if not layer.isValid():
-                QgsMessageLog.logMessage(f"Failed to create layer '{display_name}' with URI '{uri}'", plugin_tag, Qgis.Critical)
+                QgsMessageLog.logMessage(
+                    f"Failed to create layer '{display_name}' with URI '{uri}'",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
                 return None
 
             layer.startEditing()
@@ -1642,25 +1679,35 @@ class SafeguardingBuilder:
                     QgsMessageLog.logMessage(
                         f"Style file not found: '{style_path}' for key '{style_key}'",
                         plugin_tag,
-                        Qgis.Warning
+                        Qgis.Warning,
                     )
 
             # Save to file if using file output
             if self.output_mode == "file":
-                if not all([self.output_path, self.output_format_driver, self.output_format_extension]):
+                if not all(
+                    [
+                        self.output_path,
+                        self.output_format_driver,
+                        self.output_format_extension,
+                    ]
+                ):
                     QgsMessageLog.logMessage(
                         f"Skipping file save for '{display_name}': Output path/driver/extension missing.",
                         plugin_tag,
-                        level=Qgis.Critical
+                        level=Qgis.Critical,
                     )
                     return layer
-                
-                QgsMessageLog.logMessage(f"display_name = '{display_name}'", plugin_tag, Qgis.Info)
+
+                QgsMessageLog.logMessage(
+                    f"display_name = '{display_name}'", plugin_tag, Qgis.Info
+                )
 
                 # Sanitize filename and construct full path
                 name_without_ext = os.path.splitext(display_name)[0]
                 safe_name = self._sanitize_filename(name_without_ext)
-                full_path = os.path.join(self.output_path, f"{safe_name}{self.output_format_extension}")
+                full_path = os.path.join(
+                    self.output_path, f"{safe_name}{self.output_format_extension}"
+                )
 
                 temp_layer = QgsVectorLayer(uri, f"temp_{internal_name_base}", "memory")
                 temp_layer.dataProvider().addAttributes(fields)
@@ -1672,12 +1719,21 @@ class SafeguardingBuilder:
                     full_path,
                     "UTF-8",
                     temp_layer.crs(),
-                    self.output_format_driver
+                    self.output_format_driver,
                 )
 
-                if isinstance(result, tuple) and result[0] == QgsVectorFileWriter.NoError:
-                    QgsMessageLog.logMessage(f"Layer '{display_name}' successfully written to '{full_path}'.", plugin_tag, Qgis.Info)
-                    loaded_layer = self.iface.addVectorLayer(full_path, display_name, "ogr")
+                if (
+                    isinstance(result, tuple)
+                    and result[0] == QgsVectorFileWriter.NoError
+                ):
+                    QgsMessageLog.logMessage(
+                        f"Layer '{display_name}' successfully written to '{full_path}'.",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
+                    loaded_layer = self.iface.addVectorLayer(
+                        full_path, display_name, "ogr"
+                    )
                     if loaded_layer and loaded_layer.isValid():
                         root = project.layerTreeRoot()
                         loaded_node = root.findLayer(loaded_layer.id())
@@ -1685,14 +1741,24 @@ class SafeguardingBuilder:
                             cloned_node = loaded_node.clone()
                             layer_group.insertChildNode(0, cloned_node)
                             loaded_node.parent().removeChildNode(loaded_node)
-                        loaded_layer.setCustomProperty("safeguarding_style_key", style_key)
+                        loaded_layer.setCustomProperty(
+                            "safeguarding_style_key", style_key
+                        )
                         self._apply_style(loaded_layer, self.style_map)
                         self.successfully_generated_layers.append(loaded_layer)
                         return loaded_layer
                     else:
-                        QgsMessageLog.logMessage(f"Failed to reload written layer '{display_name}' from '{full_path}'.", plugin_tag, Qgis.Warning)
+                        QgsMessageLog.logMessage(
+                            f"Failed to reload written layer '{display_name}' from '{full_path}'.",
+                            plugin_tag,
+                            Qgis.Warning,
+                        )
                 else:
-                    QgsMessageLog.logMessage(f"Error writing layer '{display_name}' to file: {result}", plugin_tag, Qgis.Warning)
+                    QgsMessageLog.logMessage(
+                        f"Error writing layer '{display_name}' to file: {result}",
+                        plugin_tag,
+                        Qgis.Warning,
+                    )
 
             # Add to group in TOC for memory output
             QgsProject.instance().addMapLayer(layer, False)
@@ -1703,7 +1769,11 @@ class SafeguardingBuilder:
             return layer
 
         except Exception as e:
-            QgsMessageLog.logMessage(f"Error creating/adding layer '{display_name}': {e}", plugin_tag, Qgis.Critical)
+            QgsMessageLog.logMessage(
+                f"Error creating/adding layer '{display_name}': {e}",
+                plugin_tag,
+                Qgis.Critical,
+            )
             return None
 
     def _apply_style(self, layer: QgsVectorLayer, style_map: Dict[str, str]):
@@ -1774,12 +1844,20 @@ class SafeguardingBuilder:
         Returns QgsPointXY or None if out of range.
         """
         for i in range(len(edge_pts) - 1):
-            elev1, elev2 = edge_pts[i][1], edge_pts[i+1][1]
+            elev1, elev2 = edge_pts[i][1], edge_pts[i + 1][1]
             if (elev1 - target_elev) * (elev2 - target_elev) <= 0:
                 # target_elev is between elev1 and elev2, or equal to one
-                t = (target_elev - elev1) / (elev2 - elev1) if abs(elev2 - elev1) > 1e-9 else 0
-                x = edge_pts[i][0].x() + t * (edge_pts[i+1][0].x() - edge_pts[i][0].x())
-                y = edge_pts[i][0].y() + t * (edge_pts[i+1][0].y() - edge_pts[i][0].y())
+                t = (
+                    (target_elev - elev1) / (elev2 - elev1)
+                    if abs(elev2 - elev1) > 1e-9
+                    else 0
+                )
+                x = edge_pts[i][0].x() + t * (
+                    edge_pts[i + 1][0].x() - edge_pts[i][0].x()
+                )
+                y = edge_pts[i][0].y() + t * (
+                    edge_pts[i + 1][0].y() - edge_pts[i][0].y()
+                )
                 return QgsPointXY(x, y)
         return None
 
@@ -2007,7 +2085,7 @@ class SafeguardingBuilder:
         fields.append(QgsField("coord_north", QVariant.Double))
         fields.append(QgsField("elev_m", QVariant.Double, "Elevation (AMSL)", 10, 2))
         # fields.append(QgsField("red", QVariant.Double, "Reference Elevation Datum", 10, 2))
-        
+
         try:
             # Attempt to create geometry with Z value if elevation provided
             arp_geom: Optional[QgsGeometry] = None
@@ -2037,7 +2115,13 @@ class SafeguardingBuilder:
             north_attr = arp_north if arp_north is not None else arp_point.y()
             # Set attributes including elevation
             feature.setAttributes(
-                [icao_code, f"Aerodrome Reference Point", east_attr, north_attr, arp_elevation,]
+                [
+                    icao_code,
+                    f"Aerodrome Reference Point",
+                    east_attr,
+                    north_attr,
+                    arp_elevation,
+                ]
             )
             return self._create_and_add_layer(
                 "Point",
@@ -3165,9 +3249,7 @@ class SafeguardingBuilder:
                         )
                         if geom:
                             physical_refs = ols_dimensions.get_physical_refs()
-                            pavement_ref = physical_refs.get(
-                                "pavement", "MOS 6.04"
-                            )
+                            pavement_ref = physical_refs.get("pavement", "MOS 6.04")
                             # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
                             attributes = {
                                 "rwy": runway_name,
@@ -3216,9 +3298,7 @@ class SafeguardingBuilder:
                         )
                         if geom:
                             physical_refs = ols_dimensions.get_physical_refs()
-                            pavement_ref = physical_refs.get(
-                                "pavement", "MOS 6.04"
-                            )
+                            pavement_ref = physical_refs.get("pavement", "MOS 6.04")
                             # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
                             attributes = {
                                 "rwy": runway_name,
@@ -4312,16 +4392,27 @@ class SafeguardingBuilder:
                 if line_geom and not line_geom.isEmpty() and line_geom.isGeosValid():
                     feat = QgsFeature(fields)
                     feat.setGeometry(line_geom)
-                    feat.setAttribute(fields.indexFromName("surface"), f"Conical Contour {IHS_ELEVATION_AMSL:.0f}m")
-                    feat.setAttribute(fields.indexFromName("contour_elev_am"), IHS_ELEVATION_AMSL)
+                    feat.setAttribute(
+                        fields.indexFromName("surface"),
+                        f"Conical Contour {IHS_ELEVATION_AMSL:.0f}m",
+                    )
+                    feat.setAttribute(
+                        fields.indexFromName("contour_elev_am"), IHS_ELEVATION_AMSL
+                    )
                     feat.setAttribute(fields.indexFromName("contour_hgt_abv"), 0)
                     feat.setAttribute(fields.indexFromName("ref_mos"), ref)
                     contour_features.append(feat)
                     QgsMessageLog.logMessage(
-                        f"Conical start contour at {IHS_ELEVATION_AMSL:.2f}m AMSL.", plugin_tag, Qgis.Info
+                        f"Conical start contour at {IHS_ELEVATION_AMSL:.2f}m AMSL.",
+                        plugin_tag,
+                        Qgis.Info,
                     )
                 else:
-                    QgsMessageLog.logMessage("Failed to extract exterior ring for IHS base.", plugin_tag, Qgis.Warning)
+                    QgsMessageLog.logMessage(
+                        "Failed to extract exterior ring for IHS base.",
+                        plugin_tag,
+                        Qgis.Warning,
+                    )
 
             # 2. Interval contours (main loop)
             if IHS_ELEVATION_AMSL % CONICAL_CONTOUR_INTERVAL == 0:
@@ -4344,14 +4435,31 @@ class SafeguardingBuilder:
                 try:
                     horizontal_dist = contour_h_above_ihs / slope
                     outer_geom = ihs_base_geom.buffer(horizontal_dist, BUFFER_SEGMENTS)
-                    if outer_geom and not outer_geom.isEmpty() and outer_geom.isGeosValid():
+                    if (
+                        outer_geom
+                        and not outer_geom.isEmpty()
+                        and outer_geom.isGeosValid()
+                    ):
                         line_geom = _extract_exterior_ring_line(outer_geom)
-                        if line_geom and not line_geom.isEmpty() and line_geom.isGeosValid():
+                        if (
+                            line_geom
+                            and not line_geom.isEmpty()
+                            and line_geom.isGeosValid()
+                        ):
                             feat = QgsFeature(fields)
                             feat.setGeometry(line_geom)
-                            feat.setAttribute(fields.indexFromName("surface"), f"Conical Contour {current_target_contour_elev_amsl:.0f}m")
-                            feat.setAttribute(fields.indexFromName("contour_elev_am"), current_target_contour_elev_amsl)
-                            feat.setAttribute(fields.indexFromName("contour_hgt_abv"), contour_h_above_ihs)
+                            feat.setAttribute(
+                                fields.indexFromName("surface"),
+                                f"Conical Contour {current_target_contour_elev_amsl:.0f}m",
+                            )
+                            feat.setAttribute(
+                                fields.indexFromName("contour_elev_am"),
+                                current_target_contour_elev_amsl,
+                            )
+                            feat.setAttribute(
+                                fields.indexFromName("contour_hgt_abv"),
+                                contour_h_above_ihs,
+                            )
                             feat.setAttribute(fields.indexFromName("ref_mos"), ref)
                             contour_features.append(feat)
                             # QgsMessageLog.logMessage(
@@ -4372,19 +4480,37 @@ class SafeguardingBuilder:
                 line_geom = _extract_exterior_ring_line(end_geom)
                 if line_geom and not line_geom.isEmpty() and line_geom.isGeosValid():
                     # Avoid duplicate (shouldn't happen but check)
-                    if not any(abs(f.attribute("contour_elev_am") - conical_outer_elevation) < 1e-3 for f in contour_features):
+                    if not any(
+                        abs(f.attribute("contour_elev_am") - conical_outer_elevation)
+                        < 1e-3
+                        for f in contour_features
+                    ):
                         feat = QgsFeature(fields)
                         feat.setGeometry(line_geom)
-                        feat.setAttribute(fields.indexFromName("surface"), f"Conical Contour {conical_outer_elevation:.0f}m")
-                        feat.setAttribute(fields.indexFromName("contour_elev_am"), conical_outer_elevation)
-                        feat.setAttribute(fields.indexFromName("contour_hgt_abv"), height_extent_agl)
+                        feat.setAttribute(
+                            fields.indexFromName("surface"),
+                            f"Conical Contour {conical_outer_elevation:.0f}m",
+                        )
+                        feat.setAttribute(
+                            fields.indexFromName("contour_elev_am"),
+                            conical_outer_elevation,
+                        )
+                        feat.setAttribute(
+                            fields.indexFromName("contour_hgt_abv"), height_extent_agl
+                        )
                         feat.setAttribute(fields.indexFromName("ref_mos"), ref)
                         contour_features.append(feat)
                         QgsMessageLog.logMessage(
-                            f"Conical end contour at {conical_outer_elevation:.2f}m AMSL.", plugin_tag, Qgis.Info
+                            f"Conical end contour at {conical_outer_elevation:.2f}m AMSL.",
+                            plugin_tag,
+                            Qgis.Info,
                         )
                 else:
-                    QgsMessageLog.logMessage("Failed to extract exterior ring for conical outer edge.", plugin_tag, Qgis.Warning)
+                    QgsMessageLog.logMessage(
+                        "Failed to extract exterior ring for conical outer edge.",
+                        plugin_tag,
+                        Qgis.Warning,
+                    )
 
             # 4. Layer creation
             if contour_features:
@@ -4505,9 +4631,7 @@ class SafeguardingBuilder:
                         level=Qgis.Warning,
                     )
 
-                if (
-                    arp_point_xy
-                ):  # Only proceed if arp_point_xy was successfully set
+                if arp_point_xy:  # Only proceed if arp_point_xy was successfully set
                     try:
                         center_geom = QgsGeometry.fromPointXY(arp_point_xy)
                         ohs_full_circle_geom = center_geom.buffer(
@@ -4581,7 +4705,9 @@ class SafeguardingBuilder:
                                     attr_map["rwy_name"] = self.tr("Airport Wide")
                                 for name, value in attr_map.items():
                                     idx = fields.indexFromName(name)
-                                    print(f"Assigning {name} = {value}, idx = {idx}")  # DEBUG
+                                    print(
+                                        f"Assigning {name} = {value}, idx = {idx}"
+                                    )  # DEBUG
                                     if idx != -1:
                                         feature.setAttribute(idx, value)
                                 layer = self._create_and_add_layer(
@@ -4640,10 +4766,12 @@ class SafeguardingBuilder:
             try:
                 target_crs = QgsProject.instance().crs()
                 if target_crs and target_crs.isValid():
-                    transitional_features, transitional_contour_features = self._generate_transitional_features(
-                        processed_runway_data_list,
-                        IHS_ELEVATION_AMSL,
-                        target_crs,
+                    transitional_features, transitional_contour_features = (
+                        self._generate_transitional_features(
+                            processed_runway_data_list,
+                            IHS_ELEVATION_AMSL,
+                            target_crs,
+                        )
                     )
                     if transitional_features:
                         transitional_fields = self._get_ols_fields("Transitional")
@@ -4660,7 +4788,8 @@ class SafeguardingBuilder:
                             overall_success = True
                             QgsMessageLog.logMessage(
                                 f"Created Transitional Polygon Layer: {poly_layer.name()} ({len(transitional_features)} features)",
-                                PLUGIN_TAG, level=Qgis.Info
+                                PLUGIN_TAG,
+                                level=Qgis.Info,
                             )
 
                     # --- Create Transitional Contour Line Layer ---
@@ -4679,12 +4808,14 @@ class SafeguardingBuilder:
                             overall_success = True
                             QgsMessageLog.logMessage(
                                 f"Created Transitional Contour Layer: {contour_layer.name()} ({len(transitional_contour_features)} features)",
-                                PLUGIN_TAG, level=Qgis.Info
+                                PLUGIN_TAG,
+                                level=Qgis.Info,
                             )
                     else:
                         QgsMessageLog.logMessage(
                             f"No Transitional Contour features created for {icao_code}.",
-                            PLUGIN_TAG, level=Qgis.Warning
+                            PLUGIN_TAG,
+                            level=Qgis.Warning,
                         )
                 else:
                     QgsMessageLog.logMessage(
@@ -4955,19 +5086,19 @@ class SafeguardingBuilder:
 
     def _generate_transitional_approach_adjacent(
         self,
-        approach_edge_left_pts,     # List[(QgsPointXY, elev)]
-        approach_edge_right_pts,    # List[(QgsPointXY, elev)]
-        az_perp_l,                  # Perpendicular azimuth (left)
-        az_perp_r,                  # Perpendicular azimuth (right)
+        approach_edge_left_pts,  # List[(QgsPointXY, elev)]
+        approach_edge_right_pts,  # List[(QgsPointXY, elev)]
+        az_perp_l,  # Perpendicular azimuth (left)
+        az_perp_r,  # Perpendicular azimuth (right)
         IHS_ELEVATION_AMSL,
         transitional_slope,
-        transitional_fields,        # Polygon fields
-        contour_fields,             # Contour fields
+        transitional_fields,  # Polygon fields
+        contour_fields,  # Contour fields
         contour_interval,
         runway_name,
         end_desig,
         transitional_ref,
-        section_desc_base="Transitional Approach Adjacent Surface"
+        section_desc_base="Transitional Approach Adjacent Surface",
     ):
         """
         Generates the approach-adjacent transitional polygon and contour features.
@@ -4981,12 +5112,12 @@ class SafeguardingBuilder:
         elevations = []
 
         # Edge points should be ordered from inner to outer (away from THR)
-        for (pt, elev) in approach_edge_left_pts:
+        for pt, elev in approach_edge_left_pts:
             lower_left.append(pt)
             horiz = (IHS_ELEVATION_AMSL - elev) / transitional_slope
             upper_left.append(pt.project(horiz, az_perp_l))
             elevations.append(elev)
-        for (pt, elev) in approach_edge_right_pts:
+        for pt, elev in approach_edge_right_pts:
             lower_right.append(pt)
             horiz = (IHS_ELEVATION_AMSL - elev) / transitional_slope
             upper_right.append(pt.project(horiz, az_perp_r))
@@ -5012,7 +5143,9 @@ class SafeguardingBuilder:
 
         # 2. Contour lines: for each contour elevation between min_elev and IHS
         contour_feats = []
-        min_elev = min([e for (_, e) in approach_edge_left_pts + approach_edge_right_pts])
+        min_elev = min(
+            [e for (_, e) in approach_edge_left_pts + approach_edge_right_pts]
+        )
         max_elev = IHS_ELEVATION_AMSL
         first_contour = math.ceil(min_elev / contour_interval) * contour_interval
         contour_elevs = []
@@ -5104,7 +5237,12 @@ class SafeguardingBuilder:
             for end_idx, (end_desig, end_type, end_thr_pt, outward_az) in enumerate(
                 [
                     (primary_desig, type1_str, thr_point, rwy_params["azimuth_r_p"]),
-                    (reciprocal_desig, type2_str, rec_thr_point, rwy_params["azimuth_p_r"]),
+                    (
+                        reciprocal_desig,
+                        type2_str,
+                        rec_thr_point,
+                        rwy_params["azimuth_p_r"],
+                    ),
                 ]
             ):
                 approach_sections_params = ols_dimensions.get_ols_params(
@@ -5305,16 +5443,28 @@ class SafeguardingBuilder:
                 p_start_xy = QgsPointXY(p_start_qgsp.x(), p_start_qgsp.y())
                 p_end_xy = QgsPointXY(p_end_qgsp.x(), p_end_qgsp.y())
                 z_start = self._get_elevation_at_point_along_gradient(
-                    p_start_xy, thr_point, rec_thr_point, thr_elev, rec_thr_elev, target_crs
+                    p_start_xy,
+                    thr_point,
+                    rec_thr_point,
+                    thr_elev,
+                    rec_thr_elev,
+                    target_crs,
                 )
                 z_end = self._get_elevation_at_point_along_gradient(
-                    p_end_xy, thr_point, rec_thr_point, thr_elev, rec_thr_elev, target_crs
+                    p_end_xy,
+                    thr_point,
+                    rec_thr_point,
+                    thr_elev,
+                    rec_thr_elev,
+                    target_crs,
                 )
                 if z_start is None or z_end is None:
                     continue
                 if z_start >= IHS_ELEVATION_AMSL and z_end >= IHS_ELEVATION_AMSL:
                     continue
-                h_dist_start = max(0.0, (IHS_ELEVATION_AMSL - z_start) / transitional_slope)
+                h_dist_start = max(
+                    0.0, (IHS_ELEVATION_AMSL - z_start) / transitional_slope
+                )
                 h_dist_end = max(0.0, (IHS_ELEVATION_AMSL - z_end) / transitional_slope)
                 p_upper_start = p_start_xy.project(h_dist_start, outward_azimuth)
                 p_upper_end = p_end_xy.project(h_dist_end, outward_azimuth)
@@ -5361,17 +5511,31 @@ class SafeguardingBuilder:
                     )
                     transitional_contour_features.extend(strip_contours)
 
-        # --- Approach-Adjacent Transitional Surfaces (this section is updated) ---
+            # --- Approach-Adjacent Transitional Surfaces (this section is updated) ---
             for end_idx, (
                 end_desig,
                 end_type,
                 end_thr_pt,
                 end_thr_elev,
                 outward_az,
-            ) in enumerate([
-                (primary_desig, type1_str, thr_point, thr_elev, rwy_params["azimuth_r_p"]),
-                (reciprocal_desig, type2_str, rec_thr_point, rec_thr_elev, rwy_params["azimuth_p_r"]),
-            ]):
+            ) in enumerate(
+                [
+                    (
+                        primary_desig,
+                        type1_str,
+                        thr_point,
+                        thr_elev,
+                        rwy_params["azimuth_r_p"],
+                    ),
+                    (
+                        reciprocal_desig,
+                        type2_str,
+                        rec_thr_point,
+                        rec_thr_elev,
+                        rwy_params["azimuth_p_r"],
+                    ),
+                ]
+            ):
                 approach_sections_params = ols_dimensions.get_ols_params(
                     arc_num, end_type, "APPROACH"
                 )
@@ -5385,15 +5549,21 @@ class SafeguardingBuilder:
                 for i, section_params in enumerate(approach_sections_params):
                     section_length = section_params.get("length", 0.0)
                     section_slope = section_params.get("slope", 0.0)
-                    section_divergence = section_params.get("divergence", 0.0)
+                    section_params.get("divergence", 0.0)
                     if section_length <= 0:
                         continue
                     if i == 0:
                         start_dist = section_params.get("start_dist_from_thr", 0.0)
-                        current_section_start_pt_ctr = end_thr_pt.project(start_dist, outward_az)
+                        current_section_start_pt_ctr = end_thr_pt.project(
+                            start_dist, outward_az
+                        )
                     else:
                         if current_section_start_pt_ctr:
-                            current_section_start_pt_ctr = current_section_start_pt_ctr.project(prev_section_length, outward_az)
+                            current_section_start_pt_ctr = (
+                                current_section_start_pt_ctr.project(
+                                    prev_section_length, outward_az
+                                )
+                            )
                         else:
                             break
                     if not current_section_start_pt_ctr:
@@ -5409,7 +5579,9 @@ class SafeguardingBuilder:
                         ("L", (outward_az + 270.0) % 360.0),
                         ("R", (outward_az + 90.0) % 360.0),
                     ]:
-                        approach_edge = approach_edges_cache.get((runway_name, end_desig, i, side_label))
+                        approach_edge = approach_edges_cache.get(
+                            (runway_name, end_desig, i, side_label)
+                        )
                         if not approach_edge or approach_edge.isEmpty():
                             continue
                         pa_start = approach_edge.startPoint()
@@ -5419,34 +5591,40 @@ class SafeguardingBuilder:
 
                         # --- Clip approach side at IHS elevation ---
                         # Find where the approach edge meets the IHS (if at all)
-                        approach_edge_points = [
-                            (pa_start, za_start),
-                            (pa_end, za_end)
-                        ]
+                        [(pa_start, za_start), (pa_end, za_end)]
                         # Interpolate for IHS
                         pa_start_clipped = pa_start
                         pa_end_clipped = pa_end
                         za_start_clipped = za_start
                         za_end_clipped = za_end
 
-                        if za_start < IHS_ELEVATION_AMSL and za_end > IHS_ELEVATION_AMSL:
+                        if (
+                            za_start < IHS_ELEVATION_AMSL
+                            and za_end > IHS_ELEVATION_AMSL
+                        ):
                             # Crossing from below to above IHS: interpolate where it meets
                             frac = (IHS_ELEVATION_AMSL - za_start) / (za_end - za_start)
                             pa_end_clipped = QgsPoint(
                                 pa_start.x() + frac * (pa_end.x() - pa_start.x()),
                                 pa_start.y() + frac * (pa_end.y() - pa_start.y()),
-                                IHS_ELEVATION_AMSL
+                                IHS_ELEVATION_AMSL,
                             )
                             za_end_clipped = IHS_ELEVATION_AMSL
-                        elif za_end < IHS_ELEVATION_AMSL and za_start > IHS_ELEVATION_AMSL:
+                        elif (
+                            za_end < IHS_ELEVATION_AMSL
+                            and za_start > IHS_ELEVATION_AMSL
+                        ):
                             frac = (IHS_ELEVATION_AMSL - za_end) / (za_start - za_end)
                             pa_start_clipped = QgsPoint(
                                 pa_end.x() + frac * (pa_start.x() - pa_end.x()),
                                 pa_end.y() + frac * (pa_start.y() - pa_end.y()),
-                                IHS_ELEVATION_AMSL
+                                IHS_ELEVATION_AMSL,
                             )
                             za_start_clipped = IHS_ELEVATION_AMSL
-                        elif za_start >= IHS_ELEVATION_AMSL and za_end >= IHS_ELEVATION_AMSL:
+                        elif (
+                            za_start >= IHS_ELEVATION_AMSL
+                            and za_end >= IHS_ELEVATION_AMSL
+                        ):
                             # Both above IHS: skip
                             continue
 
@@ -5454,24 +5632,30 @@ class SafeguardingBuilder:
                         # For simple implementation, just use start and end
                         points_base = [
                             QgsPointXY(pa_start_clipped.x(), pa_start_clipped.y()),
-                            QgsPointXY(pa_end_clipped.x(), pa_end_clipped.y())
+                            QgsPointXY(pa_end_clipped.x(), pa_end_clipped.y()),
                         ]
                         elevations_base = [za_start_clipped, za_end_clipped]
 
                         # Now, for each point, project outward at right angles up to the IHS at the transitional slope
                         points_top = []
                         for base_pt, base_elev in zip(points_base, elevations_base):
-                            h_dist = max(0.0, (IHS_ELEVATION_AMSL - base_elev) / transitional_slope)
+                            h_dist = max(
+                                0.0,
+                                (IHS_ELEVATION_AMSL - base_elev) / transitional_slope,
+                            )
                             top_pt = base_pt.project(h_dist, outward_perp_azimuth)
                             points_top.append(top_pt)
 
                         # Construct polygon (base edge + top edge)
                         corners = [
-                            points_base[0], points_base[1],
-                            points_top[1], points_top[0]
+                            points_base[0],
+                            points_base[1],
+                            points_top[1],
+                            points_top[0],
                         ]
                         poly_geom = self._create_polygon_from_corners(
-                            corners, f"Trans App {end_desig} Sec{i+1} {side_label}",
+                            corners,
+                            f"Trans App {end_desig} Sec{i+1} {side_label}",
                         )
                         if poly_geom:
                             feat = QgsFeature(transitional_fields)
@@ -5482,7 +5666,8 @@ class SafeguardingBuilder:
                                 "end_desig": end_desig,
                                 "section_desc": f"Transitional {end_desig} Approach Adjacent Surface",
                                 "elev_m": IHS_ELEVATION_AMSL,
-                                "height_agl": IHS_ELEVATION_AMSL - min(za_start_clipped, za_end_clipped),
+                                "height_agl": IHS_ELEVATION_AMSL
+                                - min(za_start_clipped, za_end_clipped),
                                 "side": side_label,
                                 "slope_perc": transitional_slope * 100.0,
                                 "ref_mos": transitional_ref,
@@ -5498,27 +5683,43 @@ class SafeguardingBuilder:
                             min_elev = min(za_start_clipped, za_end_clipped)
                             max_elev = IHS_ELEVATION_AMSL
                             current_z = (
-                                math.ceil(min_elev / contour_interval) * contour_interval
-                                if min_elev < max_elev else min_elev
+                                math.ceil(min_elev / contour_interval)
+                                * contour_interval
+                                if min_elev < max_elev
+                                else min_elev
                             )
                             while current_z < max_elev - 1e-6:
                                 # Interpolate along the base edge for current_z
                                 if za_end_clipped == za_start_clipped:
                                     frac = 0.0
                                 else:
-                                    frac = (current_z - za_start_clipped) / (za_end_clipped - za_start_clipped)
+                                    frac = (current_z - za_start_clipped) / (
+                                        za_end_clipped - za_start_clipped
+                                    )
                                 if not (0.0 <= frac <= 1.0):
                                     current_z += contour_interval
                                     continue
                                 base_interp = QgsPointXY(
-                                    pa_start_clipped.x() + frac * (pa_end_clipped.x() - pa_start_clipped.x()),
-                                    pa_start_clipped.y() + frac * (pa_end_clipped.y() - pa_start_clipped.y())
+                                    pa_start_clipped.x()
+                                    + frac
+                                    * (pa_end_clipped.x() - pa_start_clipped.x()),
+                                    pa_start_clipped.y()
+                                    + frac
+                                    * (pa_end_clipped.y() - pa_start_clipped.y()),
                                 )
                                 # Project outward at the transitional slope to IHS
-                                h_dist = max(0.0, (IHS_ELEVATION_AMSL - current_z) / transitional_slope)
-                                top_interp = base_interp.project(h_dist, outward_perp_azimuth)
+                                h_dist = max(
+                                    0.0,
+                                    (IHS_ELEVATION_AMSL - current_z)
+                                    / transitional_slope,
+                                )
+                                top_interp = base_interp.project(
+                                    h_dist, outward_perp_azimuth
+                                )
                                 # Build contour line (base to top)
-                                contour_geom = QgsGeometry.fromPolylineXY([base_interp, top_interp])
+                                contour_geom = QgsGeometry.fromPolylineXY(
+                                    [base_interp, top_interp]
+                                )
                                 feat_contour = QgsFeature(contour_fields)
                                 feat_contour.setGeometry(contour_geom)
                                 attr_map_c = {
@@ -5614,7 +5815,15 @@ class SafeguardingBuilder:
                 )
                 feat = QgsFeature(fields)
                 feat.setGeometry(geom)
-                feat.setAttributes(["MET Instrument Enclosure", met_point_proj_crs.x(), met_point_proj_crs.y(), side, "MOS 19.18(2)(a)"])
+                feat.setAttributes(
+                    [
+                        "MET Instrument Enclosure",
+                        met_point_proj_crs.x(),
+                        met_point_proj_crs.y(),
+                        side,
+                        "MOS 19.18(2)(a)",
+                    ]
+                )
             if self._create_and_add_layer(
                 "Polygon",
                 f"met_enc_{icao_code}",
@@ -5647,7 +5856,15 @@ class SafeguardingBuilder:
                 )
                 feat = QgsFeature(fields)
                 feat.setGeometry(geom)
-                feat.setAttributes(["MET Buffer Zone", met_point_proj_crs.x(), met_point_proj_crs.y(), side, "MOS 19.18(2)(a)"])
+                feat.setAttributes(
+                    [
+                        "MET Buffer Zone",
+                        met_point_proj_crs.x(),
+                        met_point_proj_crs.y(),
+                        side,
+                        "MOS 19.18(2)(a)",
+                    ]
+                )
             if self._create_and_add_layer(
                 "Polygon",
                 f"met_buf_{icao_code}",
@@ -5686,7 +5903,15 @@ class SafeguardingBuilder:
                     )
                     feat = QgsFeature(fields)
                     feat.setGeometry(buffered_geom)
-                    feat.setAttributes(["MET Obstacle Buffer Zone", met_point_proj_crs.x(), met_point_proj_crs.y(), dist, "MOS 19.18(2)(a)"])
+                    feat.setAttributes(
+                        [
+                            "MET Obstacle Buffer Zone",
+                            met_point_proj_crs.x(),
+                            met_point_proj_crs.y(),
+                            dist,
+                            "MOS 19.18(2)(a)",
+                        ]
+                    )
                 if self._create_and_add_layer(
                     "Polygon",
                     f"met_obs_{icao_code}",
@@ -5709,9 +5934,12 @@ class SafeguardingBuilder:
 
     def _generate_transitional_strip_contours(
         self,
-        base_start: QgsPointXY, base_end: QgsPointXY,
-        top_start: QgsPointXY, top_end: QgsPointXY,
-        z_start: float, z_end: float,
+        base_start: QgsPointXY,
+        base_end: QgsPointXY,
+        top_start: QgsPointXY,
+        top_end: QgsPointXY,
+        z_start: float,
+        z_end: float,
         IHS_ELEVATION_AMSL: float,
         contour_fields: QgsFields,
         contour_interval: float,
@@ -5731,15 +5959,17 @@ class SafeguardingBuilder:
         current_z = first_contour
         while current_z < max_z:
             # Linear interpolation for contour endpoints along base->top lines
-            t_start = (current_z - z_start) / (max_z - z_start) if max_z > z_start else 1.0
+            t_start = (
+                (current_z - z_start) / (max_z - z_start) if max_z > z_start else 1.0
+            )
             t_end = (current_z - z_end) / (max_z - z_end) if max_z > z_end else 1.0
             pt_left = QgsPointXY(
                 base_start.x() + t_start * (top_start.x() - base_start.x()),
-                base_start.y() + t_start * (top_start.y() - base_start.y())
+                base_start.y() + t_start * (top_start.y() - base_start.y()),
             )
             pt_right = QgsPointXY(
                 base_end.x() + t_end * (top_end.x() - base_end.x()),
-                base_end.y() + t_end * (top_end.y() - base_end.y())
+                base_end.y() + t_end * (top_end.y() - base_end.y()),
             )
             line_geom = QgsGeometry.fromPolylineXY([pt_left, pt_right])
             feat = QgsFeature(contour_fields)
@@ -5751,11 +5981,11 @@ class SafeguardingBuilder:
                 "section_desc": section_desc,
                 "contour_elev_am": current_z,
             }
-        #     QgsMessageLog.logMessage(
-        #     f"Setting contour_elev_am for contour: current_z={current_z} (type={type(current_z)})",
-        #     PLUGIN_TAG,
-        #     level=Qgis.Info,
-        # )
+            #     QgsMessageLog.logMessage(
+            #     f"Setting contour_elev_am for contour: current_z={current_z} (type={type(current_z)})",
+            #     PLUGIN_TAG,
+            #     level=Qgis.Info,
+            # )
             for name, value in attr_map.items():
                 idx = contour_fields.indexFromName(name)
                 if idx != -1:
@@ -5763,12 +5993,15 @@ class SafeguardingBuilder:
             contours.append(feat)
             current_z += contour_interval
         return contours
-    
+
     def _generate_transitional_approach_contours(
         self,
-        base_start: QgsPointXY, base_end: QgsPointXY,
-        top_start: QgsPointXY, top_end: QgsPointXY,
-        z_start: float, z_end: float,
+        base_start: QgsPointXY,
+        base_end: QgsPointXY,
+        top_start: QgsPointXY,
+        top_end: QgsPointXY,
+        z_start: float,
+        z_end: float,
         IHS_ELEVATION_AMSL: float,
         contour_fields: QgsFields,
         contour_interval: float,
@@ -5788,15 +6021,17 @@ class SafeguardingBuilder:
         first_contour = math.ceil(min_z / contour_interval) * contour_interval
         current_z = first_contour
         while current_z < max_z:
-            t_left = (current_z - z_start) / (max_z - z_start) if max_z > z_start else 1.0
+            t_left = (
+                (current_z - z_start) / (max_z - z_start) if max_z > z_start else 1.0
+            )
             t_right = (current_z - z_end) / (max_z - z_end) if max_z > z_end else 1.0
             pt_left = QgsPointXY(
                 base_start.x() + t_left * (top_start.x() - base_start.x()),
-                base_start.y() + t_left * (top_start.y() - base_start.y())
+                base_start.y() + t_left * (top_start.y() - base_start.y()),
             )
             pt_right = QgsPointXY(
                 base_end.x() + t_right * (top_end.x() - base_end.x()),
-                base_end.y() + t_right * (top_end.y() - base_end.y())
+                base_end.y() + t_right * (top_end.y() - base_end.y()),
             )
             line_geom = QgsGeometry.fromPolylineXY([pt_left, pt_right])
             feat = QgsFeature(contour_fields)
@@ -5817,7 +6052,7 @@ class SafeguardingBuilder:
             contours.append(feat)
             current_z += contour_interval
         return contours
-    
+
     def process_guideline_a(
         self, runway_data: dict, layer_group: QgsLayerTreeGroup
     ) -> bool:
@@ -5867,7 +6102,14 @@ class SafeguardingBuilder:
             if geom_p:
                 feat = QgsFeature(fields)
                 feat.setGeometry(geom_p)
-                feat.setAttributes([runway_name, "Windshear Assessment Zone", primary_desig, "NASF Guideline B"])
+                feat.setAttributes(
+                    [
+                        runway_name,
+                        "Windshear Assessment Zone",
+                        primary_desig,
+                        "NASF Guideline B",
+                    ]
+                )
                 features_to_add.append(feat)
         except Exception as e:
             QgsMessageLog.logMessage(
@@ -5885,7 +6127,14 @@ class SafeguardingBuilder:
             if geom_r:
                 feat = QgsFeature(fields)
                 feat.setGeometry(geom_r)
-                feat.setAttributes([runway_name, "Windshear Assessment Zone", primary_desig, "NASF Guideline B"])
+                feat.setAttributes(
+                    [
+                        runway_name,
+                        "Windshear Assessment Zone",
+                        primary_desig,
+                        "NASF Guideline B",
+                    ]
+                )
                 features_to_add.append(feat)
         except Exception as e:
             QgsMessageLog.logMessage(
@@ -5946,7 +6195,16 @@ class SafeguardingBuilder:
                 )
                 feature = QgsFeature(fields)
                 feature.setGeometry(geom)
-                feature.setAttributes([f"Area {zone}", desc, r_in, r_out, "MOS 17.01(2)", "NASF Guideline C"])
+                feature.setAttributes(
+                    [
+                        f"Area {zone}",
+                        desc,
+                        r_in,
+                        r_out,
+                        "MOS 17.01(2)",
+                        "NASF Guideline C",
+                    ]
+                )
                 layer = self._create_and_add_layer(
                     "Polygon",
                     internal_name,
@@ -6003,7 +6261,11 @@ class SafeguardingBuilder:
                 )
 
             if create_wzm_layer(
-                "A", geom_a, self.tr("Wildlife Management Zone A (0-3km)"), 0.0, GUIDELINE_C_RADIUS_A_M / 1000.0
+                "A",
+                geom_a,
+                self.tr("Wildlife Management Zone A (0-3km)"),
+                0.0,
+                GUIDELINE_C_RADIUS_A_M / 1000.0,
             ):
                 overall_success = True
             if create_wzm_layer(
@@ -6028,18 +6290,22 @@ class SafeguardingBuilder:
                 f"Error Guideline C: {e}", PLUGIN_TAG, level=Qgis.Critical
             )
             return False
-        
+
     def process_guideline_d(
         self,
         arp_point: QgsPointXY,
         icao_code: str,
-        target_crs: QgsCoordinateReferenceSystem, # For consistency, though buffer uses geom's CRS
-        layer_group: QgsLayerTreeGroup
+        target_crs: QgsCoordinateReferenceSystem,  # For consistency, though buffer uses geom's CRS
+        layer_group: QgsLayerTreeGroup,
     ) -> bool:
         """Processes Guideline D: Wind Turbine Assessment Zone."""
         plugin_tag = PLUGIN_TAG
         if not all([arp_point, icao_code, layer_group]):
-            QgsMessageLog.logMessage("Guideline D (Wind Turbine) skipped: Missing ARP point, ICAO code, or layer group.", plugin_tag, level=Qgis.Warning)
+            QgsMessageLog.logMessage(
+                "Guideline D (Wind Turbine) skipped: Missing ARP point, ICAO code, or layer group.",
+                plugin_tag,
+                level=Qgis.Warning,
+            )
             return False
 
         # Constants are defined at the top of the file
@@ -6049,38 +6315,64 @@ class SafeguardingBuilder:
         try:
             arp_geom = QgsGeometry.fromPointXY(arp_point)
             if arp_geom.isNull():
-                QgsMessageLog.logMessage("Guideline D (Wind Turbine) skipped: ARP geometry is null.", plugin_tag, level=Qgis.Warning)
+                QgsMessageLog.logMessage(
+                    "Guideline D (Wind Turbine) skipped: ARP geometry is null.",
+                    plugin_tag,
+                    level=Qgis.Warning,
+                )
                 return False
 
-            turbine_zone_geom = arp_geom.buffer(GUIDELINE_D_TURBINE_RADIUS_M, GUIDELINE_D_BUFFER_SEGMENTS)
+            turbine_zone_geom = arp_geom.buffer(
+                GUIDELINE_D_TURBINE_RADIUS_M, GUIDELINE_D_BUFFER_SEGMENTS
+            )
             if not turbine_zone_geom or turbine_zone_geom.isEmpty():
-                QgsMessageLog.logMessage("Guideline D: Failed to create turbine zone buffer.", plugin_tag, level=Qgis.Warning)
+                QgsMessageLog.logMessage(
+                    "Guideline D: Failed to create turbine zone buffer.",
+                    plugin_tag,
+                    level=Qgis.Warning,
+                )
                 return False
 
             valid_geom = turbine_zone_geom.makeValid()
             if not valid_geom or not valid_geom.isGeosValid() or valid_geom.isEmpty():
-                QgsMessageLog.logMessage("Guideline D: Turbine zone geometry invalid after makeValid.", plugin_tag, level=Qgis.Warning)
+                QgsMessageLog.logMessage(
+                    "Guideline D: Turbine zone geometry invalid after makeValid.",
+                    plugin_tag,
+                    level=Qgis.Warning,
+                )
                 return False
 
-            fields = QgsFields([
-                QgsField("icao_code", QVariant.String, self.tr("ICAO Code"), 10),
-                QgsField("description", QVariant.String, self.tr("Description"), 100),
-                QgsField("radius_km", QVariant.Double, self.tr("Radius (km)"), 8, 2),
-                QgsField("ref_nasf", QVariant.String, self.tr("Guideline Ref."), 50)
-            ])
+            fields = QgsFields(
+                [
+                    QgsField("icao_code", QVariant.String, self.tr("ICAO Code"), 10),
+                    QgsField(
+                        "description", QVariant.String, self.tr("Description"), 100
+                    ),
+                    QgsField(
+                        "radius_km", QVariant.Double, self.tr("Radius (km)"), 8, 2
+                    ),
+                    QgsField(
+                        "ref_nasf", QVariant.String, self.tr("Guideline Ref."), 50
+                    ),
+                ]
+            )
 
             feature = QgsFeature(fields)
             feature.setGeometry(valid_geom)
-            feature.setAttributes([
-                icao_code,
-                self.tr("Wind Turbine Assessment Zone (30km Radius)"),
-                GUIDELINE_D_TURBINE_RADIUS_M / 1000.0,
-                self.tr("NASF Guideline D")
-            ])
+            feature.setAttributes(
+                [
+                    icao_code,
+                    self.tr("Wind Turbine Assessment Zone (30km Radius)"),
+                    GUIDELINE_D_TURBINE_RADIUS_M / 1000.0,
+                    self.tr("NASF Guideline D"),
+                ]
+            )
 
-            layer_display_name = f"{icao_code} {self.tr('Wind Turbine Assessment Zone')}"
+            layer_display_name = (
+                f"{icao_code} {self.tr('Wind Turbine Assessment Zone')}"
+            )
             internal_name_base = f"Guideline_D_TurbineZone_{icao_code}"
-            style_key = "Wind Turbine Assessment Zone" # Matches style_map key
+            style_key = "Wind Turbine Assessment Zone"  # Matches style_map key
 
             layer_created = self._create_and_add_layer(
                 "Polygon",
@@ -6089,11 +6381,15 @@ class SafeguardingBuilder:
                 fields,
                 [feature],
                 layer_group,
-                style_key
+                style_key,
             )
             return layer_created is not None
         except Exception as e:
-            QgsMessageLog.logMessage(f"Error processing Guideline D (Wind Turbine): {e}\n{traceback.format_exc()}", plugin_tag, level=Qgis.Critical)
+            QgsMessageLog.logMessage(
+                f"Error processing Guideline D (Wind Turbine): {e}\n{traceback.format_exc()}",
+                plugin_tag,
+                level=Qgis.Critical,
+            )
             return False
 
     def process_guideline_e(
@@ -6388,25 +6684,35 @@ class SafeguardingBuilder:
             ]
         )
         return fields
-    
+
     def _get_tocs_contour_fields(self) -> QgsFields:
-        return QgsFields([
-            QgsField("rwy_name", QVariant.String),
-            QgsField("end_desig", QVariant.String),
-            QgsField("surface", QVariant.String),
-            QgsField("contour_elev_am", QVariant.Double),
-        ])
-    
+        return QgsFields(
+            [
+                QgsField("rwy_name", QVariant.String),
+                QgsField("end_desig", QVariant.String),
+                QgsField("surface", QVariant.String),
+                QgsField("contour_elev_am", QVariant.Double),
+            ]
+        )
+
     def _get_transitional_contour_fields(self) -> QgsFields:
         """
         Returns minimal fields for the Transitional Contour lines.
         """
-        return QgsFields([
-            QgsField("rwy_name", QVariant.String, self.tr("Runway"), 50),
-            QgsField("surface", QVariant.String, self.tr("Surface Type"), 30),
-            QgsField("section_desc", QVariant.String, self.tr("Section Desc"), 50),
-            QgsField("contour_elev_am", QVariant.Double, self.tr("Contour Elev (AMSL)"), 10, 2),
-        ])
+        return QgsFields(
+            [
+                QgsField("rwy_name", QVariant.String, self.tr("Runway"), 50),
+                QgsField("surface", QVariant.String, self.tr("Surface Type"), 30),
+                QgsField("section_desc", QVariant.String, self.tr("Section Desc"), 50),
+                QgsField(
+                    "contour_elev_am",
+                    QVariant.Double,
+                    self.tr("Contour Elev (AMSL)"),
+                    10,
+                    2,
+                ),
+            ]
+        )
 
     def get_exterior_ring_as_linestring(geom: QgsGeometry) -> Optional[QgsGeometry]:
         """
@@ -6803,7 +7109,10 @@ class SafeguardingBuilder:
                     # return [], contour_line_features # Example: Stop if one section fails
 
             # --- Generate Contours within this Section ---
-            if current_elevation_amsl is not None and section_outer_elevation is not None:
+            if (
+                current_elevation_amsl is not None
+                and section_outer_elevation is not None
+            ):
                 start_elev = current_elevation_amsl
                 end_elev = section_outer_elevation
 
@@ -6815,7 +7124,10 @@ class SafeguardingBuilder:
                     contour_elevs.add(round(end_elev, 6))
                 else:
                     # Sloped section: intervals + start
-                    first_contour = math.ceil(start_elev / APPROACH_CONTOUR_INTERVAL) * APPROACH_CONTOUR_INTERVAL
+                    first_contour = (
+                        math.ceil(start_elev / APPROACH_CONTOUR_INTERVAL)
+                        * APPROACH_CONTOUR_INTERVAL
+                    )
                     if first_contour < start_elev - 1e-6:
                         first_contour += APPROACH_CONTOUR_INTERVAL
 
@@ -6844,7 +7156,9 @@ class SafeguardingBuilder:
                         dist_along = delta_h / section_slope
 
                     cl_point = current_start_point.project(dist_along, outward_azimuth)
-                    current_width_at_dist = current_start_width + (2 * dist_along * section_divergence)
+                    current_width_at_dist = current_start_width + (
+                        2 * dist_along * section_divergence
+                    )
                     half_width = current_width_at_dist / 2.0
 
                     if cl_point and half_width > 0:
@@ -6860,21 +7174,32 @@ class SafeguardingBuilder:
                                 if valid_geom:  # Clip to current section
                                     clipped_geom = contour_geom.intersection(valid_geom)
                                     if clipped_geom and not clipped_geom.isEmpty():
-                                        contour_fields = QgsFields([
-                                            QgsField("rwy_name", QVariant.String),
-                                            QgsField("end_desig", QVariant.String),
-                                            QgsField("surface", QVariant.String),
-                                            QgsField("contour_elev_am", QVariant.Double),
-                                        ])
+                                        contour_fields = QgsFields(
+                                            [
+                                                QgsField("rwy_name", QVariant.String),
+                                                QgsField("end_desig", QVariant.String),
+                                                QgsField("surface", QVariant.String),
+                                                QgsField(
+                                                    "contour_elev_am", QVariant.Double
+                                                ),
+                                            ]
+                                        )
                                         contour_feature = QgsFeature(contour_fields)
                                         contour_feature.setGeometry(clipped_geom)
                                         contour_attr_map = {
-                                            "rwy_name": runway_data.get("short_name", "N/A"),
+                                            "rwy_name": runway_data.get(
+                                                "short_name", "N/A"
+                                            ),
                                             "end_desig": end_desig,
                                             "surface": "Approach",
                                             "contour_elev_am": target_elev,
                                         }
-                                        contour_feature.setAttributes([contour_attr_map[k] for k in contour_attr_map])
+                                        contour_feature.setAttributes(
+                                            [
+                                                contour_attr_map[k]
+                                                for k in contour_attr_map
+                                            ]
+                                        )
                                         contour_line_features.append(contour_feature)
 
             # --- Update for next iteration ---
@@ -6942,8 +7267,15 @@ class SafeguardingBuilder:
                 missing_keys = [
                     k
                     for k, v in params.items()
-                    if v is None and k in [
-                        "origin_offset", "inner_edge_width", "divergence", "length", "final_width", "slope",
+                    if v is None
+                    and k
+                    in [
+                        "origin_offset",
+                        "inner_edge_width",
+                        "divergence",
+                        "length",
+                        "final_width",
+                        "slope",
                     ]
                 ]
                 QgsMessageLog.logMessage(
@@ -6988,7 +7320,9 @@ class SafeguardingBuilder:
         # 2. Calculate Start Point of TOCS Inner Edge
         effective_takeoff_start = runway_phys_end_point
         if clearway_len > 1e-6:
-            projected_clearway_end = effective_takeoff_start.project(clearway_len, outward_azimuth)
+            projected_clearway_end = effective_takeoff_start.project(
+                clearway_len, outward_azimuth
+            )
             if not projected_clearway_end:
                 QgsMessageLog.logMessage(
                     f"Failed calc TOCS clearway end point {end_desig}",
@@ -7009,7 +7343,9 @@ class SafeguardingBuilder:
 
         # 3. Calculate Length of Divergence Section
         width_increase_per_side = final_hw - inner_hw
-        length_divergence = width_increase_per_side / divergence if width_increase_per_side > 0 else 0.0
+        length_divergence = (
+            width_increase_per_side / divergence if width_increase_per_side > 0 else 0.0
+        )
 
         # 4. Generate Geometry
         try:
@@ -7032,7 +7368,9 @@ class SafeguardingBuilder:
                     final_hw,
                     f"TOCS Trapezoid Part {end_desig}",
                 )
-                rect_start_point = start_point.project(length_divergence, outward_azimuth)
+                rect_start_point = start_point.project(
+                    length_divergence, outward_azimuth
+                )
                 length_rectangle = overall_length - length_divergence
 
                 if not rect_start_point or length_rectangle < 1e-6:
@@ -7074,7 +7412,9 @@ class SafeguardingBuilder:
 
         # 5. Create TOCS Polygon Feature
         height_agl = overall_length * slope
-        elevation_amsl = (origin_elevation + height_agl) if origin_elevation is not None else None
+        elevation_amsl = (
+            (origin_elevation + height_agl) if origin_elevation is not None else None
+        )
 
         fields = self._get_ols_fields("TOCS")
         feature = QgsFeature(fields)
@@ -7108,7 +7448,9 @@ class SafeguardingBuilder:
             contour_elevs = set()
 
             # Add interval contours
-            first_contour = math.ceil(start_elev / TOCS_CONTOUR_INTERVAL) * TOCS_CONTOUR_INTERVAL
+            first_contour = (
+                math.ceil(start_elev / TOCS_CONTOUR_INTERVAL) * TOCS_CONTOUR_INTERVAL
+            )
             if first_contour < start_elev - 1e-6:
                 first_contour += TOCS_CONTOUR_INTERVAL
 
@@ -7167,13 +7509,19 @@ class SafeguardingBuilder:
                             # Clip to TOCS polygon
                             final_contour_geom = contour_geom.intersection(final_geom)
                 # If valid, create the feature
-                if 'final_contour_geom' in locals() and final_contour_geom and not final_contour_geom.isEmpty():
-                    contour_fields = QgsFields([
-                        QgsField("rwy_name", QVariant.String),
-                        QgsField("end_desig", QVariant.String),
-                        QgsField("surface", QVariant.String),
-                        QgsField("contour_elev_am", QVariant.Double),
-                    ])
+                if (
+                    "final_contour_geom" in locals()
+                    and final_contour_geom
+                    and not final_contour_geom.isEmpty()
+                ):
+                    contour_fields = QgsFields(
+                        [
+                            QgsField("rwy_name", QVariant.String),
+                            QgsField("end_desig", QVariant.String),
+                            QgsField("surface", QVariant.String),
+                            QgsField("contour_elev_am", QVariant.Double),
+                        ]
+                    )
                     contour_feature = QgsFeature(contour_fields)
                     contour_feature.setGeometry(final_contour_geom)
                     contour_attr_map = {
@@ -7182,10 +7530,12 @@ class SafeguardingBuilder:
                         "surface": "TOCS",
                         "contour_elev_am": target_elev,
                     }
-                    contour_feature.setAttributes([contour_attr_map[k] for k in contour_attr_map])
+                    contour_feature.setAttributes(
+                        [contour_attr_map[k] for k in contour_attr_map]
+                    )
                     tocs_contour_features.append(contour_feature)
                 # Clean up variable for next loop
-                if 'final_contour_geom' in locals():
+                if "final_contour_geom" in locals():
                     del final_contour_geom
 
         # Return both the polygon and the contour features list
@@ -7423,14 +7773,16 @@ class SafeguardingBuilder:
                 approach_contour_features.extend(contour_features_p)
 
             # --- 1c. Generate Take-off Climb Surface (TOCS) (Primary End) ---
-            origin_elev_tocs_p = rec_thr_elev  # Elevation reference = Reciprocal THR elev
+            origin_elev_tocs_p = (
+                rec_thr_elev  # Elevation reference = Reciprocal THR elev
+            )
             feat_tocs1, contour_features_tocs1 = self._generate_tocs(
                 runway_data,
                 rwy_params,
                 arc_num,
                 type1_str,
-                phys_p_end,           # Use RECIPROCAL physical end as reference point
-                clearway2_len,        # Use clearway associated with reciprocal end
+                phys_p_end,  # Use RECIPROCAL physical end as reference point
+                clearway2_len,  # Use clearway associated with reciprocal end
                 rwy_params["azimuth_p_r"],
                 primary_desig,
                 origin_elev_tocs_p,
@@ -7561,8 +7913,8 @@ class SafeguardingBuilder:
                 rwy_params,
                 arc_num,
                 type2_str,
-                phys_p_start,         # Use PRIMARY physical end as reference point
-                clearway1_len,        # Use clearway associated with primary end
+                phys_p_start,  # Use PRIMARY physical end as reference point
+                clearway1_len,  # Use clearway associated with primary end
                 rwy_params["azimuth_r_p"],
                 reciprocal_desig,
                 origin_elev_tocs_r,
