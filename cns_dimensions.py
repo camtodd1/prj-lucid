@@ -12,7 +12,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "High Frequency (HF)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 100,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -20,7 +20,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 6000,
             "InnerRadius_m": 100,
             "HeightRule": "TBD",
@@ -28,7 +28,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Area of Interest",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 10000,
             "InnerRadius_m": 6000,
             "HeightRule": "TBD",
@@ -38,7 +38,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Very High Frequency (VHF)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 100,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -46,7 +46,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 600,
             "InnerRadius_m": 100,
             "HeightRule": "TBD",
@@ -54,7 +54,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Area of Interest",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 2000,
             "InnerRadius_m": 100,
             "HeightRule": "TBD",
@@ -64,7 +64,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Satellite Ground Station (SGS)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 30,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -72,7 +72,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 150,
             "InnerRadius_m": 30,
             "HeightRule": "TBD",
@@ -82,7 +82,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Non-Directional Beacon (NDB)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 60,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -90,7 +90,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 300,
             "InnerRadius_m": 60,
             "HeightRule": "TBD",
@@ -100,7 +100,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Distance Measuring Equipment (DME)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 100,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -108,7 +108,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 1500,
             "InnerRadius_m": 100,
             "HeightRule": "TBD",
@@ -118,7 +118,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "VHF Omni-Directional Range (VOR)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 100,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -126,7 +126,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 1500,
             "InnerRadius_m": 100,
             "HeightRule": "TBD",
@@ -136,7 +136,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Conventional VHF Omni-Directional Range (CVOR)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 200,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -144,7 +144,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 1500,
             "InnerRadius_m": 200,
             "HeightRule": "TBD",
@@ -154,7 +154,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Doppler VHF Omni-Directional Range (DVOR) - Elevated": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 100,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -162,7 +162,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 1500,
             "InnerRadius_m": 100,
             "HeightRule": "TBD",
@@ -172,7 +172,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Doppler VHF Omni-Directional Range (DVOR) - Ground Mounted": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 150,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -180,7 +180,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 1500,
             "InnerRadius_m": 150,
             "HeightRule": "TBD",
@@ -190,7 +190,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Middle and Outer Marker": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 5,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -198,7 +198,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 50,
             "InnerRadius_m": 5,
             "HeightRule": "TBD",
@@ -210,7 +210,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Automatic Dependent Surveillance Broadcast (ADS-B)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 100,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -218,7 +218,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 1500,
             "InnerRadius_m": 100,
             "HeightRule": "TBD",
@@ -228,7 +228,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Wide Area Multilateration (WAM)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 100,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -236,7 +236,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 1500,
             "InnerRadius_m": 100,
             "HeightRule": "TBD",
@@ -246,7 +246,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Primary Surveillance Radar (PSR)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 500,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -254,7 +254,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 4000,
             "InnerRadius_m": 500,
             "HeightRule": "TBD",
@@ -262,7 +262,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Area of Interest",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 15000,
             "InnerRadius_m": 4000,
             "HeightRule": "TBD",
@@ -272,7 +272,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Secondary Surveillance Radar (SSR)": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 500,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -280,7 +280,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 4000,
             "InnerRadius_m": 500,
             "HeightRule": "TBD",
@@ -288,7 +288,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Area of Interest",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 15000,
             "InnerRadius_m": 4000,
             "HeightRule": "TBD",
@@ -298,7 +298,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Ground Based Augmentation System (GBAS) - RSMU": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 155,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -306,7 +306,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 3000,
             "InnerRadius_m": 155,
             "HeightRule": "TBD",
@@ -316,7 +316,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "GBAS - VDB": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 200,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -324,7 +324,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Donut",
+            "shape": "Donut",
             "OuterRadius_m": 3000,
             "InnerRadius_m": 200,
             "HeightRule": "TBD",
@@ -334,7 +334,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Link Dishes": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 30,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -344,7 +344,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Radar Site Monitor - Type A": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 30,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -352,7 +352,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 500,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -362,7 +362,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     "Radar Site Monitor - Type B": [
         {
             "SurfaceName": "Zone A",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 70,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",
@@ -370,7 +370,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
         {
             "SurfaceName": "Zone A/B",
-            "Shape": "Circle",
+            "shape": "Circle",
             "OuterRadius_m": 500,
             "InnerRadius_m": 0,
             "HeightRule": "TBD",

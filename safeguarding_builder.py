@@ -147,12 +147,12 @@ class SafeguardingBuilder:
         """Force QGIS to initialise CRS subsystems by adding and removing a dummy layer."""
         plugin_tag = PLUGIN_TAG
         crs_authid = QgsProject.instance().crs().authid()
-        QgsMessageLog.logMessage(f"Initialising CRS: {crs_authid}", plugin_tag, Qgis.Info)
+        # QgsMessageLog.logMessage(f"Initialising CRS: {crs_authid}", plugin_tag, Qgis.Info)
         dummy = QgsVectorLayer(f"Point?crs={crs_authid}", "crs_init_dummy", "memory")
         if dummy.isValid():
             QgsProject.instance().addMapLayer(dummy, False)
             QgsProject.instance().removeMapLayer(dummy)
-            QgsMessageLog.logMessage("CRS initialisation dummy layer added and removed successfully.", plugin_tag, Qgis.Info)
+            # QgsMessageLog.logMessage("CRS initialisation dummy layer added and removed successfully.", plugin_tag, Qgis.Info)
         else:
             QgsMessageLog.logMessage("CRS initialisation dummy layer failed to create.", plugin_tag, Qgis.Warning)
 
@@ -471,12 +471,14 @@ class SafeguardingBuilder:
             )
 
         # Round down to the nearest half metre
-        reference_elevation_datum = math.floor(reference_elevation_unrounded * 2) / 2.0
+        # reference_elevation_datum = math.floor(reference_elevation_unrounded * 2) / 2.0
+
+        reference_elevation_datum = reference_elevation_unrounded
 
         # Success: Log the final calculated RED.
         QgsMessageLog.logMessage(
-            f"Calculated Reference Elevation Datum (RED): {reference_elevation_datum:.2f}m AMSL "
-            f"(Unrounded: {reference_elevation_unrounded:.3f}m)",
+            f"Calculated Reference Elevation Datum (RED): {reference_elevation_datum:.2f}m AMSL ",
+            # f"(Unrounded: {reference_elevation_unrounded:.3f}m)",
             plugin_tag,
             level=Qgis.Success,
         )
@@ -510,12 +512,12 @@ class SafeguardingBuilder:
         QgsMessageLog.logMessage(f"Using Project CRS: {target_crs_authid} ({target_crs.description()})", plugin_tag, level=Qgis.Info)
 
         # Force CRS subsystem to initialise properly
-        self._initialise_crs()
-        QgsMessageLog.logMessage(
-            f"CRS initialisation complete. Project CRS is now active: {target_crs.authid()}",
-            plugin_tag,
-            level=Qgis.Info,
-        )
+        # self._initialise_crs()
+        # QgsMessageLog.logMessage(
+        #     f"CRS initialisation complete. Project CRS is now active: {target_crs.authid()}",
+        #     plugin_tag,
+        #     level=Qgis.Info,
+        # )
 
         specialised_safeguarding_group = None
 
@@ -1697,7 +1699,7 @@ class SafeguardingBuilder:
             layer_group.addLayer(layer)
             self.successfully_generated_layers.append(layer)
 
-            QgsMessageLog.logMessage(f"Layer '{display_name}' created and added successfully.", plugin_tag, Qgis.Info)
+            # QgsMessageLog.logMessage(f"Layer '{display_name}' created and added successfully.", plugin_tag, Qgis.Info)
             return layer
 
         except Exception as e:
@@ -4352,9 +4354,9 @@ class SafeguardingBuilder:
                             feat.setAttribute(fields.indexFromName("contour_hgt_abv"), contour_h_above_ihs)
                             feat.setAttribute(fields.indexFromName("ref_mos"), ref)
                             contour_features.append(feat)
-                            QgsMessageLog.logMessage(
-                                f"Conical interval contour at {current_target_contour_elev_amsl:.2f}m AMSL.", plugin_tag, Qgis.Info
-                            )
+                            # QgsMessageLog.logMessage(
+                            #     f"Conical interval contour at {current_target_contour_elev_amsl:.2f}m AMSL.", plugin_tag, Qgis.Info
+                            # )
                 except Exception as e_contour:
                     QgsMessageLog.logMessage(
                         f"Error generating conical interval contour at elev={current_target_contour_elev_amsl}: {e_contour}",
@@ -4450,13 +4452,13 @@ class SafeguardingBuilder:
                         geom = arp_feat.geometry()
                         actual_wkb_type = geom.wkbType()
 
-                        QgsMessageLog.logMessage(
-                            f"ARP feature for OHS: Layer='{found_arp_point_layer.name()}', "
-                            f"Geom valid? {geom.isGeosValid()}, "
-                            f"WKBType Int: {actual_wkb_type} ({QgsWkbTypes.displayString(actual_wkb_type)})",
-                            PLUGIN_TAG,
-                            Qgis.Info,
-                        )
+                        # QgsMessageLog.logMessage(
+                        #     f"ARP feature for OHS: Layer='{found_arp_point_layer.name()}', "
+                        #     f"Geom valid? {geom.isGeosValid()}, "
+                        #     f"WKBType Int: {actual_wkb_type} ({QgsWkbTypes.displayString(actual_wkb_type)})",
+                        #     PLUGIN_TAG,
+                        #     Qgis.Info,
+                        # )
 
                         acceptable_point_wkb_types = {
                             QgsWkbTypes.Point,
@@ -4519,11 +4521,11 @@ class SafeguardingBuilder:
                                     outer_conical_geom
                                     and outer_conical_geom.isGeosValid()
                                 ):
-                                    QgsMessageLog.logMessage(
-                                        "Attempting to difference Conical outer boundary from OHS circle.",
-                                        plugin_tag,
-                                        level=Qgis.Info,
-                                    )
+                                    # QgsMessageLog.logMessage(
+                                    #     "Attempting to difference Conical outer boundary from OHS circle.",
+                                    #     plugin_tag,
+                                    #     level=Qgis.Info,
+                                    # )
                                     try:
                                         difference_geom = (
                                             ohs_full_circle_geom.difference(
@@ -5749,11 +5751,11 @@ class SafeguardingBuilder:
                 "section_desc": section_desc,
                 "contour_elev_am": current_z,
             }
-            QgsMessageLog.logMessage(
-            f"Setting contour_elev_am for contour: current_z={current_z} (type={type(current_z)})",
-            PLUGIN_TAG,
-            level=Qgis.Info,
-        )
+        #     QgsMessageLog.logMessage(
+        #     f"Setting contour_elev_am for contour: current_z={current_z} (type={type(current_z)})",
+        #     PLUGIN_TAG,
+        #     level=Qgis.Info,
+        # )
             for name, value in attr_map.items():
                 idx = contour_fields.indexFromName(name)
                 if idx != -1:
