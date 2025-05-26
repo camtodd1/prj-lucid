@@ -17,3 +17,4 @@ __pycache__/
 .idea/
 *.rej
 *.orig
+.DS_Store
