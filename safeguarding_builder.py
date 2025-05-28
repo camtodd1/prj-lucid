@@ -1298,9 +1298,9 @@ class SafeguardingBuilder:
 
             guideline_groups = self._create_guideline_groups(main_group)
 
-            # specialised_group_node = main_group.addGroup(self.tr("Specialised Safeguarding"))
-            # if not specialised_group_node:
-            #     QgsMessageLog.logMessage("Failed create group: Specialised Safeguarding", plugin_tag, level=Qgis.Warning)
+            ofz_group = None
+            if guideline_groups.get("F"):
+                ofz_group = guideline_groups["F"].addGroup(self.tr("OLS Obstacle Free Zone"))
 
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl, runway_input_list
@@ -1366,6 +1366,7 @@ class SafeguardingBuilder:
                 processed_runway_data_list,
                 guideline_groups,
                 specialised_safeguarding_group,
+                ofz_group,
             )
 
             airport_wide_ols_processed = False
@@ -1918,6 +1919,7 @@ class SafeguardingBuilder:
         processed_runway_data_list: List[dict],
         guideline_groups: Dict[str, Optional[QgsLayerTreeGroup]],
         specialised_group_node: Optional[QgsLayerTreeGroup],
+        ofz_group: Optional[QgsLayerTreeGroup],
     ) -> bool:
         """Processes runway-specific guidelines."""
         any_guideline_processed_ok = False
@@ -1939,7 +1941,7 @@ class SafeguardingBuilder:
                     )
                 if guideline_groups.get("F"):
                     run_success_flags.append(
-                        self.process_guideline_f(runway_data, guideline_groups["F"])
+                        self.process_guideline_f(runway_data, guideline_groups["F"], ofz_group)
                     )  # F = OLS App/TOCS
                 if guideline_groups.get("I"):
                     run_success_flags.append(
@@ -7568,7 +7570,7 @@ class SafeguardingBuilder:
         return feature, tocs_contour_features
 
     def process_guideline_f(
-        self, runway_data: dict, layer_group: QgsLayerTreeGroup
+        self, runway_data: dict, layer_group: QgsLayerTreeGroup, ofz_group = None
     ) -> bool:
         """
         Generates RUNWAY-SPECIFIC Guideline F OLS: Inner Approach, Approach (Polygon + Contours) & TOCS.
@@ -7978,7 +7980,7 @@ class SafeguardingBuilder:
                 f"{self.tr('OLS')} Inner Approach {runway_name}",
                 fields,
                 inner_approach_features,
-                layer_group,
+                ofz_group if ofz_group is not None else layer_group,
                 style_key_inner_app,
             )
             if layer:
