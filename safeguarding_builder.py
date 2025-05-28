@@ -112,10 +112,7 @@ MOS_REF_TAXIWAY_SEPARATION = "MOS 6.53"
 CONICAL_CONTOUR_INTERVAL = 10.0  # Height interval in meters for conical surface
 APPROACH_CONTOUR_INTERVAL = 10.0  # Height interval in meters for approach surfaces
 TOCS_CONTOUR_INTERVAL = 10.0  # Height interval in meters for TOCS surfaces
-TRANSITIONAL_CONTOUR_INTERVAL = (
-    10.0  # Height interval in meters for transitional surfaces
-)
-
+TRANSITIONAL_CONTOUR_INTERVAL = 10.0  # Height interval in meters for transitional surfaces
 
 # ============================================================
 # Main Plugin Class - SafeguardingBuilder
@@ -5627,6 +5624,7 @@ class SafeguardingBuilder:
                         side_label=side_label,
                         runway_name=runway_name,
                         transitional_ref=transitional_ref,
+                        bounding_polygon=poly_geom,
                     )
                     transitional_contour_features.extend(strip_contours)
 
@@ -6024,6 +6022,7 @@ class SafeguardingBuilder:
         side_label: str,
         runway_name: str,
         transitional_ref: str,
+        bounding_polygon=None,
     ) -> List[QgsFeature]:
         """
         Generates contour lines for a rectangular (strip-adjacent) transitional surface section.
@@ -6049,6 +6048,15 @@ class SafeguardingBuilder:
                 base_end.y() + t_end * (top_end.y() - base_end.y()),
             )
             line_geom = QgsGeometry.fromPolylineXY([pt_left, pt_right])
+
+            # --- CLIP to rectangle polygon if provided ---
+            if bounding_polygon is not None and line_geom is not None:
+                clipped_geom = line_geom.intersection(bounding_polygon)
+                if clipped_geom.isEmpty():
+                    current_z += contour_interval
+                    continue  # Skip if completely outside
+                line_geom = clipped_geom  # Use the clipped geometry
+
             feat = QgsFeature(contour_fields)
             feat.setGeometry(line_geom)
             # Assign attributes (add/remove fields as appropriate)
