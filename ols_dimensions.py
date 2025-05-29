@@ -35,6 +35,9 @@ RUNWAY_TYPE_MAP = {
     "Precision Approach CAT II/III": "PA_II_III",
 }
 
+# Define the set of precision approach type abbreviations
+PRECISION_APPROACH_TYPES = {"PA_I", "PA_II_III"} # Use a set for efficient 'in' check
+
 # =========================================================================
 # == Physical Geometry Dictionaries
 # =========================================================================
