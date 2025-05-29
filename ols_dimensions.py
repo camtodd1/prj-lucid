@@ -408,6 +408,83 @@ INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # The get_ols_params function will return None if lookup fails.
 }
 
+# --- Inner Transitional Surface (only applies to instrument runways) ---
+INNER_TRANSITIONAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
+    (1, "PA_I"): {
+        "slope": 0.40,  # 40%
+        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 1/2)"
+    },
+    (2, "PA_I"): {
+        "slope": 0.40,  # 40%
+        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 1/2)"
+    },
+    (3, "PA_I"): {
+        "slope": 0.333,  # 33.3%
+        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 3/4)"
+    },
+    (4, "PA_I"): {
+        "slope": 0.333,  # 33.3%
+        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 3/4)"
+    },
+    (3, "PA_II_III"): {
+        "slope": 0.333,  # 33.3%
+        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatII/III, 3/4)"
+    },
+    (4, "PA_II_III"): {
+        "slope": 0.333,  # 33.3%
+        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatII/III, 3/4)"
+    },
+}
+
+# --- Baulked Landing Surface (instrument runways only) ---
+BAULKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
+    # Key: (ARC_Number, Runway_Type_Abbreviation)
+    # Runway_Type_Abbreviation: "PA_I" (Precision Approach CAT I), "PA_II_III" (Precision Approach CAT II/III)
+
+    (1, "PA_I"): {
+        "width": 90.0,                     # Inner width of the Baulked Landing surface (metres)
+        "start_dist_from_thr": 1800.0,     # Distance from threshold to the start of Baulked Landing (metres)
+        "divergence": 0.10,                # Divergence per side (e.g., 0.10 for 10%)
+        "slope": 0.04,                     # Slope (e.g., 0.04 for 4%)
+        "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 1/2)",
+    },
+    (2, "PA_I"): {
+        "width": 90.0,
+        "start_dist_from_thr": 1800.0,
+        "divergence": 0.10,
+        "slope": 0.04,
+        "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 1/2)",
+    },
+    (3, "PA_I"): {
+        "width": 120.0,
+        "start_dist_from_thr": 1800.0,
+        "divergence": 0.10,
+        "slope": 0.033,                    # 3.3%
+        "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 3/4)",
+    },
+    (4, "PA_I"): {
+        "width": 120.0,
+        "start_dist_from_thr": 1800.0,
+        "divergence": 0.10,
+        "slope": 0.033,
+        "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 3/4)",
+    },
+    (3, "PA_II_III"): {
+        "width": 120.0,
+        "start_dist_from_thr": 1800.0,
+        "divergence": 0.10,
+        "slope": 0.033,
+        "ref": "MOS 7.12/Table 7.15 (1) (PA-CatII/III, 3/4)",
+    },
+    (4, "PA_II_III"): {
+        "width": 120.0,
+        "start_dist_from_thr": 1800.0,
+        "divergence": 0.10,
+        "slope": 0.033,
+        "ref": "MOS 7.12/Table 7.15 (1) (PA-CatII/III, 3/4)",
+    },
+}
+
 # --- Take-Off Climb Surface (TOCS) ---
 # Dimensions vary by Code Number only
 
@@ -626,20 +703,6 @@ OHS_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Precision CAT II & III Instrument
     (3, "PA_II_III"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 7.05 Table 7.15(1)"},
     (4, "PA_II_III"): {"height_agl": 150.0, "radius": 15000.0, "ref": "MOS 7.05 Table 7.15(1)"},
-}
-
-# --- Transitional Surface ---
-# Main transitional slope depends on Code Number (MOS 139 8.2.17).
-# Inner transitional surface applies for PA CAT II/III (MOS 139 8.2.16) - NOT FULLY IMPLEMENTED HERE.
-# VERIFY ALL VALUES AGAINST MOS 139.
-TRANSITIONAL_PARAMS: Dict[int, Dict[str, Any]] = {
-    # Key: ARC Number
-    1: {"slope": 0.200, "ref": "MOS 8.2.17 (Code 1/2)"},  # 1:5
-    2: {"slope": 0.200, "ref": "MOS 8.2.17 (Code 1/2)"},  # 1:5
-    3: {"slope": 0.143, "ref": "MOS 8.2.17 (Code 3/4)"},  # 1:7
-    4: {"slope": 0.143, "ref": "MOS 8.2.17 (Code 3/4)"},  # 1:7
-    # Inner Transitional for PA CAT II/III has slope 1:3 (0.333) - see 8.2.16(b)
-    # Need logic in get_ols_params or calling function to handle this.
 }
 
 # --- Transitional Surface ---
@@ -900,86 +963,95 @@ def get_ols_params(
     Returns None if parameters are not found for the specific combination.
     Handles simplified runway type mapping and potential fallbacks for Approach.
     """
-    # Add print/log at the beginning to see exact inputs received
     print(
         f"[ols_dimensions DEBUG] get_ols_params received: arc_num={arc_num!r}, type_str={runway_type_str!r}, surface={surface_type!r}"
     )
 
     if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
-        print(f"Error: Invalid ARC Number '{arc_num}' for OLS lookup.")
+        print(f"[ols_dimensions ERROR] Invalid ARC Number '{arc_num}' for OLS lookup.")
         return None
 
     rwy_abbr = get_runway_type_abbr(runway_type_str)
-    key = (arc_num, rwy_abbr)
-    surface_type_upper = surface_type.upper()
-    print(
-        f"[ols_dimensions DEBUG] Using key: {key!r} for surface: {surface_type_upper!r}"
-    )  # Log the key being used
+    # Default key is (arc_num, rwy_abbr), used for most surfaces
+    # Some surfaces like TOCS might only use arc_num.
+    key_arc_type = (arc_num, rwy_abbr)
+    surface_type_upper = surface_type.upper() # Normalize surface type for comparison
 
-    params_dict: Optional[Dict] = (
-        None  # The dictionary containing parameters for the surface type
+    print(
+        f"[ols_dimensions DEBUG] Using rwy_abbr: '{rwy_abbr}'. Key for type-dependent surfaces: {key_arc_type!r}. Surface requested: {surface_type_upper!r}"
     )
-    lookup_key: Any = (
-        key  # The key to use for lookup (might change for TOCS/Transitional)
-    )
+
+    params_dict: Optional[Dict] = None
+    lookup_key: Any = key_arc_type # Default lookup key
 
     if surface_type_upper == "APPROACH":
         params_dict = APPROACH_PARAMS
-        lookup_key = key
-        params = params_dict.get(lookup_key)
-        # Fallback logic specifically for Approach if PA type not found
-        if not params and rwy_abbr.startswith("PA"):
+        # Fallback logic specifically for Approach
+        params = params_dict.get(key_arc_type)
+        if not params and rwy_abbr.startswith("PA"): # If PA type not found, try NPA then NI for same ARC
             key_npa = (arc_num, "NPA")
             params = params_dict.get(key_npa)
+            print(f"[ols_dimensions DEBUG] Approach PA fallback, trying NPA key {key_npa!r}, found: {params is not None}")
             if not params:
                 key_ni = (arc_num, "NI")
                 params = params_dict.get(key_ni)
-        # Return here for Approach after fallback check
-        return params.copy() if params else None
+                print(f"[ols_dimensions DEBUG] Approach NPA fallback, trying NI key {key_ni!r}, found: {params is not None}")
+        print(f"[ols_dimensions DEBUG] Approach params final: {params is not None}")
+        return params.copy() if params else None # Return immediately for Approach
 
     elif surface_type_upper == "INNERAPPROACH":
         params_dict = INNER_APPROACH_PARAMS
-        lookup_key = key  # Keyed by ARC and Type
-        params = params_dict.get(lookup_key)  # Perform lookup
-        # No fallback defined for inner approach based on table
+        # lookup_key remains key_arc_type
+
+    elif surface_type_upper == "BAULKEDLANDING": # <<< --- ADDED THIS BLOCK ---
+        params_dict = BAULKED_LANDING_PARAMS
+        # lookup_key remains key_arc_type
+        print(f"[ols_dimensions DEBUG] Attempting lookup in BAULKED_LANDING_PARAMS with key {lookup_key!r}")
 
     elif surface_type_upper == "TOCS":
         params_dict = TOCS_PARAMS
-        lookup_key = arc_num  # TOCS params keyed only by ARC number in current dict
+        lookup_key = arc_num  # TOCS params keyed only by ARC number
 
     elif surface_type_upper == "IHS":
         params_dict = IHS_PARAMS
-        lookup_key = key  # Keyed by ARC and Type
+        # lookup_key remains key_arc_type
 
     elif surface_type_upper == "CONICAL":
         params_dict = CONICAL_PARAMS
-        lookup_key = key  # Keyed by ARC and Type
+        # lookup_key remains key_arc_type
 
     elif surface_type_upper == "OHS":
         params_dict = OHS_PARAMS
-        lookup_key = key
-        print(
-            f"[ols_dimensions DEBUG] Attempting lookup in OHS_PARAMS with key {lookup_key!r}"
-        )  # Log before lookup
+        # lookup_key remains key_arc_type
+        print(f"[ols_dimensions DEBUG] Attempting lookup in OHS_PARAMS with key {lookup_key!r}")
 
-    elif surface_type_upper == "TRANSITIONAL":
-        params_dict = TRANSITIONAL_PARAMS  # <<< Use the updated dictionary
-        lookup_key = key  # <<< Use the (arc_num, rwy_abbr) tuple key
-        params = params_dict.get(lookup_key)
-        # NOTE: Add logic here later if needed to fetch/modify for Inner Transitional
+    elif surface_type_upper == "TRANSITIONAL": # Main Transitional
+        params_dict = TRANSITIONAL_PARAMS
+        # lookup_key remains key_arc_type
+    
+    elif surface_type_upper == "INNERTRANSITIONAL": # Placeholder for specific Inner Transitional params
+        params_dict = INNER_TRANSITIONAL_PARAMS # If you have specific params for it
+        # lookup_key remains key_arc_type
+        print(f"[ols_dimensions DEBUG] Attempting lookup in INNER_TRANSITIONAL_PARAMS with key {lookup_key!r}")
+
 
     else:
-        print(f"Error: Unknown OLS surface type '{surface_type}' requested.")
-        return None  # Unknown surface type
-
-    # Perform the lookup for non-Approach types
-    if params_dict:
-        params = params_dict.get(lookup_key)
-        return params.copy() if params else None
-    else:
-        # Should not happen if surface_type_upper matched a known type
+        print(f"[ols_dimensions ERROR] Unknown OLS surface type '{surface_type}' requested.")
         return None
 
+    # Common lookup for most types (except Approach which returned earlier)
+    if params_dict is not None:
+        params = params_dict.get(lookup_key)
+        print(f"[ols_dimensions DEBUG] Lookup for {surface_type_upper} with key {lookup_key!r} in {params_dict.__class__.__name__ if params_dict else 'None'}: Found params = {params is not None}")
+        if params is None and surface_type_upper == "BAULKEDLANDING": # Specific debug if BLS fails here
+             print(f"  Available keys in BAULKED_LANDING_PARAMS: {list(BAULKED_LANDING_PARAMS.keys())}")
+        return params.copy() if params else None
+    else:
+        # This path should ideally not be reached if surface_type_upper matched a known type
+        # and params_dict was assigned. Could happen if a params_dict (e.g. BAULKED_LANDING_PARAMS)
+        # was not defined at the module level.
+        print(f"[ols_dimensions WARNING] params_dict is None for known surface type '{surface_type_upper}'. This indicates a missing global parameter dictionary.")
+        return None
 
 def get_taxiway_separation_offset(
     arc_num: int, arc_let: Optional[str], runway_type_str: Optional[str]
