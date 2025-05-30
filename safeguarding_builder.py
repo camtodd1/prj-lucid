@@ -4,7 +4,7 @@
 import os.path
 import math
 import traceback
-import re  # ### NEW: Import regular expressions for filename sanitization
+import re
 
 # import functools # Not used directly
 from typing import Dict, Optional, List, Any, Tuple
@@ -347,8 +347,7 @@ class SafeguardingBuilder:
         plugin_tag = PLUGIN_TAG  # Local variable for convenience
 
         if arp_elevation is None:
-            # Critical: Cannot calculate RED without ARP Elevation. No user message needed here yet,
-            # handled later if OLS depends on it.
+            # Critical: Cannot calculate RED without ARP Elevation.
             QgsMessageLog.logMessage(
                 "Cannot calculate RED: ARP Elevation is missing.",
                 plugin_tag,
@@ -535,7 +534,7 @@ class SafeguardingBuilder:
         )
 
         # Force CRS subsystem to initialise properly
-        # self._initialise_crs()
+        self._initialise_crs()
         # QgsMessageLog.logMessage(
         #     f"CRS initialisation complete. Project CRS is now active: {target_crs.authid()}",
         #     plugin_tag,
@@ -1302,7 +1301,9 @@ class SafeguardingBuilder:
 
             ofz_group = None
             if guideline_groups.get("F"):
-                ofz_group = guideline_groups["F"].addGroup(self.tr("OLS Obstacle Free Zone"))
+                ofz_group = guideline_groups["F"].addGroup(
+                    self.tr("OLS Obstacle Free Zone")
+                )
 
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl, runway_input_list
@@ -1943,7 +1944,9 @@ class SafeguardingBuilder:
                     )
                 if guideline_groups.get("F"):
                     run_success_flags.append(
-                        self.process_guideline_f(runway_data, guideline_groups["F"], ofz_group)
+                        self.process_guideline_f(
+                            runway_data, guideline_groups["F"], ofz_group
+                        )
                     )  # F = OLS App/TOCS
                 if guideline_groups.get("I"):
                     run_success_flags.append(
@@ -4844,7 +4847,7 @@ class SafeguardingBuilder:
         )
         return overall_success
 
-    # --- NEW Geometry Helper Methods ---
+    # --- Geometry Helper Methods ---
 
     def _get_polygon_edges(
         self, polygon_geom: QgsGeometry
@@ -5027,16 +5030,18 @@ class SafeguardingBuilder:
 
     def _get_polygon_side_3d_points(
         self,
-        surface_geom_2d: QgsGeometry, # The 2D polygon of IA or BLS
+        surface_geom_2d: QgsGeometry,  # The 2D polygon of IA or BLS
         centerline_start_pt_xy: QgsPointXY,
-        centerline_end_pt_xy: QgsPointXY, # For IA, this is its own end; for BLS, its own end
-        start_elevation_amsl: float, # Elevation at centerline_start_pt_xy
-        end_elevation_amsl: float,   # Elevation at centerline_end_pt_xy
+        centerline_end_pt_xy: QgsPointXY,  # For IA, this is its own end; for BLS, its own end
+        start_elevation_amsl: float,  # Elevation at centerline_start_pt_xy
+        end_elevation_amsl: float,  # Elevation at centerline_end_pt_xy
         start_half_width: float,
         end_half_width: float,
-        side_label: str # 'L' or 'R'
-    ) -> Optional[Tuple[QgsPoint, QgsPoint]]: # Returns (inner_3d_pt, outer_3d_pt) for the specified side
-        plugin_tag = PLUGIN_TAG # Assuming PLUGIN_TAG is accessible or pass it
+        side_label: str,  # 'L' or 'R'
+    ) -> Optional[
+        Tuple[QgsPoint, QgsPoint]
+    ]:  # Returns (inner_3d_pt, outer_3d_pt) for the specified side
+        plugin_tag = PLUGIN_TAG  # Assuming PLUGIN_TAG is accessible or pass it
 
         """
         Calculates the 3D coordinates of the inner and outer points of one side
@@ -5044,84 +5049,131 @@ class SafeguardingBuilder:
         'inner' means closer to the reference threshold from which the surface originates.
         'outer' means further from that reference threshold.
         """
-        if not surface_geom_2d or surface_geom_2d.isEmpty() or not surface_geom_2d.isGeosValid():
+        if (
+            not surface_geom_2d
+            or surface_geom_2d.isEmpty()
+            or not surface_geom_2d.isGeosValid()
+        ):
             return None
-        if None in [start_elevation_amsl, end_elevation_amsl]: return None
+        if None in [start_elevation_amsl, end_elevation_amsl]:
+            return None
 
         # Determine the azimuth of the surface centerline
         surface_centerline_az = centerline_start_pt_xy.azimuth(centerline_end_pt_xy)
         if centerline_start_pt_xy.compare(centerline_end_pt_xy, 1e-3):
-            surface_centerline_az = 0 
-            QgsMessageLog.logMessage(f"Debug _poly_side: CL start/end same for {side_label}, using az 0.", plugin_tag, Qgis.Info)
-
+            surface_centerline_az = 0
+            QgsMessageLog.logMessage(
+                f"Debug _poly_side: CL start/end same for {side_label}, using az 0.",
+                plugin_tag,
+                Qgis.Info,
+            )
 
         perp_az: float
         # This is the version that worked for your IA panels:
         side_label = side_label.upper()
-        if side_label == 'L': 
-            perp_az = (surface_centerline_az + 90.0) % 360.0 # Your "effective Left"
-        elif side_label == 'R':
-            perp_az = (surface_centerline_az - 90.0 + 360.0) % 360.0 # Your "effective Right"
+        if side_label == "L":
+            perp_az = (surface_centerline_az + 90.0) % 360.0  # Your "effective Left"
+        elif side_label == "R":
+            perp_az = (
+                surface_centerline_az - 90.0 + 360.0
+            ) % 360.0  # Your "effective Right"
         else:
-            QgsMessageLog.logMessage(f"Debug _poly_side: Invalid side_label '{side_label}'.", plugin_tag, Qgis.Warning)
+            QgsMessageLog.logMessage(
+                f"Debug _poly_side: Invalid side_label '{side_label}'.",
+                plugin_tag,
+                Qgis.Warning,
+            )
             return None
-        
-        QgsMessageLog.logMessage(f"Debug _poly_side ({side_label}): surface_centerline_az={surface_centerline_az:.2f}, calculated_perp_az={perp_az:.2f}", plugin_tag, Qgis.Info) # DEBUG LOG
+
+        QgsMessageLog.logMessage(
+            f"Debug _poly_side ({side_label}): surface_centerline_az={surface_centerline_az:.2f}, calculated_perp_az={perp_az:.2f}",
+            plugin_tag,
+            Qgis.Info,
+        )  # DEBUG LOG
 
         p_inner_side_xy = centerline_start_pt_xy.project(start_half_width, perp_az)
         p_outer_side_xy = centerline_end_pt_xy.project(end_half_width, perp_az)
 
         if not p_inner_side_xy or not p_outer_side_xy:
-            QgsMessageLog.logMessage(f"Debug _poly_side ({side_label}): Failed to project side points.", plugin_tag, Qgis.Warning)
+            QgsMessageLog.logMessage(
+                f"Debug _poly_side ({side_label}): Failed to project side points.",
+                plugin_tag,
+                Qgis.Warning,
+            )
             return None
 
         # Log the calculated side points
-        QgsMessageLog.logMessage(f"Debug _poly_side ({side_label}): p_inner_side_xy={p_inner_side_xy.asWkt()}, p_outer_side_xy={p_outer_side_xy.asWkt()}", plugin_tag, Qgis.Info) # DEBUG LOG
+        QgsMessageLog.logMessage(
+            f"Debug _poly_side ({side_label}): p_inner_side_xy={p_inner_side_xy.asWkt()}, p_outer_side_xy={p_outer_side_xy.asWkt()}",
+            plugin_tag,
+            Qgis.Info,
+        )  # DEBUG LOG
 
-        p_inner_3d = QgsPoint(p_inner_side_xy.x(), p_inner_side_xy.y(), start_elevation_amsl)
-        p_outer_3d = QgsPoint(p_outer_side_xy.x(), p_outer_side_xy.y(), end_elevation_amsl)
-        
+        p_inner_3d = QgsPoint(
+            p_inner_side_xy.x(), p_inner_side_xy.y(), start_elevation_amsl
+        )
+        p_outer_3d = QgsPoint(
+            p_outer_side_xy.x(), p_outer_side_xy.y(), end_elevation_amsl
+        )
+
         return p_inner_3d, p_outer_3d
-    
+
     def _flip_side_label(self, side_label: str) -> str:
-        return 'R' if side_label.upper() == 'L' else 'L'
+        return "R" if side_label.upper() == "L" else "L"
 
     def _define_strip_edge_segment_3d(
         self,
-        p_align_ia_inner_xy: QgsPointXY, # XY point near IA inner edge (e.g., centerline of IA inner edge)
-        p_align_bls_inner_xy: QgsPointXY, # XY point near BLS inner edge (e.g., centerline of BLS inner edge)
+        p_align_ia_inner_xy: QgsPointXY,  # XY point near IA inner edge (e.g., centerline of IA inner edge)
+        p_align_bls_inner_xy: QgsPointXY,  # XY point near BLS inner edge (e.g., centerline of BLS inner edge)
         strip_half_width: float,
-        outward_perp_az_from_rwy_cl: float, # Azimuth from rwy CL to this strip edge (L or R)
-        rwy_primary_thr_pt: QgsPointXY, # For overall runway gradient
+        outward_perp_az_from_rwy_cl: float,  # Azimuth from rwy CL to this strip edge (L or R)
+        rwy_primary_thr_pt: QgsPointXY,  # For overall runway gradient
         rwy_reciprocal_thr_pt: QgsPointXY,
         rwy_primary_thr_elev: float,
-        rwy_reciprocal_thr_elev: float
-    ) -> Optional[Tuple[QgsPoint, QgsPoint]]: # Returns (start_3d_on_strip, end_3d_on_strip)
+        rwy_reciprocal_thr_elev: float,
+    ) -> Optional[
+        Tuple[QgsPoint, QgsPoint]
+    ]:  # Returns (start_3d_on_strip, end_3d_on_strip)
         """Defines the 3D segment of the ITS base along the runway strip edge."""
 
-        if None in [rwy_primary_thr_elev, rwy_reciprocal_thr_elev]: return None
+        if None in [rwy_primary_thr_elev, rwy_reciprocal_thr_elev]:
+            return None
 
         # Project to strip edge
-        strip_p1_xy = p_align_ia_inner_xy.project(strip_half_width, outward_perp_az_from_rwy_cl)
-        strip_p2_xy = p_align_bls_inner_xy.project(strip_half_width, outward_perp_az_from_rwy_cl)
+        strip_p1_xy = p_align_ia_inner_xy.project(
+            strip_half_width, outward_perp_az_from_rwy_cl
+        )
+        strip_p2_xy = p_align_bls_inner_xy.project(
+            strip_half_width, outward_perp_az_from_rwy_cl
+        )
 
-        if not strip_p1_xy or not strip_p2_xy: return None
+        if not strip_p1_xy or not strip_p2_xy:
+            return None
 
         # Get elevations along runway gradient
         z1_strip = self._get_elevation_at_point_along_gradient(
-            strip_p1_xy, rwy_primary_thr_pt, rwy_reciprocal_thr_pt,
-            rwy_primary_thr_elev, rwy_reciprocal_thr_elev, QgsProject.instance().crs()
+            strip_p1_xy,
+            rwy_primary_thr_pt,
+            rwy_reciprocal_thr_pt,
+            rwy_primary_thr_elev,
+            rwy_reciprocal_thr_elev,
+            QgsProject.instance().crs(),
         )
         z2_strip = self._get_elevation_at_point_along_gradient(
-            strip_p2_xy, rwy_primary_thr_pt, rwy_reciprocal_thr_pt,
-            rwy_primary_thr_elev, rwy_reciprocal_thr_elev, QgsProject.instance().crs()
+            strip_p2_xy,
+            rwy_primary_thr_pt,
+            rwy_reciprocal_thr_pt,
+            rwy_primary_thr_elev,
+            rwy_reciprocal_thr_elev,
+            QgsProject.instance().crs(),
         )
 
-        if z1_strip is None or z2_strip is None: return None
+        if z1_strip is None or z2_strip is None:
+            return None
 
         p1_strip_3d = QgsPoint(strip_p1_xy.x(), strip_p1_xy.y(), z1_strip)
         p2_strip_3d = QgsPoint(strip_p2_xy.x(), strip_p2_xy.y(), z2_strip)
-        
+
         return p1_strip_3d, p2_strip_3d
 
     def _clip_3d_segment_to_elevation(
@@ -5188,7 +5240,15 @@ class SafeguardingBuilder:
         return p1, p_intersect
 
     def _generate_inner_transitional_surface(
-        self, arc_num, rwy_type, thr_point, azimuth, origin_elev, ofz_params, end_desig, runway_name
+        self,
+        arc_num,
+        rwy_type,
+        thr_point,
+        azimuth,
+        origin_elev,
+        ofz_params,
+        end_desig,
+        runway_name,
     ):
         width = ofz_params.get("width")
         length = ofz_params.get("length")
@@ -5241,215 +5301,340 @@ class SafeguardingBuilder:
         return feat
 
     def _generate_baulked_landing_surface(
-            self,
-            runway_data: dict,
-            rwy_params: dict,
-            thr_point: QgsPointXY,
-            outward_azimuth: float,
-            bls_param_dict: dict,
-            end_desig: str,
-            IHS_ELEVATION_AMSL: float # Changed from Optional to required
-        ) -> Optional[Tuple[QgsFeature, QgsGeometry, float, float, QgsPointXY, float]]:
-            plugin_tag = PLUGIN_TAG
-            runway_name = runway_data.get("short_name", "N/A")
-            QgsMessageLog.logMessage(f"Debug BLS Helper Entered: End {end_desig}, Params: {bls_param_dict}, IHS: {IHS_ELEVATION_AMSL}", plugin_tag, Qgis.Info)
+        self,
+        runway_data: dict,
+        rwy_params: dict,
+        thr_point: QgsPointXY,
+        outward_azimuth: float,
+        bls_param_dict: dict,
+        end_desig: str,
+        IHS_ELEVATION_AMSL: float,  # Changed from Optional to required
+    ) -> Optional[Tuple[QgsFeature, QgsGeometry, float, float, QgsPointXY, float]]:
+        plugin_tag = PLUGIN_TAG
+        runway_name = runway_data.get("short_name", "N/A")
+        QgsMessageLog.logMessage(
+            f"Debug BLS Helper Entered: End {end_desig}, Params: {bls_param_dict}, IHS: {IHS_ELEVATION_AMSL}",
+            plugin_tag,
+            Qgis.Info,
+        )
 
-            width = bls_param_dict.get("width")
-            start_dist_from_thr = bls_param_dict.get("start_dist_from_thr")
-            divergence = bls_param_dict.get("divergence")
-            slope = bls_param_dict.get("slope")
-            ref = bls_param_dict.get("ref", "MOS (Verify)")
+        width = bls_param_dict.get("width")
+        start_dist_from_thr = bls_param_dict.get("start_dist_from_thr")
+        divergence = bls_param_dict.get("divergence")
+        slope = bls_param_dict.get("slope")
+        ref = bls_param_dict.get("ref", "MOS (Verify)")
 
-            # Consolidate missing param check for clarity
-            missing_params_list = []
-            if width is None: missing_params_list.append("width")
-            if start_dist_from_thr is None: missing_params_list.append("start_dist_from_thr")
-            if divergence is None: missing_params_list.append("divergence")
-            if slope is None: missing_params_list.append("slope")
-            if IHS_ELEVATION_AMSL is None: missing_params_list.append("IHS_ELEVATION_AMSL") # Should not be None if type hint is enforced
+        # Consolidate missing param check for clarity
+        missing_params_list = []
+        if width is None:
+            missing_params_list.append("width")
+        if start_dist_from_thr is None:
+            missing_params_list.append("start_dist_from_thr")
+        if divergence is None:
+            missing_params_list.append("divergence")
+        if slope is None:
+            missing_params_list.append("slope")
+        if IHS_ELEVATION_AMSL is None:
+            missing_params_list.append(
+                "IHS_ELEVATION_AMSL"
+            )  # Should not be None if type hint is enforced
 
-            if missing_params_list:
-                QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} returning None, missing essential inputs: {', '.join(missing_params_list)}", plugin_tag, Qgis.Warning)
-                return None
-
-            inner_edge_center_pt = thr_point.project(start_dist_from_thr, outward_azimuth)
-            if not inner_edge_center_pt:
-                QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} returning None, failed inner_edge_center_pt calc.", plugin_tag, Qgis.Warning)
-                return None
-
-            required_rwy_keys = ["thr_point", "rec_thr_point", "thr_elev_1", "thr_elev_2"]
-            if not all(key in runway_data and runway_data[key] is not None for key in required_rwy_keys):
-                QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} returning None, runway_data missing keys for elevation calc: { {k: runway_data.get(k) for k in required_rwy_keys} }", plugin_tag, Qgis.Warning)
-                return None
-
-            inner_edge_elev_amsl = self._get_elevation_at_point_along_gradient(
-                inner_edge_center_pt,
-                runway_data.get("thr_point"), runway_data.get("rec_thr_point"),
-                runway_data.get("thr_elev_1"), runway_data.get("thr_elev_2"),
-                QgsProject.instance().crs()
+        if missing_params_list:
+            QgsMessageLog.logMessage(
+                f"Debug BLS Helper: {end_desig} returning None, missing essential inputs: {', '.join(missing_params_list)}",
+                plugin_tag,
+                Qgis.Warning,
             )
-            QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} inner_edge_elev_amsl: {inner_edge_elev_amsl}", plugin_tag, Qgis.Info)
-            if inner_edge_elev_amsl is None:
-                QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} returning None, inner_edge_elev_amsl is None.", plugin_tag, Qgis.Warning)
-                return None
+            return None
 
-            height_to_gain = IHS_ELEVATION_AMSL - inner_edge_elev_amsl
-            calculated_length: float
-            QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} height_to_gain: {height_to_gain}, slope: {slope}", plugin_tag, Qgis.Info)
-            if height_to_gain <= 0:
-                calculated_length = 0.0
-                QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} starts at/above IHS. Length is 0.", plugin_tag, Qgis.Info)
-            elif slope <= 1e-9: # Using a small epsilon for float comparison
-                QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} returning None, slope is effectively zero ({slope}) and BLS starts below IHS.", plugin_tag, Qgis.Warning)
-                return None
+        inner_edge_center_pt = thr_point.project(start_dist_from_thr, outward_azimuth)
+        if not inner_edge_center_pt:
+            QgsMessageLog.logMessage(
+                f"Debug BLS Helper: {end_desig} returning None, failed inner_edge_center_pt calc.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return None
+
+        required_rwy_keys = ["thr_point", "rec_thr_point", "thr_elev_1", "thr_elev_2"]
+        if not all(
+            key in runway_data and runway_data[key] is not None
+            for key in required_rwy_keys
+        ):
+            QgsMessageLog.logMessage(
+                f"Debug BLS Helper: {end_desig} returning None, runway_data missing keys for elevation calc: { {k: runway_data.get(k) for k in required_rwy_keys} }",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return None
+
+        inner_edge_elev_amsl = self._get_elevation_at_point_along_gradient(
+            inner_edge_center_pt,
+            runway_data.get("thr_point"),
+            runway_data.get("rec_thr_point"),
+            runway_data.get("thr_elev_1"),
+            runway_data.get("thr_elev_2"),
+            QgsProject.instance().crs(),
+        )
+        QgsMessageLog.logMessage(
+            f"Debug BLS Helper: {end_desig} inner_edge_elev_amsl: {inner_edge_elev_amsl}",
+            plugin_tag,
+            Qgis.Info,
+        )
+        if inner_edge_elev_amsl is None:
+            QgsMessageLog.logMessage(
+                f"Debug BLS Helper: {end_desig} returning None, inner_edge_elev_amsl is None.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return None
+
+        height_to_gain = IHS_ELEVATION_AMSL - inner_edge_elev_amsl
+        calculated_length: float
+        QgsMessageLog.logMessage(
+            f"Debug BLS Helper: {end_desig} height_to_gain: {height_to_gain}, slope: {slope}",
+            plugin_tag,
+            Qgis.Info,
+        )
+        if height_to_gain <= 0:
+            calculated_length = 0.0
+            QgsMessageLog.logMessage(
+                f"Debug BLS Helper: {end_desig} starts at/above IHS. Length is 0.",
+                plugin_tag,
+                Qgis.Info,
+            )
+        elif slope <= 1e-9:  # Using a small epsilon for float comparison
+            QgsMessageLog.logMessage(
+                f"Debug BLS Helper: {end_desig} returning None, slope is effectively zero ({slope}) and BLS starts below IHS.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return None
+        else:
+            calculated_length = height_to_gain / slope
+        QgsMessageLog.logMessage(
+            f"Debug BLS Helper: {end_desig} calculated_length: {calculated_length}",
+            plugin_tag,
+            Qgis.Info,
+        )
+
+        if (
+            calculated_length < -1e-9
+        ):  # Allow for very small negative due to float precision if height_to_gain is near zero
+            QgsMessageLog.logMessage(
+                f"Debug BLS Helper: {end_desig} returning None, invalid (negative) calculated_length: {calculated_length}.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return None
+
+        # If calculated_length is 0 (starts at/above IHS), still create a degenerate feature or handle as per requirements.
+        # For now, let's assume a zero-length surface is acceptable if it starts at/above IHS.
+
+        half_width_inner = width / 2.0
+        # If calculated_length is 0, final_width will be equal to width.
+        final_width = width + (2 * calculated_length * divergence)
+        half_width_outer = final_width / 2.0
+
+        bls_geom = self._create_trapezoid(
+            inner_edge_center_pt,
+            outward_azimuth,
+            calculated_length,
+            half_width_inner,
+            half_width_outer,
+            f"Baulked Landing {end_desig}",
+        )
+        # The _create_trapezoid helper should handle zero length appropriately (e.g., return None or a line/point)
+        # We need to check its output.
+        QgsMessageLog.logMessage(
+            f"Debug BLS Helper: {end_desig} bls_geom created. Is valid: {bls_geom is not None and not bls_geom.isEmpty() and bls_geom.isGeosValid()}",
+            plugin_tag,
+            Qgis.Info,
+        )
+
+        if not bls_geom or bls_geom.isEmpty() or not bls_geom.isGeosValid():
+            # If calculated_length was 0, _create_trapezoid might return None or an empty/invalid geometry.
+            # Decide if this is an error or if a degenerate (e.g., line) feature should be made.
+            # For now, if it's not a valid polygon, we return None.
+            if calculated_length <= 1e-9:  # If length was effectively zero
+                QgsMessageLog.logMessage(
+                    f"Debug BLS Helper: {end_desig} has zero length. No polygon geometry created by _create_trapezoid. Returning None.",
+                    plugin_tag,
+                    Qgis.Info,
+                )
             else:
-                calculated_length = height_to_gain / slope
-            QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} calculated_length: {calculated_length}", plugin_tag, Qgis.Info)
+                QgsMessageLog.logMessage(
+                    f"Debug BLS Helper: {end_desig} returning None, invalid bls_geom from _create_trapezoid.",
+                    plugin_tag,
+                    Qgis.Warning,
+                )
+            return None
 
-            if calculated_length < -1e-9: # Allow for very small negative due to float precision if height_to_gain is near zero
-                QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} returning None, invalid (negative) calculated_length: {calculated_length}.", plugin_tag, Qgis.Warning)
-                return None
-            
-            # If calculated_length is 0 (starts at/above IHS), still create a degenerate feature or handle as per requirements.
-            # For now, let's assume a zero-length surface is acceptable if it starts at/above IHS.
+        # --- Feature Creation ---
+        fields = self._get_ols_fields("BaulkedLanding")
+        feature = QgsFeature(fields)
+        feature.setGeometry(bls_geom)
 
-            half_width_inner = width / 2.0
-            # If calculated_length is 0, final_width will be equal to width.
-            final_width = width + (2 * calculated_length * divergence)
-            half_width_outer = final_width / 2.0
+        height_agl_val = calculated_length * slope
+        elev_m_val = IHS_ELEVATION_AMSL  # Outer edge is at IHS
 
-            bls_geom = self._create_trapezoid(
-                inner_edge_center_pt, outward_azimuth, calculated_length,
-                half_width_inner, half_width_outer, f"Baulked Landing {end_desig}"
-            )
-            # The _create_trapezoid helper should handle zero length appropriately (e.g., return None or a line/point)
-            # We need to check its output.
-            QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} bls_geom created. Is valid: {bls_geom is not None and not bls_geom.isEmpty() and bls_geom.isGeosValid()}", plugin_tag, Qgis.Info)
+        attr_map = {
+            "rwy_name": runway_name,
+            "surface": "Baulked Landing",
+            "end_desig": end_desig,
+            "elev_m": elev_m_val,
+            "height_agl": height_agl_val,
+            "slope_perc": slope * 100.0,
+            "ref_mos": ref,
+            "len_m": calculated_length,
+            "innerw_m": width,
+            "outerw_m": final_width,
+            "divergence_perc": divergence * 100.0,
+            "origin_offset": start_dist_from_thr,
+        }
+        for name, value in attr_map.items():
+            idx = fields.indexFromName(name)
+            if idx != -1:
+                feature.setAttribute(idx, value)
 
-            if not bls_geom or bls_geom.isEmpty() or not bls_geom.isGeosValid():
-                # If calculated_length was 0, _create_trapezoid might return None or an empty/invalid geometry.
-                # Decide if this is an error or if a degenerate (e.g., line) feature should be made.
-                # For now, if it's not a valid polygon, we return None.
-                if calculated_length <= 1e-9: # If length was effectively zero
-                    QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} has zero length. No polygon geometry created by _create_trapezoid. Returning None.", plugin_tag, Qgis.Info)
-                else:
-                    QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} returning None, invalid bls_geom from _create_trapezoid.", plugin_tag, Qgis.Warning)
-                return None
+        QgsMessageLog.logMessage(
+            f"Debug BLS Helper: {end_desig} successfully created feature.",
+            plugin_tag,
+            Qgis.Info,
+        )
 
-            # --- Feature Creation ---
-            fields = self._get_ols_fields("BaulkedLanding")
-            feature = QgsFeature(fields)
-            feature.setGeometry(bls_geom)
-            
-            height_agl_val = calculated_length * slope
-            elev_m_val = IHS_ELEVATION_AMSL # Outer edge is at IHS
+        # --- THE CRUCIAL RETURN STATEMENT ---
+        return (
+            feature,
+            bls_geom,
+            calculated_length,
+            inner_edge_elev_amsl,
+            inner_edge_center_pt,
+            final_width,
+        )
 
-            attr_map = {
-                "rwy_name": runway_name,
-                "surface": "Baulked Landing",
-                "end_desig": end_desig,
-                "elev_m": elev_m_val,
-                "height_agl": height_agl_val,
-                "slope_perc": slope * 100.0,
-                "ref_mos": ref,
-                "len_m": calculated_length,
-                "innerw_m": width,
-                "outerw_m": final_width,
-                "divergence_perc": divergence * 100.0,
-                "origin_offset": start_dist_from_thr,
-            }
-            for name, value in attr_map.items():
-                idx = fields.indexFromName(name)
-                if idx != -1:
-                    feature.setAttribute(idx, value)
-
-            QgsMessageLog.logMessage(f"Debug BLS Helper: {end_desig} successfully created feature.", plugin_tag, Qgis.Info)
-            
-            # --- THE CRUCIAL RETURN STATEMENT ---
-            return feature, bls_geom, calculated_length, inner_edge_elev_amsl, inner_edge_center_pt, final_width
-    
     def _generate_its_panel_feature(
-            self,
-            base_p1_3d: QgsPoint,
-            base_p2_3d: QgsPoint,
-            its_slope: float,
-            IHS_ELEVATION_AMSL: float,
-            outward_projection_azimuth: float,
-            runway_name: str,
-            end_desig: str,
-            side_label: str,
-            panel_description: str,
-            ref_mos: str,
-            ols_fields: QgsFields
-        ) -> Optional[QgsFeature]:
-            plugin_tag = PLUGIN_TAG
+        self,
+        base_p1_3d: QgsPoint,
+        base_p2_3d: QgsPoint,
+        its_slope: float,
+        IHS_ELEVATION_AMSL: float,
+        outward_projection_azimuth: float,
+        runway_name: str,
+        end_desig: str,
+        side_label: str,
+        panel_description: str,
+        ref_mos: str,
+        ols_fields: QgsFields,
+    ) -> Optional[QgsFeature]:
+        plugin_tag = PLUGIN_TAG
 
-            # --- CORRECTED Z CHECK ---
-            z1_base_val = base_p1_3d.z()
-            z2_base_val = base_p2_3d.z()
+        # --- CORRECTED Z CHECK ---
+        z1_base_val = base_p1_3d.z()
+        z2_base_val = base_p2_3d.z()
 
-            # Check if Z values are None or not finite (e.g., NaN, Inf)
-            # math.isfinite() is good for this.
-            if not (isinstance(z1_base_val, (int, float)) and math.isfinite(z1_base_val) and
-                    isinstance(z2_base_val, (int, float)) and math.isfinite(z2_base_val)):
-                QgsMessageLog.logMessage(f"ITS Panel Gen Error for {panel_description} {end_desig} {side_label}: Base points have invalid or missing Z values (P1_Z: {z1_base_val}, P2_Z: {z2_base_val}).", plugin_tag, Qgis.Warning)
+        # Check if Z values are None or not finite (e.g., NaN, Inf)
+        # math.isfinite() is good for this.
+        if not (
+            isinstance(z1_base_val, (int, float))
+            and math.isfinite(z1_base_val)
+            and isinstance(z2_base_val, (int, float))
+            and math.isfinite(z2_base_val)
+        ):
+            QgsMessageLog.logMessage(
+                f"ITS Panel Gen Error for {panel_description} {end_desig} {side_label}: Base points have invalid or missing Z values (P1_Z: {z1_base_val}, P2_Z: {z2_base_val}).",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return None
+        # --- END CORRECTED Z CHECK ---
+
+        p1_base_xy = QgsPointXY(base_p1_3d.x(), base_p1_3d.y())
+        p2_base_xy = QgsPointXY(base_p2_3d.x(), base_p2_3d.y())
+        # z1_base and z2_base are now confirmed to be valid floats
+        z1_base = z1_base_val
+        z2_base = z2_base_val
+
+        if (
+            z1_base >= IHS_ELEVATION_AMSL - 1e-6
+            and z2_base >= IHS_ELEVATION_AMSL - 1e-6
+        ):
+            return None
+
+        if its_slope <= 1e-9:
+            QgsMessageLog.logMessage(
+                f"ITS Panel Gen Error for {panel_description} {end_desig} {side_label}: ITS slope is zero or negative.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return None
+
+        h_dist1 = (
+            (IHS_ELEVATION_AMSL - z1_base) / its_slope
+            if z1_base < IHS_ELEVATION_AMSL
+            else 0.0
+        )
+        h_dist2 = (
+            (IHS_ELEVATION_AMSL - z2_base) / its_slope
+            if z2_base < IHS_ELEVATION_AMSL
+            else 0.0
+        )
+        h_dist1 = max(0.0, h_dist1)
+        h_dist2 = max(0.0, h_dist2)
+
+        p1_top_xy = p1_base_xy.project(h_dist1, outward_projection_azimuth)
+        p2_top_xy = p2_base_xy.project(h_dist2, outward_projection_azimuth)
+
+        if not p1_top_xy or not p2_top_xy:
+            QgsMessageLog.logMessage(
+                f"ITS Panel Gen Error for {panel_description} {end_desig} {side_label}: Failed to project top points.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return None
+
+        if p1_base_xy.compare(p2_base_xy, epsilon=1e-3):
+            if h_dist1 <= 1e-3 and h_dist2 <= 1e-3:
                 return None
-            # --- END CORRECTED Z CHECK ---
 
-            p1_base_xy = QgsPointXY(base_p1_3d.x(), base_p1_3d.y())
-            p2_base_xy = QgsPointXY(base_p2_3d.x(), base_p2_3d.y())
-            # z1_base and z2_base are now confirmed to be valid floats
-            z1_base = z1_base_val 
-            z2_base = z2_base_val
+        if h_dist1 < 1e-3 and h_dist2 < 1e-3 and p1_base_xy.distance(p2_base_xy) < 1e-3:
+            return None
 
-            if z1_base >= IHS_ELEVATION_AMSL - 1e-6 and z2_base >= IHS_ELEVATION_AMSL - 1e-6:
-                return None
+        panel_corners_xy = [p1_base_xy, p2_base_xy, p2_top_xy, p1_top_xy]
+        panel_geom = self._create_polygon_from_corners(
+            panel_corners_xy, f"ITS Panel {panel_description} {end_desig} {side_label}"
+        )
 
-            if its_slope <= 1e-9:
-                QgsMessageLog.logMessage(f"ITS Panel Gen Error for {panel_description} {end_desig} {side_label}: ITS slope is zero or negative.", plugin_tag, Qgis.Warning)
-                return None
+        if not panel_geom or panel_geom.isEmpty() or not panel_geom.isGeosValid():
+            return None
 
-            h_dist1 = (IHS_ELEVATION_AMSL - z1_base) / its_slope if z1_base < IHS_ELEVATION_AMSL else 0.0
-            h_dist2 = (IHS_ELEVATION_AMSL - z2_base) / its_slope if z2_base < IHS_ELEVATION_AMSL else 0.0
-            h_dist1 = max(0.0, h_dist1)
-            h_dist2 = max(0.0, h_dist2)
+        feature = QgsFeature(ols_fields)
+        feature.setGeometry(panel_geom)
+        avg_base_elev = (z1_base + z2_base) / 2.0
+        height_gain_panel = (
+            IHS_ELEVATION_AMSL - avg_base_elev
+            if avg_base_elev < IHS_ELEVATION_AMSL
+            else 0.0
+        )
 
-            p1_top_xy = p1_base_xy.project(h_dist1, outward_projection_azimuth)
-            p2_top_xy = p2_base_xy.project(h_dist2, outward_projection_azimuth)
+        attr_map = {
+            "rwy_name": runway_name,
+            "surface": "Inner Transitional",
+            "end_desig": end_desig,
+            "section_desc": panel_description,
+            "elev_m": IHS_ELEVATION_AMSL,
+            "height_agl": height_gain_panel,
+            "slope_perc": its_slope * 100.0,
+            "ref_mos": ref_mos,
+            "side": side_label,
+        }
+        final_attr_map = {
+            k: v for k, v in attr_map.items() if ols_fields.indexFromName(k) != -1
+        }
+        for name, value in final_attr_map.items():
+            feature.setAttribute(ols_fields.indexFromName(name), value)
 
-            if not p1_top_xy or not p2_top_xy:
-                QgsMessageLog.logMessage(f"ITS Panel Gen Error for {panel_description} {end_desig} {side_label}: Failed to project top points.", plugin_tag, Qgis.Warning)
-                return None
-            
-            if p1_base_xy.compare(p2_base_xy, epsilon=1e-3):
-                if h_dist1 <= 1e-3 and h_dist2 <= 1e-3: 
-                    return None
-            
-            if h_dist1 < 1e-3 and h_dist2 < 1e-3 and p1_base_xy.distance(p2_base_xy) < 1e-3 :
-                return None
-
-            panel_corners_xy = [p1_base_xy, p2_base_xy, p2_top_xy, p1_top_xy]
-            panel_geom = self._create_polygon_from_corners(panel_corners_xy, f"ITS Panel {panel_description} {end_desig} {side_label}")
-
-            if not panel_geom or panel_geom.isEmpty() or not panel_geom.isGeosValid():
-                return None
-
-            feature = QgsFeature(ols_fields)
-            feature.setGeometry(panel_geom)
-            avg_base_elev = (z1_base + z2_base) / 2.0
-            height_gain_panel = IHS_ELEVATION_AMSL - avg_base_elev if avg_base_elev < IHS_ELEVATION_AMSL else 0.0
-
-            attr_map = {
-                "rwy_name": runway_name, "surface": "Inner Transitional", "end_desig": end_desig,
-                "section_desc": panel_description, "elev_m": IHS_ELEVATION_AMSL,
-                "height_agl": height_gain_panel, "slope_perc": its_slope * 100.0,
-                "ref_mos": ref_mos, "side": side_label,
-            }
-            final_attr_map = {k: v for k, v in attr_map.items() if ols_fields.indexFromName(k) != -1}
-            for name, value in final_attr_map.items():
-                feature.setAttribute(ols_fields.indexFromName(name), value)
-            
-            return feature
+        return feature
 
     def _generate_parallel_contours_in_panel(
         self,
@@ -5481,7 +5666,7 @@ class SafeguardingBuilder:
         # Top edge direction vector (from top_start to top_end)
         dx = top_end.x() - top_start.x()
         dy = top_end.y() - top_start.y()
-        top_len = (dx ** 2 + dy ** 2) ** 0.5
+        top_len = (dx**2 + dy**2) ** 0.5
         if top_len == 0:
             return []  # Avoid division by zero
         ux, uy = dx / top_len, dy / top_len
@@ -5493,7 +5678,7 @@ class SafeguardingBuilder:
         # Figure out which normal points inside the polygon by testing the first contour
         first_contour_elev = max(
             contour_interval,
-            contour_interval * (int(min_panel_elev // contour_interval) + 1)
+            contour_interval * (int(min_panel_elev // contour_interval) + 1),
         )
         direction_found = False
         for nx, ny in normals:
@@ -5539,7 +5724,10 @@ class SafeguardingBuilder:
             # Handle multipart or single part
             geoms = []
             if clipped.isMultipart():
-                geoms = [QgsGeometry.fromPolylineXY(line) for line in clipped.asMultiPolyline()]
+                geoms = [
+                    QgsGeometry.fromPolylineXY(line)
+                    for line in clipped.asMultiPolyline()
+                ]
             elif clipped.type() == QgsWkbTypes.LineGeometry:
                 geoms = [clipped]
             else:
@@ -7049,7 +7237,11 @@ class SafeguardingBuilder:
         ]
         # Add specific fields based on type
         if surface_type in [
-            "Approach", "TOCS", "InnerApproach", "InnerTransitional", "BaulkedLanding"
+            "Approach",
+            "TOCS",
+            "InnerApproach",
+            "InnerTransitional",
+            "BaulkedLanding",
         ]:
             fields_list.extend(
                 [
@@ -7173,7 +7365,6 @@ class SafeguardingBuilder:
                 "radius_m",
                 "side",
             ],  # Keep App/TOCS specific + base
-            # NEW TYPES
             "InnerTransitional": [
                 "shape_desc",
                 "height_extent",
@@ -7457,7 +7648,7 @@ class SafeguardingBuilder:
 
                     contour_elevs.add(round(start_elev, 6))
 
-                # --- NEW: Always add a contour at the very end of the final section if it's horizontal ---
+                # --- Add a contour at the very end of the final section if it's horizontal ---
                 if abs(section_slope) < 1e-9 and i == len(sections) - 1:
                     contour_elevs.add(round(end_elev, 6))
 
@@ -7861,443 +8052,910 @@ class SafeguardingBuilder:
         return feature, tocs_contour_features
 
     def process_guideline_f(
-            self, runway_data: dict, layer_group: QgsLayerTreeGroup, ofz_group: Optional[QgsLayerTreeGroup] = None
-        ) -> bool:
-            plugin_tag = PLUGIN_TAG
+        self,
+        runway_data: dict,
+        layer_group: QgsLayerTreeGroup,
+        ofz_group: Optional[QgsLayerTreeGroup] = None,
+    ) -> bool:
+        plugin_tag = PLUGIN_TAG
 
-            # --- Get Core Data from runway_data ---
-            runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index','?')}")
-            primary_threshold_point = runway_data.get("thr_point")
-            reciprocal_threshold_point = runway_data.get("rec_thr_point")
-            arc_num_str = runway_data.get("arc_num")
-            primary_approach_type_str = runway_data.get("type1", "")
-            reciprocal_approach_type_str = runway_data.get("type2", "")
-            primary_thr_elev = runway_data.get("thr_elev_1")
-            reciprocal_thr_elev = runway_data.get("thr_elev_2")
-            
-            runway_actual_width_val = runway_data.get("width")
-            if runway_actual_width_val is None:
-                QgsMessageLog.logMessage(f"Runway OLS for {runway_name} SKIPPED: Missing 'width' in runway_data.", plugin_tag, Qgis.Warning)
-                return False
-            try:
-                runway_actual_width = float(runway_actual_width_val)
-                if runway_actual_width <= 0:
-                    QgsMessageLog.logMessage(f"Runway OLS for {runway_name} SKIPPED: Runway 'width' ({runway_actual_width}) must be positive.", plugin_tag, Qgis.Warning)
-                    return False
-            except (ValueError, TypeError):
-                QgsMessageLog.logMessage(f"Runway OLS for {runway_name} SKIPPED: Invalid 'width' ('{runway_actual_width_val}') in runway_data.", plugin_tag, Qgis.Warning)
-                return False
+        # --- Get Core Data from runway_data ---
+        runway_name = runway_data.get(
+            "short_name", f"RWY_{runway_data.get('original_index','?')}"
+        )
+        primary_threshold_point = runway_data.get("thr_point")
+        reciprocal_threshold_point = runway_data.get("rec_thr_point")
+        arc_num_str = runway_data.get("arc_num")
+        primary_approach_type_str = runway_data.get("type1", "")
+        reciprocal_approach_type_str = runway_data.get("type2", "")
+        primary_thr_elev = runway_data.get("thr_elev_1")
+        reciprocal_thr_elev = runway_data.get("thr_elev_2")
 
+        runway_actual_width_val = runway_data.get("width")
+        if runway_actual_width_val is None:
             QgsMessageLog.logMessage(
-                f"Starting Runway OLS processing (OFZ components, Approach, TOCS) for {runway_name}",
-                plugin_tag, level=Qgis.Info
+                f"Runway OLS for {runway_name} SKIPPED: Missing 'width' in runway_data.",
+                plugin_tag,
+                Qgis.Warning,
             )
-
-            if not all([primary_threshold_point, reciprocal_threshold_point, layer_group, arc_num_str]):
-                QgsMessageLog.logMessage(f"Runway OLS for {runway_name} SKIPPED: Missing essential base data.", plugin_tag, Qgis.Warning)
-                return False
-            try: arc_num = int(arc_num_str)
-            except (ValueError, TypeError):
-                QgsMessageLog.logMessage(f"Runway OLS for {runway_name} SKIPPED: Invalid ARC number '{arc_num_str}'.", plugin_tag, Qgis.Warning)
-                return False
-
-            primary_desig, reciprocal_desig = (runway_name.split("/") if "/" in runway_name else ("THR1", "THR2"))
-            
-            QgsMessageLog.logMessage(f"DEBUG PGF Start: For Runway '{runway_name}'...", plugin_tag, Qgis.Info)
-            # ... (other initial debug logs) ...
-
-            rwy_params = self._get_runway_parameters(primary_threshold_point, reciprocal_threshold_point)
-            if rwy_params is None: return False # Error logged in helper
-            
-            az_primary_to_reciprocal = rwy_params["azimuth_p_r"]
-            az_reciprocal_to_primary = rwy_params["azimuth_r_p"]
-
-            clearway_len_at_primary_end = float(runway_data.get("clearway1_len", 0.0) or 0.0)
-            clearway_len_at_reciprocal_end = float(runway_data.get("clearway2_len", 0.0) or 0.0)
-            disp_at_primary_thr = float(runway_data.get("thr_displaced_1", 0.0) or 0.0)
-            disp_at_reciprocal_thr = float(runway_data.get("thr_displaced_2", 0.0) or 0.0)
-
-            physical_endpoints_result_tuple = self._get_physical_runway_endpoints(
-                primary_threshold_point, reciprocal_threshold_point,
-                disp_at_primary_thr, disp_at_reciprocal_thr, rwy_params
-            )
-            if physical_endpoints_result_tuple is None: return False # Error logged in helper
-            phys_pavement_end_near_primary_thr, phys_pavement_end_near_reciprocal_thr, _ = physical_endpoints_result_tuple
-
-            overall_success = False
-            inner_approach_features, approach_poly_features, approach_contour_features = [], [], []
-            tocs_poly_features, tocs_contour_features, ofz_inner_trans_features, ofz_bls_features = [], [], [], []
-
-            IHS_ELEVATION_AMSL: Optional[float] = None
-            if self.reference_elevation_datum is not None:
-                ihs_base_height_agl = ols_dimensions.get_ihs_base_height()
-                if ihs_base_height_agl is not None:
-                    IHS_ELEVATION_AMSL = self.reference_elevation_datum + ihs_base_height_agl
-            if IHS_ELEVATION_AMSL is None:
-                QgsMessageLog.logMessage(f"Runway OLS for {runway_name}: IHS Elevation could not be determined.", plugin_tag, Qgis.Warning)
-
-            runway_end_configurations = [
-                {
-                    "current_desig": primary_desig, "landing_threshold_pt": primary_threshold_point,
-                    "landing_threshold_elev": primary_thr_elev, "approach_type_str": primary_approach_type_str,
-                    "approach_surface_outward_azimuth": az_reciprocal_to_primary,
-                    "baulked_landing_origin_thr_pt": primary_threshold_point,
-                    "baulked_landing_flight_path_azimuth": az_primary_to_reciprocal,
-                    "tocs_departure_pavement_end_pt": phys_pavement_end_near_reciprocal_thr,
-                    "tocs_flight_path_azimuth": az_primary_to_reciprocal,
-                    "tocs_clearway_len_at_departure_end": clearway_len_at_reciprocal_end,
-                    "runway_orientation_azimuth_for_its_perp": az_primary_to_reciprocal
-                },
-                {
-                    "current_desig": reciprocal_desig, "landing_threshold_pt": reciprocal_threshold_point,
-                    "landing_threshold_elev": reciprocal_thr_elev, "approach_type_str": reciprocal_approach_type_str,
-                    "approach_surface_outward_azimuth": az_primary_to_reciprocal,
-                    "baulked_landing_origin_thr_pt": reciprocal_threshold_point,
-                    "baulked_landing_flight_path_azimuth": az_reciprocal_to_primary,
-                    "tocs_departure_pavement_end_pt": phys_pavement_end_near_primary_thr,
-                    "tocs_flight_path_azimuth": az_reciprocal_to_primary,
-                    "tocs_clearway_len_at_departure_end": clearway_len_at_primary_end,
-                    "runway_orientation_azimuth_for_its_perp": az_reciprocal_to_primary
-                }
-            ]
-
-            for config in runway_end_configurations:
-                current_desig = config["current_desig"]
-                QgsMessageLog.logMessage(f"Processing OLS for {runway_name} - End {current_desig}", plugin_tag, Qgis.Info)
-                # ... (standard debug logs for config values) ...
-
-                ia_geom_for_its: Optional[QgsGeometry] = None; ia_cl_start_xy: Optional[QgsPointXY] = None
-                ia_cl_end_xy: Optional[QgsPointXY] = None; ia_start_elev: Optional[float] = None
-                ia_end_elev: Optional[float] = None; ia_width: Optional[float] = None
-                ia_length_param_val: Optional[float] = None
-
-                bls_geom_for_its: Optional[QgsGeometry] = None; bls_cl_start_xy: Optional[QgsPointXY] = None
-                bls_cl_end_xy: Optional[QgsPointXY] = None; bls_start_elev: Optional[float] = None
-                bls_start_width: Optional[float] = None; bls_end_width: Optional[float] = None
-                bls_len: Optional[float] = None
-
-                # --- Inner Approach ---
-                try:
-                    # ... (Full IA generation logic from previous complete version, ensuring ia_... variables are populated) ...
-                    QgsMessageLog.logMessage(f"Debug InnerApproach: Attempting for {current_desig}", plugin_tag, Qgis.Info)
-                    ia_params = ols_dimensions.get_ols_params(arc_num, config["approach_type_str"], "InnerApproach")
-                    if ia_params:
-                        ia_slope_param = ia_params.get("slope"); ia_start_dist_param = ia_params.get("start_dist_from_thr")
-                        ia_length_param_val = ia_params.get("length"); ia_width_param_val = ia_params.get("width"); ia_ref_param = ia_params.get("ref")
-                        if all(v is not None for v in [ia_slope_param, ia_start_dist_param, ia_length_param_val, ia_width_param_val]):
-                            ia_cl_start_xy = config["landing_threshold_pt"].project(ia_start_dist_param, config["approach_surface_outward_azimuth"])
-                            if ia_cl_start_xy:
-                                ia_geom_for_its = self._create_rectangle_from_start(ia_cl_start_xy, config["approach_surface_outward_azimuth"], ia_length_param_val, ia_width_param_val / 2.0, f"IA {current_desig}")
-                                if ia_geom_for_its and ia_geom_for_its.isGeosValid():
-                                    ia_width = ia_width_param_val
-                                    ia_start_elev = self._get_elevation_at_point_along_gradient(ia_cl_start_xy, primary_threshold_point, reciprocal_threshold_point, primary_thr_elev, reciprocal_thr_elev, QgsProject.instance().crs())
-                                    if ia_start_elev is not None:
-                                        ia_end_elev = ia_start_elev + (ia_length_param_val * ia_slope_param)
-                                        ia_cl_end_xy = ia_cl_start_xy.project(ia_length_param_val, config["approach_surface_outward_azimuth"])
-                                    else: ia_end_elev = None; QgsMessageLog.logMessage(f"Warning: IA {current_desig} start elevation is None.", plugin_tag, Qgis.Warning)
-                                    
-                                    fields = self._get_ols_fields("InnerApproach")
-                                    feat = QgsFeature(fields); feat.setGeometry(ia_geom_for_its)
-                                    h_agl = ia_length_param_val * ia_slope_param
-                                    attrs = {"rwy_name": runway_name, "surface": "Inner Approach", "end_desig": current_desig, "elev_m": ia_end_elev, "height_agl": h_agl, "slope_perc": ia_slope_param * 100.0, "ref_mos": ia_ref_param, "len_m": ia_length_param_val, "innerw_m": ia_width_param_val, "outerw_m": ia_width_param_val, "origin_offset": ia_start_dist_param}
-                                    for n, v_attr in attrs.items():
-                                        if fields.indexFromName(n) != -1: feat.setAttribute(fields.indexFromName(n), v_attr)
-                                    inner_approach_features.append(feat)
-                    QgsMessageLog.logMessage(f"Debug InnerApproach: Completed for {current_desig}", plugin_tag, Qgis.Info)
-                except Exception as e_ia:
-                    QgsMessageLog.logMessage(f"ERROR generating Inner Approach for {current_desig}: {e_ia}\n{traceback.format_exc()}", plugin_tag, Qgis.Critical)
-
-                # --- Baulked Landing ---
-                try:
-                    # ... (Full BLS generation logic, populating bls_... variables) ...
-                    QgsMessageLog.logMessage(f"Debug BaulkedLanding: Attempting for {current_desig}", plugin_tag, Qgis.Info)
-                    bls_params_dict = ols_dimensions.get_ols_params(arc_num, config["approach_type_str"], "BaulkedLanding")
-                    if bls_params_dict and IHS_ELEVATION_AMSL is not None:
-                        QgsMessageLog.logMessage(f"  DEBUG BLS Pre-Call for '{current_desig}': Origin THR: {config['baulked_landing_origin_thr_pt'].asWkt() if config['baulked_landing_origin_thr_pt'] else 'None'}, Azimuth: {config['baulked_landing_flight_path_azimuth']}", plugin_tag, Qgis.Info)
-                        bls_result_tuple = self._generate_baulked_landing_surface(
-                            runway_data, rwy_params,
-                            config["baulked_landing_origin_thr_pt"], config["baulked_landing_flight_path_azimuth"],
-                            bls_params_dict, current_desig, IHS_ELEVATION_AMSL
-                        )
-                        QgsMessageLog.logMessage(f"Debug BLS {current_desig}: Helper result: {bls_result_tuple is not None}", plugin_tag, Qgis.Info)
-                        if bls_result_tuple:
-                            feat_bls, bls_g, bls_l, bls_se, bls_cl_s_xy, bls_ew = bls_result_tuple
-                            bls_geom_for_its = bls_g; bls_len = bls_l; bls_start_elev = bls_se
-                            bls_cl_start_xy = bls_cl_s_xy; bls_end_width = bls_ew
-                            bls_start_width = bls_params_dict.get("width")
-                            if bls_cl_start_xy and bls_len is not None:
-                                bls_cl_end_xy = bls_cl_start_xy.project(bls_len, config["baulked_landing_flight_path_azimuth"])
-                            if feat_bls: ofz_bls_features.append(feat_bls)
-                            else: QgsMessageLog.logMessage(f"Debug BLS {current_desig}: Feature from helper was None.", plugin_tag, Qgis.Warning)
-                        else: QgsMessageLog.logMessage(f"Debug BLS {current_desig}: Helper returned None overall.", plugin_tag, Qgis.Warning)
-                    elif not bls_params_dict: QgsMessageLog.logMessage(f"Debug BaulkedLanding: Skipped {current_desig}: No params.", plugin_tag, Qgis.Info)
-                    elif IHS_ELEVATION_AMSL is None: QgsMessageLog.logMessage(f"Debug BaulkedLanding: Skipped {current_desig}: IHS_ELEVATION_AMSL is None.", plugin_tag, Qgis.Warning)
-                    QgsMessageLog.logMessage(f"Debug BaulkedLanding: Completed for {current_desig}", plugin_tag, Qgis.Info)
-                except Exception as e_bls:
-                    QgsMessageLog.logMessage(f"ERROR generating Baulked Landing for {current_desig}: {e_bls}\n{traceback.format_exc()}", plugin_tag, Qgis.Critical)
-
-
-                # --- Inner Transitional Surface ---
-                if IHS_ELEVATION_AMSL is not None:
-                    it_params_dict = ols_dimensions.get_ols_params(arc_num, config["approach_type_str"], "InnerTransitional")
-                    if it_params_dict:
-                        its_slope = it_params_dict.get("slope")
-                        its_ref_mos = it_params_dict.get("ref", "MOS Ref ITS")
-
-                        if its_slope is not None and its_slope > 1e-9:
-                            its_fields = self._get_ols_fields("InnerTransitional")
-                            strip_params_for_its = ols_dimensions.get_strip_params(arc_num, config["approach_type_str"], runway_actual_width)
-                            graded_strip_total_width = 150.0 
-                            if strip_params_for_its and strip_params_for_its.get("graded_width") is not None:
-                                graded_strip_total_width = strip_params_for_its.get("graded_width")
-                            else: QgsMessageLog.logMessage(f"Debug ITS {current_desig}: Using default strip width {graded_strip_total_width}m.", plugin_tag, Qgis.Info)
-                            graded_strip_half_width = graded_strip_total_width / 2.0
-                            
-                            main_centerline_orient_az = config["runway_orientation_azimuth_for_its_perp"]
-                            # This definition of L/R for ITS projection is based on the main runway orientation
-                            outward_az_L_ITS_projection = (main_centerline_orient_az - 90.0 + 360.0) % 360.0
-                            outward_az_R_ITS_projection = (main_centerline_orient_az + 90.0) % 360.0
-
-                            for side_label_its_panel, outward_projection_az_for_panel in [("L", outward_az_L_ITS_projection), ("R", outward_az_R_ITS_projection)]:
-                                QgsMessageLog.logMessage(f"Generating ITS for {current_desig} - ITS Panel Side '{side_label_its_panel}'", plugin_tag, Qgis.Info)
-                                
-                                P_IA_inner_3d_side, P_IA_outer_3d_side = None, None
-                                P_BLS_inner_3d_side, P_BLS_outer_3d_side = None, None
-                                
-                                # Define which side of IA/BLS corresponds to this ITS panel side
-                                # If _get_polygon_side_3d_points uses (L=surface_az+90, R=surface_az-90)
-                                # And IA surface az points "inwards" while BLS surface az points "outwards"
-                                # then for the "L" ITS panel:
-                                #   - We need the "L" side of IA (using side_label_its_panel 'L')
-                                #   - We need the "L" side of BLS (using side_label_its_panel 'L')
-                                # The helper _get_polygon_side_3d_points handles L/R relative to *its input surface's centerline*
-
-                                if all(v is not None for v in [ia_geom_for_its, ia_cl_start_xy, ia_cl_end_xy, ia_start_elev, ia_end_elev, ia_width]):
-                                    ia_side_pts_tuple = self._get_polygon_side_3d_points(ia_geom_for_its, ia_cl_start_xy, ia_cl_end_xy, ia_start_elev, ia_end_elev, ia_width / 2.0, ia_width / 2.0, side_label_its_panel)
-                                    if ia_side_pts_tuple: P_IA_inner_3d_side, P_IA_outer_3d_side = ia_side_pts_tuple
-                                
-                                if all(v is not None for v in [bls_geom_for_its, bls_cl_start_xy, bls_cl_end_xy, bls_start_elev, bls_start_width, bls_end_width]) and bls_len is not None and bls_len > 1e-6:
-                                    bls_side_pts_tuple = self._get_polygon_side_3d_points(
-                                        bls_geom_for_its, bls_cl_start_xy, bls_cl_end_xy,
-                                        bls_start_elev, IHS_ELEVATION_AMSL, bls_start_width / 2.0, bls_end_width / 2.0,
-                                        self._flip_side_label(side_label_its_panel)  # <-- FLIP IT HERE
-                                    )
-                                    if bls_side_pts_tuple:
-                                        P_BLS_inner_3d_side, P_BLS_outer_3d_side = bls_side_pts_tuple
-
-                                if P_IA_outer_3d_side and P_IA_inner_3d_side:
-                                    panel_feat = self._generate_its_panel_feature(P_IA_outer_3d_side, P_IA_inner_3d_side, its_slope, IHS_ELEVATION_AMSL, outward_projection_az_for_panel, runway_name, current_desig, side_label_its_panel, "IA Adjacent", its_ref_mos, its_fields)
-                                    if panel_feat: ofz_inner_trans_features.append(panel_feat)
-                                else: QgsMessageLog.logMessage(f"ITS IA-Adjacent Panel {current_desig} {side_label_its_panel} SKIPPED: Missing 3D base points from IA.", plugin_tag, Qgis.Warning)
-
-                                if P_BLS_inner_3d_side and P_BLS_outer_3d_side:
-                                    panel_feat = self._generate_its_panel_feature(P_BLS_inner_3d_side, P_BLS_outer_3d_side, its_slope, IHS_ELEVATION_AMSL, outward_projection_az_for_panel, runway_name, current_desig, side_label_its_panel, "BLS Adjacent", its_ref_mos, its_fields)
-                                    if panel_feat: ofz_inner_trans_features.append(panel_feat)
-                                else: QgsMessageLog.logMessage(f"ITS BLS-Adjacent Panel {current_desig} {side_label_its_panel} SKIPPED: Missing 3D base points from BLS.", plugin_tag, Qgis.Warning)
-                                
-                                if P_IA_inner_3d_side and P_BLS_inner_3d_side and ia_cl_start_xy and bls_cl_start_xy:
-                                    strip_base_seg_3d = self._define_strip_edge_segment_3d(ia_cl_start_xy, bls_cl_start_xy, graded_strip_half_width, outward_projection_az_for_panel, primary_threshold_point, reciprocal_threshold_point, primary_thr_elev, reciprocal_thr_elev)
-                                    if strip_base_seg_3d:
-                                        strip_p1_3d, strip_p2_3d = strip_base_seg_3d
-                                        panel_feat = self._generate_its_panel_feature(strip_p1_3d, strip_p2_3d, its_slope, IHS_ELEVATION_AMSL, outward_projection_az_for_panel, runway_name, current_desig, side_label_its_panel, "Strip Adjacent", its_ref_mos, its_fields)
-                                        if panel_feat: ofz_inner_trans_features.append(panel_feat)
-                                    else: QgsMessageLog.logMessage(f"ITS Strip Panel {current_desig} {side_label_its_panel} SKIPPED: _define_strip_edge_segment_3d None.", plugin_tag, Qgis.Warning)
-                                else: QgsMessageLog.logMessage(f"ITS Strip Panel {current_desig} {side_label_its_panel} SKIPPED: Missing required alignment points.", plugin_tag, Qgis.Warning)
-                        else: QgsMessageLog.logMessage(f"ITS for {current_desig} SKIPPED: Invalid ITS slope.", plugin_tag, Qgis.Warning)
-                    else: QgsMessageLog.logMessage(f"ITS for {current_desig} SKIPPED: No ITS parameters found.", plugin_tag, Qgis.Info)
-                else: QgsMessageLog.logMessage(f"ITS for {current_desig} SKIPPED: IHS_ELEVATION_AMSL is None.", plugin_tag, Qgis.Warning)
-
-                # --- Main Approach ---
-                try:
-                    # ... (Main Approach logic as before) ...
-                    QgsMessageLog.logMessage(f"Debug MainApproach: Attempting for {current_desig}", plugin_tag, Qgis.Info)
-                    app_sections, app_contours = self._generate_approach_surface(
-                        runway_data, rwy_params, arc_num, config["approach_type_str"], 
-                        config["landing_threshold_pt"], config["approach_surface_outward_azimuth"],
-                        current_desig, config["landing_threshold_elev"]
-                    )
-                    if app_sections: approach_poly_features.extend(app_sections)
-                    if app_contours: approach_contour_features.extend(app_contours)
-                    QgsMessageLog.logMessage(f"Debug MainApproach: Completed for {current_desig}. Sections: {len(app_sections)}, Contours: {len(app_contours)}", plugin_tag, Qgis.Info)
-                except Exception as e_app:
-                    QgsMessageLog.logMessage(f"ERROR generating Main Approach for {current_desig}: {e_app}\n{traceback.format_exc()}", plugin_tag, Qgis.Critical)
-
-                # --- Take-off Climb Surface (TOCS) ---
-                try:
-                    # ... (TOCS logic as before) ...
-                    QgsMessageLog.logMessage(f"Debug TOCS: Attempting for {current_desig}", plugin_tag, Qgis.Info)
-                    tocs_plane_origin_pt = config["tocs_departure_pavement_end_pt"]
-                    tocs_params_for_offset = ols_dimensions.get_ols_params(arc_num, None, "TOCS")
-                    origin_offset_param_val = 60.0
-                    if tocs_params_for_offset: origin_offset_param_val = tocs_params_for_offset.get("origin_offset", 60.0)
-
-                    if config["tocs_clearway_len_at_departure_end"] > 1e-6:
-                        tocs_plane_origin_pt = tocs_plane_origin_pt.project(config["tocs_clearway_len_at_departure_end"], config["tocs_flight_path_azimuth"])
-                    else:
-                        tocs_plane_origin_pt = tocs_plane_origin_pt.project(origin_offset_param_val, config["tocs_flight_path_azimuth"])
-                    
-                    tocs_actual_start_elevation = None
-                    if tocs_plane_origin_pt:
-                        tocs_actual_start_elevation = self._get_elevation_at_point_along_gradient(
-                            tocs_plane_origin_pt, primary_threshold_point, reciprocal_threshold_point,
-                            primary_thr_elev, reciprocal_thr_elev, QgsProject.instance().crs()
-                        )
-                    
-                    feat_tocs_local = None 
-                    if tocs_actual_start_elevation is not None and tocs_plane_origin_pt is not None :
-                        QgsMessageLog.logMessage(f"  DEBUG TOCS for '{current_desig}': Plane Origin Pt: {tocs_plane_origin_pt.asWkt()}, Actual Start Elev: {tocs_actual_start_elevation:.2f}", plugin_tag, Qgis.Info)
-                        tocs_feat, tocs_conts = self._generate_tocs(
-                            runway_data, rwy_params, arc_num, config["approach_type_str"],
-                            config["tocs_departure_pavement_end_pt"],
-                            config["tocs_clearway_len_at_departure_end"],
-                            config["tocs_flight_path_azimuth"],
-                            current_desig,
-                            tocs_actual_start_elevation
-                        )
-                        feat_tocs_local = tocs_feat 
-                        if tocs_feat: tocs_poly_features.append(tocs_feat)
-                        if tocs_conts: tocs_contour_features.extend(tocs_conts)
-                    else:
-                        QgsMessageLog.logMessage(f"Debug TOCS: Skipped for {current_desig} due to missing origin point or elevation for TOCS plane.", plugin_tag, Qgis.Warning)
-                    QgsMessageLog.logMessage(f"Debug TOCS: Completed for {current_desig}. Feature generated: {feat_tocs_local is not None}", plugin_tag, Qgis.Info)
-                except Exception as e_tocs:
-                    QgsMessageLog.logMessage(f"ERROR generating TOCS for {current_desig}: {e_tocs}\n{traceback.format_exc()}", plugin_tag, Qgis.Critical)
-            
-            # --- END OF LOOP for runway_end_configurations ---
-            
-            QgsMessageLog.logMessage(f"Debug ProcessGuidelineF: Finished processing LOOP for runway {runway_name}. Total BLS features: {len(ofz_bls_features)}, Total ITS features: {len(ofz_inner_trans_features)}", plugin_tag, Qgis.Info)
-
-            # --- Layer Creation ---
-            target_ofz_group = ofz_group if ofz_group is not None else layer_group
-            
-            # Inner Approach Layer
-            if inner_approach_features:
-                fields = self._get_ols_fields("InnerApproach")
-                descriptive_style_key = "OLS Inner Approach" # Use the descriptive key
-                if self._create_and_add_layer(
-                    "Polygon", 
-                    f"OLS_InnerApproach_{runway_name.replace('/', '_')}",
-                    f"{self.tr('OLS')} Inner Approach {runway_name}", 
-                    fields,
-                    inner_approach_features, 
-                    target_ofz_group, 
-                    descriptive_style_key # Pass the descriptive key
-                ): overall_success = True
-            
-            # Inner Transitional Layer
-            if ofz_inner_trans_features:
-                fields = self._get_ols_fields("InnerTransitional")
-                descriptive_style_key = "OLS Inner Transitional" # Use the descriptive key
-                if self._create_and_add_layer(
-                    "Polygon", 
-                    f"OLS_InnerTransitional_{runway_name.replace('/', '_')}",
-                    f"{self.tr('OLS')} Inner Transitional {runway_name}", 
-                    fields,
-                    ofz_inner_trans_features, 
-                    target_ofz_group, 
-                    descriptive_style_key # Pass the descriptive key
-                ): overall_success = True
-            
-            # Logging for empty ITS on Precision Approach runways
-            is_precision_runway = False
-            # Ensure ols_dimensions and PRECISION_APPROACH_TYPES are accessible
-            # It's better to import ols_dimensions at the top of the file.
-            # For this example, assuming it's imported as 'ols_dimensions'.
-            if hasattr(ols_dimensions, 'PRECISION_APPROACH_TYPES'):
-                current_runway_type_abbrs = {ols_dimensions.get_runway_type_abbr(s.get("approach_type_str")) for s in runway_end_configurations if s.get("approach_type_str")}
-                is_precision_runway = any(abbr in ols_dimensions.PRECISION_APPROACH_TYPES for abbr in current_runway_type_abbrs)
-            else:
-                QgsMessageLog.logMessage("Warning: ols_dimensions.PRECISION_APPROACH_TYPES not found for ITS logging.", plugin_tag, Qgis.Warning)
-
-            if not ofz_inner_trans_features and is_precision_runway :
-                QgsMessageLog.logMessage(f"Warning: Inner Transitional layer for PA runway {runway_name} is empty. Check ITS generation logic and data extraction.", plugin_tag, Qgis.Warning)
-            elif not ofz_inner_trans_features: # General info if not a PA runway and still empty
-                QgsMessageLog.logMessage(f"Info: Inner Transitional layer for {runway_name} is empty (may be normal for non-PA or if generation is placeholder).", plugin_tag, Qgis.Info)
-
-            # Baulked Landing Layer
-            QgsMessageLog.logMessage(f"Debug BLS Layer Creation: Total ofz_bls_features count: {len(ofz_bls_features)} for runway {runway_name}", plugin_tag, Qgis.Info)
-            if ofz_bls_features:
-                fields = self._get_ols_fields("BaulkedLanding")
-                descriptive_style_key = "OLS Baulked Landing" # Use the descriptive key
-                QgsMessageLog.logMessage(f"Debug BLS Layer Creation: Attempting layer for {runway_name} with {len(ofz_bls_features)} features. Group: {target_ofz_group.name()}", plugin_tag, Qgis.Info)
-                bls_layer = self._create_and_add_layer(
-                    "Polygon", 
-                    f"OLS_BaulkedLanding_{runway_name.replace('/', '_')}",
-                    f"{self.tr('OLS')} Baulked Landing {runway_name}", 
-                    fields,
-                    ofz_bls_features, 
-                    target_ofz_group, 
-                    descriptive_style_key # Pass the descriptive key
+            return False
+        try:
+            runway_actual_width = float(runway_actual_width_val)
+            if runway_actual_width <= 0:
+                QgsMessageLog.logMessage(
+                    f"Runway OLS for {runway_name} SKIPPED: Runway 'width' ({runway_actual_width}) must be positive.",
+                    plugin_tag,
+                    Qgis.Warning,
                 )
-                if bls_layer:
-                    overall_success = True
-                    QgsMessageLog.logMessage(f"Debug BLS Layer Creation: Layer '{bls_layer.name()}' created for {runway_name}.", plugin_tag, Qgis.Success)
-                else:
-                    QgsMessageLog.logMessage(f"Debug BLS Layer Creation: _create_and_add_layer FAILED for BLS {runway_name}.", plugin_tag, Qgis.Critical)
-            else:
-                QgsMessageLog.logMessage(f"Debug BLS Layer Creation: No features in ofz_bls_features list for {runway_name}. Layer not created.", plugin_tag, Qgis.Info)
-
-            # Approach Sections Layer
-            if approach_poly_features:
-                fields = self._get_ols_fields("Approach")
-                descriptive_style_key = "OLS Approach" # Use the descriptive key
-                if self._create_and_add_layer(
-                    "Polygon", 
-                    f"OLS_Approach_{runway_name.replace('/', '_')}",
-                    f"{self.tr('OLS')} Approach Sections {runway_name}", 
-                    fields,
-                    approach_poly_features, 
-                    layer_group, # Main Approach usually goes in the general OLS group
-                    descriptive_style_key # Pass the descriptive key
-                ): overall_success = True
-
-            # Approach Contours Layer
-            if approach_contour_features:
-                fields = self._get_approach_contour_fields()
-                descriptive_style_key = "OLS Approach Contour" # Use the descriptive key
-                if self._create_and_add_layer(
-                    "LineString", 
-                    f"OLS_ApproachContours_{runway_name.replace('/', '_')}",
-                    f"{self.tr('OLS')} Approach Contours {runway_name}", 
-                    fields,
-                    approach_contour_features, 
-                    layer_group, 
-                    descriptive_style_key # Pass the descriptive key
-                ): overall_success = True
-
-            # TOCS Polygons Layer
-            if tocs_poly_features:
-                fields = self._get_ols_fields("TOCS")
-                descriptive_style_key = "OLS TOCS" # Use the descriptive key
-                if self._create_and_add_layer(
-                    "Polygon", 
-                    f"OLS_TOCS_{runway_name.replace('/', '_')}",
-                    f"{self.tr('OLS')} TOCS {runway_name}", 
-                    fields,
-                    tocs_poly_features, 
-                    layer_group, 
-                    descriptive_style_key # Pass the descriptive key
-                ): overall_success = True
-
-            # TOCS Contours Layer
-            if tocs_contour_features:
-                fields = self._get_tocs_contour_fields()
-                descriptive_style_key = "OLS TOCS Contour" # Use the descriptive key
-                if self._create_and_add_layer(
-                    "LineString", 
-                    f"OLS_TOCS_Contours_{runway_name.replace('/', '_')}",
-                    f"{self.tr('OLS')} TOCS Contours {runway_name}", 
-                    fields,
-                    tocs_contour_features, 
-                    layer_group, 
-                    descriptive_style_key # Pass the descriptive key
-                ): overall_success = True
-            
+                return False
+        except (ValueError, TypeError):
             QgsMessageLog.logMessage(
-                f"Finished Runway OLS processing for {runway_name}. Overall success for this runway: {overall_success}",
-                plugin_tag, level=Qgis.Success if overall_success else Qgis.Warning
+                f"Runway OLS for {runway_name} SKIPPED: Invalid 'width' ('{runway_actual_width_val}') in runway_data.",
+                plugin_tag,
+                Qgis.Warning,
             )
-            return overall_success
+            return False
+
+        QgsMessageLog.logMessage(
+            f"Starting Runway OLS processing (OFZ components, Approach, TOCS) for {runway_name}",
+            plugin_tag,
+            level=Qgis.Info,
+        )
+
+        if not all(
+            [
+                primary_threshold_point,
+                reciprocal_threshold_point,
+                layer_group,
+                arc_num_str,
+            ]
+        ):
+            QgsMessageLog.logMessage(
+                f"Runway OLS for {runway_name} SKIPPED: Missing essential base data.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return False
+        try:
+            arc_num = int(arc_num_str)
+        except (ValueError, TypeError):
+            QgsMessageLog.logMessage(
+                f"Runway OLS for {runway_name} SKIPPED: Invalid ARC number '{arc_num_str}'.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+            return False
+
+        primary_desig, reciprocal_desig = (
+            runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
+        )
+
+        QgsMessageLog.logMessage(
+            f"DEBUG PGF Start: For Runway '{runway_name}'...", plugin_tag, Qgis.Info
+        )
+
+        rwy_params = self._get_runway_parameters(
+            primary_threshold_point, reciprocal_threshold_point
+        )
+        if rwy_params is None:
+            return False  # Error logged in helper
+
+        az_primary_to_reciprocal = rwy_params["azimuth_p_r"]
+        az_reciprocal_to_primary = rwy_params["azimuth_r_p"]
+
+        clearway_len_at_primary_end = float(
+            runway_data.get("clearway1_len", 0.0) or 0.0
+        )
+        clearway_len_at_reciprocal_end = float(
+            runway_data.get("clearway2_len", 0.0) or 0.0
+        )
+        disp_at_primary_thr = float(runway_data.get("thr_displaced_1", 0.0) or 0.0)
+        disp_at_reciprocal_thr = float(runway_data.get("thr_displaced_2", 0.0) or 0.0)
+
+        physical_endpoints_result_tuple = self._get_physical_runway_endpoints(
+            primary_threshold_point,
+            reciprocal_threshold_point,
+            disp_at_primary_thr,
+            disp_at_reciprocal_thr,
+            rwy_params,
+        )
+        if physical_endpoints_result_tuple is None:
+            return False  # Error logged in helper
+        phys_pavement_end_near_primary_thr, phys_pavement_end_near_reciprocal_thr, _ = (
+            physical_endpoints_result_tuple
+        )
+
+        overall_success = False
+        inner_approach_features, approach_poly_features, approach_contour_features = (
+            [],
+            [],
+            [],
+        )
+        (
+            tocs_poly_features,
+            tocs_contour_features,
+            ofz_inner_trans_features,
+            ofz_bls_features,
+        ) = ([], [], [], [])
+
+        IHS_ELEVATION_AMSL: Optional[float] = None
+        if self.reference_elevation_datum is not None:
+            ihs_base_height_agl = ols_dimensions.get_ihs_base_height()
+            if ihs_base_height_agl is not None:
+                IHS_ELEVATION_AMSL = (
+                    self.reference_elevation_datum + ihs_base_height_agl
+                )
+        if IHS_ELEVATION_AMSL is None:
+            QgsMessageLog.logMessage(
+                f"Runway OLS for {runway_name}: IHS Elevation could not be determined.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+
+        runway_end_configurations = [
+            {
+                "current_desig": primary_desig,
+                "landing_threshold_pt": primary_threshold_point,
+                "landing_threshold_elev": primary_thr_elev,
+                "approach_type_str": primary_approach_type_str,
+                "approach_surface_outward_azimuth": az_reciprocal_to_primary,
+                "baulked_landing_origin_thr_pt": primary_threshold_point,
+                "baulked_landing_flight_path_azimuth": az_primary_to_reciprocal,
+                "tocs_departure_pavement_end_pt": phys_pavement_end_near_reciprocal_thr,
+                "tocs_flight_path_azimuth": az_primary_to_reciprocal,
+                "tocs_clearway_len_at_departure_end": clearway_len_at_reciprocal_end,
+                "runway_orientation_azimuth_for_its_perp": az_primary_to_reciprocal,
+            },
+            {
+                "current_desig": reciprocal_desig,
+                "landing_threshold_pt": reciprocal_threshold_point,
+                "landing_threshold_elev": reciprocal_thr_elev,
+                "approach_type_str": reciprocal_approach_type_str,
+                "approach_surface_outward_azimuth": az_primary_to_reciprocal,
+                "baulked_landing_origin_thr_pt": reciprocal_threshold_point,
+                "baulked_landing_flight_path_azimuth": az_reciprocal_to_primary,
+                "tocs_departure_pavement_end_pt": phys_pavement_end_near_primary_thr,
+                "tocs_flight_path_azimuth": az_reciprocal_to_primary,
+                "tocs_clearway_len_at_departure_end": clearway_len_at_primary_end,
+                "runway_orientation_azimuth_for_its_perp": az_reciprocal_to_primary,
+            },
+        ]
+
+        for config in runway_end_configurations:
+            current_desig = config["current_desig"]
+            QgsMessageLog.logMessage(
+                f"Processing OLS for {runway_name} - End {current_desig}",
+                plugin_tag,
+                Qgis.Info,
+            )
+
+            ia_geom_for_its: Optional[QgsGeometry] = None
+            ia_cl_start_xy: Optional[QgsPointXY] = None
+            ia_cl_end_xy: Optional[QgsPointXY] = None
+            ia_start_elev: Optional[float] = None
+            ia_end_elev: Optional[float] = None
+            ia_width: Optional[float] = None
+            ia_length_param_val: Optional[float] = None
+
+            bls_geom_for_its: Optional[QgsGeometry] = None
+            bls_cl_start_xy: Optional[QgsPointXY] = None
+            bls_cl_end_xy: Optional[QgsPointXY] = None
+            bls_start_elev: Optional[float] = None
+            bls_start_width: Optional[float] = None
+            bls_end_width: Optional[float] = None
+            bls_len: Optional[float] = None
+
+            # --- Inner Approach ---
+            try:
+                QgsMessageLog.logMessage(
+                    f"Debug InnerApproach: Attempting for {current_desig}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
+                ia_params = ols_dimensions.get_ols_params(
+                    arc_num, config["approach_type_str"], "InnerApproach"
+                )
+                if ia_params:
+                    ia_slope_param = ia_params.get("slope")
+                    ia_start_dist_param = ia_params.get("start_dist_from_thr")
+                    ia_length_param_val = ia_params.get("length")
+                    ia_width_param_val = ia_params.get("width")
+                    ia_ref_param = ia_params.get("ref")
+                    if all(
+                        v is not None
+                        for v in [
+                            ia_slope_param,
+                            ia_start_dist_param,
+                            ia_length_param_val,
+                            ia_width_param_val,
+                        ]
+                    ):
+                        ia_cl_start_xy = config["landing_threshold_pt"].project(
+                            ia_start_dist_param,
+                            config["approach_surface_outward_azimuth"],
+                        )
+                        if ia_cl_start_xy:
+                            ia_geom_for_its = self._create_rectangle_from_start(
+                                ia_cl_start_xy,
+                                config["approach_surface_outward_azimuth"],
+                                ia_length_param_val,
+                                ia_width_param_val / 2.0,
+                                f"IA {current_desig}",
+                            )
+                            if ia_geom_for_its and ia_geom_for_its.isGeosValid():
+                                ia_width = ia_width_param_val
+                                ia_start_elev = (
+                                    self._get_elevation_at_point_along_gradient(
+                                        ia_cl_start_xy,
+                                        primary_threshold_point,
+                                        reciprocal_threshold_point,
+                                        primary_thr_elev,
+                                        reciprocal_thr_elev,
+                                        QgsProject.instance().crs(),
+                                    )
+                                )
+                                if ia_start_elev is not None:
+                                    ia_end_elev = ia_start_elev + (
+                                        ia_length_param_val * ia_slope_param
+                                    )
+                                    ia_cl_end_xy = ia_cl_start_xy.project(
+                                        ia_length_param_val,
+                                        config["approach_surface_outward_azimuth"],
+                                    )
+                                else:
+                                    ia_end_elev = None
+                                    QgsMessageLog.logMessage(
+                                        f"Warning: IA {current_desig} start elevation is None.",
+                                        plugin_tag,
+                                        Qgis.Warning,
+                                    )
+
+                                fields = self._get_ols_fields("InnerApproach")
+                                feat = QgsFeature(fields)
+                                feat.setGeometry(ia_geom_for_its)
+                                h_agl = ia_length_param_val * ia_slope_param
+                                attrs = {
+                                    "rwy_name": runway_name,
+                                    "surface": "Inner Approach",
+                                    "end_desig": current_desig,
+                                    "elev_m": ia_end_elev,
+                                    "height_agl": h_agl,
+                                    "slope_perc": ia_slope_param * 100.0,
+                                    "ref_mos": ia_ref_param,
+                                    "len_m": ia_length_param_val,
+                                    "innerw_m": ia_width_param_val,
+                                    "outerw_m": ia_width_param_val,
+                                    "origin_offset": ia_start_dist_param,
+                                }
+                                for n, v_attr in attrs.items():
+                                    if fields.indexFromName(n) != -1:
+                                        feat.setAttribute(
+                                            fields.indexFromName(n), v_attr
+                                        )
+                                inner_approach_features.append(feat)
+                QgsMessageLog.logMessage(
+                    f"Debug InnerApproach: Completed for {current_desig}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
+            except Exception as e_ia:
+                QgsMessageLog.logMessage(
+                    f"ERROR generating Inner Approach for {current_desig}: {e_ia}\n{traceback.format_exc()}",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
+
+            # --- Baulked Landing ---
+            try:
+                QgsMessageLog.logMessage(
+                    f"Debug BaulkedLanding: Attempting for {current_desig}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
+                bls_params_dict = ols_dimensions.get_ols_params(
+                    arc_num, config["approach_type_str"], "BaulkedLanding"
+                )
+                if bls_params_dict and IHS_ELEVATION_AMSL is not None:
+                    QgsMessageLog.logMessage(
+                        f"  DEBUG BLS Pre-Call for '{current_desig}': Origin THR: {config['baulked_landing_origin_thr_pt'].asWkt() if config['baulked_landing_origin_thr_pt'] else 'None'}, Azimuth: {config['baulked_landing_flight_path_azimuth']}",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
+                    bls_result_tuple = self._generate_baulked_landing_surface(
+                        runway_data,
+                        rwy_params,
+                        config["baulked_landing_origin_thr_pt"],
+                        config["baulked_landing_flight_path_azimuth"],
+                        bls_params_dict,
+                        current_desig,
+                        IHS_ELEVATION_AMSL,
+                    )
+                    QgsMessageLog.logMessage(
+                        f"Debug BLS {current_desig}: Helper result: {bls_result_tuple is not None}",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
+                    if bls_result_tuple:
+                        feat_bls, bls_g, bls_l, bls_se, bls_cl_s_xy, bls_ew = (
+                            bls_result_tuple
+                        )
+                        bls_geom_for_its = bls_g
+                        bls_len = bls_l
+                        bls_start_elev = bls_se
+                        bls_cl_start_xy = bls_cl_s_xy
+                        bls_end_width = bls_ew
+                        bls_start_width = bls_params_dict.get("width")
+                        if bls_cl_start_xy and bls_len is not None:
+                            bls_cl_end_xy = bls_cl_start_xy.project(
+                                bls_len, config["baulked_landing_flight_path_azimuth"]
+                            )
+                        if feat_bls:
+                            ofz_bls_features.append(feat_bls)
+                        else:
+                            QgsMessageLog.logMessage(
+                                f"Debug BLS {current_desig}: Feature from helper was None.",
+                                plugin_tag,
+                                Qgis.Warning,
+                            )
+                    else:
+                        QgsMessageLog.logMessage(
+                            f"Debug BLS {current_desig}: Helper returned None overall.",
+                            plugin_tag,
+                            Qgis.Warning,
+                        )
+                elif not bls_params_dict:
+                    QgsMessageLog.logMessage(
+                        f"Debug BaulkedLanding: Skipped {current_desig}: No params.",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
+                elif IHS_ELEVATION_AMSL is None:
+                    QgsMessageLog.logMessage(
+                        f"Debug BaulkedLanding: Skipped {current_desig}: IHS_ELEVATION_AMSL is None.",
+                        plugin_tag,
+                        Qgis.Warning,
+                    )
+                QgsMessageLog.logMessage(
+                    f"Debug BaulkedLanding: Completed for {current_desig}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
+            except Exception as e_bls:
+                QgsMessageLog.logMessage(
+                    f"ERROR generating Baulked Landing for {current_desig}: {e_bls}\n{traceback.format_exc()}",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
+
+            # --- Inner Transitional Surface ---
+            if IHS_ELEVATION_AMSL is not None:
+                it_params_dict = ols_dimensions.get_ols_params(
+                    arc_num, config["approach_type_str"], "InnerTransitional"
+                )
+                if it_params_dict:
+                    its_slope = it_params_dict.get("slope")
+                    its_ref_mos = it_params_dict.get("ref", "MOS Ref ITS")
+
+                    if its_slope is not None and its_slope > 1e-9:
+                        its_fields = self._get_ols_fields("InnerTransitional")
+                        strip_params_for_its = ols_dimensions.get_strip_params(
+                            arc_num, config["approach_type_str"], runway_actual_width
+                        )
+                        graded_strip_total_width = 150.0
+                        if (
+                            strip_params_for_its
+                            and strip_params_for_its.get("graded_width") is not None
+                        ):
+                            graded_strip_total_width = strip_params_for_its.get(
+                                "graded_width"
+                            )
+                        else:
+                            QgsMessageLog.logMessage(
+                                f"Debug ITS {current_desig}: Using default strip width {graded_strip_total_width}m.",
+                                plugin_tag,
+                                Qgis.Info,
+                            )
+                        graded_strip_half_width = graded_strip_total_width / 2.0
+
+                        main_centerline_orient_az = config[
+                            "runway_orientation_azimuth_for_its_perp"
+                        ]
+                        # This definition of L/R for ITS projection is based on the main runway orientation
+                        outward_az_L_ITS_projection = (
+                            main_centerline_orient_az - 90.0 + 360.0
+                        ) % 360.0
+                        outward_az_R_ITS_projection = (
+                            main_centerline_orient_az + 90.0
+                        ) % 360.0
+
+                        for side_label_its_panel, outward_projection_az_for_panel in [
+                            ("L", outward_az_L_ITS_projection),
+                            ("R", outward_az_R_ITS_projection),
+                        ]:
+                            QgsMessageLog.logMessage(
+                                f"Generating ITS for {current_desig} - ITS Panel Side '{side_label_its_panel}'",
+                                plugin_tag,
+                                Qgis.Info,
+                            )
+
+                            P_IA_inner_3d_side, P_IA_outer_3d_side = None, None
+                            P_BLS_inner_3d_side, P_BLS_outer_3d_side = None, None
+
+                            # Define which side of IA/BLS corresponds to this ITS panel side
+                            # If _get_polygon_side_3d_points uses (L=surface_az+90, R=surface_az-90)
+                            # And IA surface az points "inwards" while BLS surface az points "outwards"
+                            # then for the "L" ITS panel:
+                            #   - We need the "L" side of IA (using side_label_its_panel 'L')
+                            #   - We need the "L" side of BLS (using side_label_its_panel 'L')
+                            # The helper _get_polygon_side_3d_points handles L/R relative to *its input surface's centerline*
+
+                            if all(
+                                v is not None
+                                for v in [
+                                    ia_geom_for_its,
+                                    ia_cl_start_xy,
+                                    ia_cl_end_xy,
+                                    ia_start_elev,
+                                    ia_end_elev,
+                                    ia_width,
+                                ]
+                            ):
+                                ia_side_pts_tuple = self._get_polygon_side_3d_points(
+                                    ia_geom_for_its,
+                                    ia_cl_start_xy,
+                                    ia_cl_end_xy,
+                                    ia_start_elev,
+                                    ia_end_elev,
+                                    ia_width / 2.0,
+                                    ia_width / 2.0,
+                                    side_label_its_panel,
+                                )
+                                if ia_side_pts_tuple:
+                                    P_IA_inner_3d_side, P_IA_outer_3d_side = (
+                                        ia_side_pts_tuple
+                                    )
+
+                            if (
+                                all(
+                                    v is not None
+                                    for v in [
+                                        bls_geom_for_its,
+                                        bls_cl_start_xy,
+                                        bls_cl_end_xy,
+                                        bls_start_elev,
+                                        bls_start_width,
+                                        bls_end_width,
+                                    ]
+                                )
+                                and bls_len is not None
+                                and bls_len > 1e-6
+                            ):
+                                bls_side_pts_tuple = self._get_polygon_side_3d_points(
+                                    bls_geom_for_its,
+                                    bls_cl_start_xy,
+                                    bls_cl_end_xy,
+                                    bls_start_elev,
+                                    IHS_ELEVATION_AMSL,
+                                    bls_start_width / 2.0,
+                                    bls_end_width / 2.0,
+                                    self._flip_side_label(
+                                        side_label_its_panel
+                                    ),
+                                )
+                                if bls_side_pts_tuple:
+                                    P_BLS_inner_3d_side, P_BLS_outer_3d_side = (
+                                        bls_side_pts_tuple
+                                    )
+
+                            if P_IA_outer_3d_side and P_IA_inner_3d_side:
+                                panel_feat = self._generate_its_panel_feature(
+                                    P_IA_outer_3d_side,
+                                    P_IA_inner_3d_side,
+                                    its_slope,
+                                    IHS_ELEVATION_AMSL,
+                                    outward_projection_az_for_panel,
+                                    runway_name,
+                                    current_desig,
+                                    side_label_its_panel,
+                                    "IA Adjacent",
+                                    its_ref_mos,
+                                    its_fields,
+                                )
+                                if panel_feat:
+                                    ofz_inner_trans_features.append(panel_feat)
+                            else:
+                                QgsMessageLog.logMessage(
+                                    f"ITS IA-Adjacent Panel {current_desig} {side_label_its_panel} SKIPPED: Missing 3D base points from IA.",
+                                    plugin_tag,
+                                    Qgis.Warning,
+                                )
+
+                            if P_BLS_inner_3d_side and P_BLS_outer_3d_side:
+                                panel_feat = self._generate_its_panel_feature(
+                                    P_BLS_inner_3d_side,
+                                    P_BLS_outer_3d_side,
+                                    its_slope,
+                                    IHS_ELEVATION_AMSL,
+                                    outward_projection_az_for_panel,
+                                    runway_name,
+                                    current_desig,
+                                    side_label_its_panel,
+                                    "BLS Adjacent",
+                                    its_ref_mos,
+                                    its_fields,
+                                )
+                                if panel_feat:
+                                    ofz_inner_trans_features.append(panel_feat)
+                            else:
+                                QgsMessageLog.logMessage(
+                                    f"ITS BLS-Adjacent Panel {current_desig} {side_label_its_panel} SKIPPED: Missing 3D base points from BLS.",
+                                    plugin_tag,
+                                    Qgis.Warning,
+                                )
+
+                            if (
+                                P_IA_inner_3d_side
+                                and P_BLS_inner_3d_side
+                                and ia_cl_start_xy
+                                and bls_cl_start_xy
+                            ):
+                                strip_base_seg_3d = self._define_strip_edge_segment_3d(
+                                    ia_cl_start_xy,
+                                    bls_cl_start_xy,
+                                    graded_strip_half_width,
+                                    outward_projection_az_for_panel,
+                                    primary_threshold_point,
+                                    reciprocal_threshold_point,
+                                    primary_thr_elev,
+                                    reciprocal_thr_elev,
+                                )
+                                if strip_base_seg_3d:
+                                    strip_p1_3d, strip_p2_3d = strip_base_seg_3d
+                                    panel_feat = self._generate_its_panel_feature(
+                                        strip_p1_3d,
+                                        strip_p2_3d,
+                                        its_slope,
+                                        IHS_ELEVATION_AMSL,
+                                        outward_projection_az_for_panel,
+                                        runway_name,
+                                        current_desig,
+                                        side_label_its_panel,
+                                        "Strip Adjacent",
+                                        its_ref_mos,
+                                        its_fields,
+                                    )
+                                    if panel_feat:
+                                        ofz_inner_trans_features.append(panel_feat)
+                                else:
+                                    QgsMessageLog.logMessage(
+                                        f"ITS Strip Panel {current_desig} {side_label_its_panel} SKIPPED: _define_strip_edge_segment_3d None.",
+                                        plugin_tag,
+                                        Qgis.Warning,
+                                    )
+                            else:
+                                QgsMessageLog.logMessage(
+                                    f"ITS Strip Panel {current_desig} {side_label_its_panel} SKIPPED: Missing required alignment points.",
+                                    plugin_tag,
+                                    Qgis.Warning,
+                                )
+                    else:
+                        QgsMessageLog.logMessage(
+                            f"ITS for {current_desig} SKIPPED: Invalid ITS slope.",
+                            plugin_tag,
+                            Qgis.Warning,
+                        )
+                else:
+                    QgsMessageLog.logMessage(
+                        f"ITS for {current_desig} SKIPPED: No ITS parameters found.",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
+            else:
+                QgsMessageLog.logMessage(
+                    f"ITS for {current_desig} SKIPPED: IHS_ELEVATION_AMSL is None.",
+                    plugin_tag,
+                    Qgis.Warning,
+                )
+
+            # --- Main Approach ---
+            try:
+                QgsMessageLog.logMessage(
+                    f"Debug MainApproach: Attempting for {current_desig}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
+                app_sections, app_contours = self._generate_approach_surface(
+                    runway_data,
+                    rwy_params,
+                    arc_num,
+                    config["approach_type_str"],
+                    config["landing_threshold_pt"],
+                    config["approach_surface_outward_azimuth"],
+                    current_desig,
+                    config["landing_threshold_elev"],
+                )
+                if app_sections:
+                    approach_poly_features.extend(app_sections)
+                if app_contours:
+                    approach_contour_features.extend(app_contours)
+                QgsMessageLog.logMessage(
+                    f"Debug MainApproach: Completed for {current_desig}. Sections: {len(app_sections)}, Contours: {len(app_contours)}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
+            except Exception as e_app:
+                QgsMessageLog.logMessage(
+                    f"ERROR generating Main Approach for {current_desig}: {e_app}\n{traceback.format_exc()}",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
+
+            # --- Take-off Climb Surface (TOCS) ---
+            try:
+                QgsMessageLog.logMessage(
+                    f"Debug TOCS: Attempting for {current_desig}", plugin_tag, Qgis.Info
+                )
+                tocs_plane_origin_pt = config["tocs_departure_pavement_end_pt"]
+                tocs_params_for_offset = ols_dimensions.get_ols_params(
+                    arc_num, None, "TOCS"
+                )
+                origin_offset_param_val = 60.0
+                if tocs_params_for_offset:
+                    origin_offset_param_val = tocs_params_for_offset.get(
+                        "origin_offset", 60.0
+                    )
+
+                if config["tocs_clearway_len_at_departure_end"] > 1e-6:
+                    tocs_plane_origin_pt = tocs_plane_origin_pt.project(
+                        config["tocs_clearway_len_at_departure_end"],
+                        config["tocs_flight_path_azimuth"],
+                    )
+                else:
+                    tocs_plane_origin_pt = tocs_plane_origin_pt.project(
+                        origin_offset_param_val, config["tocs_flight_path_azimuth"]
+                    )
+
+                tocs_actual_start_elevation = None
+                if tocs_plane_origin_pt:
+                    tocs_actual_start_elevation = (
+                        self._get_elevation_at_point_along_gradient(
+                            tocs_plane_origin_pt,
+                            primary_threshold_point,
+                            reciprocal_threshold_point,
+                            primary_thr_elev,
+                            reciprocal_thr_elev,
+                            QgsProject.instance().crs(),
+                        )
+                    )
+
+                feat_tocs_local = None
+                if (
+                    tocs_actual_start_elevation is not None
+                    and tocs_plane_origin_pt is not None
+                ):
+                    QgsMessageLog.logMessage(
+                        f"  DEBUG TOCS for '{current_desig}': Plane Origin Pt: {tocs_plane_origin_pt.asWkt()}, Actual Start Elev: {tocs_actual_start_elevation:.2f}",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
+                    tocs_feat, tocs_conts = self._generate_tocs(
+                        runway_data,
+                        rwy_params,
+                        arc_num,
+                        config["approach_type_str"],
+                        config["tocs_departure_pavement_end_pt"],
+                        config["tocs_clearway_len_at_departure_end"],
+                        config["tocs_flight_path_azimuth"],
+                        current_desig,
+                        tocs_actual_start_elevation,
+                    )
+                    feat_tocs_local = tocs_feat
+                    if tocs_feat:
+                        tocs_poly_features.append(tocs_feat)
+                    if tocs_conts:
+                        tocs_contour_features.extend(tocs_conts)
+                else:
+                    QgsMessageLog.logMessage(
+                        f"Debug TOCS: Skipped for {current_desig} due to missing origin point or elevation for TOCS plane.",
+                        plugin_tag,
+                        Qgis.Warning,
+                    )
+                QgsMessageLog.logMessage(
+                    f"Debug TOCS: Completed for {current_desig}. Feature generated: {feat_tocs_local is not None}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
+            except Exception as e_tocs:
+                QgsMessageLog.logMessage(
+                    f"ERROR generating TOCS for {current_desig}: {e_tocs}\n{traceback.format_exc()}",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
+
+        # --- END OF LOOP for runway_end_configurations ---
+
+        QgsMessageLog.logMessage(
+            f"Debug ProcessGuidelineF: Finished processing LOOP for runway {runway_name}. Total BLS features: {len(ofz_bls_features)}, Total ITS features: {len(ofz_inner_trans_features)}",
+            plugin_tag,
+            Qgis.Info,
+        )
+
+        # --- Layer Creation ---
+        target_ofz_group = ofz_group if ofz_group is not None else layer_group
+
+        # Inner Approach Layer
+        if inner_approach_features:
+            fields = self._get_ols_fields("InnerApproach")
+            descriptive_style_key = "OLS Inner Approach"  # Use the descriptive key
+            if self._create_and_add_layer(
+                "Polygon",
+                f"OLS_InnerApproach_{runway_name.replace('/', '_')}",
+                f"{self.tr('OLS')} Inner Approach {runway_name}",
+                fields,
+                inner_approach_features,
+                target_ofz_group,
+                descriptive_style_key,  # Pass the descriptive key
+            ):
+                overall_success = True
+
+        # Inner Transitional Layer
+        if ofz_inner_trans_features:
+            fields = self._get_ols_fields("InnerTransitional")
+            descriptive_style_key = "OLS Inner Transitional"  # Use the descriptive key
+            if self._create_and_add_layer(
+                "Polygon",
+                f"OLS_InnerTransitional_{runway_name.replace('/', '_')}",
+                f"{self.tr('OLS')} Inner Transitional {runway_name}",
+                fields,
+                ofz_inner_trans_features,
+                target_ofz_group,
+                descriptive_style_key,  # Pass the descriptive key
+            ):
+                overall_success = True
+
+        # Logging for empty ITS on Precision Approach runways
+        is_precision_runway = False
+        if hasattr(ols_dimensions, "PRECISION_APPROACH_TYPES"):
+            current_runway_type_abbrs = {
+                ols_dimensions.get_runway_type_abbr(s.get("approach_type_str"))
+                for s in runway_end_configurations
+                if s.get("approach_type_str")
+            }
+            is_precision_runway = any(
+                abbr in ols_dimensions.PRECISION_APPROACH_TYPES
+                for abbr in current_runway_type_abbrs
+            )
+        else:
+            QgsMessageLog.logMessage(
+                "Warning: ols_dimensions.PRECISION_APPROACH_TYPES not found for ITS logging.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+
+        if not ofz_inner_trans_features and is_precision_runway:
+            QgsMessageLog.logMessage(
+                f"Warning: Inner Transitional layer for PA runway {runway_name} is empty. Check ITS generation logic and data extraction.",
+                plugin_tag,
+                Qgis.Warning,
+            )
+        elif (
+            not ofz_inner_trans_features
+        ):  # General info if not a PA runway and still empty
+            QgsMessageLog.logMessage(
+                f"Info: Inner Transitional layer for {runway_name} is empty (may be normal for non-PA or if generation is placeholder).",
+                plugin_tag,
+                Qgis.Info,
+            )
+
+        # Baulked Landing Layer
+        QgsMessageLog.logMessage(
+            f"Debug BLS Layer Creation: Total ofz_bls_features count: {len(ofz_bls_features)} for runway {runway_name}",
+            plugin_tag,
+            Qgis.Info,
+        )
+        if ofz_bls_features:
+            fields = self._get_ols_fields("BaulkedLanding")
+            descriptive_style_key = "OLS Baulked Landing"  # Use the descriptive key
+            QgsMessageLog.logMessage(
+                f"Debug BLS Layer Creation: Attempting layer for {runway_name} with {len(ofz_bls_features)} features. Group: {target_ofz_group.name()}",
+                plugin_tag,
+                Qgis.Info,
+            )
+            bls_layer = self._create_and_add_layer(
+                "Polygon",
+                f"OLS_BaulkedLanding_{runway_name.replace('/', '_')}",
+                f"{self.tr('OLS')} Baulked Landing {runway_name}",
+                fields,
+                ofz_bls_features,
+                target_ofz_group,
+                descriptive_style_key,  # Pass the descriptive key
+            )
+            if bls_layer:
+                overall_success = True
+                QgsMessageLog.logMessage(
+                    f"Debug BLS Layer Creation: Layer '{bls_layer.name()}' created for {runway_name}.",
+                    plugin_tag,
+                    Qgis.Success,
+                )
+            else:
+                QgsMessageLog.logMessage(
+                    f"Debug BLS Layer Creation: _create_and_add_layer FAILED for BLS {runway_name}.",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
+        else:
+            QgsMessageLog.logMessage(
+                f"Debug BLS Layer Creation: No features in ofz_bls_features list for {runway_name}. Layer not created.",
+                plugin_tag,
+                Qgis.Info,
+            )
+
+        # Approach Sections Layer
+        if approach_poly_features:
+            fields = self._get_ols_fields("Approach")
+            descriptive_style_key = "OLS Approach"  # Use the descriptive key
+            if self._create_and_add_layer(
+                "Polygon",
+                f"OLS_Approach_{runway_name.replace('/', '_')}",
+                f"{self.tr('OLS')} Approach Sections {runway_name}",
+                fields,
+                approach_poly_features,
+                layer_group,  # Main Approach usually goes in the general OLS group
+                descriptive_style_key,  # Pass the descriptive key
+            ):
+                overall_success = True
+
+        # Approach Contours Layer
+        if approach_contour_features:
+            fields = self._get_approach_contour_fields()
+            descriptive_style_key = "OLS Approach Contour"  # Use the descriptive key
+            if self._create_and_add_layer(
+                "LineString",
+                f"OLS_ApproachContours_{runway_name.replace('/', '_')}",
+                f"{self.tr('OLS')} Approach Contours {runway_name}",
+                fields,
+                approach_contour_features,
+                layer_group,
+                descriptive_style_key,  # Pass the descriptive key
+            ):
+                overall_success = True
+
+        # TOCS Polygons Layer
+        if tocs_poly_features:
+            fields = self._get_ols_fields("TOCS")
+            descriptive_style_key = "OLS TOCS"  # Use the descriptive key
+            if self._create_and_add_layer(
+                "Polygon",
+                f"OLS_TOCS_{runway_name.replace('/', '_')}",
+                f"{self.tr('OLS')} TOCS {runway_name}",
+                fields,
+                tocs_poly_features,
+                layer_group,
+                descriptive_style_key,  # Pass the descriptive key
+            ):
+                overall_success = True
+
+        # TOCS Contours Layer
+        if tocs_contour_features:
+            fields = self._get_tocs_contour_fields()
+            descriptive_style_key = "OLS TOCS Contour"  # Use the descriptive key
+            if self._create_and_add_layer(
+                "LineString",
+                f"OLS_TOCS_Contours_{runway_name.replace('/', '_')}",
+                f"{self.tr('OLS')} TOCS Contours {runway_name}",
+                fields,
+                tocs_contour_features,
+                layer_group,
+                descriptive_style_key,  # Pass the descriptive key
+            ):
+                overall_success = True
+
+        QgsMessageLog.logMessage(
+            f"Finished Runway OLS processing for {runway_name}. Overall success for this runway: {overall_success}",
+            plugin_tag,
+            level=Qgis.Success if overall_success else Qgis.Warning,
+        )
+        return overall_success
 
     def process_guideline_g(
         self,
@@ -8820,20 +9478,20 @@ class SafeguardingBuilder:
                 QgsField("rwy", QVariant.String, self.tr("Runway Name"), 50),
                 QgsField(
                     "desc", QVariant.String, self.tr("desc"), 100
-                ),  # Renamed Alias, updated length
+                ),
                 QgsField("offset_m", QVariant.Double, self.tr("offset_m"), 10, 2),
                 QgsField(
                     "ref_mos", QVariant.String, self.tr("MOS Reference"), 100
-                ),  # Renamed field and Alias
+                ),
                 QgsField(
                     "appr_type", QVariant.String, self.tr("appr_type"), 50
-                ),  # New field
+                ),
                 QgsField(
                     "arc_num", QVariant.String, self.tr("arc_num"), 5
-                ),  # New field
+                ),
                 QgsField(
                     "arc_let", QVariant.String, self.tr("arc_let"), 5
-                ),  # New field
+                ),
                 QgsField("side", QVariant.String, self.tr("Side (L/R)"), 5),
             ]
         )
@@ -8925,7 +9583,6 @@ class SafeguardingBuilder:
             )
             return False
         offset_m = offset_params.get("offset_m")
-        # ref = offset_params.get('ref', 'MOS 139 T9.1 (Verify)') # Original ref from offset_params, now using constant
         if offset_m is None or offset_m <= 0:
             QgsMessageLog.logMessage(
                 f"Skipping Taxiway Sep for {runway_name}: Invalid offset value ({offset_m}).",
@@ -9092,7 +9749,7 @@ class SafeguardingBuilder:
             )
             return layer_created is not None
         else:
-            return False  # Should have been caught earlier, but safety net
+            return False
 
 
 # ============================================================
