@@ -635,9 +635,9 @@ class SafeguardingBuilder:
                 "LCZ D": "default_zone_polygon.qml",
                 "OLS Approach": "ols_approach_polygon.qml",
                 "OLS Approach Contour": "ols_approach_contours.qml",
-                "OLS Inner Approach": "default_ols_polygon.qml",
-                "OLS Inner Transitional": "default_ols_polygon.qml",
-                "OLS Baulked Landing": "default_ols_polygon.qml",
+                "OLS Inner Approach": "default_ofz_polygon.qml",
+                "OLS Inner Transitional": "default_ofz_polygon.qml",
+                "OLS Baulked Landing": "default_ofz_polygon.qml",
                 "OLS TOCS": "ols_tocs_polygon.qml",
                 "OLS TOCS Contour": "ols_tocs_contours.qml",
                 "OLS IHS": "default_ols_polygon.qml",
@@ -5057,12 +5057,13 @@ class SafeguardingBuilder:
 
         perp_az: float
         # This is the version that worked for your IA panels:
+        side_label = side_label.upper()
         if side_label == 'L': 
             perp_az = (surface_centerline_az + 90.0) % 360.0 # Your "effective Left"
         elif side_label == 'R':
             perp_az = (surface_centerline_az - 90.0 + 360.0) % 360.0 # Your "effective Right"
         else:
-            QgsMessageLog.logMessage(f"Debug _poly_side: Invalid side_label '{side_label}'.", plugin_tag, Qgis.Error)
+            QgsMessageLog.logMessage(f"Debug _poly_side: Invalid side_label '{side_label}'.", plugin_tag, Qgis.Warning)
             return None
         
         QgsMessageLog.logMessage(f"Debug _poly_side ({side_label}): surface_centerline_az={surface_centerline_az:.2f}, calculated_perp_az={perp_az:.2f}", plugin_tag, Qgis.Info) # DEBUG LOG
@@ -5081,6 +5082,9 @@ class SafeguardingBuilder:
         p_outer_3d = QgsPoint(p_outer_side_xy.x(), p_outer_side_xy.y(), end_elevation_amsl)
         
         return p_inner_3d, p_outer_3d
+    
+    def _flip_side_label(self, side_label: str) -> str:
+        return 'R' if side_label.upper() == 'L' else 'L'
 
     def _define_strip_edge_segment_3d(
         self,
@@ -8043,11 +8047,11 @@ class SafeguardingBuilder:
                         if its_slope is not None and its_slope > 1e-9:
                             its_fields = self._get_ols_fields("InnerTransitional")
                             strip_params_for_its = ols_dimensions.get_strip_params(arc_num, config["approach_type_str"], runway_actual_width)
-                            runway_strip_total_width = 150.0 
-                            if strip_params_for_its and strip_params_for_its.get("overall_width") is not None:
-                                runway_strip_total_width = strip_params_for_its.get("overall_width")
-                            else: QgsMessageLog.logMessage(f"Debug ITS {current_desig}: Using default strip width {runway_strip_total_width}m.", plugin_tag, Qgis.Info)
-                            runway_strip_half_width = runway_strip_total_width / 2.0
+                            graded_strip_total_width = 150.0 
+                            if strip_params_for_its and strip_params_for_its.get("graded_width") is not None:
+                                graded_strip_total_width = strip_params_for_its.get("graded_width")
+                            else: QgsMessageLog.logMessage(f"Debug ITS {current_desig}: Using default strip width {graded_strip_total_width}m.", plugin_tag, Qgis.Info)
+                            graded_strip_half_width = graded_strip_total_width / 2.0
                             
                             main_centerline_orient_az = config["runway_orientation_azimuth_for_its_perp"]
                             # This definition of L/R for ITS projection is based on the main runway orientation
@@ -8072,9 +8076,14 @@ class SafeguardingBuilder:
                                     ia_side_pts_tuple = self._get_polygon_side_3d_points(ia_geom_for_its, ia_cl_start_xy, ia_cl_end_xy, ia_start_elev, ia_end_elev, ia_width / 2.0, ia_width / 2.0, side_label_its_panel)
                                     if ia_side_pts_tuple: P_IA_inner_3d_side, P_IA_outer_3d_side = ia_side_pts_tuple
                                 
-                                if all(v is not None for v in [bls_geom_for_its, bls_cl_start_xy, bls_cl_end_xy, bls_start_elev, bls_start_width, bls_end_width]) and bls_len is not None and bls_len > 1e-6 :
-                                    bls_side_pts_tuple = self._get_polygon_side_3d_points(bls_geom_for_its, bls_cl_start_xy, bls_cl_end_xy, bls_start_elev, IHS_ELEVATION_AMSL, bls_start_width / 2.0, bls_end_width / 2.0, side_label_its_panel)
-                                    if bls_side_pts_tuple: P_BLS_inner_3d_side, P_BLS_outer_3d_side = bls_side_pts_tuple
+                                if all(v is not None for v in [bls_geom_for_its, bls_cl_start_xy, bls_cl_end_xy, bls_start_elev, bls_start_width, bls_end_width]) and bls_len is not None and bls_len > 1e-6:
+                                    bls_side_pts_tuple = self._get_polygon_side_3d_points(
+                                        bls_geom_for_its, bls_cl_start_xy, bls_cl_end_xy,
+                                        bls_start_elev, IHS_ELEVATION_AMSL, bls_start_width / 2.0, bls_end_width / 2.0,
+                                        self._flip_side_label(side_label_its_panel)  # <-- FLIP IT HERE
+                                    )
+                                    if bls_side_pts_tuple:
+                                        P_BLS_inner_3d_side, P_BLS_outer_3d_side = bls_side_pts_tuple
 
                                 if P_IA_outer_3d_side and P_IA_inner_3d_side:
                                     panel_feat = self._generate_its_panel_feature(P_IA_outer_3d_side, P_IA_inner_3d_side, its_slope, IHS_ELEVATION_AMSL, outward_projection_az_for_panel, runway_name, current_desig, side_label_its_panel, "IA Adjacent", its_ref_mos, its_fields)
@@ -8087,7 +8096,7 @@ class SafeguardingBuilder:
                                 else: QgsMessageLog.logMessage(f"ITS BLS-Adjacent Panel {current_desig} {side_label_its_panel} SKIPPED: Missing 3D base points from BLS.", plugin_tag, Qgis.Warning)
                                 
                                 if P_IA_inner_3d_side and P_BLS_inner_3d_side and ia_cl_start_xy and bls_cl_start_xy:
-                                    strip_base_seg_3d = self._define_strip_edge_segment_3d(ia_cl_start_xy, bls_cl_start_xy, runway_strip_half_width, outward_projection_az_for_panel, primary_threshold_point, reciprocal_threshold_point, primary_thr_elev, reciprocal_thr_elev)
+                                    strip_base_seg_3d = self._define_strip_edge_segment_3d(ia_cl_start_xy, bls_cl_start_xy, graded_strip_half_width, outward_projection_az_for_panel, primary_threshold_point, reciprocal_threshold_point, primary_thr_elev, reciprocal_thr_elev)
                                     if strip_base_seg_3d:
                                         strip_p1_3d, strip_p2_3d = strip_base_seg_3d
                                         panel_feat = self._generate_its_panel_feature(strip_p1_3d, strip_p2_3d, its_slope, IHS_ELEVATION_AMSL, outward_projection_az_for_panel, runway_name, current_desig, side_label_its_panel, "Strip Adjacent", its_ref_mos, its_fields)
@@ -8161,41 +8170,64 @@ class SafeguardingBuilder:
             # --- Layer Creation ---
             target_ofz_group = ofz_group if ofz_group is not None else layer_group
             
+            # Inner Approach Layer
             if inner_approach_features:
                 fields = self._get_ols_fields("InnerApproach")
-                style_key = self.style_map.get("OLS Inner Approach", "ols_inner_approach.qml")
-                if self._create_and_add_layer("Polygon", f"OLS_InnerApproach_{runway_name.replace('/', '_')}",
-                                            f"{self.tr('OLS')} Inner Approach {runway_name}", fields,
-                                            inner_approach_features, target_ofz_group, style_key): overall_success = True
+                descriptive_style_key = "OLS Inner Approach" # Use the descriptive key
+                if self._create_and_add_layer(
+                    "Polygon", 
+                    f"OLS_InnerApproach_{runway_name.replace('/', '_')}",
+                    f"{self.tr('OLS')} Inner Approach {runway_name}", 
+                    fields,
+                    inner_approach_features, 
+                    target_ofz_group, 
+                    descriptive_style_key # Pass the descriptive key
+                ): overall_success = True
             
+            # Inner Transitional Layer
             if ofz_inner_trans_features:
                 fields = self._get_ols_fields("InnerTransitional")
-                style_key = self.style_map.get("OLS Inner Transitional", "ols_inner_transitional.qml")
-                if self._create_and_add_layer("Polygon", f"OLS_InnerTransitional_{runway_name.replace('/', '_')}",
-                                            f"{self.tr('OLS')} Inner Transitional {runway_name}", fields,
-                                            ofz_inner_trans_features, target_ofz_group, style_key): overall_success = True
+                descriptive_style_key = "OLS Inner Transitional" # Use the descriptive key
+                if self._create_and_add_layer(
+                    "Polygon", 
+                    f"OLS_InnerTransitional_{runway_name.replace('/', '_')}",
+                    f"{self.tr('OLS')} Inner Transitional {runway_name}", 
+                    fields,
+                    ofz_inner_trans_features, 
+                    target_ofz_group, 
+                    descriptive_style_key # Pass the descriptive key
+                ): overall_success = True
             
+            # Logging for empty ITS on Precision Approach runways
             is_precision_runway = False
-            if 'ols_dimensions' in globals() and hasattr(ols_dimensions, 'PRECISION_APPROACH_TYPES'):
+            # Ensure ols_dimensions and PRECISION_APPROACH_TYPES are accessible
+            # It's better to import ols_dimensions at the top of the file.
+            # For this example, assuming it's imported as 'ols_dimensions'.
+            if hasattr(ols_dimensions, 'PRECISION_APPROACH_TYPES'):
                 current_runway_type_abbrs = {ols_dimensions.get_runway_type_abbr(s.get("approach_type_str")) for s in runway_end_configurations if s.get("approach_type_str")}
                 is_precision_runway = any(abbr in ols_dimensions.PRECISION_APPROACH_TYPES for abbr in current_runway_type_abbrs)
             else:
-                QgsMessageLog.logMessage("Warning: ols_dimensions.PRECISION_APPROACH_TYPES not found. Cannot determine if runway is precision for ITS logging.", plugin_tag, Qgis.Warning)
+                QgsMessageLog.logMessage("Warning: ols_dimensions.PRECISION_APPROACH_TYPES not found for ITS logging.", plugin_tag, Qgis.Warning)
 
             if not ofz_inner_trans_features and is_precision_runway :
                 QgsMessageLog.logMessage(f"Warning: Inner Transitional layer for PA runway {runway_name} is empty. Check ITS generation logic and data extraction.", plugin_tag, Qgis.Warning)
-            elif not ofz_inner_trans_features:
-                QgsMessageLog.logMessage(f"Info: Inner Transitional layer for {runway_name} is empty.", plugin_tag, Qgis.Info)
+            elif not ofz_inner_trans_features: # General info if not a PA runway and still empty
+                QgsMessageLog.logMessage(f"Info: Inner Transitional layer for {runway_name} is empty (may be normal for non-PA or if generation is placeholder).", plugin_tag, Qgis.Info)
 
+            # Baulked Landing Layer
             QgsMessageLog.logMessage(f"Debug BLS Layer Creation: Total ofz_bls_features count: {len(ofz_bls_features)} for runway {runway_name}", plugin_tag, Qgis.Info)
             if ofz_bls_features:
                 fields = self._get_ols_fields("BaulkedLanding")
-                style_key = self.style_map.get("OLS Baulked Landing", "ols_baulked_landing.qml")
+                descriptive_style_key = "OLS Baulked Landing" # Use the descriptive key
                 QgsMessageLog.logMessage(f"Debug BLS Layer Creation: Attempting layer for {runway_name} with {len(ofz_bls_features)} features. Group: {target_ofz_group.name()}", plugin_tag, Qgis.Info)
                 bls_layer = self._create_and_add_layer(
-                    "Polygon", f"OLS_BaulkedLanding_{runway_name.replace('/', '_')}",
-                    f"{self.tr('OLS')} Baulked Landing {runway_name}", fields,
-                    ofz_bls_features, target_ofz_group, style_key
+                    "Polygon", 
+                    f"OLS_BaulkedLanding_{runway_name.replace('/', '_')}",
+                    f"{self.tr('OLS')} Baulked Landing {runway_name}", 
+                    fields,
+                    ofz_bls_features, 
+                    target_ofz_group, 
+                    descriptive_style_key # Pass the descriptive key
                 )
                 if bls_layer:
                     overall_success = True
@@ -8205,30 +8237,61 @@ class SafeguardingBuilder:
             else:
                 QgsMessageLog.logMessage(f"Debug BLS Layer Creation: No features in ofz_bls_features list for {runway_name}. Layer not created.", plugin_tag, Qgis.Info)
 
+            # Approach Sections Layer
             if approach_poly_features:
                 fields = self._get_ols_fields("Approach")
-                style_key = self.style_map.get("OLS Approach", "ols_approach_polygon.qml")
-                if self._create_and_add_layer("Polygon", f"OLS_Approach_{runway_name.replace('/', '_')}",
-                                            f"{self.tr('OLS')} Approach Sections {runway_name}", fields,
-                                            approach_poly_features, layer_group, style_key): overall_success = True
+                descriptive_style_key = "OLS Approach" # Use the descriptive key
+                if self._create_and_add_layer(
+                    "Polygon", 
+                    f"OLS_Approach_{runway_name.replace('/', '_')}",
+                    f"{self.tr('OLS')} Approach Sections {runway_name}", 
+                    fields,
+                    approach_poly_features, 
+                    layer_group, # Main Approach usually goes in the general OLS group
+                    descriptive_style_key # Pass the descriptive key
+                ): overall_success = True
+
+            # Approach Contours Layer
             if approach_contour_features:
                 fields = self._get_approach_contour_fields()
-                style_key = self.style_map.get("OLS Approach Contour", "ols_approach_contours.qml")
-                if self._create_and_add_layer("LineString", f"OLS_ApproachContours_{runway_name.replace('/', '_')}",
-                                            f"{self.tr('OLS')} Approach Contours {runway_name}", fields,
-                                            approach_contour_features, layer_group, style_key): overall_success = True
+                descriptive_style_key = "OLS Approach Contour" # Use the descriptive key
+                if self._create_and_add_layer(
+                    "LineString", 
+                    f"OLS_ApproachContours_{runway_name.replace('/', '_')}",
+                    f"{self.tr('OLS')} Approach Contours {runway_name}", 
+                    fields,
+                    approach_contour_features, 
+                    layer_group, 
+                    descriptive_style_key # Pass the descriptive key
+                ): overall_success = True
+
+            # TOCS Polygons Layer
             if tocs_poly_features:
                 fields = self._get_ols_fields("TOCS")
-                style_key = self.style_map.get("OLS TOCS", "ols_tocs_polygon.qml")
-                if self._create_and_add_layer("Polygon", f"OLS_TOCS_{runway_name.replace('/', '_')}",
-                                            f"{self.tr('OLS')} TOCS {runway_name}", fields,
-                                            tocs_poly_features, layer_group, style_key): overall_success = True
+                descriptive_style_key = "OLS TOCS" # Use the descriptive key
+                if self._create_and_add_layer(
+                    "Polygon", 
+                    f"OLS_TOCS_{runway_name.replace('/', '_')}",
+                    f"{self.tr('OLS')} TOCS {runway_name}", 
+                    fields,
+                    tocs_poly_features, 
+                    layer_group, 
+                    descriptive_style_key # Pass the descriptive key
+                ): overall_success = True
+
+            # TOCS Contours Layer
             if tocs_contour_features:
                 fields = self._get_tocs_contour_fields()
-                style_key = self.style_map.get("OLS TOCS Contour", "ols_tocs_contours.qml")
-                if self._create_and_add_layer("LineString", f"OLS_TOCS_Contours_{runway_name.replace('/', '_')}",
-                                            f"{self.tr('OLS')} TOCS Contours {runway_name}", fields,
-                                            tocs_contour_features, layer_group, style_key): overall_success = True
+                descriptive_style_key = "OLS TOCS Contour" # Use the descriptive key
+                if self._create_and_add_layer(
+                    "LineString", 
+                    f"OLS_TOCS_Contours_{runway_name.replace('/', '_')}",
+                    f"{self.tr('OLS')} TOCS Contours {runway_name}", 
+                    fields,
+                    tocs_contour_features, 
+                    layer_group, 
+                    descriptive_style_key # Pass the descriptive key
+                ): overall_success = True
             
             QgsMessageLog.logMessage(
                 f"Finished Runway OLS processing for {runway_name}. Overall success for this runway: {overall_success}",
