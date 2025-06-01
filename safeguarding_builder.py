@@ -472,9 +472,9 @@ class SafeguardingBuilder:
             )
 
         # Round down to the nearest half metre
-        # reference_elevation_datum = math.floor(reference_elevation_unrounded * 2) / 2.0
+        reference_elevation_datum = math.floor(reference_elevation_unrounded * 2) / 2.0
 
-        reference_elevation_datum = reference_elevation_unrounded
+        # reference_elevation_datum = reference_elevation_unrounded
 
         # Success: Log the final calculated RED.
         QgsMessageLog.logMessage(
@@ -5063,7 +5063,7 @@ class SafeguardingBuilder:
         if centerline_start_pt_xy.compare(centerline_end_pt_xy, 1e-3):
             surface_centerline_az = 0
             QgsMessageLog.logMessage(
-                f"Debug _poly_side: CL start/end same for {side_label}, using az 0.",
+                f"DEBUG _poly_side: CL start/end same for {side_label}, using az 0.",
                 plugin_tag,
                 Qgis.Info,
             )
@@ -5079,14 +5079,14 @@ class SafeguardingBuilder:
             ) % 360.0  # Your "effective Right"
         else:
             QgsMessageLog.logMessage(
-                f"Debug _poly_side: Invalid side_label '{side_label}'.",
+                f"DEBUG _poly_side: Invalid side_label '{side_label}'.",
                 plugin_tag,
                 Qgis.Warning,
             )
             return None
 
         QgsMessageLog.logMessage(
-            f"Debug _poly_side ({side_label}): surface_centerline_az={surface_centerline_az:.2f}, calculated_perp_az={perp_az:.2f}",
+            f"DEBUG _poly_side ({side_label}): surface_centerline_az={surface_centerline_az:.2f}, calculated_perp_az={perp_az:.2f}",
             plugin_tag,
             Qgis.Info,
         )  # DEBUG LOG
@@ -5096,7 +5096,7 @@ class SafeguardingBuilder:
 
         if not p_inner_side_xy or not p_outer_side_xy:
             QgsMessageLog.logMessage(
-                f"Debug _poly_side ({side_label}): Failed to project side points.",
+                f"DEBUG _poly_side ({side_label}): Failed to project side points.",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -5104,7 +5104,7 @@ class SafeguardingBuilder:
 
         # Log the calculated side points
         QgsMessageLog.logMessage(
-            f"Debug _poly_side ({side_label}): p_inner_side_xy={p_inner_side_xy.asWkt()}, p_outer_side_xy={p_outer_side_xy.asWkt()}",
+            f"DEBUG _poly_side ({side_label}): p_inner_side_xy={p_inner_side_xy.asWkt()}, p_outer_side_xy={p_outer_side_xy.asWkt()}",
             plugin_tag,
             Qgis.Info,
         )  # DEBUG LOG
@@ -5313,7 +5313,7 @@ class SafeguardingBuilder:
         plugin_tag = PLUGIN_TAG
         runway_name = runway_data.get("short_name", "N/A")
         QgsMessageLog.logMessage(
-            f"Debug BLS Helper Entered: End {end_desig}, Params: {bls_param_dict}, IHS: {IHS_ELEVATION_AMSL}",
+            f"DEBUG BLS Helper Entered: End {end_desig}, Params: {bls_param_dict}, IHS: {IHS_ELEVATION_AMSL}",
             plugin_tag,
             Qgis.Info,
         )
@@ -5341,7 +5341,7 @@ class SafeguardingBuilder:
 
         if missing_params_list:
             QgsMessageLog.logMessage(
-                f"Debug BLS Helper: {end_desig} returning None, missing essential inputs: {', '.join(missing_params_list)}",
+                f"DEBUG BLS Helper: {end_desig} returning None, missing essential inputs: {', '.join(missing_params_list)}",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -5350,7 +5350,7 @@ class SafeguardingBuilder:
         inner_edge_center_pt = thr_point.project(start_dist_from_thr, outward_azimuth)
         if not inner_edge_center_pt:
             QgsMessageLog.logMessage(
-                f"Debug BLS Helper: {end_desig} returning None, failed inner_edge_center_pt calc.",
+                f"DEBUG BLS Helper: {end_desig} returning None, failed inner_edge_center_pt calc.",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -5362,7 +5362,7 @@ class SafeguardingBuilder:
             for key in required_rwy_keys
         ):
             QgsMessageLog.logMessage(
-                f"Debug BLS Helper: {end_desig} returning None, runway_data missing keys for elevation calc: { {k: runway_data.get(k) for k in required_rwy_keys} }",
+                f"DEBUG BLS Helper: {end_desig} returning None, runway_data missing keys for elevation calc: { {k: runway_data.get(k) for k in required_rwy_keys} }",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -5377,13 +5377,13 @@ class SafeguardingBuilder:
             QgsProject.instance().crs(),
         )
         QgsMessageLog.logMessage(
-            f"Debug BLS Helper: {end_desig} inner_edge_elev_amsl: {inner_edge_elev_amsl}",
+            f"DEBUG BLS Helper: {end_desig} inner_edge_elev_amsl: {inner_edge_elev_amsl}",
             plugin_tag,
             Qgis.Info,
         )
         if inner_edge_elev_amsl is None:
             QgsMessageLog.logMessage(
-                f"Debug BLS Helper: {end_desig} returning None, inner_edge_elev_amsl is None.",
+                f"DEBUG BLS Helper: {end_desig} returning None, inner_edge_elev_amsl is None.",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -5392,20 +5392,20 @@ class SafeguardingBuilder:
         height_to_gain = IHS_ELEVATION_AMSL - inner_edge_elev_amsl
         calculated_length: float
         QgsMessageLog.logMessage(
-            f"Debug BLS Helper: {end_desig} height_to_gain: {height_to_gain}, slope: {slope}",
+            f"DEBUG BLS Helper: {end_desig} height_to_gain: {height_to_gain}, slope: {slope}",
             plugin_tag,
             Qgis.Info,
         )
         if height_to_gain <= 0:
             calculated_length = 0.0
             QgsMessageLog.logMessage(
-                f"Debug BLS Helper: {end_desig} starts at/above IHS. Length is 0.",
+                f"DEBUG BLS Helper: {end_desig} starts at/above IHS. Length is 0.",
                 plugin_tag,
                 Qgis.Info,
             )
         elif slope <= 1e-9:  # Using a small epsilon for float comparison
             QgsMessageLog.logMessage(
-                f"Debug BLS Helper: {end_desig} returning None, slope is effectively zero ({slope}) and BLS starts below IHS.",
+                f"DEBUG BLS Helper: {end_desig} returning None, slope is effectively zero ({slope}) and BLS starts below IHS.",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -5413,7 +5413,7 @@ class SafeguardingBuilder:
         else:
             calculated_length = height_to_gain / slope
         QgsMessageLog.logMessage(
-            f"Debug BLS Helper: {end_desig} calculated_length: {calculated_length}",
+            f"DEBUG BLS Helper: {end_desig} calculated_length: {calculated_length}",
             plugin_tag,
             Qgis.Info,
         )
@@ -5422,7 +5422,7 @@ class SafeguardingBuilder:
             calculated_length < -1e-9
         ):  # Allow for very small negative due to float precision if height_to_gain is near zero
             QgsMessageLog.logMessage(
-                f"Debug BLS Helper: {end_desig} returning None, invalid (negative) calculated_length: {calculated_length}.",
+                f"DEBUG BLS Helper: {end_desig} returning None, invalid (negative) calculated_length: {calculated_length}.",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -5447,7 +5447,7 @@ class SafeguardingBuilder:
         # The _create_trapezoid helper should handle zero length appropriately (e.g., return None or a line/point)
         # We need to check its output.
         QgsMessageLog.logMessage(
-            f"Debug BLS Helper: {end_desig} bls_geom created. Is valid: {bls_geom is not None and not bls_geom.isEmpty() and bls_geom.isGeosValid()}",
+            f"DEBUG BLS Helper: {end_desig} bls_geom created. Is valid: {bls_geom is not None and not bls_geom.isEmpty() and bls_geom.isGeosValid()}",
             plugin_tag,
             Qgis.Info,
         )
@@ -5458,13 +5458,13 @@ class SafeguardingBuilder:
             # For now, if it's not a valid polygon, we return None.
             if calculated_length <= 1e-9:  # If length was effectively zero
                 QgsMessageLog.logMessage(
-                    f"Debug BLS Helper: {end_desig} has zero length. No polygon geometry created by _create_trapezoid. Returning None.",
+                    f"DEBUG BLS Helper: {end_desig} has zero length. No polygon geometry created by _create_trapezoid. Returning None.",
                     plugin_tag,
                     Qgis.Info,
                 )
             else:
                 QgsMessageLog.logMessage(
-                    f"Debug BLS Helper: {end_desig} returning None, invalid bls_geom from _create_trapezoid.",
+                    f"DEBUG BLS Helper: {end_desig} returning None, invalid bls_geom from _create_trapezoid.",
                     plugin_tag,
                     Qgis.Warning,
                 )
@@ -5498,7 +5498,7 @@ class SafeguardingBuilder:
                 feature.setAttribute(idx, value)
 
         QgsMessageLog.logMessage(
-            f"Debug BLS Helper: {end_desig} successfully created feature.",
+            f"DEBUG BLS Helper: {end_desig} successfully created feature.",
             plugin_tag,
             Qgis.Info,
         )
@@ -8130,10 +8130,6 @@ class SafeguardingBuilder:
             runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
         )
 
-        QgsMessageLog.logMessage(
-            f"DEBUG PGF Start: For Runway '{runway_name}'...", plugin_tag, Qgis.Info
-        )
-
         rwy_params = self._get_runway_parameters(
             primary_threshold_point, reciprocal_threshold_point
         )
@@ -8247,11 +8243,6 @@ class SafeguardingBuilder:
 
             # --- Inner Approach ---
             try:
-                QgsMessageLog.logMessage(
-                    f"Debug InnerApproach: Attempting for {current_desig}",
-                    plugin_tag,
-                    Qgis.Info,
-                )
                 ia_params = ols_dimensions.get_ols_params(
                     arc_num, config["approach_type_str"], "InnerApproach"
                 )
@@ -8333,11 +8324,7 @@ class SafeguardingBuilder:
                                             fields.indexFromName(n), v_attr
                                         )
                                 inner_approach_features.append(feat)
-                QgsMessageLog.logMessage(
-                    f"Debug InnerApproach: Completed for {current_desig}",
-                    plugin_tag,
-                    Qgis.Info,
-                )
+
             except Exception as e_ia:
                 QgsMessageLog.logMessage(
                     f"ERROR generating Inner Approach for {current_desig}: {e_ia}\n{traceback.format_exc()}",
@@ -8348,7 +8335,7 @@ class SafeguardingBuilder:
             # --- Baulked Landing ---
             try:
                 QgsMessageLog.logMessage(
-                    f"Debug BaulkedLanding: Attempting for {current_desig}",
+                    f"DEBUG BaulkedLanding: Attempting for {current_desig}",
                     plugin_tag,
                     Qgis.Info,
                 )
@@ -8371,7 +8358,7 @@ class SafeguardingBuilder:
                         IHS_ELEVATION_AMSL,
                     )
                     QgsMessageLog.logMessage(
-                        f"Debug BLS {current_desig}: Helper result: {bls_result_tuple is not None}",
+                        f"DEBUG BLS {current_desig}: Helper result: {bls_result_tuple is not None}",
                         plugin_tag,
                         Qgis.Info,
                     )
@@ -8393,30 +8380,30 @@ class SafeguardingBuilder:
                             ofz_bls_features.append(feat_bls)
                         else:
                             QgsMessageLog.logMessage(
-                                f"Debug BLS {current_desig}: Feature from helper was None.",
+                                f"DEBUG BLS {current_desig}: Feature from helper was None.",
                                 plugin_tag,
                                 Qgis.Warning,
                             )
                     else:
                         QgsMessageLog.logMessage(
-                            f"Debug BLS {current_desig}: Helper returned None overall.",
+                            f"DEBUG BLS {current_desig}: Helper returned None overall.",
                             plugin_tag,
                             Qgis.Warning,
                         )
                 elif not bls_params_dict:
                     QgsMessageLog.logMessage(
-                        f"Debug BaulkedLanding: Skipped {current_desig}: No params.",
+                        f"DEBUG BaulkedLanding: Skipped {current_desig}: No params.",
                         plugin_tag,
                         Qgis.Info,
                     )
                 elif IHS_ELEVATION_AMSL is None:
                     QgsMessageLog.logMessage(
-                        f"Debug BaulkedLanding: Skipped {current_desig}: IHS_ELEVATION_AMSL is None.",
+                        f"DEBUG BaulkedLanding: Skipped {current_desig}: IHS_ELEVATION_AMSL is None.",
                         plugin_tag,
                         Qgis.Warning,
                     )
                 QgsMessageLog.logMessage(
-                    f"Debug BaulkedLanding: Completed for {current_desig}",
+                    f"DEBUG BaulkedLanding: Completed for {current_desig}",
                     plugin_tag,
                     Qgis.Info,
                 )
@@ -8451,7 +8438,7 @@ class SafeguardingBuilder:
                             )
                         else:
                             QgsMessageLog.logMessage(
-                                f"Debug ITS {current_desig}: Using default strip width {graded_strip_total_width}m.",
+                                f"DEBUG ITS {current_desig}: Using default strip width {graded_strip_total_width}m.",
                                 plugin_tag,
                                 Qgis.Info,
                             )
@@ -8660,7 +8647,7 @@ class SafeguardingBuilder:
             # --- Main Approach ---
             try:
                 QgsMessageLog.logMessage(
-                    f"Debug MainApproach: Attempting for {current_desig}",
+                    f"DEBUG MainApproach: Attempting for {current_desig}",
                     plugin_tag,
                     Qgis.Info,
                 )
@@ -8679,7 +8666,7 @@ class SafeguardingBuilder:
                 if app_contours:
                     approach_contour_features.extend(app_contours)
                 QgsMessageLog.logMessage(
-                    f"Debug MainApproach: Completed for {current_desig}. Sections: {len(app_sections)}, Contours: {len(app_contours)}",
+                    f"DEBUG MainApproach: Completed for {current_desig}. Sections: {len(app_sections)}, Contours: {len(app_contours)}",
                     plugin_tag,
                     Qgis.Info,
                 )
@@ -8693,7 +8680,7 @@ class SafeguardingBuilder:
             # --- Take-off Climb Surface (TOCS) ---
             try:
                 QgsMessageLog.logMessage(
-                    f"Debug TOCS: Attempting for {current_desig}", plugin_tag, Qgis.Info
+                    f"DEBUG TOCS: Attempting for {current_desig}", plugin_tag, Qgis.Info
                 )
                 tocs_plane_origin_pt = config["tocs_departure_pavement_end_pt"]
                 tocs_params_for_offset = ols_dimensions.get_ols_params(
@@ -8756,12 +8743,12 @@ class SafeguardingBuilder:
                         tocs_contour_features.extend(tocs_conts)
                 else:
                     QgsMessageLog.logMessage(
-                        f"Debug TOCS: Skipped for {current_desig} due to missing origin point or elevation for TOCS plane.",
+                        f"DEBUG TOCS: Skipped for {current_desig} due to missing origin point or elevation for TOCS plane.",
                         plugin_tag,
                         Qgis.Warning,
                     )
                 QgsMessageLog.logMessage(
-                    f"Debug TOCS: Completed for {current_desig}. Feature generated: {feat_tocs_local is not None}",
+                    f"DEBUG TOCS: Completed for {current_desig}. Feature generated: {feat_tocs_local is not None}",
                     plugin_tag,
                     Qgis.Info,
                 )
@@ -8775,7 +8762,7 @@ class SafeguardingBuilder:
         # --- END OF LOOP for runway_end_configurations ---
 
         QgsMessageLog.logMessage(
-            f"Debug ProcessGuidelineF: Finished processing LOOP for runway {runway_name}. Total BLS features: {len(ofz_bls_features)}, Total ITS features: {len(ofz_inner_trans_features)}",
+            f"DEBUG ProcessGuidelineF: Finished processing LOOP for runway {runway_name}. Total BLS features: {len(ofz_bls_features)}, Total ITS features: {len(ofz_inner_trans_features)}",
             plugin_tag,
             Qgis.Info,
         )
@@ -8847,17 +8834,11 @@ class SafeguardingBuilder:
                 Qgis.Info,
             )
 
-        # Baulked Landing Layer
-        QgsMessageLog.logMessage(
-            f"Debug BLS Layer Creation: Total ofz_bls_features count: {len(ofz_bls_features)} for runway {runway_name}",
-            plugin_tag,
-            Qgis.Info,
-        )
         if ofz_bls_features:
             fields = self._get_ols_fields("BaulkedLanding")
             descriptive_style_key = "OLS Baulked Landing"  # Use the descriptive key
             QgsMessageLog.logMessage(
-                f"Debug BLS Layer Creation: Attempting layer for {runway_name} with {len(ofz_bls_features)} features. Group: {target_ofz_group.name()}",
+                f"DEBUG BLS Layer Creation: Attempting layer for {runway_name} with {len(ofz_bls_features)} features. Group: {target_ofz_group.name()}",
                 plugin_tag,
                 Qgis.Info,
             )
@@ -8873,19 +8854,19 @@ class SafeguardingBuilder:
             if bls_layer:
                 overall_success = True
                 QgsMessageLog.logMessage(
-                    f"Debug BLS Layer Creation: Layer '{bls_layer.name()}' created for {runway_name}.",
+                    f"DEBUG BLS Layer Creation: Layer '{bls_layer.name()}' created for {runway_name}.",
                     plugin_tag,
                     Qgis.Success,
                 )
             else:
                 QgsMessageLog.logMessage(
-                    f"Debug BLS Layer Creation: _create_and_add_layer FAILED for BLS {runway_name}.",
+                    f"DEBUG BLS Layer Creation: _create_and_add_layer FAILED for BLS {runway_name}.",
                     plugin_tag,
                     Qgis.Critical,
                 )
         else:
             QgsMessageLog.logMessage(
-                f"Debug BLS Layer Creation: No features in ofz_bls_features list for {runway_name}. Layer not created.",
+                f"DEBUG BLS Layer Creation: No features in ofz_bls_features list for {runway_name}. Layer not created.",
                 plugin_tag,
                 Qgis.Info,
             )
