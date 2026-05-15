@@ -679,9 +679,9 @@ class SafeguardingBuilder:
                     main_group,
                     self.arp_elevation_amsl,
                 )
-                if arp_layer:
+                if arp_layer is not None:
                     arp_layer_created = True
-                if self.arp_elevation_amsl is None and arp_layer:
+                if self.arp_elevation_amsl is None and arp_layer is not None:
                     fetched_elev = self._try_get_arp_elevation_from_layer(arp_layer)
                     if fetched_elev is not None:
                         QgsMessageLog.logMessage(
@@ -721,12 +721,13 @@ class SafeguardingBuilder:
             if any_runway_base_data_ok:
                 for rwy_data in processed_runway_data_list:
                     cl_layer = rwy_data.get("centreline_layer")
-                    if cl_layer:
+                    if cl_layer is not None:
                         self._apply_style(cl_layer, self.style_map)
 
             physical_geom_group = None
             protection_area_group = None
-            physical_layers = {}
+            physical_layer_specs = {}
+            physical_features: Dict[str, List[QgsFeature]] = {}
             any_physical_or_protection_ok = False
 
             if processed_runway_data_list and any_runway_base_data_ok:
@@ -863,56 +864,29 @@ class SafeguardingBuilder:
                             )
                             continue
                         geom_type_str = definition.get("geom_type", "Polygon")
-                        layer_name_internal = f"physical_{element_type}_{icao_code}_{id(self)}_{QtCore.QDateTime.currentMSecsSinceEpoch()}"
                         layer_display_name = f"{icao_code} {definition['name']}"
-                        layer_uri = ""
-                        if geom_type_str == "LineString":
-                            layer_uri = f"LineString?crs={target_crs_authid}&index=yes"
-                        elif geom_type_str == "Polygon":
-                            layer_uri = f"Polygon?crs={target_crs_authid}&index=yes"
-                        else:
+                        if geom_type_str not in {"LineString", "Polygon"}:
                             QgsMessageLog.logMessage(
                                 f"Warning: Unsupported geometry type '{geom_type_str}' for layer URI.",
                                 plugin_tag,
                                 level=Qgis.Warning,
                             )
                             continue
-                        layer = QgsVectorLayer(layer_uri, layer_name_internal, "memory")
 
-                        if (
-                            layer.isValid()
-                            and layer.dataProvider()
-                            and layer.dataProvider().addAttributes(definition["fields"])
-                        ):
-                            layer.updateFields()
-                            layer.setName(layer_display_name)
-                            layer.setCustomProperty(
-                                "target_group_node", target_group.name()
-                            )
-                            layer.setCustomProperty(
-                                "safeguarding_style_key",
-                                style_key_map.get(element_type),
-                            )
-                            if layer.startEditing():
-                                physical_layers[element_type] = layer
-                            else:
-                                QgsMessageLog.logMessage(
-                                    f"Warning: Failed startEditing for layer '{layer_display_name}'.",
-                                    plugin_tag,
-                                    level=Qgis.Warning,
-                                )
-                                physical_layers[element_type] = None
-                        else:
-                            QgsMessageLog.logMessage(
-                                f"Critical: Failed initialize layer '{layer_display_name}'.",
-                                plugin_tag,
-                                level=Qgis.Critical,
-                            )
-                            physical_layers[element_type] = None
+                        fields_copy = QgsFields()
+                        for field in definition["fields"]:
+                            fields_copy.append(field)
+                        physical_layer_specs[element_type] = {
+                            "display_name": layer_display_name,
+                            "fields": fields_copy,
+                            "geom_type": geom_type_str,
+                            "group": target_group,
+                            "style_key": style_key_map.get(
+                                element_type, "Default Polygon"
+                            ),
+                        }
+                        physical_features[element_type] = []
 
-                    physical_geom_features_added = {
-                        element_type: False for element_type in physical_layers.keys()
-                    }
                     QgsMessageLog.logMessage(
                         "Populating physical geometry & protection area layers...",
                         plugin_tag,
@@ -939,11 +913,8 @@ class SafeguardingBuilder:
                                 geometry,
                                 attributes,
                             ) in generated_elements_list:
-                                target_layer = physical_layers.get(element_type)
-                                if (
-                                    target_layer is None
-                                    or not target_layer.isEditable()
-                                ):
+                                target_spec = physical_layer_specs.get(element_type)
+                                if target_spec is None:
                                     continue
                                 if geometry is None or geometry.isEmpty():
                                     continue
@@ -963,32 +934,21 @@ class SafeguardingBuilder:
                                     overall_strip_geom = geometry
                                     overall_strip_attrs = attributes
 
-                                feature = QgsFeature(target_layer.fields())
+                                feature = QgsFeature(target_spec["fields"])
                                 feature.setGeometry(geometry)
                                 for field_name, value in attributes.items():
                                     idx = feature.fieldNameIndex(field_name)
                                     if idx != -1:
                                         feature.setAttribute(idx, value)
 
-                                add_ok, _ = target_layer.dataProvider().addFeatures(
-                                    [feature]
-                                )
-                                if add_ok:
-                                    physical_geom_features_added[element_type] = True
-                                    any_physical_or_protection_ok = True
-                                else:
-                                    QgsMessageLog.logMessage(
-                                        f"Warning: Failed add feature {element_type} for {runway_name_log}.",
-                                        plugin_tag,
-                                        level=Qgis.Warning,
-                                    )
+                                physical_features[element_type].append(feature)
+                                any_physical_or_protection_ok = True
 
-                            flyover_layer = physical_layers.get("FlyoverStrip")
+                            flyover_spec = physical_layer_specs.get("FlyoverStrip")
                             if (
-                                flyover_layer
-                                and flyover_layer.isEditable()
-                                and graded_strip_geom
-                                and overall_strip_geom
+                                flyover_spec is not None
+                                and graded_strip_geom is not None
+                                and overall_strip_geom is not None
                             ):
                                 try:
                                     # Ensure inputs are valid before difference
@@ -1021,7 +981,7 @@ class SafeguardingBuilder:
                                             ):
                                                 # Create feature for flyover area
                                                 flyover_feat = QgsFeature(
-                                                    flyover_layer.fields()
+                                                    flyover_spec["fields"]
                                                 )
                                                 flyover_feat.setGeometry(flyover_geom)
 
@@ -1115,23 +1075,10 @@ class SafeguardingBuilder:
                                                             idx, value
                                                         )
 
-                                                (
-                                                    add_fly_ok,
-                                                    _,
-                                                ) = flyover_layer.dataProvider().addFeatures(
-                                                    [flyover_feat]
-                                                )
-                                                if add_fly_ok:
-                                                    physical_geom_features_added[
-                                                        "FlyoverStrip"
-                                                    ] = True
-                                                    any_physical_or_protection_ok = True
-                                                else:
-                                                    QgsMessageLog.logMessage(
-                                                        f"Warning: Failed add feature FlyoverStrip for {runway_name_log}.",
-                                                        plugin_tag,
-                                                        level=Qgis.Warning,
-                                                    )
+                                                physical_features[
+                                                    "FlyoverStrip"
+                                                ].append(flyover_feat)
+                                                any_physical_or_protection_ok = True
                                             else:
                                                 QgsMessageLog.logMessage(
                                                     f"Warning: FlyoverStrip geometry invalid after difference/makeValid for {runway_name_log}.",
@@ -1156,7 +1103,7 @@ class SafeguardingBuilder:
                                         plugin_tag,
                                         level=Qgis.Warning,
                                     )
-                            elif flyover_layer and flyover_layer.isEditable():
+                            elif flyover_spec is not None:
                                 QgsMessageLog.logMessage(
                                     f"Info: Skipping FlyoverStrip for {runway_name_log}: Graded or Overall strip geometry missing.",
                                     plugin_tag,
@@ -1179,95 +1126,26 @@ class SafeguardingBuilder:
                     any_layer_successfully_processed_in_this_block = False
                     project_root = QgsProject.instance().layerTreeRoot()
 
-                    for element_type, temp_memory_layer in physical_layers.items():
-                        if temp_memory_layer and temp_memory_layer.isValid():
-                            if temp_memory_layer.isEditable():
-                                if not temp_memory_layer.commitChanges():
-                                    QgsMessageLog.logMessage(
-                                        f"Warning: Failed to commit changes on temporary layer '{temp_memory_layer.name()}'. Features might be incomplete. Errors: {temp_memory_layer.commitErrors()}",
-                                        plugin_tag,
-                                        Qgis.Warning,
-                                    )
-
-                            if temp_memory_layer.featureCount() > 0:
-                                display_name_for_final_layer = temp_memory_layer.name()
-                                fields_for_final_layer = temp_memory_layer.fields()
-
-                                qgis_geom_type_enum = temp_memory_layer.geometryType()
-                                geom_type_str_for_final_layer = "Unknown"
-                                if qgis_geom_type_enum == Qgis.GeometryType.Point:
-                                    geom_type_str_for_final_layer = "Point"
-                                elif qgis_geom_type_enum == Qgis.GeometryType.Line:
-                                    geom_type_str_for_final_layer = "LineString"
-                                elif qgis_geom_type_enum == Qgis.GeometryType.Polygon:
-                                    geom_type_str_for_final_layer = "Polygon"
-                                else:
-                                    QgsMessageLog.logMessage(
-                                        f"Warning: Unknown QGIS geometry type enum {qgis_geom_type_enum} for temp layer '{display_name_for_final_layer}'. Defaulting to 'Unknown'.",
-                                        plugin_tag,
-                                        Qgis.Warning,
-                                    )
-
-                                features_to_write = [
-                                    QgsFeature(f)
-                                    for f in temp_memory_layer.getFeatures()
-                                ]
-
-                                target_group_name = temp_memory_layer.customProperty(
-                                    "target_group_node"
-                                )
-                                style_key_for_final_layer = str(
-                                    temp_memory_layer.customProperty(
-                                        "safeguarding_style_key", "Default Polygon"
-                                    )
-                                )
-
-                                target_group_node: Optional[QgsLayerTreeGroup] = None
-                                if target_group_name and isinstance(
-                                    target_group_name, str
-                                ):
-                                    target_group_node = project_root.findGroup(
-                                        target_group_name
-                                    )
-
-                                if target_group_node is None:
-                                    QgsMessageLog.logMessage(
-                                        f"Warning: Target group '{target_group_name}' not found for '{display_name_for_final_layer}'. Using main plugin group.",
-                                        plugin_tag,
-                                        Qgis.Warning,
-                                    )
-                                    target_group_node = main_group
-
-                                final_layer = self._create_and_add_layer(
-                                    geometry_type_str=geom_type_str_for_final_layer,
-                                    internal_name_base=element_type,
-                                    display_name=display_name_for_final_layer,
-                                    fields=fields_for_final_layer,
-                                    features=features_to_write,
-                                    layer_group=target_group_node,
-                                    style_key=style_key_for_final_layer,
-                                )
-                                if final_layer:
-                                    any_physical_or_protection_ok = True
-                                    any_layer_successfully_processed_in_this_block = (
-                                        True
-                                    )
-                        #     else:
-                        #         QgsMessageLog.logMessage(
-                        #             f"Skipping final processing for '{temp_memory_layer.name()}': No features were present in its temporary layer.",
-                        #             plugin_tag,
-                        #             level=Qgis.Info,
-                        #         )
-                        # else:
-                        #     QgsMessageLog.logMessage(
-                        #         f"Skipping final processing for element_type '{element_type}': Its temporary memory layer was None or invalid.",
-                        #         plugin_tag,
-                        #         Qgis.Warning,
-                        #     )
+                    for element_type, spec in physical_layer_specs.items():
+                        features_to_write = physical_features.get(element_type, [])
+                        if features_to_write:
+                            final_layer = self._create_and_add_layer(
+                                geometry_type_str=spec["geom_type"],
+                                internal_name_base=element_type,
+                                display_name=spec["display_name"],
+                                fields=spec["fields"],
+                                features=features_to_write,
+                                layer_group=spec["group"],
+                                style_key=spec["style_key"],
+                            )
+                            if final_layer is not None:
+                                any_physical_or_protection_ok = True
+                                any_layer_successfully_processed_in_this_block = True
+                            features_to_write.clear()
 
                     if (
                         not any_layer_successfully_processed_in_this_block
-                        and physical_layers
+                        and physical_layer_specs
                     ):
                         QgsMessageLog.logMessage(
                             "Warning: No physical geometry or protection area layers were successfully processed/saved in this block.",
@@ -1278,7 +1156,7 @@ class SafeguardingBuilder:
                     if physical_geom_group is not None:
                         for rwy_data in processed_runway_data_list:
                             cl_layer = rwy_data.get("centreline_layer")
-                            if cl_layer:
+                            if cl_layer is not None:
                                 cl_node = project_root.findLayer(cl_layer.id())
                                 if cl_node is not None:
                                     cloned_node = cl_node.clone()
@@ -1549,7 +1427,7 @@ class SafeguardingBuilder:
                 )
 
                 # Check the result from the helper
-                if centreline_layer:
+                if centreline_layer is not None:
                     runway_data["centreline_layer"] = centreline_layer
                     any_runway_base_data_ok = True
                     runway_processed_ok = True
@@ -1660,11 +1538,32 @@ class SafeguardingBuilder:
                 )
                 return None
 
-            layer.startEditing()
-            layer.dataProvider().addAttributes(fields)
+            provider = layer.dataProvider()
+            if provider is None:
+                QgsMessageLog.logMessage(
+                    f"Failed to get data provider for layer '{display_name}'",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
+                return None
+
+            if not provider.addAttributes(fields):
+                QgsMessageLog.logMessage(
+                    f"Failed to add fields to layer '{display_name}'",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
+                return None
             layer.updateFields()
-            layer.dataProvider().addFeatures(features)
-            layer.commitChanges()
+            add_ok, _ = provider.addFeatures(features)
+            if not add_ok:
+                QgsMessageLog.logMessage(
+                    f"Failed to add features to layer '{display_name}'",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
+                return None
+            layer.updateExtents()
 
             # Apply style if available
             if style_key in self.style_map:
@@ -1714,16 +1613,11 @@ class SafeguardingBuilder:
                     self.output_path, f"{safe_name}{self.output_format_extension}"
                 )
 
-                temp_layer = QgsVectorLayer(uri, f"temp_{internal_name_base}", "memory")
-                temp_layer.dataProvider().addAttributes(fields)
-                temp_layer.updateFields()
-                temp_layer.dataProvider().addFeatures(features)
-
                 result = QgsVectorFileWriter.writeAsVectorFormat(
-                    temp_layer,
+                    layer,
                     full_path,
                     "UTF-8",
-                    temp_layer.crs(),
+                    layer.crs(),
                     self.output_format_driver,
                 )
 
@@ -1739,7 +1633,7 @@ class SafeguardingBuilder:
                     loaded_layer = self.iface.addVectorLayer(
                         full_path, display_name, "ogr"
                     )
-                    if loaded_layer and loaded_layer.isValid():
+                    if loaded_layer is not None and loaded_layer.isValid():
                         root = project.layerTreeRoot()
                         loaded_node = root.findLayer(loaded_layer.id())
                         if loaded_node is not None:
@@ -1788,7 +1682,7 @@ class SafeguardingBuilder:
         Minimal checking: Attempts load, logs only critical exceptions.
         """
         plugin_tag = PLUGIN_TAG
-        if not layer or not layer.isValid():
+        if layer is None or not layer.isValid():
             return
         layer_name = layer.name() or f"Layer {layer.id()}"
         qml_filename = None
@@ -4533,7 +4427,7 @@ class SafeguardingBuilder:
                     ols_layer_group,
                     "OLS Conical Contour",
                 )
-                if contour_layer:
+                if contour_layer is not None:
                     overall_success = True
                     QgsMessageLog.logMessage(
                         f"Created conical contour layer for {icao_code}, {len(contour_features)} features.",
@@ -4578,7 +4472,7 @@ class SafeguardingBuilder:
                         found_arp_point_layer = lyr
                         break  # Found a suitable point layer
 
-                if found_arp_point_layer:
+                if found_arp_point_layer is not None:
                     arp_feat = next(found_arp_point_layer.getFeatures(), None)
                     if (
                         arp_feat
@@ -4794,7 +4688,7 @@ class SafeguardingBuilder:
                             ols_layer_group,
                             "OLS Transitional",
                         )
-                        if poly_layer:
+                        if poly_layer is not None:
                             overall_success = True
                             # QgsMessageLog.logMessage(
                             #     f"Created Transitional Polygon Layer: {poly_layer.name()} ({len(transitional_features)} features)",
@@ -4814,7 +4708,7 @@ class SafeguardingBuilder:
                             ols_layer_group,
                             "OLS Transitional Contour",
                         )
-                        if contour_layer:
+                        if contour_layer is not None:
                             overall_success = True
                             # QgsMessageLog.logMessage(
                             #     f"Created Transitional Contour Layer: {contour_layer.name()} ({len(transitional_contour_features)} features)",
@@ -8728,7 +8622,7 @@ class SafeguardingBuilder:
                 target_ofz_group,
                 descriptive_style_key,
             )
-            if bls_layer:
+            if bls_layer is not None:
                 overall_success = True
             else:
                 QgsMessageLog.logMessage(
