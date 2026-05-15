@@ -696,6 +696,7 @@ class SafeguardingBuilder:
                     self.tr("Meteorological Instrument Station")
                 )
                 if met_group is not None:
+                    self._stage_layer_tree_node(met_group)
                     met_layers_created_ok, _ = self.process_met_station_surfaces(
                         met_point, icao_code, target_crs, met_group
                     )
@@ -732,9 +733,11 @@ class SafeguardingBuilder:
 
             if processed_runway_data_list and any_runway_base_data_ok:
                 physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
+                self._stage_layer_tree_node(physical_geom_group)
                 protection_area_group = main_group.addGroup(
                     self.tr("Runway Protection Areas")
                 )
+                self._stage_layer_tree_node(protection_area_group)
                 specialised_safeguarding_group = main_group.findGroup(
                     self.tr("Specialised Safeguarding")
                 )
@@ -744,6 +747,7 @@ class SafeguardingBuilder:
                     specialised_safeguarding_group = main_group.addGroup(
                         self.tr("Specialised Safeguarding")
                     )
+                self._stage_layer_tree_node(specialised_safeguarding_group)
 
                 if (
                     physical_geom_group is not None
@@ -1124,7 +1128,6 @@ class SafeguardingBuilder:
                         level=Qgis.Info,
                     )
                     any_layer_successfully_processed_in_this_block = False
-                    project_root = QgsProject.instance().layerTreeRoot()
 
                     for element_type, spec in physical_layer_specs.items():
                         features_to_write = physical_features.get(element_type, [])
@@ -1154,12 +1157,14 @@ class SafeguardingBuilder:
                         )
 
                     if physical_geom_group is not None:
+                        project_root = QgsProject.instance().layerTreeRoot()
                         for rwy_data in processed_runway_data_list:
                             cl_layer = rwy_data.get("centreline_layer")
                             if cl_layer is not None:
                                 cl_node = project_root.findLayer(cl_layer.id())
                                 if cl_node is not None:
                                     cloned_node = cl_node.clone()
+                                    self._stage_layer_tree_node(cloned_node)
                                     physical_geom_group.insertChildNode(0, cloned_node)
                                     if cl_node.parent() is not None:
                                         cl_node.parent().removeChildNode(cl_node)
@@ -1185,6 +1190,7 @@ class SafeguardingBuilder:
                 ofz_group = guideline_groups["F"].addGroup(
                     self.tr("OLS Obstacle Free Zone")
                 )
+                self._stage_layer_tree_node(ofz_group)
 
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl, runway_input_list
@@ -1341,7 +1347,24 @@ class SafeguardingBuilder:
                 f"Failed create group: {group_name}", PLUGIN_TAG, level=Qgis.Critical
             )
             return None
+        self._stage_layer_tree_node(main_group)
         return main_group
+
+    def _stage_layer_tree_node(self, node: Optional[QgsLayerTreeNode]):
+        """Keep generated layer tree nodes from rendering immediately."""
+        if node is None:
+            return
+        try:
+            if hasattr(node, "setItemVisibilityChecked"):
+                node.setItemVisibilityChecked(False)
+            if hasattr(node, "setExpanded"):
+                node.setExpanded(False)
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"Warning: Failed to stage layer tree node visibility: {e}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
 
     def _remove_group_recursively(
         self, group_node: QgsLayerTreeGroup, project: QgsProject
@@ -1479,6 +1502,8 @@ class SafeguardingBuilder:
                 QgsMessageLog.logMessage(
                     f"Failed create group: {name}", PLUGIN_TAG, level=Qgis.Warning
                 )
+            else:
+                self._stage_layer_tree_node(grp)
         return guideline_groups
 
     def _sanitize_filename(self, name: str, replace_char: str = "_") -> str:
@@ -1638,6 +1663,7 @@ class SafeguardingBuilder:
                         loaded_node = root.findLayer(loaded_layer.id())
                         if loaded_node is not None:
                             cloned_node = loaded_node.clone()
+                            self._stage_layer_tree_node(cloned_node)
                             layer_group.insertChildNode(0, cloned_node)
                             if loaded_node.parent() is not None:
                                 loaded_node.parent().removeChildNode(loaded_node)
@@ -1662,7 +1688,8 @@ class SafeguardingBuilder:
 
             # Add to group in TOC for memory output
             QgsProject.instance().addMapLayer(layer, False)
-            layer_group.addLayer(layer)
+            layer_node = layer_group.addLayer(layer)
+            self._stage_layer_tree_node(layer_node)
             self.successfully_generated_layers.append(layer)
 
             # QgsMessageLog.logMessage(f"Layer '{display_name}' created and added successfully.", plugin_tag, Qgis.Info)
@@ -1931,7 +1958,9 @@ class SafeguardingBuilder:
 
                 msg_parts.append(output_destination_message)
             elif self.output_mode == "memory":
-                output_destination_message = self.tr("Layers created in memory.")
+                output_destination_message = self.tr(
+                    "Layers created in memory and left unchecked to avoid immediate rendering."
+                )
                 msg_parts.append(output_destination_message)
 
             final_user_message = " ".join(msg_parts).strip()
@@ -1947,7 +1976,7 @@ class SafeguardingBuilder:
             if (
                 main_group is not None
             ):  # Only expand group if it exists (it might not if only file output and no group made)
-                main_group.setExpanded(True)
+                self._stage_layer_tree_node(main_group)
         else:
             # This case means self.successfully_generated_layers is empty
             self.iface.messageBar().pushMessage(
