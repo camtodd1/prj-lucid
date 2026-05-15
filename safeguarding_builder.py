@@ -69,6 +69,7 @@ GUIDELINE_C_BUFFER_SEGMENTS = 144  # Increase segments for smoother circles
 
 GUIDELINE_D_TURBINE_RADIUS_M = 30000.0
 GUIDELINE_D_BUFFER_SEGMENTS = 144  # Segments for smoother circle
+LAYER_FEATURE_BATCH_SIZE = 100
 
 GUIDELINE_E_ZONE_PARAMS = {
     "A": {
@@ -1524,6 +1525,38 @@ class SafeguardingBuilder:
 
         return name.rstrip(".") or "unnamed_layer"
 
+    def _add_features_in_batches(
+        self,
+        provider,
+        features: List[QgsFeature],
+        display_name: str,
+        batch_size: int = LAYER_FEATURE_BATCH_SIZE,
+    ) -> bool:
+        """
+        Adds features to a provider in small batches and releases Python references.
+
+        The input list is intentionally consumed after successful batch writes. This
+        keeps large generated geometries from lingering in Python after the memory
+        layer provider has accepted them.
+        """
+        plugin_tag = PLUGIN_TAG
+        if not features:
+            return True
+
+        batch_size = max(1, int(batch_size))
+        while features:
+            batch = features[:batch_size]
+            add_ok, _ = provider.addFeatures(batch)
+            if not add_ok:
+                QgsMessageLog.logMessage(
+                    f"Failed to add feature batch to layer '{display_name}'",
+                    plugin_tag,
+                    Qgis.Critical,
+                )
+                return False
+            del features[: len(batch)]
+        return True
+
     def _create_and_add_layer(
         self,
         geometry_type_str: str,
@@ -1538,6 +1571,7 @@ class SafeguardingBuilder:
         Helper to create/populate a layer, add to project/group, and apply style.
         Handles both memory layer creation and file writing based on self.output_mode.
         Logs warnings or errors on failure. Returns the added layer or None.
+        Consumes the features list after successful provider writes to lower peak memory.
         """
         plugin_tag = PLUGIN_TAG
         project = QgsProject.instance()
@@ -1580,13 +1614,7 @@ class SafeguardingBuilder:
                 )
                 return None
             layer.updateFields()
-            add_ok, _ = provider.addFeatures(features)
-            if not add_ok:
-                QgsMessageLog.logMessage(
-                    f"Failed to add features to layer '{display_name}'",
-                    plugin_tag,
-                    Qgis.Critical,
-                )
+            if not self._add_features_in_batches(provider, features, display_name):
                 return None
             layer.updateExtents()
 
@@ -4447,6 +4475,7 @@ class SafeguardingBuilder:
 
             # 4. Layer creation
             if contour_features:
+                conical_contour_count = len(contour_features)
                 contour_layer = self._create_and_add_layer(
                     "LineString",
                     f"OLS_Conical_Contours_{icao_code}",
@@ -4459,7 +4488,7 @@ class SafeguardingBuilder:
                 if contour_layer is not None:
                     overall_success = True
                     QgsMessageLog.logMessage(
-                        f"Created conical contour layer for {icao_code}, {len(contour_features)} features.",
+                        f"Created conical contour layer for {icao_code}, {conical_contour_count} features.",
                         plugin_tag,
                         Qgis.Info,
                     )
@@ -8574,6 +8603,7 @@ class SafeguardingBuilder:
 
         # --- Layer Creation ---
         target_ofz_group = ofz_group if ofz_group is not None else layer_group
+        had_ofz_inner_trans_features = bool(ofz_inner_trans_features)
 
         # Inner Approach Layer
         if inner_approach_features:
@@ -8624,14 +8654,14 @@ class SafeguardingBuilder:
                 Qgis.Warning,
             )
 
-        if not ofz_inner_trans_features and is_precision_runway:
+        if not had_ofz_inner_trans_features and is_precision_runway:
             QgsMessageLog.logMessage(
                 f"Warning: Inner Transitional layer for PA runway {runway_name} is empty. Check ITS generation logic and data extraction.",
                 plugin_tag,
                 Qgis.Warning,
             )
         elif (
-            not ofz_inner_trans_features
+            not had_ofz_inner_trans_features
         ):  # General info if not a PA runway and still empty
             QgsMessageLog.logMessage(
                 f"Info: Inner Transitional layer for {runway_name} is empty (may be normal for non-PA or if generation is placeholder).",
