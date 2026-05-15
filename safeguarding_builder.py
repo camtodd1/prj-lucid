@@ -287,7 +287,9 @@ class SafeguardingBuilder:
                 QMessageBox.critical(
                     parent_window,
                     self.tr("Dialog Error"),
-                    self.tr("Could not create dialog. Check logs."),
+                    self.tr("Could not create dialog:\n\n{error}\n\nCheck logs for the full traceback.").format(
+                        error=e
+                    ),
                 )
                 return
 

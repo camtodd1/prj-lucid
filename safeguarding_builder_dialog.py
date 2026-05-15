@@ -808,8 +808,15 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         self.radioMemoryOutput.setChecked(True)
         # self.radioFileOutput.setChecked(False) # Implicitly false if Memory is true
 
-        # Configure QgsFileWidget
-        self.fileWidgetOutputPath.setStorageMode(1)
+        # Configure QgsFileWidget. Qt6/PyQt6 is stricter about enum arguments,
+        # so avoid passing the old integer value for SaveFile.
+        file_widget_cls = type(self.fileWidgetOutputPath)
+        save_file_mode = getattr(
+            getattr(file_widget_cls, "StorageMode", file_widget_cls),
+            "SaveFile",
+            1,
+        )
+        self.fileWidgetOutputPath.setStorageMode(save_file_mode)
         self._update_file_widget_filter()  # Set initial filter
 
         # Connect signals
