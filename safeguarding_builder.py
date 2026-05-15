@@ -1816,6 +1816,37 @@ class SafeguardingBuilder:
                 return QgsPointXY(x, y)
         return None
 
+    def _ensure_valid_geometry(
+        self, geom: Optional[QgsGeometry], description: str
+    ) -> Optional[QgsGeometry]:
+        """Return a valid non-empty geometry, only calling makeValid when needed."""
+        if geom is None or geom.isEmpty():
+            return None
+        try:
+            if geom.isGeosValid():
+                return geom
+            fixed_geom = geom.makeValid()
+            if (
+                fixed_geom is not None
+                and not fixed_geom.isEmpty()
+                and fixed_geom.isGeosValid()
+            ):
+                return fixed_geom
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"Warning: Geometry validation failed for {description}: {e}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+            return None
+
+        QgsMessageLog.logMessage(
+            f"Warning: Geometry invalid after makeValid for {description}.",
+            PLUGIN_TAG,
+            level=Qgis.Warning,
+        )
+        return None
+
     # Make sure _try_get_arp_elevation_from_layer helper exists or is implemented
     def _try_get_arp_elevation_from_layer(
         self, arp_layer: QgsVectorLayer
@@ -4070,17 +4101,15 @@ class SafeguardingBuilder:
                             runway_strip_geom = None  # Ensure it's None if union failed
 
                         if runway_strip_geom:  # Check if union produced something
-                            valid_geom = runway_strip_geom.makeValid()
-                            if (
-                                valid_geom
-                                and not valid_geom.isEmpty()
-                                and valid_geom.isGeosValid()
-                            ):
+                            valid_geom = self._ensure_valid_geometry(
+                                runway_strip_geom, f"strip outline {rwy_name}"
+                            )
+                            if valid_geom is not None:
                                 strip_outline_geoms.append(valid_geom)
                                 runway_processed = True  # Mark success for this runway
                             else:
                                 QgsMessageLog.logMessage(
-                                    f"Warning: Generated strip outline for {rwy_name} is invalid after makeValid(), skipping.",
+                                    f"Warning: Generated strip outline for {rwy_name} is invalid, skipping.",
                                     plugin_tag,
                                     level=Qgis.Warning,
                                 )
@@ -4138,15 +4167,12 @@ class SafeguardingBuilder:
             ihs_base_geom = merged_geom.convexHull()
             if not ihs_base_geom or ihs_base_geom.isEmpty():
                 raise ValueError("convexHull calculation failed.")
-            if not ihs_base_geom.isGeosValid():
-                QgsMessageLog.logMessage(
-                    "IHS base convex hull is invalid, attempting makeValid()...",
-                    plugin_tag,
-                    level=Qgis.Info,
-                )
-                ihs_base_geom = ihs_base_geom.makeValid()
-            if not ihs_base_geom or not ihs_base_geom.isGeosValid():
-                raise ValueError("IHS base geometry invalid after makeValid().")
+            ihs_base_geom = self._ensure_valid_geometry(
+                ihs_base_geom, "IHS base convex hull"
+            )
+            if ihs_base_geom is None:
+                raise ValueError("IHS base geometry invalid after validation.")
+            strip_outline_geoms.clear()
         except Exception as e_hull:
             QgsMessageLog.logMessage(
                 f"IHS Generation Failed: Error during Convex Hull creation: {e_hull}",
@@ -4191,7 +4217,7 @@ class SafeguardingBuilder:
                     ols_layer_group,
                     "OLS IHS",
                 )
-                if layer:
+                if layer is not None:
                     overall_success = True
             except Exception as e_ihs_layer:
                 QgsMessageLog.logMessage(
@@ -4225,70 +4251,59 @@ class SafeguardingBuilder:
                         level=Qgis.Info,
                     )
                     try:
-                        temp_outer_geom = ihs_base_geom.buffer(
-                            horizontal_extent, BUFFER_SEGMENTS
+                        outer_conical_geom = self._ensure_valid_geometry(
+                            ihs_base_geom.buffer(horizontal_extent, BUFFER_SEGMENTS),
+                            "outer Conical buffer",
                         )
-                        if temp_outer_geom and not temp_outer_geom.isEmpty():
-                            temp_outer_geom = temp_outer_geom.makeValid()
-                            if temp_outer_geom.isGeosValid():
-                                outer_conical_geom = temp_outer_geom
-                                temp_conical_geom = outer_conical_geom.difference(
+                        if outer_conical_geom is not None:
+                            temp_conical_geom = self._ensure_valid_geometry(
+                                outer_conical_geom.difference(
                                     ihs_base_geom
+                                ),
+                                "Conical ring",
+                            )
+                            if temp_conical_geom is not None:
+                                fields = self._get_ols_fields("Conical")
+                                feature = QgsFeature(fields)
+                                feature.setGeometry(temp_conical_geom)
+                                conical_total_height_agl = (
+                                    ihs_base_height_agl + height_extent_agl
                                 )
-                                if temp_conical_geom:
-                                    temp_conical_geom = temp_conical_geom.makeValid()
-                                if (
-                                    temp_conical_geom
-                                    and not temp_conical_geom.isEmpty()
-                                    and temp_conical_geom.isGeosValid()
-                                ):
-                                    fields = self._get_ols_fields("Conical")
-                                    feature = QgsFeature(fields)
-                                    feature.setGeometry(temp_conical_geom)
-                                    conical_total_height_agl = (
-                                        ihs_base_height_agl + height_extent_agl
-                                    )
-                                    attr_map = {
-                                        "rwy_name": self.tr("Airport Wide"),
-                                        "surface": "Conical",
-                                        "section_desc": "Conical Surface",
-                                        "elev_m": conical_outer_elevation,
-                                        "height_agl": conical_total_height_agl,
-                                        "slope_perc": slope * 100.0,
-                                        "ref_mos": ref,
-                                        "height_extent": height_extent_agl,
-                                    }
-                                    for name, value in attr_map.items():
-                                        idx = fields.indexFromName(name)
-                                        if idx != -1:
-                                            feature.setAttribute(idx, value)
-                                    layer = self._create_and_add_layer(
-                                        "Polygon",
-                                        f"OLS_Conical_{icao_code}",
-                                        f"{self.tr('OLS')} Conical {icao_code}",
-                                        fields,
-                                        [feature],
-                                        ols_layer_group,
-                                        "OLS Conical",
-                                    )
-                                    if layer:
-                                        overall_success = True
-                                        conical_layer_created = True
-                                else:
-                                    QgsMessageLog.logMessage(
-                                        "Failed generate valid Conical ring geometry (difference/makeValid).",
-                                        plugin_tag,
-                                        level=Qgis.Warning,
-                                    )
+                                attr_map = {
+                                    "rwy_name": self.tr("Airport Wide"),
+                                    "surface": "Conical",
+                                    "section_desc": "Conical Surface",
+                                    "elev_m": conical_outer_elevation,
+                                    "height_agl": conical_total_height_agl,
+                                    "slope_perc": slope * 100.0,
+                                    "ref_mos": ref,
+                                    "height_extent": height_extent_agl,
+                                }
+                                for name, value in attr_map.items():
+                                    idx = fields.indexFromName(name)
+                                    if idx != -1:
+                                        feature.setAttribute(idx, value)
+                                layer = self._create_and_add_layer(
+                                    "Polygon",
+                                    f"OLS_Conical_{icao_code}",
+                                    f"{self.tr('OLS')} Conical {icao_code}",
+                                    fields,
+                                    [feature],
+                                    ols_layer_group,
+                                    "OLS Conical",
+                                )
+                                if layer is not None:
+                                    overall_success = True
+                                    conical_layer_created = True
                             else:
                                 QgsMessageLog.logMessage(
-                                    "Failed generate valid outer Conical buffer after makeValid.",
+                                    "Failed generate valid Conical ring geometry.",
                                     plugin_tag,
                                     level=Qgis.Warning,
                                 )
                         else:
                             QgsMessageLog.logMessage(
-                                "Failed generate outer Conical buffer (buffer returned None/empty).",
+                                "Failed generate valid outer Conical buffer.",
                                 plugin_tag,
                                 level=Qgis.Warning,
                             )
@@ -4395,12 +4410,11 @@ class SafeguardingBuilder:
                     continue
                 try:
                     horizontal_dist = contour_h_above_ihs / slope
-                    outer_geom = ihs_base_geom.buffer(horizontal_dist, BUFFER_SEGMENTS)
-                    if (
-                        outer_geom
-                        and not outer_geom.isEmpty()
-                        and outer_geom.isGeosValid()
-                    ):
+                    outer_geom = self._ensure_valid_geometry(
+                        ihs_base_geom.buffer(horizontal_dist, BUFFER_SEGMENTS),
+                        f"Conical contour buffer {current_target_contour_elev_amsl}",
+                    )
+                    if outer_geom is not None:
                         line_geom = _extract_exterior_ring_line(outer_geom)
                         if (
                             line_geom
@@ -4435,8 +4449,7 @@ class SafeguardingBuilder:
                 current_target_contour_elev_amsl += CONICAL_CONTOUR_INTERVAL
 
             # 3. End contour at conical outer elevation
-            final_dist = height_extent_agl / slope  # buffer distance to outer edge
-            end_geom = ihs_base_geom.buffer(final_dist, BUFFER_SEGMENTS)
+            end_geom = outer_conical_geom
             if end_geom and not end_geom.isEmpty() and end_geom.isGeosValid():
                 line_geom = _extract_exterior_ring_line(end_geom)
                 if line_geom and not line_geom.isEmpty() and line_geom.isGeosValid():
@@ -4596,102 +4609,82 @@ class SafeguardingBuilder:
                 if arp_point_xy:  # Only proceed if arp_point_xy was successfully set
                     try:
                         center_geom = QgsGeometry.fromPointXY(arp_point_xy)
-                        ohs_full_circle_geom = center_geom.buffer(
-                            radius, 144
-                        )  # Use high segments
-                        if ohs_full_circle_geom and not ohs_full_circle_geom.isEmpty():
-                            ohs_full_circle_geom = ohs_full_circle_geom.makeValid()
-                            if ohs_full_circle_geom.isGeosValid():
-                                ohs_final_geom = ohs_full_circle_geom
-                                if (
-                                    outer_conical_geom
-                                    and outer_conical_geom.isGeosValid()
-                                ):
-                                    # QgsMessageLog.logMessage(
-                                    #     "Attempting to difference Conical outer boundary from OHS circle.",
-                                    #     plugin_tag,
-                                    #     level=Qgis.Info,
-                                    # )
-                                    try:
-                                        difference_geom = (
-                                            ohs_full_circle_geom.difference(
-                                                outer_conical_geom
-                                            )
-                                        )
-                                        if difference_geom:
-                                            difference_geom = (
-                                                difference_geom.makeValid()
-                                            )
-                                            if (
-                                                difference_geom.isGeosValid()
-                                                and not difference_geom.isEmpty()
-                                            ):
-                                                ohs_final_geom = difference_geom
-                                            else:
-                                                QgsMessageLog.logMessage(
-                                                    "Warning: Difference op for OHS resulted in invalid/empty geometry. Using full circle.",
-                                                    plugin_tag,
-                                                    level=Qgis.Warning,
-                                                )
-                                        else:
-                                            QgsMessageLog.logMessage(
-                                                "Warning: Difference op for OHS returned None. Using full circle.",
-                                                plugin_tag,
-                                                level=Qgis.Warning,
-                                            )
-                                    except Exception as e_diff:
+                        ohs_full_circle_geom = self._ensure_valid_geometry(
+                            center_geom.buffer(radius, 144), "OHS full circle"
+                        )
+                        if ohs_full_circle_geom is not None:
+                            ohs_final_geom = ohs_full_circle_geom
+                            if (
+                                outer_conical_geom
+                                and outer_conical_geom.isGeosValid()
+                            ):
+                                # QgsMessageLog.logMessage(
+                                #     "Attempting to difference Conical outer boundary from OHS circle.",
+                                #     plugin_tag,
+                                #     level=Qgis.Info,
+                                # )
+                                try:
+                                    difference_geom = self._ensure_valid_geometry(
+                                        ohs_full_circle_geom.difference(
+                                            outer_conical_geom
+                                        ),
+                                        "OHS minus Conical",
+                                    )
+                                    if difference_geom is not None:
+                                        ohs_final_geom = difference_geom
+                                    else:
                                         QgsMessageLog.logMessage(
-                                            f"Warning: Error during OHS difference operation: {e_diff}. Using full circle.",
+                                            "Warning: Difference op for OHS resulted in invalid/empty geometry. Using full circle.",
                                             plugin_tag,
                                             level=Qgis.Warning,
                                         )
-                                else:
+                                except Exception as e_diff:
                                     QgsMessageLog.logMessage(
-                                        "Info: Conical outer boundary not available or invalid for OHS difference. Using full OHS circle.",
+                                        f"Warning: Error during OHS difference operation: {e_diff}. Using full circle.",
                                         plugin_tag,
-                                        level=Qgis.Info,
+                                        level=Qgis.Warning,
                                     )
-
-                                fields = self._get_ols_fields("OHS")
-                                feature = QgsFeature(fields)
-                                feature.setGeometry(ohs_final_geom)
-                                attr_map = {
-                                    "surface": "OHS",
-                                    "section_desc": "Outer Horizontal Surface",
-                                    "elev_m": ohs_elevation_amsl,
-                                    "height_agl": height_agl,
-                                    "ref_mos": ref,
-                                    "radius_m": radius,
-                                }
-                                if fields.indexFromName("rwy_name") != -1:
-                                    attr_map["rwy_name"] = self.tr("Airport Wide")
-                                for name, value in attr_map.items():
-                                    idx = fields.indexFromName(name)
-                                    print(
-                                        f"Assigning {name} = {value}, idx = {idx}"
-                                    )  # DEBUG
-                                    if idx != -1:
-                                        feature.setAttribute(idx, value)
-                                layer = self._create_and_add_layer(
-                                    "Polygon",
-                                    f"OLS_OHS_{icao_code}",
-                                    f"{self.tr('OLS')} OHS {icao_code}",
-                                    fields,
-                                    [feature],
-                                    ols_layer_group,
-                                    "OLS OHS",
-                                )
-                                if layer:
-                                    overall_success = True
                             else:
                                 QgsMessageLog.logMessage(
-                                    "Failed create valid OHS full circle geom (makeValid failed).",
+                                    "Info: Conical outer boundary not available or invalid for OHS difference. Using full OHS circle.",
                                     plugin_tag,
-                                    level=Qgis.Warning,
+                                    level=Qgis.Info,
                                 )
+
+                            fields = self._get_ols_fields("OHS")
+                            feature = QgsFeature(fields)
+                            feature.setGeometry(ohs_final_geom)
+                            attr_map = {
+                                "surface": "OHS",
+                                "section_desc": "Outer Horizontal Surface",
+                                "elev_m": ohs_elevation_amsl,
+                                "height_agl": height_agl,
+                                "ref_mos": ref,
+                                "radius_m": radius,
+                            }
+                            if fields.indexFromName("rwy_name") != -1:
+                                attr_map["rwy_name"] = self.tr("Airport Wide")
+                            for name, value in attr_map.items():
+                                idx = fields.indexFromName(name)
+                                print(
+                                    f"Assigning {name} = {value}, idx = {idx}"
+                                )  # DEBUG
+                                if idx != -1:
+                                    feature.setAttribute(idx, value)
+                            layer = self._create_and_add_layer(
+                                "Polygon",
+                                f"OLS_OHS_{icao_code}",
+                                f"{self.tr('OLS')} OHS {icao_code}",
+                                fields,
+                                [feature],
+                                ols_layer_group,
+                                "OLS OHS",
+                            )
+                            if layer is not None:
+                                overall_success = True
                         else:
                             QgsMessageLog.logMessage(
-                                "Failed create OHS full circle geom (buffer failed).",
+                                "Failed create valid OHS full circle geom.",
                                 plugin_tag,
                                 level=Qgis.Warning,
                             )
@@ -6981,7 +6974,7 @@ class SafeguardingBuilder:
                                 layer_group,
                                 style_key_lcz_area,
                             )
-                            if layer:
+                            if layer is not None:
                                 overall_success = True  # If this succeeds, the whole Guideline E processing is a success
                         else:
                             QgsMessageLog.logMessage(
