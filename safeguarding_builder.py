@@ -695,7 +695,7 @@ class SafeguardingBuilder:
                 met_group = main_group.addGroup(
                     self.tr("Meteorological Instrument Station")
                 )
-                if met_group:
+                if met_group is not None:
                     met_layers_created_ok, _ = self.process_met_station_surfaces(
                         met_point, icao_code, target_crs, met_group
                     )
@@ -738,16 +738,16 @@ class SafeguardingBuilder:
                     self.tr("Specialised Safeguarding")
                 )
                 if (
-                    not specialised_safeguarding_group
+                    specialised_safeguarding_group is None
                 ):  # Should have been created earlier
                     specialised_safeguarding_group = main_group.addGroup(
                         self.tr("Specialised Safeguarding")
                     )
 
                 if (
-                    physical_geom_group
-                    and protection_area_group
-                    and specialised_safeguarding_group
+                    physical_geom_group is not None
+                    and protection_area_group is not None
+                    and specialised_safeguarding_group is not None
                 ):
                     common_fields = [
                         QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
@@ -855,7 +855,7 @@ class SafeguardingBuilder:
 
                     for element_type, definition in layer_definitions.items():
                         target_group = definition.get("group")
-                        if not target_group:
+                        if target_group is None:
                             QgsMessageLog.logMessage(
                                 f"Warning: No target group defined for {element_type}, skipping layer setup.",
                                 plugin_tag,
@@ -1230,7 +1230,7 @@ class SafeguardingBuilder:
                                         target_group_name
                                     )
 
-                                if not target_group_node:
+                                if target_group_node is None:
                                     QgsMessageLog.logMessage(
                                         f"Warning: Target group '{target_group_name}' not found for '{display_name_for_final_layer}'. Using main plugin group.",
                                         plugin_tag,
@@ -1275,24 +1275,25 @@ class SafeguardingBuilder:
                             Qgis.Warning,
                         )
 
-                    if physical_geom_group:
+                    if physical_geom_group is not None:
                         for rwy_data in processed_runway_data_list:
                             cl_layer = rwy_data.get("centreline_layer")
                             if cl_layer:
                                 cl_node = project_root.findLayer(cl_layer.id())
-                                if cl_node:
+                                if cl_node is not None:
                                     cloned_node = cl_node.clone()
                                     physical_geom_group.insertChildNode(0, cloned_node)
-                                    cl_node.parent().removeChildNode(cl_node)
+                                    if cl_node.parent() is not None:
+                                        cl_node.parent().removeChildNode(cl_node)
 
                 else:
-                    if not physical_geom_group:
+                    if physical_geom_group is None:
                         QgsMessageLog.logMessage(
                             "Failed to create 'Physical Geometry' subgroup.",
                             plugin_tag,
                             level=Qgis.Warning,
                         )
-                    if not protection_area_group:
+                    if protection_area_group is None:
                         QgsMessageLog.logMessage(
                             "Failed to create 'Runway Protection Areas' subgroup.",
                             plugin_tag,
@@ -1302,7 +1303,7 @@ class SafeguardingBuilder:
             guideline_groups = self._create_guideline_groups(main_group)
 
             ofz_group = None
-            if guideline_groups.get("F"):
+            if guideline_groups.get("F") is not None:
                 ofz_group = guideline_groups["F"].addGroup(
                     self.tr("OLS Obstacle Free Zone")
                 )
@@ -1333,23 +1334,23 @@ class SafeguardingBuilder:
             guideline_c_processed = False
             guideline_d_processed = False
             guideline_g_processed = False
-            if arp_point and guideline_groups.get("C"):
+            if arp_point and guideline_groups.get("C") is not None:
                 guideline_c_processed = self.process_guideline_c(
                     arp_point, icao_code, target_crs, guideline_groups["C"]
                 )
 
-            if arp_point and guideline_groups.get("D"):
+            if arp_point and guideline_groups.get("D") is not None:
                 guideline_d_processed = self.process_guideline_d(
                     arp_point, icao_code, target_crs, guideline_groups["D"]
                 )
-            elif not arp_point and guideline_groups.get("D"):
+            elif not arp_point and guideline_groups.get("D") is not None:
                 QgsMessageLog.logMessage(
                     "Guideline D (Wind Turbine) skipped: ARP point not available.",
                     plugin_tag,
                     level=Qgis.Info,
                 )
 
-            if cns_input_list and guideline_groups.get("G"):
+            if cns_input_list and guideline_groups.get("G") is not None:
                 try:
                     guideline_g_processed = self.process_guideline_g(
                         cns_input_list, icao_code, target_crs, guideline_groups["G"]
@@ -1375,7 +1376,7 @@ class SafeguardingBuilder:
             )
 
             airport_wide_ols_processed = False
-            if guideline_groups.get("F") and processed_runway_data_list:
+            if guideline_groups.get("F") is not None and processed_runway_data_list:
                 if self.reference_elevation_datum is not None:
                     try:
                         airport_wide_ols_processed = self._generate_airport_wide_ols(
@@ -1448,16 +1449,16 @@ class SafeguardingBuilder:
     ) -> Optional[QgsLayerTreeGroup]:
         """Finds and clears or creates the main layer group."""
         existing_group = root_node.findGroup(group_name)
-        if existing_group:
+        if existing_group is not None:
             QgsMessageLog.logMessage(
                 f"Removing existing group: {group_name}", PLUGIN_TAG, level=Qgis.Info
             )
             self._remove_group_recursively(existing_group, project)
             parent_node = existing_group.parent()
-            if parent_node:
+            if parent_node is not None:
                 parent_node.removeChildNode(existing_group)
         main_group = root_node.addGroup(group_name)
-        if not main_group:
+        if main_group is None:
             QgsMessageLog.logMessage(
                 f"Failed create group: {group_name}", PLUGIN_TAG, level=Qgis.Critical
             )
@@ -1468,7 +1469,7 @@ class SafeguardingBuilder:
         self, group_node: QgsLayerTreeGroup, project: QgsProject
     ):
         """Helper to remove layers within a group and its subgroups."""
-        if not group_node:
+        if group_node is None:
             return
         children_copy = list(group_node.children())  # Iterate over copy
         for node in children_copy:
@@ -1596,7 +1597,7 @@ class SafeguardingBuilder:
         for key, name in guideline_defs.items():
             grp = main_group.addGroup(self.tr(name))
             guideline_groups[key] = grp
-            if not grp:
+            if grp is None:
                 QgsMessageLog.logMessage(
                     f"Failed create group: {name}", PLUGIN_TAG, level=Qgis.Warning
                 )
@@ -1741,10 +1742,11 @@ class SafeguardingBuilder:
                     if loaded_layer and loaded_layer.isValid():
                         root = project.layerTreeRoot()
                         loaded_node = root.findLayer(loaded_layer.id())
-                        if loaded_node:
+                        if loaded_node is not None:
                             cloned_node = loaded_node.clone()
                             layer_group.insertChildNode(0, cloned_node)
-                            loaded_node.parent().removeChildNode(loaded_node)
+                            if loaded_node.parent() is not None:
+                                loaded_node.parent().removeChildNode(loaded_node)
                         loaded_layer.setCustomProperty(
                             "safeguarding_style_key", style_key
                         )
@@ -1936,28 +1938,28 @@ class SafeguardingBuilder:
             )
             run_success_flags = []
             try:  # Standard Guidelines
-                if guideline_groups.get("B"):
+                if guideline_groups.get("B") is not None:
                     run_success_flags.append(
                         self.process_guideline_b(runway_data, guideline_groups["B"])
                     )
-                if guideline_groups.get("E"):
+                if guideline_groups.get("E") is not None:
                     run_success_flags.append(
                         self.process_guideline_e(runway_data, guideline_groups["E"])
                     )
-                if guideline_groups.get("F"):
+                if guideline_groups.get("F") is not None:
                     run_success_flags.append(
                         self.process_guideline_f(
                             runway_data, guideline_groups["F"], ofz_group
                         )
                     )  # F = OLS App/TOCS
-                if guideline_groups.get("I"):
+                if guideline_groups.get("I") is not None:
                     run_success_flags.append(
                         self.process_guideline_i(runway_data, guideline_groups["I"])
                     )
                 # Add calls for other guidelines (A, F, H) here if implemented
 
                 # Specialised Surfaces
-                if specialised_group_node:
+                if specialised_group_node is not None:
                     run_success_flags.append(
                         self.process_raoa(runway_data, specialised_group_node)
                     )
@@ -2049,7 +2051,7 @@ class SafeguardingBuilder:
             )  # Log overall success
 
             if (
-                main_group
+                main_group is not None
             ):  # Only expand group if it exists (it might not if only file output and no group made)
                 main_group.setExpanded(True)
         else:
@@ -2065,11 +2067,12 @@ class SafeguardingBuilder:
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
-            if main_group and root_node.findGroup(
-                main_group.name()
+            if (
+                main_group is not None
+                and root_node.findGroup(main_group.name()) is not None
             ):  # Only try to remove group if it was created
                 self._remove_group_recursively(main_group, project)
-                if main_group.parent():
+                if main_group.parent() is not None:
                     main_group.parent().removeChildNode(main_group)
 
     # --- Geometry Creation Helpers ---
@@ -6491,7 +6494,7 @@ class SafeguardingBuilder:
         )
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
-        if not all([thr_point, rec_thr_point, layer_group]):
+        if thr_point is None or rec_thr_point is None or layer_group is None:
             return False
         params = self._get_runway_parameters(thr_point, rec_thr_point)
         if params is None:
@@ -6719,7 +6722,7 @@ class SafeguardingBuilder:
     ) -> bool:
         """Processes Guideline D: Wind Turbine Assessment Zone."""
         plugin_tag = PLUGIN_TAG
-        if not all([arp_point, icao_code, layer_group]):
+        if arp_point is None or not icao_code or layer_group is None:
             QgsMessageLog.logMessage(
                 "Guideline D (Wind Turbine) skipped: Missing ARP point, ICAO code, or layer group.",
                 plugin_tag,
@@ -6821,8 +6824,10 @@ class SafeguardingBuilder:
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
 
-        if not all(
-            [thr_point, rec_thr_point, layer_group]
+        if (
+            thr_point is None
+            or rec_thr_point is None
+            or layer_group is None
         ):  # Basic check for core data
             QgsMessageLog.logMessage(
                 f"Guideline E skipped for {runway_name}: Missing threshold points or layer group.",
@@ -9088,7 +9093,7 @@ class SafeguardingBuilder:
         )
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
-        if not all([thr_point, rec_thr_point, layer_group]):
+        if thr_point is None or rec_thr_point is None or layer_group is None:
             return False
         params = self._get_runway_parameters(thr_point, rec_thr_point)
         if params is None:
@@ -9215,7 +9220,7 @@ class SafeguardingBuilder:
         type1_str = runway_data.get("type1", "")
         type2_str = runway_data.get("type2", "")
 
-        if not all([thr_point, rec_thr_point, layer_group]):
+        if thr_point is None or rec_thr_point is None or layer_group is None:
             return False  # Basic check
         rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
         if rwy_params is None:
@@ -9362,7 +9367,12 @@ class SafeguardingBuilder:
         type2_str = runway_data.get("type2", "")
 
         # Essential Checks
-        if not all([thr_point, rec_thr_point, layer_group, arc_num_str]):
+        if (
+            thr_point is None
+            or rec_thr_point is None
+            or layer_group is None
+            or not arc_num_str
+        ):
             QgsMessageLog.logMessage(
                 f"Taxiway Sep skipped {runway_name}: Missing essential data.",
                 plugin_tag,
