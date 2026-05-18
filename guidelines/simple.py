@@ -148,8 +148,12 @@ class SimpleGuidelinesMixin:
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
         """Processes Guideline C: Wildlife Management Zone."""
-        if not all(
-            [arp_point, icao_code, target_crs, target_crs.isValid(), layer_group]
+        if (
+            arp_point is None
+            or not icao_code
+            or target_crs is None
+            or not target_crs.isValid()
+            or layer_group is None
         ):
             return False
         overall_success = False
@@ -166,6 +170,11 @@ class SimpleGuidelinesMixin:
                 r_out: float,
             ) -> bool:
                 if not geom or geom.isEmpty():
+                    QgsMessageLog.logMessage(
+                        f"Guideline C: Wildlife Management Zone {zone} geometry is empty; layer not created.",
+                        PLUGIN_TAG,
+                        level=Qgis.Warning,
+                    )
                     return False
                 display_name = f"{self.tr('WMZ')} {zone} ({r_in:.0f}-{r_out:.0f}km)"
                 internal_name = f"WMZ_{zone}_{icao_code}"
@@ -200,7 +209,19 @@ class SimpleGuidelinesMixin:
                     layer_group,
                     f"WMZ {zone}",
                 )
-                return layer is not None
+                if layer is None:
+                    QgsMessageLog.logMessage(
+                        f"Guideline C: Failed to create Wildlife Management Zone {zone} layer.",
+                        PLUGIN_TAG,
+                        level=Qgis.Warning,
+                    )
+                    return False
+                QgsMessageLog.logMessage(
+                    f"Guideline C: Created Wildlife Management Zone {zone} layer.",
+                    PLUGIN_TAG,
+                    level=Qgis.Success,
+                )
+                return True
 
             def circular_ring_points(
                 radius_m: float, clockwise: bool = False

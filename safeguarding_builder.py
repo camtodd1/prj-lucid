@@ -573,7 +573,7 @@ class SafeguardingBuilder(
                 return
 
             arp_layer_created = False
-            if arp_point:
+            if arp_point is not None:
                 arp_layer = self.create_arp_layer(
                     arp_point,
                     arp_east,
@@ -741,22 +741,33 @@ class SafeguardingBuilder(
         guideline_c_processed = False
         guideline_d_processed = False
         guideline_g_processed = False
-        if arp_point and guideline_groups.get("C") is not None:
+        if arp_point is not None and guideline_groups.get("C") is not None:
+            QgsMessageLog.logMessage(
+                f"Processing Guideline C (Wildlife) from ARP ({arp_point.x():.3f}, {arp_point.y():.3f}).",
+                plugin_tag,
+                level=Qgis.Info,
+            )
             guideline_c_processed = self.process_guideline_c(
                 arp_point, icao_code, target_crs, guideline_groups["C"]
             )
-        elif not arp_point and guideline_groups.get("C") is not None:
+            if not guideline_c_processed:
+                QgsMessageLog.logMessage(
+                    "Guideline C (Wildlife) did not create any layers. Check earlier Wildlife geometry/layer messages.",
+                    plugin_tag,
+                    level=Qgis.Warning,
+                )
+        elif arp_point is None and guideline_groups.get("C") is not None:
             QgsMessageLog.logMessage(
                 "Guideline C (Wildlife) skipped: ARP point not available.",
                 plugin_tag,
                 level=Qgis.Info,
             )
 
-        if arp_point and guideline_groups.get("D") is not None:
+        if arp_point is not None and guideline_groups.get("D") is not None:
             guideline_d_processed = self.process_guideline_d(
                 arp_point, icao_code, target_crs, guideline_groups["D"]
             )
-        elif not arp_point and guideline_groups.get("D") is not None:
+        elif arp_point is None and guideline_groups.get("D") is not None:
             QgsMessageLog.logMessage(
                 "Guideline D (Wind Turbine) skipped: ARP point not available.",
                 plugin_tag,
