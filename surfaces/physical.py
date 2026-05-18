@@ -1,9 +1,20 @@
 # -*- coding: utf-8 -*-
 """Physical runway geometry generation."""
 
-from typing import List, Optional, Tuple
+import traceback
+from typing import Dict, List, Optional, Tuple
 
-from qgis.core import Qgis, QgsGeometry, QgsMessageLog  # type: ignore
+from qgis.PyQt.QtCore import QVariant  # type: ignore
+from qgis.core import (  # type: ignore
+    Qgis,
+    QgsFeature,
+    QgsField,
+    QgsFields,
+    QgsGeometry,
+    QgsLayerTreeGroup,
+    QgsMessageLog,
+    QgsProject,
+)
 
 from .. import ols_dimensions
 
@@ -11,6 +22,476 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class PhysicalGeometryMixin:
+
+    def _process_physical_and_protection_layers(
+        self,
+        main_group: QgsLayerTreeGroup,
+        icao_code: str,
+        processed_runway_data_list: List[dict],
+        any_runway_base_data_ok: bool,
+    ) -> Tuple[Optional[QgsLayerTreeGroup], bool]:
+        plugin_tag = PLUGIN_TAG
+        specialised_safeguarding_group = None
+        physical_geom_group = None
+        protection_area_group = None
+        physical_layer_specs = {}
+        physical_features: Dict[str, List[QgsFeature]] = {}
+        any_physical_or_protection_ok = False
+
+        if processed_runway_data_list and any_runway_base_data_ok:
+            physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
+            self._stage_layer_tree_node(physical_geom_group)
+            protection_area_group = main_group.addGroup(
+                self.tr("Runway Protection Areas")
+            )
+            self._stage_layer_tree_node(protection_area_group)
+            specialised_safeguarding_group = main_group.findGroup(
+                self.tr("Specialised Safeguarding")
+            )
+            if (
+                specialised_safeguarding_group is None
+            ):  # Should have been created earlier
+                specialised_safeguarding_group = main_group.addGroup(
+                    self.tr("Specialised Safeguarding")
+                )
+            self._stage_layer_tree_node(specialised_safeguarding_group)
+
+            if (
+                physical_geom_group is not None
+                and protection_area_group is not None
+                and specialised_safeguarding_group is not None
+            ):
+                common_fields = [
+                    QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
+                    QgsField("desc", QVariant.String, self.tr("Element Type"), 50),
+                    QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3),
+                    QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3),
+                    QgsField(
+                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
+                    ),
+                ]
+                stopway_resa_fields = common_fields + [
+                    QgsField(
+                        "end_desig", QVariant.String, self.tr("End Designator"), 10
+                    )
+                ]
+                pre_threshold_fields = common_fields + [
+                    QgsField(
+                        "end_desig", QVariant.String, self.tr("End Designator"), 10
+                    )
+                ]
+                marking_fields = [
+                    QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
+                    QgsField("desc", QVariant.String, self.tr("Element Type"), 50),
+                    QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3),
+                    QgsField(
+                        "end_desig", QVariant.String, self.tr("End Designator"), 10
+                    ),
+                    QgsField(
+                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
+                    ),
+                ]
+
+                layer_definitions = {
+                    "rwy": {
+                        "name": self.tr("Runway Pavement"),
+                        "fields": common_fields,
+                        "group": physical_geom_group,
+                    },
+                    "PreThresholdRunway": {
+                        "name": self.tr("Pre-Threshold Runway"),
+                        "fields": pre_threshold_fields,
+                        "group": physical_geom_group,
+                    },
+                    "PreThresholdArea": {
+                        "name": self.tr("Pre-Threshold Area"),
+                        "fields": pre_threshold_fields,
+                        "group": physical_geom_group,
+                    },
+                    "DisplacedThresholdMarking": {
+                        "name": self.tr("Displaced Threshold Markings"),
+                        "fields": marking_fields,
+                        "geom_type": "LineString",
+                        "group": physical_geom_group,
+                    },
+                    "PreThresholdAreaMarking": {
+                        "name": self.tr("Pre-Threshold Area Markings"),
+                        "fields": marking_fields,
+                        "geom_type": "LineString",
+                        "group": physical_geom_group,
+                    },
+                    "Shoulder": {
+                        "name": self.tr("Runway Shoulders"),
+                        "fields": common_fields,
+                        "group": physical_geom_group,
+                    },
+                    "Stopway": {
+                        "name": self.tr("Stopways"),
+                        "fields": stopway_resa_fields,
+                        "group": protection_area_group,
+                    },
+                    "GradedStrip": {
+                        "name": self.tr("Runway Graded Strip"),
+                        "fields": common_fields,
+                        "group": protection_area_group,
+                    },
+                    "FlyoverStrip": {
+                        "name": self.tr("Runway Strip Flyover Area"),
+                        "fields": common_fields,
+                        "group": protection_area_group,
+                    },
+                    "OverallStrip": {
+                        "name": self.tr("Runway Overall Strip"),
+                        "fields": common_fields,
+                        "group": protection_area_group,
+                    },
+                    "RESA": {
+                        "name": self.tr("Runway End Safety Area (RESA)"),
+                        "fields": stopway_resa_fields,
+                        "group": protection_area_group,
+                    },
+                }
+                style_key_map = {
+                    "rwy": "Runway Pavement",
+                    "PreThresholdRunway": "PreThreshold Runway",
+                    "PreThresholdArea": "PreThreshold Area",
+                    "DisplacedThresholdMarking": "DisplacedThresholdMarking",
+                    "PreThresholdAreaMarking": "PreThresholdAreaMarking",
+                    "Shoulder": "Runway Shoulders",
+                    "Stopway": "Stopways",
+                    "GradedStrip": "Runway Graded Strips",
+                    "FlyoverStrip": "Runway Strip Flyover Area",
+                    "OverallStrip": "Runway Overall Strips",
+                    "RESA": "Runway End Safety Areas (RESA)",
+                }
+
+                for element_type, definition in layer_definitions.items():
+                    target_group = definition.get("group")
+                    if target_group is None:
+                        QgsMessageLog.logMessage(
+                            f"Warning: No target group defined for {element_type}, skipping layer setup.",
+                            plugin_tag,
+                            level=Qgis.Warning,
+                        )
+                        continue
+                    geom_type_str = definition.get("geom_type", "Polygon")
+                    layer_display_name = f"{icao_code} {definition['name']}"
+                    if geom_type_str not in {"LineString", "Polygon"}:
+                        QgsMessageLog.logMessage(
+                            f"Warning: Unsupported geometry type '{geom_type_str}' for layer URI.",
+                            plugin_tag,
+                            level=Qgis.Warning,
+                        )
+                        continue
+
+                    fields_copy = QgsFields()
+                    for field in definition["fields"]:
+                        fields_copy.append(field)
+                    physical_layer_specs[element_type] = {
+                        "display_name": layer_display_name,
+                        "fields": fields_copy,
+                        "geom_type": geom_type_str,
+                        "group": target_group,
+                        "style_key": style_key_map.get(
+                            element_type, "Default Polygon"
+                        ),
+                    }
+                    physical_features[element_type] = []
+
+                QgsMessageLog.logMessage(
+                    "Populating physical geometry & protection area layers...",
+                    plugin_tag,
+                    level=Qgis.Info,
+                )
+                for rwy_data in processed_runway_data_list:
+                    runway_name_log = rwy_data.get(
+                        "short_name", f"RWY_{rwy_data.get('original_index','?')}"
+                    )
+                    try:
+                        generated_elements_list = self.generate_physical_geometry(
+                            rwy_data
+                        )
+                        if generated_elements_list is None:
+                            continue
+
+                        graded_strip_geom: Optional[QgsGeometry] = None
+                        overall_strip_geom: Optional[QgsGeometry] = None
+                        graded_strip_attrs: Optional[dict] = None
+                        overall_strip_attrs: Optional[dict] = None
+
+                        for (
+                            element_type,
+                            geometry,
+                            attributes,
+                        ) in generated_elements_list:
+                            target_spec = physical_layer_specs.get(element_type)
+                            if target_spec is None:
+                                continue
+                            if geometry is None or geometry.isEmpty():
+                                continue
+                            if not geometry.isGeosValid():
+                                geometry = geometry.makeValid()
+                            if (
+                                geometry is None
+                                or geometry.isEmpty()
+                                or not geometry.isGeosValid()
+                            ):
+                                continue
+
+                            if element_type == "GradedStrip":
+                                graded_strip_geom = geometry
+                                graded_strip_attrs = attributes
+                            elif element_type == "OverallStrip":
+                                overall_strip_geom = geometry
+                                overall_strip_attrs = attributes
+
+                            feature = QgsFeature(target_spec["fields"])
+                            feature.setGeometry(geometry)
+                            for field_name, value in attributes.items():
+                                idx = feature.fieldNameIndex(field_name)
+                                if idx != -1:
+                                    feature.setAttribute(idx, value)
+
+                            physical_features[element_type].append(feature)
+                            any_physical_or_protection_ok = True
+
+                        flyover_spec = physical_layer_specs.get("FlyoverStrip")
+                        if (
+                            flyover_spec is not None
+                            and graded_strip_geom is not None
+                            and overall_strip_geom is not None
+                        ):
+                            try:
+                                # Ensure inputs are valid before difference
+                                if not graded_strip_geom.isGeosValid():
+                                    graded_strip_geom = (
+                                        graded_strip_geom.makeValid()
+                                    )
+                                if not overall_strip_geom.isGeosValid():
+                                    overall_strip_geom = (
+                                        overall_strip_geom.makeValid()
+                                    )
+
+                                if (
+                                    graded_strip_geom
+                                    and overall_strip_geom
+                                    and graded_strip_geom.isGeosValid()
+                                    and overall_strip_geom.isGeosValid()
+                                ):
+                                    flyover_geom = overall_strip_geom.difference(
+                                        graded_strip_geom
+                                    )
+                                    if flyover_geom and not flyover_geom.isEmpty():
+                                        flyover_geom = (
+                                            flyover_geom.makeValid()
+                                        )  # Validate result
+                                        if (
+                                            flyover_geom
+                                            and not flyover_geom.isEmpty()
+                                            and flyover_geom.isGeosValid()
+                                        ):
+                                            # Create feature for flyover area
+                                            flyover_feat = QgsFeature(
+                                                flyover_spec["fields"]
+                                            )
+                                            flyover_feat.setGeometry(flyover_geom)
+
+                                            # --- MODIFIED ATTRIBUTE CALCULATION FOR FLYOVER ---
+                                            flyover_attrs = (
+                                                {}
+                                            )  # Start with an empty dict for flyover-specific attributes
+
+                                            # 'rwy' and 'ref_mos' can be taken from overall_strip_attrs if available
+                                            if overall_strip_attrs:
+                                                flyover_attrs["rwy"] = (
+                                                    overall_strip_attrs.get("rwy")
+                                                )
+                                                flyover_attrs["ref_mos"] = (
+                                                    overall_strip_attrs.get(
+                                                        "ref_mos"
+                                                    )
+                                                )
+
+                                            flyover_attrs["desc"] = (
+                                                "Flyover Strip Area"
+                                            )
+
+                                            # Calculate len_m and wid_m as per your logic
+                                            # len_m can be taken from either graded or overall strip length
+                                            if (
+                                                graded_strip_attrs
+                                                and "len_m" in graded_strip_attrs
+                                            ):
+                                                flyover_attrs["len_m"] = (
+                                                    graded_strip_attrs["len_m"]
+                                                )
+                                            elif (
+                                                overall_strip_attrs
+                                                and "len_m" in overall_strip_attrs
+                                            ):  # Fallback to overall
+                                                flyover_attrs["len_m"] = (
+                                                    overall_strip_attrs["len_m"]
+                                                )
+                                            else:
+                                                flyover_attrs["len_m"] = (
+                                                    None  # Or some default if neither is available
+                                                )
+
+                                            if (
+                                                graded_strip_attrs
+                                                and overall_strip_attrs
+                                                and "wid_m" in graded_strip_attrs
+                                                and "wid_m" in overall_strip_attrs
+                                                and isinstance(
+                                                    graded_strip_attrs["wid_m"],
+                                                    (int, float),
+                                                )
+                                                and isinstance(
+                                                    overall_strip_attrs["wid_m"],
+                                                    (int, float),
+                                                )
+                                            ):
+
+                                                overall_w = overall_strip_attrs[
+                                                    "wid_m"
+                                                ]
+                                                graded_w = graded_strip_attrs[
+                                                    "wid_m"
+                                                ]
+                                                if overall_w > graded_w:
+                                                    flyover_attrs["wid_m"] = (
+                                                        overall_w - graded_w
+                                                    ) / 2.0
+                                                else:
+                                                    flyover_attrs["wid_m"] = (
+                                                        0.0  # Or None, if width is not positive
+                                                    )
+                                                    QgsMessageLog.logMessage(
+                                                        f"Warning: Overall strip width not greater than graded strip width for {runway_name_log}. Flyover width set to 0.",
+                                                        plugin_tag,
+                                                        level=Qgis.Warning,
+                                                    )
+                                            else:
+                                                flyover_attrs["wid_m"] = None
+
+                                            for (
+                                                field_name,
+                                                value,
+                                            ) in flyover_attrs.items():
+                                                idx = flyover_feat.fieldNameIndex(
+                                                    field_name
+                                                )
+                                                if idx != -1:
+                                                    flyover_feat.setAttribute(
+                                                        idx, value
+                                                    )
+
+                                            physical_features[
+                                                "FlyoverStrip"
+                                            ].append(flyover_feat)
+                                            any_physical_or_protection_ok = True
+                                        else:
+                                            QgsMessageLog.logMessage(
+                                                f"Warning: FlyoverStrip geometry invalid after difference/makeValid for {runway_name_log}.",
+                                                plugin_tag,
+                                                level=Qgis.Warning,
+                                            )
+                                    else:
+                                        QgsMessageLog.logMessage(
+                                            f"Warning: FlyoverStrip geometry is empty after difference for {runway_name_log}.",
+                                            plugin_tag,
+                                            level=Qgis.Warning,
+                                        )
+                                else:
+                                    QgsMessageLog.logMessage(
+                                        f"Warning: Cannot calculate FlyoverStrip difference due to invalid input strip geometries for {runway_name_log}.",
+                                        plugin_tag,
+                                        level=Qgis.Warning,
+                                    )
+                            except Exception as e_diff:
+                                QgsMessageLog.logMessage(
+                                    f"Warning: Error calculating FlyoverStrip difference for {runway_name_log}: {e_diff}",
+                                    plugin_tag,
+                                    level=Qgis.Warning,
+                                )
+                        elif flyover_spec is not None:
+                            QgsMessageLog.logMessage(
+                                f"Info: Skipping FlyoverStrip for {runway_name_log}: Graded or Overall strip geometry missing.",
+                                plugin_tag,
+                                level=Qgis.Info,
+                            )
+
+                    except Exception as e_phys:
+                        QgsMessageLog.logMessage(
+                            f"Critical Error populating layers for {runway_name_log}: {e_phys}\n{traceback.format_exc()}",
+                            plugin_tag,
+                            level=Qgis.Critical,
+                        )
+                        continue
+
+                QgsMessageLog.logMessage(
+                    "Finalizing and saving physical geometry & protection area layers...",
+                    plugin_tag,
+                    level=Qgis.Info,
+                )
+                any_layer_successfully_processed_in_this_block = False
+
+                for element_type, spec in physical_layer_specs.items():
+                    features_to_write = physical_features.get(element_type, [])
+                    if features_to_write:
+                        final_layer = self._create_and_add_layer(
+                            geometry_type_str=spec["geom_type"],
+                            internal_name_base=element_type,
+                            display_name=spec["display_name"],
+                            fields=spec["fields"],
+                            features=features_to_write,
+                            layer_group=spec["group"],
+                            style_key=spec["style_key"],
+                        )
+                        if final_layer is not None:
+                            any_physical_or_protection_ok = True
+                            any_layer_successfully_processed_in_this_block = True
+                        features_to_write.clear()
+
+                if (
+                    not any_layer_successfully_processed_in_this_block
+                    and physical_layer_specs
+                ):
+                    QgsMessageLog.logMessage(
+                        "Warning: No physical geometry or protection area layers were successfully processed/saved in this block.",
+                        plugin_tag,
+                        Qgis.Warning,
+                    )
+
+                if physical_geom_group is not None:
+                    project_root = QgsProject.instance().layerTreeRoot()
+                    for rwy_data in processed_runway_data_list:
+                        cl_layer = rwy_data.get("centreline_layer")
+                        if cl_layer is not None:
+                            cl_node = project_root.findLayer(cl_layer.id())
+                            if cl_node is not None:
+                                cloned_node = cl_node.clone()
+                                self._stage_layer_tree_node(cloned_node)
+                                physical_geom_group.insertChildNode(0, cloned_node)
+                                if cl_node.parent() is not None:
+                                    cl_node.parent().removeChildNode(cl_node)
+
+            else:
+                if physical_geom_group is None:
+                    QgsMessageLog.logMessage(
+                        "Failed to create 'Physical Geometry' subgroup.",
+                        plugin_tag,
+                        level=Qgis.Warning,
+                    )
+                if protection_area_group is None:
+                    QgsMessageLog.logMessage(
+                        "Failed to create 'Runway Protection Areas' subgroup.",
+                        plugin_tag,
+                        level=Qgis.Warning,
+                    )
+
+        return specialised_safeguarding_group, any_physical_or_protection_ok
+
     def generate_physical_geometry(
         self, runway_data: dict
     ) -> Optional[List[Tuple[str, QgsGeometry, dict]]]:
@@ -801,4 +1282,3 @@ class PhysicalGeometryMixin:
         )
 
         return generated_elements if generated_elements else None
-
