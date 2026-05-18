@@ -132,6 +132,34 @@ class SafeguardingBuilder(
             return QCoreApplication.translate(type(self).__name__, message)
         return message
 
+    def _log(self, message: str, level=Qgis.Info, notify_user: bool = False):
+        """Log plugin messages with QGIS 3/4 compatible notification hints."""
+        try:
+            QgsMessageLog.logMessage(
+                message,
+                PLUGIN_TAG,
+                level=level,
+                notifyUser=notify_user,
+            )
+        except TypeError:
+            QgsMessageLog.logMessage(message, PLUGIN_TAG, level=level)
+
+    def _log_success(self, message: str, notify_user: bool = False):
+        self._log(message, Qgis.Success, notify_user)
+
+    def _log_warning(self, message: str, notify_user: bool = True):
+        self._log(message, Qgis.Warning, notify_user)
+
+    def _log_critical(self, message: str, notify_user: bool = True):
+        self._log(message, Qgis.Critical, notify_user)
+
+    def _crs_is_geographic(self, crs: QgsCoordinateReferenceSystem) -> bool:
+        """Return True when a CRS uses angular units and is unsuitable for metre buffers."""
+        try:
+            return bool(crs.isGeographic())
+        except Exception:
+            return False
+
     def add_action(
         self,
         icon_path: str,
@@ -442,9 +470,7 @@ class SafeguardingBuilder(
 
     def run_safeguarding_processing(self):
         plugin_tag = PLUGIN_TAG
-        QgsMessageLog.logMessage(
-            "--- Safeguarding Processing Started ---", plugin_tag, level=Qgis.Info
-        )
+        self._log("Started safeguarding generation.")
 
         self.successfully_generated_layers = []
         self.reference_elevation_datum = None
@@ -456,22 +482,14 @@ class SafeguardingBuilder(
         self.dissolve_output = False
 
         if self.dlg is None:
-            QgsMessageLog.logMessage(
-                "Processing aborted: Dialog reference missing.",
-                plugin_tag,
-                level=Qgis.Critical,
-            )
+            self._log_critical("Processing aborted: dialog reference missing.")
             return
 
         project = QgsProject.instance()
         target_crs = project.crs()
         target_crs_authid = target_crs.authid()
         if not target_crs or not target_crs.isValid():
-            QgsMessageLog.logMessage(
-                "Processing aborted: Project CRS is invalid or not set.",
-                plugin_tag,
-                level=Qgis.Critical,
-            )
+            self._log_critical("Processing aborted: project CRS is invalid or not set.")
             self.iface.messageBar().pushMessage(
                 self.tr("Error"),
                 self.tr(
@@ -482,11 +500,24 @@ class SafeguardingBuilder(
             )
             return
 
-        QgsMessageLog.logMessage(
-            f"Using Project CRS: {target_crs_authid} ({target_crs.description()})",
-            plugin_tag,
-            level=Qgis.Info,
-        )
+        if self._crs_is_geographic(target_crs):
+            crs_msg = (
+                f"Processing aborted: project CRS {target_crs_authid} "
+                f"({target_crs.description()}) is geographic. "
+                "Safeguarding surfaces use metre distances; set a projected CRS."
+            )
+            self._log_critical(crs_msg)
+            self.iface.messageBar().pushMessage(
+                self.tr("Error"),
+                self.tr(
+                    "Project CRS is geographic. Set a projected CRS in metres before generating safeguarding surfaces."
+                ),
+                level=Qgis.Critical,
+                duration=12,
+            )
+            return
+
+        self._log(f"Project CRS: {target_crs_authid} ({target_crs.description()}).")
 
         # Force CRS subsystem to initialise properly
         self._initialise_crs()
@@ -502,17 +533,13 @@ class SafeguardingBuilder(
         try:
             input_data = self.dlg.get_all_input_data()
             if input_data is None:
-                QgsMessageLog.logMessage(
-                    "Processing aborted: Input validation failed (check previous messages or dialog).",
-                    plugin_tag,
-                    level=Qgis.Warning,
+                self._log_warning(
+                    "Processing aborted: input validation failed. Check the dialog and preceding messages."
                 )
                 return
         except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Critical error getting input data: {e}\n{traceback.format_exc()}",
-                plugin_tag,
-                level=Qgis.Critical,
+            self._log_critical(
+                f"Processing aborted: failed to read input data: {e}\n{traceback.format_exc()}"
             )
             self.iface.messageBar().pushMessage(
                 self.tr("Error"),
@@ -528,14 +555,6 @@ class SafeguardingBuilder(
         self.output_format_driver = input_data.get("output_format_driver")
         self.output_format_extension = input_data.get("output_format_extension")
         self.dissolve_output = input_data.get("dissolve_output", False)
-        QgsMessageLog.logMessage(
-            f"Processing Mode: {self.output_mode}. "
-            f"Path: {self.output_path or 'N/A'}. "
-            f"Format: {self.output_format_driver or 'N/A'}. "
-            f"Dissolve: {self.dissolve_output}",
-            plugin_tag,
-            level=Qgis.Info,
-        )
 
         icao_code = input_data.get("icao_code", "UNKNOWN")
         arp_point = input_data.get("arp_point")
@@ -546,10 +565,20 @@ class SafeguardingBuilder(
         cns_input_list = input_data.get("cns_facilities", [])
         self.arp_elevation_amsl = input_data.get("arp_elevation")
 
+        output_desc = (
+            "memory"
+            if self.output_mode == "memory"
+            else f"{self.output_format_driver or 'file'} -> {self.output_path or 'N/A'}"
+        )
+        self._log(
+            f"Inputs: ICAO={icao_code}, output={output_desc}, "
+            f"ARP={'yes' if arp_point is not None else 'no'}, "
+            f"MET={'yes' if met_point is not None else 'no'}, "
+            f"CNS={len(cns_input_list)}, runways={len(runway_input_list)}."
+        )
+
         if not runway_input_list:
-            QgsMessageLog.logMessage(
-                "No valid runway data found to process.", plugin_tag, level=Qgis.Warning
-            )
+            self._log_warning("Processing aborted: no valid runway data found.")
             self.iface.messageBar().pushMessage(
                 self.tr("Warning"),
                 self.tr("No valid runway data found after validation."),
@@ -595,7 +624,7 @@ class SafeguardingBuilder(
                         )
 
             met_layers_created_ok = False
-            if met_point:
+            if met_point is not None:
                 met_group = main_group.addGroup(
                     self.tr("Meteorological Instrument Station")
                 )
@@ -611,10 +640,8 @@ class SafeguardingBuilder(
                         level=Qgis.Warning,
                     )
             else:
-                QgsMessageLog.logMessage(
-                    "Skipping MET Station processing: No valid coordinates provided.",
-                    plugin_tag,
-                    level=Qgis.Info,
+                self._log(
+                    "MET skipped: no MET coordinates provided; MET station surfaces not generated."
                 )
 
             processed_runway_data_list, any_runway_base_data_ok = (
@@ -713,9 +740,7 @@ class SafeguardingBuilder(
                 any_physical_or_protection_ok,
             )
 
-            QgsMessageLog.logMessage(
-                "--- Safeguarding Processing Finished ---", plugin_tag, level=Qgis.Info
-            )
+            self._log("Finished safeguarding generation.")
 
             if self.successfully_generated_layers:
                 if self.dlg:
@@ -742,25 +767,19 @@ class SafeguardingBuilder(
         guideline_d_processed = False
         guideline_g_processed = False
         if arp_point is not None and guideline_groups.get("C") is not None:
-            QgsMessageLog.logMessage(
-                f"Processing Guideline C (Wildlife) from ARP ({arp_point.x():.3f}, {arp_point.y():.3f}).",
-                plugin_tag,
-                level=Qgis.Info,
+            self._log(
+                f"Guideline C Wildlife: generating from ARP ({arp_point.x():.3f}, {arp_point.y():.3f})."
             )
             guideline_c_processed = self.process_guideline_c(
                 arp_point, icao_code, target_crs, guideline_groups["C"]
             )
             if not guideline_c_processed:
-                QgsMessageLog.logMessage(
-                    "Guideline C (Wildlife) did not create any layers. Check earlier Wildlife geometry/layer messages.",
-                    plugin_tag,
-                    level=Qgis.Warning,
+                self._log_warning(
+                    "Guideline C Wildlife failed: no zone layers were created. Check preceding Wildlife messages."
                 )
         elif arp_point is None and guideline_groups.get("C") is not None:
-            QgsMessageLog.logMessage(
-                "Guideline C (Wildlife) skipped: ARP point not available.",
-                plugin_tag,
-                level=Qgis.Info,
+            self._log(
+                "Guideline C Wildlife skipped: ARP coordinates missing; wildlife zones not generated."
             )
 
         if arp_point is not None and guideline_groups.get("D") is not None:
@@ -768,10 +787,8 @@ class SafeguardingBuilder(
                 arp_point, icao_code, target_crs, guideline_groups["D"]
             )
         elif arp_point is None and guideline_groups.get("D") is not None:
-            QgsMessageLog.logMessage(
-                "Guideline D (Wind Turbine) skipped: ARP point not available.",
-                plugin_tag,
-                level=Qgis.Info,
+            self._log(
+                "Guideline D Wind Turbine skipped: ARP coordinates missing; turbine zone not generated."
             )
 
         if cns_input_list and guideline_groups.get("G") is not None:
@@ -1173,38 +1190,64 @@ class SafeguardingBuilder(
         anything_successfully_generated = bool(self.successfully_generated_layers)
 
         if anything_successfully_generated:
-            msg_parts = [f"{self.tr('Processing complete for')} {icao_code}. "]
-
-            # Add summary of what was processed (optional, can be kept brief)
-            # For brevity, we can simplify this part or remove it if the layer count is enough.
-            # Example of a brief summary:
             num_layers_created = len(self.successfully_generated_layers)
-            msg_parts.append(
-                self.tr("{n} layer(s) generated. ").format(n=num_layers_created)
+            generated_categories = []
+            skipped_categories = []
+
+            if arp_ok:
+                generated_categories.append("ARP")
+            else:
+                skipped_categories.append("ARP")
+
+            if met_ok:
+                generated_categories.append("MET")
+            else:
+                skipped_categories.append("MET")
+
+            if physical_protection_ok:
+                generated_categories.append("physical/protection")
+
+            if guide_c_ok:
+                generated_categories.append("Guideline C Wildlife")
+            else:
+                skipped_categories.append("Guideline C Wildlife")
+
+            if guide_d_ok:
+                generated_categories.append("Guideline D Wind Turbine")
+
+            if guide_g_ok:
+                generated_categories.append("Guideline G CNS")
+
+            if guide_rwy_ok:
+                generated_categories.append("runway guidelines/OLS")
+
+            runway_summary = (
+                f"runways={processed_rwy_count}/{total_runways_in_input}"
+                if total_runways_in_input
+                else "runways=0"
             )
 
-            output_destination_message = ""
             if self.output_mode == "file" and self.output_path:
-                output_destination_message = self.tr(
-                    "Output files saved to directory: {path}"
-                ).format(path=self.output_path)
-
-                msg_parts.append(output_destination_message)
+                output_summary = f"files saved to {self.output_path}"
             elif self.output_mode == "memory":
-                output_destination_message = self.tr(
-                    "Layers created in memory and left unchecked to avoid immediate rendering."
-                )
-                msg_parts.append(output_destination_message)
+                output_summary = "memory layers created and left unchecked"
+            else:
+                output_summary = self.output_mode or "output complete"
 
-            final_user_message = " ".join(msg_parts).strip()
-            final_log_message = f"{final_user_message}"  # For QgsMessageLog
+            final_user_message = (
+                f"Processing complete for {icao_code}. "
+                f"{num_layers_created} layer(s) generated; {output_summary}."
+            )
+            final_log_message = (
+                f"Complete: ICAO={icao_code}, layers={num_layers_created}, "
+                f"{runway_summary}, generated={', '.join(generated_categories) or 'none'}, "
+                f"skipped={', '.join(skipped_categories) or 'none'}, output={output_summary}."
+            )
 
             self.iface.messageBar().pushMessage(
                 self.tr("Success"), final_user_message, level=Qgis.Success, duration=10
             )  # Increased duration
-            QgsMessageLog.logMessage(
-                final_log_message, PLUGIN_TAG, level=Qgis.Success
-            )  # Log overall success
+            self._log_success(final_log_message, notify_user=True)
 
             if (
                 main_group is not None
@@ -1218,10 +1261,8 @@ class SafeguardingBuilder(
                 level=Qgis.Warning,
                 duration=7,
             )
-            QgsMessageLog.logMessage(
-                "Processing finished, but no layers were successfully generated or added.",
-                PLUGIN_TAG,
-                level=Qgis.Warning,
+            self._log_warning(
+                "Processing finished: no layers were generated. Check preceding warnings/errors for the skipped prerequisite."
             )
             if (
                 main_group is not None

@@ -160,7 +160,14 @@ class SimpleGuidelinesMixin:
         try:
             arp_geom = QgsGeometry.fromPointXY(arp_point)
             if arp_geom.isNull():
+                QgsMessageLog.logMessage(
+                    "Guideline C Wildlife failed: ARP geometry is null.",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
                 return False
+            created_zones: List[str] = []
+            failed_zones: List[str] = []
 
             def create_wzm_layer(
                 zone: str,
@@ -171,10 +178,11 @@ class SimpleGuidelinesMixin:
             ) -> bool:
                 if not geom or geom.isEmpty():
                     QgsMessageLog.logMessage(
-                        f"Guideline C: Wildlife Management Zone {zone} geometry is empty; layer not created.",
+                        f"Guideline C Wildlife zone {zone} failed: geometry is empty.",
                         PLUGIN_TAG,
                         level=Qgis.Warning,
                     )
+                    failed_zones.append(zone)
                     return False
                 display_name = f"{self.tr('WMZ')} {zone} ({r_in:.0f}-{r_out:.0f}km)"
                 internal_name = f"WMZ_{zone}_{icao_code}"
@@ -211,16 +219,13 @@ class SimpleGuidelinesMixin:
                 )
                 if layer is None:
                     QgsMessageLog.logMessage(
-                        f"Guideline C: Failed to create Wildlife Management Zone {zone} layer.",
+                        f"Guideline C Wildlife zone {zone} failed: layer was not created.",
                         PLUGIN_TAG,
                         level=Qgis.Warning,
                     )
+                    failed_zones.append(zone)
                     return False
-                QgsMessageLog.logMessage(
-                    f"Guideline C: Created Wildlife Management Zone {zone} layer.",
-                    PLUGIN_TAG,
-                    level=Qgis.Success,
-                )
+                created_zones.append(zone)
                 return True
 
             def circular_ring_points(
@@ -285,10 +290,25 @@ class SimpleGuidelinesMixin:
                 GUIDELINE_C_RADIUS_C_M / 1000.0,
             ):
                 overall_success = True
+            if created_zones:
+                QgsMessageLog.logMessage(
+                    "Guideline C Wildlife: created zone layer(s) "
+                    f"{', '.join(created_zones)} from ARP "
+                    f"({arp_point.x():.3f}, {arp_point.y():.3f}).",
+                    PLUGIN_TAG,
+                    level=Qgis.Success,
+                )
+            if failed_zones:
+                QgsMessageLog.logMessage(
+                    "Guideline C Wildlife partial failure: failed zone layer(s) "
+                    f"{', '.join(failed_zones)}.",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
             return overall_success
         except Exception as e:
             QgsMessageLog.logMessage(
-                f"Error Guideline C: {e}", PLUGIN_TAG, level=Qgis.Critical
+                f"Guideline C Wildlife failed: {e}", PLUGIN_TAG, level=Qgis.Critical
             )
             return False
 

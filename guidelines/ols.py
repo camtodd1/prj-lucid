@@ -4157,10 +4157,17 @@ class OlsGuidelineMixin:
             ):
                 overall_success = True
 
+        ols_feature_counts = [
+            f"BLS={len(ofz_bls_features)}",
+            f"ITS={len(ofz_inner_trans_features)}",
+            f"Approach={len(approach_poly_features)}",
+            f"Approach contours={len(approach_contour_features)}",
+            f"TOCS={len(tocs_poly_features)}",
+            f"TOCS contours={len(tocs_contour_features)}",
+        ]
         QgsMessageLog.logMessage(
-            f"Finished Runway OLS processing for {runway_name}. Overall success for this runway: {overall_success}",
+            f"Runway OLS {runway_name}: {', '.join(ols_feature_counts)}.",
             plugin_tag,
             level=Qgis.Success if overall_success else Qgis.Warning,
         )
         return overall_success
-
