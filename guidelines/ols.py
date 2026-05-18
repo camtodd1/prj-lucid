@@ -389,7 +389,6 @@ class OlsGuidelineMixin:
                 }
                 for name, value in attr_map.items():
                     idx = fields.indexFromName(name)
-                    print(f"Assigning {name} = {value}, idx = {idx}")  # DEBUG
                     if idx != -1:
                         feature.setAttribute(idx, value)
                 layer = self._create_and_add_layer(
@@ -850,9 +849,6 @@ class OlsGuidelineMixin:
                                 attr_map["rwy_name"] = self.tr("Airport Wide")
                             for name, value in attr_map.items():
                                 idx = fields.indexFromName(name)
-                                print(
-                                    f"Assigning {name} = {value}, idx = {idx}"
-                                )  # DEBUG
                                 if idx != -1:
                                     feature.setAttribute(idx, value)
                             layer = self._create_and_add_layer(
@@ -2700,7 +2696,7 @@ class OlsGuidelineMixin:
         outward_azimuth: float,
         end_desig: str,
         threshold_elevation: Optional[float],
-    ) -> Tuple[List[QgsFeature], List[QgsFeature]]:  # <<< Changed return type
+    ) -> Tuple[List[QgsFeature], List[QgsFeature]]:
         """
         Generates a list of Approach Surface section features (polygons)
         and a list of contour line features.
@@ -2715,12 +2711,10 @@ class OlsGuidelineMixin:
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
-            return [], []  # <<< Return empty lists
+            return [], []
 
         # --- Initialize Variables ---
-        main_polygon_features: List[QgsFeature] = (
-            []
-        )  # <<< List to hold section features
+        main_polygon_features: List[QgsFeature] = []
         contour_line_features: List[QgsFeature] = []
         # calculated_total_length = 0.0 # No longer needed for overall feature
         # final_outer_width = 0.0     # No longer needed for overall feature
@@ -3011,7 +3005,7 @@ class OlsGuidelineMixin:
         return (
             main_polygon_features,
             contour_line_features,
-        )  # <<< Return list of section features
+        )
 
     def _generate_tocs(
         self,

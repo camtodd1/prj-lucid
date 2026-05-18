@@ -14,7 +14,10 @@ Runway Type Abbreviations Used:
 - 'PA_II_III': Precision Approach CAT II / III
 """
 
+import logging
 from typing import Optional, Dict, Any, Tuple, List
+
+LOGGER = logging.getLogger(__name__)
 
 # =========================================================================
 # == Constant Definitions (Basic Refs, etc. - MUST come BEFORE functions)
@@ -799,7 +802,7 @@ TAXIWAY_SEPARATION_PARAMS: Dict[Tuple[int, str, str], Dict[str, Any]] = {
     (4, "D", "NPA"): {"offset_m": 166.0, "ref": "MOS T9.1 (Verify 4D-NPA)"},
     (4, "E", "NPA"): {"offset_m": 172.5, "ref": "MOS T9.1 (Verify 4E-NPA)"},
     (4, "F", "NPA"): {"offset_m": 180.0, "ref": "MOS T9.1 (Verify 4F-NPA)"},
-    # --- Non-Instrument (NI) Runways --- <<< ADD THIS SECTION >>>
+    # --- Non-Instrument (NI) Runways ---
     # ARC Code 1
     (1, "A", "NI"): {"offset_m": 37.5, "ref": "MOS T9.1 (Verify 1A-NI)"},
     (1, "B", "NI"): {"offset_m": 42.0, "ref": "MOS T9.1 (Verify 1B-NI)"},
@@ -838,8 +841,9 @@ def get_runway_type_abbr(runway_type_str: Optional[str]) -> str:
     if abbr is None:
         # This case should ideally not happen if input comes only from the known combo box list
         # or if callers pass valid strings
-        print(
-            f"[ols_dimensions WARNING] Unknown runway type string '{runway_type_str}' could not be mapped, defaulting to NI."
+        LOGGER.warning(
+            "Unknown runway type string %r could not be mapped, defaulting to NI.",
+            runway_type_str,
         )
         return "NI"
     else:
@@ -954,7 +958,7 @@ def get_ihs_base_height() -> Optional[float]:
     try:
         return IHS_BASE_HEIGHT_AGL
     except NameError:
-        print("[ols_dimensions ERROR] IHS_BASE_HEIGHT_AGL constant is not defined.")
+        LOGGER.error("IHS_BASE_HEIGHT_AGL constant is not defined.")
         return None
 
 
@@ -966,26 +970,18 @@ def get_ols_params(
     Returns None if parameters are not found for the specific combination.
     Handles simplified runway type mapping and potential fallbacks for Approach.
     """
-    print(
-        f"[ols_dimensions DEBUG] get_ols_params received: arc_num={arc_num!r}, type_str={runway_type_str!r}, surface={surface_type!r}"
-    )
-
     if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
-        print(f"[ols_dimensions ERROR] Invalid ARC Number '{arc_num}' for OLS lookup.")
+        LOGGER.warning("Invalid ARC Number %r for OLS lookup.", arc_num)
         return None
 
     rwy_abbr = get_runway_type_abbr(runway_type_str)
     # Default key is (arc_num, rwy_abbr), used for most surfaces
     # Some surfaces like TOCS might only use arc_num.
     key_arc_type = (arc_num, rwy_abbr)
-    surface_type_upper = surface_type.upper() # Normalize surface type for comparison
-
-    print(
-        f"[ols_dimensions DEBUG] Using rwy_abbr: '{rwy_abbr}'. Key for type-dependent surfaces: {key_arc_type!r}. Surface requested: {surface_type_upper!r}"
-    )
+    surface_type_upper = surface_type.upper()
 
     params_dict: Optional[Dict] = None
-    lookup_key: Any = key_arc_type # Default lookup key
+    lookup_key: Any = key_arc_type
 
     if surface_type_upper == "APPROACH":
         params_dict = APPROACH_PARAMS
@@ -994,22 +990,18 @@ def get_ols_params(
         if not params and rwy_abbr.startswith("PA"): # If PA type not found, try NPA then NI for same ARC
             key_npa = (arc_num, "NPA")
             params = params_dict.get(key_npa)
-            print(f"[ols_dimensions DEBUG] Approach PA fallback, trying NPA key {key_npa!r}, found: {params is not None}")
             if not params:
                 key_ni = (arc_num, "NI")
                 params = params_dict.get(key_ni)
-                print(f"[ols_dimensions DEBUG] Approach NPA fallback, trying NI key {key_ni!r}, found: {params is not None}")
-        print(f"[ols_dimensions DEBUG] Approach params final: {params is not None}")
-        return params.copy() if params else None # Return immediately for Approach
+        return params.copy() if params else None
 
     elif surface_type_upper == "INNERAPPROACH":
         params_dict = INNER_APPROACH_PARAMS
         # lookup_key remains key_arc_type
 
-    elif surface_type_upper == "BAULKEDLANDING": # <<< --- ADDED THIS BLOCK ---
+    elif surface_type_upper == "BAULKEDLANDING":
         params_dict = BAULKED_LANDING_PARAMS
         # lookup_key remains key_arc_type
-        print(f"[ols_dimensions DEBUG] Attempting lookup in BAULKED_LANDING_PARAMS with key {lookup_key!r}")
 
     elif surface_type_upper == "TOCS":
         params_dict = TOCS_PARAMS
@@ -1026,7 +1018,6 @@ def get_ols_params(
     elif surface_type_upper == "OHS":
         params_dict = OHS_PARAMS
         # lookup_key remains key_arc_type
-        print(f"[ols_dimensions DEBUG] Attempting lookup in OHS_PARAMS with key {lookup_key!r}")
 
     elif surface_type_upper == "TRANSITIONAL": # Main Transitional
         params_dict = TRANSITIONAL_PARAMS
@@ -1035,25 +1026,23 @@ def get_ols_params(
     elif surface_type_upper == "INNERTRANSITIONAL": # Placeholder for specific Inner Transitional params
         params_dict = INNER_TRANSITIONAL_PARAMS # If you have specific params for it
         # lookup_key remains key_arc_type
-        print(f"[ols_dimensions DEBUG] Attempting lookup in INNER_TRANSITIONAL_PARAMS with key {lookup_key!r}")
-
 
     else:
-        print(f"[ols_dimensions ERROR] Unknown OLS surface type '{surface_type}' requested.")
+        LOGGER.warning("Unknown OLS surface type %r requested.", surface_type)
         return None
 
     # Common lookup for most types (except Approach which returned earlier)
     if params_dict is not None:
         params = params_dict.get(lookup_key)
-        print(f"[ols_dimensions DEBUG] Lookup for {surface_type_upper} with key {lookup_key!r} in {params_dict.__class__.__name__ if params_dict else 'None'}: Found params = {params is not None}")
-        if params is None and surface_type_upper == "BAULKEDLANDING": # Specific debug if BLS fails here
-             print(f"  Available keys in BAULKED_LANDING_PARAMS: {list(BAULKED_LANDING_PARAMS.keys())}")
         return params.copy() if params else None
     else:
         # This path should ideally not be reached if surface_type_upper matched a known type
         # and params_dict was assigned. Could happen if a params_dict (e.g. BAULKED_LANDING_PARAMS)
         # was not defined at the module level.
-        print(f"[ols_dimensions WARNING] params_dict is None for known surface type '{surface_type_upper}'. This indicates a missing global parameter dictionary.")
+        LOGGER.warning(
+            "Parameter dictionary is missing for known OLS surface type %r.",
+            surface_type_upper,
+        )
         return None
 
 def get_taxiway_separation_offset(
@@ -1064,7 +1053,7 @@ def get_taxiway_separation_offset(
     Returns None if parameters are not found.
     """
     if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
-        print(f"Error: Invalid ARC Number '{arc_num}' for Taxiway Sep lookup.")
+        LOGGER.warning("Invalid ARC Number %r for Taxiway Sep lookup.", arc_num)
         return None
 
     # Use most restrictive type if different ends provided (relevant if called outside loop)
@@ -1074,20 +1063,18 @@ def get_taxiway_separation_offset(
     # Handle missing ARC Letter - Default to empty string or highest possible? Check standard. Assume empty for now.
     arc_let_str = arc_let.strip().upper() if arc_let else ""
     if not arc_let_str:
-        print(
-            f"[ols_dimensions WARNING] Missing ARC Letter for Taxiway Sep lookup (Code {arc_num}, Type {rwy_abbr}). Lookup might fail if parameters require a letter."
+        LOGGER.info(
+            "Missing ARC Letter for Taxiway Sep lookup (Code %s, Type %s).",
+            arc_num,
+            rwy_abbr,
         )
 
     key = (arc_num, arc_let_str, rwy_abbr)
-    print(f"[ols_dimensions DEBUG] Using key: {key!r} for surface: TAXIWAY_SEPARATION")
 
     params = TAXIWAY_SEPARATION_PARAMS.get(key)
 
     # Basic Fallback attempt: If key with letter fails, try without letter (key = (arc_num, '', rwy_abbr))
     if not params and arc_let_str != "":
-        print(
-            f"[ols_dimensions DEBUG] Taxiway Sep lookup failed for key {key!r}. Trying without ARC Letter."
-        )
         key_no_letter = (arc_num, "", rwy_abbr)
         params = TAXIWAY_SEPARATION_PARAMS.get(key_no_letter)
 

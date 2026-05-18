@@ -18,7 +18,7 @@ DEFAULT_STYLE_MAP = {
     "Runway Overall Strips": "physical_overall_strips.qml",
     "Runway Strip Flyover Area": "default_zone_polygon.qml",
     "Runway End Safety Areas (RESA)": "physical_resa.qml",
-    "Stopways": "physical_stopway.qml",
+    "Stopways": "default_zone_polygon.qml",
     "RAOA": "default_zone_polygon.qml",
     "Taxiway Separation Line": "twy_separation_line.qml",
     "WSZ Runway": "guideline_b_wsz.qml",

@@ -915,9 +915,6 @@ class SafeguardingBuilder(
                 short_runway_name = f"{primary_desig}/{reciprocal_desig}"
                 runway_data["short_name"] = short_runway_name
 
-                # Call the helper to create the layer
-                # Pass target_crs as it might be needed by distance calcs inside helpers called by create_runway_centreline_layer
-                # ### MODIFIED: Pass arc_num_val and arc_let_val ###
                 centreline_layer = self.create_runway_centreline_layer(
                     thr_point,
                     rec_thr_point,
@@ -1135,7 +1132,6 @@ class SafeguardingBuilder(
                     run_success_flags.append(
                         self.process_raoa(runway_data, specialised_group_node)
                     )
-                    # <<< ADD CALL for Taxiway Separation >>>
                     run_success_flags.append(
                         self.process_taxiway_separation(
                             runway_data, specialised_group_node
