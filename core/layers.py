@@ -186,26 +186,6 @@ class LayerMixin:
             if style_key:
                 layer.setCustomProperty("safeguarding_style_key", style_key)
 
-            if style_key in self.style_map:
-                style_filename = self.style_map[style_key]
-                style_path = os.path.join(self.plugin_dir, "styles", style_filename)
-                if os.path.exists(style_path):
-                    try:
-                        layer.loadNamedStyle(style_path)
-                        layer.triggerRepaint()
-                    except Exception as e:
-                        QgsMessageLog.logMessage(
-                            f"Exception during loadNamedStyle for '{style_path}' on layer '{display_name}': {e}",
-                            plugin_tag,
-                            level=Qgis.Warning,
-                        )
-                else:
-                    QgsMessageLog.logMessage(
-                        f"Style file not found: '{style_path}' for key '{style_key}'",
-                        plugin_tag,
-                        Qgis.Warning,
-                    )
-
             if self.output_mode == "file":
                 if not all(
                     [
@@ -282,6 +262,7 @@ class LayerMixin:
             QgsProject.instance().addMapLayer(layer, False)
             layer_node = layer_group.addLayer(layer)
             self._stage_layer_tree_node(layer_node)
+            self._apply_style(layer, self.style_map)
             self.successfully_generated_layers.append(layer)
 
             return layer
@@ -306,6 +287,13 @@ class LayerMixin:
         qml_filename = None
         style_key = layer.customProperty("safeguarding_style_key")
         try:
+            if (
+                not style_key
+                and "Centreline" in layer_name
+                and layer_name.startswith("RWY ")
+            ):
+                style_key = "Runway Centreline"
+
             if style_key:
                 qml_filename = style_map.get(str(style_key))
             if not qml_filename:
@@ -321,9 +309,40 @@ class LayerMixin:
 
             if qml_filename:
                 qml_path = os.path.join(self.plugin_dir, "styles", qml_filename)
+                if not os.path.exists(qml_path):
+                    QgsMessageLog.logMessage(
+                        f"Style file not found: '{qml_path}' for layer '{layer_name}'",
+                        plugin_tag,
+                        level=Qgis.Warning,
+                    )
+                    return
 
                 try:
-                    layer.loadNamedStyle(qml_path)
+                    load_result = layer.loadNamedStyle(qml_path)
+                    if isinstance(load_result, tuple):
+                        result_flag = next(
+                            (
+                                item
+                                for item in load_result
+                                if isinstance(item, bool)
+                            ),
+                            True,
+                        )
+                        message = next(
+                            (
+                                item
+                                for item in load_result
+                                if isinstance(item, str) and item
+                            ),
+                            "",
+                        )
+                        if not result_flag:
+                            QgsMessageLog.logMessage(
+                                f"Failed to apply style '{qml_filename}' to '{layer_name}': {message}",
+                                plugin_tag,
+                                level=Qgis.Warning,
+                            )
+                            return
                     layer.triggerRepaint()
                 except Exception as e_load:
                     QgsMessageLog.logMessage(
