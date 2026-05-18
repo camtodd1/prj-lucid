@@ -979,65 +979,6 @@ class OlsGuidelineMixin:
 
     # --- Geometry Helper Methods ---
 
-    def _get_polygon_edges(
-        self, polygon_geom: QgsGeometry
-    ) -> List[Optional[QgsLineString]]:
-        """Extracts exterior ring segments from a single polygon geometry."""
-        if not polygon_geom or polygon_geom.isNull() or not polygon_geom.isGeosValid():
-            return []
-        if not polygon_geom.wkbType() in [Qgis.WkbType.Polygon, Qgis.WkbType.PolygonZ]:
-            # Handle multipart potentially? For now, assume simple polygon input after makeValid
-            return []
-
-        try:
-            poly = polygon_geom.constGet()  # Get QgsPolygon base object
-            if not poly:
-                return []
-            exterior = poly.exteriorRing()
-            if (
-                not exterior
-                or exterior.isEmpty()
-                or not exterior.isGeosValid()
-                or not exterior.isClosed()
-            ):
-                return []
-
-            edges = []
-            points = list(exterior.vertices())
-            if len(points) < 4:
-                return (
-                    []
-                )  # Need at least 3 unique points + closing point for a triangle
-
-            for i in range(len(points) - 1):
-                p1 = points[i]
-                p2 = points[i + 1]
-                epsilon = 1e-6
-                if abs(p1.x() - p2.x()) > epsilon or abs(p1.y() - p2.y()) > epsilon:
-                    try:
-                        line = QgsLineString(
-                            [QgsPointXY(p1.x(), p1.y()), QgsPointXY(p2.x(), p2.y())]
-                        )
-                        if line and not line.isEmpty():
-                            edges.append(line)
-                        else:
-                            edges.append(None)
-                    except Exception as e_line:
-                        QgsMessageLog.logMessage(
-                            f"Error creating edge line: {e_line}",
-                            PLUGIN_TAG,
-                            level=Qgis.Warning,
-                        )
-                        edges.append(None)
-                else:
-                    edges.append(None)  # Skip zero-length segments (based on XY)
-            return edges
-        except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Error in _get_polygon_edges: {e}", PLUGIN_TAG, level=Qgis.Critical
-            )
-            return []
-
     def _get_elevation_at_point_along_gradient(
         self,
         point_xy: QgsPointXY,  # Input is QgsPointXY
@@ -1277,69 +1218,6 @@ class OlsGuidelineMixin:
         p2_strip_3d = QgsPoint(strip_p2_xy.x(), strip_p2_xy.y(), z2_strip)
 
         return p1_strip_3d, p2_strip_3d
-
-    def _clip_3d_segment_to_elevation(
-        self, p1: QgsPoint, p2: QgsPoint, clip_elevation: float
-    ) -> Optional[Tuple[QgsPoint, QgsPoint]]:
-        """
-        Clips a 3D line segment (defined by QgsPoint with Z) against a horizontal plane.
-        Returns the portion of the segment below or at the clip_elevation.
-        Assumes p1 and p2 have valid Z values.
-        Returns None if the entire segment is above the clip elevation.
-        """
-        if not all([p1, p2]):
-            return None
-        z1, z2 = p1.z(), p2.z()
-        if z1 is None or z2 is None:
-            return None  # Need Z values
-
-        # --- FIX: Replace compare for QgsPoint ---
-        epsilon = 1e-6
-        # Check if points are effectively the same
-        if (
-            abs(p1.x() - p2.x()) < epsilon
-            and abs(p1.y() - p2.y()) < epsilon
-            and abs(z1 - z2) < epsilon
-        ):
-            # If the single point is below, return it twice, otherwise None
-            return (p1, p1) if z1 <= clip_elevation + epsilon else None
-        # --- END FIX ---
-
-        # Case 1: Both points are at or below the clipping plane
-        if z1 <= clip_elevation + epsilon and z2 <= clip_elevation + epsilon:
-            return p1, p2
-
-        # Case 2: Both points are above the clipping plane
-        if z1 > clip_elevation + epsilon and z2 > clip_elevation + epsilon:
-            return None
-
-        # Case 3: One point above, one point below/at -> Calculate intersection
-        # Ensure p1 is the point below/at the plane
-        if z1 > clip_elevation:
-            p1, p2 = p2, p1  # Swap points
-            z1, z2 = p2.z(), p1.z()  # Swap elevations
-
-        # Calculate interpolation factor (t) where elevation equals clip_elevation
-        delta_z = z2 - z1
-        if (
-            abs(delta_z) < epsilon
-        ):  # Points are effectively at same Z but one passed check? Should be caught by Case 1/2. Return original below point(s).
-            # Should only happen if z1 is approximately clip_elevation
-            return p1, p1  # Segment is horizontal at clip_elevation
-
-        t = (clip_elevation - z1) / delta_z
-        # Clamp t just in case of floating point issues near 0 or 1
-        t = max(0.0, min(t, 1.0))
-
-        # Calculate intersection point coordinates
-        x_intersect = p1.x() + t * (p2.x() - p1.x())
-        y_intersect = p1.y() + t * (p2.y() - p1.y())
-        z_intersect = clip_elevation  # By definition
-
-        p_intersect = QgsPoint(x_intersect, y_intersect, z_intersect)
-
-        # Return the segment from the original lower point (p1) to the intersection point
-        return p1, p_intersect
 
     def _generate_inner_transitional_surface(
         self,
@@ -2486,21 +2364,6 @@ class OlsGuidelineMixin:
                 ),
             ]
         )
-
-    def get_exterior_ring_as_linestring(geom: QgsGeometry) -> Optional[QgsGeometry]:
-        """
-        Returns the exterior ring as a LineString geometry (QgsGeometry) from a polygon or multipolygon.
-        Returns None if not possible.
-        """
-        # Try asPolygon (single polygon)
-        poly = geom.asPolygon()
-        if poly and len(poly) > 0 and len(poly[0]) > 1:
-            return QgsGeometry.fromPolylineXY(poly[0])
-        # Try asMultiPolygon (multi-polygon)
-        multi = geom.asMultiPolygon()
-        if multi and len(multi) > 0 and len(multi[0]) > 0 and len(multi[0][0]) > 1:
-            return QgsGeometry.fromPolylineXY(multi[0][0])
-        return None
 
     def _get_ols_fields(self, surface_type: str) -> QgsFields:
         """Returns the QgsFields definition for a given OLS surface type."""

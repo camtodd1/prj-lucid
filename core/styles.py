@@ -48,6 +48,6 @@ DEFAULT_STYLE_MAP = {
     "Default CNS": "default_cns_zone_polygon.qml",
     "PSA Runway": "guideline_i_psa.qml",
     "Default Polygon": "default_zone_polygon.qml",
-    "Default Line": "default_line.qml",
+    "Default Line": "default_ols_line.qml",
     "Default Point": "default_point.qml",
 }

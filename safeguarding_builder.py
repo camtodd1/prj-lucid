@@ -982,29 +982,6 @@ class SafeguardingBuilder(
                 self._stage_layer_tree_node(grp)
         return guideline_groups
 
-    def _interpolate_along_edge(self, edge_pts, target_elev):
-        """
-        Interpolates along an edge (list of (QgsPointXY, elev)) to find XY at target elevation.
-        Returns QgsPointXY or None if out of range.
-        """
-        for i in range(len(edge_pts) - 1):
-            elev1, elev2 = edge_pts[i][1], edge_pts[i + 1][1]
-            if (elev1 - target_elev) * (elev2 - target_elev) <= 0:
-                # target_elev is between elev1 and elev2, or equal to one
-                t = (
-                    (target_elev - elev1) / (elev2 - elev1)
-                    if abs(elev2 - elev1) > 1e-9
-                    else 0
-                )
-                x = edge_pts[i][0].x() + t * (
-                    edge_pts[i + 1][0].x() - edge_pts[i][0].x()
-                )
-                y = edge_pts[i][0].y() + t * (
-                    edge_pts[i + 1][0].y() - edge_pts[i][0].y()
-                )
-                return QgsPointXY(x, y)
-        return None
-
     def _ensure_valid_geometry(
         self, geom: Optional[QgsGeometry], description: str
     ) -> Optional[QgsGeometry]:
