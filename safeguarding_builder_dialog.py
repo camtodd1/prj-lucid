@@ -787,11 +787,9 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                 level=Qgis.Critical,
             )
             # Disable functionality or show error to user if critical
-            if hasattr(
-                self, "pushButton_generateSurfaces"
-            ):  # Assuming your main generate button
-                self.pushButton_generateSurfaces.setEnabled(False)
-                self.pushButton_generateSurfaces.setToolTip(
+            if hasattr(self, "pushButton_Generate"):
+                self.pushButton_Generate.setEnabled(False)
+                self.pushButton_Generate.setToolTip(
                     "Output options UI is misconfigured."
                 )
             return
@@ -883,6 +881,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             ("lineEdit_arp_elevation", numeric_validator),
             ("lineEdit_met_easting", coord_validator),
             ("lineEdit_met_northing", coord_validator),
+            ("lineEdit_met_elevation", numeric_validator),
         ]
         tooltips = {
             "lineEdit_arp_easting": "Airport Reference Point (ARP) Easting Coordinate",
@@ -890,6 +889,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             "lineEdit_arp_elevation": "Airport Reference Point (ARP) Elevation (AMSL)",
             "lineEdit_met_easting": "MET Station Easting Coordinate (Optional)",
             "lineEdit_met_northing": "MET Station Northing Coordinate (Optional)",
+            "lineEdit_met_elevation": "MET Station Elevation (AMSL, Optional)",
         }
         placeholders = {
             "lineEdit_arp_easting": "e.g., 455000.00",
@@ -897,6 +897,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             "lineEdit_arp_elevation": "e.g., 150.0",
             "lineEdit_met_easting": "e.g., 455100.00",
             "lineEdit_met_northing": "e.g., 5772100.00",
+            "lineEdit_met_elevation": "e.g., 150.0",
         }
         for name, validator in widgets_to_validate:
             widget = getattr(self, name, self.findChild(QtWidgets.QLineEdit, name))
@@ -978,6 +979,23 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         cns_table.setHorizontalHeaderLabels(
             ["Facility Type", "Easting/X", "Northing/Y", "Elev (AMSL)"]
         )
+        cns_table.setAlternatingRowColors(True)
+        cns_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        cns_table.setSelectionMode(
+            QAbstractItemView.SelectionMode.ExtendedSelection
+        )
+        cns_table.setEditTriggers(
+            QAbstractItemView.EditTrigger.DoubleClicked
+            | QAbstractItemView.EditTrigger.EditKeyPressed
+            | QAbstractItemView.EditTrigger.AnyKeyPressed
+        )
+        header = cns_table.horizontalHeader()
+        if header:
+            header.setStretchLastSection(False)
+            header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         add_button.clicked.connect(self.add_cns_row)
         remove_button.clicked.connect(self.remove_cns_rows)
         add_button.setToolTip("Add a new row to enter a CNS facility manually.")
