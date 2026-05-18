@@ -183,6 +183,9 @@ class LayerMixin:
                 return None
             layer.updateExtents()
 
+            if style_key:
+                layer.setCustomProperty("safeguarding_style_key", style_key)
+
             if style_key in self.style_map:
                 style_filename = self.style_map[style_key]
                 style_path = os.path.join(self.plugin_dir, "styles", style_filename)
