@@ -27,6 +27,7 @@ from qgis.core import (  # type: ignore
     QgsPolygon,
     QgsPoint,
     QgsLayerTreeGroup,
+    QgsLayerTreeLayer,
     QgsLayerTreeNode,
     QgsMessageLog,
     Qgis,
@@ -1157,6 +1158,136 @@ class SafeguardingBuilder(
                 )
         return any_guideline_processed_ok
 
+    def _count_layer_tree_contents(
+        self, node: QgsLayerTreeNode
+    ) -> Tuple[int, int, List[str]]:
+        """Count valid layers/features below a layer tree node and collect empty layer names."""
+        layer_count = 0
+        feature_count = 0
+        empty_layers: List[str] = []
+
+        if isinstance(node, QgsLayerTreeLayer):
+            layer = node.layer()
+            if layer is None or not layer.isValid():
+                empty_layers.append(node.name())
+                return 0, 0, empty_layers
+            layer_count = 1
+            try:
+                feature_count = max(0, int(layer.featureCount()))
+            except Exception:
+                feature_count = 0
+            if feature_count == 0:
+                empty_layers.append(layer.name())
+            return layer_count, feature_count, empty_layers
+
+        if isinstance(node, QgsLayerTreeGroup):
+            for child in node.children():
+                child_layers, child_features, child_empty = (
+                    self._count_layer_tree_contents(child)
+                )
+                layer_count += child_layers
+                feature_count += child_features
+                empty_layers.extend(child_empty)
+
+        return layer_count, feature_count, empty_layers
+
+    def _empty_group_reason(self, group_name: str, met_ok: bool) -> str:
+        """Return a concise explanation for expected empty top-level groups."""
+        if group_name.startswith(self.tr("Guideline A:")):
+            return "placeholder only; no surface construction logic implemented"
+        if group_name.startswith(self.tr("Guideline B:")):
+            return "no windshear layers generated; check runway inputs and preceding warnings"
+        if group_name.startswith(self.tr("Guideline C:")):
+            return "ARP missing or wildlife zone generation failed; check preceding Wildlife warnings"
+        if group_name.startswith(self.tr("Guideline D:")):
+            return "ARP missing or wind turbine zone generation failed"
+        if group_name.startswith(self.tr("Guideline E:")):
+            return "no lighting layers generated; check runway inputs and preceding warnings"
+        if group_name.startswith(self.tr("Guideline F:")):
+            return "no airspace/OLS layers generated; check runway, approach, and RED inputs"
+        if group_name.startswith(self.tr("Guideline G:")):
+            return "no CNS layers generated, or CNS input was not provided"
+        if group_name.startswith(self.tr("Guideline H:")):
+            return "placeholder only; no surface construction logic implemented"
+        if group_name.startswith(self.tr("Guideline I:")):
+            return "no public safety area layers generated; check runway inputs and preceding warnings"
+        if group_name == self.tr("Physical Geometry"):
+            return "no physical geometry generated; check runway dimensions and coordinates"
+        if group_name == self.tr("Runway Protection Areas"):
+            return "no protection areas generated; check runway inputs and preceding warnings"
+        if group_name == self.tr("Specialised Safeguarding"):
+            return "no specialised safeguarding layers generated; check runway inputs and preceding warnings"
+        if group_name == self.tr("Meteorological Instrument Station") and not met_ok:
+            return "MET coordinates not provided"
+        return "no populated layers generated; check preceding warnings for skipped prerequisites"
+
+    def _build_layer_tree_summary(
+        self,
+        main_group: Optional[QgsLayerTreeGroup],
+        met_ok: bool,
+    ) -> Tuple[List[str], List[str], int, int]:
+        """Summarise actual generated layer tree contents for final logging."""
+        if main_group is None:
+            return [], ["Main group missing"], 0, 0
+
+        populated: List[str] = []
+        empty: List[str] = []
+        total_layers = 0
+        total_features = 0
+
+        direct_layer_count = 0
+        direct_feature_count = 0
+        direct_empty_layers: List[str] = []
+
+        for child in main_group.children():
+            child_layers, child_features, child_empty = self._count_layer_tree_contents(
+                child
+            )
+            total_layers += child_layers
+            total_features += child_features
+
+            if isinstance(child, QgsLayerTreeLayer):
+                direct_layer_count += child_layers
+                direct_feature_count += child_features
+                direct_empty_layers.extend(child_empty)
+                continue
+
+            if isinstance(child, QgsLayerTreeGroup):
+                group_name = child.name()
+                if child_layers > 0 and child_features > 0:
+                    populated.append(
+                        f"{group_name}: {child_layers} layer(s), {child_features} feature(s)"
+                    )
+                    if child_empty:
+                        empty.append(
+                            f"{group_name}: empty layer(s) {', '.join(child_empty)} (0 features)"
+                        )
+                elif child_layers > 0:
+                    empty.append(
+                        f"{group_name}: {child_layers} empty layer(s) ({', '.join(child_empty)})"
+                    )
+                else:
+                    empty.append(f"{group_name}: {self._empty_group_reason(group_name, met_ok)}")
+
+        if direct_layer_count:
+            if direct_feature_count:
+                populated.insert(
+                    0,
+                    f"Top-level layers: {direct_layer_count} layer(s), {direct_feature_count} feature(s)",
+                )
+                if direct_empty_layers:
+                    empty.insert(
+                        0,
+                        f"Top-level layers: empty layer(s) {', '.join(direct_empty_layers)} (0 features)",
+                    )
+            else:
+                empty.insert(
+                    0,
+                    f"Top-level layers: {direct_layer_count} empty layer(s) ({', '.join(direct_empty_layers)})",
+                )
+
+        return populated, empty, total_layers, total_features
+
     def _final_feedback(
         self,
         main_group: Optional[QgsLayerTreeGroup],
@@ -1190,37 +1321,19 @@ class SafeguardingBuilder(
         anything_successfully_generated = bool(self.successfully_generated_layers)
 
         if anything_successfully_generated:
-            num_layers_created = len(self.successfully_generated_layers)
-            generated_categories = []
-            skipped_categories = []
-
-            if arp_ok:
-                generated_categories.append("ARP")
-            else:
-                skipped_categories.append("ARP")
-
-            if met_ok:
-                generated_categories.append("MET")
-            else:
-                skipped_categories.append("MET")
-
-            if physical_protection_ok:
-                generated_categories.append("physical/protection")
-
-            if guide_c_ok:
-                generated_categories.append("Guideline C Wildlife")
-            else:
-                skipped_categories.append("Guideline C Wildlife")
-
-            if guide_d_ok:
-                generated_categories.append("Guideline D Wind Turbine")
-
-            if guide_g_ok:
-                generated_categories.append("Guideline G CNS")
-
-            if guide_rwy_ok:
-                generated_categories.append("runway guidelines/OLS")
-
+            (
+                populated_summaries,
+                empty_summaries,
+                tree_layer_count,
+                tree_feature_count,
+            ) = self._build_layer_tree_summary(main_group, met_ok)
+            num_layers_created = tree_layer_count or len(self.successfully_generated_layers)
+            if not met_ok:
+                empty_summaries.append(
+                    "Meteorological Instrument Station: MET coordinates not provided; group not created"
+                )
+            if not arp_ok:
+                empty_summaries.append("ARP: ARP coordinates not provided; layer not created")
             runway_summary = (
                 f"runways={processed_rwy_count}/{total_runways_in_input}"
                 if total_runways_in_input
@@ -1236,18 +1349,25 @@ class SafeguardingBuilder(
 
             final_user_message = (
                 f"Processing complete for {icao_code}. "
-                f"{num_layers_created} layer(s) generated; {output_summary}."
+                f"{num_layers_created} layer(s), {tree_feature_count} feature(s); {output_summary}."
             )
             final_log_message = (
-                f"Complete: ICAO={icao_code}, layers={num_layers_created}, "
-                f"{runway_summary}, generated={', '.join(generated_categories) or 'none'}, "
-                f"skipped={', '.join(skipped_categories) or 'none'}, output={output_summary}."
+                f"Complete: {icao_code} - {num_layers_created} layer(s), "
+                f"{tree_feature_count} feature(s), {runway_summary}, {output_summary}."
             )
 
             self.iface.messageBar().pushMessage(
                 self.tr("Success"), final_user_message, level=Qgis.Success, duration=10
             )  # Increased duration
             self._log_success(final_log_message, notify_user=True)
+            if populated_summaries:
+                self._log(
+                    "Generated groups:\n- " + "\n- ".join(populated_summaries)
+                )
+            if empty_summaries:
+                self._log(
+                    "Not generated:\n- " + "\n- ".join(empty_summaries)
+                )
 
             if (
                 main_group is not None
