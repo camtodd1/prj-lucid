@@ -95,7 +95,7 @@ class SafeguardingBuilderDialog(
             scroll_content_widget = scroll_area.widget()
             if scroll_content_widget:
                 layout = scroll_content_widget.layout()
-                if not layout:
+                if layout is None:
                     layout = QtWidgets.QVBoxLayout(scroll_content_widget)
                     scroll_content_widget.setLayout(layout)
                 if isinstance(layout, QtWidgets.QVBoxLayout):
@@ -123,7 +123,7 @@ class SafeguardingBuilderDialog(
         add_runway_button = self.findChild(
             QtWidgets.QPushButton, "pushButton_add_runway"
         )
-        if not self.scroll_area_layout:
+        if self.scroll_area_layout is None:
             QgsMessageLog.logMessage(
                 "Critical: Scroll area layout unavailable.",
                 DIALOG_LOG_TAG,
@@ -161,7 +161,7 @@ class SafeguardingBuilderDialog(
 
         self._setup_output_options_ui_connections()
 
-        if self.scroll_area_layout:
+        if self.scroll_area_layout is not None:
             self.add_runway_group()  # Add the first group
         else:
             QgsMessageLog.logMessage(
@@ -238,7 +238,7 @@ class SafeguardingBuilderDialog(
                 level=Qgis.Warning,
             )
 
-        if add_runway_button and self.scroll_area_layout:
+        if add_runway_button and self.scroll_area_layout is not None:
             add_runway_button.clicked.connect(self.add_runway_group)
         elif not add_runway_button:
             QgsMessageLog.logMessage(
@@ -246,7 +246,7 @@ class SafeguardingBuilderDialog(
                 DIALOG_LOG_TAG,
                 level=Qgis.Warning,
             )
-        elif not self.scroll_area_layout:
+        elif self.scroll_area_layout is None:
             QgsMessageLog.logMessage(
                 "Warning: 'pushButton_add_runway' not connected (layout missing).",
                 DIALOG_LOG_TAG,
@@ -427,7 +427,7 @@ class SafeguardingBuilderDialog(
 
     def add_runway_group(self):
         """Creates and adds a new RunwayWidgetGroup instance."""
-        if not self.scroll_area_layout:
+        if self.scroll_area_layout is None:
             QMessageBox.critical(self, "Layout Error", "Scroll area layout missing.")
             return
 
@@ -504,7 +504,7 @@ class SafeguardingBuilderDialog(
     def _remove_runway_group_internal(self, runway_index: int):
         """Internal helper to remove a group without user confirmation."""
         group_to_remove = self._runway_groups.pop(runway_index, None)
-        if group_to_remove and self.scroll_area_layout:
+        if group_to_remove and self.scroll_area_layout is not None:
             group_to_remove.hide()
             self.scroll_area_layout.removeWidget(group_to_remove)
             group_to_remove.deleteLater()
@@ -515,7 +515,7 @@ class SafeguardingBuilderDialog(
                 DIALOG_LOG_TAG,
                 level=Qgis.Warning,
             )
-        elif not self.scroll_area_layout:
+        elif self.scroll_area_layout is None:
             QgsMessageLog.logMessage(
                 f"Internal removal Critical: Layout missing, cannot remove widget {runway_index}.",
                 DIALOG_LOG_TAG,

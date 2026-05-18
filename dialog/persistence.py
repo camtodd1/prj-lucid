@@ -53,7 +53,7 @@ class PersistenceMixin:
         self._runway_groups.clear()
         self._runway_id_counter = 0
 
-        if self.scroll_area_layout:
+        if self.scroll_area_layout is not None:
             self.add_runway_group()
         else:
             QgsMessageLog.logMessage(
