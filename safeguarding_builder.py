@@ -6498,7 +6498,7 @@ class SafeguardingBuilder:
                     [
                         runway_name,
                         "Windshear Assessment Zone",
-                        primary_desig,
+                        reciprocal_desig,
                         "NASF Guideline B",
                     ]
                 )
@@ -8838,7 +8838,9 @@ class SafeguardingBuilder:
                     )
                     if not surface_geom:
                         continue
-                    height_rule = surface_spec.get("heightrule", "TBD")
+                    height_rule = surface_spec.get(
+                        "HeightRule", surface_spec.get("heightrule", "TBD")
+                    )
                     height_value = surface_spec.get("HeightValue")
                     req_height = self._calculate_cns_height(
                         facility_elev,
@@ -9413,6 +9415,19 @@ class SafeguardingBuilder:
         features_to_add: List[QgsFeature] = []
         geom_ok = True
         surface_description = f"Minimum Taxiway Separation {runway_name}"
+        attr_runway_name = runway_name if runway_name and runway_name.strip() else "N/A"
+        attr_surface_description = (
+            surface_description if surface_description.strip() else "N/A"
+        )
+        attr_mos_ref = MOS_REF_TAXIWAY_SEPARATION
+        attr_app_type = (
+            governing_type_str
+            if governing_type_str and governing_type_str.strip()
+            else "N/A"
+        )
+        attr_arc_num_str = str(arc_num)
+        attr_arc_let = arc_let if arc_let and arc_let.strip() else "N/A"
+
         # Left Line
         try:
             pt_start_l = line_start_cl.project(offset_m, rwy_params["azimuth_perp_l"])
@@ -9423,27 +9438,6 @@ class SafeguardingBuilder:
                     fields = self._get_taxiway_separation_fields()
                     feat_l = QgsFeature(fields)
                     feat_l.setGeometry(geom_l)
-
-                    # Defensively prepare variables for attr_map
-                    attr_runway_name = (
-                        runway_name if runway_name and runway_name.strip() else "N/A"
-                    )
-                    attr_surface_description = (
-                        surface_description
-                        if surface_description and surface_description.strip()
-                        else "N/A"
-                    )
-                    # offset_m is confirmed to be a valid float by prior checks
-                    attr_mos_ref = (
-                        MOS_REF_TAXIWAY_SEPARATION  # This is a module-level constant
-                    )
-                    attr_app_type = (
-                        governing_type_str
-                        if governing_type_str and governing_type_str.strip()
-                        else "N/A"
-                    )
-                    attr_arc_num_str = str(arc_num)  # arc_num is an int, str() is safe
-                    attr_arc_let = arc_let if arc_let and arc_let.strip() else "N/A"
 
                     attr_map = {
                         "rwy": attr_runway_name,
