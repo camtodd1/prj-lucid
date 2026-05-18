@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Smaller NASF guideline processors extracted from the main plugin class."""
 
+import math
 import traceback
 from typing import Any, List, Optional
 
@@ -164,7 +165,7 @@ class SimpleGuidelinesMixin:
                 r_in: float,
                 r_out: float,
             ) -> bool:
-                if not geom:
+                if not geom or geom.isEmpty():
                     return False
                 display_name = f"{self.tr('WMZ')} {zone} ({r_in:.0f}-{r_out:.0f}km)"
                 internal_name = f"WMZ_{zone}_{icao_code}"
@@ -201,49 +202,43 @@ class SimpleGuidelinesMixin:
                 )
                 return layer is not None
 
-            geom_a = arp_geom.buffer(
-                GUIDELINE_C_RADIUS_A_M, GUIDELINE_C_BUFFER_SEGMENTS
+            def circular_ring_points(
+                radius_m: float, clockwise: bool = False
+            ) -> List[QgsPointXY]:
+                segment_count = max(8, GUIDELINE_C_BUFFER_SEGMENTS)
+                angle_step = 2.0 * math.pi / segment_count
+                points = []
+                for i in range(segment_count):
+                    angle = i * angle_step
+                    if clockwise:
+                        angle = -angle
+                    points.append(
+                        QgsPointXY(
+                            arp_point.x() + radius_m * math.cos(angle),
+                            arp_point.y() + radius_m * math.sin(angle),
+                        )
+                    )
+                points.append(QgsPointXY(points[0].x(), points[0].y()))
+                return points
+
+            def create_wzm_geometry(
+                outer_radius_m: float, inner_radius_m: Optional[float] = None
+            ) -> Optional[QgsGeometry]:
+                rings = [circular_ring_points(outer_radius_m)]
+                if inner_radius_m is not None and inner_radius_m > 0:
+                    rings.append(circular_ring_points(inner_radius_m, clockwise=True))
+                geom = QgsGeometry.fromPolygonXY(rings)
+                if geom is None or geom.isEmpty():
+                    return None
+                return geom.makeValid() if not geom.isGeosValid() else geom
+
+            geom_a = create_wzm_geometry(GUIDELINE_C_RADIUS_A_M)
+            geom_b = create_wzm_geometry(
+                GUIDELINE_C_RADIUS_B_M, GUIDELINE_C_RADIUS_A_M
             )
-            geom_a = (
-                geom_a.makeValid() if geom_a and not geom_a.isGeosValid() else geom_a
+            geom_c = create_wzm_geometry(
+                GUIDELINE_C_RADIUS_C_M, GUIDELINE_C_RADIUS_B_M
             )
-            geom_b_full = arp_geom.buffer(
-                GUIDELINE_C_RADIUS_B_M, GUIDELINE_C_BUFFER_SEGMENTS
-            )
-            geom_b_full = (
-                geom_b_full.makeValid()
-                if geom_b_full and not geom_b_full.isGeosValid()
-                else geom_b_full
-            )
-            geom_c_full = arp_geom.buffer(
-                GUIDELINE_C_RADIUS_C_M, GUIDELINE_C_BUFFER_SEGMENTS
-            )
-            geom_c_full = (
-                geom_c_full.makeValid()
-                if geom_c_full and not geom_c_full.isGeosValid()
-                else geom_c_full
-            )
-            geom_b = None
-            geom_c = None
-            if geom_b_full:
-                geom_b = geom_b_full.difference(geom_a) if geom_a else geom_b_full
-                geom_b = (
-                    geom_b.makeValid()
-                    if geom_b and not geom_b.isGeosValid()
-                    else geom_b
-                )
-            if geom_c_full:
-                geom_for_diff = geom_b_full if geom_b_full else geom_a
-                geom_c = (
-                    geom_c_full.difference(geom_for_diff)
-                    if geom_for_diff
-                    else geom_c_full
-                )
-                geom_c = (
-                    geom_c.makeValid()
-                    if geom_c and not geom_c.isGeosValid()
-                    else geom_c
-                )
 
             if create_wzm_layer(
                 "A",

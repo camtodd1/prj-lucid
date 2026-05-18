@@ -745,6 +745,12 @@ class SafeguardingBuilder(
             guideline_c_processed = self.process_guideline_c(
                 arp_point, icao_code, target_crs, guideline_groups["C"]
             )
+        elif not arp_point and guideline_groups.get("C") is not None:
+            QgsMessageLog.logMessage(
+                "Guideline C (Wildlife) skipped: ARP point not available.",
+                plugin_tag,
+                level=Qgis.Info,
+            )
 
         if arp_point and guideline_groups.get("D") is not None:
             guideline_d_processed = self.process_guideline_d(
