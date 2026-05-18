@@ -85,8 +85,16 @@ generation logic is split into smaller modules:
 safeguarding_builder.py          Plugin lifecycle, orchestration, common
                                  geometry helpers, ARP/runway layers, MET
                                  surfaces, and Guideline E logic.
-safeguarding_builder_dialog.py   QGIS dialog, user inputs, dynamic runway/CNS
-                                 controls, save/load behaviour, and validation.
+safeguarding_builder_dialog.py   QGIS dialog orchestration, global inputs,
+                                 runway calculations, and validation.
+dialog/runway_group.py           Dynamic runway input group widget.
+dialog/cns_table.py              CNS facility table setup, row handling, and
+                                 CNS input validation.
+dialog/output_options.py         Memory/file output option setup and state.
+dialog/persistence.py            Clear, save, and load behaviour for dialog
+                                 input JSON.
+dialog/constants.py              Shared dialog labels, placeholders, logging
+                                 tag, and output format definitions.
 core/layers.py                   Layer creation, feature writing, output file
                                  handling, grouping, and style application.
 core/styles.py                   Mapping between layer style keys and QML files.
@@ -109,7 +117,7 @@ resources.qrc                    Qt resource manifest.
 After editing Python modules, run a syntax check from the plugin directory:
 
 ```bash
-python3 -m py_compile safeguarding_builder.py core/styles.py surfaces/physical.py guidelines/ols.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/constants.py safeguarding_builder_dialog.py cns_dimensions.py ols_dimensions.py
+python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/constants.py cns_dimensions.py ols_dimensions.py
 ```
 
 When adding new guideline logic, prefer placing it in the relevant
