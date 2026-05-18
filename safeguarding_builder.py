@@ -1250,18 +1250,18 @@ class SafeguardingBuilder:
                                     any_layer_successfully_processed_in_this_block = (
                                         True
                                     )
-                        #     else:
-                        #         QgsMessageLog.logMessage(
-                        #             f"Skipping final processing for '{temp_memory_layer.name()}': No features were present in its temporary layer.",
-                        #             plugin_tag,
-                        #             level=Qgis.Info,
-                        #         )
-                        # else:
-                        #     QgsMessageLog.logMessage(
-                        #         f"Skipping final processing for element_type '{element_type}': Its temporary memory layer was None or invalid.",
-                        #         plugin_tag,
-                        #         Qgis.Warning,
-                        #     )
+                            else:
+                                QgsMessageLog.logMessage(
+                                    f"Skipping final processing for '{temp_memory_layer.name()}': No features were present in its temporary layer.",
+                                    plugin_tag,
+                                    level=Qgis.Info,
+                                )
+                        else:
+                            QgsMessageLog.logMessage(
+                                f"Skipping final processing for element_type '{element_type}': Its temporary memory layer was None or invalid.",
+                                plugin_tag,
+                                Qgis.Warning,
+                            )
 
                     if (
                         not any_layer_successfully_processed_in_this_block
@@ -3910,11 +3910,11 @@ class SafeguardingBuilder:
 
         # --- 1. Generate Individual Strip Outline Geometries ---
         strip_outline_geoms: List[QgsGeometry] = []
-        # QgsMessageLog.logMessage(
-        #     "Generating individual runway strip outlines for IHS base...",
-        #     plugin_tag,
-        #     level=Qgis.Info,
-        # )
+        QgsMessageLog.logMessage(
+            "Generating individual runway strip outlines for IHS base...",
+            plugin_tag,
+            level=Qgis.Info,
+        )
 
         if not processed_runway_data_list:
             QgsMessageLog.logMessage(
@@ -4407,11 +4407,11 @@ class SafeguardingBuilder:
                     feat.setAttribute(fields.indexFromName("contour_hgt_abv"), 0)
                     feat.setAttribute(fields.indexFromName("ref_mos"), ref)
                     contour_features.append(feat)
-                    # QgsMessageLog.logMessage(
-                    #     f"Conical start contour at {IHS_ELEVATION_AMSL:.2f}m AMSL.",
-                    #     plugin_tag,
-                    #     Qgis.Info,
-                    # )
+                    QgsMessageLog.logMessage(
+                        f"Conical start contour at {IHS_ELEVATION_AMSL:.2f}m AMSL.",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
                 else:
                     QgsMessageLog.logMessage(
                         "Failed to extract exterior ring for IHS base.",
@@ -4505,11 +4505,11 @@ class SafeguardingBuilder:
                         )
                         feat.setAttribute(fields.indexFromName("ref_mos"), ref)
                         contour_features.append(feat)
-                        # QgsMessageLog.logMessage(
-                        #     f"Conical end contour at {conical_outer_elevation:.2f}m AMSL.",
-                        #     plugin_tag,
-                        #     Qgis.Info,
-                        # )
+                        QgsMessageLog.logMessage(
+                            f"Conical end contour at {conical_outer_elevation:.2f}m AMSL.",
+                            plugin_tag,
+                            Qgis.Info,
+                        )
                 else:
                     QgsMessageLog.logMessage(
                         "Failed to extract exterior ring for conical outer edge.",
@@ -4791,11 +4791,11 @@ class SafeguardingBuilder:
                         )
                         if poly_layer:
                             overall_success = True
-                            # QgsMessageLog.logMessage(
-                            #     f"Created Transitional Polygon Layer: {poly_layer.name()} ({len(transitional_features)} features)",
-                            #     PLUGIN_TAG,
-                            #     level=Qgis.Info,
-                            # )
+                            QgsMessageLog.logMessage(
+                                f"Created Transitional Polygon Layer: {poly_layer.name()} ({len(transitional_features)} features)",
+                                PLUGIN_TAG,
+                                level=Qgis.Info,
+                            )
 
                     # --- Create Transitional Contour Line Layer ---
                     if transitional_contour_features:
@@ -4811,11 +4811,11 @@ class SafeguardingBuilder:
                         )
                         if contour_layer:
                             overall_success = True
-                            # QgsMessageLog.logMessage(
-                            #     f"Created Transitional Contour Layer: {contour_layer.name()} ({len(transitional_contour_features)} features)",
-                            #     PLUGIN_TAG,
-                            #     level=Qgis.Info,
-                            # )
+                            QgsMessageLog.logMessage(
+                                f"Created Transitional Contour Layer: {contour_layer.name()} ({len(transitional_contour_features)} features)",
+                                PLUGIN_TAG,
+                                level=Qgis.Info,
+                            )
                     else:
                         QgsMessageLog.logMessage(
                             f"No Transitional Contour features created for {icao_code}.",
@@ -5062,6 +5062,11 @@ class SafeguardingBuilder:
         surface_centerline_az = centerline_start_pt_xy.azimuth(centerline_end_pt_xy)
         if centerline_start_pt_xy.compare(centerline_end_pt_xy, 1e-3):
             surface_centerline_az = 0
+            QgsMessageLog.logMessage(
+                f"DEBUG _poly_side: CL start/end same for {side_label}, using az 0.",
+                plugin_tag,
+                Qgis.Info,
+            )
 
         perp_az: float
         # This is the version that worked for your IA panels:
@@ -5073,13 +5078,36 @@ class SafeguardingBuilder:
                 surface_centerline_az - 90.0 + 360.0
             ) % 360.0  # Your "effective Right"
         else:
+            QgsMessageLog.logMessage(
+                f"DEBUG _poly_side: Invalid side_label '{side_label}'.",
+                plugin_tag,
+                Qgis.Warning,
+            )
             return None
+
+        QgsMessageLog.logMessage(
+            f"DEBUG _poly_side ({side_label}): surface_centerline_az={surface_centerline_az:.2f}, calculated_perp_az={perp_az:.2f}",
+            plugin_tag,
+            Qgis.Info,
+        )  # DEBUG LOG
 
         p_inner_side_xy = centerline_start_pt_xy.project(start_half_width, perp_az)
         p_outer_side_xy = centerline_end_pt_xy.project(end_half_width, perp_az)
 
         if not p_inner_side_xy or not p_outer_side_xy:
+            QgsMessageLog.logMessage(
+                f"DEBUG _poly_side ({side_label}): Failed to project side points.",
+                plugin_tag,
+                Qgis.Warning,
+            )
             return None
+
+        # Log the calculated side points
+        QgsMessageLog.logMessage(
+            f"DEBUG _poly_side ({side_label}): p_inner_side_xy={p_inner_side_xy.asWkt()}, p_outer_side_xy={p_outer_side_xy.asWkt()}",
+            plugin_tag,
+            Qgis.Info,
+        )  # DEBUG LOG
 
         p_inner_3d = QgsPoint(
             p_inner_side_xy.x(), p_inner_side_xy.y(), start_elevation_amsl
@@ -5284,6 +5312,11 @@ class SafeguardingBuilder:
     ) -> Optional[Tuple[QgsFeature, QgsGeometry, float, float, QgsPointXY, float]]:
         plugin_tag = PLUGIN_TAG
         runway_name = runway_data.get("short_name", "N/A")
+        QgsMessageLog.logMessage(
+            f"DEBUG BLS Helper Entered: End {end_desig}, Params: {bls_param_dict}, IHS: {IHS_ELEVATION_AMSL}",
+            plugin_tag,
+            Qgis.Info,
+        )
 
         width = bls_param_dict.get("width")
         start_dist_from_thr = bls_param_dict.get("start_dist_from_thr")
@@ -5343,6 +5376,11 @@ class SafeguardingBuilder:
             runway_data.get("thr_elev_2"),
             QgsProject.instance().crs(),
         )
+        QgsMessageLog.logMessage(
+            f"DEBUG BLS Helper: {end_desig} inner_edge_elev_amsl: {inner_edge_elev_amsl}",
+            plugin_tag,
+            Qgis.Info,
+        )
         if inner_edge_elev_amsl is None:
             QgsMessageLog.logMessage(
                 f"DEBUG BLS Helper: {end_desig} returning None, inner_edge_elev_amsl is None.",
@@ -5353,12 +5391,32 @@ class SafeguardingBuilder:
 
         height_to_gain = IHS_ELEVATION_AMSL - inner_edge_elev_amsl
         calculated_length: float
+        QgsMessageLog.logMessage(
+            f"DEBUG BLS Helper: {end_desig} height_to_gain: {height_to_gain}, slope: {slope}",
+            plugin_tag,
+            Qgis.Info,
+        )
         if height_to_gain <= 0:
             calculated_length = 0.0
+            QgsMessageLog.logMessage(
+                f"DEBUG BLS Helper: {end_desig} starts at/above IHS. Length is 0.",
+                plugin_tag,
+                Qgis.Info,
+            )
         elif slope <= 1e-9:  # Using a small epsilon for float comparison
+            QgsMessageLog.logMessage(
+                f"DEBUG BLS Helper: {end_desig} returning None, slope is effectively zero ({slope}) and BLS starts below IHS.",
+                plugin_tag,
+                Qgis.Warning,
+            )
             return None
         else:
             calculated_length = height_to_gain / slope
+        QgsMessageLog.logMessage(
+            f"DEBUG BLS Helper: {end_desig} calculated_length: {calculated_length}",
+            plugin_tag,
+            Qgis.Info,
+        )
 
         if (
             calculated_length < -1e-9
@@ -5385,6 +5443,13 @@ class SafeguardingBuilder:
             half_width_inner,
             half_width_outer,
             f"Baulked Landing {end_desig}",
+        )
+        # The _create_trapezoid helper should handle zero length appropriately (e.g., return None or a line/point)
+        # We need to check its output.
+        QgsMessageLog.logMessage(
+            f"DEBUG BLS Helper: {end_desig} bls_geom created. Is valid: {bls_geom is not None and not bls_geom.isEmpty() and bls_geom.isGeosValid()}",
+            plugin_tag,
+            Qgis.Info,
         )
 
         if not bls_geom or bls_geom.isEmpty() or not bls_geom.isGeosValid():
@@ -5432,6 +5497,13 @@ class SafeguardingBuilder:
             if idx != -1:
                 feature.setAttribute(idx, value)
 
+        QgsMessageLog.logMessage(
+            f"DEBUG BLS Helper: {end_desig} successfully created feature.",
+            plugin_tag,
+            Qgis.Info,
+        )
+
+        # --- THE CRUCIAL RETURN STATEMENT ---
         return (
             feature,
             bls_geom,
@@ -8147,6 +8219,11 @@ class SafeguardingBuilder:
 
         for config in runway_end_configurations:
             current_desig = config["current_desig"]
+            QgsMessageLog.logMessage(
+                f"Processing OLS for {runway_name} - End {current_desig}",
+                plugin_tag,
+                Qgis.Info,
+            )
 
             ia_geom_for_its: Optional[QgsGeometry] = None
             ia_cl_start_xy: Optional[QgsPointXY] = None
@@ -8257,10 +8334,20 @@ class SafeguardingBuilder:
 
             # --- Baulked Landing ---
             try:
+                QgsMessageLog.logMessage(
+                    f"DEBUG BaulkedLanding: Attempting for {current_desig}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
                 bls_params_dict = ols_dimensions.get_ols_params(
                     arc_num, config["approach_type_str"], "BaulkedLanding"
                 )
                 if bls_params_dict and IHS_ELEVATION_AMSL is not None:
+                    QgsMessageLog.logMessage(
+                        f"  DEBUG BLS Pre-Call for '{current_desig}': Origin THR: {config['baulked_landing_origin_thr_pt'].asWkt() if config['baulked_landing_origin_thr_pt'] else 'None'}, Azimuth: {config['baulked_landing_flight_path_azimuth']}",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
                     bls_result_tuple = self._generate_baulked_landing_surface(
                         runway_data,
                         rwy_params,
@@ -8269,6 +8356,11 @@ class SafeguardingBuilder:
                         bls_params_dict,
                         current_desig,
                         IHS_ELEVATION_AMSL,
+                    )
+                    QgsMessageLog.logMessage(
+                        f"DEBUG BLS {current_desig}: Helper result: {bls_result_tuple is not None}",
+                        plugin_tag,
+                        Qgis.Info,
                     )
                     if bls_result_tuple:
                         feat_bls, bls_g, bls_l, bls_se, bls_cl_s_xy, bls_ew = (
@@ -8310,6 +8402,11 @@ class SafeguardingBuilder:
                         plugin_tag,
                         Qgis.Warning,
                     )
+                QgsMessageLog.logMessage(
+                    f"DEBUG BaulkedLanding: Completed for {current_desig}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
             except Exception as e_bls:
                 QgsMessageLog.logMessage(
                     f"ERROR generating Baulked Landing for {current_desig}: {e_bls}\n{traceback.format_exc()}",
@@ -8362,6 +8459,11 @@ class SafeguardingBuilder:
                             ("L", outward_az_L_ITS_projection),
                             ("R", outward_az_R_ITS_projection),
                         ]:
+                            QgsMessageLog.logMessage(
+                                f"Generating ITS for {current_desig} - ITS Panel Side '{side_label_its_panel}'",
+                                plugin_tag,
+                                Qgis.Info,
+                            )
 
                             P_IA_inner_3d_side, P_IA_outer_3d_side = None, None
                             P_BLS_inner_3d_side, P_BLS_outer_3d_side = None, None
@@ -8544,6 +8646,11 @@ class SafeguardingBuilder:
 
             # --- Main Approach ---
             try:
+                QgsMessageLog.logMessage(
+                    f"DEBUG MainApproach: Attempting for {current_desig}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
                 app_sections, app_contours = self._generate_approach_surface(
                     runway_data,
                     rwy_params,
@@ -8558,6 +8665,11 @@ class SafeguardingBuilder:
                     approach_poly_features.extend(app_sections)
                 if app_contours:
                     approach_contour_features.extend(app_contours)
+                QgsMessageLog.logMessage(
+                    f"DEBUG MainApproach: Completed for {current_desig}. Sections: {len(app_sections)}, Contours: {len(app_contours)}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
             except Exception as e_app:
                 QgsMessageLog.logMessage(
                     f"ERROR generating Main Approach for {current_desig}: {e_app}\n{traceback.format_exc()}",
@@ -8567,6 +8679,9 @@ class SafeguardingBuilder:
 
             # --- Take-off Climb Surface (TOCS) ---
             try:
+                QgsMessageLog.logMessage(
+                    f"DEBUG TOCS: Attempting for {current_desig}", plugin_tag, Qgis.Info
+                )
                 tocs_plane_origin_pt = config["tocs_departure_pavement_end_pt"]
                 tocs_params_for_offset = ols_dimensions.get_ols_params(
                     arc_num, None, "TOCS"
@@ -8605,6 +8720,11 @@ class SafeguardingBuilder:
                     tocs_actual_start_elevation is not None
                     and tocs_plane_origin_pt is not None
                 ):
+                    QgsMessageLog.logMessage(
+                        f"  DEBUG TOCS for '{current_desig}': Plane Origin Pt: {tocs_plane_origin_pt.asWkt()}, Actual Start Elev: {tocs_actual_start_elevation:.2f}",
+                        plugin_tag,
+                        Qgis.Info,
+                    )
                     tocs_feat, tocs_conts = self._generate_tocs(
                         runway_data,
                         rwy_params,
@@ -8627,6 +8747,11 @@ class SafeguardingBuilder:
                         plugin_tag,
                         Qgis.Warning,
                     )
+                QgsMessageLog.logMessage(
+                    f"DEBUG TOCS: Completed for {current_desig}. Feature generated: {feat_tocs_local is not None}",
+                    plugin_tag,
+                    Qgis.Info,
+                )
             except Exception as e_tocs:
                 QgsMessageLog.logMessage(
                     f"ERROR generating TOCS for {current_desig}: {e_tocs}\n{traceback.format_exc()}",
@@ -8637,9 +8762,9 @@ class SafeguardingBuilder:
         # --- END OF LOOP for runway_end_configurations ---
 
         QgsMessageLog.logMessage(
-            f"Finished Runway OFZ processing for {runway_name}. Total BLS features: {len(ofz_bls_features)}, Total ITS features: {len(ofz_inner_trans_features)}",
+            f"DEBUG ProcessGuidelineF: Finished processing LOOP for runway {runway_name}. Total BLS features: {len(ofz_bls_features)}, Total ITS features: {len(ofz_inner_trans_features)}",
             plugin_tag,
-            Qgis.Success,
+            Qgis.Info,
         )
 
         # --- Layer Creation ---
@@ -8711,7 +8836,12 @@ class SafeguardingBuilder:
 
         if ofz_bls_features:
             fields = self._get_ols_fields("BaulkedLanding")
-            descriptive_style_key = "OLS Baulked Landing"
+            descriptive_style_key = "OLS Baulked Landing"  # Use the descriptive key
+            QgsMessageLog.logMessage(
+                f"DEBUG BLS Layer Creation: Attempting layer for {runway_name} with {len(ofz_bls_features)} features. Group: {target_ofz_group.name()}",
+                plugin_tag,
+                Qgis.Info,
+            )
             bls_layer = self._create_and_add_layer(
                 "Polygon",
                 f"OLS_BaulkedLanding_{runway_name.replace('/', '_')}",
@@ -8719,10 +8849,15 @@ class SafeguardingBuilder:
                 fields,
                 ofz_bls_features,
                 target_ofz_group,
-                descriptive_style_key,
+                descriptive_style_key,  # Pass the descriptive key
             )
             if bls_layer:
                 overall_success = True
+                QgsMessageLog.logMessage(
+                    f"DEBUG BLS Layer Creation: Layer '{bls_layer.name()}' created for {runway_name}.",
+                    plugin_tag,
+                    Qgis.Success,
+                )
             else:
                 QgsMessageLog.logMessage(
                     f"DEBUG BLS Layer Creation: _create_and_add_layer FAILED for BLS {runway_name}.",
@@ -8739,7 +8874,7 @@ class SafeguardingBuilder:
         # Approach Sections Layer
         if approach_poly_features:
             fields = self._get_ols_fields("Approach")
-            descriptive_style_key = "OLS Approach"
+            descriptive_style_key = "OLS Approach"  # Use the descriptive key
             if self._create_and_add_layer(
                 "Polygon",
                 f"OLS_Approach_{runway_name.replace('/', '_')}",
@@ -8747,14 +8882,14 @@ class SafeguardingBuilder:
                 fields,
                 approach_poly_features,
                 layer_group,  # Main Approach usually goes in the general OLS group
-                descriptive_style_key,
+                descriptive_style_key,  # Pass the descriptive key
             ):
                 overall_success = True
 
         # Approach Contours Layer
         if approach_contour_features:
             fields = self._get_approach_contour_fields()
-            descriptive_style_key = "OLS Approach Contour"
+            descriptive_style_key = "OLS Approach Contour"  # Use the descriptive key
             if self._create_and_add_layer(
                 "LineString",
                 f"OLS_ApproachContours_{runway_name.replace('/', '_')}",
@@ -8762,14 +8897,14 @@ class SafeguardingBuilder:
                 fields,
                 approach_contour_features,
                 layer_group,
-                descriptive_style_key,
+                descriptive_style_key,  # Pass the descriptive key
             ):
                 overall_success = True
 
         # TOCS Polygons Layer
         if tocs_poly_features:
             fields = self._get_ols_fields("TOCS")
-            descriptive_style_key = "OLS TOCS"
+            descriptive_style_key = "OLS TOCS"  # Use the descriptive key
             if self._create_and_add_layer(
                 "Polygon",
                 f"OLS_TOCS_{runway_name.replace('/', '_')}",
@@ -8777,14 +8912,14 @@ class SafeguardingBuilder:
                 fields,
                 tocs_poly_features,
                 layer_group,
-                descriptive_style_key,
+                descriptive_style_key,  # Pass the descriptive key
             ):
                 overall_success = True
 
         # TOCS Contours Layer
         if tocs_contour_features:
             fields = self._get_tocs_contour_fields()
-            descriptive_style_key = "OLS TOCS Contour"
+            descriptive_style_key = "OLS TOCS Contour"  # Use the descriptive key
             if self._create_and_add_layer(
                 "LineString",
                 f"OLS_TOCS_Contours_{runway_name.replace('/', '_')}",
@@ -8792,7 +8927,7 @@ class SafeguardingBuilder:
                 fields,
                 tocs_contour_features,
                 layer_group,
-                descriptive_style_key,
+                descriptive_style_key,  # Pass the descriptive key
             ):
                 overall_success = True
 
@@ -8934,10 +9069,9 @@ class SafeguardingBuilder:
                     )
 
         if overall_success:
-            # QgsMessageLog.logMessage(
-            #     f"Guideline G: Finished processing CNS.", PLUGIN_TAG, level=Qgis.Info
-            # )
-            pass
+            QgsMessageLog.logMessage(
+                f"Guideline G: Finished processing CNS.", PLUGIN_TAG, level=Qgis.Info
+            )
         else:
             QgsMessageLog.logMessage(
                 "Guideline G: No CNS layers generated or added.",
