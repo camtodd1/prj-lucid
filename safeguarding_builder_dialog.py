@@ -806,15 +806,17 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         self.radioMemoryOutput.setChecked(True)
         # self.radioFileOutput.setChecked(False) # Implicitly false if Memory is true
 
-        # Configure QgsFileWidget. Qt6/PyQt6 is stricter about enum arguments,
-        # so avoid passing the old integer value for SaveFile.
+        # Output is written as one file per layer, so the widget should collect
+        # an output directory rather than a single output filename.
         file_widget_cls = type(self.fileWidgetOutputPath)
-        save_file_mode = getattr(
+        directory_mode = getattr(
             getattr(file_widget_cls, "StorageMode", file_widget_cls),
-            "SaveFile",
+            "GetDirectory",
             1,
         )
-        self.fileWidgetOutputPath.setStorageMode(save_file_mode)
+        self.fileWidgetOutputPath.setStorageMode(directory_mode)
+        if hasattr(self.fileWidgetOutputPath, "setDialogTitle"):
+            self.fileWidgetOutputPath.setDialogTitle(self.tr("Select Output Directory"))
         self._update_file_widget_filter()  # Set initial filter
 
         # Connect signals
@@ -1446,7 +1448,15 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             return None
 
         # --- Global Inputs ---
-        icao, arp_pt, arp_e, arp_n, arp_elev, met_pt = self._get_global_inputs()
+        (
+            icao,
+            arp_pt,
+            arp_e,
+            arp_n,
+            arp_elev,
+            met_pt,
+            met_elev,
+        ) = self._get_global_inputs()
         if icao is None:  # Critical failure
             return None
 
@@ -1458,6 +1468,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                 "arp_northing": arp_n,
                 "arp_elevation": arp_elev,
                 "met_point": met_pt,
+                "met_elevation": met_elev,
             }
         )
 
@@ -1515,45 +1526,28 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             raw_path_from_widget = self.fileWidgetOutputPath.filePath().strip()
             selected_format_name = self.comboOutputFormat.currentText()
 
-            output_path = ""  # Initialize output_path to ensure it's always defined
-
             if not raw_path_from_widget:
-                # This case is handled by the 'if not output_path:' check later
-                pass  # output_path remains ""
+                output_path = ""
             elif os.path.isdir(raw_path_from_widget):
                 output_path = raw_path_from_widget
             elif os.path.isfile(raw_path_from_widget):
                 output_path = os.path.dirname(raw_path_from_widget)
                 QgsMessageLog.logMessage(
-                    f"Output path ('{raw_path_from_widget}') was a file; using its directory: '{output_path}'.",
+                    f"Output path '{raw_path_from_widget}' was a file; using '{output_path}'.",
                     DIALOG_LOG_TAG,
                     Qgis.Info,
                 )
             else:
-                # Path doesn't exist as a file or directory.
-                # Try to see if its dirname is an existing directory (e.g., user typed /existing_dir/new_dir_name)
-                potential_dir = os.path.dirname(raw_path_from_widget)
-                if os.path.exists(potential_dir) and os.path.isdir(potential_dir):
-                    output_path = potential_dir
-                    QgsMessageLog.logMessage(
-                        f"Output path ('{raw_path_from_widget}') was not existing file/dir; using its parent: '{output_path}'.",
-                        DIALOG_LOG_TAG,
-                        Qgis.Info,
-                    )
-                else:
-                    # Assume raw_path_from_widget is the intended directory if QgsFileWidget in directory mode returned it.
-                    # The backend's os.path.isdir() will be the final check.
-                    output_path = raw_path_from_widget
-                    QgsMessageLog.logMessage(
-                        f"Output path ('{raw_path_from_widget}') is being treated as a directory. Backend will verify.",
-                        DIALOG_LOG_TAG,
-                        Qgis.Info,
-                    )
+                output_path = raw_path_from_widget
 
-            # Now validate the derived/raw output_path and selected_format_name
             if not output_path:
                 validation_ok = False
-                error_messages.append("Output directory path is required.")
+                error_messages.append("Output directory is required.")
+            elif not os.path.isdir(output_path):
+                validation_ok = False
+                error_messages.append(
+                    f"Output directory does not exist: {output_path}"
+                )
             elif selected_format_name not in OUTPUT_FORMATS:
                 validation_ok = False
                 error_messages.append(
@@ -1780,6 +1774,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         Optional[float],
         Optional[float],
         Optional[QgsPointXY],
+        Optional[float],
     ]:
         """Retrieves and validates ICAO, ARP coords, and MET coords."""
         icao_code: Optional[str] = None
@@ -1788,6 +1783,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         arp_north: Optional[float] = None
         arp_elev: Optional[float] = None
         met_point_proj_crs: Optional[QgsPointXY] = None
+        met_elev: Optional[float] = None
 
         try:
             icao_lineEdit = getattr(
@@ -1820,6 +1816,11 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                 "lineEdit_met_northing",
                 self.findChild(QtWidgets.QLineEdit, "lineEdit_met_northing"),
             )
+            met_elev_lineEdit = getattr(
+                self,
+                "lineEdit_met_elevation",
+                self.findChild(QtWidgets.QLineEdit, "lineEdit_met_elevation"),
+            )
 
             if not icao_lineEdit:
                 raise RuntimeError("UI Error: Cannot find 'lineEdit_airport_name'.")
@@ -1830,7 +1831,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                     self.tr("Input Error"),
                     self.tr("Airport ICAO Code is required."),
                 )
-                return None, None, None, None, None, None
+                return None, None, None, None, None, None, None
             icao_code = icao_code_str
 
             # ARP (Optional Coords, Optional Elev)
@@ -1887,6 +1888,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                             None,
                             None,
                             None,
+                            None,
                         )  # Abort data gathering
 
             # MET Station (Optional)
@@ -1918,6 +1920,19 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                     )
                     met_point_proj_crs = None
 
+            if met_elev_lineEdit:
+                met_elev_str = met_elev_lineEdit.text().strip()
+                if met_elev_str:
+                    try:
+                        met_elev = float(met_elev_str)
+                    except ValueError:
+                        QMessageBox.critical(
+                            self,
+                            self.tr("Input Error"),
+                            self.tr("Invalid MET Elevation format. Must be a number."),
+                        )
+                        return None, None, None, None, None, None, None
+
         except (AttributeError, RuntimeError, Exception) as e:
             QgsMessageLog.logMessage(
                 f"Error getting global inputs: {e}", DIALOG_LOG_TAG, level=Qgis.Critical
@@ -1927,9 +1942,17 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                 self.tr("Internal Error"),
                 self.tr("Error retrieving global inputs. See QGIS log."),
             )
-            return None, None, None, None, None, None
+            return None, None, None, None, None, None, None
 
-        return icao_code, arp_point, arp_east, arp_north, arp_elev, met_point_proj_crs
+        return (
+            icao_code,
+            arp_point,
+            arp_east,
+            arp_north,
+            arp_elev,
+            met_point_proj_crs,
+            met_elev,
+        )
 
     def _get_cns_manual_data(self) -> Optional[List[Dict[str, Any]]]:
         """Reads and validates CNS facility data from the manual entry table."""
@@ -2098,6 +2121,7 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             "lineEdit_arp_elevation",
             "lineEdit_met_easting",
             "lineEdit_met_northing",
+            "lineEdit_met_elevation",
         ]:
             widget = getattr(self, name, self.findChild(QtWidgets.QLineEdit, name))
             if widget:
@@ -2119,6 +2143,15 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                 level=Qgis.Warning,
             )
 
+        if hasattr(self, "radioMemoryOutput"):
+            self.radioMemoryOutput.setChecked(True)
+        if hasattr(self, "fileWidgetOutputPath"):
+            self.fileWidgetOutputPath.setFilePath("")
+        if hasattr(self, "comboOutputFormat") and DEFAULT_OUTPUT_FORMAT in OUTPUT_FORMATS:
+            self.comboOutputFormat.setCurrentText(DEFAULT_OUTPUT_FORMAT)
+        if hasattr(self, "checkBox_dissolveLayers"):
+            self.checkBox_dissolveLayers.setChecked(False)
+        self._on_output_option_changed()
         self._update_dialog_height()
 
     def save_input_data(self):
@@ -2171,12 +2204,18 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             "lineEdit_met_northing",
             self.findChild(QtWidgets.QLineEdit, "lineEdit_met_northing"),
         )
+        met_elev_le = getattr(
+            self,
+            "lineEdit_met_elevation",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_met_elevation"),
+        )
         data_to_save["icao_code"] = icao_code
         data_to_save["arp_easting"] = arp_east_le.text() if arp_east_le else ""
         data_to_save["arp_northing"] = arp_north_le.text() if arp_north_le else ""
         data_to_save["arp_elevation"] = arp_elev_le.text() if arp_elev_le else ""
         data_to_save["met_easting"] = met_east_le.text() if met_east_le else ""
         data_to_save["met_northing"] = met_north_le.text() if met_north_le else ""
+        data_to_save["met_elevation"] = met_elev_le.text() if met_elev_le else ""
 
         # Uses the updated get_input_data which includes pre_area fields
         data_to_save["runways"] = [
@@ -2222,6 +2261,15 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                         level=Qgis.Warning,
                     )
         data_to_save["cns_facilities"] = cns_list
+        output_mode = "file" if self.radioFileOutput.isChecked() else "memory"
+        data_to_save["output_options"] = {
+            "mode": output_mode,
+            "path": self.fileWidgetOutputPath.filePath().strip(),
+            "format": self.comboOutputFormat.currentText(),
+            "dissolve": self.checkBox_dissolveLayers.isChecked()
+            if hasattr(self, "checkBox_dissolveLayers")
+            else False,
+        }
 
         try:
             with open(file_path, "w", encoding="utf-8") as f:
@@ -2246,14 +2294,20 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
             for name in [
                 "lineEdit_airport_name",
                 "lineEdit_arp_easting",
+                "lineEdit_arp_northing",
                 "lineEdit_arp_elevation",
                 "lineEdit_met_easting",
+                "lineEdit_met_northing",
+                "lineEdit_met_elevation",
             ]
         ]
         if any(w and w.text() for w in global_widgets if w):
             has_data = True
         if not has_data and self._runway_groups:
-            has_data = True
+            has_data = any(
+                any(str(value).strip() for value in group.get_input_data().values())
+                for group in self._runway_groups.values()
+            )
         cns_table = getattr(
             self,
             "table_cns_facility",
@@ -2261,9 +2315,38 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
         )
         if not has_data and cns_table and cns_table.rowCount() > 0:
             has_data = True
-        # if has_data:
-        #     reply = QtWidgets.QMessageBox.question(self, self.tr('Confirm Load'), self.tr("This will clear current inputs and load data from the selected file. Continue?"), QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No, QtWidgets.QMessageBox.StandardButton.No)
-        #     if reply == QtWidgets.QMessageBox.StandardButton.No: return
+        if (
+            not has_data
+            and hasattr(self, "radioFileOutput")
+            and self.radioFileOutput.isChecked()
+        ):
+            has_data = True
+        if (
+            not has_data
+            and hasattr(self, "fileWidgetOutputPath")
+            and self.fileWidgetOutputPath.filePath().strip()
+        ):
+            has_data = True
+        if (
+            not has_data
+            and hasattr(self, "checkBox_dissolveLayers")
+            and self.checkBox_dissolveLayers.isChecked()
+        ):
+            has_data = True
+
+        if has_data:
+            reply = QtWidgets.QMessageBox.question(
+                self,
+                self.tr("Confirm Load"),
+                self.tr(
+                    "This will clear current inputs and load data from the selected file. Continue?"
+                ),
+                QtWidgets.QMessageBox.StandardButton.Yes
+                | QtWidgets.QMessageBox.StandardButton.No,
+                QtWidgets.QMessageBox.StandardButton.No,
+            )
+            if reply == QtWidgets.QMessageBox.StandardButton.No:
+                return
 
         file_path, _ = QFileDialog.getOpenFileName(
             self, self.tr("Load Inputs"), "", self.tr("JSON Files (*.json)")
@@ -2322,6 +2405,11 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                 "lineEdit_met_northing",
                 self.findChild(QtWidgets.QLineEdit, "lineEdit_met_northing"),
             )
+            met_elev_le = getattr(
+                self,
+                "lineEdit_met_elevation",
+                self.findChild(QtWidgets.QLineEdit, "lineEdit_met_elevation"),
+            )
             if icao_le:
                 icao_le.setText(loaded_data.get("icao_code", ""))
             if arp_east_le:
@@ -2334,6 +2422,8 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                 met_east_le.setText(loaded_data.get("met_easting", ""))
             if met_north_le:
                 met_north_le.setText(loaded_data.get("met_northing", ""))
+            if met_elev_le:
+                met_elev_le.setText(loaded_data.get("met_elevation", ""))
 
             loaded_runways_list = loaded_data.get("runways", [])
             if loaded_runways_list:
@@ -2432,6 +2522,33 @@ class SafeguardingBuilderDialog(QtWidgets.QDialog, FORM_CLASS):
                             DIALOG_LOG_TAG,
                             level=Qgis.Warning,
                         )
+
+            output_options = loaded_data.get("output_options", {})
+            if isinstance(output_options, dict):
+                output_mode = output_options.get("mode", "memory")
+                if output_mode == "file" and hasattr(self, "radioFileOutput"):
+                    self.radioFileOutput.setChecked(True)
+                elif hasattr(self, "radioMemoryOutput"):
+                    self.radioMemoryOutput.setChecked(True)
+
+                output_format = output_options.get("format", DEFAULT_OUTPUT_FORMAT)
+                if hasattr(self, "comboOutputFormat"):
+                    idx = self.comboOutputFormat.findText(
+                        output_format, QtCore.Qt.MatchFlag.MatchFixedString
+                    )
+                    self.comboOutputFormat.setCurrentIndex(idx if idx >= 0 else 0)
+
+                output_path = output_options.get("path", "")
+                if output_path and os.path.isfile(output_path):
+                    output_path = os.path.dirname(output_path)
+                if hasattr(self, "fileWidgetOutputPath"):
+                    self.fileWidgetOutputPath.setFilePath(output_path)
+
+                if hasattr(self, "checkBox_dissolveLayers"):
+                    self.checkBox_dissolveLayers.setChecked(
+                        bool(output_options.get("dissolve", False))
+                    )
+                self._on_output_option_changed()
 
             self._update_dialog_height()
             # QMessageBox.information(self, self.tr("Load Successful"), self.tr("Input data loaded from:\n{path}").format(path=file_path))

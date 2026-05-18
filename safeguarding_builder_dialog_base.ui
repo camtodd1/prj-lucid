@@ -383,7 +383,7 @@
           <item>
            <widget class="QRadioButton" name="radioFileOutput">
             <property name="text">
-             <string>Output to Permanent File</string>
+             <string>Output to Permanent Files</string>
             </property>
            </widget>
           </item>
@@ -406,14 +406,14 @@
           <item>
            <widget class="QLabel" name="label_outputPath">
             <property name="text">
-             <string>Output file path</string>
+             <string>Output directory</string>
             </property>
            </widget>
           </item>
           <item>
            <widget class="QgsFileWidget" name="fileWidgetOutputPath">
             <property name="storageMode">
-             <enum>QgsFileWidget::SaveFile</enum>
+             <enum>QgsFileWidget::GetDirectory</enum>
             </property>
            </widget>
           </item>
