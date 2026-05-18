@@ -92,6 +92,7 @@ class SafeguardingBuilder(
         self.output_format_driver: Optional[str] = None
         self.output_format_extension: Optional[str] = None
         self.dissolve_output: bool = False
+        self.debug_logging: bool = False
 
         self._init_locale()
 
@@ -153,6 +154,10 @@ class SafeguardingBuilder(
 
     def _log_critical(self, message: str, notify_user: bool = True):
         self._log(message, Qgis.Critical, notify_user)
+
+    def _log_debug(self, message: str):
+        if self.debug_logging:
+            self._log(message, Qgis.Info, notify_user=False)
 
     def _crs_is_geographic(self, crs: QgsCoordinateReferenceSystem) -> bool:
         """Return True when a CRS uses angular units and is unsuitable for metre buffers."""

@@ -1315,20 +1315,14 @@ class OlsGuidelineMixin:
             )  # Should not be None if type hint is enforced
 
         if missing_params_list:
-            QgsMessageLog.logMessage(
-                f"DEBUG BLS Helper: {end_desig} returning None, missing essential inputs: {', '.join(missing_params_list)}",
-                plugin_tag,
-                Qgis.Warning,
+            self._log_debug(
+                f"BLS {end_desig} skipped: missing inputs {', '.join(missing_params_list)}."
             )
             return None
 
         inner_edge_center_pt = thr_point.project(start_dist_from_thr, outward_azimuth)
         if not inner_edge_center_pt:
-            QgsMessageLog.logMessage(
-                f"DEBUG BLS Helper: {end_desig} returning None, failed inner_edge_center_pt calc.",
-                plugin_tag,
-                Qgis.Warning,
-            )
+            self._log_debug(f"BLS {end_desig} skipped: failed to calculate inner edge centre.")
             return None
 
         required_rwy_keys = ["thr_point", "rec_thr_point", "thr_elev_1", "thr_elev_2"]
@@ -1336,10 +1330,8 @@ class OlsGuidelineMixin:
             key in runway_data and runway_data[key] is not None
             for key in required_rwy_keys
         ):
-            QgsMessageLog.logMessage(
-                f"DEBUG BLS Helper: {end_desig} returning None, runway_data missing keys for elevation calc: { {k: runway_data.get(k) for k in required_rwy_keys} }",
-                plugin_tag,
-                Qgis.Warning,
+            self._log_debug(
+                f"BLS {end_desig} skipped: runway data missing keys for elevation calculation."
             )
             return None
 
@@ -1352,11 +1344,7 @@ class OlsGuidelineMixin:
             QgsProject.instance().crs(),
         )
         if inner_edge_elev_amsl is None:
-            QgsMessageLog.logMessage(
-                f"DEBUG BLS Helper: {end_desig} returning None, inner_edge_elev_amsl is None.",
-                plugin_tag,
-                Qgis.Warning,
-            )
+            self._log_debug(f"BLS {end_desig} skipped: inner edge elevation unavailable.")
             return None
 
         height_to_gain = IHS_ELEVATION_AMSL - inner_edge_elev_amsl
@@ -1371,10 +1359,8 @@ class OlsGuidelineMixin:
         if (
             calculated_length < -1e-9
         ):  # Allow for very small negative due to float precision if height_to_gain is near zero
-            QgsMessageLog.logMessage(
-                f"DEBUG BLS Helper: {end_desig} returning None, invalid (negative) calculated_length: {calculated_length}.",
-                plugin_tag,
-                Qgis.Warning,
+            self._log_debug(
+                f"BLS {end_desig} skipped: negative calculated length {calculated_length:.3f} m."
             )
             return None
 
@@ -1400,17 +1386,9 @@ class OlsGuidelineMixin:
             # Decide if this is an error or if a degenerate (e.g., line) feature should be made.
             # For now, if it's not a valid polygon, we return None.
             if calculated_length <= 1e-9:  # If length was effectively zero
-                QgsMessageLog.logMessage(
-                    f"DEBUG BLS Helper: {end_desig} has zero length. No polygon geometry created by _create_trapezoid. Returning None.",
-                    plugin_tag,
-                    Qgis.Info,
-                )
+                self._log_debug(f"BLS {end_desig} skipped: calculated length is zero.")
             else:
-                QgsMessageLog.logMessage(
-                    f"DEBUG BLS Helper: {end_desig} returning None, invalid bls_geom from _create_trapezoid.",
-                    plugin_tag,
-                    Qgis.Warning,
-                )
+                self._log_debug(f"BLS {end_desig} skipped: generated polygon is invalid.")
             return None
 
         # --- Feature Creation ---
@@ -3504,29 +3482,13 @@ class OlsGuidelineMixin:
                         if feat_bls:
                             ofz_bls_features.append(feat_bls)
                         else:
-                            QgsMessageLog.logMessage(
-                                f"DEBUG BLS {current_desig}: Feature from helper was None.",
-                                plugin_tag,
-                                Qgis.Warning,
-                            )
+                            self._log_debug(f"BLS {current_desig} skipped: helper returned no feature.")
                     else:
-                        QgsMessageLog.logMessage(
-                            f"DEBUG BLS {current_desig}: Helper returned None overall.",
-                            plugin_tag,
-                            Qgis.Warning,
-                        )
+                        self._log_debug(f"BLS {current_desig} skipped: helper returned no result.")
                 elif not bls_params_dict:
-                    QgsMessageLog.logMessage(
-                        f"DEBUG BaulkedLanding: Skipped {current_desig}: No params.",
-                        plugin_tag,
-                        Qgis.Info,
-                    )
+                    self._log_debug(f"BLS {current_desig} skipped: no baulked landing parameters.")
                 elif IHS_ELEVATION_AMSL is None:
-                    QgsMessageLog.logMessage(
-                        f"DEBUG BaulkedLanding: Skipped {current_desig}: IHS_ELEVATION_AMSL is None.",
-                        plugin_tag,
-                        Qgis.Warning,
-                    )
+                    self._log_debug(f"BLS {current_desig} skipped: IHS elevation unavailable.")
             except Exception as e_bls:
                 QgsMessageLog.logMessage(
                     f"ERROR generating Baulked Landing for {current_desig}: {e_bls}\n{traceback.format_exc()}",
@@ -3557,10 +3519,8 @@ class OlsGuidelineMixin:
                                 "graded_width"
                             )
                         else:
-                            QgsMessageLog.logMessage(
-                                f"DEBUG ITS {current_desig}: Using default strip width {graded_strip_total_width}m.",
-                                plugin_tag,
-                                Qgis.Info,
+                            self._log_debug(
+                                f"ITS {current_desig}: using default strip width {graded_strip_total_width} m."
                             )
                         graded_strip_half_width = graded_strip_total_width / 2.0
 
@@ -3839,10 +3799,8 @@ class OlsGuidelineMixin:
                     if tocs_conts:
                         tocs_contour_features.extend(tocs_conts)
                 else:
-                    QgsMessageLog.logMessage(
-                        f"DEBUG TOCS: Skipped for {current_desig} due to missing origin point or elevation for TOCS plane.",
-                        plugin_tag,
-                        Qgis.Warning,
+                    self._log_debug(
+                        f"TOCS {current_desig} skipped: missing origin point or elevation."
                     )
             except Exception as e_tocs:
                 QgsMessageLog.logMessage(
@@ -3943,16 +3901,12 @@ class OlsGuidelineMixin:
                 overall_success = True
             else:
                 QgsMessageLog.logMessage(
-                    f"DEBUG BLS Layer Creation: _create_and_add_layer FAILED for BLS {runway_name}.",
+                    f"BLS layer for {runway_name} failed: generated features could not be added to a layer.",
                     plugin_tag,
-                    Qgis.Critical,
+                    Qgis.Warning,
                 )
         else:
-            QgsMessageLog.logMessage(
-                f"DEBUG BLS Layer Creation: No features in ofz_bls_features list for {runway_name}. Layer not created.",
-                plugin_tag,
-                Qgis.Info,
-            )
+            self._log_debug(f"BLS layer for {runway_name} skipped: no features generated.")
 
         # Approach Sections Layer
         if approach_poly_features:
