@@ -3,7 +3,7 @@
 
 import math
 import traceback
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from qgis.PyQt.QtCore import QVariant  # type: ignore
 from qgis.core import (  # type: ignore
@@ -19,7 +19,6 @@ from qgis.core import (  # type: ignore
     QgsMessageLog,
     QgsPoint,
     QgsPointXY,
-    QgsPolygon,
     QgsProject,
     QgsWkbTypes,
 )
@@ -95,7 +94,6 @@ class OlsGuidelineMixin:
             )
 
         for i, rwy_data in enumerate(processed_runway_data_list):
-            runway_processed = False  # Flag for this specific runway
             try:  # Broad try block for processing a single runway's outline
                 rwy_name = rwy_data.get(
                     "short_name", f"RWY_{rwy_data.get('original_index','?')}"
@@ -290,7 +288,6 @@ class OlsGuidelineMixin:
                             )
                             if valid_geom is not None:
                                 strip_outline_geoms.append(valid_geom)
-                                runway_processed = True  # Mark success for this runway
                             else:
                                 QgsMessageLog.logMessage(
                                     f"Warning: Generated strip outline for {rwy_name} is invalid, skipping.",
@@ -973,7 +970,7 @@ class OlsGuidelineMixin:
 
         # --- Final Log ---
         QgsMessageLog.logMessage(
-            f"Finished Airport-Wide OLS Generation.", plugin_tag, level=Qgis.Info
+            "Finished Airport-Wide OLS Generation.", plugin_tag, level=Qgis.Info
         )
         return overall_success
 
@@ -1112,8 +1109,6 @@ class OlsGuidelineMixin:
     ) -> Optional[
         Tuple[QgsPoint, QgsPoint]
     ]:  # Returns (inner_3d_pt, outer_3d_pt) for the specified side
-        plugin_tag = PLUGIN_TAG  # Assuming PLUGIN_TAG is accessible or pass it
-
         """
         Calculates the 3D coordinates of the inner and outer points of one side
         of a sloped trapezoidal or rectangular surface (like IA or BLS).
@@ -1290,7 +1285,6 @@ class OlsGuidelineMixin:
         end_desig: str,
         IHS_ELEVATION_AMSL: float,  # Changed from Optional to required
     ) -> Optional[Tuple[QgsFeature, QgsGeometry, float, float, QgsPointXY, float]]:
-        plugin_tag = PLUGIN_TAG
         runway_name = runway_data.get("short_name", "N/A")
 
         width = bls_param_dict.get("width")
@@ -3777,7 +3771,6 @@ class OlsGuidelineMixin:
                         )
                     )
 
-                feat_tocs_local = None
                 if (
                     tocs_actual_start_elevation is not None
                     and tocs_plane_origin_pt is not None
@@ -3793,7 +3786,6 @@ class OlsGuidelineMixin:
                         current_desig,
                         tocs_actual_start_elevation,
                     )
-                    feat_tocs_local = tocs_feat
                     if tocs_feat:
                         tocs_poly_features.append(tocs_feat)
                     if tocs_conts:

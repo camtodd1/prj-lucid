@@ -37,7 +37,6 @@ try:
         WIDGET_MISSING_MSG,
         DIALOG_LOG_TAG,
         OUTPUT_FORMATS,
-        DEFAULT_OUTPUT_FORMAT,
     )
     from .dialog.runway_group import RunwayWidgetGroup
     from .dialog.output_options import OutputOptionsMixin
@@ -55,7 +54,6 @@ except ImportError:
         WIDGET_MISSING_MSG,
         DIALOG_LOG_TAG,
         OUTPUT_FORMATS,
-        DEFAULT_OUTPUT_FORMAT,
     )
     from dialog.runway_group import RunwayWidgetGroup  # type: ignore
     from dialog.output_options import OutputOptionsMixin  # type: ignore

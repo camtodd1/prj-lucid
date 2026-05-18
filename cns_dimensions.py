@@ -1,6 +1,6 @@
 # ./plugins/your_plugin_dir/cns_dimensions.py
 
-from typing import Union, Dict, Optional, List, Any  # Added type hinting
+from typing import Dict, Optional, List, Any  # Added type hinting
 
 # NASF Guideline G BRA Dimensions based on provided table Figure 2
 # IMPORTANT: Height rules and values are NOT specified in the table image.

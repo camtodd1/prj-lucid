@@ -9,8 +9,7 @@ import traceback
 from typing import Dict, Optional, List, Any, Tuple
 
 # --- Qt Imports ---
-from qgis.PyQt import QtCore  # type: ignore
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant, QDateTime  # type: ignore
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant  # type: ignore
 from qgis.PyQt.QtGui import QIcon  # type: ignore
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QPushButton  # type: ignore
 
@@ -25,7 +24,6 @@ from qgis.core import (  # type: ignore
     QgsLineString,
     QgsPointXY,
     QgsPolygon,
-    QgsPoint,
     QgsLayerTreeGroup,
     QgsLayerTreeLayer,
     QgsLayerTreeNode,
@@ -47,7 +45,9 @@ from .guidelines.ols import OlsGuidelineMixin
 
 try:
     # Attempt to import generated resources
-    from .resources_rc import *  # noqa: F403
+    from . import resources_rc
+
+    resources_rc.qInitResources
 except ImportError:
     # Fallback message if resources haven't been compiled
     print("Note: resources_rc.py not found or generated. Icons might be missing.")
@@ -1419,7 +1419,7 @@ class SafeguardingBuilder(
             feature.setAttributes(
                 [
                     icao_code,
-                    f"Aerodrome Reference Point",
+                    "Aerodrome Reference Point",
                     east_attr,
                     north_attr,
                     arp_elevation,
