@@ -145,6 +145,7 @@ class SafeguardingBuilderDialog(
 
         self._setup_arp_validators(self.coord_validator, self.numeric_validator)
         self._connect_global_controls()
+        self._setup_dialog_status_connections()
 
         # --- Connect Action Buttons ---
         clear_button = self.findChild(QtWidgets.QPushButton, "pushButton_clear_all")
@@ -171,6 +172,7 @@ class SafeguardingBuilderDialog(
             )
 
         QtCore.QTimer.singleShot(0, self._update_dialog_height)
+        QtCore.QTimer.singleShot(0, self.update_dialog_status)
 
     # --- Initialization Helpers ---
     def _setup_arp_validators(
@@ -209,12 +211,21 @@ class SafeguardingBuilderDialog(
                 widget.setValidator(validator)
                 widget.setToolTip(tooltips.get(name, ""))
                 widget.setPlaceholderText(placeholders.get(name, ""))
+                widget.setMaximumWidth(160)
             else:
                 QgsMessageLog.logMessage(
                     f"Warning: QLineEdit '{name}' not found.",
                     DIALOG_LOG_TAG,
                     level=Qgis.Warning,
                 )
+
+        airport_name = getattr(
+            self,
+            "lineEdit_airport_name",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_name"),
+        )
+        if airport_name:
+            airport_name.setMaximumWidth(220)
 
     def _connect_global_controls(self):
         """Connects signals for global widgets."""
@@ -231,6 +242,7 @@ class SafeguardingBuilderDialog(
 
         if airport_name_le:
             airport_name_le.textChanged.connect(self.update_all_runway_calculations)
+            airport_name_le.textChanged.connect(self.update_dialog_status)
         else:
             QgsMessageLog.logMessage(
                 "Warning: 'lineEdit_airport_name' not found.",
@@ -252,6 +264,105 @@ class SafeguardingBuilderDialog(
                 DIALOG_LOG_TAG,
                 level=Qgis.Warning,
             )
+
+    def _setup_dialog_status_connections(self):
+        """Connect lightweight status labels to high-level input changes."""
+        for name in [
+            "lineEdit_arp_easting",
+            "lineEdit_arp_northing",
+            "lineEdit_arp_elevation",
+            "lineEdit_met_easting",
+            "lineEdit_met_northing",
+            "lineEdit_met_elevation",
+        ]:
+            widget = getattr(self, name, self.findChild(QtWidgets.QLineEdit, name))
+            if widget:
+                widget.textChanged.connect(self.update_dialog_status)
+
+        cns_table = getattr(
+            self,
+            "table_cns_facility",
+            self.findChild(QtWidgets.QTableWidget, "table_cns_facility"),
+        )
+        if cns_table:
+            cns_table.itemChanged.connect(self.update_dialog_status)
+
+        for name in [
+            "radioMemoryOutput",
+            "radioFileOutput",
+            "comboOutputFormat",
+            "fileWidgetOutputPath",
+            "checkBox_dissolveLayers",
+        ]:
+            widget = getattr(self, name, None)
+            if not widget:
+                continue
+            if hasattr(widget, "toggled"):
+                widget.toggled.connect(self.update_dialog_status)
+            elif hasattr(widget, "currentIndexChanged"):
+                widget.currentIndexChanged.connect(self.update_dialog_status)
+            elif hasattr(widget, "fileChanged"):
+                widget.fileChanged.connect(self.update_dialog_status)
+
+    def update_dialog_status(self):
+        """Updates compact workflow status labels."""
+        icao = self.lineEdit_airport_name.text().strip().upper()
+        if hasattr(self, "label_airport_status"):
+            self.label_airport_status.setText(
+                f"Airport: {icao}" if icao else "Airport: ICAO required"
+            )
+
+        runway_count = len(self._runway_groups)
+        incomplete = 0
+        for group in self._runway_groups.values():
+            data = group.get_input_data()
+            required_values = [
+                data.get("designator_str", ""),
+                data.get("thr_easting", ""),
+                data.get("thr_northing", ""),
+                data.get("rec_easting", ""),
+                data.get("rec_northing", ""),
+                data.get("width", ""),
+            ]
+            if not all(str(value).strip() for value in required_values):
+                incomplete += 1
+        if hasattr(self, "label_runway_status"):
+            if runway_count == 0:
+                self.label_runway_status.setText("Runways: none defined")
+            elif incomplete:
+                self.label_runway_status.setText(
+                    f"Runways: {runway_count} defined, {incomplete} incomplete"
+                )
+            else:
+                self.label_runway_status.setText(f"Runways: {runway_count} ready")
+
+        cns_count = (
+            self.table_cns_facility.rowCount()
+            if hasattr(self, "table_cns_facility")
+            else 0
+        )
+        if hasattr(self, "label_cns_status"):
+            self.label_cns_status.setText(
+                f"CNS facilities: {cns_count}" if cns_count else "CNS facilities: none"
+            )
+
+        output_text = "Output: memory layers"
+        if hasattr(self, "radioFileOutput") and self.radioFileOutput.isChecked():
+            output_format = self.comboOutputFormat.currentText()
+            path = self.fileWidgetOutputPath.filePath().strip()
+            output_text = (
+                f"Output: {output_format} files"
+                + (f" to {path}" if path else " (directory required)")
+            )
+        if hasattr(self, "label_output_status"):
+            self.label_output_status.setText(output_text)
+
+        if hasattr(self, "label_footer_status"):
+            footer_parts = []
+            footer_parts.append(icao if icao else "No ICAO")
+            footer_parts.append(f"{runway_count} runway(s)")
+            footer_parts.append(output_text.replace("Output: ", ""))
+            self.label_footer_status.setText(" | ".join(footer_parts))
 
     # --- Runway Group Management ---
     def _get_next_runway_id(self) -> int:
@@ -424,6 +535,7 @@ class SafeguardingBuilderDialog(
         group_widget.update_display_labels(
             calculation_results
         )
+        self.update_dialog_status()
 
     def add_runway_group(self):
         """Creates and adds a new RunwayWidgetGroup instance."""
@@ -457,6 +569,7 @@ class SafeguardingBuilderDialog(
         self._runway_groups[runway_index] = new_group
         self._update_dialog_height()
         self.update_runway_calculations(runway_index)  # Update placeholders
+        self.update_dialog_status()
 
     def remove_runway_group(self, runway_index_to_remove: int):
         """Handles request to remove a runway group after confirmation."""
@@ -500,6 +613,7 @@ class SafeguardingBuilderDialog(
 
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
             self._remove_runway_group_internal(runway_index_to_remove)
+            self.update_dialog_status()
 
     def _remove_runway_group_internal(self, runway_index: int):
         """Internal helper to remove a group without user confirmation."""

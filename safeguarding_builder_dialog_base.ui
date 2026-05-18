@@ -21,6 +21,57 @@
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_dialogHeader">
+     <item>
+      <widget class="QLabel" name="label_dialog_heading">
+       <property name="font">
+        <font>
+         <weight>75</weight>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string>Safeguarding Builder</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_dialogHeader">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_load_data">
+       <property name="text">
+        <string>Load</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_save_data">
+       <property name="text">
+        <string>Save</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_clear_all">
+       <property name="text">
+        <string>Clear</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
     <widget class="QTabWidget" name="tabWidget_workflow">
      <property name="currentIndex">
       <number>0</number>
@@ -68,39 +119,46 @@
         </widget>
        </item>
        <item>
-        <widget class="QGroupBox" name="groupBox_ARP">
+       <widget class="QGroupBox" name="groupBox_ARP">
          <property name="title">
           <string>Aerodrome Reference Point (ARP)</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_arp">
-          <item row="0" column="0">
+          <item row="0" column="0" colspan="6">
+           <widget class="QLabel" name="label_arp_description">
+            <property name="text">
+             <string>Reference location for airport-wide safeguarding surfaces.</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
            <widget class="QLabel" name="label_easting_ARP">
             <property name="text">
              <string>Easting</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
+          <item row="1" column="1">
            <widget class="QLineEdit" name="lineEdit_arp_easting"/>
           </item>
-          <item row="0" column="2">
+          <item row="1" column="2">
            <widget class="QLabel" name="label_northing_ARP">
             <property name="text">
              <string>Northing</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="3">
+          <item row="1" column="3">
            <widget class="QLineEdit" name="lineEdit_arp_northing"/>
           </item>
-          <item row="0" column="4">
+          <item row="1" column="4">
            <widget class="QLabel" name="label_elevatio_ARP">
             <property name="text">
              <string>Elev (m)</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="5">
+          <item row="1" column="5">
            <widget class="QLineEdit" name="lineEdit_arp_elevation"/>
           </item>
          </layout>
@@ -112,34 +170,41 @@
           <string>Meteorological Instrument Station (optional)</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_met">
-          <item row="0" column="0">
+          <item row="0" column="0" colspan="6">
+           <widget class="QLabel" name="label_met_description">
+            <property name="text">
+             <string>Leave blank where MET station safeguarding surfaces are not required.</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
            <widget class="QLabel" name="label_easting_MET">
             <property name="text">
              <string>Easting</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="1">
+          <item row="1" column="1">
            <widget class="QLineEdit" name="lineEdit_met_easting"/>
           </item>
-          <item row="0" column="2">
+          <item row="1" column="2">
            <widget class="QLabel" name="label_northing_MET">
             <property name="text">
              <string>Northing</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="3">
+          <item row="1" column="3">
            <widget class="QLineEdit" name="lineEdit_met_northing"/>
           </item>
-          <item row="0" column="4">
+          <item row="1" column="4">
            <widget class="QLabel" name="label_elevation_MET">
             <property name="text">
              <string>Elev (m)</string>
             </property>
            </widget>
           </item>
-          <item row="0" column="5">
+          <item row="1" column="5">
            <widget class="QLineEdit" name="lineEdit_met_elevation"/>
           </item>
          </layout>
@@ -306,40 +371,6 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_outputTab">
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_inputDataActions">
-         <item>
-          <widget class="QGroupBox" name="groupBox_inputOptions">
-           <property name="title">
-            <string>Input Data Options</string>
-           </property>
-           <layout class="QHBoxLayout" name="horizontalLayout_inputButtons">
-            <item>
-             <widget class="QPushButton" name="pushButton_load_data">
-              <property name="text">
-               <string>Load Input Data</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QPushButton" name="pushButton_save_data">
-              <property name="text">
-               <string>Save Input Data</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QPushButton" name="pushButton_clear_all">
-              <property name="text">
-               <string>Clear All</string>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </widget>
-         </item>
-        </layout>
-       </item>
-       <item>
         <widget class="QGroupBox" name="groupBox_outputOptions">
          <property name="title">
           <string>Output Data Options</string>
@@ -429,22 +460,46 @@
          </property>
         </spacer>
        </item>
-       <item>
-        <widget class="QPushButton" name="pushButton_Generate">
-         <property name="minimumSize">
-          <size>
-           <width>0</width>
-           <height>55</height>
-          </size>
-         </property>
-         <property name="text">
-          <string>Generate Airport Layers</string>
-         </property>
-        </widget>
-       </item>
       </layout>
      </widget>
     </widget>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_dialogFooter">
+     <item>
+      <widget class="QLabel" name="label_footer_status">
+       <property name="text">
+        <string/>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <spacer name="horizontalSpacer_dialogFooter">
+       <property name="orientation">
+        <enum>Qt::Horizontal</enum>
+       </property>
+       <property name="sizeHint" stdset="0">
+        <size>
+         <width>40</width>
+         <height>20</height>
+        </size>
+       </property>
+      </spacer>
+     </item>
+     <item>
+      <widget class="QPushButton" name="pushButton_Generate">
+       <property name="minimumSize">
+        <size>
+         <width>220</width>
+         <height>42</height>
+        </size>
+       </property>
+       <property name="text">
+        <string>Generate Airport Layers</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
   </layout>
  </widget>

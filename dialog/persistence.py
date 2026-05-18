@@ -64,6 +64,8 @@ class PersistenceMixin:
 
         self._reset_output_options()
         self._update_dialog_height()
+        if hasattr(self, "update_dialog_status"):
+            self.update_dialog_status()
 
     def save_input_data(self):
         icao_code = self._line_text("lineEdit_airport_name").strip().upper()
@@ -127,6 +129,8 @@ class PersistenceMixin:
             self.clear_all_inputs(confirm=False)
             self._apply_loaded_payload(loaded_data)
             self._update_dialog_height()
+            if hasattr(self, "update_dialog_status"):
+                self.update_dialog_status()
         except (IOError, json.JSONDecodeError, ValueError) as e:
             self._handle_load_error(file_path, e, unexpected=False)
         except Exception as e:

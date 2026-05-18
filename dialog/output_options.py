@@ -61,6 +61,8 @@ class OutputOptionsMixin:
         is_file_output = self.radioFileOutput.isChecked()
         self.fileWidgetOutputPath.setEnabled(is_file_output)
         self.comboOutputFormat.setEnabled(is_file_output)
+        if hasattr(self, "update_dialog_status"):
+            self.update_dialog_status()
 
     def _update_file_widget_filter(self):
         selected_format_name = self.comboOutputFormat.currentText()

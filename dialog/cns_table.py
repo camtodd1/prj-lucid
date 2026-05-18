@@ -150,6 +150,8 @@ class CnsTableMixin:
             cns_table.scrollToItem(item_x, QAbstractItemView.ScrollHint.EnsureVisible)
             combo_type.setFocus()
             self._update_dialog_height()
+            if hasattr(self, "update_dialog_status"):
+                self.update_dialog_status()
         except Exception as e:
             QgsMessageLog.logMessage(
                 f"Add CNS Row Error during row/widget creation: {e}",
@@ -189,6 +191,8 @@ class CnsTableMixin:
                 for row_index in selected_rows:
                     cns_table.removeRow(row_index)
                 self._update_dialog_height()
+                if hasattr(self, "update_dialog_status"):
+                    self.update_dialog_status()
             except Exception as e:
                 QgsMessageLog.logMessage(
                     f"Remove CNS Row Error during row removal: {e}",
