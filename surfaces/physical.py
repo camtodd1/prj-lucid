@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Physical runway geometry generation."""
 
+import os
 import traceback
 from typing import Dict, List, Optional, Tuple
 
@@ -201,6 +202,29 @@ class PhysicalGeometryMixin:
                         "label_rot",
                         QVariant.Double,
                         self.tr("Label Rotation"),
+                        10,
+                        3,
+                    ),
+                    QgsField("glyph", QVariant.String, self.tr("Glyph"), 2),
+                    QgsField("glyph_no", QVariant.Int, self.tr("Glyph No.")),
+                    QgsField(
+                        "glyph_size",
+                        QVariant.Double,
+                        self.tr("Glyph Size (m)"),
+                        12,
+                        3,
+                    ),
+                    QgsField(
+                        "glyph_w_m",
+                        QVariant.Double,
+                        self.tr("Glyph Width (m)"),
+                        12,
+                        3,
+                    ),
+                    QgsField(
+                        "angle_deg",
+                        QVariant.Double,
+                        self.tr("Angle (deg)"),
                         10,
                         3,
                     ),
@@ -769,62 +793,76 @@ class PhysicalGeometryMixin:
         return specialised_safeguarding_group, any_physical_or_protection_ok
 
     def _style_runway_designation_layer(self, layer: QgsVectorLayer) -> None:
-        """Apply map-unit text labels for initial runway designation rendering."""
+        """Apply categorized SVG glyph symbols for runway designations."""
         if layer is None or not layer.isValid():
             return
 
         try:
-            from qgis.PyQt.QtGui import QColor, QFont  # type: ignore
             from qgis.core import (  # type: ignore
-                QgsPalLayerSettings,
+                QgsCategorizedSymbolRenderer,
+                QgsMarkerSymbol,
                 QgsProperty,
-                QgsTextBufferSettings,
-                QgsTextFormat,
+                QgsRendererCategory,
+                QgsSymbolLayer,
+                QgsSvgMarkerSymbolLayer,
                 QgsUnitTypes,
-                QgsVectorLayerSimpleLabeling,
             )
 
-            text_format = QgsTextFormat()
-            font = QFont("Arial")
-            font.setBold(True)
-            text_format.setFont(font)
-            text_format.setSize(9.0)
-            text_format.setSizeUnit(QgsUnitTypes.RenderMapUnits)
-            text_format.setColor(QColor(255, 255, 255))
-
-            buffer_settings = QgsTextBufferSettings()
-            buffer_settings.setEnabled(False)
-            text_format.setBuffer(buffer_settings)
-
-            label_settings = QgsPalLayerSettings()
-            label_settings.enabled = True
-            label_settings.fieldName = "text"
-            label_settings.isExpression = False
-            label_settings.setFormat(text_format)
-            try:
-                label_settings.placement = QgsPalLayerSettings.OverPoint
-            except AttributeError:
-                pass
-
-            try:
-                label_settings.dataDefinedProperties().setProperty(
-                    QgsPalLayerSettings.LabelRotation,
-                    QgsProperty.fromField("label_rot"),
+            svg_dir = os.path.join(
+                self.plugin_dir, "styles", "svg", "runway_designations"
+            )
+            categories = []
+            for glyph in "0123456789LCR":
+                svg_path = os.path.join(
+                    svg_dir, f"runway_designation_{glyph}.svg"
                 )
-            except Exception as rotation_error:
-                QgsMessageLog.logMessage(
-                    "Warning: Could not apply designation label rotation: "
-                    f"{rotation_error}",
-                    PLUGIN_TAG,
-                    level=Qgis.Warning,
-                )
+                if not os.path.exists(svg_path):
+                    QgsMessageLog.logMessage(
+                        f"Runway designation SVG missing: {svg_path}",
+                        PLUGIN_TAG,
+                        level=Qgis.Warning,
+                    )
+                    continue
 
-            layer.setLabeling(QgsVectorLayerSimpleLabeling(label_settings))
-            layer.setLabelsEnabled(True)
+                svg_layer = QgsSvgMarkerSymbolLayer(svg_path)
+                svg_layer.setSize(9.0)
+                svg_layer.setSizeUnit(QgsUnitTypes.RenderMapUnits)
+                try:
+                    size_prop = getattr(QgsSvgMarkerSymbolLayer, "PropertySize", None)
+                    if size_prop is None:
+                        size_prop = getattr(QgsSymbolLayer, "PropertySize")
+                    angle_prop = getattr(
+                        QgsSvgMarkerSymbolLayer, "PropertyAngle", None
+                    )
+                    if angle_prop is None:
+                        angle_prop = getattr(QgsSymbolLayer, "PropertyAngle")
+                    svg_layer.dataDefinedProperties().setProperty(
+                        size_prop,
+                        QgsProperty.fromField("glyph_size"),
+                    )
+                    svg_layer.dataDefinedProperties().setProperty(
+                        angle_prop,
+                        QgsProperty.fromField("angle_deg"),
+                    )
+                except Exception as dd_error:
+                    QgsMessageLog.logMessage(
+                        "Warning: Could not apply SVG glyph data-defined "
+                        f"properties: {dd_error}",
+                        PLUGIN_TAG,
+                        level=Qgis.Warning,
+                    )
+
+                symbol = QgsMarkerSymbol()
+                symbol.changeSymbolLayer(0, svg_layer)
+                categories.append(QgsRendererCategory(glyph, symbol, glyph))
+
+            if categories:
+                layer.setRenderer(QgsCategorizedSymbolRenderer("glyph", categories))
+            layer.setLabelsEnabled(False)
             layer.triggerRepaint()
-        except Exception as label_error:
+        except Exception as style_error:
             QgsMessageLog.logMessage(
-                f"Warning: Could not apply runway designation label styling: {label_error}",
+                f"Warning: Could not apply runway designation SVG styling: {style_error}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
@@ -839,6 +877,47 @@ class PhysicalGeometryMixin:
         number_height = 9.5 if any(char in designator for char in ("6", "9")) else 9.0
         suffix_height = 9.0 if designator[-1:] in {"L", "C", "R"} else 0.0
         return number_height + (6.0 + suffix_height if suffix_height else 0.0)
+
+    def _runway_designation_glyph_width(self, glyph: str) -> float:
+        return {
+            "0": 6.0,
+            "1": 0.8,
+            "2": 3.0,
+            "3": 3.0,
+            "4": 3.9,
+            "5": 3.0,
+            "6": 3.0,
+            "7": 3.5,
+            "8": 3.0,
+            "9": 3.0,
+            "L": 3.0,
+            "C": 3.0,
+            "R": 3.0,
+        }.get(glyph, 3.0)
+
+    def _runway_designation_glyphs(
+        self, designator: str
+    ) -> List[Tuple[str, float, float, float]]:
+        """Return glyph, longitudinal centre, lateral centre and glyph height."""
+        suffix = designator[-1:] if designator[-1:] in {"L", "C", "R"} else ""
+        number_text = designator[:-1] if suffix else designator
+        number_height = 9.5 if any(char in number_text for char in ("6", "9")) else 9.0
+        digit_gap = 1.0
+        glyphs: List[Tuple[str, float, float, float]] = []
+
+        widths = [self._runway_designation_glyph_width(char) for char in number_text]
+        total_width = sum(widths) + max(0, len(widths) - 1) * digit_gap
+        lateral_cursor = -total_width / 2.0
+        for char, width in zip(number_text, widths):
+            lateral_center = lateral_cursor + width / 2.0
+            glyph_height = 9.5 if char in {"6", "9"} else 9.0
+            glyphs.append((char, number_height / 2.0, lateral_center, glyph_height))
+            lateral_cursor += width + digit_gap
+
+        if suffix:
+            glyphs.append((suffix, number_height + 6.0 + 4.5, 0.0, 9.0))
+
+        return glyphs
 
     def _project_lateral(
         self, point: QgsPointXY, lateral_m: float, azimuth_degrees: float
@@ -1130,25 +1209,44 @@ class PhysicalGeometryMixin:
 
             designation_edge_offset = 1.2 + 12.0
             designation_length = self._runway_designation_length(end_desig)
-            designation_center = origin.project(
-                designation_edge_offset + designation_length / 2.0, azimuth
-            )
-            if designation_center:
+            angle_deg = (90.0 - azimuth) % 360.0
+            for glyph_no, (
+                glyph,
+                longitudinal_center,
+                lateral_center,
+                glyph_size,
+            ) in enumerate(self._runway_designation_glyphs(end_desig), start=1):
+                glyph_center = origin.project(
+                    designation_edge_offset + longitudinal_center, azimuth
+                )
+                if glyph_center:
+                    glyph_center = self._project_lateral(
+                        glyph_center, lateral_center, azimuth
+                    )
+                if not glyph_center:
+                    continue
                 generated.append(
                     (
                         "DetailedDesignationMarking",
-                        QgsGeometry.fromPointXY(designation_center),
+                        QgsGeometry.fromPointXY(glyph_center),
                         {
                             "rwy": runway_name,
                             "end_desig": end_desig,
                             "text": end_desig,
                             "bearing": round(azimuth, 3),
-                            "label_rot": round((90.0 - azimuth) % 360.0, 3),
+                            "label_rot": round(angle_deg, 3),
+                            "glyph": glyph,
+                            "glyph_no": glyph_no,
+                            "glyph_size": round(glyph_size, 3),
+                            "glyph_w_m": round(
+                                self._runway_designation_glyph_width(glyph), 3
+                            ),
+                            "angle_deg": round(angle_deg, 3),
                             "offset_m": round(designation_edge_offset, 3),
                             "height_m": round(designation_length, 3),
                             "mandatory": True,
                             "ref_mos": "MOS 8.18",
-                            "notes": "Initial implementation stores designation as point/text attributes.",
+                            "notes": "SVG glyph test implementation.",
                         },
                     )
                 )
