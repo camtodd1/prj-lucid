@@ -922,8 +922,11 @@ class PhysicalGeometryMixin:
         suffix = designator[-1:] if designator[-1:] in {"L", "C", "R"} else ""
         number_text = designator[:-1] if suffix else designator
         number_height = 9.5 if any(char in number_text for char in ("6", "9")) else 9.0
-        digit_gap = 0.8
+        digit_gap = 2.2
         glyphs: List[Tuple[str, float, float, float]] = []
+        number_row_center = number_height / 2.0
+        if suffix:
+            number_row_center = 9.0 + 6.0 + number_height / 2.0
 
         widths = [self._runway_designation_glyph_width(char) for char in number_text]
         total_width = sum(widths) + max(0, len(widths) - 1) * digit_gap
@@ -931,11 +934,11 @@ class PhysicalGeometryMixin:
         for char, width in zip(number_text, widths):
             lateral_center = lateral_cursor + width / 2.0
             glyph_height = 9.5 if char in {"6", "9"} else 9.0
-            glyphs.append((char, number_height / 2.0, lateral_center, glyph_height))
+            glyphs.append((char, number_row_center, lateral_center, glyph_height))
             lateral_cursor += width + digit_gap
 
         if suffix:
-            glyphs.append((suffix, number_height + 6.0 + 4.5, 0.0, 9.0))
+            glyphs.append((suffix, 4.5, 0.0, 9.0))
 
         return glyphs
 
