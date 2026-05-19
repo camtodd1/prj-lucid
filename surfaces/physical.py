@@ -414,6 +414,7 @@ class PhysicalGeometryMixin:
                     plugin_tag,
                     level=Qgis.Info,
                 )
+                runway_marking_contexts = {}
                 for rwy_data in processed_runway_data_list:
                     runway_name_log = rwy_data.get(
                         "short_name", f"RWY_{rwy_data.get('original_index','?')}"
@@ -508,6 +509,24 @@ class PhysicalGeometryMixin:
                             elif element_type == "OverallStrip":
                                 overall_strip_geom = geometry
                                 overall_strip_attrs = attributes
+                            elif element_type == "rwy":
+                                try:
+                                    runway_marking_contexts[
+                                        attributes.get("rwy", runway_name_log)
+                                    ] = {
+                                        "geom": QgsGeometry(geometry),
+                                        "rank": self._runway_precedence_rank(
+                                            rwy_data,
+                                            float(attributes.get("len_m") or 0.0),
+                                        ),
+                                    }
+                                except Exception as ctx_error:
+                                    QgsMessageLog.logMessage(
+                                        "Warning: Could not prepare runway "
+                                        f"intersection context for {runway_name_log}: {ctx_error}",
+                                        plugin_tag,
+                                        level=Qgis.Warning,
+                                    )
 
                             feature = QgsFeature(target_spec["fields"])
                             feature.setGeometry(geometry)
@@ -721,6 +740,25 @@ class PhysicalGeometryMixin:
                         )
                         continue
 
+                clipped_marking_count = self._apply_intersecting_runway_clipping(
+                    physical_features,
+                    runway_marking_contexts,
+                    (
+                        "DetailedThresholdMarking",
+                        "DetailedCentrelineMarking",
+                        "DetailedAimingPointMarking",
+                        "DetailedTouchdownZoneMarking",
+                        "DetailedSideStripeMarking",
+                    ),
+                )
+                if clipped_marking_count:
+                    QgsMessageLog.logMessage(
+                        "Applied MOS 8.15 runway-intersection clipping to "
+                        f"{clipped_marking_count} detailed runway marking feature(s).",
+                        plugin_tag,
+                        level=Qgis.Info,
+                    )
+
                 QgsMessageLog.logMessage(
                     "Finalizing and saving physical geometry & protection area layers...",
                     plugin_tag,
@@ -792,6 +830,100 @@ class PhysicalGeometryMixin:
                     )
 
         return specialised_safeguarding_group, any_physical_or_protection_ok
+
+    def _runway_precedence_rank(
+        self, runway_data: dict, runway_length: float
+    ) -> Tuple[int, int, float]:
+        """Rank runways for MOS 8.15 marking precedence."""
+        try:
+            arc_number = int(float(runway_data.get("arc_num") or 0))
+        except (TypeError, ValueError):
+            arc_number = 0
+
+        arc_letter = str(runway_data.get("arc_let") or "").strip().upper()
+        letter_rank = "ABCDEF".find(arc_letter[:1]) + 1 if arc_letter else 0
+        return arc_number, letter_rank, float(runway_length or 0.0)
+
+    def _append_feature_note(self, feature: QgsFeature, note: str) -> None:
+        notes_idx = feature.fieldNameIndex("notes")
+        if notes_idx == -1:
+            return
+        existing_note = feature.attribute(notes_idx) or ""
+        if existing_note:
+            feature.setAttribute(notes_idx, f"{existing_note} {note}")
+        else:
+            feature.setAttribute(notes_idx, note)
+
+    def _apply_intersecting_runway_clipping(
+        self,
+        physical_features: Dict[str, List[QgsFeature]],
+        runway_contexts: dict,
+        detailed_polygon_keys: Tuple[str, ...],
+    ) -> int:
+        """Interrupt lower-precedence detailed markings at runway intersections."""
+        if len(runway_contexts) < 2:
+            return 0
+
+        clipped_count = 0
+        for element_type in detailed_polygon_keys:
+            updated_features = []
+            for feature in physical_features.get(element_type, []):
+                runway_name = feature.attribute("rwy")
+                current_context = runway_contexts.get(runway_name)
+                if current_context is None:
+                    updated_features.append(feature)
+                    continue
+
+                geom = feature.geometry()
+                if geom is None or geom.isEmpty():
+                    continue
+
+                current_rank = current_context.get("rank", (0, 0, 0.0))
+                interrupted_by = []
+                for other_name, other_context in runway_contexts.items():
+                    if other_name == runway_name:
+                        continue
+                    other_rank = other_context.get("rank", (0, 0, 0.0))
+                    if current_rank >= other_rank:
+                        continue
+
+                    other_geom = other_context.get("geom")
+                    if other_geom is None or other_geom.isEmpty():
+                        continue
+                    if not geom.intersects(other_geom):
+                        continue
+
+                    clipped_geom = geom.difference(other_geom)
+                    if clipped_geom is None:
+                        continue
+                    if not clipped_geom.isEmpty() and not clipped_geom.isGeosValid():
+                        clipped_geom = clipped_geom.makeValid()
+                    geom = clipped_geom
+                    interrupted_by.append(other_name)
+
+                    if geom is None or geom.isEmpty():
+                        break
+
+                if not interrupted_by:
+                    updated_features.append(feature)
+                    continue
+                if geom is None or geom.isEmpty():
+                    feature.setGeometry(QgsGeometry())
+                else:
+                    feature.setGeometry(geom)
+                self._append_feature_note(
+                    feature,
+                    "Interrupted at intersecting runway pavement under MOS 8.15 "
+                    f"by {', '.join(interrupted_by)}.",
+                )
+                clipped_count += 1
+                if geom is None or geom.isEmpty():
+                    continue
+                updated_features.append(feature)
+
+            physical_features[element_type] = updated_features
+
+        return clipped_count
 
     def _style_runway_designation_layer(self, layer: QgsVectorLayer) -> None:
         """Apply categorized SVG glyph symbols for runway designations."""
