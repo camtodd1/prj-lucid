@@ -91,6 +91,76 @@ class PhysicalGeometryMixin:
                         "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
                     ),
                 ]
+                declared_distance_fields = [
+                    QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
+                    QgsField(
+                        "end_desig", QVariant.String, self.tr("End Designator"), 10
+                    ),
+                    QgsField("direction", QVariant.String, self.tr("Direction"), 12),
+                    QgsField(
+                        "bearing_deg",
+                        QVariant.Double,
+                        self.tr("Runway Bearing (deg)"),
+                        10,
+                        3,
+                    ),
+                    QgsField(
+                        "phys_len_m",
+                        QVariant.Double,
+                        self.tr("Physical Length (m)"),
+                        12,
+                        3,
+                    ),
+                    QgsField(
+                        "thr_len_m",
+                        QVariant.Double,
+                        self.tr("Threshold Length (m)"),
+                        12,
+                        3,
+                    ),
+                    QgsField(
+                        "disp_thr_m",
+                        QVariant.Double,
+                        self.tr("Displaced Threshold (m)"),
+                        12,
+                        3,
+                    ),
+                    QgsField(
+                        "clearway_m",
+                        QVariant.Double,
+                        self.tr("Clearway (m)"),
+                        12,
+                        3,
+                    ),
+                    QgsField(
+                        "stopway_m",
+                        QVariant.Double,
+                        self.tr("Stopway (m)"),
+                        12,
+                        3,
+                    ),
+                    QgsField(
+                        "takeoff_ok",
+                        QVariant.Bool,
+                        self.tr("Takeoff Available"),
+                    ),
+                    QgsField(
+                        "landing_ok",
+                        QVariant.Bool,
+                        self.tr("Landing Available"),
+                    ),
+                    QgsField("tora_m", QVariant.Double, self.tr("TORA (m)"), 12, 3),
+                    QgsField("toda_m", QVariant.Double, self.tr("TODA (m)"), 12, 3),
+                    QgsField("asda_m", QVariant.Double, self.tr("ASDA (m)"), 12, 3),
+                    QgsField("lda_m", QVariant.Double, self.tr("LDA (m)"), 12, 3),
+                    QgsField(
+                        "calc_src",
+                        QVariant.String,
+                        self.tr("Calculation Source"),
+                        40,
+                    ),
+                    QgsField("notes", QVariant.String, self.tr("Notes"), 250),
+                ]
 
                 layer_definitions = {
                     "rwy": {
@@ -123,6 +193,12 @@ class PhysicalGeometryMixin:
                     "Shoulder": {
                         "name": self.tr("Runway Shoulders"),
                         "fields": common_fields,
+                        "group": physical_geom_group,
+                    },
+                    "DeclaredDistance": {
+                        "name": self.tr("Declared Distances"),
+                        "fields": declared_distance_fields,
+                        "geom_type": "Point",
                         "group": physical_geom_group,
                     },
                     "Stopway": {
@@ -158,6 +234,7 @@ class PhysicalGeometryMixin:
                     "DisplacedThresholdMarking": "DisplacedThresholdMarking",
                     "PreThresholdAreaMarking": "PreThresholdAreaMarking",
                     "Shoulder": "Runway Shoulders",
+                    "DeclaredDistance": "Default Point",
                     "Stopway": "Stopways",
                     "GradedStrip": "Runway Graded Strips",
                     "FlyoverStrip": "Runway Strip Flyover Area",
@@ -171,6 +248,7 @@ class PhysicalGeometryMixin:
                     "DisplacedThresholdMarking",
                     "PreThresholdAreaMarking",
                     "Shoulder",
+                    "DeclaredDistance",
                     "Stopway",
                     "GradedStrip",
                     "FlyoverStrip",
@@ -190,7 +268,7 @@ class PhysicalGeometryMixin:
                         continue
                     geom_type_str = definition.get("geom_type", "Polygon")
                     layer_display_name = f"{icao_code} {definition['name']}"
-                    if geom_type_str not in {"LineString", "Polygon"}:
+                    if geom_type_str not in {"LineString", "Point", "Polygon"}:
                         QgsMessageLog.logMessage(
                             f"Warning: Unsupported geometry type '{geom_type_str}' for layer URI.",
                             plugin_tag,
@@ -222,6 +300,59 @@ class PhysicalGeometryMixin:
                         "short_name", f"RWY_{rwy_data.get('original_index','?')}"
                     )
                     try:
+                        declared_spec = physical_layer_specs.get("DeclaredDistance")
+                        if declared_spec is not None:
+                            for declared_record in rwy_data.get(
+                                "declared_distances", []
+                            ):
+                                declared_point = declared_record.get("point")
+                                if declared_point is None:
+                                    continue
+
+                                declared_feature = QgsFeature(
+                                    declared_spec["fields"]
+                                )
+                                declared_feature.setGeometry(
+                                    QgsGeometry.fromPointXY(declared_point)
+                                )
+                                declared_attrs = {
+                                    "rwy": declared_record.get("rwy"),
+                                    "end_desig": declared_record.get("end_desig"),
+                                    "direction": declared_record.get("direction"),
+                                    "bearing_deg": declared_record.get(
+                                        "bearing_deg"
+                                    ),
+                                    "phys_len_m": declared_record.get(
+                                        "physical_len_m"
+                                    ),
+                                    "thr_len_m": declared_record.get(
+                                        "threshold_len_m"
+                                    ),
+                                    "disp_thr_m": declared_record.get("disp_thr_m"),
+                                    "clearway_m": declared_record.get("clearway_m"),
+                                    "stopway_m": declared_record.get("stopway_m"),
+                                    "takeoff_ok": declared_record.get(
+                                        "takeoff_available"
+                                    ),
+                                    "landing_ok": declared_record.get(
+                                        "landing_available"
+                                    ),
+                                    "tora_m": declared_record.get("tora_m"),
+                                    "toda_m": declared_record.get("toda_m"),
+                                    "asda_m": declared_record.get("asda_m"),
+                                    "lda_m": declared_record.get("lda_m"),
+                                    "calc_src": "calculated",
+                                    "notes": "",
+                                }
+                                for field_name, value in declared_attrs.items():
+                                    idx = declared_feature.fieldNameIndex(field_name)
+                                    if idx != -1:
+                                        declared_feature.setAttribute(idx, value)
+                                physical_features["DeclaredDistance"].append(
+                                    declared_feature
+                                )
+                                any_physical_or_protection_ok = True
+
                         generated_elements_list = self.generate_physical_geometry(
                             rwy_data
                         )

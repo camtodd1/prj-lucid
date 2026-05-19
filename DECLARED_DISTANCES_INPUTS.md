@@ -154,7 +154,7 @@ Add validation for:
 3. Validate the new inputs in `SafeguardingBuilderDialog._validate_runway_data`. (Done)
 4. Reuse `clearway1_len` and `clearway2_len` in existing TOCS logic.
 5. Add a pure calculation helper for declared distances. (Done)
-6. Add a generated point layer or table with two records per runway.
+6. Add a generated point layer or table with two records per runway. (Done)
 7. Populate the centreline placeholder fields where practical.
 8. Add validation warnings for inconsistent declared-distance results.
 9. Add optional override fields.
