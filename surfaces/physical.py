@@ -831,18 +831,55 @@ class PhysicalGeometryMixin:
             runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
         )
         marking_ref = "MOS 8.26"
+        displaced_marking_end_clearance_m = 15.0
+        pre_area_marking_end_clearance_m = 15.0
+
+        def _create_marking_line(
+            start_point, end_point, start_clearance_m=0.0, end_clearance_m=0.0
+        ):
+            line = QgsGeometry.fromPolylineXY([start_point, end_point])
+            if not line or line.isEmpty():
+                return None
+
+            line_len = line.length()
+            if line_len is None:
+                return None
+
+            usable_len = line_len - start_clearance_m - end_clearance_m
+            if usable_len <= 1e-6:
+                return None
+
+            if start_clearance_m <= 0 and end_clearance_m <= 0:
+                return line
+
+            start_geom = line.interpolate(start_clearance_m)
+            end_geom = line.interpolate(line_len - end_clearance_m)
+            if (
+                not start_geom
+                or start_geom.isEmpty()
+                or not end_geom
+                or end_geom.isEmpty()
+            ):
+                return None
+
+            return QgsGeometry.fromPolylineXY(
+                [start_geom.asPoint(), end_geom.asPoint()]
+            )
 
         if disp_thr_1 > 1e-6:
             try:
-                line_geom = QgsGeometry.fromPolylineXY([phys_p_start, thr_point])
+                line_geom = _create_marking_line(
+                    phys_p_start,
+                    thr_point,
+                    end_clearance_m=displaced_marking_end_clearance_m,
+                )
                 if line_geom and not line_geom.isEmpty():
-                    line_len = line_geom.length()
                     # Use correct field names: 'rwy', 'desc', 'ref_mos'
                     attributes = {
                         "rwy": runway_name,
                         "desc": "Displaced Threshold Marking",
                         "end_desig": primary_desig,
-                        "len_m": round(line_len, 3) if line_len else None,
+                        "len_m": round(disp_thr_1, 3),
                         "ref_mos": marking_ref,
                     }
                     displaced_marking_features.append(
@@ -863,15 +900,18 @@ class PhysicalGeometryMixin:
 
         if disp_thr_2 > 1e-6:
             try:
-                line_geom = QgsGeometry.fromPolylineXY([phys_p_end, rec_thr_point])
+                line_geom = _create_marking_line(
+                    phys_p_end,
+                    rec_thr_point,
+                    end_clearance_m=displaced_marking_end_clearance_m,
+                )
                 if line_geom and not line_geom.isEmpty():
-                    line_len = line_geom.length()
                     # Use correct field names: 'rwy', 'desc', 'ref_mos'
                     attributes = {
                         "rwy": runway_name,
                         "desc": "Displaced Threshold Marking",
                         "end_desig": reciprocal_desig,
-                        "len_m": round(line_len, 3) if line_len else None,
+                        "len_m": round(disp_thr_2, 3),
                         "ref_mos": marking_ref,
                     }
                     displaced_marking_features.append(
@@ -901,15 +941,18 @@ class PhysicalGeometryMixin:
                 )
                 if not outermost_p:
                     raise ValueError("Projection failed")
-                line_geom = QgsGeometry.fromPolylineXY([outermost_p, phys_p_start])
+                line_geom = _create_marking_line(
+                    phys_p_start,
+                    outermost_p,
+                    end_clearance_m=pre_area_marking_end_clearance_m,
+                )
                 if line_geom and not line_geom.isEmpty():
-                    line_len = line_geom.length()
                     # Use correct field names: 'rwy', 'desc', 'ref_mos'
                     attributes = {
                         "rwy": runway_name,
                         "desc": "Pre-Threshold Area Marking",
                         "end_desig": primary_desig,
-                        "len_m": round(line_len, 3) if line_len else None,
+                        "len_m": round(pre_area_len_1, 3),
                         "ref_mos": "MOS 8.16(2)",
                     }
                     pre_area_marking_features.append(
@@ -935,15 +978,18 @@ class PhysicalGeometryMixin:
                 )
                 if not outermost_r:
                     raise ValueError("Projection failed")
-                line_geom = QgsGeometry.fromPolylineXY([outermost_r, phys_p_end])
+                line_geom = _create_marking_line(
+                    phys_p_end,
+                    outermost_r,
+                    end_clearance_m=pre_area_marking_end_clearance_m,
+                )
                 if line_geom and not line_geom.isEmpty():
-                    line_len = line_geom.length()
                     # Use correct field names: 'rwy', 'desc', 'ref_mos'
                     attributes = {
                         "rwy": runway_name,
                         "desc": "Pre-Threshold Area Marking",
                         "end_desig": reciprocal_desig,
-                        "len_m": round(line_len, 3) if line_len else None,
+                        "len_m": round(pre_area_len_2, 3),
                         "ref_mos": "MOS 8.16(2)",
                     }
                     pre_area_marking_features.append(

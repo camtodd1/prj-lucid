@@ -163,7 +163,7 @@
             <Option value="3x:0,0,0,0,0,0" name="interval_map_unit_scale" type="QString"/>
             <Option value="RenderMetersInMapUnits" name="interval_unit" type="QString"/>
             <Option value="0" name="offset" type="QString"/>
-            <Option value="30" name="offset_along_line" type="QString"/>
+            <Option value="15" name="offset_along_line" type="QString"/>
             <Option value="3x:0,0,0,0,0,0" name="offset_along_line_map_unit_scale" type="QString"/>
             <Option value="RenderMetersInMapUnits" name="offset_along_line_unit" type="QString"/>
             <Option value="3x:0,0,0,0,0,0" name="offset_map_unit_scale" type="QString"/>
@@ -193,7 +193,7 @@
                 <Option value="0" name="angle" type="QString"/>
                 <Option value="square" name="cap_style" type="QString"/>
                 <Option value="255,0,0,255,rgb:1,0,0,1" name="color" type="QString"/>
-                <Option value="2" name="horizontal_anchor_point" type="QString"/>
+                <Option value="1" name="horizontal_anchor_point" type="QString"/>
                 <Option value="bevel" name="joinstyle" type="QString"/>
                 <Option value="arrowhead" name="name" type="QString"/>
                 <Option value="0,0" name="offset" type="QString"/>
