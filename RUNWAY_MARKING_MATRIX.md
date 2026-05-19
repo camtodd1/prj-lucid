@@ -96,6 +96,7 @@ existing data:
 | Side stripe markings | Drafting requirements | Generated polygon geometry |
 | Displaced threshold markings | Legacy symbolic implementation retained | Move to generated geometry in a later migration |
 | Pre-threshold area chevrons | Legacy symbolic implementation retained | Move to generated geometry in a later migration |
+| Marking QA report | Implemented as compact point/table layer | One feature per runway end |
 
 ## Promotion And Legacy Layer Policy
 
@@ -107,6 +108,11 @@ existing data:
 - Legacy symbolic layers should be grouped separately from the core physical
   geometry layers so users can clearly distinguish old symbol-driven output
   from the detailed generated marking model.
+- A compact `Runway Marking QA` layer should be generated with one threshold
+  point feature per runway end. Its attribute table lists generated mandatory
+  marking families, generated optional/recommended marking families,
+  assumptions used, and skipped markings with reasons where the generator can
+  determine them.
 
 ## Cross-Cutting Rule: Intersecting Runways
 

@@ -242,6 +242,40 @@ class PhysicalGeometryMixin:
                     ),
                     QgsField("notes", QVariant.String, self.tr("Notes"), 250),
                 ]
+                marking_qa_fields = [
+                    QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
+                    QgsField(
+                        "end_desig", QVariant.String, self.tr("End Designator"), 10
+                    ),
+                    QgsField(
+                        "mandatory",
+                        QVariant.String,
+                        self.tr("Mandatory Markings Generated"),
+                        1000,
+                    ),
+                    QgsField(
+                        "optional",
+                        QVariant.String,
+                        self.tr("Optional/Recommended Markings Generated"),
+                        1000,
+                    ),
+                    QgsField(
+                        "assumptions",
+                        QVariant.String,
+                        self.tr("Assumptions Used"),
+                        1000,
+                    ),
+                    QgsField(
+                        "skipped",
+                        QVariant.String,
+                        self.tr("Skipped Markings / Reasons"),
+                        1000,
+                    ),
+                    QgsField(
+                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
+                    ),
+                    QgsField("notes", QVariant.String, self.tr("Notes"), 250),
+                ]
 
                 layer_definitions = {
                     "rwy": {
@@ -313,6 +347,12 @@ class PhysicalGeometryMixin:
                         "fields": detailed_marking_fields,
                         "group": detailed_marking_group,
                     },
+                    "DetailedMarkingQA": {
+                        "name": self.tr("Runway Marking QA"),
+                        "fields": marking_qa_fields,
+                        "geom_type": "Point",
+                        "group": detailed_marking_group,
+                    },
                     "Stopway": {
                         "name": self.tr("Stopways"),
                         "fields": stopway_resa_fields,
@@ -353,6 +393,7 @@ class PhysicalGeometryMixin:
                     "DetailedAimingPointMarking": "Runway Marking White",
                     "DetailedTouchdownZoneMarking": "Runway Marking White",
                     "DetailedSideStripeMarking": "Runway Marking White",
+                    "DetailedMarkingQA": "Default Point",
                     "Stopway": "Stopways",
                     "GradedStrip": "Runway Graded Strips",
                     "FlyoverStrip": "Runway Strip Flyover Area",
@@ -373,6 +414,7 @@ class PhysicalGeometryMixin:
                     "DetailedAimingPointMarking",
                     "DetailedTouchdownZoneMarking",
                     "DetailedSideStripeMarking",
+                    "DetailedMarkingQA",
                     "Stopway",
                     "GradedStrip",
                     "FlyoverStrip",
@@ -1159,6 +1201,76 @@ class PhysicalGeometryMixin:
             "notes": notes,
         }
 
+    def _marking_qa_attrs(
+        self,
+        runway_name: str,
+        end_desig: str,
+        mandatory: List[str],
+        optional: List[str],
+        assumptions: List[str],
+        skipped: List[str],
+    ) -> dict:
+        return {
+            "rwy": runway_name,
+            "end_desig": end_desig,
+            "mandatory": "; ".join(sorted(set(mandatory))) or "None",
+            "optional": "; ".join(sorted(set(optional))) or "None",
+            "assumptions": "; ".join(sorted(set(assumptions))) or "None",
+            "skipped": "; ".join(skipped) or "None",
+            "ref_mos": "MOS 8.15; MOS 8.17-8.25",
+            "notes": "Generated from detailed runway marking pass.",
+        }
+
+    def _append_marking_qa_records(
+        self,
+        generated: List[Tuple[str, QgsGeometry, dict]],
+        runway_name: str,
+        qa_records: dict,
+        whole_runway_mandatory: List[str],
+        whole_runway_optional: List[str],
+    ) -> None:
+        family_by_layer = {
+            "DetailedThresholdMarking": "Threshold markings",
+            "DetailedDesignationMarking": "Runway designation markings",
+            "DetailedAimingPointMarking": "Aiming point markings",
+            "DetailedTouchdownZoneMarking": "Touchdown zone markings",
+            "DetailedCentrelineMarking": "Centreline markings",
+            "DetailedSideStripeMarking": "Side-stripe markings",
+        }
+
+        for end_desig, qa in qa_records.items():
+            mandatory = list(whole_runway_mandatory)
+            optional = list(whole_runway_optional)
+            for element_type, _, attrs in generated:
+                family = family_by_layer.get(element_type)
+                if family is None:
+                    continue
+                feature_end = attrs.get("end_desig")
+                if feature_end not in {end_desig, ""}:
+                    continue
+                if attrs.get("mandatory", True):
+                    mandatory.append(family)
+                else:
+                    optional.append(family)
+
+            point = qa.get("point")
+            if point is None:
+                continue
+            generated.append(
+                (
+                    "DetailedMarkingQA",
+                    QgsGeometry.fromPointXY(point),
+                    self._marking_qa_attrs(
+                        runway_name,
+                        end_desig,
+                        mandatory,
+                        optional,
+                        list(qa.get("assumptions", [])),
+                        list(qa.get("skipped", [])),
+                    ),
+                )
+            )
+
     def _threshold_marking_params(
         self, runway_width: float
     ) -> Optional[Tuple[int, float]]:
@@ -1275,10 +1387,30 @@ class PhysicalGeometryMixin:
                 type_reciprocal,
             ),
         ]
+        default_assumptions = {
+            "Runway assumed sealed concrete/asphalt until surface type input exists.",
+            "Piano keys start 6 m after the 1.2 m threshold line.",
+            "Runway designations use SVG glyphs; polygon glyph generation deferred.",
+            "Centreline uses default 30 m stripe / 20 m gap pattern.",
+            "Take-off RVR < 550 m centreline-width trigger not modelled.",
+            "Taxiway marking breaks are out of scope.",
+            "MOS 8.15 intersecting-runway clipping is applied after QA capture.",
+        }
+        qa_records = {
+            end_desig: {
+                "point": origin,
+                "assumptions": set(default_assumptions),
+                "skipped": [],
+            }
+            for end_desig, origin, _, _ in end_specs
+        }
+        whole_runway_mandatory: List[str] = []
+        whole_runway_optional: List[str] = []
 
         # Threshold transverse bars, piano keys, designation anchor points,
         # aiming points, and touchdown-zone markings are generated per runway end.
         for end_desig, origin, azimuth, runway_type in end_specs:
+            skipped = qa_records[end_desig]["skipped"]
             threshold_bar = self._create_runway_marking_rectangle(
                 origin,
                 azimuth,
@@ -1306,6 +1438,8 @@ class PhysicalGeometryMixin:
                         ),
                     )
                 )
+            else:
+                skipped.append("Threshold transverse line: geometry generation failed.")
 
             threshold_params = self._threshold_marking_params(runway_width)
             if threshold_params is not None:
@@ -1361,6 +1495,10 @@ class PhysicalGeometryMixin:
                             )
                         )
             else:
+                skipped.append(
+                    "Threshold piano keys: unsupported runway width "
+                    f"{runway_width} m for Table 8.17(2)."
+                )
                 QgsMessageLog.logMessage(
                     f"Detailed threshold piano keys not generated for {runway_name}: unsupported width {runway_width}.",
                     plugin_tag,
@@ -1385,6 +1523,9 @@ class PhysicalGeometryMixin:
                         glyph_center, lateral_center, azimuth
                     )
                 if not glyph_center:
+                    skipped.append(
+                        f"Runway designation glyph {glyph}: anchor projection failed."
+                    )
                     continue
                 generated.append(
                     (
@@ -1454,6 +1595,10 @@ class PhysicalGeometryMixin:
                     midpoint_zone_end = runway_length / 2.0 + 275.0
                     for offset in touchdown_offsets:
                         if abs(offset - aim_offset) < 50.0:
+                            skipped.append(
+                                "ICAO A touchdown zone pair "
+                                f"at {offset:g} m: within 50 m of aiming point."
+                            )
                             continue
                         block_start = offset
                         block_end = offset + 22.5
@@ -1461,6 +1606,10 @@ class PhysicalGeometryMixin:
                             block_start < midpoint_zone_end
                             and block_end > midpoint_zone_start
                         ):
+                            skipped.append(
+                                "ICAO A touchdown zone pair "
+                                f"at {offset:g} m: intersects 550 m midpoint exclusion zone."
+                            )
                             continue
                         for side_name, sign in (("L", -1.0), ("R", 1.0)):
                             lateral_center = sign * (aim_spacing / 2.0 + 1.5)
@@ -1539,6 +1688,11 @@ class PhysicalGeometryMixin:
                                         ),
                                     )
                                 )
+            else:
+                skipped.append(
+                    "Aiming point and dependent touchdown zone markings: no "
+                    "current rule for this runway width/type combination."
+                )
 
         # One centreline stripe set for the whole runway, measured primary to
         # reciprocal, with the last stripe truncated if needed.
@@ -1592,9 +1746,17 @@ class PhysicalGeometryMixin:
                 )
             stripe_no += 1
             offset += 50.0
+        if stripe_no > 1:
+            whole_runway_mandatory.append("Centreline markings")
+        else:
+            for qa in qa_records.values():
+                qa["skipped"].append(
+                    "Centreline markings: runway too short after designation clearances."
+                )
 
         # Side stripes between runway thresholds. Intersecting runway clipping is
-        # intentionally deferred until the precedence/clipping rule is finalised.
+        # applied later as a cross-runway post-processing pass.
+        side_stripe_count = 0
         for side_name, lateral_center in (
             ("L", -runway_width / 2.0 + centreline_width / 2.0),
             ("R", runway_width / 2.0 - centreline_width / 2.0),
@@ -1628,7 +1790,20 @@ class PhysicalGeometryMixin:
                         ),
                     )
                 )
+                side_stripe_count += 1
+        if side_stripe_count:
+            whole_runway_mandatory.append("Side-stripe markings")
+        else:
+            for qa in qa_records.values():
+                qa["skipped"].append("Side-stripe markings: geometry generation failed.")
 
+        self._append_marking_qa_records(
+            generated,
+            runway_name,
+            qa_records,
+            whole_runway_mandatory,
+            whole_runway_optional,
+        )
         return generated
 
     def generate_physical_geometry(
