@@ -42,12 +42,12 @@ class PhysicalGeometryMixin:
         any_physical_or_protection_ok = False
 
         if processed_runway_data_list and any_runway_base_data_ok:
-            physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
-            self._stage_layer_tree_node(physical_geom_group)
             detailed_marking_group = main_group.addGroup(
                 self.tr("Detailed Runway Markings")
             )
             self._stage_layer_tree_node(detailed_marking_group)
+            physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
+            self._stage_layer_tree_node(physical_geom_group)
             protection_area_group = main_group.addGroup(
                 self.tr("Runway Protection Areas")
             )
