@@ -928,6 +928,7 @@ class SafeguardingBuilder(
                     main_group,
                     arc_num_val,
                     arc_let_val,
+                    runway_data.get("declared_distances"),
                 )
 
                 # Check the result from the helper
@@ -1633,6 +1634,7 @@ class SafeguardingBuilder(
         layer_group: QgsLayerTreeGroup,
         arc_num_val: Optional[str] = None,
         arc_let_val: Optional[str] = None,
+        declared_distances: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[QgsVectorLayer]:
         """Creates the runway centreline layer using the helper."""
         plugin_tag = PLUGIN_TAG
@@ -1714,6 +1716,10 @@ class SafeguardingBuilder(
                     level=Qgis.Warning,
                 )
 
+            declared_distance_attrs = self._format_centreline_declared_distances(
+                declared_distances or []
+            )
+
             # Prepare feature
             feature = QgsFeature(fields)
             feature.setGeometry(line_geom)
@@ -1723,10 +1729,10 @@ class SafeguardingBuilder(
                     length_attr,
                     azimuth_attr,
                     reciprocal_azimuth_attr,
-                    None,  # TODA - blank for now
-                    None,  # TORA - blank for now
-                    None,  # LDA - blank for now
-                    None,  # ASDA - blank for now
+                    declared_distance_attrs["toda"],
+                    declared_distance_attrs["tora"],
+                    declared_distance_attrs["lda"],
+                    declared_distance_attrs["asda"],
                     arc_num_val,
                     arc_let_val,
                 ]
@@ -1752,6 +1758,22 @@ class SafeguardingBuilder(
                 level=Qgis.Critical,
             )
             return None
+
+    def _format_centreline_declared_distances(
+        self, declared_distances: List[Dict[str, Any]]
+    ) -> Dict[str, Optional[str]]:
+        """Format per-direction declared distances for centreline attributes."""
+        formatted = {}
+        for field_name in ["toda", "tora", "lda", "asda"]:
+            value_key = f"{field_name}_m"
+            parts = []
+            for record in declared_distances:
+                end_desig = record.get("end_desig")
+                value = record.get(value_key)
+                if end_desig and value is not None:
+                    parts.append(f"{end_desig}={round(float(value), 3):g}")
+            formatted[field_name] = ";".join(parts) if parts else None
+        return formatted
 
     def _create_offset_rectangle(
         self,
