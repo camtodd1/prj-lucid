@@ -164,8 +164,22 @@ class PhysicalGeometryMixin:
                     "OverallStrip": "Runway Overall Strips",
                     "RESA": "Runway End Safety Areas (RESA)",
                 }
+                layer_creation_order = [
+                    "rwy",
+                    "PreThresholdRunway",
+                    "PreThresholdArea",
+                    "DisplacedThresholdMarking",
+                    "PreThresholdAreaMarking",
+                    "Shoulder",
+                    "Stopway",
+                    "GradedStrip",
+                    "FlyoverStrip",
+                    "OverallStrip",
+                    "RESA",
+                ]
 
-                for element_type, definition in layer_definitions.items():
+                for element_type in layer_creation_order:
+                    definition = layer_definitions[element_type]
                     target_group = definition.get("group")
                     if target_group is None:
                         QgsMessageLog.logMessage(
@@ -436,7 +450,10 @@ class PhysicalGeometryMixin:
                 )
                 any_layer_successfully_processed_in_this_block = False
 
-                for element_type, spec in physical_layer_specs.items():
+                for element_type in layer_creation_order:
+                    spec = physical_layer_specs.get(element_type)
+                    if spec is None:
+                        continue
                     features_to_write = physical_features.get(element_type, [])
                     if features_to_write:
                         final_layer = self._create_and_add_layer(
@@ -465,6 +482,7 @@ class PhysicalGeometryMixin:
 
                 if physical_geom_group is not None:
                     project_root = QgsProject.instance().layerTreeRoot()
+                    centreline_insert_index = 0
                     for rwy_data in processed_runway_data_list:
                         cl_layer = rwy_data.get("centreline_layer")
                         if cl_layer is not None:
@@ -472,7 +490,10 @@ class PhysicalGeometryMixin:
                             if cl_node is not None:
                                 cloned_node = cl_node.clone()
                                 self._stage_layer_tree_node(cloned_node)
-                                physical_geom_group.insertChildNode(0, cloned_node)
+                                physical_geom_group.insertChildNode(
+                                    centreline_insert_index, cloned_node
+                                )
+                                centreline_insert_index += 1
                                 if cl_node.parent() is not None:
                                     cl_node.parent().removeChildNode(cl_node)
 

@@ -190,7 +190,7 @@
             </data_defined_properties>
             <layer locked="0" enabled="1" pass="0" class="SimpleMarker" id="{e2798af6-d500-4494-b7df-1e105c043c53}">
               <Option type="Map">
-                <Option value="0" name="angle" type="QString"/>
+                <Option value="180" name="angle" type="QString"/>
                 <Option value="square" name="cap_style" type="QString"/>
                 <Option value="255,0,0,255,rgb:1,0,0,1" name="color" type="QString"/>
                 <Option value="1" name="horizontal_anchor_point" type="QString"/>
