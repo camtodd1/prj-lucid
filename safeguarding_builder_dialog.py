@@ -975,6 +975,38 @@ class SafeguardingBuilderDialog(
             current_errors += 1
             validated["shoulder"] = None
 
+        for field_name, label in [
+            ("clearway1_len", "primary clearway length"),
+            ("clearway2_len", "reciprocal clearway length"),
+            ("stopway1_len", "primary stopway length"),
+            ("stopway2_len", "reciprocal stopway length"),
+        ]:
+            try:
+                raw_value = str(inputs.get(field_name, "")).strip()
+                if raw_value:
+                    parsed_value = float(raw_value)
+                    if parsed_value < 0:
+                        raise ValueError("Cannot be negative")
+                    validated[field_name] = parsed_value
+                else:
+                    validated[field_name] = 0.0
+            except ValueError:
+                errors.append(
+                    f"Rwy {index}: Invalid {label} '{inputs.get(field_name, '')}'. Must be non-negative."
+                )
+                current_errors += 1
+                validated[field_name] = 0.0
+
+        for field_name in [
+            "takeoff_available_1",
+            "takeoff_available_2",
+            "landing_available_1",
+            "landing_available_2",
+        ]:
+            validated[field_name] = self._bool_from_input(
+                inputs.get(field_name, True)
+            )
+
         # Optional fields (just copy text)
         validated["arc_num"] = inputs.get("arc_num")
         validated["arc_let"] = inputs.get("arc_let")
@@ -982,6 +1014,13 @@ class SafeguardingBuilderDialog(
         validated["type2"] = inputs.get("type2")
 
         return validated if current_errors == 0 else None
+
+    def _bool_from_input(self, value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return True
+        return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
     # --- Global/CNS Input Getters (no changes needed) ---
     def _get_global_inputs(

@@ -916,6 +916,9 @@ class SafeguardingBuilder(
                 reciprocal_desig = f"{reciprocal_num:02d}{reciprocal_suffix}"
                 short_runway_name = f"{primary_desig}/{reciprocal_desig}"
                 runway_data["short_name"] = short_runway_name
+                runway_data["declared_distances"] = (
+                    self._calculate_declared_distances(runway_data)
+                )
 
                 centreline_layer = self.create_runway_centreline_layer(
                     thr_point,
@@ -956,6 +959,151 @@ class SafeguardingBuilder(
 
             # QgsMessageLog.logMessage(f"Finished processing centrelines. {len(processed_runway_data_list)}/{len(runway_input_list)} successful.", plugin_tag, level=Qgis.Info)
         return processed_runway_data_list, any_runway_base_data_ok
+
+    def _calculate_declared_distances(
+        self, runway_data: Dict[str, Any]
+    ) -> List[Dict[str, Any]]:
+        """Calculate baseline declared distances for both runway directions."""
+        runway_name = runway_data.get(
+            "short_name", f"RWY_{runway_data.get('original_index', '?')}"
+        )
+        thr_point = runway_data.get("thr_point")
+        rec_thr_point = runway_data.get("rec_thr_point")
+        if thr_point is None or rec_thr_point is None:
+            return []
+
+        rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
+        if rwy_params is None:
+            return []
+
+        disp_primary = self._non_negative_float(
+            runway_data.get("thr_displaced_1"), 0.0
+        )
+        disp_reciprocal = self._non_negative_float(
+            runway_data.get("thr_displaced_2"), 0.0
+        )
+        physical_endpoints = self._get_physical_runway_endpoints(
+            thr_point, rec_thr_point, disp_primary, disp_reciprocal, rwy_params
+        )
+        if physical_endpoints is None:
+            return []
+
+        _, _, physical_length = physical_endpoints
+        threshold_length = rwy_params.get("length")
+        if physical_length is None or threshold_length is None:
+            return []
+
+        if "/" in runway_name:
+            primary_desig, reciprocal_desig = runway_name.split("/", 1)
+        else:
+            primary_desig = runway_name
+            reciprocal_desig = "Reciprocal"
+
+        clearway_primary_end = self._non_negative_float(
+            runway_data.get("clearway1_len"), 0.0
+        )
+        clearway_reciprocal_end = self._non_negative_float(
+            runway_data.get("clearway2_len"), 0.0
+        )
+        stopway_primary_end = self._non_negative_float(
+            runway_data.get("stopway1_len"), 0.0
+        )
+        stopway_reciprocal_end = self._non_negative_float(
+            runway_data.get("stopway2_len"), 0.0
+        )
+
+        primary_takeoff_available = self._bool_from_runway_data(
+            runway_data.get("takeoff_available_1", True)
+        )
+        reciprocal_takeoff_available = self._bool_from_runway_data(
+            runway_data.get("takeoff_available_2", True)
+        )
+        primary_landing_available = self._bool_from_runway_data(
+            runway_data.get("landing_available_1", True)
+        )
+        reciprocal_landing_available = self._bool_from_runway_data(
+            runway_data.get("landing_available_2", True)
+        )
+
+        primary_tora = physical_length if primary_takeoff_available else None
+        reciprocal_tora = physical_length if reciprocal_takeoff_available else None
+        primary_lda = (
+            threshold_length + disp_reciprocal
+            if primary_landing_available
+            else None
+        )
+        reciprocal_lda = (
+            threshold_length + disp_primary
+            if reciprocal_landing_available
+            else None
+        )
+
+        return [
+            {
+                "rwy": runway_name,
+                "end_desig": primary_desig,
+                "direction": "primary",
+                "bearing_deg": rwy_params.get("azimuth_p_r"),
+                "physical_len_m": physical_length,
+                "threshold_len_m": threshold_length,
+                "disp_thr_m": disp_primary,
+                "clearway_m": clearway_reciprocal_end,
+                "stopway_m": stopway_reciprocal_end,
+                "takeoff_available": primary_takeoff_available,
+                "landing_available": primary_landing_available,
+                "tora_m": primary_tora,
+                "toda_m": (
+                    primary_tora + clearway_reciprocal_end
+                    if primary_tora is not None
+                    else None
+                ),
+                "asda_m": (
+                    primary_tora + stopway_reciprocal_end
+                    if primary_tora is not None
+                    else None
+                ),
+                "lda_m": primary_lda,
+            },
+            {
+                "rwy": runway_name,
+                "end_desig": reciprocal_desig,
+                "direction": "reciprocal",
+                "bearing_deg": rwy_params.get("azimuth_r_p"),
+                "physical_len_m": physical_length,
+                "threshold_len_m": threshold_length,
+                "disp_thr_m": disp_reciprocal,
+                "clearway_m": clearway_primary_end,
+                "stopway_m": stopway_primary_end,
+                "takeoff_available": reciprocal_takeoff_available,
+                "landing_available": reciprocal_landing_available,
+                "tora_m": reciprocal_tora,
+                "toda_m": (
+                    reciprocal_tora + clearway_primary_end
+                    if reciprocal_tora is not None
+                    else None
+                ),
+                "asda_m": (
+                    reciprocal_tora + stopway_primary_end
+                    if reciprocal_tora is not None
+                    else None
+                ),
+                "lda_m": reciprocal_lda,
+            },
+        ]
+
+    def _non_negative_float(self, value: Any, default: float = 0.0) -> float:
+        try:
+            parsed = float(value)
+            return parsed if parsed >= 0 else default
+        except (TypeError, ValueError):
+            return default
+
+    def _bool_from_runway_data(self, value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return True
+        return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
     def _create_guideline_groups(
         self, main_group: QgsLayerTreeGroup

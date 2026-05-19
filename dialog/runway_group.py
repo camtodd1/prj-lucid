@@ -201,6 +201,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         gridLayout_Coords.addWidget(self.thr_pre_area_2_le, current_coord_row, 2)
 
         groupBox_layout.addLayout(gridLayout_Coords)
+        self._add_declared_distance_controls(groupBox_layout)
 
         self.rwy_name_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.rwy_name_lbl.setObjectName(f"label_rwy_name_{self.index}")
@@ -359,6 +360,107 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         layout.addWidget(self.type2_lbl, row + 1, 0)
         layout.addWidget(self.type2_combo, row + 1, 1)
 
+    def _add_declared_distance_controls(self, parent_layout: QtWidgets.QVBoxLayout):
+        declared_group = QtWidgets.QGroupBox("Declared Distances")
+        declared_group.setObjectName(f"groupBox_declared_distances_{self.index}")
+        declared_layout = QtWidgets.QGridLayout(declared_group)
+        declared_layout.setColumnStretch(0, 2)
+        declared_layout.setColumnStretch(1, 1)
+        declared_layout.setColumnStretch(2, 1)
+
+        primary_label = QtWidgets.QLabel("Primary End")
+        reciprocal_label = QtWidgets.QLabel("Reciprocal End")
+        primary_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        reciprocal_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        declared_layout.addWidget(primary_label, 0, 1)
+        declared_layout.addWidget(reciprocal_label, 0, 2)
+
+        clearway_label = QtWidgets.QLabel("Clearway (m):")
+        self.clearway1_len_le = QtWidgets.QLineEdit()
+        self.clearway1_len_le.setObjectName(f"lineEdit_clearway1_len_{self.index}")
+        self.clearway1_len_le.setPlaceholderText("0")
+        self.clearway1_len_le.setToolTip(
+            "Clearway length beyond the primary physical runway end."
+        )
+        self.clearway1_len_le.setValidator(self.distance_validator)
+
+        self.clearway2_len_le = QtWidgets.QLineEdit()
+        self.clearway2_len_le.setObjectName(f"lineEdit_clearway2_len_{self.index}")
+        self.clearway2_len_le.setPlaceholderText("0")
+        self.clearway2_len_le.setToolTip(
+            "Clearway length beyond the reciprocal physical runway end."
+        )
+        self.clearway2_len_le.setValidator(self.distance_validator)
+        declared_layout.addWidget(clearway_label, 1, 0)
+        declared_layout.addWidget(self.clearway1_len_le, 1, 1)
+        declared_layout.addWidget(self.clearway2_len_le, 1, 2)
+
+        stopway_label = QtWidgets.QLabel("Stopway (m):")
+        self.stopway1_len_le = QtWidgets.QLineEdit()
+        self.stopway1_len_le.setObjectName(f"lineEdit_stopway1_len_{self.index}")
+        self.stopway1_len_le.setPlaceholderText("0")
+        self.stopway1_len_le.setToolTip(
+            "Stopway length beyond the primary physical runway end."
+        )
+        self.stopway1_len_le.setValidator(self.distance_validator)
+
+        self.stopway2_len_le = QtWidgets.QLineEdit()
+        self.stopway2_len_le.setObjectName(f"lineEdit_stopway2_len_{self.index}")
+        self.stopway2_len_le.setPlaceholderText("0")
+        self.stopway2_len_le.setToolTip(
+            "Stopway length beyond the reciprocal physical runway end."
+        )
+        self.stopway2_len_le.setValidator(self.distance_validator)
+        declared_layout.addWidget(stopway_label, 2, 0)
+        declared_layout.addWidget(self.stopway1_len_le, 2, 1)
+        declared_layout.addWidget(self.stopway2_len_le, 2, 2)
+
+        takeoff_label = QtWidgets.QLabel("Takeoff available:")
+        self.takeoff_available_1_cb = QtWidgets.QCheckBox()
+        self.takeoff_available_1_cb.setObjectName(
+            f"checkBox_takeoff_available_1_{self.index}"
+        )
+        self.takeoff_available_1_cb.setChecked(True)
+        self.takeoff_available_1_cb.setToolTip(
+            "Takeoff is available in the primary runway direction."
+        )
+
+        self.takeoff_available_2_cb = QtWidgets.QCheckBox()
+        self.takeoff_available_2_cb.setObjectName(
+            f"checkBox_takeoff_available_2_{self.index}"
+        )
+        self.takeoff_available_2_cb.setChecked(True)
+        self.takeoff_available_2_cb.setToolTip(
+            "Takeoff is available in the reciprocal runway direction."
+        )
+        declared_layout.addWidget(takeoff_label, 3, 0)
+        declared_layout.addWidget(self.takeoff_available_1_cb, 3, 1)
+        declared_layout.addWidget(self.takeoff_available_2_cb, 3, 2)
+
+        landing_label = QtWidgets.QLabel("Landing available:")
+        self.landing_available_1_cb = QtWidgets.QCheckBox()
+        self.landing_available_1_cb.setObjectName(
+            f"checkBox_landing_available_1_{self.index}"
+        )
+        self.landing_available_1_cb.setChecked(True)
+        self.landing_available_1_cb.setToolTip(
+            "Landing is available toward the primary runway threshold."
+        )
+
+        self.landing_available_2_cb = QtWidgets.QCheckBox()
+        self.landing_available_2_cb.setObjectName(
+            f"checkBox_landing_available_2_{self.index}"
+        )
+        self.landing_available_2_cb.setChecked(True)
+        self.landing_available_2_cb.setToolTip(
+            "Landing is available toward the reciprocal runway threshold."
+        )
+        declared_layout.addWidget(landing_label, 4, 0)
+        declared_layout.addWidget(self.landing_available_1_cb, 4, 1)
+        declared_layout.addWidget(self.landing_available_2_cb, 4, 2)
+
+        parent_layout.addWidget(declared_group)
+
     def _connect_signals(self):
         for widget in [
             self.desig_le,
@@ -374,8 +476,19 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.thr_pre_area_2_le,
             self.width_le,
             self.shoulder_le,
+            self.clearway1_len_le,
+            self.clearway2_len_le,
+            self.stopway1_len_le,
+            self.stopway2_len_le,
         ]:
             widget.textChanged.connect(self.inputChanged.emit)
+        for checkbox in [
+            self.takeoff_available_1_cb,
+            self.takeoff_available_2_cb,
+            self.landing_available_1_cb,
+            self.landing_available_2_cb,
+        ]:
+            checkbox.stateChanged.connect(self.inputChanged.emit)
         for combo in [
             self.suffix_combo,
             self.arc_num_combo,
@@ -414,6 +527,14 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "thr_pre_area_2": self.thr_pre_area_2_le.text(),
             "width": self.width_le.text(),
             "shoulder": self.shoulder_le.text(),
+            "clearway1_len": self.clearway1_len_le.text(),
+            "clearway2_len": self.clearway2_len_le.text(),
+            "stopway1_len": self.stopway1_len_le.text(),
+            "stopway2_len": self.stopway2_len_le.text(),
+            "takeoff_available_1": self.takeoff_available_1_cb.isChecked(),
+            "takeoff_available_2": self.takeoff_available_2_cb.isChecked(),
+            "landing_available_1": self.landing_available_1_cb.isChecked(),
+            "landing_available_2": self.landing_available_2_cb.isChecked(),
             "arc_num": self.arc_num_combo.currentData(),
             "arc_let": self.arc_let_combo.currentData(),
             "type1": self.type1_combo.currentText(),
@@ -442,6 +563,22 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.thr_pre_area_2_le.setText(data.get("thr_pre_area_2", ""))
             self.width_le.setText(data.get("width", ""))
             self.shoulder_le.setText(data.get("shoulder", ""))
+            self.clearway1_len_le.setText(data.get("clearway1_len", ""))
+            self.clearway2_len_le.setText(data.get("clearway2_len", ""))
+            self.stopway1_len_le.setText(data.get("stopway1_len", ""))
+            self.stopway2_len_le.setText(data.get("stopway2_len", ""))
+            self.takeoff_available_1_cb.setChecked(
+                self._bool_from_saved_value(data.get("takeoff_available_1", True))
+            )
+            self.takeoff_available_2_cb.setChecked(
+                self._bool_from_saved_value(data.get("takeoff_available_2", True))
+            )
+            self.landing_available_1_cb.setChecked(
+                self._bool_from_saved_value(data.get("landing_available_1", True))
+            )
+            self.landing_available_2_cb.setChecked(
+                self._bool_from_saved_value(data.get("landing_available_2", True))
+            )
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
             self._set_combo_text(self.type1_combo, data.get("type1", ""))
@@ -482,8 +619,19 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
                 self.thr_pre_area_2_le,
                 self.width_le,
                 self.shoulder_le,
+                self.clearway1_len_le,
+                self.clearway2_len_le,
+                self.stopway1_len_le,
+                self.stopway2_len_le,
             ]:
                 line_edit.clear()
+            for checkbox in [
+                self.takeoff_available_1_cb,
+                self.takeoff_available_2_cb,
+                self.landing_available_1_cb,
+                self.landing_available_2_cb,
+            ]:
+                checkbox.setChecked(True)
             for combo in [
                 self.suffix_combo,
                 self.arc_num_combo,
@@ -513,6 +661,14 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.thr_pre_area_2_le,
             self.width_le,
             self.shoulder_le,
+            self.clearway1_len_le,
+            self.clearway2_len_le,
+            self.stopway1_len_le,
+            self.stopway2_len_le,
+            self.takeoff_available_1_cb,
+            self.takeoff_available_2_cb,
+            self.landing_available_1_cb,
+            self.landing_available_2_cb,
             self.arc_num_combo,
             self.arc_let_combo,
             self.type1_combo,
@@ -526,3 +682,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
     def _set_combo_text(self, combo: QtWidgets.QComboBox, value: str) -> None:
         idx = combo.findText(value, QtCore.Qt.MatchFlag.MatchFixedString)
         combo.setCurrentIndex(idx if idx >= 0 else 0)
+
+    def _bool_from_saved_value(self, value) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return True
+        return str(value).strip().lower() not in {"0", "false", "no", "off"}

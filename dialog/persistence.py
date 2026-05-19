@@ -203,7 +203,7 @@ class PersistenceMixin:
         if any(widget and widget.text() for widget in global_widgets):
             return True
         if any(
-            any(str(value).strip() for value in group.get_input_data().values())
+            self._runway_has_existing_input(group.get_input_data())
             for group in self._runway_groups.values()
         ):
             return True
@@ -211,6 +211,19 @@ class PersistenceMixin:
         if cns_table and cns_table.rowCount() > 0:
             return True
         return self._output_options_changed()
+
+    def _runway_has_existing_input(self, runway_data) -> bool:
+        default_fields = {
+            "takeoff_available_1",
+            "takeoff_available_2",
+            "landing_available_1",
+            "landing_available_2",
+        }
+        return any(
+            str(value).strip()
+            for key, value in runway_data.items()
+            if key not in default_fields
+        )
 
     def _validate_loaded_payload(self, loaded_data) -> None:
         if not isinstance(loaded_data, dict):
@@ -389,6 +402,14 @@ class PersistenceMixin:
         runway_data.setdefault("thr_pre_area_2", "")
         runway_data.setdefault("thr_displaced_1", "")
         runway_data.setdefault("thr_displaced_2", "")
+        runway_data.setdefault("clearway1_len", "")
+        runway_data.setdefault("clearway2_len", "")
+        runway_data.setdefault("stopway1_len", "")
+        runway_data.setdefault("stopway2_len", "")
+        runway_data.setdefault("takeoff_available_1", True)
+        runway_data.setdefault("takeoff_available_2", True)
+        runway_data.setdefault("landing_available_1", True)
+        runway_data.setdefault("landing_available_2", True)
         return runway_data
 
     def _line_edit(self, name: str):
