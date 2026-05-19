@@ -13,6 +13,7 @@ from qgis.core import (  # type: ignore
     QgsGeometry,
     QgsLayerTreeGroup,
     QgsMessageLog,
+    QgsPointXY,
     QgsProject,
 )
 
@@ -33,6 +34,7 @@ class PhysicalGeometryMixin:
         plugin_tag = PLUGIN_TAG
         specialised_safeguarding_group = None
         physical_geom_group = None
+        detailed_marking_group = None
         protection_area_group = None
         physical_layer_specs = {}
         physical_features: Dict[str, List[QgsFeature]] = {}
@@ -41,6 +43,10 @@ class PhysicalGeometryMixin:
         if processed_runway_data_list and any_runway_base_data_ok:
             physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
             self._stage_layer_tree_node(physical_geom_group)
+            detailed_marking_group = main_group.addGroup(
+                self.tr("Detailed Runway Markings")
+            )
+            self._stage_layer_tree_node(detailed_marking_group)
             protection_area_group = main_group.addGroup(
                 self.tr("Runway Protection Areas")
             )
@@ -161,6 +167,43 @@ class PhysicalGeometryMixin:
                     ),
                     QgsField("notes", QVariant.String, self.tr("Notes"), 250),
                 ]
+                detailed_marking_fields = [
+                    QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
+                    QgsField(
+                        "end_desig", QVariant.String, self.tr("End Designator"), 10
+                    ),
+                    QgsField("mark_type", QVariant.String, self.tr("Marking"), 40),
+                    QgsField("sub_type", QVariant.String, self.tr("Subtype"), 40),
+                    QgsField("side", QVariant.String, self.tr("Side"), 10),
+                    QgsField("stripe_no", QVariant.Int, self.tr("Stripe No.")),
+                    QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3),
+                    QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3),
+                    QgsField("offset_m", QVariant.Double, self.tr("offset_m"), 12, 3),
+                    QgsField(
+                        "spacing_m", QVariant.Double, self.tr("spacing_m"), 12, 3
+                    ),
+                    QgsField("lda_m", QVariant.Double, self.tr("lda_m"), 12, 3),
+                    QgsField("mandatory", QVariant.Bool, self.tr("Mandatory")),
+                    QgsField(
+                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
+                    ),
+                    QgsField("notes", QVariant.String, self.tr("Notes"), 250),
+                ]
+                designation_fields = [
+                    QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
+                    QgsField(
+                        "end_desig", QVariant.String, self.tr("End Designator"), 10
+                    ),
+                    QgsField("text", QVariant.String, self.tr("Designation"), 10),
+                    QgsField("bearing", QVariant.Double, self.tr("Bearing"), 10, 3),
+                    QgsField("offset_m", QVariant.Double, self.tr("offset_m"), 12, 3),
+                    QgsField("height_m", QVariant.Double, self.tr("height_m"), 12, 3),
+                    QgsField("mandatory", QVariant.Bool, self.tr("Mandatory")),
+                    QgsField(
+                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
+                    ),
+                    QgsField("notes", QVariant.String, self.tr("Notes"), 250),
+                ]
 
                 layer_definitions = {
                     "rwy": {
@@ -201,6 +244,37 @@ class PhysicalGeometryMixin:
                         "geom_type": "Point",
                         "group": physical_geom_group,
                     },
+                    "DetailedThresholdMarking": {
+                        "name": self.tr("Threshold Markings"),
+                        "fields": detailed_marking_fields,
+                        "group": detailed_marking_group,
+                    },
+                    "DetailedDesignationMarking": {
+                        "name": self.tr("Runway Designation Markings"),
+                        "fields": designation_fields,
+                        "geom_type": "Point",
+                        "group": detailed_marking_group,
+                    },
+                    "DetailedCentrelineMarking": {
+                        "name": self.tr("Runway Centreline Markings"),
+                        "fields": detailed_marking_fields,
+                        "group": detailed_marking_group,
+                    },
+                    "DetailedAimingPointMarking": {
+                        "name": self.tr("Aiming Point Markings"),
+                        "fields": detailed_marking_fields,
+                        "group": detailed_marking_group,
+                    },
+                    "DetailedTouchdownZoneMarking": {
+                        "name": self.tr("Touchdown Zone Markings"),
+                        "fields": detailed_marking_fields,
+                        "group": detailed_marking_group,
+                    },
+                    "DetailedSideStripeMarking": {
+                        "name": self.tr("Runway Side-Stripe Markings"),
+                        "fields": detailed_marking_fields,
+                        "group": detailed_marking_group,
+                    },
                     "Stopway": {
                         "name": self.tr("Stopways"),
                         "fields": stopway_resa_fields,
@@ -235,6 +309,12 @@ class PhysicalGeometryMixin:
                     "PreThresholdAreaMarking": "PreThresholdAreaMarking",
                     "Shoulder": "Runway Shoulders",
                     "DeclaredDistance": "Default Point",
+                    "DetailedThresholdMarking": "Runway Marking White",
+                    "DetailedDesignationMarking": "Default Point",
+                    "DetailedCentrelineMarking": "Runway Marking White",
+                    "DetailedAimingPointMarking": "Runway Marking White",
+                    "DetailedTouchdownZoneMarking": "Runway Marking White",
+                    "DetailedSideStripeMarking": "Runway Marking White",
                     "Stopway": "Stopways",
                     "GradedStrip": "Runway Graded Strips",
                     "FlyoverStrip": "Runway Strip Flyover Area",
@@ -249,6 +329,12 @@ class PhysicalGeometryMixin:
                     "PreThresholdAreaMarking",
                     "Shoulder",
                     "DeclaredDistance",
+                    "DetailedThresholdMarking",
+                    "DetailedDesignationMarking",
+                    "DetailedCentrelineMarking",
+                    "DetailedAimingPointMarking",
+                    "DetailedTouchdownZoneMarking",
+                    "DetailedSideStripeMarking",
                     "Stopway",
                     "GradedStrip",
                     "FlyoverStrip",
@@ -389,6 +475,34 @@ class PhysicalGeometryMixin:
                             elif element_type == "OverallStrip":
                                 overall_strip_geom = geometry
                                 overall_strip_attrs = attributes
+
+                            feature = QgsFeature(target_spec["fields"])
+                            feature.setGeometry(geometry)
+                            for field_name, value in attributes.items():
+                                idx = feature.fieldNameIndex(field_name)
+                                if idx != -1:
+                                    feature.setAttribute(idx, value)
+
+                            physical_features[element_type].append(feature)
+                            any_physical_or_protection_ok = True
+
+                        detailed_markings = self.generate_detailed_runway_markings(
+                            rwy_data
+                        )
+                        for element_type, geometry, attributes in detailed_markings:
+                            target_spec = physical_layer_specs.get(element_type)
+                            if target_spec is None:
+                                continue
+                            if geometry is None or geometry.isEmpty():
+                                continue
+                            if not geometry.isGeosValid():
+                                geometry = geometry.makeValid()
+                            if (
+                                geometry is None
+                                or geometry.isEmpty()
+                                or not geometry.isGeosValid()
+                            ):
+                                continue
 
                             feature = QgsFeature(target_spec["fields"])
                             feature.setGeometry(geometry)
@@ -643,6 +757,547 @@ class PhysicalGeometryMixin:
                     )
 
         return specialised_safeguarding_group, any_physical_or_protection_ok
+
+    def _runway_designators(self, runway_name: str) -> Tuple[str, str]:
+        if "/" in runway_name:
+            primary, reciprocal = runway_name.split("/", 1)
+            return primary.strip(), reciprocal.strip()
+        return runway_name, "Reciprocal"
+
+    def _runway_designation_length(self, designator: str) -> float:
+        number_height = 9.5 if any(char in designator for char in ("6", "9")) else 9.0
+        suffix_height = 9.0 if designator[-1:] in {"L", "C", "R"} else 0.0
+        return number_height + (6.0 + suffix_height if suffix_height else 0.0)
+
+    def _project_lateral(
+        self, point: QgsPointXY, lateral_m: float, azimuth_degrees: float
+    ) -> QgsPointXY:
+        if abs(lateral_m) <= 1e-9:
+            return point
+        azimuth = (
+            (azimuth_degrees + 90.0) % 360.0
+            if lateral_m > 0
+            else (azimuth_degrees - 90.0 + 360.0) % 360.0
+        )
+        return point.project(abs(lateral_m), azimuth)
+
+    def _create_runway_marking_rectangle(
+        self,
+        origin: QgsPointXY,
+        runway_azimuth: float,
+        start_offset_m: float,
+        length_m: float,
+        lateral_center_m: float,
+        width_m: float,
+        description: str,
+    ) -> Optional[QgsGeometry]:
+        if length_m <= 0 or width_m <= 0:
+            return None
+        start_center = origin.project(start_offset_m, runway_azimuth)
+        end_center = origin.project(start_offset_m + length_m, runway_azimuth)
+        if start_center is None or end_center is None:
+            return None
+
+        start_center = self._project_lateral(
+            start_center, lateral_center_m, runway_azimuth
+        )
+        end_center = self._project_lateral(end_center, lateral_center_m, runway_azimuth)
+        half_width = width_m / 2.0
+        az_l = (runway_azimuth - 90.0 + 360.0) % 360.0
+        az_r = (runway_azimuth + 90.0) % 360.0
+        corners = [
+            start_center.project(half_width, az_l),
+            start_center.project(half_width, az_r),
+            end_center.project(half_width, az_r),
+            end_center.project(half_width, az_l),
+        ]
+        if not all(corners):
+            return None
+        return self._create_polygon_from_corners(corners, description)
+
+    def _detail_marking_attrs(
+        self,
+        runway_name: str,
+        end_desig: str,
+        mark_type: str,
+        sub_type: str,
+        len_m: float,
+        wid_m: float,
+        ref_mos: str,
+        side: str = "",
+        stripe_no: Optional[int] = None,
+        offset_m: Optional[float] = None,
+        spacing_m: Optional[float] = None,
+        lda_m: Optional[float] = None,
+        mandatory: bool = True,
+        notes: str = "",
+    ) -> dict:
+        return {
+            "rwy": runway_name,
+            "end_desig": end_desig,
+            "mark_type": mark_type,
+            "sub_type": sub_type,
+            "side": side,
+            "stripe_no": stripe_no,
+            "len_m": round(len_m, 3),
+            "wid_m": round(wid_m, 3),
+            "offset_m": round(offset_m, 3) if offset_m is not None else None,
+            "spacing_m": round(spacing_m, 3) if spacing_m is not None else None,
+            "lda_m": round(lda_m, 3) if lda_m is not None else None,
+            "mandatory": mandatory,
+            "ref_mos": ref_mos,
+            "notes": notes,
+        }
+
+    def _threshold_marking_params(
+        self, runway_width: float
+    ) -> Optional[Tuple[int, float]]:
+        table = {
+            18.0: (4, 1.5),
+            23.0: (6, 1.5),
+            30.0: (8, 1.5),
+            45.0: (12, 1.7),
+            60.0: (16, 1.7),
+        }
+        for width_m, params in table.items():
+            if abs(float(runway_width) - width_m) <= 0.01:
+                return params
+        return None
+
+    def _centreline_marking_width(
+        self, arc_num: int, type_primary: str, type_reciprocal: str
+    ) -> float:
+        widths = []
+        for runway_type in (type_primary, type_reciprocal):
+            type_abbr = ols_dimensions.get_runway_type_abbr(runway_type)
+            if type_abbr == "PA_II_III":
+                widths.append(0.9)
+            elif type_abbr == "PA_I" or (type_abbr == "NPA" and arc_num in (3, 4)):
+                widths.append(0.45)
+            else:
+                widths.append(0.3)
+        return max(widths) if widths else 0.3
+
+    def _declared_lda_for_end(
+        self, runway_data: dict, end_desig: str, fallback_length: float
+    ) -> float:
+        for record in runway_data.get("declared_distances", []):
+            if record.get("end_desig") == end_desig and record.get("lda_m") is not None:
+                try:
+                    return float(record.get("lda_m"))
+                except (TypeError, ValueError):
+                    break
+        return fallback_length
+
+    def _aiming_point_rule(
+        self, runway_width: float, lda_m: float, runway_type: str
+    ) -> Optional[Tuple[float, float, float, float, str]]:
+        type_abbr = ols_dimensions.get_runway_type_abbr(runway_type)
+        if type_abbr in {"PA_I", "PA_II_III"}:
+            if lda_m < 800.0:
+                return 150.0, 30.0, 4.0, 6.0, "MOS 8.22(3)"
+            if lda_m < 1200.0:
+                return 250.0, 30.0, 6.0, 9.0, "MOS 8.22(3)"
+            if lda_m < 2400.0:
+                return 300.0, 45.0, 9.0, 18.0, "MOS 8.22(3)"
+            return 400.0, 45.0, 9.0, 18.0, "MOS 8.22(3)"
+
+        if abs(runway_width - 30.0) <= 0.01:
+            return 300.0, 45.0, 6.0, 17.0, "MOS 8.22(8)"
+        if runway_width >= 45.0:
+            return 300.0, 45.0, 9.0, 23.0, "MOS 8.22(8)"
+        return None
+
+    def _touchdown_zone_offsets(self, lda_m: float) -> List[float]:
+        if lda_m < 900.0:
+            return [300.0]
+        if lda_m < 1200.0:
+            return [150.0, 450.0]
+        if lda_m < 1500.0:
+            return [150.0, 300.0, 450.0, 600.0]
+        if lda_m < 2400.0:
+            return [150.0, 300.0, 450.0, 600.0, 750.0]
+        return [150.0, 300.0, 450.0, 600.0, 750.0, 900.0]
+
+    def generate_detailed_runway_markings(
+        self, runway_data: dict
+    ) -> List[Tuple[str, QgsGeometry, dict]]:
+        """Generate MOS139 runway marking polygons in a separate layer group."""
+        plugin_tag = PLUGIN_TAG
+        generated: List[Tuple[str, QgsGeometry, dict]] = []
+
+        thr_point = runway_data.get("thr_point")
+        rec_thr_point = runway_data.get("rec_thr_point")
+        runway_width = runway_data.get("width")
+        if not thr_point or not rec_thr_point or not runway_width or runway_width <= 0:
+            return generated
+
+        rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
+        if rwy_params is None:
+            return generated
+
+        runway_name = runway_data.get(
+            "short_name", f"RWY_{runway_data.get('original_index', '?')}"
+        )
+        primary_desig, reciprocal_desig = self._runway_designators(runway_name)
+        runway_length = float(rwy_params["length"])
+        try:
+            arc_num = int(float(runway_data.get("arc_num") or 0))
+        except (TypeError, ValueError):
+            arc_num = 0
+        type_primary = runway_data.get("type1", "")
+        type_reciprocal = runway_data.get("type2", "")
+        centreline_width = self._centreline_marking_width(
+            arc_num, type_primary, type_reciprocal
+        )
+
+        end_specs = [
+            (
+                primary_desig,
+                thr_point,
+                rwy_params["azimuth_p_r"],
+                type_primary,
+            ),
+            (
+                reciprocal_desig,
+                rec_thr_point,
+                rwy_params["azimuth_r_p"],
+                type_reciprocal,
+            ),
+        ]
+
+        # Threshold transverse bars, piano keys, designation anchor points,
+        # aiming points, and touchdown-zone markings are generated per runway end.
+        for end_desig, origin, azimuth, runway_type in end_specs:
+            threshold_bar = self._create_runway_marking_rectangle(
+                origin,
+                azimuth,
+                0.0,
+                1.2,
+                0.0,
+                runway_width,
+                f"Threshold bar {runway_name} {end_desig}",
+            )
+            if threshold_bar:
+                generated.append(
+                    (
+                        "DetailedThresholdMarking",
+                        threshold_bar,
+                        self._detail_marking_attrs(
+                            runway_name,
+                            end_desig,
+                            "Threshold",
+                            "Transverse Line",
+                            1.2,
+                            runway_width,
+                            "MOS 8.17(2)(a)",
+                            offset_m=0.0,
+                            mandatory=True,
+                        ),
+                    )
+                )
+
+            threshold_params = self._threshold_marking_params(runway_width)
+            if threshold_params is not None:
+                stripe_count, gap_m = threshold_params
+                stripe_width = 1.8
+                total_marked_width = (
+                    stripe_count * stripe_width + (stripe_count - 1) * gap_m
+                )
+                edge_space = (runway_width - total_marked_width) / 2.0
+                if edge_space < gap_m:
+                    stripe_width = max(
+                        0.1,
+                        (runway_width - (stripe_count + 1) * gap_m)
+                        / stripe_count,
+                    )
+                    edge_space = gap_m
+                left_edge = -runway_width / 2.0 + edge_space
+                piano_start = 1.2 + 6.0
+                for stripe_idx in range(stripe_count):
+                    stripe_left = left_edge + stripe_idx * (stripe_width + gap_m)
+                    lateral_center = stripe_left + stripe_width / 2.0
+                    geom = self._create_runway_marking_rectangle(
+                        origin,
+                        azimuth,
+                        piano_start,
+                        30.0,
+                        lateral_center,
+                        stripe_width,
+                        f"Piano key {runway_name} {end_desig} {stripe_idx + 1}",
+                    )
+                    if geom:
+                        generated.append(
+                            (
+                                "DetailedThresholdMarking",
+                                geom,
+                                self._detail_marking_attrs(
+                                    runway_name,
+                                    end_desig,
+                                    "Threshold",
+                                    "Piano Key",
+                                    30.0,
+                                    stripe_width,
+                                    "MOS 8.17(2)(b); Table 8.17(2)",
+                                    stripe_no=stripe_idx + 1,
+                                    offset_m=piano_start,
+                                    spacing_m=gap_m,
+                                    mandatory=True,
+                                    notes=(
+                                        f"Edge space {edge_space:.3f} m; "
+                                        "stripe width 1.8 m unless adjusted to keep edge spaces >= a."
+                                    ),
+                                ),
+                            )
+                        )
+            else:
+                QgsMessageLog.logMessage(
+                    f"Detailed threshold piano keys not generated for {runway_name}: unsupported width {runway_width}.",
+                    plugin_tag,
+                    level=Qgis.Info,
+                )
+
+            designation_edge_offset = 1.2 + 12.0
+            designation_length = self._runway_designation_length(end_desig)
+            designation_center = origin.project(
+                designation_edge_offset + designation_length / 2.0, azimuth
+            )
+            if designation_center:
+                generated.append(
+                    (
+                        "DetailedDesignationMarking",
+                        QgsGeometry.fromPointXY(designation_center),
+                        {
+                            "rwy": runway_name,
+                            "end_desig": end_desig,
+                            "text": end_desig,
+                            "bearing": round(azimuth, 3),
+                            "offset_m": round(designation_edge_offset, 3),
+                            "height_m": round(designation_length, 3),
+                            "mandatory": True,
+                            "ref_mos": "MOS 8.18",
+                            "notes": "Initial implementation stores designation as point/text attributes.",
+                        },
+                    )
+                )
+
+            lda_m = self._declared_lda_for_end(runway_data, end_desig, runway_length)
+            aiming_rule = self._aiming_point_rule(runway_width, lda_m, runway_type)
+            if aiming_rule is not None:
+                aim_offset, aim_len, aim_width, aim_spacing, aim_ref = aiming_rule
+                for side_name, sign in (("L", -1.0), ("R", 1.0)):
+                    lateral_center = sign * (aim_spacing / 2.0 + aim_width / 2.0)
+                    geom = self._create_runway_marking_rectangle(
+                        origin,
+                        azimuth,
+                        aim_offset,
+                        aim_len,
+                        lateral_center,
+                        aim_width,
+                        f"Aiming point {runway_name} {end_desig} {side_name}",
+                    )
+                    if geom:
+                        generated.append(
+                            (
+                                "DetailedAimingPointMarking",
+                                geom,
+                                self._detail_marking_attrs(
+                                    runway_name,
+                                    end_desig,
+                                    "Aiming Point",
+                                    "Stripe",
+                                    aim_len,
+                                    aim_width,
+                                    aim_ref,
+                                    side=side_name,
+                                    offset_m=aim_offset,
+                                    spacing_m=aim_spacing,
+                                    lda_m=lda_m,
+                                    mandatory=True,
+                                ),
+                            )
+                        )
+
+                type_abbr = ols_dimensions.get_runway_type_abbr(runway_type)
+                if type_abbr in {"PA_I", "PA_II_III"}:
+                    touchdown_offsets = self._touchdown_zone_offsets(lda_m)
+                    midpoint_zone_start = runway_length / 2.0 - 275.0
+                    midpoint_zone_end = runway_length / 2.0 + 275.0
+                    for offset in touchdown_offsets:
+                        if abs(offset - aim_offset) < 50.0:
+                            continue
+                        block_start = offset
+                        block_end = offset + 22.5
+                        if (
+                            block_start < midpoint_zone_end
+                            and block_end > midpoint_zone_start
+                        ):
+                            continue
+                        for side_name, sign in (("L", -1.0), ("R", 1.0)):
+                            lateral_center = sign * (aim_spacing / 2.0 + 1.5)
+                            geom = self._create_runway_marking_rectangle(
+                                origin,
+                                azimuth,
+                                offset,
+                                22.5,
+                                lateral_center,
+                                3.0,
+                                f"TDZ ICAO A {runway_name} {end_desig} {offset}",
+                            )
+                            if geom:
+                                generated.append(
+                                    (
+                                        "DetailedTouchdownZoneMarking",
+                                        geom,
+                                        self._detail_marking_attrs(
+                                            runway_name,
+                                            end_desig,
+                                            "Touchdown Zone",
+                                            "ICAO A",
+                                            22.5,
+                                            3.0,
+                                            "MOS 8.23; MOS 8.24",
+                                            side=side_name,
+                                            offset_m=offset,
+                                            spacing_m=aim_spacing,
+                                            lda_m=lda_m,
+                                            mandatory=(
+                                                runway_width >= 30.0
+                                                and runway_length >= 1500.0
+                                            ),
+                                            notes="Table 8.24 selection uses LDA for this initial implementation.",
+                                        ),
+                                    )
+                                )
+                else:
+                    for offset in (150.0, 450.0):
+                        for side_name, sign in (("L", -1.0), ("R", 1.0)):
+                            lateral_center = sign * (aim_spacing / 2.0 + 1.5)
+                            geom = self._create_runway_marking_rectangle(
+                                origin,
+                                azimuth,
+                                offset,
+                                22.5,
+                                lateral_center,
+                                3.0,
+                                f"TDZ simple {runway_name} {end_desig} {offset}",
+                            )
+                            if geom:
+                                generated.append(
+                                    (
+                                        "DetailedTouchdownZoneMarking",
+                                        geom,
+                                        self._detail_marking_attrs(
+                                            runway_name,
+                                            end_desig,
+                                            "Touchdown Zone",
+                                            "Simple",
+                                            22.5,
+                                            3.0,
+                                            "MOS 8.23; MOS 8.25",
+                                            side=side_name,
+                                            offset_m=offset,
+                                            spacing_m=aim_spacing,
+                                            lda_m=lda_m,
+                                            mandatory=(
+                                                runway_width >= 30.0
+                                                and runway_length >= 1500.0
+                                            ),
+                                            notes=(
+                                                "450 m pair generated by default "
+                                                "even when runway length is under 1500 m."
+                                            ),
+                                        ),
+                                    )
+                                )
+
+        # One centreline stripe set for the whole runway, measured primary to
+        # reciprocal, with the last stripe truncated if needed.
+        primary_protect = (
+            1.2 + 12.0 + self._runway_designation_length(primary_desig) + 12.0
+        )
+        reciprocal_protect = (
+            1.2 + 12.0 + self._runway_designation_length(reciprocal_desig) + 12.0
+        )
+        centreline_end = runway_length - reciprocal_protect
+        offset = primary_protect
+        stripe_no = 1
+        while offset < centreline_end - 1e-6:
+            stripe_len = min(30.0, centreline_end - offset)
+            if stripe_len <= 1.0:
+                break
+            geom = self._create_runway_marking_rectangle(
+                thr_point,
+                rwy_params["azimuth_p_r"],
+                offset,
+                stripe_len,
+                0.0,
+                centreline_width,
+                f"Centreline stripe {runway_name} {stripe_no}",
+            )
+            if geom:
+                generated.append(
+                    (
+                        "DetailedCentrelineMarking",
+                        geom,
+                        self._detail_marking_attrs(
+                            runway_name,
+                            "",
+                            "Centreline",
+                            "Stripe",
+                            stripe_len,
+                            centreline_width,
+                            "MOS 8.19",
+                            stripe_no=stripe_no,
+                            offset_m=offset,
+                            spacing_m=20.0,
+                            mandatory=True,
+                            notes=(
+                                "Single whole-runway set; final reciprocal-end stripe may be truncated."
+                            ),
+                        ),
+                    )
+                )
+            stripe_no += 1
+            offset += 50.0
+
+        # Side stripes between runway thresholds. Intersecting runway clipping is
+        # intentionally deferred until the precedence/clipping rule is finalised.
+        for side_name, lateral_center in (
+            ("L", -runway_width / 2.0 + centreline_width / 2.0),
+            ("R", runway_width / 2.0 - centreline_width / 2.0),
+        ):
+            geom = self._create_runway_marking_rectangle(
+                thr_point,
+                rwy_params["azimuth_p_r"],
+                0.0,
+                runway_length,
+                lateral_center,
+                centreline_width,
+                f"Side stripe {runway_name} {side_name}",
+            )
+            if geom:
+                generated.append(
+                    (
+                        "DetailedSideStripeMarking",
+                        geom,
+                        self._detail_marking_attrs(
+                            runway_name,
+                            "",
+                            "Side Stripe",
+                            "Continuous",
+                            runway_length,
+                            centreline_width,
+                            "MOS 8.21; MOS 8.15",
+                            side=side_name,
+                            offset_m=0.0,
+                            mandatory=True,
+                            notes="Taxiway breaks out of scope; intersecting runway clipping deferred.",
+                        ),
+                    )
+                )
+
+        return generated
 
     def generate_physical_geometry(
         self, runway_data: dict
