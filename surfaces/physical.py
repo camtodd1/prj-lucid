@@ -15,6 +15,7 @@ from qgis.core import (  # type: ignore
     QgsMessageLog,
     QgsPointXY,
     QgsProject,
+    QgsVectorLayer,
 )
 
 from .. import ols_dimensions
@@ -196,6 +197,13 @@ class PhysicalGeometryMixin:
                     ),
                     QgsField("text", QVariant.String, self.tr("Designation"), 10),
                     QgsField("bearing", QVariant.Double, self.tr("Bearing"), 10, 3),
+                    QgsField(
+                        "label_rot",
+                        QVariant.Double,
+                        self.tr("Label Rotation"),
+                        10,
+                        3,
+                    ),
                     QgsField("offset_m", QVariant.Double, self.tr("offset_m"), 12, 3),
                     QgsField("height_m", QVariant.Double, self.tr("height_m"), 12, 3),
                     QgsField("mandatory", QVariant.Bool, self.tr("Mandatory")),
@@ -310,7 +318,7 @@ class PhysicalGeometryMixin:
                     "Shoulder": "Runway Shoulders",
                     "DeclaredDistance": "Default Point",
                     "DetailedThresholdMarking": "Runway Marking White",
-                    "DetailedDesignationMarking": "Default Point",
+                    "DetailedDesignationMarking": "Runway Designation Text",
                     "DetailedCentrelineMarking": "Runway Marking White",
                     "DetailedAimingPointMarking": "Runway Marking White",
                     "DetailedTouchdownZoneMarking": "Runway Marking White",
@@ -711,6 +719,8 @@ class PhysicalGeometryMixin:
                             style_key=spec["style_key"],
                         )
                         if final_layer is not None:
+                            if element_type == "DetailedDesignationMarking":
+                                self._style_runway_designation_layer(final_layer)
                             any_physical_or_protection_ok = True
                             any_layer_successfully_processed_in_this_block = True
                         features_to_write.clear()
@@ -757,6 +767,67 @@ class PhysicalGeometryMixin:
                     )
 
         return specialised_safeguarding_group, any_physical_or_protection_ok
+
+    def _style_runway_designation_layer(self, layer: QgsVectorLayer) -> None:
+        """Apply map-unit text labels for initial runway designation rendering."""
+        if layer is None or not layer.isValid():
+            return
+
+        try:
+            from qgis.PyQt.QtGui import QColor, QFont  # type: ignore
+            from qgis.core import (  # type: ignore
+                QgsPalLayerSettings,
+                QgsProperty,
+                QgsTextBufferSettings,
+                QgsTextFormat,
+                QgsUnitTypes,
+                QgsVectorLayerSimpleLabeling,
+            )
+
+            text_format = QgsTextFormat()
+            font = QFont("Arial")
+            font.setBold(True)
+            text_format.setFont(font)
+            text_format.setSize(9.0)
+            text_format.setSizeUnit(QgsUnitTypes.RenderMapUnits)
+            text_format.setColor(QColor(255, 255, 255))
+
+            buffer_settings = QgsTextBufferSettings()
+            buffer_settings.setEnabled(False)
+            text_format.setBuffer(buffer_settings)
+
+            label_settings = QgsPalLayerSettings()
+            label_settings.enabled = True
+            label_settings.fieldName = "text"
+            label_settings.isExpression = False
+            label_settings.setFormat(text_format)
+            try:
+                label_settings.placement = QgsPalLayerSettings.OverPoint
+            except AttributeError:
+                pass
+
+            try:
+                label_settings.dataDefinedProperties().setProperty(
+                    QgsPalLayerSettings.LabelRotation,
+                    QgsProperty.fromField("label_rot"),
+                )
+            except Exception as rotation_error:
+                QgsMessageLog.logMessage(
+                    "Warning: Could not apply designation label rotation: "
+                    f"{rotation_error}",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
+
+            layer.setLabeling(QgsVectorLayerSimpleLabeling(label_settings))
+            layer.setLabelsEnabled(True)
+            layer.triggerRepaint()
+        except Exception as label_error:
+            QgsMessageLog.logMessage(
+                f"Warning: Could not apply runway designation label styling: {label_error}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
 
     def _runway_designators(self, runway_name: str) -> Tuple[str, str]:
         if "/" in runway_name:
@@ -1072,6 +1143,7 @@ class PhysicalGeometryMixin:
                             "end_desig": end_desig,
                             "text": end_desig,
                             "bearing": round(azimuth, 3),
+                            "label_rot": round((90.0 - azimuth) % 360.0, 3),
                             "offset_m": round(designation_edge_offset, 3),
                             "height_m": round(designation_length, 3),
                             "mandatory": True,
