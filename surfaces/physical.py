@@ -38,6 +38,7 @@ class PhysicalGeometryMixin:
         specialised_safeguarding_group = None
         physical_geom_group = None
         detailed_marking_group = None
+        legacy_marking_group = None
         protection_area_group = None
         physical_layer_specs = {}
         physical_features: Dict[str, List[QgsFeature]] = {}
@@ -50,6 +51,10 @@ class PhysicalGeometryMixin:
             self._stage_layer_tree_node(detailed_marking_group)
             physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
             self._stage_layer_tree_node(physical_geom_group)
+            legacy_marking_group = physical_geom_group.addGroup(
+                self.tr("Legacy Symbol Markings")
+            )
+            self._stage_layer_tree_node(legacy_marking_group)
             protection_area_group = main_group.addGroup(
                 self.tr("Runway Protection Areas")
             )
@@ -255,16 +260,16 @@ class PhysicalGeometryMixin:
                         "group": physical_geom_group,
                     },
                     "DisplacedThresholdMarking": {
-                        "name": self.tr("Displaced Threshold Markings"),
+                        "name": self.tr("Legacy Displaced Threshold Markings"),
                         "fields": marking_fields,
                         "geom_type": "LineString",
-                        "group": physical_geom_group,
+                        "group": legacy_marking_group,
                     },
                     "PreThresholdAreaMarking": {
-                        "name": self.tr("Pre-Threshold Area Markings"),
+                        "name": self.tr("Legacy Pre-Threshold Area Markings"),
                         "fields": marking_fields,
                         "geom_type": "LineString",
-                        "group": physical_geom_group,
+                        "group": legacy_marking_group,
                     },
                     "Shoulder": {
                         "name": self.tr("Runway Shoulders"),

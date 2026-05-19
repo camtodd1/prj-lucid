@@ -94,8 +94,19 @@ existing data:
 | Aiming point markings | Drafting requirements | Generated polygon geometry |
 | Touchdown zone markings | Drafting requirements in progress | Generated polygon geometry |
 | Side stripe markings | Drafting requirements | Generated polygon geometry |
-| Displaced threshold markings | Existing implementation; needs rules migration | Marker-line plus geometry rules |
-| Pre-threshold area chevrons | Existing implementation; needs rules migration | Marker-line plus geometry rules |
+| Displaced threshold markings | Legacy symbolic implementation retained | Move to generated geometry in a later migration |
+| Pre-threshold area chevrons | Legacy symbolic implementation retained | Move to generated geometry in a later migration |
+
+## Promotion And Legacy Layer Policy
+
+- The `Detailed Runway Markings` group is the primary output for generated
+  MOS139 runway markings.
+- Existing QML marker-line layers for displaced-threshold arrows and
+  pre-threshold area chevrons are retained as legacy symbolic layers until those
+  marking families are migrated to generated geometry.
+- Legacy symbolic layers should be grouped separately from the core physical
+  geometry layers so users can clearly distinguish old symbol-driven output
+  from the detailed generated marking model.
 
 ## Cross-Cutting Rule: Intersecting Runways
 
