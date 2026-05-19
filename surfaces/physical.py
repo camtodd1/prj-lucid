@@ -878,6 +878,18 @@ class PhysicalGeometryMixin:
         suffix_height = 9.0 if designator[-1:] in {"L", "C", "R"} else 0.0
         return number_height + (6.0 + suffix_height if suffix_height else 0.0)
 
+    def _runway_designation_start_offset(self) -> float:
+        threshold_line_width = 1.2
+        piano_key_gap_after_threshold = 6.0
+        piano_key_length = 30.0
+        designation_gap_after_piano_keys = 12.0
+        return (
+            threshold_line_width
+            + piano_key_gap_after_threshold
+            + piano_key_length
+            + designation_gap_after_piano_keys
+        )
+
     def _runway_designation_glyph_width(self, glyph: str) -> float:
         return {
             "0": 6.0,
@@ -1207,15 +1219,16 @@ class PhysicalGeometryMixin:
                     level=Qgis.Info,
                 )
 
-            designation_edge_offset = 1.2 + 12.0
+            designation_edge_offset = self._runway_designation_start_offset()
             designation_length = self._runway_designation_length(end_desig)
-            angle_deg = (90.0 - azimuth) % 360.0
+            angle_deg = azimuth % 360.0
             for glyph_no, (
                 glyph,
                 longitudinal_center,
                 lateral_center,
-                glyph_size,
+                glyph_height,
             ) in enumerate(self._runway_designation_glyphs(end_desig), start=1):
+                glyph_width = self._runway_designation_glyph_width(glyph)
                 glyph_center = origin.project(
                     designation_edge_offset + longitudinal_center, azimuth
                 )
@@ -1237,13 +1250,11 @@ class PhysicalGeometryMixin:
                             "label_rot": round(angle_deg, 3),
                             "glyph": glyph,
                             "glyph_no": glyph_no,
-                            "glyph_size": round(glyph_size, 3),
-                            "glyph_w_m": round(
-                                self._runway_designation_glyph_width(glyph), 3
-                            ),
+                            "glyph_size": round(glyph_width, 3),
+                            "glyph_w_m": round(glyph_width, 3),
                             "angle_deg": round(angle_deg, 3),
                             "offset_m": round(designation_edge_offset, 3),
-                            "height_m": round(designation_length, 3),
+                            "height_m": round(glyph_height, 3),
                             "mandatory": True,
                             "ref_mos": "MOS 8.18",
                             "notes": "SVG glyph test implementation.",
@@ -1383,11 +1394,14 @@ class PhysicalGeometryMixin:
 
         # One centreline stripe set for the whole runway, measured primary to
         # reciprocal, with the last stripe truncated if needed.
+        designation_start = self._runway_designation_start_offset()
         primary_protect = (
-            1.2 + 12.0 + self._runway_designation_length(primary_desig) + 12.0
+            designation_start + self._runway_designation_length(primary_desig) + 12.0
         )
         reciprocal_protect = (
-            1.2 + 12.0 + self._runway_designation_length(reciprocal_desig) + 12.0
+            designation_start
+            + self._runway_designation_length(reciprocal_desig)
+            + 12.0
         )
         centreline_end = runway_length - reciprocal_protect
         offset = primary_protect
