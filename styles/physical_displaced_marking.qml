@@ -163,7 +163,7 @@
             <Option value="3x:0,0,0,0,0,0" type="QString" name="interval_map_unit_scale"/>
             <Option value="RenderMetersInMapUnits" type="QString" name="interval_unit"/>
             <Option value="0" type="QString" name="offset"/>
-            <Option value="0" type="QString" name="offset_along_line"/>
+            <Option value="30" type="QString" name="offset_along_line"/>
             <Option value="3x:0,0,0,0,0,0" type="QString" name="offset_along_line_map_unit_scale"/>
             <Option value="RenderMetersInMapUnits" type="QString" name="offset_along_line_unit"/>
             <Option value="3x:0,0,0,0,0,0" type="QString" name="offset_map_unit_scale"/>
@@ -193,7 +193,7 @@
                 <Option value="90" type="QString" name="angle"/>
                 <Option value="255,255,255,255,hsv:0,0,1,1" type="QString" name="color"/>
                 <Option value="0" type="QString" name="fixedAspectRatio"/>
-                <Option value="1" type="QString" name="horizontal_anchor_point"/>
+                <Option value="2" type="QString" name="horizontal_anchor_point"/>
                 <Option value="dthr.svg" type="QString" name="name"/>
                 <Option value="0,0" type="QString" name="offset"/>
                 <Option value="3x:0,0,0,0,0,0" type="QString" name="offset_map_unit_scale"/>
