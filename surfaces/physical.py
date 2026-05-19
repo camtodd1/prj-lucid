@@ -2,6 +2,7 @@
 """Physical runway geometry generation."""
 
 import os
+import re
 import traceback
 from typing import Dict, List, Optional, Tuple
 
@@ -891,21 +892,28 @@ class PhysicalGeometryMixin:
         )
 
     def _runway_designation_glyph_width(self, glyph: str) -> float:
-        return {
-            "0": 6.0,
-            "1": 0.8,
-            "2": 3.0,
-            "3": 3.0,
-            "4": 3.9,
-            "5": 3.0,
-            "6": 3.0,
-            "7": 3.5,
-            "8": 3.0,
-            "9": 3.0,
-            "L": 3.0,
-            "C": 3.0,
-            "R": 3.0,
-        }.get(glyph, 3.0)
+        glyph_height = 9.5 if glyph in {"6", "9"} else 9.0
+        svg_path = os.path.join(
+            self.plugin_dir,
+            "styles",
+            "svg",
+            "runway_designations",
+            f"runway_designation_{glyph}.svg",
+        )
+        try:
+            with open(svg_path, "r", encoding="utf-8") as svg_file:
+                svg_text = svg_file.read(1000)
+            width_match = re.search(r'\bwidth="([0-9.]+)', svg_text)
+            height_match = re.search(r'\bheight="([0-9.]+)', svg_text)
+            if width_match and height_match:
+                svg_width = float(width_match.group(1))
+                svg_height = float(height_match.group(1))
+                if svg_width > 0 and svg_height > 0:
+                    return glyph_height * svg_width / svg_height
+        except Exception:
+            pass
+
+        return 3.0
 
     def _runway_designation_glyphs(
         self, designator: str
@@ -914,7 +922,7 @@ class PhysicalGeometryMixin:
         suffix = designator[-1:] if designator[-1:] in {"L", "C", "R"} else ""
         number_text = designator[:-1] if suffix else designator
         number_height = 9.5 if any(char in number_text for char in ("6", "9")) else 9.0
-        digit_gap = 1.0
+        digit_gap = 0.8
         glyphs: List[Tuple[str, float, float, float]] = []
 
         widths = [self._runway_designation_glyph_width(char) for char in number_text]
