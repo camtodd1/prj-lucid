@@ -21,6 +21,7 @@ from qgis.core import (  # type: ignore
 )
 
 from .. import ols_dimensions
+from ..reports.runway_summary import summarize_generated_elements
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
@@ -525,6 +526,17 @@ class PhysicalGeometryMixin:
                         )
                         if generated_elements_list is None:
                             continue
+
+                        generated_summary = summarize_generated_elements(
+                            generated_elements_list
+                        )
+                        rwy_data["generated_feature_counts"] = {
+                            **rwy_data.get("generated_feature_counts", {}),
+                            **generated_summary.get("counts", {}),
+                        }
+                        existing_refs = list(rwy_data.get("generated_mos_refs", []))
+                        existing_refs.extend(generated_summary.get("mos_refs", []))
+                        rwy_data["generated_mos_refs"] = sorted(set(existing_refs))
 
                         graded_strip_geom: Optional[QgsGeometry] = None
                         overall_strip_geom: Optional[QgsGeometry] = None

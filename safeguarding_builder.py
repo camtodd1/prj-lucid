@@ -41,6 +41,7 @@ from .surfaces.met import MetSurfacesMixin
 from .guidelines.simple import SimpleGuidelinesMixin
 from .guidelines.lighting import LightingGuidelineMixin
 from .guidelines.ols import OlsGuidelineMixin
+from .reports.runway_summary import build_runway_summaries, render_markdown_report
 
 
 try:
@@ -727,6 +728,8 @@ class SafeguardingBuilder(
                 any_guideline_processed_ok,
             )
 
+            self._write_runway_summary_report(icao_code, processed_runway_data_list)
+
             self._final_feedback(
                 main_group,
                 root,
@@ -919,6 +922,10 @@ class SafeguardingBuilder(
                 runway_data["declared_distances"] = (
                     self._calculate_declared_distances(runway_data)
                 )
+                runway_data["generated_feature_counts"] = {
+                    **runway_data.get("generated_feature_counts", {}),
+                    "DeclaredDistance": len(runway_data.get("declared_distances") or []),
+                }
 
                 centreline_layer = self.create_runway_centreline_layer(
                     thr_point,
@@ -960,6 +967,41 @@ class SafeguardingBuilder(
 
             # QgsMessageLog.logMessage(f"Finished processing centrelines. {len(processed_runway_data_list)}/{len(runway_input_list)} successful.", plugin_tag, level=Qgis.Info)
         return processed_runway_data_list, any_runway_base_data_ok
+
+    def _write_runway_summary_report(
+        self, icao_code: str, processed_runway_data_list: List[Dict[str, Any]]
+    ) -> Optional[str]:
+        """Write the Critical Runway Information Summary Markdown report."""
+        if not processed_runway_data_list:
+            self._log("Runway summary report skipped: no processed runway data.")
+            return None
+        if self.output_mode != "file":
+            self._log(
+                "Runway summary report not written: select file output to create the Markdown report."
+            )
+            return None
+        if not self.output_path:
+            self._log_warning(
+                "Runway summary report skipped: file output path is not available."
+            )
+            return None
+
+        safe_icao = self._sanitize_filename(icao_code or "UNKNOWN")
+        report_path = os.path.join(
+            self.output_path, f"{safe_icao}_Critical_Runway_Information_Summary.md"
+        )
+        try:
+            summaries = build_runway_summaries(processed_runway_data_list)
+            markdown = render_markdown_report(icao_code, None, summaries)
+            with open(report_path, "w", encoding="utf-8") as report_file:
+                report_file.write(markdown)
+            self._log_success(f"Runway summary report written to '{report_path}'.")
+            return report_path
+        except Exception as e:
+            self._log_warning(
+                f"Runway summary report failed: {e}\n{traceback.format_exc()}"
+            )
+            return None
 
     def _calculate_declared_distances(
         self, runway_data: Dict[str, Any]

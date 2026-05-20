@@ -3968,6 +3968,17 @@ class OlsGuidelineMixin:
             f"TOCS={len(tocs_poly_features)}",
             f"TOCS contours={len(tocs_contour_features)}",
         ]
+        runway_data["ols_feature_counts"] = {
+            "OLS BLS": len(ofz_bls_features),
+            "OLS ITS": len(ofz_inner_trans_features),
+            "OLS Approach": len(approach_poly_features),
+            "OLS Approach contours": len(approach_contour_features),
+            "OLS TOCS": len(tocs_poly_features),
+            "OLS TOCS contours": len(tocs_contour_features),
+        }
+        generated_feature_counts = dict(runway_data.get("generated_feature_counts", {}))
+        generated_feature_counts.update(runway_data["ols_feature_counts"])
+        runway_data["generated_feature_counts"] = generated_feature_counts
         QgsMessageLog.logMessage(
             f"Runway OLS {runway_name}: {', '.join(ols_feature_counts)}.",
             plugin_tag,
