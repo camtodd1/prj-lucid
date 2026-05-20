@@ -1214,6 +1214,29 @@ class PhysicalGeometryMixin:
         ]
         return self._create_polygon_from_corners(corners, description)
 
+    def _create_chevron_apex_cap(
+        self,
+        apex_point: QgsPointXY,
+        pointing_azimuth: float,
+        width_m: float,
+        description: str,
+    ) -> Optional[QgsGeometry]:
+        if width_m <= 0:
+            return None
+
+        half_width = width_m / 2.0
+        forward = apex_point.project(half_width, pointing_azimuth)
+        backward = apex_point.project(half_width, (pointing_azimuth + 180.0) % 360.0)
+        left = apex_point.project(half_width, (pointing_azimuth - 90.0) % 360.0)
+        right = apex_point.project(half_width, (pointing_azimuth + 90.0) % 360.0)
+        if not all([forward, right, backward, left]):
+            return None
+
+        return self._create_polygon_from_corners(
+            [forward, right, backward, left],
+            description,
+        )
+
     def _detail_marking_attrs(
         self,
         runway_name: str,
@@ -1797,6 +1820,36 @@ class PhysicalGeometryMixin:
                         apex_offset += 30.0
                         chevron_no += 1
                         continue
+
+                    apex_cap = self._create_chevron_apex_cap(
+                        apex_point,
+                        (pre_area_outward_azimuth + 180.0) % 360.0,
+                        0.9,
+                        f"Pre-threshold area chevron apex {runway_name} {end_desig} {chevron_no}",
+                    )
+                    if apex_cap:
+                        generated.append(
+                            (
+                                "DetailedPreThresholdAreaMarking",
+                                apex_cap,
+                                self._detail_marking_attrs(
+                                    runway_name,
+                                    end_desig,
+                                    "Pre-Threshold Area",
+                                    "Chevron Apex",
+                                    0.9,
+                                    0.9,
+                                    "MOS 8.16(1); MOS 8.16(2)",
+                                    stripe_no=chevron_no,
+                                    offset_m=apex_offset,
+                                    spacing_m=30.0,
+                                    mandatory=True,
+                                    notes=(
+                                        "Apex cap fills the join between generated chevron legs."
+                                    ),
+                                ),
+                            )
+                        )
 
                     for side_name, sign in (("L", -1.0), ("R", 1.0)):
                         endpoint = self._project_lateral(
