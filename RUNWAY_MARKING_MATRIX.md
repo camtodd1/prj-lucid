@@ -717,7 +717,7 @@ Status: implemented as detailed generated polygon geometry.
 | --- | --- |
 | Layer name | `{ICAO} Pre-Threshold Area Markings` |
 | Geometry type | Polygon |
-| Feature granularity | One polygon per chevron leg |
+| Feature granularity | One polygon per chevron |
 | Group | Detailed Runway Markings |
 | Style | Yellow fill with no outline |
 | Attributes | `rwy`, `end_desig`, `mark_type`, `sub_type`, `side`, `stripe_no`, `len_m`, `wid_m`, `offset_m`, `spacing_m`, `mandatory`, `ref_mos`, `notes` |
@@ -726,6 +726,8 @@ Status: implemented as detailed generated polygon geometry.
 
 - Generate independently for each runway end with entered pre-threshold area
   length greater than 60 m.
+- Use one mitered polygon per chevron to avoid extra apex-cap features and
+  rendering artifacts at the apex.
 - Use the physical runway end as the runway-end marking reference and project
   chevrons outward into the pre-threshold area.
 - Legacy symbolic pre-threshold area line markings are no longer generated in

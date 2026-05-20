@@ -1188,52 +1188,77 @@ class PhysicalGeometryMixin:
             return None
         return self._create_polygon_from_corners(corners, description)
 
-    def _create_marking_segment_between_points(
-        self,
-        start_point: QgsPointXY,
-        end_point: QgsPointXY,
-        width_m: float,
-        description: str,
-    ) -> Optional[QgsGeometry]:
-        if width_m <= 0:
-            return None
-        dx = end_point.x() - start_point.x()
-        dy = end_point.y() - start_point.y()
-        segment_len = math.hypot(dx, dy)
-        if segment_len <= 1e-9:
-            return None
-
-        half_width = width_m / 2.0
-        perp_x = -dy / segment_len * half_width
-        perp_y = dx / segment_len * half_width
-        corners = [
-            QgsPointXY(start_point.x() + perp_x, start_point.y() + perp_y),
-            QgsPointXY(start_point.x() - perp_x, start_point.y() - perp_y),
-            QgsPointXY(end_point.x() - perp_x, end_point.y() - perp_y),
-            QgsPointXY(end_point.x() + perp_x, end_point.y() + perp_y),
-        ]
-        return self._create_polygon_from_corners(corners, description)
-
-    def _create_chevron_apex_cap(
+    def _create_pre_threshold_chevron_polygon(
         self,
         apex_point: QgsPointXY,
-        pointing_azimuth: float,
+        left_endpoint: QgsPointXY,
+        right_endpoint: QgsPointXY,
         width_m: float,
         description: str,
     ) -> Optional[QgsGeometry]:
         if width_m <= 0:
             return None
 
-        half_width = width_m / 2.0
-        forward = apex_point.project(half_width, pointing_azimuth)
-        backward = apex_point.project(half_width, (pointing_azimuth + 180.0) % 360.0)
-        left = apex_point.project(half_width, (pointing_azimuth - 90.0) % 360.0)
-        right = apex_point.project(half_width, (pointing_azimuth + 90.0) % 360.0)
-        if not all([forward, right, backward, left]):
+        left_leg_len = math.hypot(
+            left_endpoint.x() - apex_point.x(),
+            left_endpoint.y() - apex_point.y(),
+        )
+        right_leg_len = math.hypot(
+            right_endpoint.x() - apex_point.x(),
+            right_endpoint.y() - apex_point.y(),
+        )
+        if left_leg_len <= 1e-9 or right_leg_len <= 1e-9:
             return None
 
+        half_width = width_m / 2.0
+        left_unit = (
+            (left_endpoint.x() - apex_point.x()) / left_leg_len,
+            (left_endpoint.y() - apex_point.y()) / left_leg_len,
+        )
+        right_unit = (
+            (right_endpoint.x() - apex_point.x()) / right_leg_len,
+            (right_endpoint.y() - apex_point.y()) / right_leg_len,
+        )
+        bisector = (
+            left_unit[0] + right_unit[0],
+            left_unit[1] + right_unit[1],
+        )
+        bisector_len = math.hypot(bisector[0], bisector[1])
+        if bisector_len <= 1e-9:
+            return None
+        bisector = (bisector[0] / bisector_len, bisector[1] / bisector_len)
+        miter_len = half_width / math.sin(math.radians(45.0))
+
+        left_perp = (-left_unit[1], left_unit[0])
+        right_perp = (-right_unit[1], right_unit[0])
+
+        forward = QgsPointXY(
+            apex_point.x() - bisector[0] * miter_len,
+            apex_point.y() - bisector[1] * miter_len,
+        )
+        inner_apex = QgsPointXY(
+            apex_point.x() + bisector[0] * miter_len,
+            apex_point.y() + bisector[1] * miter_len,
+        )
+        left_outer = QgsPointXY(
+            left_endpoint.x() + left_perp[0] * half_width,
+            left_endpoint.y() + left_perp[1] * half_width,
+        )
+        left_inner = QgsPointXY(
+            left_endpoint.x() - left_perp[0] * half_width,
+            left_endpoint.y() - left_perp[1] * half_width,
+        )
+        right_inner = QgsPointXY(
+            right_endpoint.x() + right_perp[0] * half_width,
+            right_endpoint.y() + right_perp[1] * half_width,
+        )
+        right_outer = QgsPointXY(
+            right_endpoint.x() - right_perp[0] * half_width,
+            right_endpoint.y() - right_perp[1] * half_width,
+        )
+
         return self._create_polygon_from_corners(
-            [forward, right, backward, left],
+            [forward, left_outer, left_inner, inner_apex, right_inner, right_outer],
             description,
         )
 
@@ -1821,23 +1846,37 @@ class PhysicalGeometryMixin:
                         chevron_no += 1
                         continue
 
-                    apex_cap = self._create_chevron_apex_cap(
-                        apex_point,
-                        (pre_area_outward_azimuth + 180.0) % 360.0,
-                        0.9,
-                        f"Pre-threshold area chevron apex {runway_name} {end_desig} {chevron_no}",
+                    left_endpoint = self._project_lateral(
+                        base_center,
+                        -visible_run,
+                        pre_area_outward_azimuth,
                     )
-                    if apex_cap:
+                    right_endpoint = self._project_lateral(
+                        base_center,
+                        visible_run,
+                        pre_area_outward_azimuth,
+                    )
+                    geom = self._create_pre_threshold_chevron_polygon(
+                        apex_point,
+                        left_endpoint,
+                        right_endpoint,
+                        0.9,
+                        f"Pre-threshold area chevron {runway_name} {end_desig} {chevron_no}",
+                    )
+                    if geom:
                         generated.append(
                             (
                                 "DetailedPreThresholdAreaMarking",
-                                apex_cap,
+                                geom,
                                 self._detail_marking_attrs(
                                     runway_name,
                                     end_desig,
                                     "Pre-Threshold Area",
-                                    "Chevron Apex",
-                                    0.9,
+                                    "Chevron",
+                                    math.hypot(
+                                        left_endpoint.x() - apex_point.x(),
+                                        left_endpoint.y() - apex_point.y(),
+                                    ),
                                     0.9,
                                     "MOS 8.16(1); MOS 8.16(2)",
                                     stripe_no=chevron_no,
@@ -1845,52 +1884,12 @@ class PhysicalGeometryMixin:
                                     spacing_m=30.0,
                                     mandatory=True,
                                     notes=(
-                                        "Apex cap fills the join between generated chevron legs."
+                                        "Single generated yellow chevron polygon; "
+                                        "line ends target <= 7.5 m from runway edges where width permits."
                                     ),
                                 ),
                             )
                         )
-
-                    for side_name, sign in (("L", -1.0), ("R", 1.0)):
-                        endpoint = self._project_lateral(
-                            base_center,
-                            sign * visible_run,
-                            pre_area_outward_azimuth,
-                        )
-                        geom = self._create_marking_segment_between_points(
-                            apex_point,
-                            endpoint,
-                            0.9,
-                            f"Pre-threshold area chevron {runway_name} {end_desig} {chevron_no} {side_name}",
-                        )
-                        if geom:
-                            generated.append(
-                                (
-                                    "DetailedPreThresholdAreaMarking",
-                                    geom,
-                                    self._detail_marking_attrs(
-                                        runway_name,
-                                        end_desig,
-                                        "Pre-Threshold Area",
-                                        "Chevron",
-                                        math.hypot(
-                                            endpoint.x() - apex_point.x(),
-                                            endpoint.y() - apex_point.y(),
-                                        ),
-                                        0.9,
-                                        "MOS 8.16(1); MOS 8.16(2)",
-                                        side=side_name,
-                                        stripe_no=chevron_no,
-                                        offset_m=apex_offset,
-                                        spacing_m=30.0,
-                                        mandatory=True,
-                                        notes=(
-                                            "Yellow chevron leg generated at 45 degrees; "
-                                            "line ends target <= 7.5 m from runway edges where width permits."
-                                        ),
-                                    ),
-                                )
-                            )
                     apex_offset += 30.0
                     chevron_no += 1
             elif pre_area_len > 1e-6:
