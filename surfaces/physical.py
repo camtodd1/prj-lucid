@@ -40,7 +40,6 @@ class PhysicalGeometryMixin:
         specialised_safeguarding_group = None
         physical_geom_group = None
         detailed_marking_group = None
-        legacy_marking_group = None
         protection_area_group = None
         physical_layer_specs = {}
         physical_features: Dict[str, List[QgsFeature]] = {}
@@ -53,10 +52,6 @@ class PhysicalGeometryMixin:
             self._stage_layer_tree_node(detailed_marking_group)
             physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
             self._stage_layer_tree_node(physical_geom_group)
-            legacy_marking_group = detailed_marking_group.addGroup(
-                self.tr("Legacy Symbol Markings")
-            )
-            self._stage_layer_tree_node(legacy_marking_group)
             protection_area_group = main_group.addGroup(
                 self.tr("Runway Protection Areas")
             )
@@ -95,17 +90,6 @@ class PhysicalGeometryMixin:
                     QgsField(
                         "end_desig", QVariant.String, self.tr("End Designator"), 10
                     )
-                ]
-                marking_fields = [
-                    QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
-                    QgsField("desc", QVariant.String, self.tr("Element Type"), 50),
-                    QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3),
-                    QgsField(
-                        "end_desig", QVariant.String, self.tr("End Designator"), 10
-                    ),
-                    QgsField(
-                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
-                    ),
                 ]
                 declared_distance_fields = [
                     QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
@@ -295,18 +279,6 @@ class PhysicalGeometryMixin:
                         "fields": pre_threshold_fields,
                         "group": physical_geom_group,
                     },
-                    "DisplacedThresholdMarking": {
-                        "name": self.tr("Legacy Displaced Threshold Markings"),
-                        "fields": marking_fields,
-                        "geom_type": "LineString",
-                        "group": legacy_marking_group,
-                    },
-                    "PreThresholdAreaMarking": {
-                        "name": self.tr("Legacy Pre-Threshold Area Markings"),
-                        "fields": marking_fields,
-                        "geom_type": "LineString",
-                        "group": legacy_marking_group,
-                    },
                     "Shoulder": {
                         "name": self.tr("Runway Shoulders"),
                         "fields": common_fields,
@@ -341,6 +313,11 @@ class PhysicalGeometryMixin:
                     },
                     "DetailedTouchdownZoneMarking": {
                         "name": self.tr("Touchdown Zone Markings"),
+                        "fields": detailed_marking_fields,
+                        "group": detailed_marking_group,
+                    },
+                    "DetailedDisplacedThresholdMarking": {
+                        "name": self.tr("Displaced Threshold Markings"),
                         "fields": detailed_marking_fields,
                         "group": detailed_marking_group,
                     },
@@ -390,8 +367,6 @@ class PhysicalGeometryMixin:
                     "rwy": "Runway Pavement",
                     "PreThresholdRunway": "PreThreshold Runway",
                     "PreThresholdArea": "PreThreshold Area",
-                    "DisplacedThresholdMarking": "DisplacedThresholdMarking",
-                    "PreThresholdAreaMarking": "PreThresholdAreaMarking",
                     "Shoulder": "Runway Shoulders",
                     "DeclaredDistance": "Default Point",
                     "DetailedThresholdMarking": "Runway Marking White",
@@ -399,6 +374,7 @@ class PhysicalGeometryMixin:
                     "DetailedCentrelineMarking": "Runway Marking White",
                     "DetailedAimingPointMarking": "Runway Marking White",
                     "DetailedTouchdownZoneMarking": "Runway Marking White",
+                    "DetailedDisplacedThresholdMarking": "Runway Marking White",
                     "DetailedPreThresholdAreaMarking": "Runway Marking Yellow",
                     "DetailedSideStripeMarking": "Runway Marking White",
                     "DetailedMarkingQA": "Default Point",
@@ -412,8 +388,6 @@ class PhysicalGeometryMixin:
                     "rwy",
                     "PreThresholdRunway",
                     "PreThresholdArea",
-                    "DisplacedThresholdMarking",
-                    "PreThresholdAreaMarking",
                     "Shoulder",
                     "DeclaredDistance",
                     "DetailedThresholdMarking",
@@ -421,6 +395,7 @@ class PhysicalGeometryMixin:
                     "DetailedCentrelineMarking",
                     "DetailedAimingPointMarking",
                     "DetailedTouchdownZoneMarking",
+                    "DetailedDisplacedThresholdMarking",
                     "DetailedPreThresholdAreaMarking",
                     "DetailedSideStripeMarking",
                     "DetailedMarkingQA",
@@ -815,6 +790,7 @@ class PhysicalGeometryMixin:
                         "DetailedCentrelineMarking",
                         "DetailedAimingPointMarking",
                         "DetailedTouchdownZoneMarking",
+                        "DetailedDisplacedThresholdMarking",
                         "DetailedPreThresholdAreaMarking",
                         "DetailedSideStripeMarking",
                     ),
@@ -1262,6 +1238,48 @@ class PhysicalGeometryMixin:
             description,
         )
 
+    def _create_displaced_threshold_arrow_polygon(
+        self,
+        origin: QgsPointXY,
+        runway_azimuth: float,
+        arrow_tip_offset_m: float,
+        description: str,
+    ) -> Optional[QgsGeometry]:
+        arrow_length = 18.0
+        head_length = 7.0
+        head_half_width = 3.0
+        shaft_half_width = 0.75
+
+        tip = origin.project(arrow_tip_offset_m, runway_azimuth)
+        head_base = origin.project(arrow_tip_offset_m - head_length, runway_azimuth)
+        tail = origin.project(arrow_tip_offset_m - arrow_length, runway_azimuth)
+        if not tip or not head_base or not tail:
+            return None
+
+        head_left = self._project_lateral(head_base, -head_half_width, runway_azimuth)
+        shaft_left_front = self._project_lateral(
+            head_base, -shaft_half_width, runway_azimuth
+        )
+        shaft_left_tail = self._project_lateral(tail, -shaft_half_width, runway_azimuth)
+        shaft_right_tail = self._project_lateral(tail, shaft_half_width, runway_azimuth)
+        shaft_right_front = self._project_lateral(
+            head_base, shaft_half_width, runway_azimuth
+        )
+        head_right = self._project_lateral(head_base, head_half_width, runway_azimuth)
+
+        corners = [
+            tip,
+            head_left,
+            shaft_left_front,
+            shaft_left_tail,
+            shaft_right_tail,
+            shaft_right_front,
+            head_right,
+        ]
+        if not all(corners):
+            return None
+        return self._create_polygon_from_corners(corners, description)
+
     def _detail_marking_attrs(
         self,
         runway_name: str,
@@ -1329,6 +1347,7 @@ class PhysicalGeometryMixin:
             "DetailedDesignationMarking": "Runway designation markings",
             "DetailedAimingPointMarking": "Aiming point markings",
             "DetailedTouchdownZoneMarking": "Touchdown zone markings",
+            "DetailedDisplacedThresholdMarking": "Displaced threshold markings",
             "DetailedPreThresholdAreaMarking": "Pre-threshold area markings",
             "DetailedCentrelineMarking": "Centreline markings",
             "DetailedSideStripeMarking": "Side-stripe markings",
@@ -1494,6 +1513,7 @@ class PhysicalGeometryMixin:
                 phys_p_start,
                 rwy_params["azimuth_r_p"],
                 non_negative_number(runway_data.get("thr_pre_area_1"), 0.0),
+                disp_primary,
             ),
             (
                 reciprocal_desig,
@@ -1503,6 +1523,7 @@ class PhysicalGeometryMixin:
                 phys_p_end,
                 rwy_params["azimuth_p_r"],
                 non_negative_number(runway_data.get("thr_pre_area_2"), 0.0),
+                disp_reciprocal,
             ),
         ]
         default_assumptions = {
@@ -1520,7 +1541,7 @@ class PhysicalGeometryMixin:
                 "assumptions": set(default_assumptions),
                 "skipped": [],
             }
-            for end_desig, origin, _, _, _, _, _ in end_specs
+            for end_desig, origin, _, _, _, _, _, _ in end_specs
         }
         whole_runway_mandatory: List[str] = []
         whole_runway_optional: List[str] = []
@@ -1535,8 +1556,50 @@ class PhysicalGeometryMixin:
             pre_area_start,
             pre_area_outward_azimuth,
             pre_area_len,
+            displaced_len,
         ) in end_specs:
             skipped = qa_records[end_desig]["skipped"]
+            if displaced_len > 1e-6:
+                arrow_tip_offset = 30.0
+                arrow_no = 1
+                while arrow_tip_offset <= displaced_len - 15.0 + 1e-6:
+                    geom = self._create_displaced_threshold_arrow_polygon(
+                        pre_area_start,
+                        azimuth,
+                        arrow_tip_offset,
+                        f"Displaced threshold arrow {runway_name} {end_desig} {arrow_no}",
+                    )
+                    if geom:
+                        generated.append(
+                            (
+                                "DetailedDisplacedThresholdMarking",
+                                geom,
+                                self._detail_marking_attrs(
+                                    runway_name,
+                                    end_desig,
+                                    "Displaced Threshold",
+                                    "Arrow",
+                                    18.0,
+                                    6.0,
+                                    "MOS 8.26",
+                                    stripe_no=arrow_no,
+                                    offset_m=arrow_tip_offset,
+                                    spacing_m=50.0,
+                                    mandatory=True,
+                                    notes=(
+                                        "Generated polygon arrow; placement preserves legacy marker-line "
+                                        "30 m initial offset, 50 m interval, and 15 m threshold clearance."
+                                    ),
+                                ),
+                            )
+                        )
+                    else:
+                        skipped.append(
+                            f"Displaced threshold arrow {arrow_no}: geometry generation failed."
+                        )
+                    arrow_tip_offset += 50.0
+                    arrow_no += 1
+
             threshold_bar = self._create_runway_marking_rectangle(
                 origin,
                 azimuth,
@@ -1825,12 +1888,23 @@ class PhysicalGeometryMixin:
                     "Pre-threshold area entered in dialog is assumed sealed and not suitable for normal aircraft usage."
                 )
                 chevron_leg_run = max(15.0, runway_width / 2.0 - 7.5)
-                apex_offset = 0.0
+                pre_area_clip = self._create_rectangle_from_start(
+                    pre_area_start,
+                    pre_area_outward_azimuth,
+                    pre_area_len,
+                    runway_width / 2.0,
+                    f"Pre-threshold area clip {runway_name} {end_desig}",
+                )
+                apex_offset = -7.5
                 chevron_no = 1
                 while apex_offset < pre_area_len - 1e-6:
                     base_offset = min(apex_offset + chevron_leg_run, pre_area_len)
-                    visible_run = base_offset - apex_offset
-                    if visible_run <= 1e-6:
+                    if base_offset <= 0.0:
+                        apex_offset += 30.0
+                        chevron_no += 1
+                        continue
+                    chevron_run = base_offset - apex_offset
+                    if chevron_run <= 1e-6:
                         break
                     apex_point = pre_area_start.project(
                         apex_offset, pre_area_outward_azimuth
@@ -1848,14 +1922,21 @@ class PhysicalGeometryMixin:
 
                     left_endpoint = self._project_lateral(
                         base_center,
-                        -visible_run,
+                        -chevron_run,
                         pre_area_outward_azimuth,
                     )
                     right_endpoint = self._project_lateral(
                         base_center,
-                        visible_run,
+                        chevron_run,
                         pre_area_outward_azimuth,
                     )
+                    if not left_endpoint or not right_endpoint:
+                        skipped.append(
+                            f"Pre-threshold area chevron {chevron_no}: endpoint projection failed."
+                        )
+                        apex_offset += 30.0
+                        chevron_no += 1
+                        continue
                     geom = self._create_pre_threshold_chevron_polygon(
                         apex_point,
                         left_endpoint,
@@ -1863,6 +1944,10 @@ class PhysicalGeometryMixin:
                         0.9,
                         f"Pre-threshold area chevron {runway_name} {end_desig} {chevron_no}",
                     )
+                    if geom and pre_area_clip:
+                        geom = geom.intersection(pre_area_clip)
+                        if geom and not geom.isEmpty() and not geom.isGeosValid():
+                            geom = geom.makeValid()
                     if geom:
                         generated.append(
                             (
@@ -1885,6 +1970,7 @@ class PhysicalGeometryMixin:
                                     mandatory=True,
                                     notes=(
                                         "Single generated yellow chevron polygon; "
+                                        "first chevron is clipped at the runway end marking; "
                                         "line ends target <= 7.5 m from runway edges where width permits."
                                     ),
                                 ),
@@ -2340,113 +2426,6 @@ class PhysicalGeometryMixin:
                     )
 
             generated_elements.extend(pre_threshold_area_features)
-
-        # --- 1d. Displaced Threshold Markings ---
-        displaced_marking_features = []
-        primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
-        reciprocal_desig = (
-            runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
-        )
-        marking_ref = "MOS 8.26"
-        displaced_marking_end_clearance_m = 15.0
-
-        def _create_marking_line(
-            start_point, end_point, start_clearance_m=0.0, end_clearance_m=0.0
-        ):
-            line = QgsGeometry.fromPolylineXY([start_point, end_point])
-            if not line or line.isEmpty():
-                return None
-
-            line_len = line.length()
-            if line_len is None:
-                return None
-
-            usable_len = line_len - start_clearance_m - end_clearance_m
-            if usable_len <= 1e-6:
-                return None
-
-            if start_clearance_m <= 0 and end_clearance_m <= 0:
-                return line
-
-            start_geom = line.interpolate(start_clearance_m)
-            end_geom = line.interpolate(line_len - end_clearance_m)
-            if (
-                not start_geom
-                or start_geom.isEmpty()
-                or not end_geom
-                or end_geom.isEmpty()
-            ):
-                return None
-
-            return QgsGeometry.fromPolylineXY(
-                [start_geom.asPoint(), end_geom.asPoint()]
-            )
-
-        if disp_thr_1 > 1e-6:
-            try:
-                line_geom = _create_marking_line(
-                    phys_p_start,
-                    thr_point,
-                    end_clearance_m=displaced_marking_end_clearance_m,
-                )
-                if line_geom and not line_geom.isEmpty():
-                    # Use correct field names: 'rwy', 'desc', 'ref_mos'
-                    attributes = {
-                        "rwy": runway_name,
-                        "desc": "Displaced Threshold Marking",
-                        "end_desig": primary_desig,
-                        "len_m": round(disp_thr_1, 3),
-                        "ref_mos": marking_ref,
-                    }
-                    displaced_marking_features.append(
-                        ("DisplacedThresholdMarking", line_geom, attributes)
-                    )
-                else:
-                    QgsMessageLog.logMessage(
-                        f"Warning: Failed generate geometry for Primary Displaced Marking {log_name}.",
-                        plugin_tag,
-                        level=Qgis.Warning,
-                    )
-            except Exception as e:
-                QgsMessageLog.logMessage(
-                    f"Warning: Error generating Primary Displaced Marking {log_name}: {e}",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
-
-        if disp_thr_2 > 1e-6:
-            try:
-                line_geom = _create_marking_line(
-                    phys_p_end,
-                    rec_thr_point,
-                    end_clearance_m=displaced_marking_end_clearance_m,
-                )
-                if line_geom and not line_geom.isEmpty():
-                    # Use correct field names: 'rwy', 'desc', 'ref_mos'
-                    attributes = {
-                        "rwy": runway_name,
-                        "desc": "Displaced Threshold Marking",
-                        "end_desig": reciprocal_desig,
-                        "len_m": round(disp_thr_2, 3),
-                        "ref_mos": marking_ref,
-                    }
-                    displaced_marking_features.append(
-                        ("DisplacedThresholdMarking", line_geom, attributes)
-                    )
-                else:
-                    QgsMessageLog.logMessage(
-                        f"Warning: Failed generate geometry for Reciprocal Displaced Marking {log_name}.",
-                        plugin_tag,
-                        level=Qgis.Warning,
-                    )
-            except Exception as e:
-                QgsMessageLog.logMessage(
-                    f"Warning: Error generating Reciprocal Displaced Marking {log_name}: {e}",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
-
-        generated_elements.extend(displaced_marking_features)
 
         # --- 2. Runway Shoulders ---
         if (

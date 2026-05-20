@@ -94,7 +94,7 @@ existing data:
 | Aiming point markings | Drafting requirements | Generated polygon geometry |
 | Touchdown zone markings | Drafting requirements in progress | Generated polygon geometry |
 | Side stripe markings | Drafting requirements | Generated polygon geometry |
-| Displaced threshold markings | Legacy symbolic implementation retained | Move to generated geometry in a later migration |
+| Displaced threshold markings | Implemented | Generated white polygon geometry |
 | Pre-threshold area chevrons | Implemented | Generated yellow polygon geometry |
 | Marking QA report | Implemented as compact point/table layer | One feature per runway end |
 
@@ -102,12 +102,10 @@ existing data:
 
 - The `Detailed Runway Markings` group is the primary output for generated
   MOS139 runway markings.
-- Existing QML marker-line layers for displaced-threshold arrows are retained as
-  legacy symbolic layers until migrated to generated geometry. Pre-threshold
-  area chevrons are generated as detailed polygon markings.
-- Legacy symbolic layers should be grouped separately from the core physical
-  geometry layers so users can clearly distinguish old symbol-driven output
-  from the detailed generated marking model.
+- Displaced-threshold arrows and pre-threshold area chevrons are generated as
+  detailed polygon markings.
+- Legacy symbolic runway marking layers are no longer generated in the normal
+  runway marking path.
 - A compact `Runway Marking QA` layer should be generated with one threshold
   point feature per runway end. Its attribute table lists generated mandatory
   marking families, generated optional/recommended marking families,
@@ -669,8 +667,36 @@ remain before implementation.
 
 ## 7. Displaced Threshold Markings
 
-Status: existing implementation; migrate to data-driven rules after new marking
-families are defined.
+Status: implemented as detailed generated polygon geometry.
+
+### MOS References
+
+| Reference | Requirement summary | Notes |
+| --- | --- | --- |
+| MOS 8.26 | Displaced threshold markings identify pavement before a displaced threshold that is available for take-off but not landing. | Detailed MOS dimensions still need to be parsed into this matrix when source text is available. |
+
+### Current Implementation Interpretation
+
+- Generate one white polygon arrow per displaced-threshold arrow position.
+- Preserve the legacy marker-line placement behavior as the initial geometry
+  contract: first arrow tip 30 m from the physical runway end, then repeat at
+  50 m intervals, with a 15 m clearance before the displaced threshold.
+- Arrows are aligned on the runway centreline and point toward the displaced
+  threshold.
+- The current generated arrow shape is a deterministic polygon approximation
+  of the previous `dthr.svg` marker. Replace these dimensions with MOS figure
+  values when the displaced-threshold marking clauses/figure are supplied.
+
+### Generated Feature Model
+
+| Field | Proposed value |
+| --- | --- |
+| Layer name | `{ICAO} Displaced Threshold Markings` |
+| Geometry type | Polygon |
+| Feature granularity | One polygon per arrow |
+| Group | Detailed Runway Markings |
+| Style | White fill with no outline |
+| Attributes | `rwy`, `end_desig`, `mark_type`, `sub_type`, `stripe_no`, `len_m`, `wid_m`, `offset_m`, `spacing_m`, `mandatory`, `ref_mos`, `notes` |
 
 ## 8. Pre-Threshold Area Chevrons
 
@@ -728,6 +754,9 @@ Status: implemented as detailed generated polygon geometry.
   length greater than 60 m.
 - Use one mitered polygon per chevron to avoid extra apex-cap features and
   rendering artifacts at the apex.
+- Place the first theoretical chevron apex 7.5 m on the runway side of the
+  runway end marking, then clip to the pre-threshold area so only the outward
+  half is visible, matching Figure 8.16(2).
 - Use the physical runway end as the runway-end marking reference and project
   chevrons outward into the pre-threshold area.
 - Legacy symbolic pre-threshold area line markings are no longer generated in
