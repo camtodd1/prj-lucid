@@ -95,16 +95,16 @@ existing data:
 | Touchdown zone markings | Drafting requirements in progress | Generated polygon geometry |
 | Side stripe markings | Drafting requirements | Generated polygon geometry |
 | Displaced threshold markings | Legacy symbolic implementation retained | Move to generated geometry in a later migration |
-| Pre-threshold area chevrons | Legacy symbolic implementation retained | Move to generated geometry in a later migration |
+| Pre-threshold area chevrons | Implemented | Generated yellow polygon geometry |
 | Marking QA report | Implemented as compact point/table layer | One feature per runway end |
 
 ## Promotion And Legacy Layer Policy
 
 - The `Detailed Runway Markings` group is the primary output for generated
   MOS139 runway markings.
-- Existing QML marker-line layers for displaced-threshold arrows and
-  pre-threshold area chevrons are retained as legacy symbolic layers until those
-  marking families are migrated to generated geometry.
+- Existing QML marker-line layers for displaced-threshold arrows are retained as
+  legacy symbolic layers until migrated to generated geometry. Pre-threshold
+  area chevrons are generated as detailed polygon markings.
 - Legacy symbolic layers should be grouped separately from the core physical
   geometry layers so users can clearly distinguish old symbol-driven output
   from the detailed generated marking model.
@@ -674,5 +674,59 @@ families are defined.
 
 ## 8. Pre-Threshold Area Chevrons
 
-Status: existing implementation; migrate to data-driven rules after new marking
-families are defined.
+Status: implemented as detailed generated polygon geometry.
+
+### MOS References
+
+| Reference | Requirement summary | Notes |
+| --- | --- | --- |
+| MOS 8.16(1) | If an area before the non-displaced threshold, or the runway end in the reciprocal direction, is sealed concrete/asphalt, exceeds 60 m in length, and is not suitable for normal aircraft usage, pre-threshold area markings must be used. | Current dialog has pre-threshold area length but does not yet collect surface/suitability. |
+| MOS 8.16(1) Note | This does not apply to runway starter extensions. | Starter extension classification is not modelled in the current dialog. |
+| MOS 8.16(2)(a) | Markings consist of yellow chevrons with 0.9 m wide lines angled 45 degrees to the runway centreline. | Generated as yellow polygon legs. |
+| MOS 8.16(2)(b) | Chevrons are spaced 30 m apart, apex to apex. | Stored as `spacing_m = 30`. |
+| MOS 8.16(2)(c) | Chevrons are 15 m tall from apex to base. | Extended where needed so line ends target the runway-edge clearance rule. |
+| MOS 8.16(2)(d) | Chevrons point towards the non-displaced threshold, or runway end in the reciprocal direction. | Apex is placed toward the runway end/threshold side. |
+| MOS 8.16(2)(e) | Except near the threshold/runway end, line ends must be long enough to end not more than 7.5 m from the respective runway edges. | Current implementation targets this by extending the 45-degree legs for wider runways. |
+| MOS 8.16(2)(f) | Markings terminate at the runway end marking. | First chevron apex starts near the runway end marking; future clipping can refine partial chevrons at the end marking. |
+
+### Applicability
+
+| Condition | Applies? | Notes |
+| --- | --- | --- |
+| Pre-threshold area length > 60 m | Yes | Uses dialog `thr_pre_area_1` / `thr_pre_area_2`. |
+| Sealed concrete/asphalt surface | Assumed yes | Surface type input does not exist yet. |
+| Not suitable for normal aircraft usage | Assumed yes when pre-threshold area length is entered | Suitability input does not exist yet. |
+| Runway starter extension | Not modelled | Add explicit input before suppressing markings for starter extensions. |
+
+### Geometry Parameters
+
+| Parameter | Value / rule | Unit | Notes |
+| --- | --- | --- | --- |
+| Marking shape | Chevron | n/a | Two legs per chevron. |
+| Line width | 0.9 | m | MOS 8.16(2)(a). |
+| Line angle | 45 | degrees | Angled to runway centreline. |
+| Apex spacing | 30 | m | Apex to apex. |
+| Nominal chevron height | 15 | m | Apex to base. |
+| Edge clearance | Not more than 7.5 | m | Targeted where runway width requires longer legs. |
+| Color | Yellow | n/a | MOS 8.16(2). |
+| Direction | Points toward runway end/non-displaced threshold | rule | Apex is runway-end side, legs extend outward into the pre-threshold area. |
+
+### Generated Feature Model
+
+| Field | Proposed value |
+| --- | --- |
+| Layer name | `{ICAO} Pre-Threshold Area Markings` |
+| Geometry type | Polygon |
+| Feature granularity | One polygon per chevron leg |
+| Group | Detailed Runway Markings |
+| Style | Yellow fill with no outline |
+| Attributes | `rwy`, `end_desig`, `mark_type`, `sub_type`, `side`, `stripe_no`, `len_m`, `wid_m`, `offset_m`, `spacing_m`, `mandatory`, `ref_mos`, `notes` |
+
+### Implementation Notes
+
+- Generate independently for each runway end with entered pre-threshold area
+  length greater than 60 m.
+- Use the physical runway end as the runway-end marking reference and project
+  chevrons outward into the pre-threshold area.
+- Legacy symbolic pre-threshold area line markings are no longer generated in
+  the normal physical geometry pass.

@@ -14,6 +14,7 @@ DEFAULT_STYLE_MAP = {
     "DisplacedThresholdMarking": "physical_displaced_marking.qml",
     "PreThresholdAreaMarking": "physical_pre_area_marking.qml",
     "Runway Marking White": "runway_marking_white.qml",
+    "Runway Marking Yellow": "runway_marking_yellow.qml",
     "Runway Designation Text": "runway_designation_text.qml",
     "Runway Shoulders": "physical_runway_shoulder.qml",
     "Runway Graded Strips": "physical_graded_strips.qml",

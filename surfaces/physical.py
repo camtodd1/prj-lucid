@@ -3,6 +3,7 @@
 
 import os
 import re
+import math
 import traceback
 from typing import Dict, List, Optional, Tuple
 
@@ -343,6 +344,11 @@ class PhysicalGeometryMixin:
                         "fields": detailed_marking_fields,
                         "group": detailed_marking_group,
                     },
+                    "DetailedPreThresholdAreaMarking": {
+                        "name": self.tr("Pre-Threshold Area Markings"),
+                        "fields": detailed_marking_fields,
+                        "group": detailed_marking_group,
+                    },
                     "DetailedSideStripeMarking": {
                         "name": self.tr("Runway Side-Stripe Markings"),
                         "fields": detailed_marking_fields,
@@ -393,6 +399,7 @@ class PhysicalGeometryMixin:
                     "DetailedCentrelineMarking": "Runway Marking White",
                     "DetailedAimingPointMarking": "Runway Marking White",
                     "DetailedTouchdownZoneMarking": "Runway Marking White",
+                    "DetailedPreThresholdAreaMarking": "Runway Marking Yellow",
                     "DetailedSideStripeMarking": "Runway Marking White",
                     "DetailedMarkingQA": "Default Point",
                     "Stopway": "Stopways",
@@ -414,6 +421,7 @@ class PhysicalGeometryMixin:
                     "DetailedCentrelineMarking",
                     "DetailedAimingPointMarking",
                     "DetailedTouchdownZoneMarking",
+                    "DetailedPreThresholdAreaMarking",
                     "DetailedSideStripeMarking",
                     "DetailedMarkingQA",
                     "Stopway",
@@ -807,6 +815,7 @@ class PhysicalGeometryMixin:
                         "DetailedCentrelineMarking",
                         "DetailedAimingPointMarking",
                         "DetailedTouchdownZoneMarking",
+                        "DetailedPreThresholdAreaMarking",
                         "DetailedSideStripeMarking",
                     ),
                 )
@@ -1179,6 +1188,32 @@ class PhysicalGeometryMixin:
             return None
         return self._create_polygon_from_corners(corners, description)
 
+    def _create_marking_segment_between_points(
+        self,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+        width_m: float,
+        description: str,
+    ) -> Optional[QgsGeometry]:
+        if width_m <= 0:
+            return None
+        dx = end_point.x() - start_point.x()
+        dy = end_point.y() - start_point.y()
+        segment_len = math.hypot(dx, dy)
+        if segment_len <= 1e-9:
+            return None
+
+        half_width = width_m / 2.0
+        perp_x = -dy / segment_len * half_width
+        perp_y = dx / segment_len * half_width
+        corners = [
+            QgsPointXY(start_point.x() + perp_x, start_point.y() + perp_y),
+            QgsPointXY(start_point.x() - perp_x, start_point.y() - perp_y),
+            QgsPointXY(end_point.x() - perp_x, end_point.y() - perp_y),
+            QgsPointXY(end_point.x() + perp_x, end_point.y() + perp_y),
+        ]
+        return self._create_polygon_from_corners(corners, description)
+
     def _detail_marking_attrs(
         self,
         runway_name: str,
@@ -1246,6 +1281,7 @@ class PhysicalGeometryMixin:
             "DetailedDesignationMarking": "Runway designation markings",
             "DetailedAimingPointMarking": "Aiming point markings",
             "DetailedTouchdownZoneMarking": "Touchdown zone markings",
+            "DetailedPreThresholdAreaMarking": "Pre-threshold area markings",
             "DetailedCentrelineMarking": "Centreline markings",
             "DetailedSideStripeMarking": "Side-stripe markings",
         }
@@ -1370,11 +1406,27 @@ class PhysicalGeometryMixin:
         if rwy_params is None:
             return generated
 
+        def non_negative_number(value, default=0.0):
+            try:
+                parsed = float(value)
+                return parsed if parsed >= 0 else default
+            except (TypeError, ValueError):
+                return default
+
         runway_name = runway_data.get(
             "short_name", f"RWY_{runway_data.get('original_index', '?')}"
         )
         primary_desig, reciprocal_desig = self._runway_designators(runway_name)
         runway_length = float(rwy_params["length"])
+        disp_primary = non_negative_number(runway_data.get("thr_displaced_1"), 0.0)
+        disp_reciprocal = non_negative_number(runway_data.get("thr_displaced_2"), 0.0)
+        physical_endpoints = self._get_physical_runway_endpoints(
+            thr_point, rec_thr_point, disp_primary, disp_reciprocal, rwy_params
+        )
+        if physical_endpoints:
+            phys_p_start, phys_p_end, _ = physical_endpoints
+        else:
+            phys_p_start, phys_p_end = thr_point, rec_thr_point
         try:
             arc_num = int(float(runway_data.get("arc_num") or 0))
         except (TypeError, ValueError):
@@ -1391,12 +1443,18 @@ class PhysicalGeometryMixin:
                 thr_point,
                 rwy_params["azimuth_p_r"],
                 type_primary,
+                phys_p_start,
+                rwy_params["azimuth_r_p"],
+                non_negative_number(runway_data.get("thr_pre_area_1"), 0.0),
             ),
             (
                 reciprocal_desig,
                 rec_thr_point,
                 rwy_params["azimuth_r_p"],
                 type_reciprocal,
+                phys_p_end,
+                rwy_params["azimuth_p_r"],
+                non_negative_number(runway_data.get("thr_pre_area_2"), 0.0),
             ),
         ]
         default_assumptions = {
@@ -1414,14 +1472,22 @@ class PhysicalGeometryMixin:
                 "assumptions": set(default_assumptions),
                 "skipped": [],
             }
-            for end_desig, origin, _, _ in end_specs
+            for end_desig, origin, _, _, _, _, _ in end_specs
         }
         whole_runway_mandatory: List[str] = []
         whole_runway_optional: List[str] = []
 
         # Threshold transverse bars, piano keys, designation anchor points,
         # aiming points, and touchdown-zone markings are generated per runway end.
-        for end_desig, origin, azimuth, runway_type in end_specs:
+        for (
+            end_desig,
+            origin,
+            azimuth,
+            runway_type,
+            pre_area_start,
+            pre_area_outward_azimuth,
+            pre_area_len,
+        ) in end_specs:
             skipped = qa_records[end_desig]["skipped"]
             threshold_bar = self._create_runway_marking_rectangle(
                 origin,
@@ -1704,6 +1770,79 @@ class PhysicalGeometryMixin:
                 skipped.append(
                     "Aiming point and dependent touchdown zone markings: no "
                     "current rule for this runway width/type combination."
+                )
+
+            if pre_area_len > 60.0:
+                qa_records[end_desig]["assumptions"].add(
+                    "Pre-threshold area entered in dialog is assumed sealed and not suitable for normal aircraft usage."
+                )
+                chevron_leg_run = max(15.0, runway_width / 2.0 - 7.5)
+                apex_offset = 0.0
+                chevron_no = 1
+                while apex_offset < pre_area_len - 1e-6:
+                    base_offset = min(apex_offset + chevron_leg_run, pre_area_len)
+                    visible_run = base_offset - apex_offset
+                    if visible_run <= 1e-6:
+                        break
+                    apex_point = pre_area_start.project(
+                        apex_offset, pre_area_outward_azimuth
+                    )
+                    base_center = pre_area_start.project(
+                        base_offset, pre_area_outward_azimuth
+                    )
+                    if not apex_point or not base_center:
+                        skipped.append(
+                            f"Pre-threshold area chevron {chevron_no}: projection failed."
+                        )
+                        apex_offset += 30.0
+                        chevron_no += 1
+                        continue
+
+                    for side_name, sign in (("L", -1.0), ("R", 1.0)):
+                        endpoint = self._project_lateral(
+                            base_center,
+                            sign * visible_run,
+                            pre_area_outward_azimuth,
+                        )
+                        geom = self._create_marking_segment_between_points(
+                            apex_point,
+                            endpoint,
+                            0.9,
+                            f"Pre-threshold area chevron {runway_name} {end_desig} {chevron_no} {side_name}",
+                        )
+                        if geom:
+                            generated.append(
+                                (
+                                    "DetailedPreThresholdAreaMarking",
+                                    geom,
+                                    self._detail_marking_attrs(
+                                        runway_name,
+                                        end_desig,
+                                        "Pre-Threshold Area",
+                                        "Chevron",
+                                        math.hypot(
+                                            endpoint.x() - apex_point.x(),
+                                            endpoint.y() - apex_point.y(),
+                                        ),
+                                        0.9,
+                                        "MOS 8.16(1); MOS 8.16(2)",
+                                        side=side_name,
+                                        stripe_no=chevron_no,
+                                        offset_m=apex_offset,
+                                        spacing_m=30.0,
+                                        mandatory=True,
+                                        notes=(
+                                            "Yellow chevron leg generated at 45 degrees; "
+                                            "line ends target <= 7.5 m from runway edges where width permits."
+                                        ),
+                                    ),
+                                )
+                            )
+                    apex_offset += 30.0
+                    chevron_no += 1
+            elif pre_area_len > 1e-6:
+                skipped.append(
+                    "Pre-threshold area markings: area length does not exceed 60 m."
                 )
 
         # One centreline stripe set for the whole runway, measured primary to
@@ -2158,7 +2297,6 @@ class PhysicalGeometryMixin:
         )
         marking_ref = "MOS 8.26"
         displaced_marking_end_clearance_m = 15.0
-        pre_area_marking_end_clearance_m = 15.0
 
         def _create_marking_line(
             start_point, end_point, start_clearance_m=0.0, end_clearance_m=0.0
@@ -2257,84 +2395,6 @@ class PhysicalGeometryMixin:
                 )
 
         generated_elements.extend(displaced_marking_features)
-
-        # --- 1e. Pre-Threshold Area Markings ---
-        pre_area_marking_features = []
-        if pre_area_len_1 > 1e-6:
-            try:
-                outermost_p = phys_p_start.project(
-                    pre_area_len_1, rwy_params["azimuth_r_p"]
-                )
-                if not outermost_p:
-                    raise ValueError("Projection failed")
-                line_geom = _create_marking_line(
-                    phys_p_start,
-                    outermost_p,
-                    end_clearance_m=pre_area_marking_end_clearance_m,
-                )
-                if line_geom and not line_geom.isEmpty():
-                    # Use correct field names: 'rwy', 'desc', 'ref_mos'
-                    attributes = {
-                        "rwy": runway_name,
-                        "desc": "Pre-Threshold Area Marking",
-                        "end_desig": primary_desig,
-                        "len_m": round(pre_area_len_1, 3),
-                        "ref_mos": "MOS 8.16(2)",
-                    }
-                    pre_area_marking_features.append(
-                        ("PreThresholdAreaMarking", line_geom, attributes)
-                    )
-                else:
-                    QgsMessageLog.logMessage(
-                        f"Warning: Failed generate geometry for Primary Pre-Area Marking {log_name}.",
-                        plugin_tag,
-                        level=Qgis.Warning,
-                    )
-            except Exception as e:
-                QgsMessageLog.logMessage(
-                    f"Warning: Error generating Primary Pre-Area Marking {log_name}: {e}",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
-
-        if pre_area_len_2 > 1e-6:
-            try:
-                outermost_r = phys_p_end.project(
-                    pre_area_len_2, rwy_params["azimuth_p_r"]
-                )
-                if not outermost_r:
-                    raise ValueError("Projection failed")
-                line_geom = _create_marking_line(
-                    phys_p_end,
-                    outermost_r,
-                    end_clearance_m=pre_area_marking_end_clearance_m,
-                )
-                if line_geom and not line_geom.isEmpty():
-                    # Use correct field names: 'rwy', 'desc', 'ref_mos'
-                    attributes = {
-                        "rwy": runway_name,
-                        "desc": "Pre-Threshold Area Marking",
-                        "end_desig": reciprocal_desig,
-                        "len_m": round(pre_area_len_2, 3),
-                        "ref_mos": "MOS 8.16(2)",
-                    }
-                    pre_area_marking_features.append(
-                        ("PreThresholdAreaMarking", line_geom, attributes)
-                    )
-                else:
-                    QgsMessageLog.logMessage(
-                        f"Warning: Failed generate geometry for Reciprocal Pre-Area Marking {log_name}.",
-                        plugin_tag,
-                        level=Qgis.Warning,
-                    )
-            except Exception as e:
-                QgsMessageLog.logMessage(
-                    f"Warning: Error generating Reciprocal Pre-Area Marking {log_name}: {e}",
-                    plugin_tag,
-                    level=Qgis.Warning,
-                )
-
-        generated_elements.extend(pre_area_marking_features)
 
         # --- 2. Runway Shoulders ---
         if (
