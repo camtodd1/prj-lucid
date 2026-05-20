@@ -52,7 +52,7 @@ class PhysicalGeometryMixin:
             self._stage_layer_tree_node(detailed_marking_group)
             physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
             self._stage_layer_tree_node(physical_geom_group)
-            legacy_marking_group = physical_geom_group.addGroup(
+            legacy_marking_group = detailed_marking_group.addGroup(
                 self.tr("Legacy Symbol Markings")
             )
             self._stage_layer_tree_node(legacy_marking_group)
