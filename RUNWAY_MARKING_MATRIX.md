@@ -673,19 +673,27 @@ Status: implemented as detailed generated polygon geometry.
 
 | Reference | Requirement summary | Notes |
 | --- | --- | --- |
-| MOS 8.26 | Displaced threshold markings identify pavement before a displaced threshold that is available for take-off but not landing. | Detailed MOS dimensions still need to be parsed into this matrix when source text is available. |
+| MOS 8.26(1) | If a runway threshold is permanently displaced, displaced threshold markings must be provided as shown in Figures 8.26(1)-1 and 8.26(1)-2. | Applies when `thr_displaced_1` or `thr_displaced_2` is greater than zero. |
+| MOS 8.26(2)(a) | The first arrow must point in the direction of the displaced threshold. | All generated arrows point from physical runway end toward the displaced threshold. |
+| MOS 8.26(2)(b) | The tip of the first arrow head must end 20 m from the commencement of the displaced threshold's white piano key markings. | Current implementation uses piano-key commencement at threshold + 7.2 m, matching MOS 8.17 threshold-line plus piano-key offset. |
+| MOS 8.26(2)(c) | Preceding complete arrows, pointing toward the displaced threshold, must be provided at 20 m intervals until the reciprocal runway end is reached. | Figure and MOS 8.26(2)(f) imply a 50 m arrow cycle; implementation places complete preceding arrows at 50 m tip-to-tip intervals. |
+| MOS 8.26(2)(c) Note | A partial arrow must not be used if there is insufficient space at the reciprocal runway end for a complete arrow. | Generator only emits complete arrows. |
+| MOS 8.26(2)(d) | Each arrow head is 10 m long, has 0.9-1 m line thickness, arms 3.5 m apart at widest dimension, and points toward the displaced threshold. | Implemented as two 0.9 m wide polygon arms. |
+| MOS 8.26(2)(e) | The arrow stem must be 30 m long and the same width as the centreline marking. | Stem width uses the generated centreline marking width. |
+| MOS 8.26(2)(f) | The combined length of arrow head, stem, and the gap between the base of the arrow and the head of the preceding arrow must be 50 m. | With 10 m head and 30 m stem, this leaves a 10 m gap in each 50 m cycle. |
 
 ### Current Implementation Interpretation
 
 - Generate one white polygon arrow per displaced-threshold arrow position.
-- Preserve the legacy marker-line placement behavior as the initial geometry
-  contract: first arrow tip 30 m from the physical runway end, then repeat at
-  50 m intervals, with a 15 m clearance before the displaced threshold.
+- The first arrow tip is 20 m before the commencement of the displaced
+  threshold piano-key markings.
+- Complete preceding arrows are placed back toward the runway end at 50 m
+  tip-to-tip intervals. Partial arrows are not generated.
 - Arrows are aligned on the runway centreline and point toward the displaced
   threshold.
-- The current generated arrow shape is a deterministic polygon approximation
-  of the previous `dthr.svg` marker. Replace these dimensions with MOS figure
-  values when the displaced-threshold marking clauses/figure are supplied.
+- Arrow geometry is one generated feature made from a 30 m centreline-width
+  stem and two 10 m long, 0.9 m wide head arms, with the arms 3.5 m apart at
+  their widest dimension.
 
 ### Generated Feature Model
 

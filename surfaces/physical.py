@@ -1238,47 +1238,88 @@ class PhysicalGeometryMixin:
             description,
         )
 
+    def _create_marking_segment_between_points(
+        self,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+        width_m: float,
+        description: str,
+    ) -> Optional[QgsGeometry]:
+        if width_m <= 0:
+            return None
+        dx = end_point.x() - start_point.x()
+        dy = end_point.y() - start_point.y()
+        segment_len = math.hypot(dx, dy)
+        if segment_len <= 1e-9:
+            return None
+
+        half_width = width_m / 2.0
+        perp_x = -dy / segment_len * half_width
+        perp_y = dx / segment_len * half_width
+        corners = [
+            QgsPointXY(start_point.x() + perp_x, start_point.y() + perp_y),
+            QgsPointXY(start_point.x() - perp_x, start_point.y() - perp_y),
+            QgsPointXY(end_point.x() - perp_x, end_point.y() - perp_y),
+            QgsPointXY(end_point.x() + perp_x, end_point.y() + perp_y),
+        ]
+        return self._create_polygon_from_corners(corners, description)
+
     def _create_displaced_threshold_arrow_polygon(
         self,
         origin: QgsPointXY,
         runway_azimuth: float,
         arrow_tip_offset_m: float,
+        stem_width_m: float,
         description: str,
     ) -> Optional[QgsGeometry]:
-        arrow_length = 18.0
-        head_length = 7.0
-        head_half_width = 3.0
-        shaft_half_width = 0.75
+        head_length = 10.0
+        stem_length = 30.0
+        head_half_width = 1.75
+        head_line_width = 0.9
 
         tip = origin.project(arrow_tip_offset_m, runway_azimuth)
         head_base = origin.project(arrow_tip_offset_m - head_length, runway_azimuth)
-        tail = origin.project(arrow_tip_offset_m - arrow_length, runway_azimuth)
+        tail = origin.project(
+            arrow_tip_offset_m - head_length - stem_length, runway_azimuth
+        )
         if not tip or not head_base or not tail:
             return None
 
         head_left = self._project_lateral(head_base, -head_half_width, runway_azimuth)
-        shaft_left_front = self._project_lateral(
-            head_base, -shaft_half_width, runway_azimuth
-        )
-        shaft_left_tail = self._project_lateral(tail, -shaft_half_width, runway_azimuth)
-        shaft_right_tail = self._project_lateral(tail, shaft_half_width, runway_azimuth)
-        shaft_right_front = self._project_lateral(
-            head_base, shaft_half_width, runway_azimuth
-        )
         head_right = self._project_lateral(head_base, head_half_width, runway_azimuth)
+        if not head_left or not head_right:
+            return None
 
-        corners = [
+        stem = self._create_marking_segment_between_points(
+            tail,
+            head_base,
+            float(stem_width_m or 0.3),
+            f"{description} stem",
+        )
+        left_head = self._create_marking_segment_between_points(
             tip,
             head_left,
-            shaft_left_front,
-            shaft_left_tail,
-            shaft_right_tail,
-            shaft_right_front,
+            head_line_width,
+            f"{description} left head",
+        )
+        right_head = self._create_marking_segment_between_points(
+            tip,
             head_right,
-        ]
-        if not all(corners):
+            head_line_width,
+            f"{description} right head",
+        )
+        if not stem or not left_head or not right_head:
             return None
-        return self._create_polygon_from_corners(corners, description)
+
+        arrow_geom = stem.combine(left_head)
+        if not arrow_geom or arrow_geom.isEmpty():
+            return None
+        arrow_geom = arrow_geom.combine(right_head)
+        if not arrow_geom or arrow_geom.isEmpty():
+            return None
+        if not arrow_geom.isGeosValid():
+            arrow_geom = arrow_geom.makeValid()
+        return arrow_geom
 
     def _detail_marking_attrs(
         self,
@@ -1560,13 +1601,15 @@ class PhysicalGeometryMixin:
         ) in end_specs:
             skipped = qa_records[end_desig]["skipped"]
             if displaced_len > 1e-6:
-                arrow_tip_offset = 30.0
+                first_arrow_tip_offset = displaced_len + 7.2 - 20.0
+                arrow_tip_offset = first_arrow_tip_offset
                 arrow_no = 1
-                while arrow_tip_offset <= displaced_len - 15.0 + 1e-6:
+                while arrow_tip_offset - 40.0 >= -1e-6:
                     geom = self._create_displaced_threshold_arrow_polygon(
                         pre_area_start,
                         azimuth,
                         arrow_tip_offset,
+                        centreline_width,
                         f"Displaced threshold arrow {runway_name} {end_desig} {arrow_no}",
                     )
                     if geom:
@@ -1579,16 +1622,17 @@ class PhysicalGeometryMixin:
                                     end_desig,
                                     "Displaced Threshold",
                                     "Arrow",
-                                    18.0,
-                                    6.0,
+                                    40.0,
+                                    3.5,
                                     "MOS 8.26",
                                     stripe_no=arrow_no,
                                     offset_m=arrow_tip_offset,
                                     spacing_m=50.0,
                                     mandatory=True,
                                     notes=(
-                                        "Generated polygon arrow; placement preserves legacy marker-line "
-                                        "30 m initial offset, 50 m interval, and 15 m threshold clearance."
+                                        "Head 10 m, stem 30 m. First tip is 20 m before "
+                                        "the displaced-threshold piano-key commencement; "
+                                        "preceding complete arrows repeat at 50 m intervals."
                                     ),
                                 ),
                             )
@@ -1597,7 +1641,7 @@ class PhysicalGeometryMixin:
                         skipped.append(
                             f"Displaced threshold arrow {arrow_no}: geometry generation failed."
                         )
-                    arrow_tip_offset += 50.0
+                    arrow_tip_offset -= 50.0
                     arrow_no += 1
 
             threshold_bar = self._create_runway_marking_rectangle(
