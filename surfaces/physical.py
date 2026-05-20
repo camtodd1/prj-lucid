@@ -1606,7 +1606,7 @@ class PhysicalGeometryMixin:
                     midpoint_zone_start = runway_length / 2.0 - 275.0
                     midpoint_zone_end = runway_length / 2.0 + 275.0
                     for offset in touchdown_offsets:
-                        if abs(offset - aim_offset) < 50.0:
+                        if abs(offset - aim_offset) <= 50.0:
                             skipped.append(
                                 "ICAO A touchdown zone pair "
                                 f"at {offset:g} m: within 50 m of aiming point."
