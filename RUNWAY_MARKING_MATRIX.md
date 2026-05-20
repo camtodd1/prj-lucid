@@ -679,8 +679,8 @@ Status: implemented as detailed generated polygon geometry.
 | MOS 8.26(2)(c) | Preceding complete arrows, pointing toward the displaced threshold, must be provided at 20 m intervals until the reciprocal runway end is reached. | Figure and MOS 8.26(2)(f) imply a 50 m arrow cycle; implementation places complete preceding arrows at 50 m tip-to-tip intervals. |
 | MOS 8.26(2)(c) Note | A partial arrow must not be used if there is insufficient space at the reciprocal runway end for a complete arrow. | Generator only emits complete arrows. |
 | MOS 8.26(2)(d) | Each arrow head is 10 m long, has 0.9-1 m line thickness, arms 3.5 m apart at widest dimension, and points toward the displaced threshold. | Implemented as two 0.9 m wide polygon arms. |
-| MOS 8.26(2)(e) | The arrow stem must be 30 m long and the same width as the centreline marking. | Stem width uses the generated centreline marking width. |
-| MOS 8.26(2)(f) | The combined length of arrow head, stem, and the gap between the base of the arrow and the head of the preceding arrow must be 50 m. | With 10 m head and 30 m stem, this leaves a 10 m gap in each 50 m cycle. |
+| MOS 8.26(2)(e) | The arrow stem must be the same width as the centreline marking. | Figure 8.26(1)-1 is interpreted as a 30 m total arrow length, including 10 m head and 20 m stem. |
+| MOS 8.26(2)(f) | The combined length of arrow head, arrow stem and the gap between arrows must be 50 m. | With 30 m total arrow length, this leaves a 20 m gap in each 50 m cycle. |
 
 ### Current Implementation Interpretation
 
@@ -691,9 +691,9 @@ Status: implemented as detailed generated polygon geometry.
   tip-to-tip intervals. Partial arrows are not generated.
 - Arrows are aligned on the runway centreline and point toward the displaced
   threshold.
-- Arrow geometry is one generated feature made from a 30 m centreline-width
-  stem and two 10 m long, 0.9 m wide head arms, with the arms 3.5 m apart at
-  their widest dimension.
+- Arrow geometry is one generated feature with a 30 m total length: a 20 m
+  centreline-width stem and two 10 m long, 0.9 m wide head arms, with the arms
+  3.5 m apart at their widest dimension.
 
 ### Generated Feature Model
 

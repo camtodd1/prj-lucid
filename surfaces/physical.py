@@ -1273,7 +1273,7 @@ class PhysicalGeometryMixin:
         description: str,
     ) -> Optional[QgsGeometry]:
         head_length = 10.0
-        stem_length = 30.0
+        stem_length = 20.0
         head_half_width = 1.75
         head_line_width = 0.9
 
@@ -1604,7 +1604,7 @@ class PhysicalGeometryMixin:
                 first_arrow_tip_offset = displaced_len + 7.2 - 20.0
                 arrow_tip_offset = first_arrow_tip_offset
                 arrow_no = 1
-                while arrow_tip_offset - 40.0 >= -1e-6:
+                while arrow_tip_offset - 30.0 >= -1e-6:
                     geom = self._create_displaced_threshold_arrow_polygon(
                         pre_area_start,
                         azimuth,
@@ -1622,7 +1622,7 @@ class PhysicalGeometryMixin:
                                     end_desig,
                                     "Displaced Threshold",
                                     "Arrow",
-                                    40.0,
+                                    30.0,
                                     3.5,
                                     "MOS 8.26",
                                     stripe_no=arrow_no,
@@ -1630,7 +1630,7 @@ class PhysicalGeometryMixin:
                                     spacing_m=50.0,
                                     mandatory=True,
                                     notes=(
-                                        "Head 10 m, stem 30 m. First tip is 20 m before "
+                                        "Head 10 m, stem 20 m, total arrow length 30 m. First tip is 20 m before "
                                         "the displaced-threshold piano-key commencement; "
                                         "preceding complete arrows repeat at 50 m intervals."
                                     ),
