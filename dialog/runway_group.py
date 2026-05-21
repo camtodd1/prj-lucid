@@ -600,51 +600,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             results.get("type2_label_text", "(Reciprocal End) Type:")
         )
 
-    def clear_inputs(self):
-        widgets_to_block = self._input_widgets()
-        for widget in widgets_to_block:
-            widget.blockSignals(True)
-        try:
-            for line_edit in [
-                self.desig_le,
-                self.thr_east_le,
-                self.thr_north_le,
-                self.rec_east_le,
-                self.rec_north_le,
-                self.thr_elev_1_le,
-                self.thr_elev_2_le,
-                self.thr_displaced_1_le,
-                self.thr_displaced_2_le,
-                self.thr_pre_area_1_le,
-                self.thr_pre_area_2_le,
-                self.width_le,
-                self.shoulder_le,
-                self.clearway1_len_le,
-                self.clearway2_len_le,
-                self.stopway1_len_le,
-                self.stopway2_len_le,
-            ]:
-                line_edit.clear()
-            for checkbox in [
-                self.takeoff_available_1_cb,
-                self.takeoff_available_2_cb,
-                self.landing_available_1_cb,
-                self.landing_available_2_cb,
-            ]:
-                checkbox.setChecked(True)
-            for combo in [
-                self.suffix_combo,
-                self.arc_num_combo,
-                self.arc_let_combo,
-                self.type1_combo,
-                self.type2_combo,
-            ]:
-                combo.setCurrentIndex(0)
-        finally:
-            for widget in widgets_to_block:
-                widget.blockSignals(False)
-            self.inputChanged.emit()
-
     def _input_widgets(self):
         return [
             self.desig_le,
