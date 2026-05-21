@@ -19,6 +19,7 @@ from qgis.core import (  # type: ignore
     QgsPointXY,
     QgsProject,
     QgsVectorLayer,
+    QgsWkbTypes,
 )
 
 from .. import ols_dimensions
@@ -28,6 +29,66 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class PhysicalGeometryMixin:
+    def _polygonal_geometry_only(
+        self, geom: Optional[QgsGeometry], description: str
+    ) -> Optional[QgsGeometry]:
+        """Return only polygonal components from a geometry result."""
+        if geom is None or geom.isEmpty():
+            return None
+
+        polygon_parts: List[QgsGeometry] = []
+
+        def collect_polygon_parts(candidate: QgsGeometry) -> None:
+            if candidate is None or candidate.isEmpty():
+                return
+            try:
+                if candidate.type() == QgsWkbTypes.PolygonGeometry:
+                    polygon_parts.append(QgsGeometry(candidate))
+                    return
+            except Exception:
+                return
+
+            try:
+                for part in candidate.asGeometryCollection():
+                    collect_polygon_parts(part)
+            except Exception:
+                return
+
+        collect_polygon_parts(geom)
+        if not polygon_parts:
+            QgsMessageLog.logMessage(
+                f"Warning: {description} did not contain polygonal geometry.",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+            return None
+
+        if len(polygon_parts) == 1:
+            polygonal_geom = polygon_parts[0]
+        else:
+            polygonal_geom = QgsGeometry.unaryUnion(polygon_parts)
+
+        if polygonal_geom is None or polygonal_geom.isEmpty():
+            return None
+        if not polygonal_geom.isGeosValid():
+            polygonal_geom = polygonal_geom.makeValid()
+            polygon_parts = []
+            collect_polygon_parts(polygonal_geom)
+            if not polygon_parts:
+                return None
+            polygonal_geom = (
+                polygon_parts[0]
+                if len(polygon_parts) == 1
+                else QgsGeometry.unaryUnion(polygon_parts)
+            )
+
+        if (
+            polygonal_geom is None
+            or polygonal_geom.isEmpty()
+            or not polygonal_geom.isGeosValid()
+        ):
+            return None
+        return polygonal_geom
 
     def _process_physical_and_protection_layers(
         self,
@@ -635,9 +696,10 @@ class PhysicalGeometryMixin:
                                         graded_strip_geom
                                     )
                                     if flyover_geom and not flyover_geom.isEmpty():
-                                        flyover_geom = (
-                                            flyover_geom.makeValid()
-                                        )  # Validate result
+                                        flyover_geom = self._polygonal_geometry_only(
+                                            flyover_geom,
+                                            f"FlyoverStrip difference for {runway_name_log}",
+                                        )
                                         if (
                                             flyover_geom
                                             and not flyover_geom.isEmpty()
