@@ -7,6 +7,8 @@ from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
 
 from .dialog_constants import (
     CALC_PLACEHOLDER,
+    DEFAULT_RUNWAY_SURFACE_CATEGORY,
+    DEFAULT_RUNWAY_SURFACE_MATERIAL,
     NA_PLACEHOLDER,
     RUNWAY_SURFACE_MATERIALS,
     WIDGET_MISSING_MSG,
@@ -353,7 +355,11 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "Select runway surface material for the chosen category."
         )
         self.surface_material_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._refresh_surface_material_options("")
+        self.surface_category_combo.setCurrentText(DEFAULT_RUNWAY_SURFACE_CATEGORY)
+        self._refresh_surface_material_options(
+            DEFAULT_RUNWAY_SURFACE_CATEGORY,
+            selected_material=DEFAULT_RUNWAY_SURFACE_MATERIAL,
+        )
         layout.addWidget(label_surface_material, row + 3, 0)
         layout.addWidget(self.surface_material_combo, row + 3, 1)
 
@@ -619,11 +625,14 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
             self._set_combo_text(
-                self.surface_category_combo, data.get("surface_category", "")
+                self.surface_category_combo,
+                data.get("surface_category", DEFAULT_RUNWAY_SURFACE_CATEGORY),
             )
             self._refresh_surface_material_options(
                 self.surface_category_combo.currentText(),
-                selected_material=data.get("surface_material", ""),
+                selected_material=data.get(
+                    "surface_material", DEFAULT_RUNWAY_SURFACE_MATERIAL
+                ),
             )
             self._set_combo_text(self.type1_combo, data.get("type1", ""))
             self._set_combo_text(self.type2_combo, data.get("type2", ""))

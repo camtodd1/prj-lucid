@@ -32,6 +32,8 @@ try:
         ENTER_COORDS_MSG,
         INVALID_COORDS_MSG,
         CALC_ERROR_MSG,
+        DEFAULT_RUNWAY_SURFACE_CATEGORY,
+        DEFAULT_RUNWAY_SURFACE_MATERIAL,
         SAME_POINT_MSG,
         NEAR_POINTS_MSG,
         WIDGET_MISSING_MSG,
@@ -50,6 +52,8 @@ except ImportError:
         ENTER_COORDS_MSG,
         INVALID_COORDS_MSG,
         CALC_ERROR_MSG,
+        DEFAULT_RUNWAY_SURFACE_CATEGORY,
+        DEFAULT_RUNWAY_SURFACE_MATERIAL,
         SAME_POINT_MSG,
         NEAR_POINTS_MSG,
         WIDGET_MISSING_MSG,
@@ -1012,8 +1016,14 @@ class SafeguardingBuilderDialog(
         # Optional fields (just copy text)
         validated["arc_num"] = inputs.get("arc_num")
         validated["arc_let"] = inputs.get("arc_let")
-        surface_category = str(inputs.get("surface_category", "") or "").strip()
-        surface_material = str(inputs.get("surface_material", "") or "").strip()
+        surface_category = (
+            str(inputs.get("surface_category", "") or "").strip()
+            or DEFAULT_RUNWAY_SURFACE_CATEGORY
+        )
+        surface_material = (
+            str(inputs.get("surface_material", "") or "").strip()
+            or DEFAULT_RUNWAY_SURFACE_MATERIAL
+        )
         if surface_category and surface_category not in RUNWAY_SURFACE_MATERIALS:
             errors.append(
                 f"Rwy {index}: Invalid runway surface category '{surface_category}'."

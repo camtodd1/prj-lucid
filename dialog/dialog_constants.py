@@ -15,6 +15,8 @@ RUNWAY_SURFACE_MATERIALS = {
     "Sealed": ["Asphalt", "Bitumen", "Concrete"],
     "Unsealed": ["Gravel", "Grass", "Sand", "Coral", "Clay", "Soil", "Salt"],
 }
+DEFAULT_RUNWAY_SURFACE_CATEGORY = "Sealed"
+DEFAULT_RUNWAY_SURFACE_MATERIAL = "Asphalt"
 
 OUTPUT_FORMATS = {
     "GeoPackage": ("GPKG", "GeoPackage", ".gpkg"),
