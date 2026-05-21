@@ -11,6 +11,11 @@ WIDGET_MISSING_MSG = "Widget?"
 
 DIALOG_LOG_TAG = "SafeguardingBuilderDialog"
 
+RUNWAY_SURFACE_MATERIALS = {
+    "Sealed": ["Asphalt", "Bitumen", "Concrete"],
+    "Unsealed": ["Gravel", "Grass", "Sand", "Coral", "Clay", "Soil", "Salt"],
+}
+
 OUTPUT_FORMATS = {
     "GeoPackage": ("GPKG", "GeoPackage", ".gpkg"),
     "ESRI Shapefile": ("ESRI Shapefile", "ESRI Shapefile", ".shp"),

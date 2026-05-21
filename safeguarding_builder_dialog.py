@@ -37,6 +37,7 @@ try:
         WIDGET_MISSING_MSG,
         DIALOG_LOG_TAG,
         OUTPUT_FORMATS,
+        RUNWAY_SURFACE_MATERIALS,
     )
     from .dialog.runway_group import RunwayWidgetGroup
     from .dialog.output_options import OutputOptionsMixin
@@ -54,6 +55,7 @@ except ImportError:
         WIDGET_MISSING_MSG,
         DIALOG_LOG_TAG,
         OUTPUT_FORMATS,
+        RUNWAY_SURFACE_MATERIALS,
     )
     from dialog.runway_group import RunwayWidgetGroup  # type: ignore
     from dialog.output_options import OutputOptionsMixin  # type: ignore
@@ -1010,6 +1012,25 @@ class SafeguardingBuilderDialog(
         # Optional fields (just copy text)
         validated["arc_num"] = inputs.get("arc_num")
         validated["arc_let"] = inputs.get("arc_let")
+        surface_category = str(inputs.get("surface_category", "") or "").strip()
+        surface_material = str(inputs.get("surface_material", "") or "").strip()
+        if surface_category and surface_category not in RUNWAY_SURFACE_MATERIALS:
+            errors.append(
+                f"Rwy {index}: Invalid runway surface category '{surface_category}'."
+            )
+            current_errors += 1
+            surface_category = ""
+            surface_material = ""
+        elif surface_material and surface_material not in RUNWAY_SURFACE_MATERIALS.get(
+            surface_category, []
+        ):
+            errors.append(
+                f"Rwy {index}: Invalid runway surface material '{surface_material}' for category '{surface_category or 'None'}'."
+            )
+            current_errors += 1
+            surface_material = ""
+        validated["surface_category"] = surface_category
+        validated["surface_material"] = surface_material
         validated["type1"] = inputs.get("type1")
         validated["type2"] = inputs.get("type2")
 

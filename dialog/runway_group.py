@@ -8,6 +8,7 @@ from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
 from .dialog_constants import (
     CALC_PLACEHOLDER,
     NA_PLACEHOLDER,
+    RUNWAY_SURFACE_MATERIALS,
     WIDGET_MISSING_MSG,
 )
 
@@ -269,7 +270,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         current_details_row += 1
 
         self._add_arc_controls(detailsLayout, current_details_row)
-        current_details_row += 2
+        current_details_row += 4
         self._add_runway_type_controls(detailsLayout, current_details_row)
 
         groupBox_layout.addLayout(detailsLayout)
@@ -325,6 +326,36 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.arc_let_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         layout.addWidget(label_arc_let, row + 1, 0)
         layout.addWidget(self.arc_let_combo, row + 1, 1)
+
+        label_surface_category = QtWidgets.QLabel("Surface Category:")
+        label_surface_category.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
+        self.surface_category_combo = QtWidgets.QComboBox()
+        self.surface_category_combo.setObjectName(
+            f"comboBox_surface_category_{self.index}"
+        )
+        self.surface_category_combo.addItems([""] + list(RUNWAY_SURFACE_MATERIALS))
+        self.surface_category_combo.setToolTip("Select runway surface category.")
+        self.surface_category_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        layout.addWidget(label_surface_category, row + 2, 0)
+        layout.addWidget(self.surface_category_combo, row + 2, 1)
+
+        label_surface_material = QtWidgets.QLabel("Surface Material:")
+        label_surface_material.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
+        self.surface_material_combo = QtWidgets.QComboBox()
+        self.surface_material_combo.setObjectName(
+            f"comboBox_surface_material_{self.index}"
+        )
+        self.surface_material_combo.setToolTip(
+            "Select runway surface material for the chosen category."
+        )
+        self.surface_material_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self._refresh_surface_material_options("")
+        layout.addWidget(label_surface_material, row + 3, 0)
+        layout.addWidget(self.surface_material_combo, row + 3, 1)
 
     def _add_runway_type_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
         runway_types = [
@@ -493,10 +524,14 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.suffix_combo,
             self.arc_num_combo,
             self.arc_let_combo,
+            self.surface_material_combo,
             self.type1_combo,
             self.type2_combo,
         ]:
             combo.currentIndexChanged.connect(self.inputChanged.emit)
+        self.surface_category_combo.currentIndexChanged.connect(
+            self._handle_surface_category_changed
+        )
         self.remove_button.clicked.connect(self._emit_remove_request)
 
     def _arc_number_for_length(self, length_m: float) -> Optional[str]:
@@ -537,6 +572,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "landing_available_2": self.landing_available_2_cb.isChecked(),
             "arc_num": self.arc_num_combo.currentData(),
             "arc_let": self.arc_let_combo.currentData(),
+            "surface_category": self.surface_category_combo.currentText(),
+            "surface_material": self.surface_material_combo.currentText(),
             "type1": self.type1_combo.currentText(),
             "type2": self.type2_combo.currentText(),
         }
@@ -581,6 +618,13 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             )
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
+            self._set_combo_text(
+                self.surface_category_combo, data.get("surface_category", "")
+            )
+            self._refresh_surface_material_options(
+                self.surface_category_combo.currentText(),
+                selected_material=data.get("surface_material", ""),
+            )
             self._set_combo_text(self.type1_combo, data.get("type1", ""))
             self._set_combo_text(self.type2_combo, data.get("type2", ""))
         finally:
@@ -626,9 +670,35 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.landing_available_2_cb,
             self.arc_num_combo,
             self.arc_let_combo,
+            self.surface_category_combo,
+            self.surface_material_combo,
             self.type1_combo,
             self.type2_combo,
         ]
+
+    def _handle_surface_category_changed(self):
+        self._refresh_surface_material_options(
+            self.surface_category_combo.currentText()
+        )
+        self.inputChanged.emit()
+
+    def _refresh_surface_material_options(
+        self, category: str, selected_material: str = ""
+    ) -> None:
+        current_material = selected_material or self.surface_material_combo.currentText()
+        self.surface_material_combo.blockSignals(True)
+        try:
+            self.surface_material_combo.clear()
+            materials = RUNWAY_SURFACE_MATERIALS.get(category, [])
+            self.surface_material_combo.addItem("")
+            self.surface_material_combo.addItems(materials)
+            if current_material in materials:
+                self.surface_material_combo.setCurrentText(current_material)
+            else:
+                self.surface_material_combo.setCurrentIndex(0)
+            self.surface_material_combo.setEnabled(bool(materials))
+        finally:
+            self.surface_material_combo.blockSignals(False)
 
     def _set_combo_data(self, combo: QtWidgets.QComboBox, value: str) -> None:
         idx = combo.findData(value)
