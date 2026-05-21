@@ -19,7 +19,6 @@ from qgis.core import (  # type: ignore
     QgsPointXY,
     QgsProject,
     QgsVectorLayer,
-    QgsWkbTypes,
 )
 
 from .. import ols_dimensions
@@ -29,67 +28,6 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class PhysicalGeometryMixin:
-    def _polygonal_geometry_only(
-        self, geom: Optional[QgsGeometry], description: str
-    ) -> Optional[QgsGeometry]:
-        """Return only polygonal components from a geometry result."""
-        if geom is None or geom.isEmpty():
-            return None
-
-        polygon_parts: List[QgsGeometry] = []
-
-        def collect_polygon_parts(candidate: QgsGeometry) -> None:
-            if candidate is None or candidate.isEmpty():
-                return
-            try:
-                if candidate.type() == QgsWkbTypes.PolygonGeometry:
-                    polygon_parts.append(QgsGeometry(candidate))
-                    return
-            except Exception:
-                return
-
-            try:
-                for part in candidate.asGeometryCollection():
-                    collect_polygon_parts(part)
-            except Exception:
-                return
-
-        collect_polygon_parts(geom)
-        if not polygon_parts:
-            QgsMessageLog.logMessage(
-                f"Warning: {description} did not contain polygonal geometry.",
-                PLUGIN_TAG,
-                level=Qgis.Warning,
-            )
-            return None
-
-        if len(polygon_parts) == 1:
-            polygonal_geom = polygon_parts[0]
-        else:
-            polygonal_geom = QgsGeometry.unaryUnion(polygon_parts)
-
-        if polygonal_geom is None or polygonal_geom.isEmpty():
-            return None
-        if not polygonal_geom.isGeosValid():
-            polygonal_geom = polygonal_geom.makeValid()
-            polygon_parts = []
-            collect_polygon_parts(polygonal_geom)
-            if not polygon_parts:
-                return None
-            polygonal_geom = (
-                polygon_parts[0]
-                if len(polygon_parts) == 1
-                else QgsGeometry.unaryUnion(polygon_parts)
-            )
-
-        if (
-            polygonal_geom is None
-            or polygonal_geom.isEmpty()
-            or not polygonal_geom.isGeosValid()
-        ):
-            return None
-        return polygonal_geom
-
     def _process_physical_and_protection_layers(
         self,
         main_group: QgsLayerTreeGroup,
@@ -582,11 +520,6 @@ class PhysicalGeometryMixin:
                         existing_refs.extend(generated_summary.get("mos_refs", []))
                         rwy_data["generated_mos_refs"] = sorted(set(existing_refs))
 
-                        graded_strip_geom: Optional[QgsGeometry] = None
-                        overall_strip_geom: Optional[QgsGeometry] = None
-                        graded_strip_attrs: Optional[dict] = None
-                        overall_strip_attrs: Optional[dict] = None
-
                         for (
                             element_type,
                             geometry,
@@ -606,13 +539,7 @@ class PhysicalGeometryMixin:
                             ):
                                 continue
 
-                            if element_type == "GradedStrip":
-                                graded_strip_geom = geometry
-                                graded_strip_attrs = attributes
-                            elif element_type == "OverallStrip":
-                                overall_strip_geom = geometry
-                                overall_strip_attrs = attributes
-                            elif element_type == "rwy":
+                            if element_type == "rwy":
                                 try:
                                     runway_marking_contexts[
                                         attributes.get("rwy", runway_name_log)
@@ -668,173 +595,6 @@ class PhysicalGeometryMixin:
 
                             physical_features[element_type].append(feature)
                             any_physical_or_protection_ok = True
-
-                        flyover_spec = physical_layer_specs.get("FlyoverStrip")
-                        if (
-                            flyover_spec is not None
-                            and graded_strip_geom is not None
-                            and overall_strip_geom is not None
-                        ):
-                            try:
-                                # Ensure inputs are valid before difference
-                                if not graded_strip_geom.isGeosValid():
-                                    graded_strip_geom = (
-                                        graded_strip_geom.makeValid()
-                                    )
-                                if not overall_strip_geom.isGeosValid():
-                                    overall_strip_geom = (
-                                        overall_strip_geom.makeValid()
-                                    )
-
-                                if (
-                                    graded_strip_geom
-                                    and overall_strip_geom
-                                    and graded_strip_geom.isGeosValid()
-                                    and overall_strip_geom.isGeosValid()
-                                ):
-                                    flyover_geom = overall_strip_geom.difference(
-                                        graded_strip_geom
-                                    )
-                                    if flyover_geom and not flyover_geom.isEmpty():
-                                        flyover_geom = self._polygonal_geometry_only(
-                                            flyover_geom,
-                                            f"FlyoverStrip difference for {runway_name_log}",
-                                        )
-                                        if (
-                                            flyover_geom
-                                            and not flyover_geom.isEmpty()
-                                            and flyover_geom.isGeosValid()
-                                        ):
-                                            # Create feature for flyover area
-                                            flyover_feat = QgsFeature(
-                                                flyover_spec["fields"]
-                                            )
-                                            flyover_feat.setGeometry(flyover_geom)
-
-                                            # --- MODIFIED ATTRIBUTE CALCULATION FOR FLYOVER ---
-                                            flyover_attrs = (
-                                                {}
-                                            )  # Start with an empty dict for flyover-specific attributes
-
-                                            # 'rwy' and 'ref_mos' can be taken from overall_strip_attrs if available
-                                            if overall_strip_attrs:
-                                                flyover_attrs["rwy"] = (
-                                                    overall_strip_attrs.get("rwy")
-                                                )
-                                                flyover_attrs["ref_mos"] = (
-                                                    overall_strip_attrs.get(
-                                                        "ref_mos"
-                                                    )
-                                                )
-
-                                            flyover_attrs["desc"] = (
-                                                "Flyover Strip Area"
-                                            )
-
-                                            # Calculate len_m and wid_m as per your logic
-                                            # len_m can be taken from either graded or overall strip length
-                                            if (
-                                                graded_strip_attrs
-                                                and "len_m" in graded_strip_attrs
-                                            ):
-                                                flyover_attrs["len_m"] = (
-                                                    graded_strip_attrs["len_m"]
-                                                )
-                                            elif (
-                                                overall_strip_attrs
-                                                and "len_m" in overall_strip_attrs
-                                            ):  # Fallback to overall
-                                                flyover_attrs["len_m"] = (
-                                                    overall_strip_attrs["len_m"]
-                                                )
-                                            else:
-                                                flyover_attrs["len_m"] = (
-                                                    None  # Or some default if neither is available
-                                                )
-
-                                            if (
-                                                graded_strip_attrs
-                                                and overall_strip_attrs
-                                                and "wid_m" in graded_strip_attrs
-                                                and "wid_m" in overall_strip_attrs
-                                                and isinstance(
-                                                    graded_strip_attrs["wid_m"],
-                                                    (int, float),
-                                                )
-                                                and isinstance(
-                                                    overall_strip_attrs["wid_m"],
-                                                    (int, float),
-                                                )
-                                            ):
-
-                                                overall_w = overall_strip_attrs[
-                                                    "wid_m"
-                                                ]
-                                                graded_w = graded_strip_attrs[
-                                                    "wid_m"
-                                                ]
-                                                if overall_w > graded_w:
-                                                    flyover_attrs["wid_m"] = (
-                                                        overall_w - graded_w
-                                                    ) / 2.0
-                                                else:
-                                                    flyover_attrs["wid_m"] = (
-                                                        0.0  # Or None, if width is not positive
-                                                    )
-                                                    QgsMessageLog.logMessage(
-                                                        f"Warning: Overall strip width not greater than graded strip width for {runway_name_log}. Flyover width set to 0.",
-                                                        plugin_tag,
-                                                        level=Qgis.Warning,
-                                                    )
-                                            else:
-                                                flyover_attrs["wid_m"] = None
-
-                                            for (
-                                                field_name,
-                                                value,
-                                            ) in flyover_attrs.items():
-                                                idx = flyover_feat.fieldNameIndex(
-                                                    field_name
-                                                )
-                                                if idx != -1:
-                                                    flyover_feat.setAttribute(
-                                                        idx, value
-                                                    )
-
-                                            physical_features[
-                                                "FlyoverStrip"
-                                            ].append(flyover_feat)
-                                            any_physical_or_protection_ok = True
-                                        else:
-                                            QgsMessageLog.logMessage(
-                                                f"Warning: FlyoverStrip geometry invalid after difference/makeValid for {runway_name_log}.",
-                                                plugin_tag,
-                                                level=Qgis.Warning,
-                                            )
-                                    else:
-                                        QgsMessageLog.logMessage(
-                                            f"Warning: FlyoverStrip geometry is empty after difference for {runway_name_log}.",
-                                            plugin_tag,
-                                            level=Qgis.Warning,
-                                        )
-                                else:
-                                    QgsMessageLog.logMessage(
-                                        f"Warning: Cannot calculate FlyoverStrip difference due to invalid input strip geometries for {runway_name_log}.",
-                                        plugin_tag,
-                                        level=Qgis.Warning,
-                                    )
-                            except Exception as e_diff:
-                                QgsMessageLog.logMessage(
-                                    f"Warning: Error calculating FlyoverStrip difference for {runway_name_log}: {e_diff}",
-                                    plugin_tag,
-                                    level=Qgis.Warning,
-                                )
-                        elif flyover_spec is not None:
-                            QgsMessageLog.logMessage(
-                                f"Info: Skipping FlyoverStrip for {runway_name_log}: Graded or Overall strip geometry missing.",
-                                plugin_tag,
-                                level=Qgis.Info,
-                            )
 
                     except Exception as e_phys:
                         QgsMessageLog.logMessage(
@@ -2725,6 +2485,94 @@ class PhysicalGeometryMixin:
                         }
                         generated_elements.append(
                             ("OverallStrip", overall_strip_geom, overall_attrs)
+                        )
+
+                    flyover_width = (overall_width - graded_width) / 2.0
+                    if flyover_width > 1e-6:
+                        flyover_ref = f"{strip_dims.get('mos_overall_width_ref','')}; {strip_dims.get('mos_graded_width_ref','')}; {strip_dims.get('mos_extension_length_ref','')}"
+                        flyover_attrs = {
+                            "rwy": runway_name,
+                            "desc": "Flyover Strip Area",
+                            "wid_m": flyover_width,
+                            "len_m": round(strip_length, 3),
+                            "ref_mos": flyover_ref,
+                        }
+
+                        left_inner_p = strip_end_center_p.project(
+                            graded_half_width, rwy_params["azimuth_perp_l"]
+                        )
+                        left_outer_p = strip_end_center_p.project(
+                            overall_half_width, rwy_params["azimuth_perp_l"]
+                        )
+                        left_outer_r = strip_end_center_r.project(
+                            overall_half_width, rwy_params["azimuth_perp_l"]
+                        )
+                        left_inner_r = strip_end_center_r.project(
+                            graded_half_width, rwy_params["azimuth_perp_l"]
+                        )
+                        if all(
+                            [left_inner_p, left_outer_p, left_outer_r, left_inner_r]
+                        ):
+                            left_flyover_geom = self._create_polygon_from_corners(
+                                [
+                                    left_inner_p,
+                                    left_outer_p,
+                                    left_outer_r,
+                                    left_inner_r,
+                                ],
+                                f"Left Flyover Strip {log_name}",
+                            )
+                            if left_flyover_geom:
+                                generated_elements.append(
+                                    (
+                                        "FlyoverStrip",
+                                        left_flyover_geom,
+                                        flyover_attrs.copy(),
+                                    )
+                                )
+
+                        right_inner_p = strip_end_center_p.project(
+                            graded_half_width, rwy_params["azimuth_perp_r"]
+                        )
+                        right_inner_r = strip_end_center_r.project(
+                            graded_half_width, rwy_params["azimuth_perp_r"]
+                        )
+                        right_outer_r = strip_end_center_r.project(
+                            overall_half_width, rwy_params["azimuth_perp_r"]
+                        )
+                        right_outer_p = strip_end_center_p.project(
+                            overall_half_width, rwy_params["azimuth_perp_r"]
+                        )
+                        if all(
+                            [
+                                right_inner_p,
+                                right_inner_r,
+                                right_outer_r,
+                                right_outer_p,
+                            ]
+                        ):
+                            right_flyover_geom = self._create_polygon_from_corners(
+                                [
+                                    right_inner_p,
+                                    right_inner_r,
+                                    right_outer_r,
+                                    right_outer_p,
+                                ],
+                                f"Right Flyover Strip {log_name}",
+                            )
+                            if right_flyover_geom:
+                                generated_elements.append(
+                                    (
+                                        "FlyoverStrip",
+                                        right_flyover_geom,
+                                        flyover_attrs.copy(),
+                                    )
+                                )
+                    elif overall_width <= graded_width:
+                        QgsMessageLog.logMessage(
+                            f"Info: Skipping FlyoverStrip for {log_name}: Overall strip width is not greater than graded strip width.",
+                            plugin_tag,
+                            level=Qgis.Info,
                         )
                 else:
                     QgsMessageLog.logMessage(
