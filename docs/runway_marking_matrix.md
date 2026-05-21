@@ -152,7 +152,7 @@ existing data:
 
 | Reference | Requirement summary | Notes |
 | --- | --- | --- |
-| MOS 8.17(1) | Runway threshold markings must be provided on sealed concrete/asphalt runways, and on unsealed runways with sealed concrete/asphalt thresholds. | Default assumption: runway is sealed concrete/asphalt until a surface type input is added. |
+| MOS 8.17(1) | Runway threshold markings must be provided on sealed concrete/asphalt runways, and on unsealed runways with sealed concrete/asphalt thresholds. | Generated when runway surface category is `Sealed`; unsealed runways with separate sealed thresholds are not modelled yet. |
 | MOS 8.17(2)(a) | A permanent threshold, or permanently displaced threshold, must be indicated by a white transverse line at the threshold location. | Line is 1.2 m wide and extends the full runway width at the threshold. |
 | MOS 8.17(2)(b) | Beyond the transverse line, white piano key markings consist of adjacent, uniformly spaced, 30 m long stripes. | Stripe number and stripe-space width are from Table 8.17(2). |
 | MOS 8.17(4) and Table 8.17(2) | For listed runway widths, stripe count and width of spaces between stripes are set by the table. | Table widths: 18, 23, 30, 45, 60 m. |
@@ -476,7 +476,7 @@ open interpretation questions remain before implementation.
 
 | Reference | Requirement summary | Notes |
 | --- | --- | --- |
-| MOS 8.23(1) | A touchdown zone marking must be provided at each end of a sealed concrete/asphalt runway at least 30 m wide and at least 1500 m long. | Requires runway surface input or default paved-runway assumption. |
+| MOS 8.23(1) | A touchdown zone marking must be provided at each end of a sealed concrete/asphalt runway at least 30 m wide and at least 1500 m long. | Generated when runway surface category is `Sealed`; mandatory flag also requires width >= 30 m and length >= 1500 m. |
 | MOS 8.23(1) Note | CASA recommends touchdown zone markings at both ends of other sealed concrete/asphalt runways. | Recommendation, not mandatory based on supplied text. |
 | MOS 8.23(2)(a) | On a precision approach runway, touchdown zone marking must use ICAO `A` basic pattern in accordance with section 8.24. | MOS 8.24 geometry captured below. |
 | MOS 8.23(2)(b) | On other runways, touchdown zone marking may use ICAO `A` basic pattern or simple pattern. | Default is simple pattern for non-precision/non-instrument runways. |
@@ -580,8 +580,9 @@ open interpretation questions remain before implementation.
 
 ### Open Questions
 
-- Do we assume all runways currently entered in the builder are sealed
-  concrete/asphalt unless a future runway surface input says otherwise?
+- Surface category/material is now collected in the runway dialog. Current
+  marking gates treat `Sealed` as the applicable MOS sealed concrete/asphalt
+  trigger.
 - For sealed runways below 30 m width or 1500 m length, should the builder
   generate recommended touchdown zone markings by default, or only when an
   override is selected?
@@ -601,7 +602,7 @@ remain before implementation.
 
 | Reference | Requirement summary | Notes |
 | --- | --- | --- |
-| MOS 8.21(1) | Subject to MOS 8.21(7), runway side-stripe markings must be provided along each side edge of a sealed concrete/asphalt runway to delineate runway width. | Current enhancement assumes sealed concrete/asphalt and generates by default. |
+| MOS 8.21(1) | Subject to MOS 8.21(7), runway side-stripe markings must be provided along each side edge of a sealed concrete/asphalt runway to delineate runway width. | Generated when runway surface category is `Sealed`. |
 | MOS 8.21(2) | Except where broken for taxiways and other runways, side-stripe markings consist of one continuous white line whose width is at least the runway centreline marking width. | Requires centreline marking width rule. |
 | MOS 8.21(3) | For an 18 m wide runway with no runway centreline marking, side-stripe width must be at least 0.3 m. | Special minimum width case. |
 | MOS 8.21(4) | Distance between the outer edges of side-stripe markings must equal runway width. | Places stripe outer edges on the runway side edges. |
@@ -728,7 +729,7 @@ Status: implemented as detailed generated polygon geometry.
 | Condition | Applies? | Notes |
 | --- | --- | --- |
 | Pre-threshold area length > 60 m | Yes | Uses dialog `thr_pre_area_1` / `thr_pre_area_2`. |
-| Sealed concrete/asphalt surface | Assumed yes | Surface type input does not exist yet. |
+| Sealed concrete/asphalt surface | Uses runway surface category | Current implementation generates when category is `Sealed`. |
 | Not suitable for normal aircraft usage | Assumed yes when pre-threshold area length is entered | Suitability input does not exist yet. |
 | Runway starter extension | Not modelled | Add explicit input before suppressing markings for starter extensions. |
 

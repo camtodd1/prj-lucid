@@ -59,11 +59,11 @@
 
 ## Runway Markings
 
-- [ ] Add runway surface type and suitability inputs where marking applicability depends on sealed/unsealed pavement or unavailable pre-threshold areas.
+- [ ] Add runway suitability inputs where marking applicability depends on unavailable pre-threshold areas.
 
   Notes:
-  - Current assumptions treat entered runways as sealed unless future inputs say otherwise.
-  - Pre-threshold area markings need surface/suitability and starter-extension classification inputs to fully match MOS applicability.
+  - Runway surface category/material inputs are now present.
+  - Pre-threshold area markings still need suitability and starter-extension classification inputs to fully match MOS applicability.
 
 - [ ] Confirm touchdown zone marking defaults and runway-length basis.
 

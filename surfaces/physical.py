@@ -74,6 +74,18 @@ class PhysicalGeometryMixin:
                 common_fields = [
                     QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
                     QgsField("desc", QVariant.String, self.tr("Element Type"), 50),
+                    QgsField(
+                        "surf_cat",
+                        QVariant.String,
+                        self.tr("Surface Category"),
+                        20,
+                    ),
+                    QgsField(
+                        "surf_mat",
+                        QVariant.String,
+                        self.tr("Surface Material"),
+                        30,
+                    ),
                     QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3),
                     QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3),
                     QgsField(
@@ -1173,6 +1185,31 @@ class PhysicalGeometryMixin:
             "notes": notes,
         }
 
+    def _runway_surface_description(self, runway_data: dict) -> str:
+        category = str(runway_data.get("surface_category") or "").strip()
+        material = str(runway_data.get("surface_material") or "").strip()
+        if category and material:
+            return f"{category} / {material}"
+        if category:
+            return category
+        return "not selected"
+
+    def _is_marking_surface_applicable(self, runway_data: dict) -> bool:
+        """Return True when selected runway surface supports sealed-surface markings."""
+        return str(runway_data.get("surface_category") or "").strip() == "Sealed"
+
+    def _surface_trigger_note(self, mos_ref: str, runway_data: dict) -> str:
+        surface_desc = self._runway_surface_description(runway_data)
+        if self._is_marking_surface_applicable(runway_data):
+            return (
+                f"{mos_ref} surface trigger met: selected runway surface is "
+                f"{surface_desc}."
+            )
+        return (
+            f"{mos_ref} surface trigger not met: selected runway surface is "
+            f"{surface_desc}; marking not generated."
+        )
+
     def _marking_qa_attrs(
         self,
         runway_name: str,
@@ -1362,6 +1399,7 @@ class PhysicalGeometryMixin:
         centreline_width = self._centreline_marking_width(
             arc_num, type_primary, type_reciprocal
         )
+        surface_markings_applicable = self._is_marking_surface_applicable(runway_data)
 
         end_specs = [
             (
@@ -1386,7 +1424,7 @@ class PhysicalGeometryMixin:
             ),
         ]
         default_assumptions = {
-            "Runway assumed sealed concrete/asphalt until surface type input exists.",
+            f"Runway surface selected: {self._runway_surface_description(runway_data)}.",
             "Piano keys start 6 m after the 1.2 m threshold line.",
             "Runway designations use SVG glyphs; polygon glyph generation deferred.",
             "Centreline uses default 30 m stripe / 20 m gap pattern.",
@@ -1402,6 +1440,15 @@ class PhysicalGeometryMixin:
             }
             for end_desig, origin, _, _, _, _, _, _ in end_specs
         }
+        for qa in qa_records.values():
+            qa["assumptions"].update(
+                {
+                    self._surface_trigger_note("MOS 8.17", runway_data),
+                    self._surface_trigger_note("MOS 8.21", runway_data),
+                    self._surface_trigger_note("MOS 8.22", runway_data),
+                    self._surface_trigger_note("MOS 8.23", runway_data),
+                }
+            )
         whole_runway_mandatory: List[str] = []
         whole_runway_optional: List[str] = []
 
@@ -1462,98 +1509,111 @@ class PhysicalGeometryMixin:
                     arrow_tip_offset -= 50.0
                     arrow_no += 1
 
-            threshold_bar = self._create_runway_marking_rectangle(
-                origin,
-                azimuth,
-                0.0,
-                1.2,
-                0.0,
-                runway_width,
-                f"Threshold bar {runway_name} {end_desig}",
-            )
-            if threshold_bar:
-                generated.append(
-                    (
-                        "DetailedThresholdMarking",
-                        threshold_bar,
-                        self._detail_marking_attrs(
-                            runway_name,
-                            end_desig,
-                            "Threshold",
-                            "Transverse Line",
-                            1.2,
-                            runway_width,
-                            "MOS 8.17(2)(a)",
-                            offset_m=0.0,
-                            mandatory=True,
-                        ),
-                    )
+            if surface_markings_applicable:
+                threshold_bar = self._create_runway_marking_rectangle(
+                    origin,
+                    azimuth,
+                    0.0,
+                    1.2,
+                    0.0,
+                    runway_width,
+                    f"Threshold bar {runway_name} {end_desig}",
                 )
-            else:
-                skipped.append("Threshold transverse line: geometry generation failed.")
-
-            threshold_params = self._threshold_marking_params(runway_width)
-            if threshold_params is not None:
-                stripe_count, gap_m = threshold_params
-                stripe_width = 1.8
-                total_marked_width = (
-                    stripe_count * stripe_width + (stripe_count - 1) * gap_m
-                )
-                edge_space = (runway_width - total_marked_width) / 2.0
-                if edge_space < gap_m:
-                    stripe_width = max(
-                        0.1,
-                        (runway_width - (stripe_count + 1) * gap_m)
-                        / stripe_count,
-                    )
-                    edge_space = gap_m
-                left_edge = -runway_width / 2.0 + edge_space
-                piano_start = 1.2 + 6.0
-                for stripe_idx in range(stripe_count):
-                    stripe_left = left_edge + stripe_idx * (stripe_width + gap_m)
-                    lateral_center = stripe_left + stripe_width / 2.0
-                    geom = self._create_runway_marking_rectangle(
-                        origin,
-                        azimuth,
-                        piano_start,
-                        30.0,
-                        lateral_center,
-                        stripe_width,
-                        f"Piano key {runway_name} {end_desig} {stripe_idx + 1}",
-                    )
-                    if geom:
-                        generated.append(
-                            (
-                                "DetailedThresholdMarking",
-                                geom,
-                                self._detail_marking_attrs(
-                                    runway_name,
-                                    end_desig,
-                                    "Threshold",
-                                    "Piano Key",
-                                    30.0,
-                                    stripe_width,
-                                    "MOS 8.17(2)(b); Table 8.17(2)",
-                                    stripe_no=stripe_idx + 1,
-                                    offset_m=piano_start,
-                                    spacing_m=gap_m,
-                                    mandatory=True,
-                                    notes=(
-                                        f"Edge space {edge_space:.3f} m; "
-                                        "stripe width 1.8 m unless adjusted to keep edge spaces >= a."
-                                    ),
+                if threshold_bar:
+                    generated.append(
+                        (
+                            "DetailedThresholdMarking",
+                            threshold_bar,
+                            self._detail_marking_attrs(
+                                runway_name,
+                                end_desig,
+                                "Threshold",
+                                "Transverse Line",
+                                1.2,
+                                runway_width,
+                                "MOS 8.17(2)(a)",
+                                offset_m=0.0,
+                                mandatory=True,
+                                notes=self._surface_trigger_note(
+                                    "MOS 8.17", runway_data
                                 ),
-                            )
+                            ),
                         )
+                    )
+                else:
+                    skipped.append(
+                        "Threshold transverse line: geometry generation failed."
+                    )
+
+                threshold_params = self._threshold_marking_params(runway_width)
+                if threshold_params is not None:
+                    stripe_count, gap_m = threshold_params
+                    stripe_width = 1.8
+                    total_marked_width = (
+                        stripe_count * stripe_width + (stripe_count - 1) * gap_m
+                    )
+                    edge_space = (runway_width - total_marked_width) / 2.0
+                    if edge_space < gap_m:
+                        stripe_width = max(
+                            0.1,
+                            (runway_width - (stripe_count + 1) * gap_m)
+                            / stripe_count,
+                        )
+                        edge_space = gap_m
+                    left_edge = -runway_width / 2.0 + edge_space
+                    piano_start = 1.2 + 6.0
+                    for stripe_idx in range(stripe_count):
+                        stripe_left = left_edge + stripe_idx * (stripe_width + gap_m)
+                        lateral_center = stripe_left + stripe_width / 2.0
+                        geom = self._create_runway_marking_rectangle(
+                            origin,
+                            azimuth,
+                            piano_start,
+                            30.0,
+                            lateral_center,
+                            stripe_width,
+                            f"Piano key {runway_name} {end_desig} {stripe_idx + 1}",
+                        )
+                        if geom:
+                            generated.append(
+                                (
+                                    "DetailedThresholdMarking",
+                                    geom,
+                                    self._detail_marking_attrs(
+                                        runway_name,
+                                        end_desig,
+                                        "Threshold",
+                                        "Piano Key",
+                                        30.0,
+                                        stripe_width,
+                                        "MOS 8.17(2)(b); Table 8.17(2)",
+                                        stripe_no=stripe_idx + 1,
+                                        offset_m=piano_start,
+                                        spacing_m=gap_m,
+                                        mandatory=True,
+                                        notes=(
+                                            self._surface_trigger_note(
+                                                "MOS 8.17", runway_data
+                                            )
+                                            + f" Edge space {edge_space:.3f} m; "
+                                            "stripe width 1.8 m unless adjusted to keep edge spaces >= a."
+                                        ),
+                                    ),
+                                )
+                            )
+                else:
+                    skipped.append(
+                        "Threshold piano keys: unsupported runway width "
+                        f"{runway_width} m for Table 8.17(2)."
+                    )
+                    QgsMessageLog.logMessage(
+                        f"Detailed threshold piano keys not generated for {runway_name}: unsupported width {runway_width}.",
+                        plugin_tag,
+                        level=Qgis.Info,
+                    )
             else:
                 skipped.append(
-                    "Threshold piano keys: unsupported runway width "
-                    f"{runway_width} m for Table 8.17(2)."
-                )
-                QgsMessageLog.logMessage(
-                    f"Detailed threshold piano keys not generated for {runway_name}: unsupported width {runway_width}.",
-                    plugin_tag,
-                    level=Qgis.Info,
+                    "Threshold markings: MOS 8.17 sealed-surface trigger not met."
                 )
 
             designation_edge_offset = self._runway_designation_start_offset()
@@ -1604,7 +1664,12 @@ class PhysicalGeometryMixin:
 
             lda_m = self._declared_lda_for_end(runway_data, end_desig, runway_length)
             aiming_rule = self._aiming_point_rule(runway_width, lda_m, runway_type)
-            if aiming_rule is not None:
+            if not surface_markings_applicable:
+                skipped.append(
+                    "Aiming point and touchdown zone markings: MOS 8.22/8.23 "
+                    "sealed-surface triggers not met."
+                )
+            elif aiming_rule is not None:
                 aim_offset, aim_len, aim_width, aim_spacing, aim_ref = aiming_rule
                 for side_name, sign in (("L", -1.0), ("R", 1.0)):
                     lateral_center = sign * (aim_spacing / 2.0 + aim_width / 2.0)
@@ -1635,6 +1700,9 @@ class PhysicalGeometryMixin:
                                     spacing_m=aim_spacing,
                                     lda_m=lda_m,
                                     mandatory=True,
+                                    notes=self._surface_trigger_note(
+                                        "MOS 8.22", runway_data
+                                    ),
                                 ),
                             )
                         )
@@ -1691,10 +1759,16 @@ class PhysicalGeometryMixin:
                                             spacing_m=aim_spacing,
                                             lda_m=lda_m,
                                             mandatory=(
-                                                runway_width >= 30.0
+                                                surface_markings_applicable
+                                                and runway_width >= 30.0
                                                 and runway_length >= 1500.0
                                             ),
-                                            notes="Table 8.24 selection uses LDA for this initial implementation.",
+                                            notes=(
+                                                self._surface_trigger_note(
+                                                    "MOS 8.23", runway_data
+                                                )
+                                                + " Table 8.24 selection uses LDA for this initial implementation."
+                                            ),
                                         ),
                                     )
                                 )
@@ -1729,11 +1803,15 @@ class PhysicalGeometryMixin:
                                             spacing_m=aim_spacing,
                                             lda_m=lda_m,
                                             mandatory=(
-                                                runway_width >= 30.0
+                                                surface_markings_applicable
+                                                and runway_width >= 30.0
                                                 and runway_length >= 1500.0
                                             ),
                                             notes=(
-                                                "450 m pair generated by default "
+                                                self._surface_trigger_note(
+                                                    "MOS 8.23", runway_data
+                                                )
+                                                + " 450 m pair generated by default "
                                                 "even when runway length is under 1500 m."
                                             ),
                                         ),
@@ -1905,46 +1983,58 @@ class PhysicalGeometryMixin:
                     "Centreline markings: runway too short after designation clearances."
                 )
 
-        # Side stripes between runway thresholds. Intersecting runway clipping is
-        # applied later as a cross-runway post-processing pass.
         side_stripe_count = 0
-        for side_name, lateral_center in (
-            ("L", -runway_width / 2.0 + centreline_width / 2.0),
-            ("R", runway_width / 2.0 - centreline_width / 2.0),
-        ):
-            geom = self._create_runway_marking_rectangle(
-                thr_point,
-                rwy_params["azimuth_p_r"],
-                0.0,
-                runway_length,
-                lateral_center,
-                centreline_width,
-                f"Side stripe {runway_name} {side_name}",
-            )
-            if geom:
-                generated.append(
-                    (
-                        "DetailedSideStripeMarking",
-                        geom,
-                        self._detail_marking_attrs(
-                            runway_name,
-                            "",
-                            "Side Stripe",
-                            "Continuous",
-                            runway_length,
-                            centreline_width,
-                            "MOS 8.21; MOS 8.15",
-                            side=side_name,
-                            offset_m=0.0,
-                            mandatory=True,
-                            notes="Taxiway breaks out of scope; intersecting runway clipping deferred.",
-                        ),
-                    )
+        if surface_markings_applicable:
+            # Side stripes between runway thresholds. Intersecting runway clipping is
+            # applied later as a cross-runway post-processing pass.
+            for side_name, lateral_center in (
+                ("L", -runway_width / 2.0 + centreline_width / 2.0),
+                ("R", runway_width / 2.0 - centreline_width / 2.0),
+            ):
+                geom = self._create_runway_marking_rectangle(
+                    thr_point,
+                    rwy_params["azimuth_p_r"],
+                    0.0,
+                    runway_length,
+                    lateral_center,
+                    centreline_width,
+                    f"Side stripe {runway_name} {side_name}",
                 )
-                side_stripe_count += 1
+                if geom:
+                    generated.append(
+                        (
+                            "DetailedSideStripeMarking",
+                            geom,
+                            self._detail_marking_attrs(
+                                runway_name,
+                                "",
+                                "Side Stripe",
+                                "Continuous",
+                                runway_length,
+                                centreline_width,
+                                "MOS 8.21; MOS 8.15",
+                                side=side_name,
+                                offset_m=0.0,
+                                mandatory=True,
+                                notes=(
+                                    self._surface_trigger_note(
+                                        "MOS 8.21", runway_data
+                                    )
+                                    + " Taxiway breaks out of scope; intersecting runway clipping deferred."
+                                ),
+                            ),
+                        )
+                    )
+                    side_stripe_count += 1
+        else:
+            for qa in qa_records.values():
+                qa["skipped"].append(
+                    "Side-stripe markings: MOS 8.21 sealed-surface trigger not met."
+                )
+
         if side_stripe_count:
             whole_runway_mandatory.append("Side-stripe markings")
-        else:
+        elif surface_markings_applicable:
             for qa in qa_records.values():
                 qa["skipped"].append("Side-stripe markings: geometry generation failed.")
 
@@ -2077,6 +2167,8 @@ class PhysicalGeometryMixin:
                         attributes = {
                             "rwy": runway_name,
                             "desc": "Runway Pavement",
+                            "surf_cat": runway_data.get("surface_category") or "",
+                            "surf_mat": runway_data.get("surface_material") or "",
                             "wid_m": runway_width,
                             "len_m": round(landing_length, 3),
                             "ref_mos": pavement_ref,
