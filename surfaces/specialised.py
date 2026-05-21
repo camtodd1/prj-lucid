@@ -15,8 +15,8 @@ from qgis.core import (  # type: ignore
     QgsMessageLog,
 )
 
-from .. import ols_dimensions
-from ..guidelines.constants import RAOA_MOS_REF_VAL, MOS_REF_TAXIWAY_SEPARATION
+from ..dimensions import ols_dimensions
+from ..guidelines.guideline_constants import RAOA_MOS_REF_VAL, MOS_REF_TAXIWAY_SEPARATION
 
 PLUGIN_TAG = "SafeguardingBuilder"
 

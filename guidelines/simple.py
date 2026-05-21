@@ -18,8 +18,8 @@ from qgis.core import (  # type: ignore
     QgsPointXY,
 )
 
-from .. import cns_dimensions
-from .constants import (
+from ..dimensions import cns_dimensions
+from .guideline_constants import (
     GUIDELINE_B_FAR_EDGE_OFFSET,
     GUIDELINE_B_ZONE_HALF_WIDTH,
     GUIDELINE_B_ZONE_LENGTH_BACKWARD,

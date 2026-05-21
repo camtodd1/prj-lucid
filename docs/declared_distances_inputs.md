@@ -68,7 +68,7 @@ For the common case with no operational restrictions:
 
 ## Partially Present But Not Exposed In The Dialog
 
-`guidelines/ols.py` already looks for:
+`guidelines/ols_guideline.py` already looks for:
 
 - `clearway1_len`
 - `clearway2_len`

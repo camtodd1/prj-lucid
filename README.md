@@ -93,20 +93,23 @@ dialog/cns_table.py              CNS facility table setup, row handling, and
 dialog/output_options.py         Memory/file output option setup and state.
 dialog/persistence.py            Clear, save, and load behaviour for dialog
                                  input JSON.
-dialog/constants.py              Shared dialog labels, placeholders, logging
+dialog/dialog_constants.py       Shared dialog labels, placeholders, logging
                                  tag, and output format definitions.
 core/layers.py                   Layer creation, feature writing, output file
                                  handling, grouping, and style application.
 core/styles.py                   Mapping between layer style keys and QML files.
-guidelines/constants.py          Shared constants for guideline dimensions,
+guidelines/guideline_constants.py
+                                 Shared constants for guideline dimensions,
                                  references, contour intervals, and offsets.
 guidelines/simple.py             Guideline A/B/C/D/G/I and CNS helper logic.
-guidelines/ols.py                Guideline F and airport-wide OLS generation.
+guidelines/ols_guideline.py      Guideline F and airport-wide OLS generation.
 surfaces/physical.py             Physical runway and runway protection geometry.
 surfaces/specialised.py          Specialised surfaces such as RAOA and taxiway
                                  separation offsets.
-ols_dimensions.py                CASA MOS-style physical and OLS dimensions.
-cns_dimensions.py                CNS building restricted area dimensions.
+dimensions/ols_dimensions.py     CASA MOS-style physical and OLS dimensions.
+dimensions/cns_dimensions.py     CNS building restricted area dimensions.
+docs/                            Planning notes, implementation matrices,
+                                 TODOs, and reference mapping files.
 styles/*.qml                     QGIS layer styling files.
 metadata.txt                     QGIS plugin metadata.
 resources.qrc                    Qt resource manifest.
@@ -117,7 +120,7 @@ resources.qrc                    Qt resource manifest.
 After editing Python modules, run a syntax check from the plugin directory:
 
 ```bash
-python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/constants.py cns_dimensions.py ols_dimensions.py
+python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols_guideline.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/guideline_constants.py dimensions/*.py
 ```
 
 When adding new guideline logic, prefer placing it in the relevant
@@ -134,6 +137,6 @@ QGIS-compatible Qt resource compiler used by your local QGIS/PyQt installation.
 - The plugin expects the QGIS project CRS to be projected and metre-based.
 - Guideline A and Guideline H detailed generation are not fully implemented.
 - Some specialised CNS and OLS cases depend on the available parameter tables in
-  `cns_dimensions.py` and `ols_dimensions.py`.
+  `dimensions/cns_dimensions.py` and `dimensions/ols_dimensions.py`.
 - Runtime validation should be performed in QGIS after code changes because many
   behaviours depend on QGIS APIs and live project state.

@@ -15,7 +15,7 @@ from qgis.core import (  # type: ignore
     QgsMessageLog,
 )
 
-from .constants import (
+from .guideline_constants import (
     GUIDELINE_C_BUFFER_SEGMENTS,
     GUIDELINE_E_ZONE_ORDER,
     GUIDELINE_E_ZONE_PARAMS,

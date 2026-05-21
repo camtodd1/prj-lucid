@@ -12,7 +12,7 @@ from qgis.PyQt.QtWidgets import (  # type: ignore
     QTableWidgetItem,
 )
 
-from .constants import DIALOG_LOG_TAG, DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS
+from .dialog_constants import DIALOG_LOG_TAG, DEFAULT_OUTPUT_FORMAT, OUTPUT_FORMATS
 
 
 class PersistenceMixin:

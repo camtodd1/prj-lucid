@@ -21,7 +21,7 @@ from qgis.core import (  # type: ignore
     QgsVectorLayer,
 )
 
-from .. import ols_dimensions
+from ..dimensions import ols_dimensions
 from ..reports.runway_summary import summarize_generated_elements
 
 PLUGIN_TAG = "SafeguardingBuilder"

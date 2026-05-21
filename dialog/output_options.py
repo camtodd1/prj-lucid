@@ -2,7 +2,7 @@
 
 from qgis.core import QgsMessageLog, Qgis  # type: ignore
 
-from .constants import DIALOG_LOG_TAG, OUTPUT_FORMATS, DEFAULT_OUTPUT_FORMAT
+from .dialog_constants import DIALOG_LOG_TAG, OUTPUT_FORMATS, DEFAULT_OUTPUT_FORMAT
 
 
 class OutputOptionsMixin:

@@ -17,7 +17,7 @@ from qgis.PyQt.QtWidgets import (  # type: ignore
     QTableWidgetItem,
 )
 
-from .constants import DIALOG_LOG_TAG
+from .dialog_constants import DIALOG_LOG_TAG
 
 
 CNS_FACILITY_TYPES = sorted(

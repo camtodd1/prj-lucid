@@ -5,7 +5,7 @@ from typing import Dict, Optional
 
 from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
 
-from .constants import (
+from .dialog_constants import (
     CALC_PLACEHOLDER,
     NA_PLACEHOLDER,
     WIDGET_MISSING_MSG,

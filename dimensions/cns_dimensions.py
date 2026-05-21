@@ -1,5 +1,3 @@
-# ./plugins/your_plugin_dir/cns_dimensions.py
-
 from typing import Dict, Optional, List, Any  # Added type hinting
 
 # NASF Guideline G BRA Dimensions based on provided table Figure 2

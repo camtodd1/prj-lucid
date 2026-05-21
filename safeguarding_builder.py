@@ -40,7 +40,7 @@ from .surfaces.specialised import SpecialisedSurfacesMixin
 from .surfaces.met import MetSurfacesMixin
 from .guidelines.simple import SimpleGuidelinesMixin
 from .guidelines.lighting import LightingGuidelineMixin
-from .guidelines.ols import OlsGuidelineMixin
+from .guidelines.ols_guideline import OlsGuidelineMixin
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 
 

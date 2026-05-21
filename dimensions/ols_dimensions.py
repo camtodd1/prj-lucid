@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# ols_dimensions.py
+# dimensions/ols_dimensions.py
 """
 Stores Obstacle Limitation Surface (OLS) parameters based on CASA MOS Part 139.
 

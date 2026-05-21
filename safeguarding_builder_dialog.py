@@ -26,7 +26,7 @@ from qgis.PyQt.QtWidgets import (  # type: ignore
 )
 
 try:
-    from .dialog.constants import (
+    from .dialog.dialog_constants import (
         CALC_PLACEHOLDER,
         NA_PLACEHOLDER,
         ENTER_COORDS_MSG,
@@ -43,7 +43,7 @@ try:
     from .dialog.cns_table import CnsTableMixin
     from .dialog.persistence import PersistenceMixin
 except ImportError:
-    from dialog.constants import (  # type: ignore
+    from dialog.dialog_constants import (  # type: ignore
         CALC_PLACEHOLDER,
         NA_PLACEHOLDER,
         ENTER_COORDS_MSG,

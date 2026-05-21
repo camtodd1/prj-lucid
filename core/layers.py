@@ -19,7 +19,7 @@ from qgis.core import (  # type: ignore
     QgsVectorLayer,
 )
 
-from ..guidelines.constants import LAYER_FEATURE_BATCH_SIZE
+from ..guidelines.guideline_constants import LAYER_FEATURE_BATCH_SIZE
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
