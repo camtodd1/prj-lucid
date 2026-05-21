@@ -41,9 +41,8 @@ existing data:
 
 ## Confirmed Defaults And Decisions
 
-- Assume runways are sealed concrete/asphalt for the current generator scope.
-  Surface/suitability inputs are not required unless unsealed-runway marking
-  exceptions are brought into scope.
+- Assume runways are sealed concrete/asphalt until a later runway surface type
+  enhancement is added to the input dialog.
 - Generate markings by default when the rule is mandatory or recommended, and
   add a feature attribute indicating whether the marking is mandatory.
 - For threshold piano keys, edge spaces between the outermost stripes and runway
@@ -52,8 +51,8 @@ existing data:
   needed.
 - Threshold piano key stripes start 6 m after the 1.2 m transverse threshold
   line.
-- Runway designation markings are generated as polygon geometry from local
-  digit/letter SVG outlines.
+- Initial runway designation marking implementation may use controlled text/SVG;
+  generated polygon glyphs are parked for a later enhancement.
 - The 12 m runway designation offset is measured from the threshold marking to
   the nearest edge of the runway designation number.
 - Default runway centreline pattern is 30 m stripe length and 20 m gap.
@@ -77,10 +76,11 @@ existing data:
   default on runways under 1500 m.
 - Side-stripe outer edges must be separated by the runway width.
 - Do not add a MOS 8.21(7) side-stripe omission option in the current
-  enhancement; generate side stripes by default under the current sealed-runway
-  scope.
+  enhancement; generate side stripes by default under the sealed-runway
+  assumption.
 - Taxiway intersections do not need to break side stripes in the current
-  enhancement. Intersecting runways are handled by the MOS 8.15 clipping pass.
+  enhancement. Intersecting runways do affect side stripes and need a later
+  rule.
 - Side-stripe longitudinal extent is the physical pavement between runway
   thresholds.
 
@@ -88,12 +88,12 @@ existing data:
 
 | Marking family | Status | Implementation target |
 | --- | --- | --- |
-| Threshold markings / piano keys | Implemented | Generated polygon geometry |
-| Runway designation markings | Implemented | Generated polygon glyph geometry |
-| Centreline markings | Implemented | Generated polygon geometry |
-| Aiming point markings | Implemented | Generated polygon geometry |
-| Touchdown zone markings | Implemented | Generated polygon geometry |
-| Side stripe markings | Implemented | Generated polygon geometry |
+| Threshold markings / piano keys | Drafting requirements | Generated polygon geometry |
+| Runway designation markings | Drafting requirements | Generated geometry or controlled text/SVG glyphs |
+| Centreline markings | Drafting requirements | Generated polygon geometry |
+| Aiming point markings | Drafting requirements | Generated polygon geometry |
+| Touchdown zone markings | Drafting requirements in progress | Generated polygon geometry |
+| Side stripe markings | Drafting requirements | Generated polygon geometry |
 | Displaced threshold markings | Implemented | Generated white polygon geometry |
 | Pre-threshold area chevrons | Implemented | Generated yellow polygon geometry |
 | Marking QA report | Implemented as compact point/table layer | One feature per runway end |
@@ -152,7 +152,7 @@ existing data:
 
 | Reference | Requirement summary | Notes |
 | --- | --- | --- |
-| MOS 8.17(1) | Runway threshold markings must be provided on sealed concrete/asphalt runways, and on unsealed runways with sealed concrete/asphalt thresholds. | Current generator scope assumes sealed concrete/asphalt runways. |
+| MOS 8.17(1) | Runway threshold markings must be provided on sealed concrete/asphalt runways, and on unsealed runways with sealed concrete/asphalt thresholds. | Default assumption: runway is sealed concrete/asphalt until a surface type input is added. |
 | MOS 8.17(2)(a) | A permanent threshold, or permanently displaced threshold, must be indicated by a white transverse line at the threshold location. | Line is 1.2 m wide and extends the full runway width at the threshold. |
 | MOS 8.17(2)(b) | Beyond the transverse line, white piano key markings consist of adjacent, uniformly spaced, 30 m long stripes. | Stripe number and stripe-space width are from Table 8.17(2). |
 | MOS 8.17(4) and Table 8.17(2) | For listed runway widths, stripe count and width of spaces between stripes are set by the table. | Table widths: 18, 23, 30, 45, 60 m. |
@@ -208,7 +208,8 @@ existing data:
 
 ### Open Questions
 
-- Add surface/suitability inputs only if unsealed runway cases become in scope.
+- Later surface type enhancement should replace the current sealed
+  concrete/asphalt default assumption.
 - Confirm exact piano-key stripe width formula once Figure 8.17(2) is available,
   using the confirmed rule that edge spaces are at least `a`.
 
@@ -220,7 +221,7 @@ existing data:
 | --- | --- | --- |
 | MOS 8.18(6) | Location and orientation of runway designation markings must be as shown in Figure 8.18(6). | Markings are centred on the runway centreline and oriented for the approach direction. |
 | MOS 8.18(7) | Distance from the threshold marking to the corresponding runway designation marking must be 12 m. | Figure 8.18(6) shows this from threshold marking to the nearest designation marking element. |
-| MOS 8.18(8) | Shape and dimensions of numbers and letters must be as shown in Figure 8.18(8). | Generated as polygon geometry from local glyph outlines. |
+| MOS 8.18(8) | Shape and dimensions of numbers and letters must be as shown in Figure 8.18(8). | Requires encoded glyph geometry or controlled SVG/text templates. |
 | MOS 8.18(9) | Each number or letter must be 9 m high. | General glyph height. |
 | MOS 8.18(10) | Numbers `6` and `9` must be 9.5 m high, without affecting other spacing in Figure 8.18(8). | Special glyph height exception. |
 | MOS 8.18(11) | On parallel runways, distance between runway designation number and letter `L`, `C`, or `R` must be 6 m. | Applies to suffix letters. |
@@ -248,14 +249,14 @@ existing data:
 | Color | White | n/a | Implied runway marking color; confirm if needed. |
 | Orientation | Oriented for approach direction | rule | Marking should be readable from the approach end, aligned with runway centreline. |
 | Lateral placement | Centred on runway centreline | rule | Figure 8.18(6). |
-| Glyph shapes | As shown in Figure 8.18(8) | m | Uses local glyph outline templates converted to polygons. |
+| Glyph shapes | As shown in Figure 8.18(8) | m | Needs vector glyph library/templates based on the figure dimensions. |
 
 ### Generated Feature Model
 
 | Field | Proposed value |
 | --- | --- |
 | Layer name | `{ICAO} Runway Designation Markings` |
-| Geometry type | Generated polygon glyphs |
+| Geometry type | Controlled text/SVG for initial implementation; polygon glyphs later |
 | Feature granularity | One feature per glyph or one multipart feature per full designation |
 | Group | Physical Geometry |
 | Style | White fill with no outline |
@@ -263,8 +264,10 @@ existing data:
 
 ### Implementation Notes
 
-- Generated polygons use the local glyph library for digits `0-9` and letters
-  `L`, `C`, `R`.
+- Initial implementation can use controlled text or SVG markings.
+- Generated polygon glyph geometry is parked for a later enhancement.
+- If polygon geometry is added later, create a local glyph library for digits
+  `0-9` and letters `L`, `C`, `R` using Figure 8.18(8) dimensions.
 - Placement should be calculated in runway-local coordinates:
   - longitudinal axis: runway centreline direction from threshold into runway;
   - lateral axis: perpendicular to runway centreline;
@@ -466,7 +469,8 @@ decisions.
 
 ## 5. Touchdown Zone Markings
 
-Status: implemented. MOS 8.23, 8.24 and 8.25 rules are captured below.
+Status: drafting requirements in progress. MOS 8.23, 8.24 and 8.25 received;
+open interpretation questions remain before implementation.
 
 ### MOS References
 
@@ -652,7 +656,7 @@ remain before implementation.
   markings are interrupted where the higher-precedence runway markings/pavement
   take precedence.
 - No MOS 8.21(7) omission checkbox is needed for v1; generate side stripes by
-  default under the current sealed-runway scope.
+  default under the sealed-runway assumption.
 
 ### Open Questions
 
@@ -717,7 +721,7 @@ Status: implemented as detailed generated polygon geometry.
 | MOS 8.16(2)(c) | Chevrons are 15 m tall from apex to base. | Extended where needed so line ends target the runway-edge clearance rule. |
 | MOS 8.16(2)(d) | Chevrons point towards the non-displaced threshold, or runway end in the reciprocal direction. | Apex is placed toward the runway end/threshold side. |
 | MOS 8.16(2)(e) | Except near the threshold/runway end, line ends must be long enough to end not more than 7.5 m from the respective runway edges. | Current implementation targets this by extending the 45-degree legs for wider runways. |
-| MOS 8.16(2)(f) | Markings terminate at the runway end marking. | First chevron apex starts near the runway end marking and generated geometry is clipped to the pre-threshold area. |
+| MOS 8.16(2)(f) | Markings terminate at the runway end marking. | First chevron apex starts near the runway end marking; future clipping can refine partial chevrons at the end marking. |
 
 ### Applicability
 

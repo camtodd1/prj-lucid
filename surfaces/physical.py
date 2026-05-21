@@ -5,7 +5,6 @@ import os
 import re
 import math
 import traceback
-import xml.etree.ElementTree as ET
 from typing import Dict, List, Optional, Tuple
 
 from qgis.PyQt.QtCore import QVariant  # type: ignore
@@ -19,6 +18,7 @@ from qgis.core import (  # type: ignore
     QgsMessageLog,
     QgsPointXY,
     QgsProject,
+    QgsVectorLayer,
 )
 
 from ..dimensions import ols_dimensions
@@ -297,6 +297,7 @@ class PhysicalGeometryMixin:
                     "DetailedDesignationMarking": {
                         "name": self.tr("Runway Designation Markings"),
                         "fields": designation_fields,
+                        "geom_type": "Point",
                         "group": detailed_marking_group,
                     },
                     "DetailedCentrelineMarking": {
@@ -608,7 +609,6 @@ class PhysicalGeometryMixin:
                     runway_marking_contexts,
                     (
                         "DetailedThresholdMarking",
-                        "DetailedDesignationMarking",
                         "DetailedCentrelineMarking",
                         "DetailedAimingPointMarking",
                         "DetailedTouchdownZoneMarking",
@@ -648,6 +648,8 @@ class PhysicalGeometryMixin:
                             style_key=spec["style_key"],
                         )
                         if final_layer is not None:
+                            if element_type == "DetailedDesignationMarking":
+                                self._style_runway_designation_layer(final_layer)
                             any_physical_or_protection_ok = True
                             any_layer_successfully_processed_in_this_block = True
                         features_to_write.clear()
@@ -789,6 +791,77 @@ class PhysicalGeometryMixin:
 
         return clipped_count
 
+    def _style_runway_designation_layer(self, layer: QgsVectorLayer) -> None:
+        """Apply categorized SVG glyph symbols for runway designations."""
+        if layer is None or not layer.isValid():
+            return
+
+        try:
+            from qgis.core import (  # type: ignore
+                QgsCategorizedSymbolRenderer,
+                QgsMarkerSymbol,
+                QgsProperty,
+                QgsRendererCategory,
+                QgsSymbolLayer,
+                QgsSvgMarkerSymbolLayer,
+                QgsUnitTypes,
+            )
+
+            svg_dir = os.path.join(
+                self.plugin_dir, "styles", "svg", "runway_designations"
+            )
+            categories = []
+            for glyph in "0123456789LCR":
+                svg_path = os.path.join(svg_dir, f"runway_designation_{glyph}.svg")
+                if not os.path.exists(svg_path):
+                    QgsMessageLog.logMessage(
+                        f"Runway designation SVG missing: {svg_path}",
+                        PLUGIN_TAG,
+                        level=Qgis.Warning,
+                    )
+                    continue
+
+                svg_layer = QgsSvgMarkerSymbolLayer(svg_path)
+                svg_layer.setSize(9.0)
+                svg_layer.setSizeUnit(QgsUnitTypes.RenderMapUnits)
+                try:
+                    size_prop = getattr(QgsSvgMarkerSymbolLayer, "PropertySize", None)
+                    if size_prop is None:
+                        size_prop = getattr(QgsSymbolLayer, "PropertySize")
+                    angle_prop = getattr(QgsSvgMarkerSymbolLayer, "PropertyAngle", None)
+                    if angle_prop is None:
+                        angle_prop = getattr(QgsSymbolLayer, "PropertyAngle")
+                    svg_layer.dataDefinedProperties().setProperty(
+                        size_prop,
+                        QgsProperty.fromField("glyph_size"),
+                    )
+                    svg_layer.dataDefinedProperties().setProperty(
+                        angle_prop,
+                        QgsProperty.fromField("angle_deg"),
+                    )
+                except Exception as dd_error:
+                    QgsMessageLog.logMessage(
+                        "Warning: Could not apply SVG glyph data-defined "
+                        f"properties: {dd_error}",
+                        PLUGIN_TAG,
+                        level=Qgis.Warning,
+                    )
+
+                symbol = QgsMarkerSymbol()
+                symbol.changeSymbolLayer(0, svg_layer)
+                categories.append(QgsRendererCategory(glyph, symbol, glyph))
+
+            if categories:
+                layer.setRenderer(QgsCategorizedSymbolRenderer("glyph", categories))
+            layer.setLabelsEnabled(False)
+            layer.triggerRepaint()
+        except Exception as style_error:
+            QgsMessageLog.logMessage(
+                f"Warning: Could not apply runway designation SVG styling: {style_error}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
     def _runway_designators(self, runway_name: str) -> Tuple[str, str]:
         if "/" in runway_name:
             primary, reciprocal = runway_name.split("/", 1)
@@ -835,195 +908,6 @@ class PhysicalGeometryMixin:
             pass
 
         return 3.0
-
-    def _runway_designation_svg_template(
-        self, glyph: str
-    ) -> Optional[Tuple[float, float, List[List[Tuple[float, float]]]]]:
-        """Return SVG width, height and ring coordinates for a designation glyph."""
-        cache = getattr(self, "_runway_designation_template_cache", None)
-        if cache is None:
-            cache = {}
-            self._runway_designation_template_cache = cache
-        if glyph in cache:
-            return cache[glyph]
-
-        svg_path = os.path.join(
-            self.plugin_dir,
-            "styles",
-            "svg",
-            "runway_designations",
-            f"runway_designation_{glyph}.svg",
-        )
-        try:
-            root = ET.parse(svg_path).getroot()
-            svg_width = float(root.attrib.get("width", "0").replace("px", ""))
-            svg_height = float(root.attrib.get("height", "0").replace("px", ""))
-            if svg_width <= 0 or svg_height <= 0:
-                return None
-
-            for element in root.iter():
-                tag = element.tag.split("}")[-1]
-                transform = element.attrib.get("transform", "")
-                dx, dy = self._svg_translate(transform)
-                if tag == "polyline" and element.attrib.get("points"):
-                    ring = self._svg_points_to_ring(element.attrib["points"], dx, dy)
-                    if ring:
-                        cache[glyph] = (svg_width, svg_height, [ring])
-                        return cache[glyph]
-                if tag == "path" and element.attrib.get("d"):
-                    rings = self._svg_path_to_rings(element.attrib["d"], dx, dy)
-                    if rings:
-                        cache[glyph] = (svg_width, svg_height, rings)
-                        return cache[glyph]
-        except Exception as error:
-            QgsMessageLog.logMessage(
-                f"Runway designation glyph template failed for '{glyph}': {error}",
-                PLUGIN_TAG,
-                level=Qgis.Warning,
-            )
-        cache[glyph] = None
-        return None
-
-    def _svg_translate(self, transform: str) -> Tuple[float, float]:
-        match = re.search(r"translate\(([-+0-9.eE]+)[ ,]+([-+0-9.eE]+)\)", transform)
-        if not match:
-            return 0.0, 0.0
-        return float(match.group(1)), float(match.group(2))
-
-    def _svg_points_to_ring(
-        self, points_text: str, dx: float, dy: float
-    ) -> List[Tuple[float, float]]:
-        values = [float(value) for value in re.findall(r"[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?", points_text)]
-        ring = [
-            (values[i] + dx, values[i + 1] + dy)
-            for i in range(0, len(values) - 1, 2)
-        ]
-        if ring and ring[0] != ring[-1]:
-            ring.append(ring[0])
-        return ring if len(ring) >= 4 else []
-
-    def _svg_path_to_rings(
-        self, path_text: str, dx: float, dy: float
-    ) -> List[List[Tuple[float, float]]]:
-        tokens = re.findall(
-            r"[MmLlHhVvZz]|[-+]?(?:\d*\.\d+|\d+)(?:[eE][-+]?\d+)?",
-            path_text,
-        )
-        rings: List[List[Tuple[float, float]]] = []
-        ring: List[Tuple[float, float]] = []
-        current = (0.0, 0.0)
-        start = (0.0, 0.0)
-        command = ""
-        index = 0
-
-        def is_command(value: str) -> bool:
-            return bool(re.fullmatch(r"[MmLlHhVvZz]", value))
-
-        def close_ring() -> None:
-            nonlocal ring
-            if ring:
-                if ring[0] != ring[-1]:
-                    ring.append(ring[0])
-                if len(ring) >= 4:
-                    rings.append(ring)
-            ring = []
-
-        while index < len(tokens):
-            if is_command(tokens[index]):
-                command = tokens[index]
-                index += 1
-            if command in {"Z", "z"}:
-                close_ring()
-                current = start
-                command = ""
-                continue
-            if command in {"M", "m", "L", "l"}:
-                first_pair_for_move = command in {"M", "m"}
-                while index + 1 < len(tokens) and not is_command(tokens[index]):
-                    x = float(tokens[index])
-                    y = float(tokens[index + 1])
-                    index += 2
-                    if command.islower():
-                        x += current[0]
-                        y += current[1]
-                    current = (x, y)
-                    if first_pair_for_move:
-                        close_ring()
-                        start = current
-                        ring = [(x + dx, y + dy)]
-                        first_pair_for_move = False
-                    else:
-                        ring.append((x + dx, y + dy))
-                if command in {"M", "m"}:
-                    command = "l" if command == "m" else "L"
-                continue
-            if command in {"H", "h"}:
-                while index < len(tokens) and not is_command(tokens[index]):
-                    x = float(tokens[index])
-                    index += 1
-                    if command == "h":
-                        x += current[0]
-                    current = (x, current[1])
-                    ring.append((current[0] + dx, current[1] + dy))
-                continue
-            if command in {"V", "v"}:
-                while index < len(tokens) and not is_command(tokens[index]):
-                    y = float(tokens[index])
-                    index += 1
-                    if command == "v":
-                        y += current[1]
-                    current = (current[0], y)
-                    ring.append((current[0] + dx, current[1] + dy))
-                continue
-            break
-
-        close_ring()
-        return rings
-
-    def _create_runway_designation_glyph_polygon(
-        self,
-        origin: QgsPointXY,
-        runway_azimuth: float,
-        glyph: str,
-        designation_edge_offset_m: float,
-        longitudinal_center_m: float,
-        lateral_center_m: float,
-        glyph_height_m: float,
-        glyph_width_m: float,
-    ) -> Optional[QgsGeometry]:
-        template = self._runway_designation_svg_template(glyph)
-        if not template:
-            return None
-
-        svg_width, svg_height, rings = template
-        transformed_rings: List[List[QgsPointXY]] = []
-        for ring in rings:
-            transformed_ring = []
-            for x_svg, y_svg in ring:
-                long_delta = (y_svg / svg_height - 0.5) * glyph_height_m
-                lateral_delta = (x_svg / svg_width - 0.5) * glyph_width_m
-                point = origin.project(
-                    designation_edge_offset_m + longitudinal_center_m + long_delta,
-                    runway_azimuth,
-                )
-                if point is None:
-                    return None
-                point = self._project_lateral(
-                    point, lateral_center_m + lateral_delta, runway_azimuth
-                )
-                if point is None:
-                    return None
-                transformed_ring.append(point)
-            if len(transformed_ring) >= 4:
-                transformed_rings.append(transformed_ring)
-
-        if not transformed_rings:
-            return None
-
-        geom = QgsGeometry.fromPolygonXY(transformed_rings)
-        if geom and not geom.isEmpty() and not geom.isGeosValid():
-            geom = geom.makeValid()
-        return geom
 
     def _runway_designation_glyphs(
         self, designator: str
@@ -1502,9 +1386,9 @@ class PhysicalGeometryMixin:
             ),
         ]
         default_assumptions = {
-            "Runway assumed sealed concrete/asphalt under current generator scope.",
+            "Runway assumed sealed concrete/asphalt until surface type input exists.",
             "Piano keys start 6 m after the 1.2 m threshold line.",
-            "Runway designations use local SVG outlines converted to polygon geometry.",
+            "Runway designations use SVG glyphs; polygon glyph generation deferred.",
             "Centreline uses default 30 m stripe / 20 m gap pattern.",
             "Take-off RVR < 550 m centreline-width trigger not modelled.",
             "Taxiway marking breaks are out of scope.",
@@ -1682,25 +1566,22 @@ class PhysicalGeometryMixin:
                 glyph_height,
             ) in enumerate(self._runway_designation_glyphs(end_desig), start=1):
                 glyph_width = self._runway_designation_glyph_width(glyph)
-                geom = self._create_runway_designation_glyph_polygon(
-                    origin,
-                    azimuth,
-                    glyph,
-                    designation_edge_offset,
-                    longitudinal_center,
-                    lateral_center,
-                    glyph_height,
-                    glyph_width,
+                glyph_center = origin.project(
+                    designation_edge_offset + longitudinal_center, azimuth
                 )
-                if not geom:
+                if glyph_center:
+                    glyph_center = self._project_lateral(
+                        glyph_center, lateral_center, azimuth
+                    )
+                if not glyph_center:
                     skipped.append(
-                        f"Runway designation glyph {glyph}: polygon generation failed."
+                        f"Runway designation glyph {glyph}: anchor projection failed."
                     )
                     continue
                 generated.append(
                     (
                         "DetailedDesignationMarking",
-                        geom,
+                        QgsGeometry.fromPointXY(glyph_center),
                         {
                             "rwy": runway_name,
                             "end_desig": end_desig,
@@ -1716,7 +1597,7 @@ class PhysicalGeometryMixin:
                             "height_m": round(glyph_height, 3),
                             "mandatory": True,
                             "ref_mos": "MOS 8.18",
-                            "notes": "Generated polygon glyph from local SVG outline.",
+                            "notes": "SVG glyph test implementation.",
                         },
                     )
                 )
@@ -2056,10 +1937,7 @@ class PhysicalGeometryMixin:
                             side=side_name,
                             offset_m=0.0,
                             mandatory=True,
-                            notes=(
-                                "Taxiway breaks out of scope; intersecting runway "
-                                "clipping is applied after QA capture."
-                            ),
+                            notes="Taxiway breaks out of scope; intersecting runway clipping deferred.",
                         ),
                     )
                 )
