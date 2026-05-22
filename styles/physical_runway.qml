@@ -162,7 +162,7 @@
             <Option name="offset" type="QString" value="0,0"/>
             <Option name="offset_map_unit_scale" type="QString" value="3x:0,0,0,0,0,0"/>
             <Option name="offset_unit" type="QString" value="MM"/>
-            <Option name="outline_color" type="QString" value="255,255,255,255,hsv:0,0,1,1"/>
+            <Option name="outline_color" type="QString" value="255,255,255,0,hsv:0,0,1,0"/>
             <Option name="outline_style" type="QString" value="solid"/>
             <Option name="outline_width" type="QString" value="0.5"/>
             <Option name="outline_width_unit" type="QString" value="RenderMetersInMapUnits"/>
@@ -262,6 +262,20 @@
         </config>
       </editWidget>
     </field>
+    <field configurationFlags="NoFlag" name="surf_cat">
+      <editWidget type="TextEdit">
+        <config>
+          <Option/>
+        </config>
+      </editWidget>
+    </field>
+    <field configurationFlags="NoFlag" name="surf_mat">
+      <editWidget type="TextEdit">
+        <config>
+          <Option/>
+        </config>
+      </editWidget>
+    </field>
     <field configurationFlags="NoFlag" name="len_m">
       <editWidget type="TextEdit">
         <config>
@@ -287,13 +301,17 @@
   <aliases>
     <alias field="rwy" index="0" name=""/>
     <alias field="desc" index="1" name=""/>
-    <alias field="len_m" index="2" name=""/>
-    <alias field="wid_m" index="3" name=""/>
-    <alias field="ref_mos" index="4" name=""/>
+    <alias field="surf_cat" index="2" name=""/>
+    <alias field="surf_mat" index="3" name=""/>
+    <alias field="len_m" index="4" name=""/>
+    <alias field="wid_m" index="5" name=""/>
+    <alias field="ref_mos" index="6" name=""/>
   </aliases>
   <defaults>
     <default applyOnUpdate="0" expression="" field="rwy"/>
     <default applyOnUpdate="0" expression="" field="desc"/>
+    <default applyOnUpdate="0" expression="" field="surf_cat"/>
+    <default applyOnUpdate="0" expression="" field="surf_mat"/>
     <default applyOnUpdate="0" expression="" field="len_m"/>
     <default applyOnUpdate="0" expression="" field="wid_m"/>
     <default applyOnUpdate="0" expression="" field="ref_mos"/>
@@ -301,6 +319,8 @@
   <constraints>
     <constraint constraints="0" exp_strength="0" field="rwy" notnull_strength="0" unique_strength="0"/>
     <constraint constraints="0" exp_strength="0" field="desc" notnull_strength="0" unique_strength="0"/>
+    <constraint constraints="0" exp_strength="0" field="surf_cat" notnull_strength="0" unique_strength="0"/>
+    <constraint constraints="0" exp_strength="0" field="surf_mat" notnull_strength="0" unique_strength="0"/>
     <constraint constraints="0" exp_strength="0" field="len_m" notnull_strength="0" unique_strength="0"/>
     <constraint constraints="0" exp_strength="0" field="wid_m" notnull_strength="0" unique_strength="0"/>
     <constraint constraints="0" exp_strength="0" field="ref_mos" notnull_strength="0" unique_strength="0"/>
@@ -308,6 +328,8 @@
   <constraintExpressions>
     <constraint desc="" exp="" field="rwy"/>
     <constraint desc="" exp="" field="desc"/>
+    <constraint desc="" exp="" field="surf_cat"/>
+    <constraint desc="" exp="" field="surf_mat"/>
     <constraint desc="" exp="" field="len_m"/>
     <constraint desc="" exp="" field="wid_m"/>
     <constraint desc="" exp="" field="ref_mos"/>
@@ -323,6 +345,8 @@
       <column hidden="0" name="len_m" type="field" width="-1"/>
       <column hidden="0" name="wid_m" type="field" width="-1"/>
       <column hidden="0" name="ref_mos" type="field" width="-1"/>
+      <column hidden="0" name="surf_cat" type="field" width="-1"/>
+      <column hidden="0" name="surf_mat" type="field" width="-1"/>
       <column hidden="1" type="actions" width="-1"/>
     </columns>
   </attributetableconfig>
@@ -364,6 +388,8 @@ def my_form_open(dialog, layer, feature):
     <field editable="1" name="len_m"/>
     <field editable="1" name="ref_mos"/>
     <field editable="1" name="rwy"/>
+    <field editable="1" name="surf_cat"/>
+    <field editable="1" name="surf_mat"/>
     <field editable="1" name="wid_m"/>
   </editable>
   <labelOnTop>
@@ -376,6 +402,8 @@ def my_form_open(dialog, layer, feature):
     <field labelOnTop="0" name="len_m"/>
     <field labelOnTop="0" name="ref_mos"/>
     <field labelOnTop="0" name="rwy"/>
+    <field labelOnTop="0" name="surf_cat"/>
+    <field labelOnTop="0" name="surf_mat"/>
     <field labelOnTop="0" name="wid_m"/>
   </labelOnTop>
   <reuseLastValuePolicy>
@@ -388,6 +416,8 @@ def my_form_open(dialog, layer, feature):
     <field name="len_m" reuseLastValuePolicy="NotAllowed"/>
     <field name="ref_mos" reuseLastValuePolicy="NotAllowed"/>
     <field name="rwy" reuseLastValuePolicy="NotAllowed"/>
+    <field name="surf_cat" reuseLastValuePolicy="NotAllowed"/>
+    <field name="surf_mat" reuseLastValuePolicy="NotAllowed"/>
     <field name="wid_m" reuseLastValuePolicy="NotAllowed"/>
   </reuseLastValuePolicy>
   <dataDefinedFieldProperties/>

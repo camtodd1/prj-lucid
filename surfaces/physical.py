@@ -19,6 +19,7 @@ from qgis.core import (  # type: ignore
     QgsPointXY,
     QgsProject,
     QgsVectorLayer,
+    QgsWkbTypes,
 )
 
 from ..dimensions import ols_dimensions
@@ -814,6 +815,69 @@ class PhysicalGeometryMixin:
 
         return clipped_count
 
+    def _polygonal_layer_geometries(
+        self, geom: Optional[QgsGeometry], description: str
+    ) -> List[QgsGeometry]:
+        """Return single-part polygon geometries suitable for polygon layer writes."""
+        if geom is None or geom.isEmpty():
+            return []
+
+        try:
+            if not geom.isGeosValid():
+                geom = geom.makeValid()
+            if geom is None or geom.isEmpty():
+                return []
+
+            polygon_parts = []
+
+            def collect_polygon_parts(source_geom: QgsGeometry) -> None:
+                if source_geom is None or source_geom.isEmpty():
+                    return
+                if source_geom.type() == QgsWkbTypes.PolygonGeometry:
+                    if source_geom.isMultipart():
+                        polygon_parts.extend(
+                            part
+                            for part in source_geom.asMultiPolygon()
+                            if part and part[0]
+                        )
+                    else:
+                        polygon = source_geom.asPolygon()
+                        if polygon and polygon[0]:
+                            polygon_parts.append(polygon)
+                    return
+                if hasattr(source_geom, "asGeometryCollection"):
+                    for part_geom in source_geom.asGeometryCollection():
+                        collect_polygon_parts(part_geom)
+
+            collect_polygon_parts(geom)
+            if not polygon_parts:
+                return []
+
+            polygonal_geometries = []
+            for polygon_part in polygon_parts:
+                polygonal_geom = QgsGeometry.fromPolygonXY(polygon_part)
+                if polygonal_geom is None or polygonal_geom.isEmpty():
+                    continue
+                if not polygonal_geom.isGeosValid():
+                    polygonal_geom = polygonal_geom.makeValid()
+                if (
+                    polygonal_geom is None
+                    or polygonal_geom.isEmpty()
+                    or polygonal_geom.type() != QgsWkbTypes.PolygonGeometry
+                    or polygonal_geom.isMultipart()
+                    or not polygonal_geom.isGeosValid()
+                ):
+                    continue
+                polygonal_geometries.append(polygonal_geom)
+            return polygonal_geometries
+        except Exception as poly_error:
+            QgsMessageLog.logMessage(
+                f"Warning: Could not normalise polygon geometry for {description}: {poly_error}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+            return []
+
     def _apply_side_stripe_crossing_runway_clipping(
         self,
         physical_features: Dict[str, List[QgsFeature]],
@@ -875,10 +939,9 @@ class PhysicalGeometryMixin:
                 updated_features.append(feature)
                 continue
 
-            if geom is None or geom.isEmpty():
-                feature.setGeometry(QgsGeometry())
-            else:
-                feature.setGeometry(geom)
+            clipped_geometries = self._polygonal_layer_geometries(
+                geom, f"side-stripe clipped by {', '.join(interrupted_by)}"
+            )
             self._append_feature_note(
                 feature,
                 "Interrupted at intersecting runway pavement under MOS 8.21 "
@@ -886,9 +949,12 @@ class PhysicalGeometryMixin:
                 f"by {', '.join(interrupted_by)}.",
             )
             clipped_count += 1
-            if geom is None or geom.isEmpty():
+            if not clipped_geometries:
                 continue
-            updated_features.append(feature)
+            for geom_index, clipped_geometry in enumerate(clipped_geometries):
+                clipped_feature = feature if geom_index == 0 else QgsFeature(feature)
+                clipped_feature.setGeometry(clipped_geometry)
+                updated_features.append(clipped_feature)
 
         physical_features["DetailedSideStripeMarking"] = updated_features
         return clipped_count
