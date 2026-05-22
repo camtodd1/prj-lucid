@@ -5,6 +5,11 @@ from typing import Dict, List, Optional
 from qgis.PyQt import QtGui, QtWidgets  # type: ignore
 from qgis.PyQt.QtWidgets import QComboBox, QTableWidgetItem  # type: ignore
 
+try:
+    from ..dimensions.agl_dimensions import approach_profile_for_end
+except ImportError:
+    from dimensions.agl_dimensions import approach_profile_for_end  # type: ignore
+
 
 class AglOptionsMixin:
     """Mixin for optional Airfield Ground Lighting inputs."""
@@ -45,11 +50,13 @@ class AglOptionsMixin:
         self.lineEdit_agl_threshold_spacing = self._agl_line_edit("lineEdit_agl_threshold_spacing", "3")
         self.lineEdit_agl_threshold_inset = self._agl_line_edit("lineEdit_agl_threshold_inset", "0")
         self.lineEdit_agl_approach_spacing = self._agl_line_edit("lineEdit_agl_approach_spacing", "30")
+        self.lineEdit_agl_edge_spacing.setReadOnly(True)
+        self.lineEdit_agl_threshold_spacing.setReadOnly(True)
 
         for row, (label, widget) in enumerate(
             [
-                ("Edge light spacing (m)", self.lineEdit_agl_edge_spacing),
-                ("Threshold light spacing (m)", self.lineEdit_agl_threshold_spacing),
+                ("MOS edge spacing baseline (m)", self.lineEdit_agl_edge_spacing),
+                ("MOS precision threshold max spacing (m)", self.lineEdit_agl_threshold_spacing),
                 ("Threshold bar inset from runway edge (m)", self.lineEdit_agl_threshold_inset),
                 ("Default approach light spacing (m)", self.lineEdit_agl_approach_spacing),
             ]
@@ -282,13 +289,29 @@ class AglOptionsMixin:
             if runway_index_int not in self._runway_groups:
                 self._agl_error(errors, f"AGL approach row {row + 1}: selected runway no longer exists.")
                 continue
-            length_m = self._parse_agl_number(length_text, minimum=0.01)
+            runway_type = self._agl_runway_end_type(runway_index_int, str(end_role))
+            profile = approach_profile_for_end(runway_type)
+            length_m = (
+                self._parse_agl_number(length_text, minimum=0.01)
+                if length_text
+                else float(profile.get("length_m") or 0.0)
+            )
             if length_m is None:
                 self._agl_error(errors, f"AGL approach row {row + 1}: approach length must be positive.")
                 continue
-            spacing_m = default_spacing if not spacing_text else self._parse_agl_number(spacing_text, minimum=0.01)
+            spacing_m = (
+                self._parse_agl_number(spacing_text, minimum=0.01)
+                if spacing_text
+                else float(profile.get("spacing_m") or default_spacing)
+            )
             if spacing_m is None:
                 self._agl_error(errors, f"AGL approach row {row + 1}: spacing override must be positive.")
+                continue
+            if length_m <= 0:
+                self._agl_error(
+                    errors,
+                    f"AGL approach row {row + 1}: no MOS approach-light profile exists for this runway end; enter a positive length.",
+                )
                 continue
             rows.append(
                 {
@@ -319,6 +342,13 @@ class AglOptionsMixin:
     def _agl_error(self, errors: Optional[List[str]], message: str) -> None:
         if errors is not None:
             errors.append(message)
+
+    def _agl_runway_end_type(self, runway_index: int, end_role: str) -> str:
+        group = self._runway_groups.get(runway_index)
+        if group is None:
+            return ""
+        data = group.get_input_data()
+        return str(data.get("type1" if end_role == "primary" else "type2", "") or "")
 
     def _set_combo_data(self, combo: QComboBox, value) -> None:
         idx = combo.findData(value)
