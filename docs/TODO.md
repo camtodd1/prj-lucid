@@ -17,7 +17,7 @@
 
 ## Airfield Ground Lighting Generation
 
-- [ ] Add optional Airfield Ground Lighting (AGL) generation.
+- [x] Add optional Airfield Ground Lighting (AGL) generation.
 
   Scope:
   - Add an additional UI dialog tab for AGL inputs.

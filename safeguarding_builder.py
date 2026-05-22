@@ -36,6 +36,7 @@ from qgis.core import (  # type: ignore
 from .core.layers import LayerMixin
 from .core.styles import DEFAULT_STYLE_MAP
 from .surfaces.physical import PhysicalGeometryMixin
+from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
 from .surfaces.specialised import SpecialisedSurfacesMixin
 from .surfaces.met import MetSurfacesMixin
 from .guidelines.simple import SimpleGuidelinesMixin
@@ -67,6 +68,7 @@ class SafeguardingBuilder(
     LightingGuidelineMixin,
     OlsGuidelineMixin,
     PhysicalGeometryMixin,
+    AirfieldGroundLightingMixin,
     SpecialisedSurfacesMixin,
     MetSurfacesMixin,
     LayerMixin,
@@ -546,6 +548,7 @@ class SafeguardingBuilder(
         met_point = input_data.get("met_point")
         runway_input_list = input_data.get("runways", [])
         cns_input_list = input_data.get("cns_facilities", [])
+        agl_options = input_data.get("agl_options", {"enabled": False})
         self.arp_elevation_amsl = input_data.get("arp_elevation")
 
         output_desc = (
@@ -557,6 +560,7 @@ class SafeguardingBuilder(
             f"Inputs: ICAO={icao_code}, output={output_desc}, "
             f"ARP={'yes' if arp_point is not None else 'no'}, "
             f"MET={'yes' if met_point is not None else 'no'}, "
+            f"AGL={'enabled' if agl_options.get('enabled') else 'disabled'}, "
             f"CNS={len(cns_input_list)}, runways={len(runway_input_list)}."
         )
 
@@ -643,6 +647,21 @@ class SafeguardingBuilder(
                 any_runway_base_data_ok,
             )
 
+            agl_processed_ok = False
+            if agl_options.get("enabled"):
+                agl_group = main_group.addGroup(self.tr("Airfield Ground Lighting"))
+                if agl_group is not None:
+                    self._stage_layer_tree_node(agl_group)
+                    agl_processed_ok = self.process_airfield_ground_lighting(
+                        processed_runway_data_list,
+                        agl_options,
+                        agl_group,
+                    )
+                else:
+                    self._log_warning("Airfield Ground Lighting skipped: failed to create output group.")
+            else:
+                self._log("Airfield Ground Lighting skipped: option not enabled.")
+
             guideline_groups = self._create_guideline_groups(main_group)
 
             ofz_group = None
@@ -694,6 +713,7 @@ class SafeguardingBuilder(
                 icao_code,
                 any_guideline_processed_ok,
             )
+            any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
 
@@ -1240,6 +1260,8 @@ class SafeguardingBuilder(
             return "no physical geometry generated; check runway dimensions and coordinates"
         if group_name == self.tr("Runway Protection Areas"):
             return "no protection areas generated; check runway inputs and preceding warnings"
+        if group_name == self.tr("Airfield Ground Lighting"):
+            return "AGL was enabled, but no lighting points were generated; check Lighting tab inputs"
         if group_name == self.tr("Specialised Safeguarding"):
             return "no specialised safeguarding layers generated; check runway inputs and preceding warnings"
         if group_name == self.tr("Meteorological Instrument Station") and not met_ok:

@@ -68,6 +68,8 @@ class PersistenceMixin:
             )
 
         self._reset_output_options()
+        if hasattr(self, "_reset_agl_options"):
+            self._reset_agl_options()
         self._update_dialog_height()
         if hasattr(self, "update_dialog_status"):
             self.update_dialog_status()
@@ -142,6 +144,8 @@ class PersistenceMixin:
             "runways": [self._runway_groups[idx].get_input_data() for idx in sorted(self._runway_groups.keys())],
             "cns_facilities": self._get_cns_save_rows(),
         }
+        if hasattr(self, "_get_agl_save_options"):
+            data_to_save["agl_options"] = self._get_agl_save_options()
         output_mode = "file" if self.radioFileOutput.isChecked() else "memory"
         data_to_save["output_options"] = {
             "mode": output_mode,
@@ -196,6 +200,8 @@ class PersistenceMixin:
         cns_table = self._table("table_cns_facility")
         if cns_table and cns_table.rowCount() > 0:
             return True
+        if hasattr(self, "_agl_options_changed") and self._agl_options_changed():
+            return True
         return self._output_options_changed()
 
     def _runway_has_existing_input(self, runway_data) -> bool:
@@ -227,6 +233,8 @@ class PersistenceMixin:
         self._set_line_text("lineEdit_met_northing", loaded_data.get("met_northing", ""))
         self._set_line_text("lineEdit_met_elevation", loaded_data.get("met_elevation", ""))
         self._load_runway_rows(loaded_data.get("runways", []))
+        if hasattr(self, "_load_agl_options"):
+            self._load_agl_options(loaded_data.get("agl_options", {}))
         self._load_cns_rows(loaded_data.get("cns_facilities", []))
         self._load_output_options(loaded_data.get("output_options", {}))
 

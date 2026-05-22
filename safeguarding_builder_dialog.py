@@ -44,6 +44,7 @@ try:
     from .dialog.runway_group import RunwayWidgetGroup
     from .dialog.output_options import OutputOptionsMixin
     from .dialog.cns_table import CnsTableMixin
+    from .dialog.agl_options import AglOptionsMixin
     from .dialog.persistence import PersistenceMixin
 except ImportError:
     from dialog.dialog_constants import (  # type: ignore
@@ -64,6 +65,7 @@ except ImportError:
     from dialog.runway_group import RunwayWidgetGroup  # type: ignore
     from dialog.output_options import OutputOptionsMixin  # type: ignore
     from dialog.cns_table import CnsTableMixin  # type: ignore
+    from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
 
 # Load the UI class from the .ui file
@@ -76,6 +78,7 @@ FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), "safeguar
 class SafeguardingBuilderDialog(
     OutputOptionsMixin,
     CnsTableMixin,
+    AglOptionsMixin,
     PersistenceMixin,
     QtWidgets.QDialog,
     FORM_CLASS,
@@ -156,8 +159,10 @@ class SafeguardingBuilderDialog(
             load_button.clicked.connect(self.load_input_data)
 
         self._setup_cns_manual_entry()
+        self._setup_agl_options_ui()
 
         self._setup_output_options_ui_connections()
+        self._setup_agl_options_ui_connections()
 
         if self.scroll_area_layout is not None:
             self.add_runway_group()  # Add the first group
@@ -333,6 +338,13 @@ class SafeguardingBuilderDialog(
         if hasattr(self, "label_cns_status"):
             self.label_cns_status.setText(f"CNS facilities: {cns_count}" if cns_count else "CNS facilities: none")
 
+        agl_enabled = bool(hasattr(self, "checkBox_agl_enabled") and self.checkBox_agl_enabled.isChecked())
+        agl_rows = self.table_agl_approach.rowCount() if hasattr(self, "table_agl_approach") else 0
+        if hasattr(self, "label_agl_status"):
+            self.label_agl_status.setText(
+                f"AGL: enabled, {agl_rows} approach row(s)" if agl_enabled else "AGL: disabled"
+            )
+
         output_text = "Output: memory layers"
         if hasattr(self, "radioFileOutput") and self.radioFileOutput.isChecked():
             output_format = self.comboOutputFormat.currentText()
@@ -345,6 +357,8 @@ class SafeguardingBuilderDialog(
             footer_parts = []
             footer_parts.append(icao if icao else "No ICAO")
             footer_parts.append(f"{runway_count} runway(s)")
+            if agl_enabled:
+                footer_parts.append("AGL")
             footer_parts.append(output_text.replace("Output: ", ""))
             self.label_footer_status.setText(" | ".join(footer_parts))
 
@@ -671,6 +685,12 @@ class SafeguardingBuilderDialog(
             )
             return None
         final_data["runways"] = runway_data_list
+
+        # --- Airfield Ground Lighting Inputs ---
+        agl_options = self._get_agl_options(error_messages)
+        final_data["agl_options"] = agl_options
+        if agl_options.get("enabled") and len(error_messages) > 0:
+            validation_ok = False
 
         # --- CNS Inputs ---
         cns_data = self._get_cns_manual_data()

@@ -4,6 +4,7 @@
 DEFAULT_STYLE_MAP = {
     "ARP": "arp_point.qml",
     "Runway Centreline": "rwy_centreline_line.qml",
+    "AGL Light": "default_point.qml",
     "MET Station Location": "default_point.qml",
     "MET Instrument Enclosure": "default_zone_polygon.qml",
     "MET Buffer Zone": "default_zone_polygon.qml",
