@@ -635,7 +635,7 @@ remain before implementation.
 | Lateral placement | Outer edges separated by runway width | rule | Confirmed: distance between the outer edges of side stripes equals runway width. |
 | Orientation | Parallel to runway centreline | rule | Generate in runway-local coordinates. |
 | Longitudinal extent | Physical pavement between runway thresholds | m/rule | Confirmed v1 interpretation for this builder. |
-| Breaks | Side stripes are interrupted at intersecting runways | rule | Use intersecting runway pavement overlap under MOS 8.21(6). Taxiway intersections are out of scope. |
+| Breaks | Side stripes are interrupted at intersecting runways | rule | Clip using intersecting runway pavement inset by one stripe width so truncated stripes form a point. Taxiway intersections are out of scope. |
 
 ### Generated Feature Model
 
@@ -658,7 +658,8 @@ remain before implementation.
   enhancement.
 - Intersecting runway handling follows MOS 8.15 for general marking precedence.
   Centreline markings remain continuous, and side stripes are clipped wherever
-  they cross intersecting runway pavement under MOS 8.21(6).
+  they cross intersecting runway pavement under MOS 8.21(6), with a one
+  stripe-width extension into the crossing pavement to avoid blunt clipped ends.
 - No MOS 8.21(7) omission checkbox is needed for v1; generate side stripes by
   default under the sealed-runway assumption.
 

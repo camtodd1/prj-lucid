@@ -835,6 +835,11 @@ class PhysicalGeometryMixin:
             if geom is None or geom.isEmpty():
                 continue
 
+            try:
+                stripe_width = float(feature.attribute("wid_m") or 0.0)
+            except (TypeError, ValueError):
+                stripe_width = 0.0
+
             interrupted_by = []
             for other_name, other_context in runway_contexts.items():
                 if other_name == runway_name:
@@ -846,7 +851,16 @@ class PhysicalGeometryMixin:
                 if not geom.intersects(other_geom):
                     continue
 
-                clipped_geom = geom.difference(other_geom)
+                clipping_geom = other_geom
+                if stripe_width > 0.0:
+                    inset_geom = other_geom.buffer(-stripe_width, 8)
+                    if inset_geom is not None and not inset_geom.isEmpty():
+                        if not inset_geom.isGeosValid():
+                            inset_geom = inset_geom.makeValid()
+                        if inset_geom is not None and not inset_geom.isEmpty():
+                            clipping_geom = inset_geom
+
+                clipped_geom = geom.difference(clipping_geom)
                 if clipped_geom is None:
                     continue
                 if not clipped_geom.isEmpty() and not clipped_geom.isGeosValid():
@@ -868,6 +882,7 @@ class PhysicalGeometryMixin:
             self._append_feature_note(
                 feature,
                 "Interrupted at intersecting runway pavement under MOS 8.21 "
+                "with one stripe-width extension "
                 f"by {', '.join(interrupted_by)}.",
             )
             clipped_count += 1
