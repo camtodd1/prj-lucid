@@ -17,6 +17,7 @@ from qgis.core import (  # type: ignore
     QgsProject,
     QgsVectorFileWriter,
     QgsVectorLayer,
+    QgsWkbTypes,
 )
 
 from ..guidelines.guideline_constants import LAYER_FEATURE_BATCH_SIZE
@@ -114,11 +115,38 @@ class LayerMixin:
             add_ok, _ = provider.addFeatures(batch)
             if not add_ok:
                 QgsMessageLog.logMessage(
-                    f"Failed to add feature batch to layer '{display_name}'",
+                    f"Failed to add feature batch to layer '{display_name}'. "
+                    "Retrying feature-by-feature for diagnostics.",
                     plugin_tag,
-                    Qgis.Critical,
+                    Qgis.Warning,
                 )
-                return False
+                failed_features = 0
+                for batch_index, feature in enumerate(batch):
+                    single_ok, _ = provider.addFeatures([feature])
+                    if single_ok:
+                        continue
+                    failed_features += 1
+                    geom = feature.geometry()
+                    if geom is None:
+                        geom_details = "geometry=None"
+                    else:
+                        try:
+                            geom_details = (
+                                f"wkb={QgsWkbTypes.displayString(geom.wkbType())}, "
+                                f"type={geom.type()}, multipart={geom.isMultipart()}, "
+                                f"empty={geom.isEmpty()}, valid={geom.isGeosValid()}, "
+                                f"area={geom.area():.6f}"
+                            )
+                        except Exception as geom_error:
+                            geom_details = f"geometry detail error: {geom_error}"
+                    QgsMessageLog.logMessage(
+                        f"Failed to add feature {batch_index} to layer "
+                        f"'{display_name}': {geom_details}",
+                        plugin_tag,
+                        Qgis.Critical,
+                    )
+                if failed_features:
+                    return False
             del features[: len(batch)]
         return True
 

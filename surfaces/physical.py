@@ -661,6 +661,12 @@ class PhysicalGeometryMixin:
                     if spec is None:
                         continue
                     features_to_write = physical_features.get(element_type, [])
+                    if element_type == "DetailedSideStripeMarking":
+                        features_to_write[:] = (
+                            self._normalise_side_stripe_features_for_layer(
+                                features_to_write
+                            )
+                        )
                     if features_to_write:
                         final_layer = self._create_and_add_layer(
                             geometry_type_str=spec["geom_type"],
@@ -878,6 +884,32 @@ class PhysicalGeometryMixin:
             )
             return []
 
+    def _clone_feature_with_geometry(
+        self, source_feature: QgsFeature, geometry: QgsGeometry
+    ) -> QgsFeature:
+        """Clone attributes onto a fresh feature to avoid reusing feature ids."""
+        cloned_feature = QgsFeature(source_feature.fields())
+        cloned_feature.setAttributes(source_feature.attributes())
+        cloned_feature.setGeometry(geometry)
+        return cloned_feature
+
+    def _normalise_side_stripe_features_for_layer(
+        self, features: List[QgsFeature]
+    ) -> List[QgsFeature]:
+        """Prepare side-stripe features as fresh single-part polygons."""
+        normalised_features: List[QgsFeature] = []
+        for feature in features:
+            runway_name = feature.attribute("rwy")
+            side = feature.attribute("side")
+            geometries = self._polygonal_layer_geometries(
+                feature.geometry(), f"side-stripe {runway_name} {side}"
+            )
+            for geometry in geometries:
+                normalised_features.append(
+                    self._clone_feature_with_geometry(feature, geometry)
+                )
+        return normalised_features
+
     def _apply_side_stripe_crossing_runway_clipping(
         self,
         physical_features: Dict[str, List[QgsFeature]],
@@ -952,9 +984,9 @@ class PhysicalGeometryMixin:
             if not clipped_geometries:
                 continue
             for geom_index, clipped_geometry in enumerate(clipped_geometries):
-                clipped_feature = feature if geom_index == 0 else QgsFeature(feature)
-                clipped_feature.setGeometry(clipped_geometry)
-                updated_features.append(clipped_feature)
+                updated_features.append(
+                    self._clone_feature_with_geometry(feature, clipped_geometry)
+                )
 
         physical_features["DetailedSideStripeMarking"] = updated_features
         return clipped_count
