@@ -67,9 +67,8 @@ except ImportError:
     from dialog.persistence import PersistenceMixin  # type: ignore
 
 # Load the UI class from the .ui file
-FORM_CLASS, _ = uic.loadUiType(
-    os.path.join(os.path.dirname(__file__), "safeguarding_builder_dialog_base.ui")
-)
+FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), "safeguarding_builder_dialog_base.ui"))
+
 
 # =========================================================================
 # == Main Dialog Class
@@ -124,9 +123,7 @@ class SafeguardingBuilderDialog(
                 level=Qgis.Critical,
             )
 
-        add_runway_button = self.findChild(
-            QtWidgets.QPushButton, "pushButton_add_runway"
-        )
+        add_runway_button = self.findChild(QtWidgets.QPushButton, "pushButton_add_runway")
         if self.scroll_area_layout is None:
             QgsMessageLog.logMessage(
                 "Critical: Scroll area layout unavailable.",
@@ -139,13 +136,9 @@ class SafeguardingBuilderDialog(
 
         # --- Setup Coordinate Validators ---
         self.coord_validator = QtGui.QDoubleValidator()
-        self.coord_validator.setNotation(
-            QtGui.QDoubleValidator.Notation.StandardNotation
-        )
+        self.coord_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
         self.numeric_validator = QtGui.QDoubleValidator()
-        self.numeric_validator.setNotation(
-            QtGui.QDoubleValidator.Notation.StandardNotation
-        )
+        self.numeric_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
 
         self._setup_arp_validators(self.coord_validator, self.numeric_validator)
         self._connect_global_controls()
@@ -312,9 +305,7 @@ class SafeguardingBuilderDialog(
         """Updates compact workflow status labels."""
         icao = self.lineEdit_airport_name.text().strip().upper()
         if hasattr(self, "label_airport_status"):
-            self.label_airport_status.setText(
-                f"Airport: {icao}" if icao else "Airport: ICAO required"
-            )
+            self.label_airport_status.setText(f"Airport: {icao}" if icao else "Airport: ICAO required")
 
         runway_count = len(self._runway_groups)
         incomplete = 0
@@ -334,30 +325,19 @@ class SafeguardingBuilderDialog(
             if runway_count == 0:
                 self.label_runway_status.setText("Runways: none defined")
             elif incomplete:
-                self.label_runway_status.setText(
-                    f"Runways: {runway_count} defined, {incomplete} incomplete"
-                )
+                self.label_runway_status.setText(f"Runways: {runway_count} defined, {incomplete} incomplete")
             else:
                 self.label_runway_status.setText(f"Runways: {runway_count} ready")
 
-        cns_count = (
-            self.table_cns_facility.rowCount()
-            if hasattr(self, "table_cns_facility")
-            else 0
-        )
+        cns_count = self.table_cns_facility.rowCount() if hasattr(self, "table_cns_facility") else 0
         if hasattr(self, "label_cns_status"):
-            self.label_cns_status.setText(
-                f"CNS facilities: {cns_count}" if cns_count else "CNS facilities: none"
-            )
+            self.label_cns_status.setText(f"CNS facilities: {cns_count}" if cns_count else "CNS facilities: none")
 
         output_text = "Output: memory layers"
         if hasattr(self, "radioFileOutput") and self.radioFileOutput.isChecked():
             output_format = self.comboOutputFormat.currentText()
             path = self.fileWidgetOutputPath.filePath().strip()
-            output_text = (
-                f"Output: {output_format} files"
-                + (f" to {path}" if path else " (directory required)")
-            )
+            output_text = f"Output: {output_format} files" + (f" to {path}" if path else " (directory required)")
         if hasattr(self, "label_output_status"):
             self.label_output_status.setText(output_text)
 
@@ -397,9 +377,7 @@ class SafeguardingBuilderDialog(
             "lineEdit_airport_name",
             self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_name"),
         )
-        icao_code = (
-            icao_le.text().strip().upper() if icao_le else ""
-        )  # Get ICAO code early
+        icao_code = icao_le.text().strip().upper() if icao_le else ""  # Get ICAO code early
 
         # --- Initialize Results ---
         calculation_results = {  # Default/error values
@@ -435,42 +413,28 @@ class SafeguardingBuilderDialog(
                 # Calculate primary designation (both formats)
                 compact_desig_1 = f"{rwy_desig_val:02d}{rwy_suffix}"  # e.g., "09L"
                 full_desig_1_str = f"RWY {compact_desig_1}"  # e.g., "RWY 09L" (still needed for type labels)
-                type1_label_str = (
-                    f"{full_desig_1_str} Approach Type:"  # Update type label text
-                )
+                type1_label_str = f"{full_desig_1_str} Approach Type:"  # Update type label text
 
                 # Calculate reciprocal designation (both formats)
-                reciprocal_val = (
-                    (rwy_desig_val + 18)
-                    if rwy_desig_val <= 18
-                    else (rwy_desig_val - 18)
-                )
+                reciprocal_val = (rwy_desig_val + 18) if rwy_desig_val <= 18 else (rwy_desig_val - 18)
                 rec_desig_num_str = f"{reciprocal_val:02d}"  # e.g., "27"
                 rec_suffix_map = {"L": "R", "R": "L", "C": "C", "": ""}
                 rec_suffix = rec_suffix_map.get(rwy_suffix, "")  # e.g., "R"
                 compact_desig_2 = f"{rec_desig_num_str}{rec_suffix}"  # e.g., "27R"
                 full_desig_2_str = f"RWY {compact_desig_2}"  # e.g., "RWY 27R" (needed for header + type label)
-                type2_label_str = (
-                    f"{full_desig_2_str} Approach Type:"  # Update type label text
-                )
+                type2_label_str = f"{full_desig_2_str} Approach Type:"  # Update type label text
 
                 # <<< MODIFIED: Construct the runway name label in the desired format >>>
-                combined_compact_desigs = (
-                    f"{compact_desig_1}/{compact_desig_2}"  # e.g., "09L/27R"
-                )
+                combined_compact_desigs = f"{compact_desig_1}/{compact_desig_2}"  # e.g., "09L/27R"
                 if icao_code:
                     rwy_name_str = f"{icao_code} Runway {combined_compact_desigs}"  # e.g., "EGLL Runway 09L/27R"
                 else:
-                    rwy_name_str = (
-                        f"Runway {combined_compact_desigs}"  # e.g., "Runway 09L/27R"
-                    )
+                    rwy_name_str = f"Runway {combined_compact_desigs}"  # e.g., "Runway 09L/27R"
 
             except ValueError:
                 # Handle invalid designation input
                 full_desig_2_str = "Invalid"  # Keep this for the header label update
-                rwy_name_str = (
-                    "Invalid Designation"  # Set error message for the main label
-                )
+                rwy_name_str = "Invalid Designation"  # Set error message for the main label
 
             # Update results dictionary with calculated values
             calculation_results.update(
@@ -502,14 +466,10 @@ class SafeguardingBuilderDialog(
                     distance_str = f"{dist:.2f}"
                     ZERO_TOL, NEAR_TOL = 1e-6, 0.1
                     if math.isclose(dist, 0.0, abs_tol=ZERO_TOL):
-                        azimuth_str = SAME_POINT_MSG + (
-                            f" (<{NEAR_TOL}m)" if ZERO_TOL < dist < NEAR_TOL else ""
-                        )
+                        azimuth_str = SAME_POINT_MSG + (f" (<{NEAR_TOL}m)" if ZERO_TOL < dist < NEAR_TOL else "")
                     else:
                         az = p1.azimuth(p2) % 360
-                        azimuth_str = f"{az:.2f}" + (
-                            f" ({NEAR_POINTS_MSG})" if dist < NEAR_TOL else ""
-                        )
+                        azimuth_str = f"{az:.2f}" + (f" ({NEAR_POINTS_MSG})" if dist < NEAR_TOL else "")
                 except ValueError:
                     distance_str, azimuth_str = INVALID_COORDS_MSG, INVALID_COORDS_MSG
                 except Exception as e_coord:
@@ -530,15 +490,11 @@ class SafeguardingBuilderDialog(
             )
             # Reset results to error state
             calculation_results = {k: CALC_ERROR_MSG for k in calculation_results}
-            calculation_results["type1_label_text"] = (
-                "(Primary End) Type:"  # Reset labels
-            )
+            calculation_results["type1_label_text"] = "(Primary End) Type:"  # Reset labels
             calculation_results["type2_label_text"] = "(Reciprocal End) Type:"
 
         # --- Update the group's display labels ---
-        group_widget.update_display_labels(
-            calculation_results
-        )
+        group_widget.update_display_labels(calculation_results)
         self.update_dialog_status()
 
     def add_runway_group(self):
@@ -548,23 +504,15 @@ class SafeguardingBuilderDialog(
             return
 
         runway_index = self._get_next_runway_id()
-        scroll_content_widget = self.findChild(
-            QtWidgets.QScrollArea, "scrollArea_runways"
-        ).widget()
+        scroll_content_widget = self.findChild(QtWidgets.QScrollArea, "scrollArea_runways").widget()
         if not scroll_content_widget:
-            QMessageBox.critical(
-                self, "Layout Error", "Scroll area content widget missing."
-            )
+            QMessageBox.critical(self, "Layout Error", "Scroll area content widget missing.")
             return
 
         # Pass all arguments positionally
-        new_group = RunwayWidgetGroup(
-            runway_index, self.coord_validator, scroll_content_widget
-        )
+        new_group = RunwayWidgetGroup(runway_index, self.coord_validator, scroll_content_widget)
 
-        new_group.inputChanged.connect(
-            lambda idx=runway_index: self.update_runway_calculations(idx)
-        )
+        new_group.inputChanged.connect(lambda idx=runway_index: self.update_runway_calculations(idx))
         new_group.removeRequested.connect(self.remove_runway_group)
 
         # Add to the end of the layout
@@ -603,15 +551,12 @@ class SafeguardingBuilderDialog(
         except AttributeError:
             pass
 
-        confirmation_message = self.tr("Remove '{name}'?").format(
-            name=runway_display_name
-        )
+        confirmation_message = self.tr("Remove '{name}'?").format(name=runway_display_name)
         reply = QtWidgets.QMessageBox.question(
             self,
             self.tr("Confirm Removal"),
             confirmation_message,
-            QtWidgets.QMessageBox.StandardButton.Yes
-            | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
             QtWidgets.QMessageBox.StandardButton.No,
         )
 
@@ -705,21 +650,15 @@ class SafeguardingBuilderDialog(
         else:
             for index, group_widget in sorted(self._runway_groups.items()):
                 runway_inputs = group_widget.get_input_data()
-                validated_runway = self._validate_runway_data(
-                    index, runway_inputs, error_messages
-                )
+                validated_runway = self._validate_runway_data(index, runway_inputs, error_messages)
                 if validated_runway:
                     # Ensure keys exist (validator should add them, but be safe)
                     validated_runway.setdefault("thr_elev_1", None)
                     validated_runway.setdefault("thr_elev_2", None)
                     validated_runway.setdefault("thr_displaced_1", None)
                     validated_runway.setdefault("thr_displaced_2", None)
-                    validated_runway.setdefault(
-                        "thr_pre_area_1", None
-                    )
-                    validated_runway.setdefault(
-                        "thr_pre_area_2", None
-                    )
+                    validated_runway.setdefault("thr_pre_area_1", None)
+                    validated_runway.setdefault("thr_pre_area_2", None)
                     runway_data_list.append(validated_runway)
                 else:
                     validation_ok = False  # Error messages added by validator
@@ -728,8 +667,7 @@ class SafeguardingBuilderDialog(
             QMessageBox.critical(
                 self,
                 "Input Error",
-                "Please correct the following errors:\n- "
-                + "\n- ".join(error_messages),
+                "Please correct the following errors:\n- " + "\n- ".join(error_messages),
             )
             return None
         final_data["runways"] = runway_data_list
@@ -770,20 +708,14 @@ class SafeguardingBuilderDialog(
                 error_messages.append("Output directory is required.")
             elif not os.path.isdir(output_path):
                 validation_ok = False
-                error_messages.append(
-                    f"Output directory does not exist: {output_path}"
-                )
+                error_messages.append(f"Output directory does not exist: {output_path}")
             elif selected_format_name not in OUTPUT_FORMATS:
                 validation_ok = False
-                error_messages.append(
-                    f"Invalid output format selected: {selected_format_name}."
-                )
+                error_messages.append(f"Invalid output format selected: {selected_format_name}.")
             else:
                 # If validation_ok is still True up to this point
                 driver_name, _, extension = OUTPUT_FORMATS[selected_format_name]
-                final_data["output_path"] = (
-                    output_path  # Store the processed directory path
-                )
+                final_data["output_path"] = output_path  # Store the processed directory path
                 final_data["output_format_driver"] = driver_name
                 final_data["output_format_extension"] = extension
 
@@ -796,8 +728,7 @@ class SafeguardingBuilderDialog(
             QMessageBox.critical(
                 self,
                 "Input Error",
-                "Please correct the following errors:\n- "
-                + "\n- ".join(error_messages),
+                "Please correct the following errors:\n- " + "\n- ".join(error_messages),
             )
             return None
 
@@ -809,9 +740,7 @@ class SafeguardingBuilderDialog(
 
         return final_data
 
-    def _validate_runway_data(
-        self, index: int, inputs: Dict[str, str], errors: List[str]
-    ) -> Optional[Dict[str, Any]]:
+    def _validate_runway_data(self, index: int, inputs: Dict[str, str], errors: List[str]) -> Optional[Dict[str, Any]]:
         """Validates raw inputs for a single runway."""
         validated = {"original_index": index}
         current_errors = 0
@@ -825,9 +754,7 @@ class SafeguardingBuilderDialog(
             validated["designator_num"] = desig_val
             validated["suffix"] = inputs.get("suffix", "")
         except ValueError as e:
-            errors.append(
-                f"Rwy {index}: Invalid primary designator '{desig_str}'. ({e})"
-            )
+            errors.append(f"Rwy {index}: Invalid primary designator '{desig_str}'. ({e})")
             current_errors += 1
             validated["designator_num"] = None
 
@@ -871,18 +798,14 @@ class SafeguardingBuilderDialog(
             elev1_str = inputs.get("thr_elev_1", "").strip()
             validated["thr_elev_1"] = float(elev1_str) if elev1_str else None
         except ValueError:
-            errors.append(
-                f"Rwy {index}: Invalid primary elevation '{inputs.get('thr_elev_1', '')}'."
-            )
+            errors.append(f"Rwy {index}: Invalid primary elevation '{inputs.get('thr_elev_1', '')}'.")
             current_errors += 1
             validated["thr_elev_1"] = None
         try:  # Reciprocal Elevation
             elev2_str = inputs.get("thr_elev_2", "").strip()
             validated["thr_elev_2"] = float(elev2_str) if elev2_str else None
         except ValueError:
-            errors.append(
-                f"Rwy {index}: Invalid reciprocal elevation '{inputs.get('thr_elev_2', '')}'."
-            )
+            errors.append(f"Rwy {index}: Invalid reciprocal elevation '{inputs.get('thr_elev_2', '')}'.")
             current_errors += 1
             validated["thr_elev_2"] = None
 
@@ -958,9 +881,7 @@ class SafeguardingBuilderDialog(
                 raise ValueError("Width must be positive")
             validated["width"] = width_val
         except (ValueError, TypeError):
-            errors.append(
-                f"Rwy {index}: Invalid runway width '{inputs.get('width', '')}'. Must be a positive number."
-            )
+            errors.append(f"Rwy {index}: Invalid runway width '{inputs.get('width', '')}'. Must be a positive number.")
             current_errors += 1
             validated["width"] = None
 
@@ -975,9 +896,7 @@ class SafeguardingBuilderDialog(
             else:
                 validated["shoulder"] = None
         except ValueError:
-            errors.append(
-                f"Rwy {index}: Invalid shoulder width '{inputs.get('shoulder', '')}'. Must be non-negative."
-            )
+            errors.append(f"Rwy {index}: Invalid shoulder width '{inputs.get('shoulder', '')}'. Must be non-negative.")
             current_errors += 1
             validated["shoulder"] = None
 
@@ -997,9 +916,7 @@ class SafeguardingBuilderDialog(
                 else:
                     validated[field_name] = 0.0
             except ValueError:
-                errors.append(
-                    f"Rwy {index}: Invalid {label} '{inputs.get(field_name, '')}'. Must be non-negative."
-                )
+                errors.append(f"Rwy {index}: Invalid {label} '{inputs.get(field_name, '')}'. Must be non-negative.")
                 current_errors += 1
                 validated[field_name] = 0.0
 
@@ -1009,31 +926,19 @@ class SafeguardingBuilderDialog(
             "landing_available_1",
             "landing_available_2",
         ]:
-            validated[field_name] = self._bool_from_input(
-                inputs.get(field_name, True)
-            )
+            validated[field_name] = self._bool_from_input(inputs.get(field_name, True))
 
         # Optional fields (just copy text)
         validated["arc_num"] = inputs.get("arc_num")
         validated["arc_let"] = inputs.get("arc_let")
-        surface_category = (
-            str(inputs.get("surface_category", "") or "").strip()
-            or DEFAULT_RUNWAY_SURFACE_CATEGORY
-        )
-        surface_material = (
-            str(inputs.get("surface_material", "") or "").strip()
-            or DEFAULT_RUNWAY_SURFACE_MATERIAL
-        )
+        surface_category = str(inputs.get("surface_category", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_CATEGORY
+        surface_material = str(inputs.get("surface_material", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_MATERIAL
         if surface_category and surface_category not in RUNWAY_SURFACE_MATERIALS:
-            errors.append(
-                f"Rwy {index}: Invalid runway surface category '{surface_category}'."
-            )
+            errors.append(f"Rwy {index}: Invalid runway surface category '{surface_category}'.")
             current_errors += 1
             surface_category = ""
             surface_material = ""
-        elif surface_material and surface_material not in RUNWAY_SURFACE_MATERIALS.get(
-            surface_category, []
-        ):
+        elif surface_material and surface_material not in RUNWAY_SURFACE_MATERIALS.get(surface_category, []):
             errors.append(
                 f"Rwy {index}: Invalid runway surface material '{surface_material}' for category '{surface_category or 'None'}'."
             )
@@ -1143,9 +1048,7 @@ class SafeguardingBuilderDialog(
                         QMessageBox.warning(
                             self,
                             self.tr("Input Warning"),
-                            self.tr(
-                                "Invalid ARP coordinate format. ARP coordinates ignored."
-                            ),
+                            self.tr("Invalid ARP coordinate format. ARP coordinates ignored."),
                         )
                         arp_point, arp_east, arp_north = None, None, None
                 elif arp_east_str or arp_north_str:  # Only one entered
@@ -1194,9 +1097,7 @@ class SafeguardingBuilderDialog(
                         QMessageBox.warning(
                             self,
                             self.tr("Input Warning"),
-                            self.tr(
-                                "Invalid MET station coordinate format. MET station ignored."
-                            ),
+                            self.tr("Invalid MET station coordinate format. MET station ignored."),
                         )
                         met_point_proj_crs = None
                 elif met_east_str or met_north_str:  # Only one entered
@@ -1223,9 +1124,7 @@ class SafeguardingBuilderDialog(
                         return None, None, None, None, None, None, None
 
         except (AttributeError, RuntimeError, Exception) as e:
-            QgsMessageLog.logMessage(
-                f"Error getting global inputs: {e}", DIALOG_LOG_TAG, level=Qgis.Critical
-            )
+            QgsMessageLog.logMessage(f"Error getting global inputs: {e}", DIALOG_LOG_TAG, level=Qgis.Critical)
             QMessageBox.critical(
                 self,
                 self.tr("Internal Error"),
@@ -1242,6 +1141,7 @@ class SafeguardingBuilderDialog(
             met_point_proj_crs,
             met_elev,
         )
+
 
 # ========================= End of Class Definition =========================
 

@@ -40,22 +40,14 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class SimpleGuidelinesMixin:
-    def process_guideline_a(
-        self, runway_data: dict, layer_group: QgsLayerTreeGroup
-    ) -> bool:
+    def process_guideline_a(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Placeholder for Guideline A: Aircraft Noise processing."""
-        QgsMessageLog.logMessage(
-            "Guideline A processing not implemented.", PLUGIN_TAG, level=Qgis.Info
-        )
+        QgsMessageLog.logMessage("Guideline A processing not implemented.", PLUGIN_TAG, level=Qgis.Info)
         return False
 
-    def process_guideline_b(
-        self, runway_data: dict, layer_group: QgsLayerTreeGroup
-    ) -> bool:
+    def process_guideline_b(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Processes Guideline B: Windshear Assessment Zone."""
-        runway_name = runway_data.get(
-            "short_name", f"RWY_{runway_data.get('original_index','?')}"
-        )
+        runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
         if thr_point is None or rec_thr_point is None or layer_group is None:
@@ -73,9 +65,7 @@ class SimpleGuidelinesMixin:
             ]
         )
         features_to_add = []
-        primary_desig, reciprocal_desig = (
-            runway_name.split("/") if "/" in runway_name else ("Primary", "Reciprocal")
-        )
+        primary_desig, reciprocal_desig = runway_name.split("/") if "/" in runway_name else ("Primary", "Reciprocal")
         try:
             geom_p = self._create_offset_rectangle(
                 thr_point,
@@ -98,9 +88,7 @@ class SimpleGuidelinesMixin:
                 )
                 features_to_add.append(feat)
         except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Error WSZ Primary {runway_name}: {e}", PLUGIN_TAG, level=Qgis.Warning
-            )
+            QgsMessageLog.logMessage(f"Error WSZ Primary {runway_name}: {e}", PLUGIN_TAG, level=Qgis.Warning)
         try:
             geom_r = self._create_offset_rectangle(
                 rec_thr_point,
@@ -148,13 +136,7 @@ class SimpleGuidelinesMixin:
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
         """Processes Guideline C: Wildlife Management Zone."""
-        if (
-            arp_point is None
-            or not icao_code
-            or target_crs is None
-            or not target_crs.isValid()
-            or layer_group is None
-        ):
+        if arp_point is None or not icao_code or target_crs is None or not target_crs.isValid() or layer_group is None:
             return False
         overall_success = False
         try:
@@ -228,9 +210,7 @@ class SimpleGuidelinesMixin:
                 created_zones.append(zone)
                 return True
 
-            def circular_ring_points(
-                radius_m: float, clockwise: bool = False
-            ) -> List[QgsPointXY]:
+            def circular_ring_points(radius_m: float, clockwise: bool = False) -> List[QgsPointXY]:
                 segment_count = max(8, GUIDELINE_C_BUFFER_SEGMENTS)
                 angle_step = 2.0 * math.pi / segment_count
                 points = []
@@ -259,12 +239,8 @@ class SimpleGuidelinesMixin:
                 return geom.makeValid() if not geom.isGeosValid() else geom
 
             geom_a = create_wzm_geometry(GUIDELINE_C_RADIUS_A_M)
-            geom_b = create_wzm_geometry(
-                GUIDELINE_C_RADIUS_B_M, GUIDELINE_C_RADIUS_A_M
-            )
-            geom_c = create_wzm_geometry(
-                GUIDELINE_C_RADIUS_C_M, GUIDELINE_C_RADIUS_B_M
-            )
+            geom_b = create_wzm_geometry(GUIDELINE_C_RADIUS_B_M, GUIDELINE_C_RADIUS_A_M)
+            geom_c = create_wzm_geometry(GUIDELINE_C_RADIUS_C_M, GUIDELINE_C_RADIUS_B_M)
 
             if create_wzm_layer(
                 "A",
@@ -300,16 +276,13 @@ class SimpleGuidelinesMixin:
                 )
             if failed_zones:
                 QgsMessageLog.logMessage(
-                    "Guideline C Wildlife partial failure: failed zone layer(s) "
-                    f"{', '.join(failed_zones)}.",
+                    "Guideline C Wildlife partial failure: failed zone layer(s) " f"{', '.join(failed_zones)}.",
                     PLUGIN_TAG,
                     level=Qgis.Warning,
                 )
             return overall_success
         except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Guideline C Wildlife failed: {e}", PLUGIN_TAG, level=Qgis.Critical
-            )
+            QgsMessageLog.logMessage(f"Guideline C Wildlife failed: {e}", PLUGIN_TAG, level=Qgis.Critical)
             return False
 
     def process_guideline_d(
@@ -339,9 +312,7 @@ class SimpleGuidelinesMixin:
                 )
                 return False
 
-            turbine_zone_geom = arp_geom.buffer(
-                GUIDELINE_D_TURBINE_RADIUS_M, GUIDELINE_D_BUFFER_SEGMENTS
-            )
+            turbine_zone_geom = arp_geom.buffer(GUIDELINE_D_TURBINE_RADIUS_M, GUIDELINE_D_BUFFER_SEGMENTS)
             if not turbine_zone_geom or turbine_zone_geom.isEmpty():
                 QgsMessageLog.logMessage(
                     "Guideline D: Failed to create turbine zone buffer.",
@@ -362,15 +333,9 @@ class SimpleGuidelinesMixin:
             fields = QgsFields(
                 [
                     QgsField("icao_code", QVariant.String, self.tr("ICAO Code"), 10),
-                    QgsField(
-                        "description", QVariant.String, self.tr("Description"), 100
-                    ),
-                    QgsField(
-                        "radius_km", QVariant.Double, self.tr("Radius (km)"), 8, 2
-                    ),
-                    QgsField(
-                        "ref_nasf", QVariant.String, self.tr("Guideline Ref."), 50
-                    ),
+                    QgsField("description", QVariant.String, self.tr("Description"), 100),
+                    QgsField("radius_km", QVariant.Double, self.tr("Radius (km)"), 8, 2),
+                    QgsField("ref_nasf", QVariant.String, self.tr("Guideline Ref."), 50),
                 ]
             )
 
@@ -385,9 +350,7 @@ class SimpleGuidelinesMixin:
                 ]
             )
 
-            layer_display_name = (
-                f"{icao_code} {self.tr('Wind Turbine Assessment Zone')}"
-            )
+            layer_display_name = f"{icao_code} {self.tr('Wind Turbine Assessment Zone')}"
             internal_name_base = f"Guideline_D_TurbineZone_{icao_code}"
             style_key = "Wind Turbine Assessment Zone"
 
@@ -467,23 +430,13 @@ class SimpleGuidelinesMixin:
                             "SECONDARY SURVEILLANCE RADAR": "SSR",
                             "GROUND BASED AUGMENTATION SYSTEM": "GBAS",
                         }
-                        fac_acronym = predefined_acronyms.get(
-                            facility_type.upper(), facility_type.split(" ")[0]
-                        )
+                        fac_acronym = predefined_acronyms.get(facility_type.upper(), facility_type.split(" ")[0])
                     layer_display_name = (
-                        f"{fac_acronym} {surface_name}"
-                        if fac_acronym
-                        else f"{facility_type} {surface_name}"
+                        f"{fac_acronym} {surface_name}" if fac_acronym else f"{facility_type} {surface_name}"
                     )
-                    fac_identifier = (
-                        facility_id
-                        if facility_id != "N/A"
-                        else facility_type.replace(" ", "_")[:10]
-                    )
+                    fac_identifier = facility_id if facility_id != "N/A" else facility_type.replace(" ", "_")[:10]
                     internal_name_base = f"G_CNS_{icao_code}_{fac_identifier}_{surface_name.replace(' ', '_')}"
-                    internal_name_base = "".join(
-                        c if c.isalnum() else "_" for c in internal_name_base
-                    )
+                    internal_name_base = "".join(c if c.isalnum() else "_" for c in internal_name_base)
                     surface_geom = self._generate_circular_or_donut(
                         facility_geom,
                         surface_spec,
@@ -491,9 +444,7 @@ class SimpleGuidelinesMixin:
                     )
                     if not surface_geom:
                         continue
-                    height_rule = surface_spec.get(
-                        "HeightRule", surface_spec.get("heightrule", "TBD")
-                    )
+                    height_rule = surface_spec.get("HeightRule", surface_spec.get("heightrule", "TBD"))
                     height_value = surface_spec.get("HeightValue")
                     req_height = self._calculate_cns_height(
                         facility_elev,
@@ -568,17 +519,9 @@ class SimpleGuidelinesMixin:
         shape = surface_spec.get("shape", "").upper()
         outer_radius = surface_spec.get("OuterRadius_m")
         inner_radius = surface_spec.get("InnerRadius_m", 0.0)
-        if (
-            outer_radius is None
-            or not isinstance(outer_radius, (int, float))
-            or outer_radius <= 0
-        ):
+        if outer_radius is None or not isinstance(outer_radius, (int, float)) or outer_radius <= 0:
             return None
-        if (
-            inner_radius is None
-            or not isinstance(inner_radius, (int, float))
-            or inner_radius < 0
-        ):
+        if inner_radius is None or not isinstance(inner_radius, (int, float)) or inner_radius < 0:
             inner_radius = 0.0
         buffer_segments = 36
         outer_geom = facility_point_geom.buffer(outer_radius, buffer_segments)
@@ -614,11 +557,7 @@ class SimpleGuidelinesMixin:
                     return donut_geom
                 elif donut_geom:
                     fixed_donut = donut_geom.makeValid()
-                    return (
-                        fixed_donut
-                        if fixed_donut and fixed_donut.isGeosValid()
-                        else None
-                    )
+                    return fixed_donut if fixed_donut and fixed_donut.isGeosValid() else None
                 else:
                     return None
             except Exception as e:
@@ -651,11 +590,7 @@ class SimpleGuidelinesMixin:
             if rule == "TBD" or rule is None:
                 return facility_elevation
             elif rule == "FacilityElevation + AGL":
-                return (
-                    facility_elevation + float(value)
-                    if value is not None
-                    else facility_elevation
-                )
+                return facility_elevation + float(value) if value is not None else facility_elevation
             elif rule == "Fixed_AMSL":
                 return float(value) if value is not None else None
             elif rule == "Slope":
@@ -680,13 +615,9 @@ class SimpleGuidelinesMixin:
             )
             return None
 
-    def process_guideline_i(
-        self, runway_data: dict, layer_group: QgsLayerTreeGroup
-    ) -> bool:
+    def process_guideline_i(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Processes Guideline I: Public Safety Area (PSA) Trapezoids."""
-        runway_name = runway_data.get(
-            "short_name", f"RWY_{runway_data.get('original_index','?')}"
-        )
+        runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
         if thr_point is None or rec_thr_point is None or layer_group is None:
@@ -712,9 +643,7 @@ class SimpleGuidelinesMixin:
             ]
         )
         features_to_add = []
-        primary_desig, reciprocal_desig = (
-            runway_name.split("/") if "/" in runway_name else ("Primary", "Reciprocal")
-        )
+        primary_desig, reciprocal_desig = runway_name.split("/") if "/" in runway_name else ("Primary", "Reciprocal")
         try:
             geom_p = self._create_trapezoid(
                 thr_point,
@@ -741,9 +670,7 @@ class SimpleGuidelinesMixin:
                 )
                 features_to_add.append(feat)
         except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Error PSA Primary {runway_name}: {e}", PLUGIN_TAG, level=Qgis.Warning
-            )
+            QgsMessageLog.logMessage(f"Error PSA Primary {runway_name}: {e}", PLUGIN_TAG, level=Qgis.Warning)
         try:
             geom_r = self._create_trapezoid(
                 rec_thr_point,

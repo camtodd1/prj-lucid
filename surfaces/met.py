@@ -65,9 +65,7 @@ class MetSurfacesMixin:
             ):
                 any_layer_ok = True
         except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Error MET Point: {e}", PLUGIN_TAG, level=Qgis.Critical
-            )
+            QgsMessageLog.logMessage(f"Error MET Point: {e}", PLUGIN_TAG, level=Qgis.Critical)
 
         try:
             side = 16.0
@@ -106,9 +104,7 @@ class MetSurfacesMixin:
             ):
                 any_layer_ok = True
         except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Error MET Enclosure: {e}", PLUGIN_TAG, level=Qgis.Critical
-            )
+            QgsMessageLog.logMessage(f"Error MET Enclosure: {e}", PLUGIN_TAG, level=Qgis.Critical)
 
         try:
             side = 30.0
@@ -146,9 +142,7 @@ class MetSurfacesMixin:
             ):
                 any_layer_ok = True
         except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Error MET Buffer: {e}", PLUGIN_TAG, level=Qgis.Critical
-            )
+            QgsMessageLog.logMessage(f"Error MET Buffer: {e}", PLUGIN_TAG, level=Qgis.Critical)
 
         if enclosure_geom:
             try:
@@ -156,9 +150,7 @@ class MetSurfacesMixin:
                 name = self.tr("MET Obstacle Buffer Zone")
                 buffered_geom = enclosure_geom.buffer(dist, 12)
                 buffered_geom = (
-                    buffered_geom.makeValid()
-                    if buffered_geom and not buffered_geom.isGeosValid()
-                    else buffered_geom
+                    buffered_geom.makeValid() if buffered_geom and not buffered_geom.isGeosValid() else buffered_geom
                 )
                 if buffered_geom and not buffered_geom.isEmpty():
                     fields = QgsFields(

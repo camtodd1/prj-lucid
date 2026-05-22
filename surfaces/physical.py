@@ -46,25 +46,15 @@ class PhysicalGeometryMixin:
         any_physical_or_protection_ok = False
 
         if processed_runway_data_list and any_runway_base_data_ok:
-            detailed_marking_group = main_group.addGroup(
-                self.tr("Detailed Runway Markings")
-            )
+            detailed_marking_group = main_group.addGroup(self.tr("Detailed Runway Markings"))
             self._stage_layer_tree_node(detailed_marking_group)
             physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
             self._stage_layer_tree_node(physical_geom_group)
-            protection_area_group = main_group.addGroup(
-                self.tr("Runway Protection Areas")
-            )
+            protection_area_group = main_group.addGroup(self.tr("Runway Protection Areas"))
             self._stage_layer_tree_node(protection_area_group)
-            specialised_safeguarding_group = main_group.findGroup(
-                self.tr("Specialised Safeguarding")
-            )
-            if (
-                specialised_safeguarding_group is None
-            ):  # Should have been created earlier
-                specialised_safeguarding_group = main_group.addGroup(
-                    self.tr("Specialised Safeguarding")
-                )
+            specialised_safeguarding_group = main_group.findGroup(self.tr("Specialised Safeguarding"))
+            if specialised_safeguarding_group is None:  # Should have been created earlier
+                specialised_safeguarding_group = main_group.addGroup(self.tr("Specialised Safeguarding"))
             self._stage_layer_tree_node(specialised_safeguarding_group)
 
             if (
@@ -89,25 +79,17 @@ class PhysicalGeometryMixin:
                     ),
                     QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3),
                     QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3),
-                    QgsField(
-                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
-                    ),
+                    QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250),
                 ]
                 stopway_resa_fields = common_fields + [
-                    QgsField(
-                        "end_desig", QVariant.String, self.tr("End Designator"), 10
-                    )
+                    QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
                 pre_threshold_fields = common_fields + [
-                    QgsField(
-                        "end_desig", QVariant.String, self.tr("End Designator"), 10
-                    )
+                    QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
                 declared_distance_fields = [
                     QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
-                    QgsField(
-                        "end_desig", QVariant.String, self.tr("End Designator"), 10
-                    ),
+                    QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
                     QgsField("direction", QVariant.String, self.tr("Direction"), 12),
                     QgsField(
                         "bearing_deg",
@@ -175,9 +157,7 @@ class PhysicalGeometryMixin:
                 ]
                 detailed_marking_fields = [
                     QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
-                    QgsField(
-                        "end_desig", QVariant.String, self.tr("End Designator"), 10
-                    ),
+                    QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
                     QgsField("mark_type", QVariant.String, self.tr("Marking"), 40),
                     QgsField("sub_type", QVariant.String, self.tr("Subtype"), 40),
                     QgsField("side", QVariant.String, self.tr("Side"), 10),
@@ -185,21 +165,15 @@ class PhysicalGeometryMixin:
                     QgsField("len_m", QVariant.Double, self.tr("len_m"), 12, 3),
                     QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3),
                     QgsField("offset_m", QVariant.Double, self.tr("offset_m"), 12, 3),
-                    QgsField(
-                        "spacing_m", QVariant.Double, self.tr("spacing_m"), 12, 3
-                    ),
+                    QgsField("spacing_m", QVariant.Double, self.tr("spacing_m"), 12, 3),
                     QgsField("lda_m", QVariant.Double, self.tr("lda_m"), 12, 3),
                     QgsField("mandatory", QVariant.Bool, self.tr("Mandatory")),
-                    QgsField(
-                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
-                    ),
+                    QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250),
                     QgsField("notes", QVariant.String, self.tr("Notes"), 250),
                 ]
                 designation_fields = [
                     QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
-                    QgsField(
-                        "end_desig", QVariant.String, self.tr("End Designator"), 10
-                    ),
+                    QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
                     QgsField("text", QVariant.String, self.tr("Designation"), 10),
                     QgsField("bearing", QVariant.Double, self.tr("Bearing"), 10, 3),
                     QgsField(
@@ -235,16 +209,12 @@ class PhysicalGeometryMixin:
                     QgsField("offset_m", QVariant.Double, self.tr("offset_m"), 12, 3),
                     QgsField("height_m", QVariant.Double, self.tr("height_m"), 12, 3),
                     QgsField("mandatory", QVariant.Bool, self.tr("Mandatory")),
-                    QgsField(
-                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
-                    ),
+                    QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250),
                     QgsField("notes", QVariant.String, self.tr("Notes"), 250),
                 ]
                 marking_qa_fields = [
                     QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
-                    QgsField(
-                        "end_desig", QVariant.String, self.tr("End Designator"), 10
-                    ),
+                    QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
                     QgsField(
                         "mandatory",
                         QVariant.String,
@@ -269,9 +239,7 @@ class PhysicalGeometryMixin:
                         self.tr("Skipped Markings / Reasons"),
                         1000,
                     ),
-                    QgsField(
-                        "ref_mos", QVariant.String, self.tr("MOS Reference"), 250
-                    ),
+                    QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250),
                     QgsField("notes", QVariant.String, self.tr("Notes"), 250),
                 ]
 
@@ -446,9 +414,7 @@ class PhysicalGeometryMixin:
                         "fields": fields_copy,
                         "geom_type": geom_type_str,
                         "group": target_group,
-                        "style_key": style_key_map.get(
-                            element_type, "Default Polygon"
-                        ),
+                        "style_key": style_key_map.get(element_type, "Default Polygon"),
                     }
                     physical_features[element_type] = []
 
@@ -459,47 +425,29 @@ class PhysicalGeometryMixin:
                 )
                 runway_marking_contexts = {}
                 for rwy_data in processed_runway_data_list:
-                    runway_name_log = rwy_data.get(
-                        "short_name", f"RWY_{rwy_data.get('original_index','?')}"
-                    )
+                    runway_name_log = rwy_data.get("short_name", f"RWY_{rwy_data.get('original_index', '?')}")
                     try:
                         declared_spec = physical_layer_specs.get("DeclaredDistance")
                         if declared_spec is not None:
-                            for declared_record in rwy_data.get(
-                                "declared_distances", []
-                            ):
+                            for declared_record in rwy_data.get("declared_distances", []):
                                 declared_point = declared_record.get("point")
                                 if declared_point is None:
                                     continue
 
-                                declared_feature = QgsFeature(
-                                    declared_spec["fields"]
-                                )
-                                declared_feature.setGeometry(
-                                    QgsGeometry.fromPointXY(declared_point)
-                                )
+                                declared_feature = QgsFeature(declared_spec["fields"])
+                                declared_feature.setGeometry(QgsGeometry.fromPointXY(declared_point))
                                 declared_attrs = {
                                     "rwy": declared_record.get("rwy"),
                                     "end_desig": declared_record.get("end_desig"),
                                     "direction": declared_record.get("direction"),
-                                    "bearing_deg": declared_record.get(
-                                        "bearing_deg"
-                                    ),
-                                    "phys_len_m": declared_record.get(
-                                        "physical_len_m"
-                                    ),
-                                    "thr_len_m": declared_record.get(
-                                        "threshold_len_m"
-                                    ),
+                                    "bearing_deg": declared_record.get("bearing_deg"),
+                                    "phys_len_m": declared_record.get("physical_len_m"),
+                                    "thr_len_m": declared_record.get("threshold_len_m"),
                                     "disp_thr_m": declared_record.get("disp_thr_m"),
                                     "clearway_m": declared_record.get("clearway_m"),
                                     "stopway_m": declared_record.get("stopway_m"),
-                                    "takeoff_ok": declared_record.get(
-                                        "takeoff_available"
-                                    ),
-                                    "landing_ok": declared_record.get(
-                                        "landing_available"
-                                    ),
+                                    "takeoff_ok": declared_record.get("takeoff_available"),
+                                    "landing_ok": declared_record.get("landing_available"),
                                     "tora_m": declared_record.get("tora_m"),
                                     "toda_m": declared_record.get("toda_m"),
                                     "asda_m": declared_record.get("asda_m"),
@@ -511,20 +459,14 @@ class PhysicalGeometryMixin:
                                     idx = declared_feature.fieldNameIndex(field_name)
                                     if idx != -1:
                                         declared_feature.setAttribute(idx, value)
-                                physical_features["DeclaredDistance"].append(
-                                    declared_feature
-                                )
+                                physical_features["DeclaredDistance"].append(declared_feature)
                                 any_physical_or_protection_ok = True
 
-                        generated_elements_list = self.generate_physical_geometry(
-                            rwy_data
-                        )
+                        generated_elements_list = self.generate_physical_geometry(rwy_data)
                         if generated_elements_list is None:
                             continue
 
-                        generated_summary = summarize_generated_elements(
-                            generated_elements_list
-                        )
+                        generated_summary = summarize_generated_elements(generated_elements_list)
                         rwy_data["generated_feature_counts"] = {
                             **rwy_data.get("generated_feature_counts", {}),
                             **generated_summary.get("counts", {}),
@@ -545,18 +487,12 @@ class PhysicalGeometryMixin:
                                 continue
                             if not geometry.isGeosValid():
                                 geometry = geometry.makeValid()
-                            if (
-                                geometry is None
-                                or geometry.isEmpty()
-                                or not geometry.isGeosValid()
-                            ):
+                            if geometry is None or geometry.isEmpty() or not geometry.isGeosValid():
                                 continue
 
                             if element_type == "rwy":
                                 try:
-                                    runway_marking_contexts[
-                                        attributes.get("rwy", runway_name_log)
-                                    ] = {
+                                    runway_marking_contexts[attributes.get("rwy", runway_name_log)] = {
                                         "geom": QgsGeometry(geometry),
                                         "rank": self._runway_precedence_rank(
                                             rwy_data,
@@ -581,9 +517,7 @@ class PhysicalGeometryMixin:
                             physical_features[element_type].append(feature)
                             any_physical_or_protection_ok = True
 
-                        detailed_markings = self.generate_detailed_runway_markings(
-                            rwy_data
-                        )
+                        detailed_markings = self.generate_detailed_runway_markings(rwy_data)
                         for element_type, geometry, attributes in detailed_markings:
                             target_spec = physical_layer_specs.get(element_type)
                             if target_spec is None:
@@ -592,11 +526,7 @@ class PhysicalGeometryMixin:
                                 continue
                             if not geometry.isGeosValid():
                                 geometry = geometry.makeValid()
-                            if (
-                                geometry is None
-                                or geometry.isEmpty()
-                                or not geometry.isGeosValid()
-                            ):
+                            if geometry is None or geometry.isEmpty() or not geometry.isGeosValid():
                                 continue
 
                             feature = QgsFeature(target_spec["fields"])
@@ -628,11 +558,9 @@ class PhysicalGeometryMixin:
                         "DetailedPreThresholdAreaMarking",
                     ),
                 )
-                clipped_side_stripe_count = (
-                    self._apply_side_stripe_crossing_runway_clipping(
-                        physical_features,
-                        runway_marking_contexts,
-                    )
+                clipped_side_stripe_count = self._apply_side_stripe_crossing_runway_clipping(
+                    physical_features,
+                    runway_marking_contexts,
                 )
                 if clipped_marking_count:
                     QgsMessageLog.logMessage(
@@ -662,11 +590,7 @@ class PhysicalGeometryMixin:
                         continue
                     features_to_write = physical_features.get(element_type, [])
                     if element_type == "DetailedSideStripeMarking":
-                        features_to_write[:] = (
-                            self._normalise_side_stripe_features_for_layer(
-                                features_to_write
-                            )
-                        )
+                        features_to_write[:] = self._normalise_side_stripe_features_for_layer(features_to_write)
                     if features_to_write:
                         final_layer = self._create_and_add_layer(
                             geometry_type_str=spec["geom_type"],
@@ -684,10 +608,7 @@ class PhysicalGeometryMixin:
                             any_layer_successfully_processed_in_this_block = True
                         features_to_write.clear()
 
-                if (
-                    not any_layer_successfully_processed_in_this_block
-                    and physical_layer_specs
-                ):
+                if not any_layer_successfully_processed_in_this_block and physical_layer_specs:
                     QgsMessageLog.logMessage(
                         "Warning: No physical geometry or protection area layers were successfully processed/saved in this block.",
                         plugin_tag,
@@ -704,9 +625,7 @@ class PhysicalGeometryMixin:
                             if cl_node is not None:
                                 cloned_node = cl_node.clone()
                                 self._stage_layer_tree_node(cloned_node)
-                                physical_geom_group.insertChildNode(
-                                    centreline_insert_index, cloned_node
-                                )
+                                physical_geom_group.insertChildNode(centreline_insert_index, cloned_node)
                                 centreline_insert_index += 1
                                 if cl_node.parent() is not None:
                                     cl_node.parent().removeChildNode(cl_node)
@@ -727,9 +646,7 @@ class PhysicalGeometryMixin:
 
         return specialised_safeguarding_group, any_physical_or_protection_ok
 
-    def _runway_precedence_rank(
-        self, runway_data: dict, runway_length: float
-    ) -> Tuple[int, int, float]:
+    def _runway_precedence_rank(self, runway_data: dict, runway_length: float) -> Tuple[int, int, float]:
         """Rank runways for MOS 8.15 marking precedence."""
         try:
             arc_number = int(float(runway_data.get("arc_num") or 0))
@@ -809,8 +726,7 @@ class PhysicalGeometryMixin:
                     feature.setGeometry(geom)
                 self._append_feature_note(
                     feature,
-                    "Interrupted at intersecting runway pavement under MOS 8.15 "
-                    f"by {', '.join(interrupted_by)}.",
+                    "Interrupted at intersecting runway pavement under MOS 8.15 " f"by {', '.join(interrupted_by)}.",
                 )
                 clipped_count += 1
                 if geom is None or geom.isEmpty():
@@ -821,9 +737,7 @@ class PhysicalGeometryMixin:
 
         return clipped_count
 
-    def _polygonal_layer_geometries(
-        self, geom: Optional[QgsGeometry], description: str
-    ) -> List[QgsGeometry]:
+    def _polygonal_layer_geometries(self, geom: Optional[QgsGeometry], description: str) -> List[QgsGeometry]:
         """Return single-part polygon geometries suitable for polygon layer writes."""
         if geom is None or geom.isEmpty():
             return []
@@ -841,11 +755,7 @@ class PhysicalGeometryMixin:
                     return
                 if source_geom.type() == QgsWkbTypes.PolygonGeometry:
                     if source_geom.isMultipart():
-                        polygon_parts.extend(
-                            part
-                            for part in source_geom.asMultiPolygon()
-                            if part and part[0]
-                        )
+                        polygon_parts.extend(part for part in source_geom.asMultiPolygon() if part and part[0])
                     else:
                         polygon = source_geom.asPolygon()
                         if polygon and polygon[0]:
@@ -884,30 +794,22 @@ class PhysicalGeometryMixin:
             )
             return []
 
-    def _clone_feature_with_geometry(
-        self, source_feature: QgsFeature, geometry: QgsGeometry
-    ) -> QgsFeature:
+    def _clone_feature_with_geometry(self, source_feature: QgsFeature, geometry: QgsGeometry) -> QgsFeature:
         """Clone attributes onto a fresh feature to avoid reusing feature ids."""
         cloned_feature = QgsFeature(source_feature.fields())
         cloned_feature.setAttributes(source_feature.attributes())
         cloned_feature.setGeometry(geometry)
         return cloned_feature
 
-    def _normalise_side_stripe_features_for_layer(
-        self, features: List[QgsFeature]
-    ) -> List[QgsFeature]:
+    def _normalise_side_stripe_features_for_layer(self, features: List[QgsFeature]) -> List[QgsFeature]:
         """Prepare side-stripe features as fresh single-part polygons."""
         normalised_features: List[QgsFeature] = []
         for feature in features:
             runway_name = feature.attribute("rwy")
             side = feature.attribute("side")
-            geometries = self._polygonal_layer_geometries(
-                feature.geometry(), f"side-stripe {runway_name} {side}"
-            )
+            geometries = self._polygonal_layer_geometries(feature.geometry(), f"side-stripe {runway_name} {side}")
             for geometry in geometries:
-                normalised_features.append(
-                    self._clone_feature_with_geometry(feature, geometry)
-                )
+                normalised_features.append(self._clone_feature_with_geometry(feature, geometry))
         return normalised_features
 
     def _apply_side_stripe_crossing_runway_clipping(
@@ -984,9 +886,7 @@ class PhysicalGeometryMixin:
             if not clipped_geometries:
                 continue
             for geom_index, clipped_geometry in enumerate(clipped_geometries):
-                updated_features.append(
-                    self._clone_feature_with_geometry(feature, clipped_geometry)
-                )
+                updated_features.append(self._clone_feature_with_geometry(feature, clipped_geometry))
 
         physical_features["DetailedSideStripeMarking"] = updated_features
         return clipped_count
@@ -1007,9 +907,7 @@ class PhysicalGeometryMixin:
                 QgsUnitTypes,
             )
 
-            svg_dir = os.path.join(
-                self.plugin_dir, "styles", "svg", "runway_designations"
-            )
+            svg_dir = os.path.join(self.plugin_dir, "styles", "svg", "runway_designations")
             categories = []
             for glyph in "0123456789LCR":
                 svg_path = os.path.join(svg_dir, f"runway_designation_{glyph}.svg")
@@ -1041,8 +939,7 @@ class PhysicalGeometryMixin:
                     )
                 except Exception as dd_error:
                     QgsMessageLog.logMessage(
-                        "Warning: Could not apply SVG glyph data-defined "
-                        f"properties: {dd_error}",
+                        "Warning: Could not apply SVG glyph data-defined " f"properties: {dd_error}",
                         PLUGIN_TAG,
                         level=Qgis.Warning,
                     )
@@ -1079,10 +976,7 @@ class PhysicalGeometryMixin:
         piano_key_length = 30.0
         designation_gap_after_piano_keys = 12.0
         return (
-            threshold_line_width
-            + piano_key_gap_after_threshold
-            + piano_key_length
-            + designation_gap_after_piano_keys
+            threshold_line_width + piano_key_gap_after_threshold + piano_key_length + designation_gap_after_piano_keys
         )
 
     def _runway_designation_glyph_width(self, glyph: str) -> float:
@@ -1109,9 +1003,7 @@ class PhysicalGeometryMixin:
 
         return 3.0
 
-    def _runway_designation_glyphs(
-        self, designator: str
-    ) -> List[Tuple[str, float, float, float]]:
+    def _runway_designation_glyphs(self, designator: str) -> List[Tuple[str, float, float, float]]:
         """Return glyph, longitudinal centre, lateral centre and glyph height."""
         suffix = designator[-1:] if designator[-1:] in {"L", "C", "R"} else ""
         number_text = designator[:-1] if suffix else designator
@@ -1136,16 +1028,10 @@ class PhysicalGeometryMixin:
 
         return glyphs
 
-    def _project_lateral(
-        self, point: QgsPointXY, lateral_m: float, azimuth_degrees: float
-    ) -> QgsPointXY:
+    def _project_lateral(self, point: QgsPointXY, lateral_m: float, azimuth_degrees: float) -> QgsPointXY:
         if abs(lateral_m) <= 1e-9:
             return point
-        azimuth = (
-            (azimuth_degrees + 90.0) % 360.0
-            if lateral_m > 0
-            else (azimuth_degrees - 90.0 + 360.0) % 360.0
-        )
+        azimuth = (azimuth_degrees + 90.0) % 360.0 if lateral_m > 0 else (azimuth_degrees - 90.0 + 360.0) % 360.0
         return point.project(abs(lateral_m), azimuth)
 
     def _create_runway_marking_rectangle(
@@ -1165,9 +1051,7 @@ class PhysicalGeometryMixin:
         if start_center is None or end_center is None:
             return None
 
-        start_center = self._project_lateral(
-            start_center, lateral_center_m, runway_azimuth
-        )
+        start_center = self._project_lateral(start_center, lateral_center_m, runway_azimuth)
         end_center = self._project_lateral(end_center, lateral_center_m, runway_azimuth)
         half_width = width_m / 2.0
         az_l = (runway_azimuth - 90.0 + 360.0) % 360.0
@@ -1297,9 +1181,7 @@ class PhysicalGeometryMixin:
 
         tip = origin.project(arrow_tip_offset_m, runway_azimuth)
         head_base = origin.project(arrow_tip_offset_m - head_length, runway_azimuth)
-        tail = origin.project(
-            arrow_tip_offset_m - head_length - stem_length, runway_azimuth
-        )
+        tail = origin.project(arrow_tip_offset_m - head_length - stem_length, runway_azimuth)
         if not tip or not head_base or not tail:
             return None
 
@@ -1389,13 +1271,9 @@ class PhysicalGeometryMixin:
     def _surface_trigger_note(self, mos_ref: str, runway_data: dict) -> str:
         surface_desc = self._runway_surface_description(runway_data)
         if self._is_marking_surface_applicable(runway_data):
-            return (
-                f"{mos_ref} surface trigger met: selected runway surface is "
-                f"{surface_desc}."
-            )
+            return f"{mos_ref} surface trigger met: selected runway surface is " f"{surface_desc}."
         return (
-            f"{mos_ref} surface trigger not met: selected runway surface is "
-            f"{surface_desc}; marking not generated."
+            f"{mos_ref} surface trigger not met: selected runway surface is " f"{surface_desc}; marking not generated."
         )
 
     def _marking_qa_attrs(
@@ -1470,9 +1348,7 @@ class PhysicalGeometryMixin:
                 )
             )
 
-    def _threshold_marking_params(
-        self, runway_width: float
-    ) -> Optional[Tuple[int, float]]:
+    def _threshold_marking_params(self, runway_width: float) -> Optional[Tuple[int, float]]:
         table = {
             18.0: (4, 1.5),
             23.0: (6, 1.5),
@@ -1485,9 +1361,7 @@ class PhysicalGeometryMixin:
                 return params
         return None
 
-    def _centreline_marking_width(
-        self, arc_num: int, type_primary: str, type_reciprocal: str
-    ) -> float:
+    def _centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str) -> float:
         widths = []
         for runway_type in (type_primary, type_reciprocal):
             type_abbr = ols_dimensions.get_runway_type_abbr(runway_type)
@@ -1499,9 +1373,7 @@ class PhysicalGeometryMixin:
                 widths.append(0.3)
         return max(widths) if widths else 0.3
 
-    def _declared_lda_for_end(
-        self, runway_data: dict, end_desig: str, fallback_length: float
-    ) -> float:
+    def _declared_lda_for_end(self, runway_data: dict, end_desig: str, fallback_length: float) -> float:
         for record in runway_data.get("declared_distances", []):
             if record.get("end_desig") == end_desig and record.get("lda_m") is not None:
                 try:
@@ -1540,9 +1412,7 @@ class PhysicalGeometryMixin:
             return [150.0, 300.0, 450.0, 600.0, 750.0]
         return [150.0, 300.0, 450.0, 600.0, 750.0, 900.0]
 
-    def generate_detailed_runway_markings(
-        self, runway_data: dict
-    ) -> List[Tuple[str, QgsGeometry, dict]]:
+    def generate_detailed_runway_markings(self, runway_data: dict) -> List[Tuple[str, QgsGeometry, dict]]:
         """Generate MOS139 runway marking polygons in a separate layer group."""
         plugin_tag = PLUGIN_TAG
         generated: List[Tuple[str, QgsGeometry, dict]] = []
@@ -1564,9 +1434,7 @@ class PhysicalGeometryMixin:
             except (TypeError, ValueError):
                 return default
 
-        runway_name = runway_data.get(
-            "short_name", f"RWY_{runway_data.get('original_index', '?')}"
-        )
+        runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         primary_desig, reciprocal_desig = self._runway_designators(runway_name)
         runway_length = float(rwy_params["length"])
         disp_primary = non_negative_number(runway_data.get("thr_displaced_1"), 0.0)
@@ -1584,9 +1452,7 @@ class PhysicalGeometryMixin:
             arc_num = 0
         type_primary = runway_data.get("type1", "")
         type_reciprocal = runway_data.get("type2", "")
-        centreline_width = self._centreline_marking_width(
-            arc_num, type_primary, type_reciprocal
-        )
+        centreline_width = self._centreline_marking_width(arc_num, type_primary, type_reciprocal)
         surface_markings_applicable = self._is_marking_surface_applicable(runway_data)
 
         end_specs = [
@@ -1692,9 +1558,7 @@ class PhysicalGeometryMixin:
                             )
                         )
                     else:
-                        skipped.append(
-                            f"Displaced threshold arrow {arrow_no}: geometry generation failed."
-                        )
+                        skipped.append(f"Displaced threshold arrow {arrow_no}: geometry generation failed.")
                     arrow_tip_offset -= 50.0
                     arrow_no += 1
 
@@ -1723,30 +1587,23 @@ class PhysicalGeometryMixin:
                                 "MOS 8.17(2)(a)",
                                 offset_m=0.0,
                                 mandatory=True,
-                                notes=self._surface_trigger_note(
-                                    "MOS 8.17", runway_data
-                                ),
+                                notes=self._surface_trigger_note("MOS 8.17", runway_data),
                             ),
                         )
                     )
                 else:
-                    skipped.append(
-                        "Threshold transverse line: geometry generation failed."
-                    )
+                    skipped.append("Threshold transverse line: geometry generation failed.")
 
                 threshold_params = self._threshold_marking_params(runway_width)
                 if threshold_params is not None:
                     stripe_count, gap_m = threshold_params
                     stripe_width = 1.8
-                    total_marked_width = (
-                        stripe_count * stripe_width + (stripe_count - 1) * gap_m
-                    )
+                    total_marked_width = stripe_count * stripe_width + (stripe_count - 1) * gap_m
                     edge_space = (runway_width - total_marked_width) / 2.0
                     if edge_space < gap_m:
                         stripe_width = max(
                             0.1,
-                            (runway_width - (stripe_count + 1) * gap_m)
-                            / stripe_count,
+                            (runway_width - (stripe_count + 1) * gap_m) / stripe_count,
                         )
                         edge_space = gap_m
                     left_edge = -runway_width / 2.0 + edge_space
@@ -1781,9 +1638,7 @@ class PhysicalGeometryMixin:
                                         spacing_m=gap_m,
                                         mandatory=True,
                                         notes=(
-                                            self._surface_trigger_note(
-                                                "MOS 8.17", runway_data
-                                            )
+                                            self._surface_trigger_note("MOS 8.17", runway_data)
                                             + f" Edge space {edge_space:.3f} m; "
                                             "stripe width 1.8 m unless adjusted to keep edge spaces >= a."
                                         ),
@@ -1792,8 +1647,7 @@ class PhysicalGeometryMixin:
                             )
                 else:
                     skipped.append(
-                        "Threshold piano keys: unsupported runway width "
-                        f"{runway_width} m for Table 8.17(2)."
+                        "Threshold piano keys: unsupported runway width " f"{runway_width} m for Table 8.17(2)."
                     )
                     QgsMessageLog.logMessage(
                         f"Detailed threshold piano keys not generated for {runway_name}: unsupported width {runway_width}.",
@@ -1801,12 +1655,9 @@ class PhysicalGeometryMixin:
                         level=Qgis.Info,
                     )
             else:
-                skipped.append(
-                    "Threshold markings: MOS 8.17 sealed-surface trigger not met."
-                )
+                skipped.append("Threshold markings: MOS 8.17 sealed-surface trigger not met.")
 
             designation_edge_offset = self._runway_designation_start_offset()
-            designation_length = self._runway_designation_length(end_desig)
             angle_deg = azimuth % 360.0
             for glyph_no, (
                 glyph,
@@ -1815,17 +1666,11 @@ class PhysicalGeometryMixin:
                 glyph_height,
             ) in enumerate(self._runway_designation_glyphs(end_desig), start=1):
                 glyph_width = self._runway_designation_glyph_width(glyph)
-                glyph_center = origin.project(
-                    designation_edge_offset + longitudinal_center, azimuth
-                )
+                glyph_center = origin.project(designation_edge_offset + longitudinal_center, azimuth)
                 if glyph_center:
-                    glyph_center = self._project_lateral(
-                        glyph_center, lateral_center, azimuth
-                    )
+                    glyph_center = self._project_lateral(glyph_center, lateral_center, azimuth)
                 if not glyph_center:
-                    skipped.append(
-                        f"Runway designation glyph {glyph}: anchor projection failed."
-                    )
+                    skipped.append(f"Runway designation glyph {glyph}: anchor projection failed.")
                     continue
                 generated.append(
                     (
@@ -1855,8 +1700,7 @@ class PhysicalGeometryMixin:
             aiming_rule = self._aiming_point_rule(runway_width, lda_m, runway_type)
             if not surface_markings_applicable:
                 skipped.append(
-                    "Aiming point and touchdown zone markings: MOS 8.22/8.23 "
-                    "sealed-surface triggers not met."
+                    "Aiming point and touchdown zone markings: MOS 8.22/8.23 " "sealed-surface triggers not met."
                 )
             elif aiming_rule is not None:
                 aim_offset, aim_len, aim_width, aim_spacing, aim_ref = aiming_rule
@@ -1889,9 +1733,7 @@ class PhysicalGeometryMixin:
                                     spacing_m=aim_spacing,
                                     lda_m=lda_m,
                                     mandatory=True,
-                                    notes=self._surface_trigger_note(
-                                        "MOS 8.22", runway_data
-                                    ),
+                                    notes=self._surface_trigger_note("MOS 8.22", runway_data),
                                 ),
                             )
                         )
@@ -1904,16 +1746,12 @@ class PhysicalGeometryMixin:
                     for offset in touchdown_offsets:
                         if abs(offset - aim_offset) <= 50.0:
                             skipped.append(
-                                "ICAO A touchdown zone pair "
-                                f"at {offset:g} m: within 50 m of aiming point."
+                                "ICAO A touchdown zone pair " f"at {offset:g} m: within 50 m of aiming point."
                             )
                             continue
                         block_start = offset
                         block_end = offset + 22.5
-                        if (
-                            block_start < midpoint_zone_end
-                            and block_end > midpoint_zone_start
-                        ):
+                        if block_start < midpoint_zone_end and block_end > midpoint_zone_start:
                             skipped.append(
                                 "ICAO A touchdown zone pair "
                                 f"at {offset:g} m: intersects 550 m midpoint exclusion zone."
@@ -1953,9 +1791,7 @@ class PhysicalGeometryMixin:
                                                 and runway_length >= 1500.0
                                             ),
                                             notes=(
-                                                self._surface_trigger_note(
-                                                    "MOS 8.23", runway_data
-                                                )
+                                                self._surface_trigger_note("MOS 8.23", runway_data)
                                                 + " Table 8.24 selection uses LDA for this initial implementation."
                                             ),
                                         ),
@@ -1997,9 +1833,7 @@ class PhysicalGeometryMixin:
                                                 and runway_length >= 1500.0
                                             ),
                                             notes=(
-                                                self._surface_trigger_note(
-                                                    "MOS 8.23", runway_data
-                                                )
+                                                self._surface_trigger_note("MOS 8.23", runway_data)
                                                 + " 450 m pair generated by default "
                                                 "even when runway length is under 1500 m."
                                             ),
@@ -2035,16 +1869,10 @@ class PhysicalGeometryMixin:
                     chevron_run = base_offset - apex_offset
                     if chevron_run <= 1e-6:
                         break
-                    apex_point = pre_area_start.project(
-                        apex_offset, pre_area_outward_azimuth
-                    )
-                    base_center = pre_area_start.project(
-                        base_offset, pre_area_outward_azimuth
-                    )
+                    apex_point = pre_area_start.project(apex_offset, pre_area_outward_azimuth)
+                    base_center = pre_area_start.project(base_offset, pre_area_outward_azimuth)
                     if not apex_point or not base_center:
-                        skipped.append(
-                            f"Pre-threshold area chevron {chevron_no}: projection failed."
-                        )
+                        skipped.append(f"Pre-threshold area chevron {chevron_no}: projection failed.")
                         apex_offset += 30.0
                         chevron_no += 1
                         continue
@@ -2060,9 +1888,7 @@ class PhysicalGeometryMixin:
                         pre_area_outward_azimuth,
                     )
                     if not left_endpoint or not right_endpoint:
-                        skipped.append(
-                            f"Pre-threshold area chevron {chevron_no}: endpoint projection failed."
-                        )
+                        skipped.append(f"Pre-threshold area chevron {chevron_no}: endpoint projection failed.")
                         apex_offset += 30.0
                         chevron_no += 1
                         continue
@@ -2108,21 +1934,13 @@ class PhysicalGeometryMixin:
                     apex_offset += 30.0
                     chevron_no += 1
             elif pre_area_len > 1e-6:
-                skipped.append(
-                    "Pre-threshold area markings: area length does not exceed 60 m."
-                )
+                skipped.append("Pre-threshold area markings: area length does not exceed 60 m.")
 
         # One centreline stripe set for the whole runway, measured primary to
         # reciprocal, with the last stripe truncated if needed.
         designation_start = self._runway_designation_start_offset()
-        primary_protect = (
-            designation_start + self._runway_designation_length(primary_desig) + 12.0
-        )
-        reciprocal_protect = (
-            designation_start
-            + self._runway_designation_length(reciprocal_desig)
-            + 12.0
-        )
+        primary_protect = designation_start + self._runway_designation_length(primary_desig) + 12.0
+        reciprocal_protect = designation_start + self._runway_designation_length(reciprocal_desig) + 12.0
         centreline_end = runway_length - reciprocal_protect
         offset = primary_protect
         stripe_no = 1
@@ -2156,9 +1974,7 @@ class PhysicalGeometryMixin:
                             offset_m=offset,
                             spacing_m=20.0,
                             mandatory=True,
-                            notes=(
-                                "Single whole-runway set; final reciprocal-end stripe may be truncated."
-                            ),
+                            notes=("Single whole-runway set; final reciprocal-end stripe may be truncated."),
                         ),
                     )
                 )
@@ -2168,9 +1984,7 @@ class PhysicalGeometryMixin:
             whole_runway_mandatory.append("Centreline markings")
         else:
             for qa in qa_records.values():
-                qa["skipped"].append(
-                    "Centreline markings: runway too short after designation clearances."
-                )
+                qa["skipped"].append("Centreline markings: runway too short after designation clearances.")
 
         side_stripe_count = 0
         if surface_markings_applicable:
@@ -2206,9 +2020,7 @@ class PhysicalGeometryMixin:
                                 offset_m=0.0,
                                 mandatory=True,
                                 notes=(
-                                    self._surface_trigger_note(
-                                        "MOS 8.21", runway_data
-                                    )
+                                    self._surface_trigger_note("MOS 8.21", runway_data)
                                     + " Taxiway breaks out of scope; intersecting runway pavement is clipped after generation."
                                 ),
                             ),
@@ -2217,9 +2029,7 @@ class PhysicalGeometryMixin:
                     side_stripe_count += 1
         else:
             for qa in qa_records.values():
-                qa["skipped"].append(
-                    "Side-stripe markings: MOS 8.21 sealed-surface trigger not met."
-                )
+                qa["skipped"].append("Side-stripe markings: MOS 8.21 sealed-surface trigger not met.")
 
         if side_stripe_count:
             whole_runway_mandatory.append("Side-stripe markings")
@@ -2236,9 +2046,7 @@ class PhysicalGeometryMixin:
         )
         return generated
 
-    def generate_physical_geometry(
-        self, runway_data: dict
-    ) -> Optional[List[Tuple[str, QgsGeometry, dict]]]:
+    def generate_physical_geometry(self, runway_data: dict) -> Optional[List[Tuple[str, QgsGeometry, dict]]]:
         """
         Calculates geometry and attributes for physical runway components.
         Returns a list of tuples: (element_type_key, geometry, attributes)
@@ -2252,11 +2060,7 @@ class PhysicalGeometryMixin:
         runway_width = runway_data.get("width")
         shoulder_width = runway_data.get("shoulder")
         runway_name = runway_data.get("short_name", "RWY")
-        log_name = (
-            runway_name
-            if runway_name != "RWY"
-            else f"RWY_{runway_data.get('original_index','?')}"
-        )
+        log_name = runway_name if runway_name != "RWY" else f"RWY_{runway_data.get('original_index', '?')}"
 
         disp_val_1 = runway_data.get("thr_displaced_1")
         disp_val_2 = runway_data.get("thr_displaced_2")
@@ -2362,9 +2166,7 @@ class PhysicalGeometryMixin:
                             "len_m": round(landing_length, 3),
                             "ref_mos": pavement_ref,
                         }
-                        generated_elements.append(
-                            ("rwy", landing_pavement_geom, attributes)
-                        )
+                        generated_elements.append(("rwy", landing_pavement_geom, attributes))
                 else:
                     QgsMessageLog.logMessage(
                         f"Warning: Failed to calculate landing pavement corners for {log_name}.",
@@ -2388,29 +2190,17 @@ class PhysicalGeometryMixin:
         if runway_width is not None and runway_width > 0:
             pre_threshold_features = []
             half_width = runway_width / 2.0
-            primary_desig = (
-                runway_name.split("/")[0] if "/" in runway_name else "Primary"
-            )
-            reciprocal_desig = (
-                runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
-            )
+            primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
+            reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
 
             if disp_thr_1 > 1e-6:
                 try:
                     start_point = phys_p_start
                     end_point = thr_point
-                    p_start_l = start_point.project(
-                        half_width, rwy_params["azimuth_perp_l"]
-                    )
-                    p_start_r = start_point.project(
-                        half_width, rwy_params["azimuth_perp_r"]
-                    )
-                    p_end_l = end_point.project(
-                        half_width, rwy_params["azimuth_perp_l"]
-                    )
-                    p_end_r = end_point.project(
-                        half_width, rwy_params["azimuth_perp_r"]
-                    )
+                    p_start_l = start_point.project(half_width, rwy_params["azimuth_perp_l"])
+                    p_start_r = start_point.project(half_width, rwy_params["azimuth_perp_r"])
+                    p_end_l = end_point.project(half_width, rwy_params["azimuth_perp_l"])
+                    p_end_r = end_point.project(half_width, rwy_params["azimuth_perp_r"])
                     if all([p_start_l, p_start_r, p_end_l, p_end_r]):
                         geom = self._create_polygon_from_corners(
                             [p_start_l, p_start_r, p_end_r, p_end_l],
@@ -2428,9 +2218,7 @@ class PhysicalGeometryMixin:
                                 "ref_mos": pavement_ref,
                                 "end_desig": primary_desig,
                             }
-                            pre_threshold_features.append(
-                                ("PreThresholdRunway", geom, attributes)
-                            )
+                            pre_threshold_features.append(("PreThresholdRunway", geom, attributes))
                     else:
                         QgsMessageLog.logMessage(
                             f"Warning: Failed calculate corners for Pre-Threshold Pavement {primary_desig}.",
@@ -2448,18 +2236,10 @@ class PhysicalGeometryMixin:
                 try:
                     start_point = phys_p_end
                     end_point = rec_thr_point
-                    r_start_l = start_point.project(
-                        half_width, rwy_params["azimuth_perp_l"]
-                    )
-                    r_start_r = start_point.project(
-                        half_width, rwy_params["azimuth_perp_r"]
-                    )
-                    r_end_l = end_point.project(
-                        half_width, rwy_params["azimuth_perp_l"]
-                    )
-                    r_end_r = end_point.project(
-                        half_width, rwy_params["azimuth_perp_r"]
-                    )
+                    r_start_l = start_point.project(half_width, rwy_params["azimuth_perp_l"])
+                    r_start_r = start_point.project(half_width, rwy_params["azimuth_perp_r"])
+                    r_end_l = end_point.project(half_width, rwy_params["azimuth_perp_l"])
+                    r_end_r = end_point.project(half_width, rwy_params["azimuth_perp_r"])
                     if all([r_start_l, r_start_r, r_end_l, r_end_r]):
                         geom = self._create_polygon_from_corners(
                             [r_start_l, r_start_r, r_end_r, r_end_l],
@@ -2477,9 +2257,7 @@ class PhysicalGeometryMixin:
                                 "ref_mos": pavement_ref,
                                 "end_desig": reciprocal_desig,
                             }
-                            pre_threshold_features.append(
-                                ("PreThresholdRunway", geom, attributes)
-                            )
+                            pre_threshold_features.append(("PreThresholdRunway", geom, attributes))
                     else:
                         QgsMessageLog.logMessage(
                             f"Warning: Failed calculate corners for Pre-Threshold Pavement {reciprocal_desig}.",
@@ -2499,12 +2277,8 @@ class PhysicalGeometryMixin:
         if runway_width is not None and runway_width > 0:
             pre_threshold_area_features = []
             half_width = runway_width / 2.0
-            primary_desig = (
-                runway_name.split("/")[0] if "/" in runway_name else "Primary"
-            )
-            reciprocal_desig = (
-                runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
-            )
+            primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
+            reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
 
             if pre_area_len_1 > 1e-6:
                 try:
@@ -2527,9 +2301,7 @@ class PhysicalGeometryMixin:
                             "ref_mos": "MOS 8.16",
                             "end_desig": primary_desig,
                         }
-                        pre_threshold_area_features.append(
-                            ("PreThresholdArea", geom, attributes)
-                        )
+                        pre_threshold_area_features.append(("PreThresholdArea", geom, attributes))
                 except Exception as e:
                     QgsMessageLog.logMessage(
                         f"Warning: Error generating Pre-Threshold Area {primary_desig}: {e}",
@@ -2558,9 +2330,7 @@ class PhysicalGeometryMixin:
                             "ref_mos": "MOS 8.16",
                             "end_desig": reciprocal_desig,
                         }
-                        pre_threshold_area_features.append(
-                            ("PreThresholdArea", geom, attributes)
-                        )
+                        pre_threshold_area_features.append(("PreThresholdArea", geom, attributes))
                 except Exception as e:
                     QgsMessageLog.logMessage(
                         f"Warning: Error generating Pre-Threshold Area {reciprocal_desig}: {e}",
@@ -2571,43 +2341,20 @@ class PhysicalGeometryMixin:
             generated_elements.extend(pre_threshold_area_features)
 
         # --- 2. Runway Shoulders ---
-        if (
-            shoulder_width is not None
-            and shoulder_width > 0
-            and runway_width is not None
-            and runway_width > 0
-        ):
+        if shoulder_width is not None and shoulder_width > 0 and runway_width is not None and runway_width > 0:
             try:
                 half_width = runway_width / 2.0
-                phys_start_l = phys_p_start.project(
-                    half_width, rwy_params["azimuth_perp_l"]
-                )
-                phys_start_r = phys_p_start.project(
-                    half_width, rwy_params["azimuth_perp_r"]
-                )
-                phys_end_l = phys_p_end.project(
-                    half_width, rwy_params["azimuth_perp_l"]
-                )
-                phys_end_r = phys_p_end.project(
-                    half_width, rwy_params["azimuth_perp_r"]
-                )
+                phys_start_l = phys_p_start.project(half_width, rwy_params["azimuth_perp_l"])
+                phys_start_r = phys_p_start.project(half_width, rwy_params["azimuth_perp_r"])
+                phys_end_l = phys_p_end.project(half_width, rwy_params["azimuth_perp_l"])
+                phys_end_r = phys_p_end.project(half_width, rwy_params["azimuth_perp_r"])
                 if not all([phys_start_l, phys_start_r, phys_end_l, phys_end_r]):
-                    raise ValueError(
-                        "Failed to calculate physical pavement corners for shoulders."
-                    )
+                    raise ValueError("Failed to calculate physical pavement corners for shoulders.")
 
-                outer_start_l = phys_start_l.project(
-                    shoulder_width, rwy_params["azimuth_perp_l"]
-                )
-                outer_start_r = phys_start_r.project(
-                    shoulder_width, rwy_params["azimuth_perp_r"]
-                )
-                outer_end_l = phys_end_l.project(
-                    shoulder_width, rwy_params["azimuth_perp_l"]
-                )
-                outer_end_r = phys_end_r.project(
-                    shoulder_width, rwy_params["azimuth_perp_r"]
-                )
+                outer_start_l = phys_start_l.project(shoulder_width, rwy_params["azimuth_perp_l"])
+                outer_start_r = phys_start_r.project(shoulder_width, rwy_params["azimuth_perp_r"])
+                outer_end_l = phys_end_l.project(shoulder_width, rwy_params["azimuth_perp_l"])
+                outer_end_r = phys_end_r.project(shoulder_width, rwy_params["azimuth_perp_r"])
 
                 physical_refs = ols_dimensions.get_physical_refs()
                 shoulder_ref = physical_refs.get("shoulder", "MOS 6.2.4")
@@ -2627,13 +2374,9 @@ class PhysicalGeometryMixin:
                         outer_end_l,
                         phys_end_l,
                     ]
-                    left_shoulder_poly = self._create_polygon_from_corners(
-                        left_corners, f"Left Shoulder {log_name}"
-                    )
+                    left_shoulder_poly = self._create_polygon_from_corners(left_corners, f"Left Shoulder {log_name}")
                     if left_shoulder_poly:
-                        generated_elements.append(
-                            ("Shoulder", left_shoulder_poly, shoulder_attrs.copy())
-                        )
+                        generated_elements.append(("Shoulder", left_shoulder_poly, shoulder_attrs.copy()))
                 else:
                     QgsMessageLog.logMessage(
                         f"Warning: Failed calculate outer corners for left shoulder for {log_name}.",
@@ -2648,13 +2391,9 @@ class PhysicalGeometryMixin:
                         outer_end_r,
                         outer_start_r,
                     ]
-                    right_shoulder_poly = self._create_polygon_from_corners(
-                        right_corners, f"Right Shoulder {log_name}"
-                    )
+                    right_shoulder_poly = self._create_polygon_from_corners(right_corners, f"Right Shoulder {log_name}")
                     if right_shoulder_poly:
-                        generated_elements.append(
-                            ("Shoulder", right_shoulder_poly, shoulder_attrs.copy())
-                        )
+                        generated_elements.append(("Shoulder", right_shoulder_poly, shoulder_attrs.copy()))
                 else:
                     QgsMessageLog.logMessage(
                         f"Warning: Failed calculate outer corners for right shoulder for {log_name}.",
@@ -2686,9 +2425,7 @@ class PhysicalGeometryMixin:
             type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type1"))
             runway_width_for_strip = runway_data.get("width")
 
-            strip_dims = ols_dimensions.get_strip_params(
-                arc_num, type1_abbr, runway_width_for_strip
-            )
+            strip_dims = ols_dimensions.get_strip_params(arc_num, type1_abbr, runway_width_for_strip)
             runway_data["calculated_strip_dims"] = strip_dims
 
             if strip_dims is None:
@@ -2701,29 +2438,20 @@ class PhysicalGeometryMixin:
                 )
 
             if strip_dims and all(
-                strip_dims.get(dim) is not None
-                for dim in ["overall_width", "graded_width", "extension_length"]
+                strip_dims.get(dim) is not None for dim in ["overall_width", "graded_width", "extension_length"]
             ):
                 extension = strip_dims["extension_length"]
                 graded_width = strip_dims["graded_width"]
                 overall_width = strip_dims["overall_width"]
                 graded_half_width = graded_width / 2.0
                 overall_half_width = overall_width / 2.0
-                stopway_primary_end = self._non_negative_float(
-                    runway_data.get("stopway1_len"), 0.0
-                )
-                stopway_reciprocal_end = self._non_negative_float(
-                    runway_data.get("stopway2_len"), 0.0
-                )
+                stopway_primary_end = self._non_negative_float(runway_data.get("stopway1_len"), 0.0)
+                stopway_reciprocal_end = self._non_negative_float(runway_data.get("stopway2_len"), 0.0)
                 primary_strip_extension = extension + stopway_primary_end
                 reciprocal_strip_extension = extension + stopway_reciprocal_end
 
-                strip_end_center_p = phys_p_start.project(
-                    primary_strip_extension, rwy_params["azimuth_r_p"]
-                )
-                strip_end_center_r = phys_p_end.project(
-                    reciprocal_strip_extension, rwy_params["azimuth_p_r"]
-                )
+                strip_end_center_p = phys_p_start.project(primary_strip_extension, rwy_params["azimuth_r_p"])
+                strip_end_center_r = phys_p_end.project(reciprocal_strip_extension, rwy_params["azimuth_p_r"])
 
                 if strip_end_center_p and strip_end_center_r:
                     strip_length = strip_end_center_p.distance(strip_end_center_r)
@@ -2738,7 +2466,10 @@ class PhysicalGeometryMixin:
                         f"Graded Strip {log_name}",
                     )
                     if graded_strip_geom:
-                        graded_ref = f"{strip_dims.get('mos_graded_width_ref','')}; {strip_dims.get('mos_extension_length_ref','')}"
+                        graded_ref = (
+                            f"{strip_dims.get('mos_graded_width_ref', '')}; "
+                            f"{strip_dims.get('mos_extension_length_ref', '')}"
+                        )
                         # Use correct field names: 'rwy', 'desc', 'ref_mos'
                         graded_attrs = {
                             "rwy": runway_name,
@@ -2747,9 +2478,7 @@ class PhysicalGeometryMixin:
                             "len_m": round(strip_length, 3),
                             "ref_mos": graded_ref,
                         }
-                        generated_elements.append(
-                            ("GradedStrip", graded_strip_geom, graded_attrs)
-                        )
+                        generated_elements.append(("GradedStrip", graded_strip_geom, graded_attrs))
 
                     overall_strip_geom = self._create_runway_aligned_rectangle(
                         strip_end_center_p,
@@ -2759,7 +2488,10 @@ class PhysicalGeometryMixin:
                         f"Overall Strip {log_name}",
                     )
                     if overall_strip_geom:
-                        overall_ref = f"{strip_dims.get('mos_overall_width_ref','')}; {strip_dims.get('mos_extension_length_ref','')}"
+                        overall_ref = (
+                            f"{strip_dims.get('mos_overall_width_ref', '')}; "
+                            f"{strip_dims.get('mos_extension_length_ref', '')}"
+                        )
                         # Use correct field names: 'rwy', 'desc', 'ref_mos'
                         overall_attrs = {
                             "rwy": runway_name,
@@ -2768,13 +2500,15 @@ class PhysicalGeometryMixin:
                             "len_m": round(strip_length, 3),
                             "ref_mos": overall_ref,
                         }
-                        generated_elements.append(
-                            ("OverallStrip", overall_strip_geom, overall_attrs)
-                        )
+                        generated_elements.append(("OverallStrip", overall_strip_geom, overall_attrs))
 
                     flyover_width = (overall_width - graded_width) / 2.0
                     if flyover_width > 1e-6:
-                        flyover_ref = f"{strip_dims.get('mos_overall_width_ref','')}; {strip_dims.get('mos_graded_width_ref','')}; {strip_dims.get('mos_extension_length_ref','')}"
+                        flyover_ref = (
+                            f"{strip_dims.get('mos_overall_width_ref', '')}; "
+                            f"{strip_dims.get('mos_graded_width_ref', '')}; "
+                            f"{strip_dims.get('mos_extension_length_ref', '')}"
+                        )
                         flyover_attrs = {
                             "rwy": runway_name,
                             "desc": "Flyover Strip Area",
@@ -2783,21 +2517,11 @@ class PhysicalGeometryMixin:
                             "ref_mos": flyover_ref,
                         }
 
-                        left_inner_p = strip_end_center_p.project(
-                            graded_half_width, rwy_params["azimuth_perp_l"]
-                        )
-                        left_outer_p = strip_end_center_p.project(
-                            overall_half_width, rwy_params["azimuth_perp_l"]
-                        )
-                        left_outer_r = strip_end_center_r.project(
-                            overall_half_width, rwy_params["azimuth_perp_l"]
-                        )
-                        left_inner_r = strip_end_center_r.project(
-                            graded_half_width, rwy_params["azimuth_perp_l"]
-                        )
-                        if all(
-                            [left_inner_p, left_outer_p, left_outer_r, left_inner_r]
-                        ):
+                        left_inner_p = strip_end_center_p.project(graded_half_width, rwy_params["azimuth_perp_l"])
+                        left_outer_p = strip_end_center_p.project(overall_half_width, rwy_params["azimuth_perp_l"])
+                        left_outer_r = strip_end_center_r.project(overall_half_width, rwy_params["azimuth_perp_l"])
+                        left_inner_r = strip_end_center_r.project(graded_half_width, rwy_params["azimuth_perp_l"])
+                        if all([left_inner_p, left_outer_p, left_outer_r, left_inner_r]):
                             left_flyover_geom = self._create_polygon_from_corners(
                                 [
                                     left_inner_p,
@@ -2816,18 +2540,10 @@ class PhysicalGeometryMixin:
                                     )
                                 )
 
-                        right_inner_p = strip_end_center_p.project(
-                            graded_half_width, rwy_params["azimuth_perp_r"]
-                        )
-                        right_inner_r = strip_end_center_r.project(
-                            graded_half_width, rwy_params["azimuth_perp_r"]
-                        )
-                        right_outer_r = strip_end_center_r.project(
-                            overall_half_width, rwy_params["azimuth_perp_r"]
-                        )
-                        right_outer_p = strip_end_center_p.project(
-                            overall_half_width, rwy_params["azimuth_perp_r"]
-                        )
+                        right_inner_p = strip_end_center_p.project(graded_half_width, rwy_params["azimuth_perp_r"])
+                        right_inner_r = strip_end_center_r.project(graded_half_width, rwy_params["azimuth_perp_r"])
+                        right_outer_r = strip_end_center_r.project(overall_half_width, rwy_params["azimuth_perp_r"])
+                        right_outer_p = strip_end_center_p.project(overall_half_width, rwy_params["azimuth_perp_r"])
                         if all(
                             [
                                 right_inner_p,
@@ -2885,9 +2601,7 @@ class PhysicalGeometryMixin:
         try:
             type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type1"))
             type2_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type2"))
-            resa_dims = ols_dimensions.get_resa_params(
-                int(runway_data.get("arc_num", 0)), type1_abbr, type2_abbr
-            )
+            resa_dims = ols_dimensions.get_resa_params(int(runway_data.get("arc_num", 0)), type1_abbr, type2_abbr)
 
             if (
                 resa_dims
@@ -2904,13 +2618,13 @@ class PhysicalGeometryMixin:
                 if resa_length is None or resa_length <= 0:
                     raise ValueError("Required RESA length missing or invalid.")
 
-                primary_desig = (
-                    runway_name.split("/")[0] if "/" in runway_name else "Primary"
+                primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
+                reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
+                resa_ref = (
+                    f"{resa_dims.get('mos_applicability_ref', '')}; "
+                    f"{resa_dims.get('mos_width_ref', '')}; "
+                    f"{resa_dims.get('mos_length_ref', '')}"
                 )
-                reciprocal_desig = (
-                    runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
-                )
-                resa_ref = f"{resa_dims.get('mos_applicability_ref','')}; {resa_dims.get('mos_width_ref','')}; {resa_dims.get('mos_length_ref','')}"
                 # Use correct field names: 'rwy', 'desc', 'ref_mos'
                 resa_base_attrs = {
                     "rwy": runway_name,

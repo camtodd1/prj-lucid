@@ -76,9 +76,7 @@ class CnsTableMixin:
             return
 
         cns_table.setColumnCount(4)
-        cns_table.setHorizontalHeaderLabels(
-            ["Facility Type", "Easting/X", "Northing/Y", "Elev (AMSL)"]
-        )
+        cns_table.setHorizontalHeaderLabels(["Facility Type", "Easting/X", "Northing/Y", "Elev (AMSL)"])
         cns_table.setAlternatingRowColors(True)
         cns_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         cns_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -90,14 +88,10 @@ class CnsTableMixin:
         header = cns_table.horizontalHeader()
         if header:
             header.setStretchLastSection(False)
-            header.setSectionResizeMode(
-                0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
-            )
+            header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
             header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
             header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Stretch)
-            header.setSectionResizeMode(
-                3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
-            )
+            header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
         add_button.clicked.connect(self.add_cns_row)
         remove_button.clicked.connect(self.remove_cns_rows)
         add_button.setToolTip("Add a new row to enter a CNS facility manually.")
@@ -142,9 +136,7 @@ class CnsTableMixin:
             cns_table.setItem(row_position, 2, item_y)
 
             item_elev = QTableWidgetItem("")
-            item_elev.setToolTip(
-                "Enter Elevation AMSL (Optional). Leave blank if unknown."
-            )
+            item_elev.setToolTip("Enter Elevation AMSL (Optional). Leave blank if unknown.")
             cns_table.setItem(row_position, 3, item_elev)
 
             cns_table.scrollToItem(item_x, QAbstractItemView.ScrollHint.EnsureVisible)
@@ -178,11 +170,10 @@ class CnsTableMixin:
         reply = QMessageBox.question(
             self,
             self.tr("Confirm Removal"),
-            self.tr(
-                "Are you sure you want to remove the {n} selected CNS facility row(s)?"
-            ).format(n=len(selected_rows)),
-            QtWidgets.QMessageBox.StandardButton.Yes
-            | QtWidgets.QMessageBox.StandardButton.No,
+            self.tr("Are you sure you want to remove the {n} selected CNS facility row(s)?").format(
+                n=len(selected_rows)
+            ),
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
             QtWidgets.QMessageBox.StandardButton.No,
         )
 
@@ -244,11 +235,7 @@ class CnsTableMixin:
         error_in_row = False
         try:
             combo_box = cns_table.cellWidget(row, 0)
-            if (
-                isinstance(combo_box, QComboBox)
-                and combo_box.currentIndex() > 0
-                and combo_box.currentText()
-            ):
+            if isinstance(combo_box, QComboBox) and combo_box.currentIndex() > 0 and combo_box.currentText():
                 facility_type = combo_box.currentText()
             else:
                 valid_row = False
@@ -284,17 +271,10 @@ class CnsTableMixin:
         except Exception as e:
             valid_row = False
             error_in_row = True
-            QgsMessageLog.logMessage(
-                f"CNS Row {row+1} Error: {e}", DIALOG_LOG_TAG, level=Qgis.Critical
-            )
+            QgsMessageLog.logMessage(f"CNS Row {row+1} Error: {e}", DIALOG_LOG_TAG, level=Qgis.Critical)
 
         if valid_row and point_geom_project_crs:
-            safe_type = (
-                facility_type.replace(" ", "_")
-                .replace("-", "")
-                .replace("(", "")
-                .replace(")", "")
-            )
+            safe_type = facility_type.replace(" ", "_").replace("-", "").replace("(", "").replace(")", "")
             return {
                 "valid": True,
                 "facility": {
@@ -307,9 +287,7 @@ class CnsTableMixin:
             }
         return {"valid": False, "error": error_in_row}
 
-    def _show_cns_skip_message(
-        self, rows_with_errors: int, skipped_rows: int, total_rows: int
-    ) -> None:
+    def _show_cns_skip_message(self, rows_with_errors: int, skipped_rows: int, total_rows: int) -> None:
         if rows_with_errors > 0:
             QMessageBox.warning(
                 self,
@@ -321,9 +299,7 @@ class CnsTableMixin:
                 ),
             )
         elif skipped_rows > 0 and skipped_rows == total_rows and total_rows > 0:
-            QMessageBox.information(
-                self, "CNS Data Info", "All CNS rows skipped (missing required data)."
-            )
+            QMessageBox.information(self, "CNS Data Info", "All CNS rows skipped (missing required data).")
         elif skipped_rows > 0:
             QMessageBox.information(
                 self,

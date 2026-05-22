@@ -37,14 +37,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
         self.index = index
         self.numeric_validator = QtGui.QDoubleValidator()
-        self.numeric_validator.setNotation(
-            QtGui.QDoubleValidator.Notation.StandardNotation
-        )
+        self.numeric_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
         self.coord_validator = coord_validator
         self.distance_validator = QtGui.QDoubleValidator(0.0, 9999.9, 1, self)
-        self.distance_validator.setNotation(
-            QtGui.QDoubleValidator.Notation.StandardNotation
-        )
+        self.distance_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
 
         self.setObjectName(f"groupBox_runway_{self.index}")
         self.setSizePolicy(
@@ -65,25 +61,15 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         gridLayout_Coords.setColumnStretch(2, 1)
 
         label_designation_row = QtWidgets.QLabel("Designation:")
-        label_designation_row.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_designation_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         label_easting_row = QtWidgets.QLabel("Easting:")
-        label_easting_row.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_easting_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         label_northing_row = QtWidgets.QLabel("Northing:")
-        label_northing_row.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_northing_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         label_elevation_row = QtWidgets.QLabel("Elevation (m):")
-        label_elevation_row.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_elevation_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         label_displaced_row = QtWidgets.QLabel("Displaced (m):")
-        label_displaced_row.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_displaced_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         label_pre_threshold_area_row = QtWidgets.QLabel("Pre-threshold Area (m):")
         label_pre_threshold_area_row.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
@@ -127,9 +113,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.rec_east_le.setValidator(self.coord_validator)
 
         self.rec_north_le = QtWidgets.QLineEdit()
-        self.rec_north_le.setObjectName(
-            f"lineEdit_reciprocal_thr_northing_{self.index}"
-        )
+        self.rec_north_le.setObjectName(f"lineEdit_reciprocal_thr_northing_{self.index}")
         self.rec_north_le.setPlaceholderText("e.g., 124567.90")
         self.rec_north_le.setToolTip("Northing coordinate of reciprocal threshold")
         self.rec_north_le.setValidator(self.coord_validator)
@@ -165,9 +149,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.thr_pre_area_1_le = QtWidgets.QLineEdit()
         self.thr_pre_area_1_le.setObjectName(f"lineEdit_thr_pre_area_1_{self.index}")
         self.thr_pre_area_1_le.setPlaceholderText("e.g., 60")
-        self.thr_pre_area_1_le.setToolTip(
-            "Length of pre-threshold area for primary end (meters). Leave blank if none."
-        )
+        self.thr_pre_area_1_le.setToolTip("Length of pre-threshold area for primary end (meters). Leave blank if none.")
         self.thr_pre_area_1_le.setValidator(self.distance_validator)
 
         self.thr_pre_area_2_le = QtWidgets.QLineEdit()
@@ -208,9 +190,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
         self.rwy_name_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.rwy_name_lbl.setObjectName(f"label_rwy_name_{self.index}")
-        self.rwy_name_lbl.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        self.rwy_name_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         font = self.rwy_name_lbl.font()
         font.setBold(True)
         self.rwy_name_lbl.setFont(font)
@@ -224,9 +204,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         current_details_row = 0
 
         label_rwy_dist_text = QtWidgets.QLabel("Length (m):")
-        label_rwy_dist_text.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_rwy_dist_text.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.dist_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.dist_lbl.setObjectName(f"label_rwy_distance_{self.index}")
         detailsLayout.addWidget(label_rwy_dist_text, current_details_row, 0)
@@ -234,9 +212,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         current_details_row += 1
 
         label_rwy_azim_text = QtWidgets.QLabel("Azimuth (deg):")
-        label_rwy_azim_text.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_rwy_azim_text.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.azim_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.azim_lbl.setObjectName(f"label_rwy_azimuth_{self.index}")
         detailsLayout.addWidget(label_rwy_azim_text, current_details_row, 0)
@@ -244,9 +220,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         current_details_row += 1
 
         label_runway_width = QtWidgets.QLabel("Runway Width (m):")
-        label_runway_width.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_runway_width.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.width_le = QtWidgets.QLineEdit()
         self.width_le.setObjectName(f"lineEdit_runway_width_{self.index}")
         self.width_le.setToolTip("Enter actual runway width (meters).")
@@ -258,14 +232,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         current_details_row += 1
 
         label_runway_shoulder = QtWidgets.QLabel("Runway Shoulder (m):")
-        label_runway_shoulder.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_runway_shoulder.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.shoulder_le = QtWidgets.QLineEdit()
         self.shoulder_le.setObjectName(f"lineEdit_rwy_shoulder_{self.index}")
-        self.shoulder_le.setToolTip(
-            "Enter width of runway shoulder (each side, if applicable)."
-        )
+        self.shoulder_le.setToolTip("Enter width of runway shoulder (each side, if applicable).")
         self.shoulder_le.setValidator(self.distance_validator)
         detailsLayout.addWidget(label_runway_shoulder, current_details_row, 0)
         detailsLayout.addWidget(self.shoulder_le, current_details_row, 1)
@@ -290,9 +260,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
     def _add_arc_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
         label_arc_num = QtWidgets.QLabel("ARC Number:")
-        label_arc_num.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_arc_num.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.arc_num_combo = QtWidgets.QComboBox()
         self.arc_num_combo.setObjectName(f"comboBox_arc_num_{self.index}")
         for label, value in [
@@ -309,9 +277,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         layout.addWidget(self.arc_num_combo, row, 1)
 
         label_arc_let = QtWidgets.QLabel("ARC Letter:")
-        label_arc_let.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_arc_let.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.arc_let_combo = QtWidgets.QComboBox()
         self.arc_let_combo.setObjectName(f"comboBox_arc_let_{self.index}")
         for label, value in [
@@ -330,13 +296,9 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         layout.addWidget(self.arc_let_combo, row + 1, 1)
 
         label_surface_category = QtWidgets.QLabel("Surface Category:")
-        label_surface_category.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_surface_category.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.surface_category_combo = QtWidgets.QComboBox()
-        self.surface_category_combo.setObjectName(
-            f"comboBox_surface_category_{self.index}"
-        )
+        self.surface_category_combo.setObjectName(f"comboBox_surface_category_{self.index}")
         self.surface_category_combo.addItems([""] + list(RUNWAY_SURFACE_MATERIALS))
         self.surface_category_combo.setToolTip("Select runway surface category.")
         self.surface_category_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
@@ -344,16 +306,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         layout.addWidget(self.surface_category_combo, row + 2, 1)
 
         label_surface_material = QtWidgets.QLabel("Surface Material:")
-        label_surface_material.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        label_surface_material.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.surface_material_combo = QtWidgets.QComboBox()
-        self.surface_material_combo.setObjectName(
-            f"comboBox_surface_material_{self.index}"
-        )
-        self.surface_material_combo.setToolTip(
-            "Select runway surface material for the chosen category."
-        )
+        self.surface_material_combo.setObjectName(f"comboBox_surface_material_{self.index}")
+        self.surface_material_combo.setToolTip("Select runway surface material for the chosen category.")
         self.surface_material_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self.surface_category_combo.setCurrentText(DEFAULT_RUNWAY_SURFACE_CATEGORY)
         self._refresh_surface_material_options(
@@ -373,9 +329,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         ]
         self.type1_lbl = QtWidgets.QLabel("(Primary End) Type:")
         self.type1_lbl.setObjectName(f"label_type_desig1_{self.index}")
-        self.type1_lbl.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        self.type1_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.type1_combo = QtWidgets.QComboBox()
         self.type1_combo.setObjectName(f"comboBox_type_desig1_{self.index}")
         self.type1_combo.addItems(runway_types)
@@ -386,9 +340,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
         self.type2_lbl = QtWidgets.QLabel("(Reciprocal End) Type:")
         self.type2_lbl.setObjectName(f"label_type_desig2_{self.index}")
-        self.type2_lbl.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
+        self.type2_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.type2_combo = QtWidgets.QComboBox()
         self.type2_combo.setObjectName(f"comboBox_type_desig2_{self.index}")
         self.type2_combo.addItems(runway_types)
@@ -416,17 +368,13 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.clearway1_len_le = QtWidgets.QLineEdit()
         self.clearway1_len_le.setObjectName(f"lineEdit_clearway1_len_{self.index}")
         self.clearway1_len_le.setPlaceholderText("0")
-        self.clearway1_len_le.setToolTip(
-            "Clearway length beyond the primary physical runway end."
-        )
+        self.clearway1_len_le.setToolTip("Clearway length beyond the primary physical runway end.")
         self.clearway1_len_le.setValidator(self.distance_validator)
 
         self.clearway2_len_le = QtWidgets.QLineEdit()
         self.clearway2_len_le.setObjectName(f"lineEdit_clearway2_len_{self.index}")
         self.clearway2_len_le.setPlaceholderText("0")
-        self.clearway2_len_le.setToolTip(
-            "Clearway length beyond the reciprocal physical runway end."
-        )
+        self.clearway2_len_le.setToolTip("Clearway length beyond the reciprocal physical runway end.")
         self.clearway2_len_le.setValidator(self.distance_validator)
         declared_layout.addWidget(clearway_label, 1, 0)
         declared_layout.addWidget(self.clearway1_len_le, 1, 1)
@@ -436,17 +384,13 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.stopway1_len_le = QtWidgets.QLineEdit()
         self.stopway1_len_le.setObjectName(f"lineEdit_stopway1_len_{self.index}")
         self.stopway1_len_le.setPlaceholderText("0")
-        self.stopway1_len_le.setToolTip(
-            "Stopway length beyond the primary physical runway end."
-        )
+        self.stopway1_len_le.setToolTip("Stopway length beyond the primary physical runway end.")
         self.stopway1_len_le.setValidator(self.distance_validator)
 
         self.stopway2_len_le = QtWidgets.QLineEdit()
         self.stopway2_len_le.setObjectName(f"lineEdit_stopway2_len_{self.index}")
         self.stopway2_len_le.setPlaceholderText("0")
-        self.stopway2_len_le.setToolTip(
-            "Stopway length beyond the reciprocal physical runway end."
-        )
+        self.stopway2_len_le.setToolTip("Stopway length beyond the reciprocal physical runway end.")
         self.stopway2_len_le.setValidator(self.distance_validator)
         declared_layout.addWidget(stopway_label, 2, 0)
         declared_layout.addWidget(self.stopway1_len_le, 2, 1)
@@ -454,44 +398,28 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
         takeoff_label = QtWidgets.QLabel("Takeoff available:")
         self.takeoff_available_1_cb = QtWidgets.QCheckBox()
-        self.takeoff_available_1_cb.setObjectName(
-            f"checkBox_takeoff_available_1_{self.index}"
-        )
+        self.takeoff_available_1_cb.setObjectName(f"checkBox_takeoff_available_1_{self.index}")
         self.takeoff_available_1_cb.setChecked(True)
-        self.takeoff_available_1_cb.setToolTip(
-            "Takeoff is available in the primary runway direction."
-        )
+        self.takeoff_available_1_cb.setToolTip("Takeoff is available in the primary runway direction.")
 
         self.takeoff_available_2_cb = QtWidgets.QCheckBox()
-        self.takeoff_available_2_cb.setObjectName(
-            f"checkBox_takeoff_available_2_{self.index}"
-        )
+        self.takeoff_available_2_cb.setObjectName(f"checkBox_takeoff_available_2_{self.index}")
         self.takeoff_available_2_cb.setChecked(True)
-        self.takeoff_available_2_cb.setToolTip(
-            "Takeoff is available in the reciprocal runway direction."
-        )
+        self.takeoff_available_2_cb.setToolTip("Takeoff is available in the reciprocal runway direction.")
         declared_layout.addWidget(takeoff_label, 3, 0)
         declared_layout.addWidget(self.takeoff_available_1_cb, 3, 1)
         declared_layout.addWidget(self.takeoff_available_2_cb, 3, 2)
 
         landing_label = QtWidgets.QLabel("Landing available:")
         self.landing_available_1_cb = QtWidgets.QCheckBox()
-        self.landing_available_1_cb.setObjectName(
-            f"checkBox_landing_available_1_{self.index}"
-        )
+        self.landing_available_1_cb.setObjectName(f"checkBox_landing_available_1_{self.index}")
         self.landing_available_1_cb.setChecked(True)
-        self.landing_available_1_cb.setToolTip(
-            "Landing is available toward the primary runway threshold."
-        )
+        self.landing_available_1_cb.setToolTip("Landing is available toward the primary runway threshold.")
 
         self.landing_available_2_cb = QtWidgets.QCheckBox()
-        self.landing_available_2_cb.setObjectName(
-            f"checkBox_landing_available_2_{self.index}"
-        )
+        self.landing_available_2_cb.setObjectName(f"checkBox_landing_available_2_{self.index}")
         self.landing_available_2_cb.setChecked(True)
-        self.landing_available_2_cb.setToolTip(
-            "Landing is available toward the reciprocal runway threshold."
-        )
+        self.landing_available_2_cb.setToolTip("Landing is available toward the reciprocal runway threshold.")
         declared_layout.addWidget(landing_label, 4, 0)
         declared_layout.addWidget(self.landing_available_1_cb, 4, 1)
         declared_layout.addWidget(self.landing_available_2_cb, 4, 2)
@@ -535,9 +463,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.type2_combo,
         ]:
             combo.currentIndexChanged.connect(self.inputChanged.emit)
-        self.surface_category_combo.currentIndexChanged.connect(
-            self._handle_surface_category_changed
-        )
+        self.surface_category_combo.currentIndexChanged.connect(self._handle_surface_category_changed)
         self.remove_button.clicked.connect(self._emit_remove_request)
 
     def _arc_number_for_length(self, length_m: float) -> Optional[str]:
@@ -590,9 +516,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             widget.blockSignals(True)
         try:
             self.desig_le.setText(data.get("designator_str", ""))
-            suffix_idx = self.suffix_combo.findText(
-                data.get("suffix", ""), QtCore.Qt.MatchFlag.MatchFixedString
-            )
+            suffix_idx = self.suffix_combo.findText(data.get("suffix", ""), QtCore.Qt.MatchFlag.MatchFixedString)
             self.suffix_combo.setCurrentIndex(suffix_idx if suffix_idx >= 0 else 0)
             self.thr_east_le.setText(data.get("thr_easting", ""))
             self.thr_north_le.setText(data.get("thr_northing", ""))
@@ -610,18 +534,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.clearway2_len_le.setText(data.get("clearway2_len", ""))
             self.stopway1_len_le.setText(data.get("stopway1_len", ""))
             self.stopway2_len_le.setText(data.get("stopway2_len", ""))
-            self.takeoff_available_1_cb.setChecked(
-                self._bool_from_saved_value(data.get("takeoff_available_1", True))
-            )
-            self.takeoff_available_2_cb.setChecked(
-                self._bool_from_saved_value(data.get("takeoff_available_2", True))
-            )
-            self.landing_available_1_cb.setChecked(
-                self._bool_from_saved_value(data.get("landing_available_1", True))
-            )
-            self.landing_available_2_cb.setChecked(
-                self._bool_from_saved_value(data.get("landing_available_2", True))
-            )
+            self.takeoff_available_1_cb.setChecked(self._bool_from_saved_value(data.get("takeoff_available_1", True)))
+            self.takeoff_available_2_cb.setChecked(self._bool_from_saved_value(data.get("takeoff_available_2", True)))
+            self.landing_available_1_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_1", True)))
+            self.landing_available_2_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_2", True)))
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
             self._set_combo_text(
@@ -630,9 +546,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             )
             self._refresh_surface_material_options(
                 self.surface_category_combo.currentText(),
-                selected_material=data.get(
-                    "surface_material", DEFAULT_RUNWAY_SURFACE_MATERIAL
-                ),
+                selected_material=data.get("surface_material", DEFAULT_RUNWAY_SURFACE_MATERIAL),
             )
             self._set_combo_text(self.type1_combo, data.get("type1", ""))
             self._set_combo_text(self.type2_combo, data.get("type2", ""))
@@ -642,16 +556,12 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.inputChanged.emit()
 
     def update_display_labels(self, results: Dict[str, str]):
-        self.rec_desig_hdr_lbl.setText(
-            results.get("reciprocal_desig_full", NA_PLACEHOLDER)
-        )
+        self.rec_desig_hdr_lbl.setText(results.get("reciprocal_desig_full", NA_PLACEHOLDER))
         self.rwy_name_lbl.setText(results.get("runway_name", WIDGET_MISSING_MSG))
         self.dist_lbl.setText(results.get("distance", WIDGET_MISSING_MSG))
         self.azim_lbl.setText(results.get("azimuth", WIDGET_MISSING_MSG))
         self.type1_lbl.setText(results.get("type1_label_text", "(Primary End) Type:"))
-        self.type2_lbl.setText(
-            results.get("type2_label_text", "(Reciprocal End) Type:")
-        )
+        self.type2_lbl.setText(results.get("type2_label_text", "(Reciprocal End) Type:"))
 
     def _input_widgets(self):
         return [
@@ -686,14 +596,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         ]
 
     def _handle_surface_category_changed(self):
-        self._refresh_surface_material_options(
-            self.surface_category_combo.currentText()
-        )
+        self._refresh_surface_material_options(self.surface_category_combo.currentText())
         self.inputChanged.emit()
 
-    def _refresh_surface_material_options(
-        self, category: str, selected_material: str = ""
-    ) -> None:
+    def _refresh_surface_material_options(self, category: str, selected_material: str = "") -> None:
         current_material = selected_material or self.surface_material_combo.currentText()
         self.surface_material_combo.blockSignals(True)
         try:

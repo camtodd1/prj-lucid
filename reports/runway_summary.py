@@ -49,15 +49,9 @@ def _build_runway_summary(runway_data: Dict[str, Any]) -> Dict[str, Any]:
         "runway": runway_name,
         "designators": _split_designators(runway_name),
         "bearing_primary": _first_declared_value(declared_distances, "primary", "bearing_deg"),
-        "bearing_reciprocal": _first_declared_value(
-            declared_distances, "reciprocal", "bearing_deg"
-        ),
-        "threshold_length": _first_non_none(
-            record.get("threshold_len_m") for record in declared_distances
-        ),
-        "physical_length": _first_non_none(
-            record.get("physical_len_m") for record in declared_distances
-        ),
+        "bearing_reciprocal": _first_declared_value(declared_distances, "reciprocal", "bearing_deg"),
+        "threshold_length": _first_non_none(record.get("threshold_len_m") for record in declared_distances),
+        "physical_length": _first_non_none(record.get("physical_len_m") for record in declared_distances),
         "width": runway_data.get("width"),
         "thresholds": [
             {

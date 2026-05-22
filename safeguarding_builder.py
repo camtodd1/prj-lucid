@@ -58,6 +58,7 @@ from .safeguarding_builder_dialog import SafeguardingBuilderDialog
 # Plugin-specific constant for logging
 PLUGIN_TAG = "SafeguardingBuilder"
 
+
 # ============================================================
 # Main Plugin Class - SafeguardingBuilder
 # ============================================================
@@ -114,9 +115,7 @@ class SafeguardingBuilder(
     def _init_locale(self):
         """Load translation file."""
         locale_code = QSettings().value("locale/userLocale", "")[0:2]
-        locale_path = os.path.join(
-            self.plugin_dir, "i18n", f"SafeguardingBuilder_{locale_code}.qm"
-        )
+        locale_path = os.path.join(self.plugin_dir, "i18n", f"SafeguardingBuilder_{locale_code}.qm")
         if os.path.exists(locale_path):
             self.translator = QTranslator()
             if self.translator.load(locale_path):
@@ -241,9 +240,7 @@ class SafeguardingBuilder(
             try:
                 self.dlg.deleteLater()
             except Exception as e:
-                QgsMessageLog.logMessage(
-                    f"Error cleaning dialog: {e}", PLUGIN_TAG, level=Qgis.Warning
-                )
+                QgsMessageLog.logMessage(f"Error cleaning dialog: {e}", PLUGIN_TAG, level=Qgis.Warning)
             self.dlg = None
         self.successfully_generated_layers = []
 
@@ -252,9 +249,7 @@ class SafeguardingBuilder(
         if self.dlg is not None and self.dlg.isVisible():
             self.dlg.raise_()
             self.dlg.activateWindow()
-            QgsMessageLog.logMessage(
-                "Dialog already open.", PLUGIN_TAG, level=Qgis.Info
-            )
+            QgsMessageLog.logMessage("Dialog already open.", PLUGIN_TAG, level=Qgis.Info)
             return
 
         self.successfully_generated_layers = []  # Reset layers list
@@ -293,9 +288,7 @@ class SafeguardingBuilder(
                 QMessageBox.critical(
                     self.dlg,
                     self.tr("UI Error"),
-                    self.tr(
-                        "Main 'Generate' button is missing from the dialog. Plugin cannot function."
-                    ),
+                    self.tr("Main 'Generate' button is missing from the dialog. Plugin cannot function."),
                 )
                 self.dlg.deleteLater()  # Clean up the partially created dialog
                 self.dlg = None
@@ -306,9 +299,7 @@ class SafeguardingBuilder(
             self.dlg.finished.connect(self.dialog_finished)
 
         self.dlg.show()
-        QgsMessageLog.logMessage(
-            "Safeguarding Builder dialog shown.", PLUGIN_TAG, level=Qgis.Info
-        )
+        QgsMessageLog.logMessage("Safeguarding Builder dialog shown.", PLUGIN_TAG, level=Qgis.Info)
 
     def dialog_finished(self, result: int):
         """Slot connected to the dialog's finished signal for cleanup."""
@@ -352,9 +343,7 @@ class SafeguardingBuilder(
             return None
 
         threshold_elevations: List[float] = []
-        missing_elev_rwy_summaries: List[str] = (
-            []
-        )  # Store summary strings for missing elevations
+        missing_elev_rwy_summaries: List[str] = []  # Store summary strings for missing elevations
 
         for rwy_data in runway_data_list:
             # Use validated keys 'thr_elev_1' and 'thr_elev_2'
@@ -362,9 +351,7 @@ class SafeguardingBuilder(
             rec_thr_elev = rwy_data.get("thr_elev_2")
 
             # Generate a name for logging/reporting
-            rwy_name = rwy_data.get(
-                "short_name", f"RWY Index {rwy_data.get('original_index', '?')}"
-            )
+            rwy_name = rwy_data.get("short_name", f"RWY Index {rwy_data.get('original_index', '?')}")
 
             # Check if the retrieved values are valid floats
             valid_thr = isinstance(thr_elev, (int, float))
@@ -383,9 +370,7 @@ class SafeguardingBuilder(
                     missing_parts.append("THR1")
                 if not valid_rec:
                     missing_parts.append("THR2")
-                missing_elev_rwy_summaries.append(
-                    f"{rwy_name} ({'/'.join(missing_parts)})"
-                )
+                missing_elev_rwy_summaries.append(f"{rwy_name} ({'/'.join(missing_parts)})")
 
         # --- Post-Loop Checks and Logging ---
 
@@ -400,9 +385,7 @@ class SafeguardingBuilder(
             if self.iface:
                 self.iface.messageBar().pushMessage(
                     self.tr("Error"),
-                    self.tr(
-                        "Cannot calculate Reference Elevation Datum: No valid threshold elevations found."
-                    ),
+                    self.tr("Cannot calculate Reference Elevation Datum: No valid threshold elevations found."),
                     level=Qgis.Critical,
                     duration=10,
                 )
@@ -496,9 +479,7 @@ class SafeguardingBuilder(
             self._log_critical("Processing aborted: project CRS is invalid or not set.")
             self.iface.messageBar().pushMessage(
                 self.tr("Error"),
-                self.tr(
-                    "Project CRS is invalid or not set. Please set a valid Projected CRS."
-                ),
+                self.tr("Project CRS is invalid or not set. Please set a valid Projected CRS."),
                 level=Qgis.Critical,
                 duration=10,
             )
@@ -542,9 +523,7 @@ class SafeguardingBuilder(
                 )
                 return
         except Exception as e:
-            self._log_critical(
-                f"Processing aborted: failed to read input data: {e}\n{traceback.format_exc()}"
-            )
+            self._log_critical(f"Processing aborted: failed to read input data: {e}\n{traceback.format_exc()}")
             self.iface.messageBar().pushMessage(
                 self.tr("Error"),
                 self.tr("Failed to retrieve input data. See log for details."),
@@ -629,9 +608,7 @@ class SafeguardingBuilder(
 
             met_layers_created_ok = False
             if met_point is not None:
-                met_group = main_group.addGroup(
-                    self.tr("Meteorological Instrument Station")
-                )
+                met_group = main_group.addGroup(self.tr("Meteorological Instrument Station"))
                 if met_group is not None:
                     self._stage_layer_tree_node(met_group)
                     met_layers_created_ok, _ = self.process_met_station_surfaces(
@@ -644,14 +621,10 @@ class SafeguardingBuilder(
                         level=Qgis.Warning,
                     )
             else:
-                self._log(
-                    "MET skipped: no MET coordinates provided; MET station surfaces not generated."
-                )
+                self._log("MET skipped: no MET coordinates provided; MET station surfaces not generated.")
 
-            processed_runway_data_list, any_runway_base_data_ok = (
-                self._process_runways_part1(
-                    main_group, project, target_crs, icao_code, runway_input_list
-                )
+            processed_runway_data_list, any_runway_base_data_ok = self._process_runways_part1(
+                main_group, project, target_crs, icao_code, runway_input_list
             )
 
             if any_runway_base_data_ok:
@@ -674,18 +647,14 @@ class SafeguardingBuilder(
 
             ofz_group = None
             if guideline_groups.get("F") is not None:
-                ofz_group = guideline_groups["F"].addGroup(
-                    self.tr("OLS Obstacle Free Zone")
-                )
+                ofz_group = guideline_groups["F"].addGroup(self.tr("OLS Obstacle Free Zone"))
                 self._stage_layer_tree_node(ofz_group)
 
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl, runway_input_list
             )
             pa_runways_exist = any(
-                "PA" in rwy.get("type1", "") or "PA" in rwy.get("type2", "")
-                for rwy in runway_input_list
-                if rwy
+                "PA" in rwy.get("type1", "") or "PA" in rwy.get("type2", "") for rwy in runway_input_list if rwy
             )
             if self.reference_elevation_datum is None and pa_runways_exist:
                 QgsMessageLog.logMessage(
@@ -695,9 +664,7 @@ class SafeguardingBuilder(
                 )
                 self.iface.messageBar().pushMessage(
                     self.tr("Error"),
-                    self.tr(
-                        "Reference Elevation Datum calculation failed. Cannot generate OLS for precision runways."
-                    ),
+                    self.tr("Reference Elevation Datum calculation failed. Cannot generate OLS for precision runways."),
                     level=Qgis.Critical,
                     duration=10,
                 )
@@ -758,8 +725,6 @@ class SafeguardingBuilder(
     # Helper Methods
     # ============================================================
 
-
-
     def _process_airport_guidelines(
         self,
         arp_point: Optional[QgsPointXY],
@@ -773,29 +738,19 @@ class SafeguardingBuilder(
         guideline_d_processed = False
         guideline_g_processed = False
         if arp_point is not None and guideline_groups.get("C") is not None:
-            self._log(
-                f"Guideline C Wildlife: generating from ARP ({arp_point.x():.3f}, {arp_point.y():.3f})."
-            )
-            guideline_c_processed = self.process_guideline_c(
-                arp_point, icao_code, target_crs, guideline_groups["C"]
-            )
+            self._log(f"Guideline C Wildlife: generating from ARP ({arp_point.x():.3f}, {arp_point.y():.3f}).")
+            guideline_c_processed = self.process_guideline_c(arp_point, icao_code, target_crs, guideline_groups["C"])
             if not guideline_c_processed:
                 self._log_warning(
                     "Guideline C Wildlife failed: no zone layers were created. Check preceding Wildlife messages."
                 )
         elif arp_point is None and guideline_groups.get("C") is not None:
-            self._log(
-                "Guideline C Wildlife skipped: ARP coordinates missing; wildlife zones not generated."
-            )
+            self._log("Guideline C Wildlife skipped: ARP coordinates missing; wildlife zones not generated.")
 
         if arp_point is not None and guideline_groups.get("D") is not None:
-            guideline_d_processed = self.process_guideline_d(
-                arp_point, icao_code, target_crs, guideline_groups["D"]
-            )
+            guideline_d_processed = self.process_guideline_d(arp_point, icao_code, target_crs, guideline_groups["D"])
         elif arp_point is None and guideline_groups.get("D") is not None:
-            self._log(
-                "Guideline D Wind Turbine skipped: ARP coordinates missing; turbine zone not generated."
-            )
+            self._log("Guideline D Wind Turbine skipped: ARP coordinates missing; turbine zone not generated.")
 
         if cns_input_list and guideline_groups.get("G") is not None:
             try:
@@ -845,9 +800,7 @@ class SafeguardingBuilder(
                     )
                     self.iface.messageBar().pushMessage(
                         self.tr("Error"),
-                        self.tr(
-                            "Failed to generate airport-wide OLS surfaces. Check logs."
-                        ),
+                        self.tr("Failed to generate airport-wide OLS surfaces. Check logs."),
                         level=Qgis.Critical,
                         duration=10,
                     )
@@ -909,19 +862,13 @@ class SafeguardingBuilder(
 
                 # Generate runway name (keep this logic)
                 primary_desig = f"{designator_num:02d}{suffix}"
-                reciprocal_num = (
-                    (designator_num + 18)
-                    if designator_num <= 18
-                    else (designator_num - 18)
-                )
+                reciprocal_num = (designator_num + 18) if designator_num <= 18 else (designator_num - 18)
                 reciprocal_suffix_map = {"L": "R", "R": "L", "C": "C", "": ""}
                 reciprocal_suffix = reciprocal_suffix_map.get(suffix, "")
                 reciprocal_desig = f"{reciprocal_num:02d}{reciprocal_suffix}"
                 short_runway_name = f"{primary_desig}/{reciprocal_desig}"
                 runway_data["short_name"] = short_runway_name
-                runway_data["declared_distances"] = (
-                    self._calculate_declared_distances(runway_data)
-                )
+                runway_data["declared_distances"] = self._calculate_declared_distances(runway_data)
                 runway_data["generated_feature_counts"] = {
                     **runway_data.get("generated_feature_counts", {}),
                     "DeclaredDistance": len(runway_data.get("declared_distances") or []),
@@ -976,20 +923,14 @@ class SafeguardingBuilder(
             self._log("Runway summary report skipped: no processed runway data.")
             return None
         if self.output_mode != "file":
-            self._log(
-                "Runway summary report not written: select file output to create the Markdown report."
-            )
+            self._log("Runway summary report not written: select file output to create the Markdown report.")
             return None
         if not self.output_path:
-            self._log_warning(
-                "Runway summary report skipped: file output path is not available."
-            )
+            self._log_warning("Runway summary report skipped: file output path is not available.")
             return None
 
         safe_icao = self._sanitize_filename(icao_code or "UNKNOWN")
-        report_path = os.path.join(
-            self.output_path, f"{safe_icao}_Critical_Runway_Information_Summary.md"
-        )
+        report_path = os.path.join(self.output_path, f"{safe_icao}_Critical_Runway_Information_Summary.md")
         try:
             summaries = build_runway_summaries(processed_runway_data_list)
             markdown = render_markdown_report(icao_code, None, summaries)
@@ -998,18 +939,12 @@ class SafeguardingBuilder(
             self._log_success(f"Runway summary report written to '{report_path}'.")
             return report_path
         except Exception as e:
-            self._log_warning(
-                f"Runway summary report failed: {e}\n{traceback.format_exc()}"
-            )
+            self._log_warning(f"Runway summary report failed: {e}\n{traceback.format_exc()}")
             return None
 
-    def _calculate_declared_distances(
-        self, runway_data: Dict[str, Any]
-    ) -> List[Dict[str, Any]]:
+    def _calculate_declared_distances(self, runway_data: Dict[str, Any]) -> List[Dict[str, Any]]:
         """Calculate baseline declared distances for both runway directions."""
-        runway_name = runway_data.get(
-            "short_name", f"RWY_{runway_data.get('original_index', '?')}"
-        )
+        runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
         if thr_point is None or rec_thr_point is None:
@@ -1019,12 +954,8 @@ class SafeguardingBuilder(
         if rwy_params is None:
             return []
 
-        disp_primary = self._non_negative_float(
-            runway_data.get("thr_displaced_1"), 0.0
-        )
-        disp_reciprocal = self._non_negative_float(
-            runway_data.get("thr_displaced_2"), 0.0
-        )
+        disp_primary = self._non_negative_float(runway_data.get("thr_displaced_1"), 0.0)
+        disp_reciprocal = self._non_negative_float(runway_data.get("thr_displaced_2"), 0.0)
         physical_endpoints = self._get_physical_runway_endpoints(
             thr_point, rec_thr_point, disp_primary, disp_reciprocal, rwy_params
         )
@@ -1042,44 +973,20 @@ class SafeguardingBuilder(
             primary_desig = runway_name
             reciprocal_desig = "Reciprocal"
 
-        clearway_primary_end = self._non_negative_float(
-            runway_data.get("clearway1_len"), 0.0
-        )
-        clearway_reciprocal_end = self._non_negative_float(
-            runway_data.get("clearway2_len"), 0.0
-        )
-        stopway_primary_end = self._non_negative_float(
-            runway_data.get("stopway1_len"), 0.0
-        )
-        stopway_reciprocal_end = self._non_negative_float(
-            runway_data.get("stopway2_len"), 0.0
-        )
+        clearway_primary_end = self._non_negative_float(runway_data.get("clearway1_len"), 0.0)
+        clearway_reciprocal_end = self._non_negative_float(runway_data.get("clearway2_len"), 0.0)
+        stopway_primary_end = self._non_negative_float(runway_data.get("stopway1_len"), 0.0)
+        stopway_reciprocal_end = self._non_negative_float(runway_data.get("stopway2_len"), 0.0)
 
-        primary_takeoff_available = self._bool_from_runway_data(
-            runway_data.get("takeoff_available_1", True)
-        )
-        reciprocal_takeoff_available = self._bool_from_runway_data(
-            runway_data.get("takeoff_available_2", True)
-        )
-        primary_landing_available = self._bool_from_runway_data(
-            runway_data.get("landing_available_1", True)
-        )
-        reciprocal_landing_available = self._bool_from_runway_data(
-            runway_data.get("landing_available_2", True)
-        )
+        primary_takeoff_available = self._bool_from_runway_data(runway_data.get("takeoff_available_1", True))
+        reciprocal_takeoff_available = self._bool_from_runway_data(runway_data.get("takeoff_available_2", True))
+        primary_landing_available = self._bool_from_runway_data(runway_data.get("landing_available_1", True))
+        reciprocal_landing_available = self._bool_from_runway_data(runway_data.get("landing_available_2", True))
 
         primary_tora = physical_length if primary_takeoff_available else None
         reciprocal_tora = physical_length if reciprocal_takeoff_available else None
-        primary_lda = (
-            threshold_length + disp_reciprocal
-            if primary_landing_available
-            else None
-        )
-        reciprocal_lda = (
-            threshold_length + disp_primary
-            if reciprocal_landing_available
-            else None
-        )
+        primary_lda = threshold_length + disp_reciprocal if primary_landing_available else None
+        reciprocal_lda = threshold_length + disp_primary if reciprocal_landing_available else None
 
         return [
             {
@@ -1096,16 +1003,8 @@ class SafeguardingBuilder(
                 "takeoff_available": primary_takeoff_available,
                 "landing_available": primary_landing_available,
                 "tora_m": primary_tora,
-                "toda_m": (
-                    primary_tora + clearway_reciprocal_end
-                    if primary_tora is not None
-                    else None
-                ),
-                "asda_m": (
-                    primary_tora + stopway_reciprocal_end
-                    if primary_tora is not None
-                    else None
-                ),
+                "toda_m": (primary_tora + clearway_reciprocal_end if primary_tora is not None else None),
+                "asda_m": (primary_tora + stopway_reciprocal_end if primary_tora is not None else None),
                 "lda_m": primary_lda,
             },
             {
@@ -1122,16 +1021,8 @@ class SafeguardingBuilder(
                 "takeoff_available": reciprocal_takeoff_available,
                 "landing_available": reciprocal_landing_available,
                 "tora_m": reciprocal_tora,
-                "toda_m": (
-                    reciprocal_tora + clearway_primary_end
-                    if reciprocal_tora is not None
-                    else None
-                ),
-                "asda_m": (
-                    reciprocal_tora + stopway_primary_end
-                    if reciprocal_tora is not None
-                    else None
-                ),
+                "toda_m": (reciprocal_tora + clearway_primary_end if reciprocal_tora is not None else None),
+                "asda_m": (reciprocal_tora + stopway_primary_end if reciprocal_tora is not None else None),
                 "lda_m": reciprocal_lda,
             },
         ]
@@ -1150,9 +1041,7 @@ class SafeguardingBuilder(
             return True
         return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
-    def _create_guideline_groups(
-        self, main_group: QgsLayerTreeGroup
-    ) -> Dict[str, Optional[QgsLayerTreeGroup]]:
+    def _create_guideline_groups(self, main_group: QgsLayerTreeGroup) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Creates the top-level groups for each guideline."""
         guideline_defs = {
             "A": "Guideline A: Noise",
@@ -1170,16 +1059,12 @@ class SafeguardingBuilder(
             grp = main_group.addGroup(self.tr(name))
             guideline_groups[key] = grp
             if grp is None:
-                QgsMessageLog.logMessage(
-                    f"Failed create group: {name}", PLUGIN_TAG, level=Qgis.Warning
-                )
+                QgsMessageLog.logMessage(f"Failed create group: {name}", PLUGIN_TAG, level=Qgis.Warning)
             else:
                 self._stage_layer_tree_node(grp)
         return guideline_groups
 
-    def _ensure_valid_geometry(
-        self, geom: Optional[QgsGeometry], description: str
-    ) -> Optional[QgsGeometry]:
+    def _ensure_valid_geometry(self, geom: Optional[QgsGeometry], description: str) -> Optional[QgsGeometry]:
         """Return a valid non-empty geometry, only calling makeValid when needed."""
         if geom is None or geom.isEmpty():
             return None
@@ -1187,11 +1072,7 @@ class SafeguardingBuilder(
             if geom.isGeosValid():
                 return geom
             fixed_geom = geom.makeValid()
-            if (
-                fixed_geom is not None
-                and not fixed_geom.isEmpty()
-                and fixed_geom.isGeosValid()
-            ):
+            if fixed_geom is not None and not fixed_geom.isEmpty() and fixed_geom.isGeosValid():
                 return fixed_geom
         except Exception as e:
             QgsMessageLog.logMessage(
@@ -1209,9 +1090,7 @@ class SafeguardingBuilder(
         return None
 
     # Make sure _try_get_arp_elevation_from_layer helper exists or is implemented
-    def _try_get_arp_elevation_from_layer(
-        self, arp_layer: QgsVectorLayer
-    ) -> Optional[float]:
+    def _try_get_arp_elevation_from_layer(self, arp_layer: QgsVectorLayer) -> Optional[float]:
         """Attempts to get elevation from Z value or attribute of the first ARP feature."""
         if not arp_layer or not arp_layer.isValid() or arp_layer.featureCount() == 0:
             return None
@@ -1244,9 +1123,7 @@ class SafeguardingBuilder(
             )
         return None
 
-    def _get_runway_midpoint(
-        self, thr_point: QgsPointXY, rec_thr_point: QgsPointXY
-    ) -> Optional[QgsPointXY]:
+    def _get_runway_midpoint(self, thr_point: QgsPointXY, rec_thr_point: QgsPointXY) -> Optional[QgsPointXY]:
         """Calculates the midpoint of the line segment between two points."""
         if not thr_point or not rec_thr_point:
             return None
@@ -1274,41 +1151,25 @@ class SafeguardingBuilder(
         if not processed_runway_data_list:
             return False
         for runway_data in processed_runway_data_list:
-            rwy_name = runway_data.get(
-                "short_name", f"RWY_{runway_data.get('original_index', '?')}"
-            )
+            rwy_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
             run_success_flags = []
             try:  # Standard Guidelines
                 if guideline_groups.get("B") is not None:
-                    run_success_flags.append(
-                        self.process_guideline_b(runway_data, guideline_groups["B"])
-                    )
+                    run_success_flags.append(self.process_guideline_b(runway_data, guideline_groups["B"]))
                 if guideline_groups.get("E") is not None:
-                    run_success_flags.append(
-                        self.process_guideline_e(runway_data, guideline_groups["E"])
-                    )
+                    run_success_flags.append(self.process_guideline_e(runway_data, guideline_groups["E"]))
                 if guideline_groups.get("F") is not None:
                     run_success_flags.append(
-                        self.process_guideline_f(
-                            runway_data, guideline_groups["F"], ofz_group
-                        )
+                        self.process_guideline_f(runway_data, guideline_groups["F"], ofz_group)
                     )  # F = OLS App/TOCS
                 if guideline_groups.get("I") is not None:
-                    run_success_flags.append(
-                        self.process_guideline_i(runway_data, guideline_groups["I"])
-                    )
+                    run_success_flags.append(self.process_guideline_i(runway_data, guideline_groups["I"]))
                 # Add calls for other guidelines (A, F, H) here if implemented
 
                 # Specialised Surfaces
                 if specialised_group_node is not None:
-                    run_success_flags.append(
-                        self.process_raoa(runway_data, specialised_group_node)
-                    )
-                    run_success_flags.append(
-                        self.process_taxiway_separation(
-                            runway_data, specialised_group_node
-                        )
-                    )
+                    run_success_flags.append(self.process_raoa(runway_data, specialised_group_node))
+                    run_success_flags.append(self.process_taxiway_separation(runway_data, specialised_group_node))
                 else:
                     QgsMessageLog.logMessage(
                         f"Skipping Specialised surfaces for {rwy_name}: Group missing.",
@@ -1326,9 +1187,7 @@ class SafeguardingBuilder(
                 )
         return any_guideline_processed_ok
 
-    def _count_layer_tree_contents(
-        self, node: QgsLayerTreeNode
-    ) -> Tuple[int, int, List[str]]:
+    def _count_layer_tree_contents(self, node: QgsLayerTreeNode) -> Tuple[int, int, List[str]]:
         """Count valid layers/features below a layer tree node and collect empty layer names."""
         layer_count = 0
         feature_count = 0
@@ -1350,9 +1209,7 @@ class SafeguardingBuilder(
 
         if isinstance(node, QgsLayerTreeGroup):
             for child in node.children():
-                child_layers, child_features, child_empty = (
-                    self._count_layer_tree_contents(child)
-                )
+                child_layers, child_features, child_empty = self._count_layer_tree_contents(child)
                 layer_count += child_layers
                 feature_count += child_features
                 empty_layers.extend(child_empty)
@@ -1408,9 +1265,7 @@ class SafeguardingBuilder(
         direct_empty_layers: List[str] = []
 
         for child in main_group.children():
-            child_layers, child_features, child_empty = self._count_layer_tree_contents(
-                child
-            )
+            child_layers, child_features, child_empty = self._count_layer_tree_contents(child)
             total_layers += child_layers
             total_features += child_features
 
@@ -1423,17 +1278,11 @@ class SafeguardingBuilder(
             if isinstance(child, QgsLayerTreeGroup):
                 group_name = child.name()
                 if child_layers > 0 and child_features > 0:
-                    populated.append(
-                        f"{group_name}: {child_layers} layer(s), {child_features} feature(s)"
-                    )
+                    populated.append(f"{group_name}: {child_layers} layer(s), {child_features} feature(s)")
                     if child_empty:
-                        empty.append(
-                            f"{group_name}: empty layer(s) {', '.join(child_empty)} (0 features)"
-                        )
+                        empty.append(f"{group_name}: empty layer(s) {', '.join(child_empty)} (0 features)")
                 elif child_layers > 0:
-                    empty.append(
-                        f"{group_name}: {child_layers} empty layer(s) ({', '.join(child_empty)})"
-                    )
+                    empty.append(f"{group_name}: {child_layers} empty layer(s) ({', '.join(child_empty)})")
                 else:
                     empty.append(f"{group_name}: {self._empty_group_reason(group_name, met_ok)}")
 
@@ -1473,9 +1322,7 @@ class SafeguardingBuilder(
         physical_protection_ok: bool,
     ):
         """Provides final user feedback."""
-        if (
-            main_group is None and self.output_mode == "memory"
-        ):  # If no group and memory, something is wrong
+        if main_group is None and self.output_mode == "memory":  # If no group and memory, something is wrong
             self.iface.messageBar().pushMessage(
                 self.tr("Error"),
                 self.tr("Processing error: Main layer group not created."),
@@ -1503,9 +1350,7 @@ class SafeguardingBuilder(
             if not arp_ok:
                 empty_summaries.append("ARP: ARP coordinates not provided; layer not created")
             runway_summary = (
-                f"runways={processed_rwy_count}/{total_runways_in_input}"
-                if total_runways_in_input
-                else "runways=0"
+                f"runways={processed_rwy_count}/{total_runways_in_input}" if total_runways_in_input else "runways=0"
             )
 
             if self.output_mode == "file" and self.output_path:
@@ -1529,13 +1374,9 @@ class SafeguardingBuilder(
             )  # Increased duration
             self._log_success(final_log_message, notify_user=True)
             if populated_summaries:
-                self._log(
-                    "Generated groups:\n- " + "\n- ".join(populated_summaries)
-                )
+                self._log("Generated groups:\n- " + "\n- ".join(populated_summaries))
             if empty_summaries:
-                self._log(
-                    "Not generated:\n- " + "\n- ".join(empty_summaries)
-                )
+                self._log("Not generated:\n- " + "\n- ".join(empty_summaries))
 
             if (
                 main_group is not None
@@ -1553,8 +1394,7 @@ class SafeguardingBuilder(
                 "Processing finished: no layers were generated. Check preceding warnings/errors for the skipped prerequisite."
             )
             if (
-                main_group is not None
-                and root_node.findGroup(main_group.name()) is not None
+                main_group is not None and root_node.findGroup(main_group.name()) is not None
             ):  # Only try to remove group if it was created
                 self._remove_group_recursively(main_group, project)
                 if main_group.parent() is not None:
@@ -1588,9 +1428,7 @@ class SafeguardingBuilder(
                 try:  # QgsPoint requires QGIS 3.x, use QgsPointXY as fallback if needed
                     from qgis.core import QgsPoint  # type: ignore
 
-                    arp_geom = QgsGeometry(
-                        QgsPoint(arp_point.x(), arp_point.y(), arp_elevation)
-                    )
+                    arp_geom = QgsGeometry(QgsPoint(arp_point.x(), arp_point.y(), arp_elevation))
                 except ImportError:
                     arp_geom = QgsGeometry.fromPointXY(arp_point)  # Fallback to 2D
                     QgsMessageLog.logMessage(
@@ -1628,9 +1466,7 @@ class SafeguardingBuilder(
                 "ARP",
             )
         except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Error in create_arp_layer: {e}", PLUGIN_TAG, level=Qgis.Critical
-            )
+            QgsMessageLog.logMessage(f"Error in create_arp_layer: {e}", PLUGIN_TAG, level=Qgis.Critical)
             return None
 
     def _create_centered_oriented_square(
@@ -1703,9 +1539,7 @@ class SafeguardingBuilder(
                 [
                     QgsField("rwy", QVariant.String),
                     QgsField("len_m", QVariant.Double),
-                    QgsField(
-                        "rwy_head", QVariant.Double, "Runway Heading (degrees)", 10, 3
-                    ),
+                    QgsField("rwy_head", QVariant.Double, "Runway Heading (degrees)", 10, 3),
                     QgsField(
                         "reciprocal_head",
                         QVariant.Double,
@@ -1742,14 +1576,10 @@ class SafeguardingBuilder(
             reciprocal_azimuth_attr = None
             if rwy_params:
                 azimuth_attr = (
-                    round(rwy_params.get("azimuth_p_r"), 3)
-                    if rwy_params.get("azimuth_p_r") is not None
-                    else None
+                    round(rwy_params.get("azimuth_p_r"), 3) if rwy_params.get("azimuth_p_r") is not None else None
                 )
                 reciprocal_azimuth_attr = (
-                    round(rwy_params.get("azimuth_r_p"), 3)
-                    if rwy_params.get("azimuth_r_p") is not None
-                    else None
+                    round(rwy_params.get("azimuth_r_p"), 3) if rwy_params.get("azimuth_r_p") is not None else None
                 )
             else:
                 QgsMessageLog.logMessage(
@@ -1758,9 +1588,7 @@ class SafeguardingBuilder(
                     level=Qgis.Warning,
                 )
 
-            declared_distance_attrs = self._format_centreline_declared_distances(
-                declared_distances or []
-            )
+            declared_distance_attrs = self._format_centreline_declared_distances(declared_distances or [])
 
             # Prepare feature
             feature = QgsFeature(fields)
@@ -1840,12 +1668,8 @@ class SafeguardingBuilder(
             backward_azimuth = (outward_azimuth_degrees + 180.0) % 360.0
             az_perp_r = (outward_azimuth_degrees + 90.0) % 360.0
             az_perp_l = (outward_azimuth_degrees - 90.0 + 360.0) % 360.0
-            far_edge_center = start_point.project(
-                far_edge_offset, outward_azimuth_degrees
-            )
-            near_edge_center = far_edge_center.project(
-                zone_length_backward, backward_azimuth
-            )
+            far_edge_center = start_point.project(far_edge_offset, outward_azimuth_degrees)
+            near_edge_center = far_edge_center.project(zone_length_backward, backward_azimuth)
             if not far_edge_center or not near_edge_center:
                 QgsMessageLog.logMessage(
                     f"Warning: Failed center point projection for '{description}'.",
@@ -1884,12 +1708,7 @@ class SafeguardingBuilder(
         description: str = "Aligned Rectangle",
     ) -> Optional[QgsGeometry]:
         plugin_tag = PLUGIN_TAG
-        if (
-            not point1
-            or not point2
-            or half_width_m <= 0
-            or point1.compare(point2, 1e-6)
-        ):
+        if not point1 or not point2 or half_width_m <= 0 or point1.compare(point2, 1e-6):
             QgsMessageLog.logMessage(
                 f"Skipping '{description}': Invalid points or half width ({half_width_m}).",
                 plugin_tag,
@@ -1914,18 +1733,10 @@ class SafeguardingBuilder(
                     level=Qgis.Warning,
                 )
                 return None
-            corner_start_l = rect_start_center.project(
-                half_width_m, params["azimuth_perp_l"]
-            )
-            corner_start_r = rect_start_center.project(
-                half_width_m, params["azimuth_perp_r"]
-            )
-            corner_end_l = rect_end_center.project(
-                half_width_m, params["azimuth_perp_l"]
-            )
-            corner_end_r = rect_end_center.project(
-                half_width_m, params["azimuth_perp_r"]
-            )
+            corner_start_l = rect_start_center.project(half_width_m, params["azimuth_perp_l"])
+            corner_start_r = rect_start_center.project(half_width_m, params["azimuth_perp_r"])
+            corner_end_l = rect_end_center.project(half_width_m, params["azimuth_perp_l"])
+            corner_end_r = rect_end_center.project(half_width_m, params["azimuth_perp_r"])
             corner_points = [corner_start_l, corner_start_r, corner_end_r, corner_end_l]
             if not all(p is not None for p in corner_points):
                 QgsMessageLog.logMessage(
@@ -1953,12 +1764,7 @@ class SafeguardingBuilder(
         description: str = "Trapezoid",
     ) -> Optional[QgsGeometry]:
         plugin_tag = PLUGIN_TAG
-        if (
-            not start_point
-            or length <= 0
-            or inner_half_width < 0
-            or outer_half_width < 0
-        ):
+        if not start_point or length <= 0 or inner_half_width < 0 or outer_half_width < 0:
             QgsMessageLog.logMessage(
                 f"Skipping '{description}': Invalid start point/length/widths.",
                 plugin_tag,
@@ -1997,14 +1803,10 @@ class SafeguardingBuilder(
             )
             return None
 
-    def _get_runway_parameters(
-        self, thr_point: QgsPointXY, rec_thr_point: QgsPointXY
-    ) -> Optional[dict]:
+    def _get_runway_parameters(self, thr_point: QgsPointXY, rec_thr_point: QgsPointXY) -> Optional[dict]:
         """Calculates basic length and azimuths between two threshold points."""
         plugin_tag = PLUGIN_TAG
-        if not isinstance(thr_point, QgsPointXY) or not isinstance(
-            rec_thr_point, QgsPointXY
-        ):
+        if not isinstance(thr_point, QgsPointXY) or not isinstance(rec_thr_point, QgsPointXY):
             QgsMessageLog.logMessage(
                 "Invalid threshold point types for runway parameter calculation.",
                 plugin_tag,
@@ -2021,12 +1823,8 @@ class SafeguardingBuilder(
 
         try:
             length = thr_point.distance(rec_thr_point)
-            azimuth_p_r = thr_point.azimuth(
-                rec_thr_point
-            )  # Primary THR -> Reciprocal THR
-            azimuth_r_p = rec_thr_point.azimuth(
-                thr_point
-            )  # Reciprocal THR -> Primary THR
+            azimuth_p_r = thr_point.azimuth(rec_thr_point)  # Primary THR -> Reciprocal THR
+            azimuth_r_p = rec_thr_point.azimuth(thr_point)  # Reciprocal THR -> Primary THR
 
             # Check for valid results from QGIS geometry methods
             if (
@@ -2048,9 +1846,7 @@ class SafeguardingBuilder(
             # Perpendicular azimuths (calculated from original azimuth_p_r before its normalization for this return dict)
             # These calculations already ensure results are in the 0-360 range.
             azimuth_perp_r = (azimuth_p_r + 90.0) % 360.0
-            azimuth_perp_l = (
-                azimuth_p_r - 90.0 + 360.0
-            ) % 360.0  # Ensure positive before modulo
+            azimuth_perp_l = (azimuth_p_r - 90.0 + 360.0) % 360.0  # Ensure positive before modulo
 
             # Normalize main azimuths to be in the 0-360 degree range.
             # (value + 360.0) % 360.0 ensures a positive result in [0, 360.0).
@@ -2111,11 +1907,7 @@ class SafeguardingBuilder(
             )
             return None
 
-        if (
-            not rwy_params
-            or "azimuth_p_r" not in rwy_params
-            or "azimuth_r_p" not in rwy_params
-        ):
+        if not rwy_params or "azimuth_p_r" not in rwy_params or "azimuth_r_p" not in rwy_params:
             QgsMessageLog.logMessage(
                 "Missing required azimuths in rwy_params for physical endpoint calculation.",
                 PLUGIN_TAG,
@@ -2131,12 +1923,8 @@ class SafeguardingBuilder(
         # Project "backwards" along the runway centerline.
         # The direction "backwards" from primary threshold is along the azimuth R->P.
         phys_end_point_primary = thr_point_primary
-        if (
-            displaced_thr_primary > 1e-6
-        ):  # Use tolerance, only project if displacement exists
-            projected_point = thr_point_primary.project(
-                displaced_thr_primary, azimuth_r_p
-            )
+        if displaced_thr_primary > 1e-6:  # Use tolerance, only project if displacement exists
+            projected_point = thr_point_primary.project(displaced_thr_primary, azimuth_r_p)
             if projected_point:
                 phys_end_point_primary = projected_point
             else:
@@ -2153,9 +1941,7 @@ class SafeguardingBuilder(
         # The direction "backwards" from reciprocal threshold is along the azimuth P->R.
         phys_end_point_reciprocal = thr_point_reciprocal
         if displaced_thr_reciprocal > 1e-6:  # Use tolerance
-            projected_point = thr_point_reciprocal.project(
-                displaced_thr_reciprocal, azimuth_p_r
-            )
+            projected_point = thr_point_reciprocal.project(displaced_thr_reciprocal, azimuth_p_r)
             if projected_point:
                 phys_end_point_reciprocal = projected_point
             else:
@@ -2168,9 +1954,7 @@ class SafeguardingBuilder(
 
         # --- Calculate Total Physical Length ---
         try:
-            total_physical_length = phys_end_point_primary.distance(
-                phys_end_point_reciprocal
-            )
+            total_physical_length = phys_end_point_primary.distance(phys_end_point_reciprocal)
             if total_physical_length is None:
                 QgsMessageLog.logMessage(
                     "Failed to calculate distance between physical endpoints.",
@@ -2195,12 +1979,7 @@ class SafeguardingBuilder(
         plugin_tag = PLUGIN_TAG
 
         # Input validation
-        if (
-            not corners
-            or len(corners) < 3
-            or None in corners
-            or not all(isinstance(p, QgsPointXY) for p in corners)
-        ):
+        if not corners or len(corners) < 3 or None in corners or not all(isinstance(p, QgsPointXY) for p in corners):
             QgsMessageLog.logMessage(
                 f"Cannot create polygon '{description}': Invalid input corner points.",
                 plugin_tag,
@@ -2210,11 +1989,7 @@ class SafeguardingBuilder(
 
         try:
             # Ensure list is closed (first == last)
-            closed_corners = (
-                corners + [corners[0]]
-                if not corners[0].compare(corners[-1], 1e-6)
-                else corners
-            )
+            closed_corners = corners + [corners[0]] if not corners[0].compare(corners[-1], 1e-6) else corners
 
             # Create exterior ring
             exterior_ring = QgsLineString(closed_corners)
@@ -2242,12 +2017,7 @@ class SafeguardingBuilder(
             if not geom.isGeosValid():
                 geom_valid = geom.makeValid()
 
-                if (
-                    not geom_valid
-                    or geom_valid.isNull()
-                    or geom_valid.isEmpty()
-                    or not geom_valid.isGeosValid()
-                ):
+                if not geom_valid or geom_valid.isNull() or geom_valid.isEmpty() or not geom_valid.isGeosValid():
                     QgsMessageLog.logMessage(
                         f"Cannot create polygon '{description}': Geometry invalid even after makeValid().",
                         plugin_tag,
@@ -2276,9 +2046,7 @@ class SafeguardingBuilder(
                     if polygons:  # Check if conversion to MultiPolygon worked
                         for poly_rings in polygons:
                             # Ensure we handle potential empty ring lists
-                            if (
-                                poly_rings and poly_rings[0]
-                            ):  # Check if exterior ring exists
+                            if poly_rings and poly_rings[0]:  # Check if exterior ring exists
                                 try:
                                     # Create temporary polygon from rings
                                     temp_poly = QgsPolygon(
@@ -2321,12 +2089,7 @@ class SafeguardingBuilder(
                     geom = geom_valid
 
             # Final check on the potentially modified geometry
-            if (
-                geom is None
-                or geom.isNull()
-                or geom.isEmpty()
-                or not geom.isGeosValid()
-            ):
+            if geom is None or geom.isNull() or geom.isEmpty() or not geom.isGeosValid():
                 QgsMessageLog.logMessage(
                     f"Cannot create polygon '{description}': Final geometry check failed (Null/Empty/Invalid).",
                     plugin_tag,
@@ -2398,7 +2161,6 @@ class SafeguardingBuilder(
     # ============================================================
     # Specialised Safeguarding Processing (e.g., RAOA)
     # ============================================================
-
 
 
 # ============================================================

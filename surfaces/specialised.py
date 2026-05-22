@@ -39,9 +39,7 @@ class SpecialisedSurfacesMixin:
     def process_raoa(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Generates RAOA if applicable (Precision Approach runways)."""
         plugin_tag = PLUGIN_TAG
-        runway_name = runway_data.get(
-            "short_name", f"RWY_{runway_data.get('original_index','?')}"
-        )
+        runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
         type1_str = runway_data.get("type1", "")
@@ -58,9 +56,7 @@ class SpecialisedSurfacesMixin:
         RAOA_HALF_WIDTH = RAOA_WIDTH / 2.0
         APPLICABLE_TYPES = ["Precision Approach CAT I", "Precision Approach CAT II/III"]
         features_to_add: List[QgsFeature] = []
-        primary_desig, reciprocal_desig = (
-            runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
-        )
+        primary_desig, reciprocal_desig = runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
 
         # Check Primary End
         if type1_str in APPLICABLE_TYPES:
@@ -157,35 +153,21 @@ class SpecialisedSurfacesMixin:
         fields = QgsFields(
             [
                 QgsField("rwy", QVariant.String, self.tr("Runway Name"), 50),
-                QgsField(
-                    "desc", QVariant.String, self.tr("desc"), 100
-                ),
+                QgsField("desc", QVariant.String, self.tr("desc"), 100),
                 QgsField("offset_m", QVariant.Double, self.tr("offset_m"), 10, 2),
-                QgsField(
-                    "ref_mos", QVariant.String, self.tr("MOS Reference"), 100
-                ),
-                QgsField(
-                    "appr_type", QVariant.String, self.tr("appr_type"), 50
-                ),
-                QgsField(
-                    "arc_num", QVariant.String, self.tr("arc_num"), 5
-                ),
-                QgsField(
-                    "arc_let", QVariant.String, self.tr("arc_let"), 5
-                ),
+                QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 100),
+                QgsField("appr_type", QVariant.String, self.tr("appr_type"), 50),
+                QgsField("arc_num", QVariant.String, self.tr("arc_num"), 5),
+                QgsField("arc_let", QVariant.String, self.tr("arc_let"), 5),
                 QgsField("side", QVariant.String, self.tr("Side (L/R)"), 5),
             ]
         )
         return fields
 
-    def process_taxiway_separation(
-        self, runway_data: dict, layer_group: QgsLayerTreeGroup
-    ) -> bool:
+    def process_taxiway_separation(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Generates Taxiway Minimum Separation lines."""
         plugin_tag = PLUGIN_TAG
-        runway_name = runway_data.get(
-            "short_name", f"RWY_{runway_data.get('original_index','?')}"
-        )
+        runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
         arc_num_str = runway_data.get("arc_num")
@@ -194,12 +176,7 @@ class SpecialisedSurfacesMixin:
         type2_str = runway_data.get("type2", "")
 
         # Essential Checks
-        if (
-            thr_point is None
-            or rec_thr_point is None
-            or layer_group is None
-            or not arc_num_str
-        ):
+        if thr_point is None or rec_thr_point is None or layer_group is None or not arc_num_str:
             QgsMessageLog.logMessage(
                 f"Taxiway Sep skipped {runway_name}: Missing essential data.",
                 plugin_tag,
@@ -207,9 +184,7 @@ class SpecialisedSurfacesMixin:
             )
             return False
         try:
-            arc_num = int(
-                arc_num_str
-            )  # Keep as int for logic, convert to str for attribute
+            arc_num = int(arc_num_str)  # Keep as int for logic, convert to str for attribute
         except (ValueError, TypeError):
             QgsMessageLog.logMessage(
                 f"Taxiway Sep skipped {runway_name}: Invalid ARC Number '{arc_num_str}'.",
@@ -219,11 +194,7 @@ class SpecialisedSurfacesMixin:
             return False
 
         # Validate ARC Letter
-        if (
-            not arc_let_raw
-            or not isinstance(arc_let_raw, str)
-            or not arc_let_raw.strip()
-        ):
+        if not arc_let_raw or not isinstance(arc_let_raw, str) or not arc_let_raw.strip():
             QgsMessageLog.logMessage(
                 f"Taxiway Sep skipped {runway_name}: ARC Letter not provided or invalid ('{arc_let_raw}').",
                 plugin_tag,
@@ -233,11 +204,7 @@ class SpecialisedSurfacesMixin:
         arc_let = arc_let_raw.strip().upper()  # Use cleaned letter
 
         rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
-        if (
-            rwy_params is None
-            or rwy_params.get("length") is None
-            or rwy_params["length"] <= 0
-        ):
+        if rwy_params is None or rwy_params.get("length") is None or rwy_params["length"] <= 0:
             QgsMessageLog.logMessage(
                 f"Taxiway Sep skipped {runway_name}: Invalid runway parameters or length.",
                 plugin_tag,
@@ -258,9 +225,7 @@ class SpecialisedSurfacesMixin:
         governing_type_str = type_order[max(idx1, idx2)]
 
         # Get Offset Parameter
-        offset_params = ols_dimensions.get_taxiway_separation_offset(
-            arc_num, arc_let, governing_type_str
-        )
+        offset_params = ols_dimensions.get_taxiway_separation_offset(arc_num, arc_let, governing_type_str)
         if not offset_params:
             QgsMessageLog.logMessage(
                 f"Skipping Taxiway Sep for {runway_name}: No offset parameters found for classification (ARC={arc_num}, Let='{arc_let}', Type='{governing_type_str}').",
@@ -295,15 +260,9 @@ class SpecialisedSurfacesMixin:
         geom_ok = True
         surface_description = f"Minimum Taxiway Separation {runway_name}"
         attr_runway_name = runway_name if runway_name and runway_name.strip() else "N/A"
-        attr_surface_description = (
-            surface_description if surface_description.strip() else "N/A"
-        )
+        attr_surface_description = surface_description if surface_description.strip() else "N/A"
         attr_mos_ref = MOS_REF_TAXIWAY_SEPARATION
-        attr_app_type = (
-            governing_type_str
-            if governing_type_str and governing_type_str.strip()
-            else "N/A"
-        )
+        attr_app_type = governing_type_str if governing_type_str and governing_type_str.strip() else "N/A"
         attr_arc_num_str = str(arc_num)
         attr_arc_let = arc_let if arc_let and arc_let.strip() else "N/A"
 
@@ -400,9 +359,7 @@ class SpecialisedSurfacesMixin:
                 level=Qgis.Warning,
             )
 
-        if (
-            not geom_ok and not features_to_add
-        ):  # If geometry failed AND no features were added
+        if not geom_ok and not features_to_add:  # If geometry failed AND no features were added
             QgsMessageLog.logMessage(
                 f"Failed to generate taxiway separation line geometries for {runway_name}",
                 plugin_tag,

@@ -32,18 +32,14 @@ class LayerMixin:
         """Finds and clears or creates the main layer group."""
         existing_group = root_node.findGroup(group_name)
         if existing_group is not None:
-            QgsMessageLog.logMessage(
-                f"Removing existing group: {group_name}", PLUGIN_TAG, level=Qgis.Info
-            )
+            QgsMessageLog.logMessage(f"Removing existing group: {group_name}", PLUGIN_TAG, level=Qgis.Info)
             self._remove_group_recursively(existing_group, project)
             parent_node = existing_group.parent()
             if parent_node is not None:
                 parent_node.removeChildNode(existing_group)
         main_group = root_node.addGroup(group_name)
         if main_group is None:
-            QgsMessageLog.logMessage(
-                f"Failed create group: {group_name}", PLUGIN_TAG, level=Qgis.Critical
-            )
+            QgsMessageLog.logMessage(f"Failed create group: {group_name}", PLUGIN_TAG, level=Qgis.Critical)
             return None
         self._stage_layer_tree_node(main_group)
         return main_group
@@ -64,9 +60,7 @@ class LayerMixin:
                 level=Qgis.Warning,
             )
 
-    def _remove_group_recursively(
-        self, group_node: QgsLayerTreeGroup, project: QgsProject
-    ):
+    def _remove_group_recursively(self, group_node: QgsLayerTreeGroup, project: QgsProject):
         """Helper to remove layers within a group and its subgroups."""
         if group_node is None:
             return
@@ -244,15 +238,11 @@ class LayerMixin:
                     )
                     return layer
 
-                QgsMessageLog.logMessage(
-                    f"display_name = '{display_name}'", plugin_tag, Qgis.Info
-                )
+                QgsMessageLog.logMessage(f"display_name = '{display_name}'", plugin_tag, Qgis.Info)
 
                 name_without_ext = os.path.splitext(display_name)[0]
                 safe_name = self._sanitize_filename(name_without_ext)
-                full_path = os.path.join(
-                    self.output_path, f"{safe_name}{self.output_format_extension}"
-                )
+                full_path = os.path.join(self.output_path, f"{safe_name}{self.output_format_extension}")
 
                 result = QgsVectorFileWriter.writeAsVectorFormat(
                     layer,
@@ -262,18 +252,13 @@ class LayerMixin:
                     self.output_format_driver,
                 )
 
-                if (
-                    isinstance(result, tuple)
-                    and result[0] == QgsVectorFileWriter.NoError
-                ):
+                if isinstance(result, tuple) and result[0] == QgsVectorFileWriter.NoError:
                     QgsMessageLog.logMessage(
                         f"Layer '{display_name}' successfully written to '{full_path}'.",
                         plugin_tag,
                         Qgis.Info,
                     )
-                    loaded_layer = self.iface.addVectorLayer(
-                        full_path, display_name, "ogr"
-                    )
+                    loaded_layer = self.iface.addVectorLayer(full_path, display_name, "ogr")
                     if loaded_layer is not None and loaded_layer.isValid():
                         root = project.layerTreeRoot()
                         loaded_node = root.findLayer(loaded_layer.id())
@@ -283,9 +268,7 @@ class LayerMixin:
                             layer_group.insertChildNode(0, cloned_node)
                             if loaded_node.parent() is not None:
                                 loaded_node.parent().removeChildNode(loaded_node)
-                        loaded_layer.setCustomProperty(
-                            "safeguarding_style_key", style_key
-                        )
+                        loaded_layer.setCustomProperty("safeguarding_style_key", style_key)
                         self._apply_style(loaded_layer, self.style_map)
                         self.successfully_generated_layers.append(loaded_layer)
                         return loaded_layer
@@ -330,11 +313,7 @@ class LayerMixin:
         qml_filename = None
         style_key = layer.customProperty("safeguarding_style_key")
         try:
-            if (
-                not style_key
-                and "Centreline" in layer_name
-                and layer_name.startswith("RWY ")
-            ):
+            if not style_key and "Centreline" in layer_name and layer_name.startswith("RWY "):
                 style_key = "Runway Centreline"
 
             if style_key:
@@ -364,19 +343,11 @@ class LayerMixin:
                     load_result = layer.loadNamedStyle(qml_path)
                     if isinstance(load_result, tuple):
                         result_flag = next(
-                            (
-                                item
-                                for item in load_result
-                                if isinstance(item, bool)
-                            ),
+                            (item for item in load_result if isinstance(item, bool)),
                             True,
                         )
                         message = next(
-                            (
-                                item
-                                for item in load_result
-                                if isinstance(item, str) and item
-                            ),
+                            (item for item in load_result if isinstance(item, str) and item),
                             "",
                         )
                         if not result_flag:

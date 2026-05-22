@@ -39,7 +39,7 @@ RUNWAY_TYPE_MAP = {
 }
 
 # Define the set of precision approach type abbreviations
-PRECISION_APPROACH_TYPES = {"PA_I", "PA_II_III"} # Use a set for efficient 'in' check
+PRECISION_APPROACH_TYPES = {"PA_I", "PA_II_III"}  # Use a set for efficient 'in' check
 
 # =========================================================================
 # == Physical Geometry Dictionaries
@@ -416,42 +416,23 @@ INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 
 # --- Inner Transitional Surface (only applies to instrument runways) ---
 INNER_TRANSITIONAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
-    (1, "PA_I"): {
-        "slope": 0.40,  # 40%
-        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 1/2)"
-    },
-    (2, "PA_I"): {
-        "slope": 0.40,  # 40%
-        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 1/2)"
-    },
-    (3, "PA_I"): {
-        "slope": 0.333,  # 33.3%
-        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 3/4)"
-    },
-    (4, "PA_I"): {
-        "slope": 0.333,  # 33.3%
-        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 3/4)"
-    },
-    (3, "PA_II_III"): {
-        "slope": 0.333,  # 33.3%
-        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatII/III, 3/4)"
-    },
-    (4, "PA_II_III"): {
-        "slope": 0.333,  # 33.3%
-        "ref": "MOS 7.11/Table 7.15 (1) (PA-CatII/III, 3/4)"
-    },
+    (1, "PA_I"): {"slope": 0.40, "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 1/2)"},  # 40%
+    (2, "PA_I"): {"slope": 0.40, "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 1/2)"},  # 40%
+    (3, "PA_I"): {"slope": 0.333, "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 3/4)"},  # 33.3%
+    (4, "PA_I"): {"slope": 0.333, "ref": "MOS 7.11/Table 7.15 (1) (PA-CatI, 3/4)"},  # 33.3%
+    (3, "PA_II_III"): {"slope": 0.333, "ref": "MOS 7.11/Table 7.15 (1) (PA-CatII/III, 3/4)"},  # 33.3%
+    (4, "PA_II_III"): {"slope": 0.333, "ref": "MOS 7.11/Table 7.15 (1) (PA-CatII/III, 3/4)"},  # 33.3%
 }
 
 # --- Baulked Landing Surface (instrument runways only) ---
 BAULKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Key: (ARC_Number, Runway_Type_Abbreviation)
     # Runway_Type_Abbreviation: "PA_I" (Precision Approach CAT I), "PA_II_III" (Precision Approach CAT II/III)
-
     (1, "PA_I"): {
-        "width": 90.0,                     # Inner width of the Baulked Landing surface (metres)
-        "start_dist_from_thr": 1800.0,     # Distance from threshold to the start of Baulked Landing (metres)
-        "divergence": 0.10,                # Divergence per side (e.g., 0.10 for 10%)
-        "slope": 0.04,                     # Slope (e.g., 0.04 for 4%)
+        "width": 90.0,  # Inner width of the Baulked Landing surface (metres)
+        "start_dist_from_thr": 1800.0,  # Distance from threshold to the start of Baulked Landing (metres)
+        "divergence": 0.10,  # Divergence per side (e.g., 0.10 for 10%)
+        "slope": 0.04,  # Slope (e.g., 0.04 for 4%)
         "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 1/2)",
     },
     (2, "PA_I"): {
@@ -465,7 +446,7 @@ BAULKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "width": 120.0,
         "start_dist_from_thr": 1800.0,
         "divergence": 0.10,
-        "slope": 0.033,                    # 3.3%
+        "slope": 0.033,  # 3.3%
         "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 3/4)",
     },
     (4, "PA_I"): {
@@ -935,9 +916,7 @@ def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str):
         results["mos_applicability_ref"] = applicability_refs.get("required_3_4", "N/A")
     elif arc_num in [1, 2] and is_instrument:
         results["required"] = True
-        results["mos_applicability_ref"] = applicability_refs.get(
-            "required_1_2_instr", "N/A"
-        )
+        results["mos_applicability_ref"] = applicability_refs.get("required_1_2_instr", "N/A")
     else:
         results["required"] = False
         results["mos_applicability_ref"] = applicability_refs.get("not_required", "N/A")
@@ -962,9 +941,7 @@ def get_ihs_base_height() -> Optional[float]:
         return None
 
 
-def get_ols_params(
-    arc_num: int, runway_type_str: Optional[str], surface_type: str
-) -> Optional[Dict[str, Any]]:
+def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: str) -> Optional[Dict[str, Any]]:
     """
     Retrieves OLS parameters based on ARC number, runway type, and surface type.
     Returns None if parameters are not found for the specific combination.
@@ -987,7 +964,7 @@ def get_ols_params(
         params_dict = APPROACH_PARAMS
         # Fallback logic specifically for Approach
         params = params_dict.get(key_arc_type)
-        if not params and rwy_abbr.startswith("PA"): # If PA type not found, try NPA then NI for same ARC
+        if not params and rwy_abbr.startswith("PA"):  # If PA type not found, try NPA then NI for same ARC
             key_npa = (arc_num, "NPA")
             params = params_dict.get(key_npa)
             if not params:
@@ -1019,12 +996,12 @@ def get_ols_params(
         params_dict = OHS_PARAMS
         # lookup_key remains key_arc_type
 
-    elif surface_type_upper == "TRANSITIONAL": # Main Transitional
+    elif surface_type_upper == "TRANSITIONAL":  # Main Transitional
         params_dict = TRANSITIONAL_PARAMS
         # lookup_key remains key_arc_type
-    
-    elif surface_type_upper == "INNERTRANSITIONAL": # Placeholder for specific Inner Transitional params
-        params_dict = INNER_TRANSITIONAL_PARAMS # If you have specific params for it
+
+    elif surface_type_upper == "INNERTRANSITIONAL":  # Placeholder for specific Inner Transitional params
+        params_dict = INNER_TRANSITIONAL_PARAMS  # If you have specific params for it
         # lookup_key remains key_arc_type
 
     else:
@@ -1044,6 +1021,7 @@ def get_ols_params(
             surface_type_upper,
         )
         return None
+
 
 def get_taxiway_separation_offset(
     arc_num: int, arc_let: Optional[str], runway_type_str: Optional[str]

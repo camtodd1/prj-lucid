@@ -27,13 +27,9 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class LightingGuidelineMixin:
-    def process_guideline_e(
-        self, runway_data: dict, layer_group: QgsLayerTreeGroup
-    ) -> bool:
+    def process_guideline_e(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Processes Guideline E: Lighting Control Zone and LCZ Area circle."""
-        runway_name = runway_data.get(
-            "short_name", f"RWY_{runway_data.get('original_index','?')}"
-        )
+        runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
 
@@ -57,9 +53,8 @@ class LightingGuidelineMixin:
         overall_success = False
 
         try:
-            def create_lcz_layer(
-                zone_letter: str, geom: Optional[QgsGeometry]
-            ) -> bool:
+
+            def create_lcz_layer(zone_letter: str, geom: Optional[QgsGeometry]) -> bool:
                 if not geom:
                     return False
                 params = GUIDELINE_E_ZONE_PARAMS[zone_letter]
@@ -121,9 +116,7 @@ class LightingGuidelineMixin:
                     f"LCZ Full {zone_id_geom_gen} {runway_name}",
                 )
                 full_geoms[zone_id_geom_gen] = (
-                    geom_full.makeValid()
-                    if geom_full and not geom_full.isGeosValid()
-                    else geom_full
+                    geom_full.makeValid() if geom_full and not geom_full.isGeosValid() else geom_full
                 )
 
             final_geoms["A"] = full_geoms.get("A")
@@ -136,9 +129,7 @@ class LightingGuidelineMixin:
                 if geom_curr_for_diff and geom_prev_valid_for_diff:
                     diff_geom = geom_curr_for_diff.difference(geom_prev_valid_for_diff)
                     final_geoms[zone_id_diff] = (
-                        diff_geom.makeValid()
-                        if diff_geom and not diff_geom.isGeosValid()
-                        else diff_geom
+                        diff_geom.makeValid() if diff_geom and not diff_geom.isGeosValid() else diff_geom
                     )
                 elif geom_curr_for_diff:
                     final_geoms[zone_id_diff] = geom_curr_for_diff
@@ -162,9 +153,7 @@ class LightingGuidelineMixin:
                 midpoint_geom = QgsGeometry.fromPointXY(midpoint)
                 if not midpoint_geom.isNull():
                     radius_m = 6000.0
-                    lcz_area_circle_geom = midpoint_geom.buffer(
-                        radius_m, GUIDELINE_C_BUFFER_SEGMENTS
-                    )
+                    lcz_area_circle_geom = midpoint_geom.buffer(radius_m, GUIDELINE_C_BUFFER_SEGMENTS)
 
                     if lcz_area_circle_geom and not lcz_area_circle_geom.isEmpty():
                         valid_lcz_area_geom = lcz_area_circle_geom.makeValid()
@@ -221,9 +210,7 @@ class LightingGuidelineMixin:
                             internal_name = f"LCZ_Area_{runway_name.replace('/', '_')}"
                             style_key_lcz_area = "LCZ Area"
                             if style_key_lcz_area not in self.style_map:
-                                self.style_map[style_key_lcz_area] = (
-                                    "default_zone_polygon.qml"
-                                )
+                                self.style_map[style_key_lcz_area] = "default_zone_polygon.qml"
 
                             layer = self._create_and_add_layer(
                                 "Polygon",

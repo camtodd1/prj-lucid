@@ -27,9 +27,7 @@ class OutputOptionsMixin:
             )
             if hasattr(self, "pushButton_Generate"):
                 self.pushButton_Generate.setEnabled(False)
-                self.pushButton_Generate.setToolTip(
-                    "Output options UI is misconfigured."
-                )
+                self.pushButton_Generate.setToolTip("Output options UI is misconfigured.")
             return
 
         self.comboOutputFormat.clear()
@@ -52,9 +50,7 @@ class OutputOptionsMixin:
         self._update_file_widget_filter()
 
         self.radioMemoryOutput.toggled.connect(self._on_output_option_changed)
-        self.comboOutputFormat.currentIndexChanged.connect(
-            self._update_file_widget_filter
-        )
+        self.comboOutputFormat.currentIndexChanged.connect(self._update_file_widget_filter)
         self._on_output_option_changed()
 
     def _on_output_option_changed(self):

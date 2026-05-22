@@ -30,8 +30,7 @@ class PersistenceMixin:
                 self,
                 self.tr("Confirm Clear"),
                 self.tr("Clear all inputs and runway definitions?"),
-                QtWidgets.QMessageBox.StandardButton.Yes
-                | QtWidgets.QMessageBox.StandardButton.No,
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                 QtWidgets.QMessageBox.StandardButton.No,
             )
             if reply == QtWidgets.QMessageBox.StandardButton.No:
@@ -75,11 +74,7 @@ class PersistenceMixin:
 
     def save_input_data(self):
         icao_code = self._line_text("lineEdit_airport_name").strip().upper()
-        suggested_filename = (
-            f"{icao_code}_safeguarding_inputs.json"
-            if icao_code
-            else "safeguarding_inputs.json"
-        )
+        suggested_filename = f"{icao_code}_safeguarding_inputs.json" if icao_code else "safeguarding_inputs.json"
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             self.tr("Save Inputs"),
@@ -102,9 +97,7 @@ class PersistenceMixin:
             )
         except Exception as e:
             error_msg = self.tr("Error saving data:") + f"\n{type(e).__name__}: {e}"
-            QgsMessageLog.logMessage(
-                f"Save error {file_path}: {e}", DIALOG_LOG_TAG, level=Qgis.Critical
-            )
+            QgsMessageLog.logMessage(f"Save error {file_path}: {e}", DIALOG_LOG_TAG, level=Qgis.Critical)
             QMessageBox.critical(self, self.tr("Save Error"), error_msg)
 
     def load_input_data(self):
@@ -112,19 +105,14 @@ class PersistenceMixin:
             reply = QtWidgets.QMessageBox.question(
                 self,
                 self.tr("Confirm Load"),
-                self.tr(
-                    "This will clear current inputs and load data from the selected file. Continue?"
-                ),
-                QtWidgets.QMessageBox.StandardButton.Yes
-                | QtWidgets.QMessageBox.StandardButton.No,
+                self.tr("This will clear current inputs and load data from the selected file. Continue?"),
+                QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
                 QtWidgets.QMessageBox.StandardButton.No,
             )
             if reply == QtWidgets.QMessageBox.StandardButton.No:
                 return
 
-        file_path, _ = QFileDialog.getOpenFileName(
-            self, self.tr("Load Inputs"), "", self.tr("JSON Files (*.json)")
-        )
+        file_path, _ = QFileDialog.getOpenFileName(self, self.tr("Load Inputs"), "", self.tr("JSON Files (*.json)"))
         if not file_path:
             return
 
@@ -151,10 +139,7 @@ class PersistenceMixin:
             "met_easting": self._line_text("lineEdit_met_easting"),
             "met_northing": self._line_text("lineEdit_met_northing"),
             "met_elevation": self._line_text("lineEdit_met_elevation"),
-            "runways": [
-                self._runway_groups[idx].get_input_data()
-                for idx in sorted(self._runway_groups.keys())
-            ],
+            "runways": [self._runway_groups[idx].get_input_data() for idx in sorted(self._runway_groups.keys())],
             "cns_facilities": self._get_cns_save_rows(),
         }
         output_mode = "file" if self.radioFileOutput.isChecked() else "memory"
@@ -162,9 +147,7 @@ class PersistenceMixin:
             "mode": output_mode,
             "path": self.fileWidgetOutputPath.filePath().strip(),
             "format": self.comboOutputFormat.currentText(),
-            "dissolve": self.checkBox_dissolveLayers.isChecked()
-            if hasattr(self, "checkBox_dissolveLayers")
-            else False,
+            "dissolve": self.checkBox_dissolveLayers.isChecked() if hasattr(self, "checkBox_dissolveLayers") else False,
         }
         return data_to_save
 
@@ -208,10 +191,7 @@ class PersistenceMixin:
         ]
         if any(widget and widget.text() for widget in global_widgets):
             return True
-        if any(
-            self._runway_has_existing_input(group.get_input_data())
-            for group in self._runway_groups.values()
-        ):
+        if any(self._runway_has_existing_input(group.get_input_data()) for group in self._runway_groups.values()):
             return True
         cns_table = self._table("table_cns_facility")
         if cns_table and cns_table.rowCount() > 0:
@@ -225,11 +205,7 @@ class PersistenceMixin:
             "landing_available_1",
             "landing_available_2",
         }
-        return any(
-            str(value).strip()
-            for key, value in runway_data.items()
-            if key not in default_fields
-        )
+        return any(str(value).strip() for key, value in runway_data.items() if key not in default_fields)
 
     def _validate_loaded_payload(self, loaded_data) -> None:
         if not isinstance(loaded_data, dict):
@@ -239,12 +215,8 @@ class PersistenceMixin:
             raise ValueError(f"Missing required keys: {', '.join(missing)}")
         if not isinstance(loaded_data.get("runways"), list):
             raise ValueError("Invalid format: 'runways' key is not a list.")
-        if "cns_facilities" in loaded_data and not isinstance(
-            loaded_data.get("cns_facilities"), list
-        ):
-            raise ValueError(
-                "Invalid format: 'cns_facilities' key exists but is not a list."
-            )
+        if "cns_facilities" in loaded_data and not isinstance(loaded_data.get("cns_facilities"), list):
+            raise ValueError("Invalid format: 'cns_facilities' key exists but is not a list.")
 
     def _apply_loaded_payload(self, loaded_data) -> None:
         self._set_line_text("lineEdit_airport_name", loaded_data.get("icao_code", ""))
@@ -261,9 +233,7 @@ class PersistenceMixin:
     def _load_runway_rows(self, loaded_runways_list) -> None:
         if loaded_runways_list:
             first_index = min(self._runway_groups.keys()) if self._runway_groups else None
-            first_group = (
-                self._runway_groups.get(first_index) if first_index is not None else None
-            )
+            first_group = self._runway_groups.get(first_index) if first_index is not None else None
             if first_group:
                 first_group.set_input_data(self._with_runway_defaults(loaded_runways_list[0]))
             else:
@@ -278,9 +248,7 @@ class PersistenceMixin:
                     self.add_runway_group()
                     new_group = self._runway_groups.get(self._runway_id_counter)
                     if new_group:
-                        new_group.set_input_data(
-                            self._with_runway_defaults(runway_data_item)
-                        )
+                        new_group.set_input_data(self._with_runway_defaults(runway_data_item))
                     else:
                         QgsMessageLog.logMessage(
                             f"Load Error: Group {self._runway_id_counter} missing after add.",
@@ -341,9 +309,7 @@ class PersistenceMixin:
 
         output_format = output_options.get("format", DEFAULT_OUTPUT_FORMAT)
         if hasattr(self, "comboOutputFormat"):
-            idx = self.comboOutputFormat.findText(
-                output_format, QtCore.Qt.MatchFlag.MatchFixedString
-            )
+            idx = self.comboOutputFormat.findText(output_format, QtCore.Qt.MatchFlag.MatchFixedString)
             self.comboOutputFormat.setCurrentIndex(idx if idx >= 0 else 0)
 
         output_path = output_options.get("path", "")
@@ -353,9 +319,7 @@ class PersistenceMixin:
             self.fileWidgetOutputPath.setFilePath(output_path)
 
         if hasattr(self, "checkBox_dissolveLayers"):
-            self.checkBox_dissolveLayers.setChecked(
-                bool(output_options.get("dissolve", False))
-            )
+            self.checkBox_dissolveLayers.setChecked(bool(output_options.get("dissolve", False)))
         self._on_output_option_changed()
 
     def _reset_output_options(self) -> None:
@@ -383,14 +347,12 @@ class PersistenceMixin:
         if unexpected:
             log_msg = f"Unexpected load error ({file_path}): {error_details}"
             user_msg = (
-                self.tr("An unexpected error occurred during loading:")
-                + f"\n\n{self.tr('Error')}: {error_details}"
+                self.tr("An unexpected error occurred during loading:") + f"\n\n{self.tr('Error')}: {error_details}"
             )
         else:
             log_msg = f"Load Error ({file_path}): {error_details}"
             user_msg = (
-                self.tr("Error loading data from file:")
-                + f"\n{file_path}\n\n{self.tr('Error')}: {error_details}"
+                self.tr("Error loading data from file:") + f"\n{file_path}\n\n{self.tr('Error')}: {error_details}"
             )
         QgsMessageLog.logMessage(log_msg, DIALOG_LOG_TAG, level=Qgis.Critical)
         QMessageBox.critical(self, self.tr("Load Error"), user_msg)
