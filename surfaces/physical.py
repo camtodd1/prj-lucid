@@ -2709,12 +2709,20 @@ class PhysicalGeometryMixin:
                 overall_width = strip_dims["overall_width"]
                 graded_half_width = graded_width / 2.0
                 overall_half_width = overall_width / 2.0
+                stopway_primary_end = self._non_negative_float(
+                    runway_data.get("stopway1_len"), 0.0
+                )
+                stopway_reciprocal_end = self._non_negative_float(
+                    runway_data.get("stopway2_len"), 0.0
+                )
+                primary_strip_extension = extension + stopway_primary_end
+                reciprocal_strip_extension = extension + stopway_reciprocal_end
 
                 strip_end_center_p = phys_p_start.project(
-                    extension, rwy_params["azimuth_r_p"]
+                    primary_strip_extension, rwy_params["azimuth_r_p"]
                 )
                 strip_end_center_r = phys_p_end.project(
-                    extension, rwy_params["azimuth_p_r"]
+                    reciprocal_strip_extension, rwy_params["azimuth_p_r"]
                 )
 
                 if strip_end_center_p and strip_end_center_r:
