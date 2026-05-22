@@ -110,6 +110,19 @@ class LayerMixin:
             return True
 
         batch_size = max(1, int(batch_size))
+        provider_fields = provider.fields()
+        for feature in features:
+            normalised_attrs = []
+            attrs = feature.attributes()
+            for field_index in range(provider_fields.count()):
+                value = attrs[field_index] if field_index < len(attrs) else None
+                field = provider_fields.at(field_index)
+                if isinstance(value, str) and field.length() > 0:
+                    value = value[: field.length()]
+                normalised_attrs.append(value)
+            feature.setFields(provider_fields)
+            feature.setAttributes(normalised_attrs)
+
         while features:
             batch = features[:batch_size]
             add_ok, _ = provider.addFeatures(batch)
@@ -141,7 +154,9 @@ class LayerMixin:
                             geom_details = f"geometry detail error: {geom_error}"
                     QgsMessageLog.logMessage(
                         f"Failed to add feature {batch_index} to layer "
-                        f"'{display_name}': {geom_details}",
+                        f"'{display_name}': {geom_details}; "
+                        f"attr_count={len(feature.attributes())}; "
+                        f"attrs={feature.attributes()}",
                         plugin_tag,
                         Qgis.Critical,
                     )
