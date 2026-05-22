@@ -621,18 +621,29 @@ class PhysicalGeometryMixin:
                     runway_marking_contexts,
                     (
                         "DetailedThresholdMarking",
-                        "DetailedCentrelineMarking",
                         "DetailedAimingPointMarking",
                         "DetailedTouchdownZoneMarking",
                         "DetailedDisplacedThresholdMarking",
                         "DetailedPreThresholdAreaMarking",
-                        "DetailedSideStripeMarking",
                     ),
+                )
+                clipped_side_stripe_count = (
+                    self._apply_side_stripe_crossing_runway_clipping(
+                        physical_features,
+                        runway_marking_contexts,
+                    )
                 )
                 if clipped_marking_count:
                     QgsMessageLog.logMessage(
                         "Applied MOS 8.15 runway-intersection clipping to "
                         f"{clipped_marking_count} detailed runway marking feature(s).",
+                        plugin_tag,
+                        level=Qgis.Info,
+                    )
+                if clipped_side_stripe_count:
+                    QgsMessageLog.logMessage(
+                        "Applied MOS 8.21 intersecting-runway clipping to "
+                        f"{clipped_side_stripe_count} side-stripe marking feature(s).",
                         plugin_tag,
                         level=Qgis.Info,
                     )
@@ -801,6 +812,70 @@ class PhysicalGeometryMixin:
 
             physical_features[element_type] = updated_features
 
+        return clipped_count
+
+    def _apply_side_stripe_crossing_runway_clipping(
+        self,
+        physical_features: Dict[str, List[QgsFeature]],
+        runway_contexts: dict,
+    ) -> int:
+        """Remove side stripes where they pass over intersecting runway pavement."""
+        if len(runway_contexts) < 2:
+            return 0
+
+        clipped_count = 0
+        updated_features = []
+        for feature in physical_features.get("DetailedSideStripeMarking", []):
+            runway_name = feature.attribute("rwy")
+            if runway_name not in runway_contexts:
+                updated_features.append(feature)
+                continue
+
+            geom = feature.geometry()
+            if geom is None or geom.isEmpty():
+                continue
+
+            interrupted_by = []
+            for other_name, other_context in runway_contexts.items():
+                if other_name == runway_name:
+                    continue
+
+                other_geom = other_context.get("geom")
+                if other_geom is None or other_geom.isEmpty():
+                    continue
+                if not geom.intersects(other_geom):
+                    continue
+
+                clipped_geom = geom.difference(other_geom)
+                if clipped_geom is None:
+                    continue
+                if not clipped_geom.isEmpty() and not clipped_geom.isGeosValid():
+                    clipped_geom = clipped_geom.makeValid()
+                geom = clipped_geom
+                interrupted_by.append(other_name)
+
+                if geom is None or geom.isEmpty():
+                    break
+
+            if not interrupted_by:
+                updated_features.append(feature)
+                continue
+
+            if geom is None or geom.isEmpty():
+                feature.setGeometry(QgsGeometry())
+            else:
+                feature.setGeometry(geom)
+            self._append_feature_note(
+                feature,
+                "Interrupted at intersecting runway pavement under MOS 8.21 "
+                f"by {', '.join(interrupted_by)}.",
+            )
+            clipped_count += 1
+            if geom is None or geom.isEmpty():
+                continue
+            updated_features.append(feature)
+
+        physical_features["DetailedSideStripeMarking"] = updated_features
         return clipped_count
 
     def _style_runway_designation_layer(self, layer: QgsVectorLayer) -> None:
@@ -1430,7 +1505,8 @@ class PhysicalGeometryMixin:
             "Centreline uses default 30 m stripe / 20 m gap pattern.",
             "Take-off RVR < 550 m centreline-width trigger not modelled.",
             "Taxiway marking breaks are out of scope.",
-            "MOS 8.15 intersecting-runway clipping is applied after QA capture.",
+            "MOS 8.15 intersecting-runway clipping is applied after QA capture; centreline markings remain continuous.",
+            "MOS 8.21 side stripes are removed where they cross intersecting runway pavement.",
         }
         qa_records = {
             end_desig: {
@@ -2020,7 +2096,7 @@ class PhysicalGeometryMixin:
                                     self._surface_trigger_note(
                                         "MOS 8.21", runway_data
                                     )
-                                    + " Taxiway breaks out of scope; intersecting runway clipping deferred."
+                                    + " Taxiway breaks out of scope; intersecting runway pavement is clipped after generation."
                                 ),
                             ),
                         )

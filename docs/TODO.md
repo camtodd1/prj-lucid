@@ -77,11 +77,6 @@
   - Current matrix parks generated polygon glyphs for a later enhancement.
   - Create local glyph templates for digits `0-9` and letters `L`, `C`, `R` based on Figure 8.18(8) dimensions.
 
-- [ ] Add cross-runway post-processing for side-stripe clipping at intersecting runways.
-
-  Source:
-  - `surfaces/physical.py` notes that intersecting runway clipping is intended as a later pass.
-
 - [ ] Refine pre-threshold chevron clipping at runway end markings.
 
   Source:
