@@ -66,6 +66,41 @@ class AglOptionsMixin:
 
         group_layout.addWidget(spacing_group)
 
+        elements_group = QtWidgets.QGroupBox("MOS optional elements")
+        elements_group.setObjectName("groupBox_agl_elements")
+        elements_layout = QtWidgets.QGridLayout(elements_group)
+        self.checkBox_agl_runway_end_lights = QtWidgets.QCheckBox("Runway end lights")
+        self.checkBox_agl_runway_end_lights.setObjectName("checkBox_agl_runway_end_lights")
+        self.checkBox_agl_runway_end_lights.setChecked(True)
+        self.checkBox_agl_threshold_wing_bars = QtWidgets.QCheckBox("Threshold wing bars for precision ends")
+        self.checkBox_agl_threshold_wing_bars.setObjectName("checkBox_agl_threshold_wing_bars")
+        self.checkBox_agl_rtil = QtWidgets.QCheckBox("RTIL for displaced thresholds")
+        self.checkBox_agl_rtil.setObjectName("checkBox_agl_rtil")
+        self.checkBox_agl_temp_displaced_threshold = QtWidgets.QCheckBox("Temporary displaced threshold arrays")
+        self.checkBox_agl_temp_displaced_threshold.setObjectName("checkBox_agl_temp_displaced_threshold")
+        self.checkBox_agl_stopway_lights = QtWidgets.QCheckBox("Stopway lights where stopway length is entered")
+        self.checkBox_agl_stopway_lights.setObjectName("checkBox_agl_stopway_lights")
+        self.checkBox_agl_stopway_lights.setChecked(True)
+        self.checkBox_agl_centreline_lights = QtWidgets.QCheckBox("Runway centreline lights for CAT II/III")
+        self.checkBox_agl_centreline_lights.setObjectName("checkBox_agl_centreline_lights")
+        self.checkBox_agl_centreline_lights.setChecked(True)
+        self.checkBox_agl_tdz_lights = QtWidgets.QCheckBox("TDZ lights for CAT II/III")
+        self.checkBox_agl_tdz_lights.setObjectName("checkBox_agl_tdz_lights")
+        self.checkBox_agl_tdz_lights.setChecked(True)
+        for row, widget in enumerate(
+            [
+                self.checkBox_agl_runway_end_lights,
+                self.checkBox_agl_threshold_wing_bars,
+                self.checkBox_agl_rtil,
+                self.checkBox_agl_temp_displaced_threshold,
+                self.checkBox_agl_stopway_lights,
+                self.checkBox_agl_centreline_lights,
+                self.checkBox_agl_tdz_lights,
+            ]
+        ):
+            elements_layout.addWidget(widget, row // 2, row % 2)
+        group_layout.addWidget(elements_group)
+
         approach_group = QtWidgets.QGroupBox("Per-end approach lighting")
         approach_group.setObjectName("groupBox_agl_approach")
         approach_layout = QtWidgets.QVBoxLayout(approach_group)
@@ -112,6 +147,8 @@ class AglOptionsMixin:
         ]:
             widget.textChanged.connect(self._on_agl_option_changed)
         self.table_agl_approach.itemChanged.connect(self._on_agl_option_changed)
+        for widget in self._agl_checkbox_widgets():
+            widget.toggled.connect(self._on_agl_option_changed)
         self.pushButton_add_agl_approach.clicked.connect(self._add_agl_approach_row)
         self.pushButton_remove_agl_approach.clicked.connect(self._remove_selected_agl_approach_rows)
         self._on_agl_option_changed()
@@ -188,6 +225,7 @@ class AglOptionsMixin:
             "lineEdit_agl_approach_spacing", "AGL default approach light spacing", errors, minimum=0.01
         )
         options["approach_lighting"] = self._get_agl_approach_rows(errors)
+        options.update(self._get_agl_element_options())
         return options
 
     def _get_agl_save_options(self) -> Dict[str, object]:
@@ -199,6 +237,7 @@ class AglOptionsMixin:
             "approach_spacing_m": self._line_text("lineEdit_agl_approach_spacing"),
             "approach_lighting": [],
         }
+        options.update(self._get_agl_element_options())
         rows = []
         table = getattr(self, "table_agl_approach", None)
         if table is not None:
@@ -224,6 +263,7 @@ class AglOptionsMixin:
         self._set_line_text("lineEdit_agl_threshold_spacing", str(agl_options.get("threshold_spacing_m", "3")))
         self._set_line_text("lineEdit_agl_threshold_inset", str(agl_options.get("threshold_inset_m", "0")))
         self._set_line_text("lineEdit_agl_approach_spacing", str(agl_options.get("approach_spacing_m", "30")))
+        self._set_agl_element_options(agl_options)
         table = getattr(self, "table_agl_approach", None)
         if table is not None:
             table.setRowCount(0)
@@ -240,6 +280,13 @@ class AglOptionsMixin:
         self._set_line_text("lineEdit_agl_threshold_spacing", self.AGL_DEFAULTS["threshold_spacing_m"])
         self._set_line_text("lineEdit_agl_threshold_inset", self.AGL_DEFAULTS["threshold_inset_m"])
         self._set_line_text("lineEdit_agl_approach_spacing", self.AGL_DEFAULTS["approach_spacing_m"])
+        self.checkBox_agl_runway_end_lights.setChecked(True)
+        self.checkBox_agl_threshold_wing_bars.setChecked(False)
+        self.checkBox_agl_rtil.setChecked(False)
+        self.checkBox_agl_temp_displaced_threshold.setChecked(False)
+        self.checkBox_agl_stopway_lights.setChecked(True)
+        self.checkBox_agl_centreline_lights.setChecked(True)
+        self.checkBox_agl_tdz_lights.setChecked(True)
         if hasattr(self, "table_agl_approach"):
             self.table_agl_approach.setRowCount(0)
         self._on_agl_option_changed()
@@ -252,6 +299,19 @@ class AglOptionsMixin:
         table = getattr(self, "table_agl_approach", None)
         if table is not None and table.rowCount() > 0:
             return True
+        defaults = {
+            "runway_end_lights": True,
+            "threshold_wing_bars": False,
+            "rtil": False,
+            "temp_displaced_threshold": False,
+            "stopway_lights": True,
+            "centreline_lights": True,
+            "tdz_lights": True,
+        }
+        for option_name, default in defaults.items():
+            widget = getattr(self, f"checkBox_agl_{option_name}", None)
+            if widget is not None and widget.isChecked() != default:
+                return True
         for widget_name, default in [
             ("lineEdit_agl_edge_spacing", self.AGL_DEFAULTS["edge_spacing_m"]),
             ("lineEdit_agl_threshold_spacing", self.AGL_DEFAULTS["threshold_spacing_m"]),
@@ -342,6 +402,43 @@ class AglOptionsMixin:
     def _agl_error(self, errors: Optional[List[str]], message: str) -> None:
         if errors is not None:
             errors.append(message)
+
+    def _agl_checkbox_widgets(self) -> List[QtWidgets.QCheckBox]:
+        return [
+            self.checkBox_agl_runway_end_lights,
+            self.checkBox_agl_threshold_wing_bars,
+            self.checkBox_agl_rtil,
+            self.checkBox_agl_temp_displaced_threshold,
+            self.checkBox_agl_stopway_lights,
+            self.checkBox_agl_centreline_lights,
+            self.checkBox_agl_tdz_lights,
+        ]
+
+    def _get_agl_element_options(self) -> Dict[str, bool]:
+        return {
+            "runway_end_lights": self.checkBox_agl_runway_end_lights.isChecked(),
+            "threshold_wing_bars": self.checkBox_agl_threshold_wing_bars.isChecked(),
+            "rtil": self.checkBox_agl_rtil.isChecked(),
+            "temp_displaced_threshold": self.checkBox_agl_temp_displaced_threshold.isChecked(),
+            "stopway_lights": self.checkBox_agl_stopway_lights.isChecked(),
+            "centreline_lights": self.checkBox_agl_centreline_lights.isChecked(),
+            "tdz_lights": self.checkBox_agl_tdz_lights.isChecked(),
+        }
+
+    def _set_agl_element_options(self, options) -> None:
+        defaults = {
+            "runway_end_lights": True,
+            "threshold_wing_bars": False,
+            "rtil": False,
+            "temp_displaced_threshold": False,
+            "stopway_lights": True,
+            "centreline_lights": True,
+            "tdz_lights": True,
+        }
+        for option_name, default in defaults.items():
+            widget = getattr(self, f"checkBox_agl_{option_name}", None)
+            if widget is not None:
+                widget.setChecked(bool(options.get(option_name, default)))
 
     def _agl_runway_end_type(self, runway_index: int, end_role: str) -> str:
         group = self._runway_groups.get(runway_index)

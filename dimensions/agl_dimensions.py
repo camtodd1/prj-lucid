@@ -7,6 +7,16 @@ MOS_REF_RUNWAY_EDGE = "Part 139 MOS 2019 s 9.51"
 MOS_REF_THRESHOLD_LOCATION = "Part 139 MOS 2019 s 9.54"
 MOS_REF_THRESHOLD_NON_PRECISION = "Part 139 MOS 2019 s 9.55"
 MOS_REF_THRESHOLD_PRECISION = "Part 139 MOS 2019 s 9.56"
+MOS_REF_THRESHOLD_CHARACTERISTICS = "Part 139 MOS 2019 ss 9.57-9.58"
+MOS_REF_THRESHOLD_WING_BARS = "Part 139 MOS 2019 s 9.59(1)-(2)"
+MOS_REF_RTIL = "Part 139 MOS 2019 s 9.59(3)-(6)"
+MOS_REF_TEMP_DISPLACED_THRESHOLD = "Part 139 MOS 2019 ss 9.60-9.62"
+MOS_REF_DISPLACED_THRESHOLD_EDGE = "Part 139 MOS 2019 s 9.63"
+MOS_REF_RUNWAY_END = "Part 139 MOS 2019 ss 9.64-9.66"
+MOS_REF_STOPWAY = "Part 139 MOS 2019 s 9.68"
+MOS_REF_RUNWAY_CENTRELINE = "Part 139 MOS 2019 s 9.70"
+MOS_REF_SIMPLE_TDZ = "Part 139 MOS 2019 s 9.71"
+MOS_REF_TDZ = "Part 139 MOS 2019 s 9.72"
 MOS_REF_APPROACH_SALS = "Part 139 MOS 2019 ss 9.39-9.40"
 MOS_REF_APPROACH_CAT_I = "Part 139 MOS 2019 s 9.41"
 MOS_REF_APPROACH_CAT_II_III = "Part 139 MOS 2019 s 9.42"
@@ -31,6 +41,34 @@ PRECISION_APPROACH_POINT_D_M = 600.0
 PRECISION_APPROACH_POINT_E_M = 750.0
 PRECISION_CROSSBAR_LENGTH_M = 30.0
 CAT_II_III_SIDE_ROW_INNER_SPACING_M = 18.0
+RUNWAY_END_MIN_LIGHTS = 6
+CAT_III_RUNWAY_END_MAX_SPACING_M = 6.0
+THRESHOLD_WING_BAR_LIGHTS_PER_SIDE = 5
+THRESHOLD_WING_BAR_SPACING_M = 2.5
+RTIL_MIN_LATERAL_FROM_EDGE_LIGHTS_M = 12.0
+RTIL_DEFAULT_LATERAL_FROM_EDGE_LIGHTS_M = 12.0
+RTIL_MAX_LATERAL_FROM_EDGE_LIGHTS_M = 20.0
+TEMP_DISPLACED_THRESHOLD_LIGHTS_PER_SIDE = 5
+TEMP_DISPLACED_THRESHOLD_NARROW_LIGHTS_PER_SIDE = 3
+TEMP_DISPLACED_THRESHOLD_SPACING_M = 2.5
+STOPWAY_END_MIN_LIGHTS = 2
+RUNWAY_CENTRELINE_DEFAULT_SPACING_M = 30.0
+RUNWAY_CENTRELINE_LOW_VIS_SPACING_M = 15.0
+RUNWAY_CENTRELINE_RED_ZONE_M = 300.0
+RUNWAY_CENTRELINE_ALTERNATING_ZONE_M = 900.0
+TDZ_LENGTH_M = 900.0
+TDZ_FIRST_ROW_OFFSET_M = 60.0
+TDZ_ROW_SPACING_M = 60.0
+TDZ_BARRETTE_LIGHTS = 3
+TDZ_BARRETTE_SPACING_M = 1.5
+TDZ_INNER_OFFSET_M = 9.0
+LIGHT_COLOUR_WHITE = "white"
+LIGHT_COLOUR_VARIABLE_WHITE = "variable white"
+LIGHT_COLOUR_YELLOW = "yellow"
+LIGHT_COLOUR_GREEN = "green"
+LIGHT_COLOUR_RED = "red"
+LIGHT_COLOUR_BLUE = "blue"
+LIGHT_COLOUR_FLASHING_WHITE = "flashing white"
 
 
 def runway_is_precision(runway_type: str) -> bool:
@@ -60,6 +98,25 @@ def threshold_light_count_for_end(runway_type: str, runway_width_m: float) -> in
     if runway_is_precision(runway_type):
         return int(lit_width_m // PRECISION_THRESHOLD_MAX_SPACING_M) + 1
     return NON_PRECISION_THRESHOLD_MIN_LIGHTS
+
+
+def runway_end_light_count_for_end(runway_type: str, runway_width_m: float) -> int:
+    lit_width_m = max(float(runway_width_m), RUNWAY_LIGHTING_MIN_WIDTH_M)
+    if "CAT III" in (runway_type or ""):
+        return int(lit_width_m // CAT_III_RUNWAY_END_MAX_SPACING_M) + 1
+    return RUNWAY_END_MIN_LIGHTS
+
+
+def temp_displaced_threshold_lights_per_side(runway_width_m: float) -> int:
+    if float(runway_width_m) <= RUNWAY_LIGHTING_MIN_WIDTH_M:
+        return TEMP_DISPLACED_THRESHOLD_NARROW_LIGHTS_PER_SIDE
+    return TEMP_DISPLACED_THRESHOLD_LIGHTS_PER_SIDE
+
+
+def runway_centreline_required(runway_type_1: str, runway_type_2: str) -> bool:
+    return "Precision Approach CAT II/III" in (runway_type_1 or "") or "Precision Approach CAT II/III" in (
+        runway_type_2 or ""
+    )
 
 
 def approach_profile_for_end(runway_type: str) -> Dict[str, object]:

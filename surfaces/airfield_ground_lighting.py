@@ -17,14 +17,42 @@ from qgis.core import (  # type: ignore
 )
 
 from ..dimensions.agl_dimensions import (
+    LIGHT_COLOUR_FLASHING_WHITE,
+    LIGHT_COLOUR_GREEN,
+    LIGHT_COLOUR_RED,
+    LIGHT_COLOUR_VARIABLE_WHITE,
+    LIGHT_COLOUR_WHITE,
+    LIGHT_COLOUR_YELLOW,
+    MOS_REF_DISPLACED_THRESHOLD_EDGE,
     MOS_REF_RUNWAY_EDGE,
+    MOS_REF_RUNWAY_CENTRELINE,
+    MOS_REF_RUNWAY_END,
+    MOS_REF_RTIL,
+    MOS_REF_STOPWAY,
+    MOS_REF_TDZ,
+    MOS_REF_TEMP_DISPLACED_THRESHOLD,
     MOS_REF_THRESHOLD_LOCATION,
     MOS_REF_THRESHOLD_NON_PRECISION,
     MOS_REF_THRESHOLD_PRECISION,
+    MOS_REF_THRESHOLD_WING_BARS,
     RUNWAY_LIGHTING_MIN_WIDTH_M,
+    RTIL_DEFAULT_LATERAL_FROM_EDGE_LIGHTS_M,
+    STOPWAY_END_MIN_LIGHTS,
+    TDZ_BARRETTE_LIGHTS,
+    TDZ_BARRETTE_SPACING_M,
+    TDZ_FIRST_ROW_OFFSET_M,
+    TDZ_INNER_OFFSET_M,
+    TDZ_LENGTH_M,
+    TDZ_ROW_SPACING_M,
+    TEMP_DISPLACED_THRESHOLD_SPACING_M,
+    THRESHOLD_WING_BAR_LIGHTS_PER_SIDE,
+    THRESHOLD_WING_BAR_SPACING_M,
     approach_profile_for_end,
+    runway_centreline_required,
     runway_edge_spacing_for_end,
     runway_is_precision,
+    temp_displaced_threshold_lights_per_side,
+    runway_end_light_count_for_end,
     threshold_light_count_for_end,
 )
 
@@ -50,6 +78,16 @@ class AirfieldGroundLightingMixin:
         threshold_inset_m = float(agl_options.get("threshold_inset_m") or 0.0)
         default_approach_spacing_m = float(agl_options.get("approach_spacing_m") or 30.0)
         approach_rows = self._agl_rows_by_runway_end(agl_options.get("approach_lighting", []))
+        for option_name in [
+            "runway_end_lights",
+            "threshold_wing_bars",
+            "rtil",
+            "temp_displaced_threshold",
+            "stopway_lights",
+            "centreline_lights",
+            "tdz_lights",
+        ]:
+            approach_rows[("__options__", option_name)] = bool(agl_options.get(option_name, False))
 
         overall_success = False
         for runway_data in processed_runway_data_list:
@@ -102,6 +140,18 @@ class AirfieldGroundLightingMixin:
         primary_desig, reciprocal_desig = self._agl_end_designators(runway_name)
         primary_type = runway_data.get("type1", "")
         reciprocal_type = runway_data.get("type2", "")
+        disp_primary = self._non_negative_float(runway_data.get("thr_displaced_1"), 0.0)
+        disp_reciprocal = self._non_negative_float(runway_data.get("thr_displaced_2"), 0.0)
+        physical_endpoints = self._get_physical_runway_endpoints(
+            thr_point,
+            rec_thr_point,
+            disp_primary,
+            disp_reciprocal,
+            params,
+        )
+        phys_primary, phys_reciprocal, physical_length = (
+            physical_endpoints if physical_endpoints is not None else (thr_point, rec_thr_point, params["length"])
+        )
         edge_spacing_m = min(
             runway_edge_spacing_for_end(primary_type),
             runway_edge_spacing_for_end(reciprocal_type),
@@ -109,17 +159,21 @@ class AirfieldGroundLightingMixin:
         precision_runway = runway_is_precision(primary_type) or runway_is_precision(reciprocal_type)
         edge_start_offset_m = edge_spacing_m if precision_runway else 0.0
         edge_end_offset_m = edge_spacing_m if precision_runway else 0.0
+        physical_params = {**params, "length": physical_length}
 
         self._append_runway_edge_lights(
             features,
             fields,
             runway_name,
-            thr_point,
-            params,
+            phys_primary,
+            physical_params,
             lit_half_width,
             edge_spacing_m,
             edge_start_offset_m,
             edge_end_offset_m,
+            disp_primary,
+            disp_reciprocal,
+            precision_runway,
         )
         self._append_threshold_lights(
             features,
@@ -133,6 +187,139 @@ class AirfieldGroundLightingMixin:
             lit_half_width,
             threshold_inset_m,
         )
+
+        if self._agl_option_enabled(approach_rows, "runway_end_lights"):
+            self._append_runway_end_lights(
+                features,
+                fields,
+                runway_name,
+                primary_desig,
+                primary_type,
+                phys_primary,
+                params["azimuth_perp_l"],
+                params["azimuth_perp_r"],
+                lit_half_width,
+            )
+            self._append_runway_end_lights(
+                features,
+                fields,
+                runway_name,
+                reciprocal_desig,
+                reciprocal_type,
+                phys_reciprocal,
+                params["azimuth_perp_l"],
+                params["azimuth_perp_r"],
+                lit_half_width,
+            )
+
+        if approach_rows.get(("__options__", "threshold_wing_bars")):
+            for end_desig, runway_type, point in [
+                (primary_desig, primary_type, thr_point),
+                (reciprocal_desig, reciprocal_type, rec_thr_point),
+            ]:
+                if runway_is_precision(runway_type):
+                    self._append_threshold_wing_bars(
+                        features,
+                        fields,
+                        runway_name,
+                        end_desig,
+                        point,
+                        params["azimuth_perp_l"],
+                        params["azimuth_perp_r"],
+                        lit_half_width,
+                    )
+
+        if approach_rows.get(("__options__", "rtil")):
+            for end_desig, point, displacement_m in [
+                (primary_desig, thr_point, disp_primary),
+                (reciprocal_desig, rec_thr_point, disp_reciprocal),
+            ]:
+                if displacement_m > 0:
+                    self._append_rtil(
+                        features,
+                        fields,
+                        runway_name,
+                        end_desig,
+                        point,
+                        params["azimuth_perp_l"],
+                        params["azimuth_perp_r"],
+                        lit_half_width,
+                    )
+
+        if approach_rows.get(("__options__", "temp_displaced_threshold")):
+            for end_desig, point, displacement_m in [
+                (primary_desig, thr_point, disp_primary),
+                (reciprocal_desig, rec_thr_point, disp_reciprocal),
+            ]:
+                if displacement_m > 0:
+                    self._append_temp_displaced_threshold_lights(
+                        features,
+                        fields,
+                        runway_name,
+                        end_desig,
+                        point,
+                        params["azimuth_perp_l"],
+                        params["azimuth_perp_r"],
+                        lit_half_width,
+                    )
+
+        if approach_rows.get(("__options__", "stopway_lights")):
+            self._append_stopway_lights(
+                features,
+                fields,
+                runway_name,
+                primary_desig,
+                phys_primary,
+                params["azimuth_r_p"],
+                params["azimuth_perp_l"],
+                params["azimuth_perp_r"],
+                lit_half_width,
+                self._non_negative_float(runway_data.get("stopway1_len"), 0.0),
+                edge_spacing_m,
+            )
+            self._append_stopway_lights(
+                features,
+                fields,
+                runway_name,
+                reciprocal_desig,
+                phys_reciprocal,
+                params["azimuth_p_r"],
+                params["azimuth_perp_l"],
+                params["azimuth_perp_r"],
+                lit_half_width,
+                self._non_negative_float(runway_data.get("stopway2_len"), 0.0),
+                edge_spacing_m,
+            )
+
+        if approach_rows.get(("__options__", "centreline_lights")) and runway_centreline_required(
+            primary_type, reciprocal_type
+        ):
+            self._append_runway_centreline_lights(
+                features,
+                fields,
+                runway_name,
+                phys_primary,
+                params["azimuth_p_r"],
+                physical_length,
+            )
+
+        if approach_rows.get(("__options__", "tdz_lights")):
+            for end_role, end_desig, runway_type, origin, azimuth in [
+                ("primary", primary_desig, primary_type, thr_point, params["azimuth_p_r"]),
+                ("reciprocal", reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_r_p"]),
+            ]:
+                if "Precision Approach CAT II/III" in (runway_type or ""):
+                    self._append_tdz_lights(
+                        features,
+                        fields,
+                        runway_name,
+                        end_desig,
+                        origin,
+                        azimuth,
+                        params["azimuth_perp_l"],
+                        params["azimuth_perp_r"],
+                        min(TDZ_LENGTH_M, physical_length / 2.0),
+                    )
         self._append_threshold_lights(
             features,
             fields,
@@ -190,6 +377,9 @@ class AirfieldGroundLightingMixin:
         spacing_m: float,
         start_offset_m: float,
         end_offset_m: float,
+        disp_primary_m: float,
+        disp_reciprocal_m: float,
+        precision_runway: bool,
     ) -> None:
         available_length_m = max(0.0, params["length"] - start_offset_m - end_offset_m)
         if available_length_m <= 0:
@@ -202,6 +392,14 @@ class AirfieldGroundLightingMixin:
                 continue
             left = centre.project(half_width, params["azimuth_perp_l"])
             right = centre.project(half_width, params["azimuth_perp_r"])
+            colour = self._runway_edge_light_colour(
+                offset_m,
+                params["length"],
+                disp_primary_m,
+                disp_reciprocal_m,
+                precision_runway,
+            )
+            ref_mos = MOS_REF_DISPLACED_THRESHOLD_EDGE if colour == LIGHT_COLOUR_RED else MOS_REF_RUNWAY_EDGE
             if left is not None:
                 features.append(
                     self._agl_feature(
@@ -213,7 +411,8 @@ class AirfieldGroundLightingMixin:
                         "Left",
                         spacing_m,
                         offset_m,
-                        MOS_REF_RUNWAY_EDGE,
+                        colour,
+                        ref_mos,
                     )
                 )
             if right is not None:
@@ -227,7 +426,8 @@ class AirfieldGroundLightingMixin:
                         "Right",
                         spacing_m,
                         offset_m,
-                        MOS_REF_RUNWAY_EDGE,
+                        colour,
+                        ref_mos,
                     )
                 )
 
@@ -270,6 +470,7 @@ class AirfieldGroundLightingMixin:
                         side,
                         spacing_m,
                         abs(lateral_m),
+                        LIGHT_COLOUR_GREEN,
                         ref_mos,
                     )
                 )
@@ -304,6 +505,7 @@ class AirfieldGroundLightingMixin:
                         "Centre",
                         spacing_m,
                         offset_m,
+                        LIGHT_COLOUR_WHITE,
                         ref_mos,
                     )
                 )
@@ -331,9 +533,278 @@ class AirfieldGroundLightingMixin:
                             "Centre",
                             3.0,
                             crossbar_offset_m,
+                            LIGHT_COLOUR_WHITE,
                             ref_mos,
                         )
                     )
+
+    def _append_runway_end_lights(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        runway_type: str,
+        runway_end_point: QgsPointXY,
+        azimuth_left: float,
+        azimuth_right: float,
+        half_width: float,
+    ) -> None:
+        light_count = runway_end_light_count_for_end(runway_type, half_width * 2.0)
+        spacing_m = (half_width * 2.0) / max(1, light_count - 1)
+        for lateral_m in self._agl_lateral_offsets_by_count(half_width, light_count):
+            side = "Centre" if abs(lateral_m) < 1e-6 else ("Left" if lateral_m < 0 else "Right")
+            azimuth = azimuth_left if lateral_m < 0 else azimuth_right
+            point = runway_end_point if abs(lateral_m) < 1e-6 else runway_end_point.project(abs(lateral_m), azimuth)
+            if point is not None:
+                features.append(
+                    self._agl_feature(
+                        fields,
+                        point,
+                        runway_name,
+                        end_desig,
+                        "Runway End",
+                        side,
+                        spacing_m,
+                        abs(lateral_m),
+                        LIGHT_COLOUR_RED,
+                        MOS_REF_RUNWAY_END,
+                    )
+                )
+
+    def _append_threshold_wing_bars(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        threshold_point: QgsPointXY,
+        azimuth_left: float,
+        azimuth_right: float,
+        half_width: float,
+    ) -> None:
+        for side_name, azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
+            for index in range(THRESHOLD_WING_BAR_LIGHTS_PER_SIDE):
+                lateral_m = half_width + index * THRESHOLD_WING_BAR_SPACING_M
+                point = threshold_point.project(lateral_m, azimuth)
+                if point is not None:
+                    features.append(
+                        self._agl_feature(
+                            fields,
+                            point,
+                            runway_name,
+                            end_desig,
+                            "Threshold Wing Bar",
+                            side_name,
+                            THRESHOLD_WING_BAR_SPACING_M,
+                            lateral_m,
+                            LIGHT_COLOUR_GREEN,
+                            MOS_REF_THRESHOLD_WING_BARS,
+                        )
+                    )
+
+    def _append_rtil(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        threshold_point: QgsPointXY,
+        azimuth_left: float,
+        azimuth_right: float,
+        half_width: float,
+    ) -> None:
+        lateral_m = half_width + RTIL_DEFAULT_LATERAL_FROM_EDGE_LIGHTS_M
+        for side_name, azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
+            point = threshold_point.project(lateral_m, azimuth)
+            if point is not None:
+                features.append(
+                    self._agl_feature(
+                        fields,
+                        point,
+                        runway_name,
+                        end_desig,
+                        "RTIL",
+                        side_name,
+                        0.0,
+                        lateral_m,
+                        LIGHT_COLOUR_FLASHING_WHITE,
+                        MOS_REF_RTIL,
+                    )
+                )
+
+    def _append_temp_displaced_threshold_lights(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        threshold_point: QgsPointXY,
+        azimuth_left: float,
+        azimuth_right: float,
+        half_width: float,
+    ) -> None:
+        lights_per_side = temp_displaced_threshold_lights_per_side(half_width * 2.0)
+        for side_name, azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
+            for index in range(lights_per_side):
+                lateral_m = half_width + index * TEMP_DISPLACED_THRESHOLD_SPACING_M
+                point = threshold_point.project(lateral_m, azimuth)
+                if point is not None:
+                    features.append(
+                        self._agl_feature(
+                            fields,
+                            point,
+                            runway_name,
+                            end_desig,
+                            "Temporary Displaced Threshold",
+                            side_name,
+                            TEMP_DISPLACED_THRESHOLD_SPACING_M,
+                            lateral_m,
+                            LIGHT_COLOUR_GREEN,
+                            MOS_REF_TEMP_DISPLACED_THRESHOLD,
+                        )
+                    )
+
+    def _append_stopway_lights(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        start_point: QgsPointXY,
+        outward_azimuth: float,
+        azimuth_left: float,
+        azimuth_right: float,
+        half_width: float,
+        stopway_length_m: float,
+        spacing_m: float,
+    ) -> None:
+        if stopway_length_m <= 0:
+            return
+        count = self._agl_interval_count(stopway_length_m, spacing_m)
+        for index in range(1, count + 1):
+            longitudinal_m = min(index * spacing_m, stopway_length_m)
+            centre = start_point.project(longitudinal_m, outward_azimuth)
+            if centre is None:
+                continue
+            for side_name, azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
+                point = centre.project(half_width, azimuth)
+                if point is not None:
+                    features.append(
+                        self._agl_feature(
+                            fields,
+                            point,
+                            runway_name,
+                            end_desig,
+                            "Stopway Edge",
+                            side_name,
+                            spacing_m,
+                            longitudinal_m,
+                            LIGHT_COLOUR_RED,
+                            MOS_REF_STOPWAY,
+                        )
+                    )
+        stopway_end = start_point.project(stopway_length_m, outward_azimuth)
+        if stopway_end is None:
+            return
+        for lateral_m in self._agl_lateral_offsets_by_count(half_width, STOPWAY_END_MIN_LIGHTS):
+            azimuth = azimuth_left if lateral_m < 0 else azimuth_right
+            point = stopway_end if abs(lateral_m) < 1e-6 else stopway_end.project(abs(lateral_m), azimuth)
+            if point is not None:
+                features.append(
+                    self._agl_feature(
+                        fields,
+                        point,
+                        runway_name,
+                        end_desig,
+                        "Stopway End",
+                        "Centre",
+                        half_width * 2.0,
+                        stopway_length_m,
+                        LIGHT_COLOUR_RED,
+                        MOS_REF_STOPWAY,
+                    )
+                )
+
+    def _append_runway_centreline_lights(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        start_point: QgsPointXY,
+        azimuth: float,
+        length_m: float,
+    ) -> None:
+        spacing_m = 30.0
+        count = self._agl_interval_count(length_m, spacing_m)
+        for index in range(count + 1):
+            offset_m = min(index * spacing_m, length_m)
+            point = start_point.project(offset_m, azimuth)
+            if point is None:
+                continue
+            distance_to_end = min(offset_m, max(0.0, length_m - offset_m))
+            if distance_to_end <= 300.0:
+                colour = LIGHT_COLOUR_RED
+            elif distance_to_end <= 900.0:
+                colour = LIGHT_COLOUR_RED if (index // 2) % 2 == 0 else LIGHT_COLOUR_WHITE
+            else:
+                colour = LIGHT_COLOUR_WHITE
+            features.append(
+                self._agl_feature(
+                    fields,
+                    point,
+                    runway_name,
+                    "",
+                    "Runway Centreline",
+                    "Centre",
+                    spacing_m,
+                    offset_m,
+                    colour,
+                    MOS_REF_RUNWAY_CENTRELINE,
+                )
+            )
+
+    def _append_tdz_lights(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        threshold_point: QgsPointXY,
+        runway_azimuth: float,
+        azimuth_left: float,
+        azimuth_right: float,
+        length_m: float,
+    ) -> None:
+        if length_m < TDZ_FIRST_ROW_OFFSET_M:
+            return
+        row_count = self._agl_interval_count(length_m - TDZ_FIRST_ROW_OFFSET_M, TDZ_ROW_SPACING_M)
+        for row_index in range(row_count + 1):
+            longitudinal_m = TDZ_FIRST_ROW_OFFSET_M + row_index * TDZ_ROW_SPACING_M
+            if longitudinal_m > length_m:
+                continue
+            row_center = threshold_point.project(longitudinal_m, runway_azimuth)
+            if row_center is None:
+                continue
+            for side_name, side_azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
+                for light_index in range(TDZ_BARRETTE_LIGHTS):
+                    lateral_m = TDZ_INNER_OFFSET_M + light_index * TDZ_BARRETTE_SPACING_M
+                    point = row_center.project(lateral_m, side_azimuth)
+                    if point is not None:
+                        features.append(
+                            self._agl_feature(
+                                fields,
+                                point,
+                                runway_name,
+                                end_desig,
+                                "TDZ Barrette",
+                                side_name,
+                                TDZ_BARRETTE_SPACING_M,
+                                longitudinal_m,
+                                LIGHT_COLOUR_VARIABLE_WHITE,
+                                MOS_REF_TDZ,
+                            )
+                        )
 
     def _agl_feature(
         self,
@@ -345,6 +816,7 @@ class AirfieldGroundLightingMixin:
         side: str,
         spacing_m: float,
         offset_m: float,
+        colour: str,
         ref_mos: str,
     ) -> QgsFeature:
         feature = QgsFeature(fields)
@@ -355,6 +827,7 @@ class AirfieldGroundLightingMixin:
                 end_desig,
                 light_type,
                 side,
+                colour,
                 round(float(spacing_m), 3),
                 round(float(offset_m), 3),
                 ref_mos,
@@ -370,6 +843,7 @@ class AirfieldGroundLightingMixin:
                 QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
                 QgsField("light_type", QVariant.String, self.tr("Light Type"), 30),
                 QgsField("side", QVariant.String, self.tr("Side"), 12),
+                QgsField("colour", QVariant.String, self.tr("Colour"), 20),
                 QgsField("spacing_m", QVariant.Double, self.tr("Spacing (m)"), 12, 3),
                 QgsField("offset_m", QVariant.Double, self.tr("Offset (m)"), 12, 3),
                 QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 80),
@@ -389,6 +863,9 @@ class AirfieldGroundLightingMixin:
             except (TypeError, ValueError):
                 continue
         return rows
+
+    def _agl_option_enabled(self, rows: Dict[tuple, object], option_name: str) -> bool:
+        return bool(rows.get(("__options__", option_name)))
 
     def _agl_end_designators(self, runway_name: str) -> tuple[str, str]:
         if "/" in runway_name:
@@ -413,3 +890,19 @@ class AirfieldGroundLightingMixin:
             return [-usable_half_width, usable_half_width]
         spacing_m = (usable_half_width * 2.0) / (light_count - 1)
         return [-usable_half_width + (idx * spacing_m) for idx in range(light_count)]
+
+    def _runway_edge_light_colour(
+        self,
+        offset_m: float,
+        runway_length_m: float,
+        disp_primary_m: float,
+        disp_reciprocal_m: float,
+        precision_runway: bool,
+    ) -> str:
+        if disp_primary_m > 0 and offset_m < disp_primary_m:
+            return LIGHT_COLOUR_RED
+        if disp_reciprocal_m > 0 and (runway_length_m - offset_m) < disp_reciprocal_m:
+            return LIGHT_COLOUR_RED
+        if precision_runway and min(offset_m, max(0.0, runway_length_m - offset_m)) <= 600.0:
+            return LIGHT_COLOUR_YELLOW
+        return LIGHT_COLOUR_VARIABLE_WHITE
