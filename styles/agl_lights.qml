@@ -109,7 +109,7 @@
           <Option type="Map">
             <Option name="name" value="circle" type="QString"/>
             <Option name="color" value="220,35,35,255" type="QString"/>
-            <Option name="outline_color" value="20,70,160,255" type="QString"/>
+            <Option name="outline_color" value="204,204,204,255" type="QString"/>
             <Option name="size" value="3.2" type="QString"/>
             <Option name="outline_width" value="0.25" type="QString"/>
             <Option name="size_unit" value="MM" type="QString"/>
@@ -121,7 +121,7 @@
             <Option name="name" value="semi_circle" type="QString"/>
             <Option name="angle" value="0" type="QString"/>
             <Option name="color" value="255,255,255,255" type="QString"/>
-            <Option name="outline_color" value="20,70,160,255" type="QString"/>
+            <Option name="outline_color" value="204,204,204,255" type="QString"/>
             <Option name="size" value="3.2" type="QString"/>
             <Option name="outline_width" value="0.25" type="QString"/>
             <Option name="size_unit" value="MM" type="QString"/>
@@ -134,7 +134,7 @@
           <Option type="Map">
             <Option name="name" value="circle" type="QString"/>
             <Option name="color" value="255,255,255,255" type="QString"/>
-            <Option name="outline_color" value="20,70,160,255" type="QString"/>
+            <Option name="outline_color" value="204,204,204,255" type="QString"/>
             <Option name="size" value="3.2" type="QString"/>
             <Option name="outline_width" value="0.25" type="QString"/>
             <Option name="size_unit" value="MM" type="QString"/>
@@ -146,7 +146,7 @@
             <Option name="name" value="semi_circle" type="QString"/>
             <Option name="angle" value="0" type="QString"/>
             <Option name="color" value="220,35,35,255" type="QString"/>
-            <Option name="outline_color" value="20,70,160,255" type="QString"/>
+            <Option name="outline_color" value="204,204,204,255" type="QString"/>
             <Option name="size" value="3.2" type="QString"/>
             <Option name="outline_width" value="0.25" type="QString"/>
             <Option name="size_unit" value="MM" type="QString"/>

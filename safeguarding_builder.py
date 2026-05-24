@@ -637,6 +637,12 @@ class SafeguardingBuilder(
                     if cl_layer is not None:
                         self._apply_style(cl_layer, self.style_map)
 
+            agl_group = None
+            if agl_options.get("enabled"):
+                agl_group = main_group.addGroup(self.tr("Airfield Ground Lighting"))
+                if agl_group is not None:
+                    self._stage_layer_tree_node(agl_group)
+
             (
                 specialised_safeguarding_group,
                 any_physical_or_protection_ok,
@@ -649,9 +655,7 @@ class SafeguardingBuilder(
 
             agl_processed_ok = False
             if agl_options.get("enabled"):
-                agl_group = main_group.addGroup(self.tr("Airfield Ground Lighting"))
                 if agl_group is not None:
-                    self._stage_layer_tree_node(agl_group)
                     agl_processed_ok = self.process_airfield_ground_lighting(
                         processed_runway_data_list,
                         agl_options,
