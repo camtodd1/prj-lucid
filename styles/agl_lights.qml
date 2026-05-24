@@ -9,8 +9,6 @@
       <category value="red" symbol="4" label="Red"/>
       <category value="yellow" symbol="5" label="Yellow"/>
       <category value="blue" symbol="6" label="Blue"/>
-      <category value="white/red" symbol="7" label="White / red"/>
-      <category value="red/white" symbol="8" label="Red / white"/>
     </categories>
     <symbols>
       <symbol name="0" type="marker" alpha="1">
@@ -98,84 +96,6 @@
             <Option name="color" value="40,110,255,255" type="QString"/>
             <Option name="outline_color" value="0,40,120,255" type="QString"/>
             <Option name="size" value="2.8" type="QString"/>
-            <Option name="outline_width" value="0.25" type="QString"/>
-            <Option name="size_unit" value="MM" type="QString"/>
-            <Option name="outline_width_unit" value="MM" type="QString"/>
-          </Option>
-        </layer>
-      </symbol>
-      <symbol name="7" type="marker" alpha="1">
-        <data_defined_properties>
-          <Option type="Map">
-            <Option name="name" value="" type="QString"/>
-            <Option name="properties">
-              <Option type="Map" name="angle">
-                <Option name="active" value="true" type="bool"/>
-                <Option name="expression" value="" type="QString"/>
-                <Option name="field" value="symbol_ang" type="QString"/>
-                <Option name="type" value="2" type="int"/>
-              </Option>
-            </Option>
-            <Option name="type" value="collection" type="QString"/>
-          </Option>
-        </data_defined_properties>
-        <layer class="SimpleMarker" enabled="1">
-          <Option type="Map">
-            <Option name="name" value="circle" type="QString"/>
-            <Option name="color" value="220,35,35,255" type="QString"/>
-            <Option name="outline_color" value="20,70,160,255" type="QString"/>
-            <Option name="size" value="3.2" type="QString"/>
-            <Option name="outline_width" value="0.25" type="QString"/>
-            <Option name="size_unit" value="MM" type="QString"/>
-            <Option name="outline_width_unit" value="MM" type="QString"/>
-          </Option>
-        </layer>
-        <layer class="SimpleMarker" enabled="1">
-          <Option type="Map">
-            <Option name="name" value="semi_circle" type="QString"/>
-            <Option name="angle" value="0" type="QString"/>
-            <Option name="color" value="255,255,255,255" type="QString"/>
-            <Option name="outline_color" value="20,70,160,255" type="QString"/>
-            <Option name="size" value="3.2" type="QString"/>
-            <Option name="outline_width" value="0.25" type="QString"/>
-            <Option name="size_unit" value="MM" type="QString"/>
-            <Option name="outline_width_unit" value="MM" type="QString"/>
-          </Option>
-        </layer>
-      </symbol>
-      <symbol name="8" type="marker" alpha="1">
-        <data_defined_properties>
-          <Option type="Map">
-            <Option name="name" value="" type="QString"/>
-            <Option name="properties">
-              <Option type="Map" name="angle">
-                <Option name="active" value="true" type="bool"/>
-                <Option name="expression" value="" type="QString"/>
-                <Option name="field" value="symbol_ang" type="QString"/>
-                <Option name="type" value="2" type="int"/>
-              </Option>
-            </Option>
-            <Option name="type" value="collection" type="QString"/>
-          </Option>
-        </data_defined_properties>
-        <layer class="SimpleMarker" enabled="1">
-          <Option type="Map">
-            <Option name="name" value="circle" type="QString"/>
-            <Option name="color" value="255,255,255,255" type="QString"/>
-            <Option name="outline_color" value="20,70,160,255" type="QString"/>
-            <Option name="size" value="3.2" type="QString"/>
-            <Option name="outline_width" value="0.25" type="QString"/>
-            <Option name="size_unit" value="MM" type="QString"/>
-            <Option name="outline_width_unit" value="MM" type="QString"/>
-          </Option>
-        </layer>
-        <layer class="SimpleMarker" enabled="1">
-          <Option type="Map">
-            <Option name="name" value="semi_circle" type="QString"/>
-            <Option name="angle" value="0" type="QString"/>
-            <Option name="color" value="220,35,35,255" type="QString"/>
-            <Option name="outline_color" value="20,70,160,255" type="QString"/>
-            <Option name="size" value="3.2" type="QString"/>
             <Option name="outline_width" value="0.25" type="QString"/>
             <Option name="size_unit" value="MM" type="QString"/>
             <Option name="outline_width_unit" value="MM" type="QString"/>
