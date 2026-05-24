@@ -1,4 +1,4 @@
-"""Optional Airfield Ground Lighting generation."""
+"""Optional Airfield Ground Lighting point generation."""
 
 import math
 import traceback
@@ -148,9 +148,7 @@ class AirfieldGroundLightingMixin:
             return False
 
         fields = self._agl_fields()
-        directional_fields = self._agl_directional_fields()
         features: List[QgsFeature] = []
-        directional_features: List[QgsFeature] = []
         lit_half_width = max(float(runway_width), RUNWAY_LIGHTING_MIN_WIDTH_M) / 2.0
         primary_desig, reciprocal_desig = self._agl_end_designators(runway_name)
         primary_type = runway_data.get("type1", "")
@@ -314,9 +312,7 @@ class AirfieldGroundLightingMixin:
         if approach_rows.get(("__options__", "centreline_lights")) and (centreline_required or centreline_recommended):
             self._append_runway_centreline_lights(
                 features,
-                directional_features,
                 fields,
-                directional_fields,
                 runway_name,
                 phys_primary,
                 params["azimuth_p_r"],
@@ -391,16 +387,7 @@ class AirfieldGroundLightingMixin:
             layer_group,
             "AGL Light",
         )
-        directional_layer = self._create_and_add_layer(
-            "Polygon",
-            f"AGL_Directional_{runway_name.replace('/', '_')}",
-            f"{self.tr('AGL Directional Lights')} {runway_name}",
-            directional_fields,
-            directional_features,
-            layer_group,
-            "AGL Directional Light",
-        )
-        return layer is not None or directional_layer is not None
+        return layer is not None
 
     def _append_runway_edge_lights(
         self,
@@ -765,9 +752,7 @@ class AirfieldGroundLightingMixin:
     def _append_runway_centreline_lights(
         self,
         features: List[QgsFeature],
-        directional_features: List[QgsFeature],
         fields: QgsFields,
-        directional_fields: QgsFields,
         runway_name: str,
         start_point: QgsPointXY,
         azimuth: float,
@@ -792,44 +777,6 @@ class AirfieldGroundLightingMixin:
                 distance_to_end=offset_m,
                 sequence_index=int(round((length_m - offset_m) / spacing_m)) if spacing_m > 0 else index,
             )
-            if primary_colour != reciprocal_colour:
-                primary_observable_azimuth = azimuth + 180.0
-                reciprocal_observable_azimuth = azimuth
-                directional_features.extend(
-                    [
-                        self._agl_directional_feature(
-                            directional_fields,
-                            point,
-                            primary_observable_azimuth,
-                            runway_name,
-                            "",
-                            "Runway Centreline",
-                            "Primary",
-                            spacing_m,
-                            offset_m,
-                            primary_colour,
-                            primary_colour,
-                            reciprocal_colour,
-                            MOS_REF_RUNWAY_CENTRELINE,
-                        ),
-                        self._agl_directional_feature(
-                            directional_fields,
-                            point,
-                            reciprocal_observable_azimuth,
-                            runway_name,
-                            "",
-                            "Runway Centreline",
-                            "Reciprocal",
-                            spacing_m,
-                            offset_m,
-                            reciprocal_colour,
-                            primary_colour,
-                            reciprocal_colour,
-                            MOS_REF_RUNWAY_CENTRELINE,
-                        ),
-                    ]
-                )
-                continue
             colour = self._combined_light_colour(primary_colour, reciprocal_colour)
             features.append(
                 self._agl_feature(
@@ -846,7 +793,7 @@ class AirfieldGroundLightingMixin:
                     colour_primary=primary_colour,
                     colour_reciprocal=reciprocal_colour,
                     angle_deg=azimuth + 180.0,
-                    symbol_angle_deg=azimuth + 90.0,
+                    symbol_angle_deg=azimuth + 180.0,
                 )
             )
 
@@ -993,56 +940,6 @@ class AirfieldGroundLightingMixin:
         )
         return feature
 
-    def _agl_directional_feature(
-        self,
-        fields: QgsFields,
-        point: QgsPointXY,
-        observable_azimuth: float,
-        runway_name: str,
-        end_desig: str,
-        light_type: str,
-        side: str,
-        spacing_m: float,
-        offset_m: float,
-        colour: str,
-        colour_primary: str,
-        colour_reciprocal: str,
-        ref_mos: str,
-    ) -> QgsFeature:
-        feature = QgsFeature(fields)
-        feature.setGeometry(self._agl_half_disk_geometry(point, observable_azimuth))
-        feature.setAttributes(
-            [
-                runway_name,
-                end_desig,
-                light_type,
-                side,
-                colour,
-                colour_primary,
-                colour_reciprocal,
-                round(float(spacing_m), 3),
-                round(float(offset_m), 3),
-                round(float(observable_azimuth) % 360.0, 3),
-                ref_mos,
-                "MOS-derived",
-            ]
-        )
-        return feature
-
-    def _agl_half_disk_geometry(self, center: QgsPointXY, observable_azimuth: float) -> QgsGeometry:
-        radius_m = 1.8
-        segment_count = 18
-        points = []
-        for index in range(segment_count + 1):
-            angle = observable_azimuth - 90.0 + (180.0 * index / segment_count)
-            arc_point = center.project(radius_m, angle)
-            if arc_point is not None:
-                points.append(arc_point)
-        if len(points) < 3:
-            return QgsGeometry.fromPointXY(center)
-        points.append(points[0])
-        return QgsGeometry.fromPolygonXY([points])
-
     def _agl_fields(self) -> QgsFields:
         return QgsFields(
             [
@@ -1057,24 +954,6 @@ class AirfieldGroundLightingMixin:
                 QgsField("offset_m", QVariant.Double, self.tr("Offset (m)"), 12, 3),
                 QgsField("angle_deg", QVariant.Double, self.tr("Display Angle (deg)"), 12, 3),
                 QgsField("symbol_ang", QVariant.Double, self.tr("Symbol Angle (deg)"), 12, 3),
-                QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 80),
-                QgsField("source", QVariant.String, self.tr("Source"), 80),
-            ]
-        )
-
-    def _agl_directional_fields(self) -> QgsFields:
-        return QgsFields(
-            [
-                QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
-                QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
-                QgsField("light_type", QVariant.String, self.tr("Light Type"), 30),
-                QgsField("side", QVariant.String, self.tr("Observable Side"), 12),
-                QgsField("colour", QVariant.String, self.tr("Colour"), 20),
-                QgsField("colour_p", QVariant.String, self.tr("Primary Direction Colour"), 20),
-                QgsField("colour_r", QVariant.String, self.tr("Reciprocal Direction Colour"), 20),
-                QgsField("spacing_m", QVariant.Double, self.tr("Spacing (m)"), 12, 3),
-                QgsField("offset_m", QVariant.Double, self.tr("Offset (m)"), 12, 3),
-                QgsField("obs_az", QVariant.Double, self.tr("Observable Azimuth (deg)"), 12, 3),
                 QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 80),
                 QgsField("source", QVariant.String, self.tr("Source"), 80),
             ]

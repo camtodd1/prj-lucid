@@ -8,6 +8,7 @@ from typing import Dict, List, Optional
 
 from qgis.core import (  # type: ignore
     Qgis,
+    QgsCategorizedSymbolRenderer,
     QgsFeature,
     QgsFields,
     QgsLayerTreeGroup,
@@ -357,6 +358,8 @@ class LayerMixin:
                                 level=Qgis.Warning,
                             )
                             return
+                    if str(style_key) == "AGL Light":
+                        self._apply_agl_rotation_field(layer)
                     layer.triggerRepaint()
                 except Exception as e_load:
                     QgsMessageLog.logMessage(
@@ -377,4 +380,24 @@ class LayerMixin:
                 f"Critical Error applying style logic to '{layer_name}': {e}\n{traceback.format_exc()}",
                 plugin_tag,
                 level=Qgis.Critical,
+            )
+
+    def _apply_agl_rotation_field(self, layer: QgsVectorLayer) -> None:
+        """Apply QGIS' renderer-level marker rotation for dual-aspect AGL point symbols."""
+        if layer.fields().indexFromName("symbol_ang") < 0:
+            return
+        renderer = layer.renderer()
+        if renderer is None or renderer.type() != "categorizedSymbol":
+            return
+        try:
+            for category in renderer.categories():
+                symbol = category.symbol()
+                if symbol is not None:
+                    QgsCategorizedSymbolRenderer.convertSymbolRotation(symbol, "symbol_ang")
+            layer.setRenderer(renderer)
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Unable to apply AGL symbol rotation field for '{layer.name()}': {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
             )
