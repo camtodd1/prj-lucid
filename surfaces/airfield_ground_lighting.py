@@ -792,6 +792,7 @@ class AirfieldGroundLightingMixin:
                     MOS_REF_RUNWAY_CENTRELINE,
                     colour_primary=primary_colour,
                     colour_reciprocal=reciprocal_colour,
+                    angle_deg=azimuth + 180.0,
                 )
             )
 
@@ -914,6 +915,7 @@ class AirfieldGroundLightingMixin:
         ref_mos: str,
         colour_primary: str = "",
         colour_reciprocal: str = "",
+        angle_deg: float = 0.0,
     ) -> QgsFeature:
         feature = QgsFeature(fields)
         feature.setGeometry(QgsGeometry.fromPointXY(point))
@@ -928,6 +930,7 @@ class AirfieldGroundLightingMixin:
                 colour_reciprocal or colour,
                 round(float(spacing_m), 3),
                 round(float(offset_m), 3),
+                round(float(angle_deg) % 360.0, 3),
                 ref_mos,
                 "MOS-derived",
             ]
@@ -946,6 +949,7 @@ class AirfieldGroundLightingMixin:
                 QgsField("colour_r", QVariant.String, self.tr("Reciprocal Direction Colour"), 20),
                 QgsField("spacing_m", QVariant.Double, self.tr("Spacing (m)"), 12, 3),
                 QgsField("offset_m", QVariant.Double, self.tr("Offset (m)"), 12, 3),
+                QgsField("angle_deg", QVariant.Double, self.tr("Display Angle (deg)"), 12, 3),
                 QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 80),
                 QgsField("source", QVariant.String, self.tr("Source"), 80),
             ]

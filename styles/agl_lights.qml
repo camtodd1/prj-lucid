@@ -109,12 +109,49 @@
           <Option type="Map">
             <Option name="name" value="semi_circle" type="QString"/>
             <Option name="color" value="255,255,255,255" type="QString"/>
-            <Option name="outline_color" value="120,0,0,255" type="QString"/>
+            <Option name="outline_color" value="70,70,70,255" type="QString"/>
             <Option name="size" value="3.2" type="QString"/>
-            <Option name="outline_width" value="0.35" type="QString"/>
+            <Option name="outline_width" value="0.25" type="QString"/>
             <Option name="size_unit" value="MM" type="QString"/>
             <Option name="outline_width_unit" value="MM" type="QString"/>
           </Option>
+          <data_defined_properties>
+            <Option type="Map">
+              <Option name="name" value="" type="QString"/>
+              <Option name="properties">
+                <Option type="Map" name="angle">
+                  <Option name="active" value="true" type="bool"/>
+                  <Option name="expression" value="&quot;angle_deg&quot;" type="QString"/>
+                  <Option name="type" value="3" type="int"/>
+                </Option>
+              </Option>
+              <Option name="type" value="collection" type="QString"/>
+            </Option>
+          </data_defined_properties>
+        </layer>
+        <layer class="SimpleMarker" enabled="1">
+          <Option type="Map">
+            <Option name="name" value="semi_circle" type="QString"/>
+            <Option name="color" value="220,35,35,255" type="QString"/>
+            <Option name="outline_color" value="70,70,70,255" type="QString"/>
+            <Option name="size" value="3.2" type="QString"/>
+            <Option name="outline_width" value="0.25" type="QString"/>
+            <Option name="size_unit" value="MM" type="QString"/>
+            <Option name="outline_width_unit" value="MM" type="QString"/>
+          </Option>
+          <data_defined_properties>
+            <Option type="Map">
+              <Option name="name" value="" type="QString"/>
+              <Option name="properties">
+                <Option type="Map" name="angle">
+                  <Option name="active" value="true" type="bool"/>
+                  <Option name="expression" value="(&quot;angle_deg&quot; + 180) % 360" type="QString"/>
+                  <Option name="type" value="3" type="int"/>
+                </Option>
+              </Option>
+              <Option name="type" value="collection" type="QString"/>
+            </Option>
+          </data_defined_properties>
         </layer>
       </symbol>
       <symbol name="8" type="marker" alpha="1">
@@ -122,12 +159,49 @@
           <Option type="Map">
             <Option name="name" value="semi_circle" type="QString"/>
             <Option name="color" value="220,35,35,255" type="QString"/>
-            <Option name="outline_color" value="90,90,90,255" type="QString"/>
+            <Option name="outline_color" value="70,70,70,255" type="QString"/>
             <Option name="size" value="3.2" type="QString"/>
-            <Option name="outline_width" value="0.35" type="QString"/>
+            <Option name="outline_width" value="0.25" type="QString"/>
             <Option name="size_unit" value="MM" type="QString"/>
             <Option name="outline_width_unit" value="MM" type="QString"/>
           </Option>
+          <data_defined_properties>
+            <Option type="Map">
+              <Option name="name" value="" type="QString"/>
+              <Option name="properties">
+                <Option type="Map" name="angle">
+                  <Option name="active" value="true" type="bool"/>
+                  <Option name="expression" value="&quot;angle_deg&quot;" type="QString"/>
+                  <Option name="type" value="3" type="int"/>
+                </Option>
+              </Option>
+              <Option name="type" value="collection" type="QString"/>
+            </Option>
+          </data_defined_properties>
+        </layer>
+        <layer class="SimpleMarker" enabled="1">
+          <Option type="Map">
+            <Option name="name" value="semi_circle" type="QString"/>
+            <Option name="color" value="255,255,255,255" type="QString"/>
+            <Option name="outline_color" value="70,70,70,255" type="QString"/>
+            <Option name="size" value="3.2" type="QString"/>
+            <Option name="outline_width" value="0.25" type="QString"/>
+            <Option name="size_unit" value="MM" type="QString"/>
+            <Option name="outline_width_unit" value="MM" type="QString"/>
+          </Option>
+          <data_defined_properties>
+            <Option type="Map">
+              <Option name="name" value="" type="QString"/>
+              <Option name="properties">
+                <Option type="Map" name="angle">
+                  <Option name="active" value="true" type="bool"/>
+                  <Option name="expression" value="(&quot;angle_deg&quot; + 180) % 360" type="QString"/>
+                  <Option name="type" value="3" type="int"/>
+                </Option>
+              </Option>
+              <Option name="type" value="collection" type="QString"/>
+            </Option>
+          </data_defined_properties>
         </layer>
       </symbol>
     </symbols>
