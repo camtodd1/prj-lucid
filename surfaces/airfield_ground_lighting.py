@@ -769,13 +769,15 @@ class AirfieldGroundLightingMixin:
                 point = point.project(lateral_offset_m, azimuth_left)
             if point is None:
                 continue
-            distance_to_end = max(0.0, length_m - offset_m)
-            if distance_to_end <= 300.0:
-                colour = LIGHT_COLOUR_RED
-            elif distance_to_end <= 900.0:
-                colour = LIGHT_COLOUR_RED if (index // 2) % 2 == 0 else LIGHT_COLOUR_WHITE
-            else:
-                colour = LIGHT_COLOUR_WHITE
+            primary_colour = self._runway_centreline_colour_for_direction(
+                distance_to_end=max(0.0, length_m - offset_m),
+                sequence_index=index,
+            )
+            reciprocal_colour = self._runway_centreline_colour_for_direction(
+                distance_to_end=offset_m,
+                sequence_index=int(round((length_m - offset_m) / spacing_m)) if spacing_m > 0 else index,
+            )
+            colour = self._combined_light_colour(primary_colour, reciprocal_colour)
             features.append(
                 self._agl_feature(
                     fields,
@@ -788,8 +790,22 @@ class AirfieldGroundLightingMixin:
                     offset_m,
                     colour,
                     MOS_REF_RUNWAY_CENTRELINE,
+                    colour_primary=primary_colour,
+                    colour_reciprocal=reciprocal_colour,
                 )
             )
+
+    def _runway_centreline_colour_for_direction(self, distance_to_end: float, sequence_index: int) -> str:
+        if distance_to_end <= 300.0:
+            return LIGHT_COLOUR_RED
+        if distance_to_end <= 900.0:
+            return LIGHT_COLOUR_RED if (sequence_index // 2) % 2 == 0 else LIGHT_COLOUR_WHITE
+        return LIGHT_COLOUR_WHITE
+
+    def _combined_light_colour(self, primary_colour: str, reciprocal_colour: str) -> str:
+        if primary_colour == reciprocal_colour:
+            return primary_colour
+        return f"{primary_colour}/{reciprocal_colour}"
 
     def _append_tdz_lights(
         self,
@@ -896,6 +912,8 @@ class AirfieldGroundLightingMixin:
         offset_m: float,
         colour: str,
         ref_mos: str,
+        colour_primary: str = "",
+        colour_reciprocal: str = "",
     ) -> QgsFeature:
         feature = QgsFeature(fields)
         feature.setGeometry(QgsGeometry.fromPointXY(point))
@@ -906,6 +924,8 @@ class AirfieldGroundLightingMixin:
                 light_type,
                 side,
                 colour,
+                colour_primary or colour,
+                colour_reciprocal or colour,
                 round(float(spacing_m), 3),
                 round(float(offset_m), 3),
                 ref_mos,
@@ -922,6 +942,8 @@ class AirfieldGroundLightingMixin:
                 QgsField("light_type", QVariant.String, self.tr("Light Type"), 30),
                 QgsField("side", QVariant.String, self.tr("Side"), 12),
                 QgsField("colour", QVariant.String, self.tr("Colour"), 20),
+                QgsField("colour_p", QVariant.String, self.tr("Primary Direction Colour"), 20),
+                QgsField("colour_r", QVariant.String, self.tr("Reciprocal Direction Colour"), 20),
                 QgsField("spacing_m", QVariant.Double, self.tr("Spacing (m)"), 12, 3),
                 QgsField("offset_m", QVariant.Double, self.tr("Offset (m)"), 12, 3),
                 QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 80),
