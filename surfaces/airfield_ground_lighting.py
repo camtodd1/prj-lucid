@@ -43,6 +43,7 @@ from ..dimensions.agl_dimensions import (
     TDZ_FIRST_ROW_OFFSET_M,
     TDZ_INNER_OFFSET_M,
     TDZ_LENGTH_M,
+    TDZ_MARKING_LENGTH_M,
     TDZ_ROW_SPACING_M,
     TEMP_DISPLACED_THRESHOLD_SPACING_M,
     THRESHOLD_WING_BAR_LIGHTS_PER_SIDE,
@@ -86,6 +87,7 @@ class AirfieldGroundLightingMixin:
             "stopway_lights",
             "centreline_lights",
             "tdz_lights",
+            "cat_i_tdz_lights",
         ]:
             approach_rows[("__options__", option_name)] = bool(agl_options.get(option_name, False))
 
@@ -308,7 +310,11 @@ class AirfieldGroundLightingMixin:
                 ("primary", primary_desig, primary_type, thr_point, params["azimuth_p_r"]),
                 ("reciprocal", reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_r_p"]),
             ]:
-                if "Precision Approach CAT II/III" in (runway_type or ""):
+                cat_ii_iii = "Precision Approach CAT II/III" in (runway_type or "")
+                cat_i_optional = "Precision Approach CAT I" in (runway_type or "") and approach_rows.get(
+                    ("__options__", "cat_i_tdz_lights")
+                )
+                if cat_ii_iii or cat_i_optional:
                     self._append_tdz_lights(
                         features,
                         fields,
@@ -318,7 +324,7 @@ class AirfieldGroundLightingMixin:
                         azimuth,
                         params["azimuth_perp_l"],
                         params["azimuth_perp_r"],
-                        min(TDZ_LENGTH_M, physical_length / 2.0),
+                        self._tdz_lighting_extent(runway_data, end_desig, runway_type, physical_length),
                     )
         self._append_threshold_lights(
             features,
@@ -805,6 +811,57 @@ class AirfieldGroundLightingMixin:
                                 MOS_REF_TDZ,
                             )
                         )
+
+    def _tdz_lighting_extent(
+        self,
+        runway_data: dict,
+        end_desig: str,
+        runway_type: str,
+        runway_length_m: float,
+    ) -> float:
+        """Return MOS 9.72 TDZ light extent: lesser of 900 m and MOS 8.24 TDZ marking length."""
+        rendered_extents = runway_data.get("tdz_marking_extents") or {}
+        rendered_extent = rendered_extents.get(end_desig)
+        if rendered_extent is not None:
+            try:
+                return min(TDZ_LENGTH_M, float(rendered_extent))
+            except (TypeError, ValueError):
+                pass
+
+        lda_m = self._declared_lda_for_end(runway_data, end_desig, runway_length_m)
+        touchdown_offsets = self._touchdown_zone_offsets(lda_m)
+        if not touchdown_offsets:
+            return 0.0
+
+        aim_offset = None
+        aim_rule = self._aiming_point_rule(runway_data.get("width") or 0.0, lda_m, runway_type)
+        if aim_rule is not None:
+            aim_offset = aim_rule[0]
+
+        valid_offsets = []
+        midpoint_zone_start = runway_length_m / 2.0 - 275.0
+        midpoint_zone_end = runway_length_m / 2.0 + 275.0
+        for offset in touchdown_offsets:
+            if aim_offset is not None and abs(offset - aim_offset) <= 50.0:
+                continue
+            block_start = offset
+            block_end = offset + TDZ_MARKING_LENGTH_M
+            if block_start < midpoint_zone_end and block_end > midpoint_zone_start:
+                continue
+            valid_offsets.append(offset)
+
+        if not valid_offsets:
+            return 0.0
+        tdz_marking_length_m = max(valid_offsets) + TDZ_MARKING_LENGTH_M
+        QgsMessageLog.logMessage(
+            (
+                f"AGL TDZ extent for {runway_data.get('short_name', 'runway')} {end_desig} "
+                "used calculated MOS 8.24 extent because rendered TDZ marking extent metadata was unavailable."
+            ),
+            PLUGIN_TAG,
+            level=Qgis.Info,
+        )
+        return min(TDZ_LENGTH_M, tdz_marking_length_m)
 
     def _agl_feature(
         self,

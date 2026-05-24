@@ -87,6 +87,8 @@ class AglOptionsMixin:
         self.checkBox_agl_tdz_lights = QtWidgets.QCheckBox("TDZ lights for CAT II/III")
         self.checkBox_agl_tdz_lights.setObjectName("checkBox_agl_tdz_lights")
         self.checkBox_agl_tdz_lights.setChecked(True)
+        self.checkBox_agl_cat_i_tdz_lights = QtWidgets.QCheckBox("Optional TDZ lights for CAT I")
+        self.checkBox_agl_cat_i_tdz_lights.setObjectName("checkBox_agl_cat_i_tdz_lights")
         for row, widget in enumerate(
             [
                 self.checkBox_agl_runway_end_lights,
@@ -96,6 +98,7 @@ class AglOptionsMixin:
                 self.checkBox_agl_stopway_lights,
                 self.checkBox_agl_centreline_lights,
                 self.checkBox_agl_tdz_lights,
+                self.checkBox_agl_cat_i_tdz_lights,
             ]
         ):
             elements_layout.addWidget(widget, row // 2, row % 2)
@@ -287,6 +290,7 @@ class AglOptionsMixin:
         self.checkBox_agl_stopway_lights.setChecked(True)
         self.checkBox_agl_centreline_lights.setChecked(True)
         self.checkBox_agl_tdz_lights.setChecked(True)
+        self.checkBox_agl_cat_i_tdz_lights.setChecked(False)
         if hasattr(self, "table_agl_approach"):
             self.table_agl_approach.setRowCount(0)
         self._on_agl_option_changed()
@@ -307,6 +311,7 @@ class AglOptionsMixin:
             "stopway_lights": True,
             "centreline_lights": True,
             "tdz_lights": True,
+            "cat_i_tdz_lights": False,
         }
         for option_name, default in defaults.items():
             widget = getattr(self, f"checkBox_agl_{option_name}", None)
@@ -412,6 +417,7 @@ class AglOptionsMixin:
             self.checkBox_agl_stopway_lights,
             self.checkBox_agl_centreline_lights,
             self.checkBox_agl_tdz_lights,
+            self.checkBox_agl_cat_i_tdz_lights,
         ]
 
     def _get_agl_element_options(self) -> Dict[str, bool]:
@@ -423,6 +429,7 @@ class AglOptionsMixin:
             "stopway_lights": self.checkBox_agl_stopway_lights.isChecked(),
             "centreline_lights": self.checkBox_agl_centreline_lights.isChecked(),
             "tdz_lights": self.checkBox_agl_tdz_lights.isChecked(),
+            "cat_i_tdz_lights": self.checkBox_agl_cat_i_tdz_lights.isChecked(),
         }
 
     def _set_agl_element_options(self, options) -> None:
@@ -434,6 +441,7 @@ class AglOptionsMixin:
             "stopway_lights": True,
             "centreline_lights": True,
             "tdz_lights": True,
+            "cat_i_tdz_lights": False,
         }
         for option_name, default in defaults.items():
             widget = getattr(self, f"checkBox_agl_{option_name}", None)

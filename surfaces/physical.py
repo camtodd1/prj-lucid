@@ -1435,6 +1435,7 @@ class PhysicalGeometryMixin:
                 return default
 
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
+        runway_data["tdz_marking_extents"] = {}
         primary_desig, reciprocal_desig = self._runway_designators(runway_name)
         runway_length = float(rwy_params["length"])
         disp_primary = non_negative_number(runway_data.get("thr_displaced_1"), 0.0)
@@ -1769,6 +1770,11 @@ class PhysicalGeometryMixin:
                                 f"TDZ ICAO A {runway_name} {end_desig} {offset}",
                             )
                             if geom:
+                                rendered_extent = offset + 22.5
+                                runway_data["tdz_marking_extents"][end_desig] = max(
+                                    runway_data["tdz_marking_extents"].get(end_desig, 0.0),
+                                    rendered_extent,
+                                )
                                 generated.append(
                                     (
                                         "DetailedTouchdownZoneMarking",
@@ -1811,6 +1817,11 @@ class PhysicalGeometryMixin:
                                 f"TDZ simple {runway_name} {end_desig} {offset}",
                             )
                             if geom:
+                                rendered_extent = offset + 22.5
+                                runway_data["tdz_marking_extents"][end_desig] = max(
+                                    runway_data["tdz_marking_extents"].get(end_desig, 0.0),
+                                    rendered_extent,
+                                )
                                 generated.append(
                                     (
                                         "DetailedTouchdownZoneMarking",
