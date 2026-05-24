@@ -133,8 +133,9 @@
               <Option name="properties">
                 <Option type="Map" name="angle">
                   <Option name="active" value="true" type="bool"/>
-                  <Option name="expression" value="&quot;angle_deg&quot;" type="QString"/>
-                  <Option name="type" value="3" type="int"/>
+                  <Option name="expression" value="" type="QString"/>
+                  <Option name="field" value="symbol_ang" type="QString"/>
+                  <Option name="type" value="2" type="int"/>
                 </Option>
               </Option>
               <Option name="type" value="collection" type="QString"/>
@@ -171,8 +172,9 @@
               <Option name="properties">
                 <Option type="Map" name="angle">
                   <Option name="active" value="true" type="bool"/>
-                  <Option name="expression" value="&quot;angle_deg&quot;" type="QString"/>
-                  <Option name="type" value="3" type="int"/>
+                  <Option name="expression" value="" type="QString"/>
+                  <Option name="field" value="symbol_ang" type="QString"/>
+                  <Option name="type" value="2" type="int"/>
                 </Option>
               </Option>
               <Option name="type" value="collection" type="QString"/>
