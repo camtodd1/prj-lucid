@@ -36,6 +36,7 @@ from ..dimensions.agl_dimensions import (
     MOS_REF_THRESHOLD_PRECISION,
     MOS_REF_THRESHOLD_WING_BARS,
     RUNWAY_LIGHTING_MIN_WIDTH_M,
+    RUNWAY_CENTRELINE_MAX_OFFSET_M,
     RTIL_DEFAULT_LATERAL_FROM_EDGE_LIGHTS_M,
     STOPWAY_END_MIN_LIGHTS,
     TDZ_BARRETTE_LIGHTS,
@@ -50,6 +51,8 @@ from ..dimensions.agl_dimensions import (
     THRESHOLD_WING_BAR_SPACING_M,
     approach_profile_for_end,
     runway_centreline_required,
+    runway_centreline_recommended,
+    runway_centreline_spacing,
     runway_edge_spacing_for_end,
     runway_is_precision,
     temp_displaced_threshold_lights_per_side,
@@ -77,6 +80,10 @@ class AirfieldGroundLightingMixin:
             return False
 
         threshold_inset_m = float(agl_options.get("threshold_inset_m") or 0.0)
+        centreline_offset_m = min(
+            float(agl_options.get("centreline_offset_m") or 0.0),
+            RUNWAY_CENTRELINE_MAX_OFFSET_M,
+        )
         default_approach_spacing_m = float(agl_options.get("approach_spacing_m") or 30.0)
         approach_rows = self._agl_rows_by_runway_end(agl_options.get("approach_lighting", []))
         for option_name in [
@@ -86,6 +93,8 @@ class AirfieldGroundLightingMixin:
             "temp_displaced_threshold",
             "stopway_lights",
             "centreline_lights",
+            "centreline_low_visibility",
+            "cat_i_centreline_lights",
             "tdz_lights",
             "cat_i_tdz_lights",
         ]:
@@ -98,6 +107,7 @@ class AirfieldGroundLightingMixin:
                     runway_data,
                     layer_group,
                     threshold_inset_m,
+                    centreline_offset_m,
                     default_approach_spacing_m,
                     approach_rows,
                 )
@@ -116,6 +126,7 @@ class AirfieldGroundLightingMixin:
         runway_data: dict,
         layer_group: QgsLayerTreeGroup,
         threshold_inset_m: float,
+        centreline_offset_m: float,
         default_approach_spacing_m: float,
         approach_rows: Dict[tuple, Dict[str, object]],
     ) -> bool:
@@ -293,16 +304,22 @@ class AirfieldGroundLightingMixin:
                 edge_spacing_m,
             )
 
-        if approach_rows.get(("__options__", "centreline_lights")) and runway_centreline_required(
-            primary_type, reciprocal_type
-        ):
+        centreline_low_visibility = bool(approach_rows.get(("__options__", "centreline_low_visibility")))
+        centreline_required = runway_centreline_required(primary_type, reciprocal_type, centreline_low_visibility)
+        centreline_recommended = bool(approach_rows.get(("__options__", "cat_i_centreline_lights"))) and (
+            runway_centreline_recommended(primary_type, reciprocal_type, lit_half_width * 2.0)
+        )
+        if approach_rows.get(("__options__", "centreline_lights")) and (centreline_required or centreline_recommended):
             self._append_runway_centreline_lights(
                 features,
                 fields,
                 runway_name,
                 phys_primary,
                 params["azimuth_p_r"],
+                params["azimuth_perp_l"],
                 physical_length,
+                runway_centreline_spacing(centreline_low_visibility),
+                centreline_offset_m,
             )
 
         if approach_rows.get(("__options__", "tdz_lights")):
@@ -739,16 +756,20 @@ class AirfieldGroundLightingMixin:
         runway_name: str,
         start_point: QgsPointXY,
         azimuth: float,
+        azimuth_left: float,
         length_m: float,
+        spacing_m: float,
+        lateral_offset_m: float,
     ) -> None:
-        spacing_m = 30.0
         count = self._agl_interval_count(length_m, spacing_m)
         for index in range(count + 1):
             offset_m = min(index * spacing_m, length_m)
             point = start_point.project(offset_m, azimuth)
+            if point is not None and lateral_offset_m > 0:
+                point = point.project(lateral_offset_m, azimuth_left)
             if point is None:
                 continue
-            distance_to_end = min(offset_m, max(0.0, length_m - offset_m))
+            distance_to_end = max(0.0, length_m - offset_m)
             if distance_to_end <= 300.0:
                 colour = LIGHT_COLOUR_RED
             elif distance_to_end <= 900.0:

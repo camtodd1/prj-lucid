@@ -50,6 +50,7 @@ class AglOptionsMixin:
         self.lineEdit_agl_threshold_spacing = self._agl_line_edit("lineEdit_agl_threshold_spacing", "3")
         self.lineEdit_agl_threshold_inset = self._agl_line_edit("lineEdit_agl_threshold_inset", "0")
         self.lineEdit_agl_approach_spacing = self._agl_line_edit("lineEdit_agl_approach_spacing", "30")
+        self.lineEdit_agl_centreline_offset = self._agl_line_edit("lineEdit_agl_centreline_offset", "0")
         self.lineEdit_agl_edge_spacing.setReadOnly(True)
         self.lineEdit_agl_threshold_spacing.setReadOnly(True)
 
@@ -59,6 +60,7 @@ class AglOptionsMixin:
                 ("MOS precision threshold max spacing (m)", self.lineEdit_agl_threshold_spacing),
                 ("Threshold bar inset from runway edge (m)", self.lineEdit_agl_threshold_inset),
                 ("Default approach light spacing (m)", self.lineEdit_agl_approach_spacing),
+                ("Centreline light offset left of approach (m)", self.lineEdit_agl_centreline_offset),
             ]
         ):
             spacing_layout.addWidget(QtWidgets.QLabel(label), row, 0)
@@ -84,6 +86,10 @@ class AglOptionsMixin:
         self.checkBox_agl_centreline_lights = QtWidgets.QCheckBox("Runway centreline lights for CAT II/III")
         self.checkBox_agl_centreline_lights.setObjectName("checkBox_agl_centreline_lights")
         self.checkBox_agl_centreline_lights.setChecked(True)
+        self.checkBox_agl_centreline_low_visibility = QtWidgets.QCheckBox("Centreline spacing for RVR below 350 m")
+        self.checkBox_agl_centreline_low_visibility.setObjectName("checkBox_agl_centreline_low_visibility")
+        self.checkBox_agl_cat_i_centreline_lights = QtWidgets.QCheckBox("Recommended centreline lights for CAT I >50 m")
+        self.checkBox_agl_cat_i_centreline_lights.setObjectName("checkBox_agl_cat_i_centreline_lights")
         self.checkBox_agl_tdz_lights = QtWidgets.QCheckBox("TDZ lights for CAT II/III")
         self.checkBox_agl_tdz_lights.setObjectName("checkBox_agl_tdz_lights")
         self.checkBox_agl_tdz_lights.setChecked(True)
@@ -97,6 +103,8 @@ class AglOptionsMixin:
                 self.checkBox_agl_temp_displaced_threshold,
                 self.checkBox_agl_stopway_lights,
                 self.checkBox_agl_centreline_lights,
+                self.checkBox_agl_centreline_low_visibility,
+                self.checkBox_agl_cat_i_centreline_lights,
                 self.checkBox_agl_tdz_lights,
                 self.checkBox_agl_cat_i_tdz_lights,
             ]
@@ -147,6 +155,7 @@ class AglOptionsMixin:
             self.lineEdit_agl_threshold_spacing,
             self.lineEdit_agl_threshold_inset,
             self.lineEdit_agl_approach_spacing,
+            self.lineEdit_agl_centreline_offset,
         ]:
             widget.textChanged.connect(self._on_agl_option_changed)
         self.table_agl_approach.itemChanged.connect(self._on_agl_option_changed)
@@ -227,6 +236,11 @@ class AglOptionsMixin:
         options["approach_spacing_m"] = self._agl_float(
             "lineEdit_agl_approach_spacing", "AGL default approach light spacing", errors, minimum=0.01
         )
+        options["centreline_offset_m"] = self._agl_float(
+            "lineEdit_agl_centreline_offset", "AGL centreline light offset", errors, minimum=0.0
+        )
+        if options["centreline_offset_m"] > 0.6:
+            self._agl_error(errors, "AGL centreline light offset must not exceed 0.6 m.")
         options["approach_lighting"] = self._get_agl_approach_rows(errors)
         options.update(self._get_agl_element_options())
         return options
@@ -238,6 +252,7 @@ class AglOptionsMixin:
             "threshold_spacing_m": self._line_text("lineEdit_agl_threshold_spacing"),
             "threshold_inset_m": self._line_text("lineEdit_agl_threshold_inset"),
             "approach_spacing_m": self._line_text("lineEdit_agl_approach_spacing"),
+            "centreline_offset_m": self._line_text("lineEdit_agl_centreline_offset"),
             "approach_lighting": [],
         }
         options.update(self._get_agl_element_options())
@@ -266,6 +281,7 @@ class AglOptionsMixin:
         self._set_line_text("lineEdit_agl_threshold_spacing", str(agl_options.get("threshold_spacing_m", "3")))
         self._set_line_text("lineEdit_agl_threshold_inset", str(agl_options.get("threshold_inset_m", "0")))
         self._set_line_text("lineEdit_agl_approach_spacing", str(agl_options.get("approach_spacing_m", "30")))
+        self._set_line_text("lineEdit_agl_centreline_offset", str(agl_options.get("centreline_offset_m", "0")))
         self._set_agl_element_options(agl_options)
         table = getattr(self, "table_agl_approach", None)
         if table is not None:
@@ -283,12 +299,15 @@ class AglOptionsMixin:
         self._set_line_text("lineEdit_agl_threshold_spacing", self.AGL_DEFAULTS["threshold_spacing_m"])
         self._set_line_text("lineEdit_agl_threshold_inset", self.AGL_DEFAULTS["threshold_inset_m"])
         self._set_line_text("lineEdit_agl_approach_spacing", self.AGL_DEFAULTS["approach_spacing_m"])
+        self._set_line_text("lineEdit_agl_centreline_offset", "0")
         self.checkBox_agl_runway_end_lights.setChecked(True)
         self.checkBox_agl_threshold_wing_bars.setChecked(False)
         self.checkBox_agl_rtil.setChecked(False)
         self.checkBox_agl_temp_displaced_threshold.setChecked(False)
         self.checkBox_agl_stopway_lights.setChecked(True)
         self.checkBox_agl_centreline_lights.setChecked(True)
+        self.checkBox_agl_centreline_low_visibility.setChecked(False)
+        self.checkBox_agl_cat_i_centreline_lights.setChecked(False)
         self.checkBox_agl_tdz_lights.setChecked(True)
         self.checkBox_agl_cat_i_tdz_lights.setChecked(False)
         if hasattr(self, "table_agl_approach"):
@@ -310,6 +329,8 @@ class AglOptionsMixin:
             "temp_displaced_threshold": False,
             "stopway_lights": True,
             "centreline_lights": True,
+            "centreline_low_visibility": False,
+            "cat_i_centreline_lights": False,
             "tdz_lights": True,
             "cat_i_tdz_lights": False,
         }
@@ -322,6 +343,7 @@ class AglOptionsMixin:
             ("lineEdit_agl_threshold_spacing", self.AGL_DEFAULTS["threshold_spacing_m"]),
             ("lineEdit_agl_threshold_inset", self.AGL_DEFAULTS["threshold_inset_m"]),
             ("lineEdit_agl_approach_spacing", self.AGL_DEFAULTS["approach_spacing_m"]),
+            ("lineEdit_agl_centreline_offset", "0"),
         ]:
             widget = self._line_edit(widget_name)
             if widget and widget.text().strip() != default:
@@ -416,6 +438,8 @@ class AglOptionsMixin:
             self.checkBox_agl_temp_displaced_threshold,
             self.checkBox_agl_stopway_lights,
             self.checkBox_agl_centreline_lights,
+            self.checkBox_agl_centreline_low_visibility,
+            self.checkBox_agl_cat_i_centreline_lights,
             self.checkBox_agl_tdz_lights,
             self.checkBox_agl_cat_i_tdz_lights,
         ]
@@ -428,6 +452,8 @@ class AglOptionsMixin:
             "temp_displaced_threshold": self.checkBox_agl_temp_displaced_threshold.isChecked(),
             "stopway_lights": self.checkBox_agl_stopway_lights.isChecked(),
             "centreline_lights": self.checkBox_agl_centreline_lights.isChecked(),
+            "centreline_low_visibility": self.checkBox_agl_centreline_low_visibility.isChecked(),
+            "cat_i_centreline_lights": self.checkBox_agl_cat_i_centreline_lights.isChecked(),
             "tdz_lights": self.checkBox_agl_tdz_lights.isChecked(),
             "cat_i_tdz_lights": self.checkBox_agl_cat_i_tdz_lights.isChecked(),
         }
@@ -440,6 +466,8 @@ class AglOptionsMixin:
             "temp_displaced_threshold": False,
             "stopway_lights": True,
             "centreline_lights": True,
+            "centreline_low_visibility": False,
+            "cat_i_centreline_lights": False,
             "tdz_lights": True,
             "cat_i_tdz_lights": False,
         }

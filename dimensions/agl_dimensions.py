@@ -54,6 +54,7 @@ TEMP_DISPLACED_THRESHOLD_SPACING_M = 2.5
 STOPWAY_END_MIN_LIGHTS = 2
 RUNWAY_CENTRELINE_DEFAULT_SPACING_M = 30.0
 RUNWAY_CENTRELINE_LOW_VIS_SPACING_M = 15.0
+RUNWAY_CENTRELINE_MAX_OFFSET_M = 0.6
 RUNWAY_CENTRELINE_RED_ZONE_M = 300.0
 RUNWAY_CENTRELINE_ALTERNATING_ZONE_M = 900.0
 TDZ_LENGTH_M = 900.0
@@ -114,10 +115,24 @@ def temp_displaced_threshold_lights_per_side(runway_width_m: float) -> int:
     return TEMP_DISPLACED_THRESHOLD_LIGHTS_PER_SIDE
 
 
-def runway_centreline_required(runway_type_1: str, runway_type_2: str) -> bool:
+def runway_centreline_required(runway_type_1: str, runway_type_2: str, rvr_below_350: bool = False) -> bool:
+    if rvr_below_350:
+        return True
     return "Precision Approach CAT II/III" in (runway_type_1 or "") or "Precision Approach CAT II/III" in (
         runway_type_2 or ""
     )
+
+
+def runway_centreline_recommended(runway_type_1: str, runway_type_2: str, edge_light_width_m: float) -> bool:
+    if edge_light_width_m <= 50.0:
+        return False
+    return "Precision Approach CAT I" in (runway_type_1 or "") or "Precision Approach CAT I" in (runway_type_2 or "")
+
+
+def runway_centreline_spacing(rvr_below_350: bool) -> float:
+    if rvr_below_350:
+        return RUNWAY_CENTRELINE_LOW_VIS_SPACING_M
+    return RUNWAY_CENTRELINE_DEFAULT_SPACING_M
 
 
 def approach_profile_for_end(runway_type: str) -> Dict[str, object]:
