@@ -197,6 +197,7 @@ class AirfieldGroundLightingMixin:
             thr_point,
             params["azimuth_perp_l"],
             params["azimuth_perp_r"],
+            params["azimuth_r_p"],
             lit_half_width,
             threshold_inset_m,
         )
@@ -211,6 +212,7 @@ class AirfieldGroundLightingMixin:
                 phys_primary,
                 params["azimuth_perp_l"],
                 params["azimuth_perp_r"],
+                params["azimuth_p_r"],
                 lit_half_width,
             )
             self._append_runway_end_lights(
@@ -222,6 +224,7 @@ class AirfieldGroundLightingMixin:
                 phys_reciprocal,
                 params["azimuth_perp_l"],
                 params["azimuth_perp_r"],
+                params["azimuth_r_p"],
                 lit_half_width,
             )
 
@@ -352,6 +355,7 @@ class AirfieldGroundLightingMixin:
             rec_thr_point,
             params["azimuth_perp_l"],
             params["azimuth_perp_r"],
+            params["azimuth_p_r"],
             lit_half_width,
             threshold_inset_m,
         )
@@ -378,6 +382,7 @@ class AirfieldGroundLightingMixin:
                 profile,
             )
 
+        features = self._resolve_overlapping_agl_features(features, fields)
         layer = self._create_and_add_layer(
             "Point",
             f"AGL_{runway_name.replace('/', '_')}",
@@ -464,6 +469,7 @@ class AirfieldGroundLightingMixin:
         threshold_point: QgsPointXY,
         azimuth_left: float,
         azimuth_right: float,
+        observable_azimuth: float,
         half_width: float,
         inset_m: float,
     ) -> None:
@@ -495,6 +501,8 @@ class AirfieldGroundLightingMixin:
                         abs(lateral_m),
                         LIGHT_COLOUR_GREEN,
                         ref_mos,
+                        angle_deg=observable_azimuth,
+                        symbol_angle_deg=observable_azimuth,
                     )
                 )
 
@@ -571,6 +579,7 @@ class AirfieldGroundLightingMixin:
         runway_end_point: QgsPointXY,
         azimuth_left: float,
         azimuth_right: float,
+        observable_azimuth: float,
         half_width: float,
     ) -> None:
         light_count = runway_end_light_count_for_end(runway_type, half_width * 2.0)
@@ -592,6 +601,8 @@ class AirfieldGroundLightingMixin:
                         abs(lateral_m),
                         LIGHT_COLOUR_RED,
                         MOS_REF_RUNWAY_END,
+                        angle_deg=observable_azimuth,
+                        symbol_angle_deg=observable_azimuth,
                     )
                 )
 
@@ -939,6 +950,101 @@ class AirfieldGroundLightingMixin:
             ]
         )
         return feature
+
+    def _resolve_overlapping_agl_features(self, features: List[QgsFeature], fields: QgsFields) -> List[QgsFeature]:
+        grouped_features: Dict[tuple, List[QgsFeature]] = {}
+        for feature in features:
+            point = feature.geometry().asPoint()
+            key = (
+                feature.attribute("rwy"),
+                round(float(point.x()), 3),
+                round(float(point.y()), 3),
+            )
+            grouped_features.setdefault(key, []).append(feature)
+
+        resolved_features = []
+        for group in grouped_features.values():
+            if len(group) == 1:
+                resolved_features.extend(group)
+                continue
+
+            threshold_feature = self._first_agl_feature_of_type(group, "Threshold")
+            runway_end_feature = self._first_agl_feature_of_type(group, "Runway End")
+            if threshold_feature is not None and runway_end_feature is not None:
+                resolved_features.append(
+                    self._combined_threshold_runway_end_feature(fields, threshold_feature, runway_end_feature)
+                )
+                continue
+
+            highest_priority = max(self._agl_overlap_priority(feature) for feature in group)
+            kept_signatures = set()
+            for feature in group:
+                if self._agl_overlap_priority(feature) != highest_priority:
+                    continue
+                signature = (
+                    feature.attribute("light_type"),
+                    feature.attribute("side"),
+                    feature.attribute("colour"),
+                    feature.attribute("end_desig"),
+                )
+                if signature in kept_signatures:
+                    continue
+                kept_signatures.add(signature)
+                resolved_features.append(feature)
+
+        return resolved_features
+
+    def _first_agl_feature_of_type(self, features: List[QgsFeature], light_type: str) -> QgsFeature | None:
+        for feature in features:
+            if feature.attribute("light_type") == light_type:
+                return feature
+        return None
+
+    def _combined_threshold_runway_end_feature(
+        self,
+        fields: QgsFields,
+        threshold_feature: QgsFeature,
+        runway_end_feature: QgsFeature,
+    ) -> QgsFeature:
+        point = threshold_feature.geometry().asPoint()
+        ref_mos = f"{threshold_feature.attribute('ref_mos')}; {runway_end_feature.attribute('ref_mos')}"
+        return self._agl_feature(
+            fields,
+            QgsPointXY(point),
+            threshold_feature.attribute("rwy"),
+            threshold_feature.attribute("end_desig") or runway_end_feature.attribute("end_desig"),
+            "Threshold / Runway End",
+            threshold_feature.attribute("side"),
+            threshold_feature.attribute("spacing_m") or runway_end_feature.attribute("spacing_m") or 0.0,
+            threshold_feature.attribute("offset_m") or runway_end_feature.attribute("offset_m") or 0.0,
+            "green/red",
+            ref_mos,
+            colour_primary=LIGHT_COLOUR_GREEN,
+            colour_reciprocal=LIGHT_COLOUR_RED,
+            angle_deg=float(threshold_feature.attribute("angle_deg") or 0.0),
+            symbol_angle_deg=float(
+                threshold_feature.attribute("symbol_ang") or threshold_feature.attribute("angle_deg") or 0.0
+            ),
+        )
+
+    def _agl_overlap_priority(self, feature: QgsFeature) -> int:
+        light_type = feature.attribute("light_type")
+        priorities = {
+            "Stopway End": 90,
+            "Threshold / Runway End": 85,
+            "Runway End": 80,
+            "Threshold": 80,
+            "Temporary Displaced Threshold": 75,
+            "RTIL": 75,
+            "Threshold Wing Bar": 70,
+            "TDZ Barrette": 65,
+            "Runway Centreline": 60,
+            "Approach Crossbar": 55,
+            "Approach Centreline": 50,
+            "Stopway Edge": 40,
+            "Runway Edge": 30,
+        }
+        return priorities.get(str(light_type), 10)
 
     def _agl_fields(self) -> QgsFields:
         return QgsFields(
