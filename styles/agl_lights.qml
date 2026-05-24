@@ -105,6 +105,20 @@
         </layer>
       </symbol>
       <symbol name="7" type="marker" alpha="1">
+        <data_defined_properties>
+          <Option type="Map">
+            <Option name="name" value="" type="QString"/>
+            <Option name="properties">
+              <Option type="Map" name="angle">
+                <Option name="active" value="true" type="bool"/>
+                <Option name="expression" value="" type="QString"/>
+                <Option name="field" value="symbol_ang" type="QString"/>
+                <Option name="type" value="2" type="int"/>
+              </Option>
+            </Option>
+            <Option name="type" value="collection" type="QString"/>
+          </Option>
+        </data_defined_properties>
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="circle" type="QString"/>
@@ -127,23 +141,23 @@
             <Option name="size_unit" value="MM" type="QString"/>
             <Option name="outline_width_unit" value="MM" type="QString"/>
           </Option>
-          <data_defined_properties>
-            <Option type="Map">
-              <Option name="name" value="" type="QString"/>
-              <Option name="properties">
-                <Option type="Map" name="angle">
-                  <Option name="active" value="true" type="bool"/>
-                  <Option name="expression" value="" type="QString"/>
-                  <Option name="field" value="symbol_ang" type="QString"/>
-                  <Option name="type" value="2" type="int"/>
-                </Option>
-              </Option>
-              <Option name="type" value="collection" type="QString"/>
-            </Option>
-          </data_defined_properties>
         </layer>
       </symbol>
       <symbol name="8" type="marker" alpha="1">
+        <data_defined_properties>
+          <Option type="Map">
+            <Option name="name" value="" type="QString"/>
+            <Option name="properties">
+              <Option type="Map" name="angle">
+                <Option name="active" value="true" type="bool"/>
+                <Option name="expression" value="" type="QString"/>
+                <Option name="field" value="symbol_ang" type="QString"/>
+                <Option name="type" value="2" type="int"/>
+              </Option>
+            </Option>
+            <Option name="type" value="collection" type="QString"/>
+          </Option>
+        </data_defined_properties>
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="circle" type="QString"/>
@@ -166,20 +180,6 @@
             <Option name="size_unit" value="MM" type="QString"/>
             <Option name="outline_width_unit" value="MM" type="QString"/>
           </Option>
-          <data_defined_properties>
-            <Option type="Map">
-              <Option name="name" value="" type="QString"/>
-              <Option name="properties">
-                <Option type="Map" name="angle">
-                  <Option name="active" value="true" type="bool"/>
-                  <Option name="expression" value="" type="QString"/>
-                  <Option name="field" value="symbol_ang" type="QString"/>
-                  <Option name="type" value="2" type="int"/>
-                </Option>
-              </Option>
-              <Option name="type" value="collection" type="QString"/>
-            </Option>
-          </data_defined_properties>
         </layer>
       </symbol>
     </symbols>
