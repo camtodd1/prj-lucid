@@ -62,6 +62,9 @@ from ..dimensions.agl_dimensions import (
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
+AGL_BEAM_OMNIDIRECTIONAL = "omnidirectional"
+AGL_BEAM_UNIDIRECTIONAL = "unidirectional"
+AGL_BEAM_BIDIRECTIONAL = "bidirectional"
 
 
 class AirfieldGroundLightingMixin:
@@ -263,9 +266,9 @@ class AirfieldGroundLightingMixin:
                 )
 
         if approach_rows.get(("__options__", "threshold_wing_bars")):
-            for end_desig, runway_type, point in [
-                (primary_desig, primary_type, thr_point),
-                (reciprocal_desig, reciprocal_type, rec_thr_point),
+            for end_desig, runway_type, point, observable_azimuth in [
+                (primary_desig, primary_type, thr_point, params["azimuth_r_p"]),
+                (reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_p_r"]),
             ]:
                 if runway_type_supports_agl(runway_type) and runway_is_precision(runway_type):
                     self._append_threshold_wing_bars(
@@ -276,13 +279,14 @@ class AirfieldGroundLightingMixin:
                         point,
                         params["azimuth_perp_l"],
                         params["azimuth_perp_r"],
+                        observable_azimuth,
                         lit_half_width,
                     )
 
         if approach_rows.get(("__options__", "rtil")):
-            for end_desig, point, displacement_m in [
-                (primary_desig, thr_point, disp_primary),
-                (reciprocal_desig, rec_thr_point, disp_reciprocal),
+            for end_desig, point, displacement_m, observable_azimuth in [
+                (primary_desig, thr_point, disp_primary, params["azimuth_r_p"]),
+                (reciprocal_desig, rec_thr_point, disp_reciprocal, params["azimuth_p_r"]),
             ]:
                 if displacement_m > 0:
                     self._append_rtil(
@@ -293,13 +297,14 @@ class AirfieldGroundLightingMixin:
                         point,
                         params["azimuth_perp_l"],
                         params["azimuth_perp_r"],
+                        observable_azimuth,
                         lit_half_width,
                     )
 
         if approach_rows.get(("__options__", "temp_displaced_threshold")):
-            for end_desig, point, displacement_m in [
-                (primary_desig, thr_point, disp_primary),
-                (reciprocal_desig, rec_thr_point, disp_reciprocal),
+            for end_desig, point, displacement_m, observable_azimuth in [
+                (primary_desig, thr_point, disp_primary, params["azimuth_r_p"]),
+                (reciprocal_desig, rec_thr_point, disp_reciprocal, params["azimuth_p_r"]),
             ]:
                 if displacement_m > 0:
                     self._append_temp_displaced_threshold_lights(
@@ -310,6 +315,7 @@ class AirfieldGroundLightingMixin:
                         point,
                         params["azimuth_perp_l"],
                         params["azimuth_perp_r"],
+                        observable_azimuth,
                         lit_half_width,
                     )
 
@@ -491,6 +497,12 @@ class AirfieldGroundLightingMixin:
             if left is not None and not self._should_omit_runway_edge_light(
                 left, index, "Left", omission_geometries, omitted_indices_by_side
             ):
+                beam_type = self._runway_edge_beam_type(
+                    primary_colour,
+                    reciprocal_colour,
+                    primary_precision_edge_characteristics,
+                    reciprocal_precision_edge_characteristics,
+                )
                 features.append(
                     self._agl_feature(
                         fields,
@@ -507,11 +519,18 @@ class AirfieldGroundLightingMixin:
                         colour_reciprocal=reciprocal_colour,
                         angle_deg=params["azimuth_r_p"],
                         symbol_angle_deg=params["azimuth_r_p"],
+                        beam_type=beam_type,
                     )
                 )
             if right is not None and not self._should_omit_runway_edge_light(
                 right, index, "Right", omission_geometries, omitted_indices_by_side
             ):
+                beam_type = self._runway_edge_beam_type(
+                    primary_colour,
+                    reciprocal_colour,
+                    primary_precision_edge_characteristics,
+                    reciprocal_precision_edge_characteristics,
+                )
                 features.append(
                     self._agl_feature(
                         fields,
@@ -528,6 +547,7 @@ class AirfieldGroundLightingMixin:
                         colour_reciprocal=reciprocal_colour,
                         angle_deg=params["azimuth_r_p"],
                         symbol_angle_deg=params["azimuth_r_p"],
+                        beam_type=beam_type,
                     )
                 )
 
@@ -650,6 +670,7 @@ class AirfieldGroundLightingMixin:
                         ref_mos,
                         angle_deg=observable_azimuth,
                         symbol_angle_deg=observable_azimuth,
+                        beam_type=AGL_BEAM_UNIDIRECTIONAL,
                     )
                 )
 
@@ -685,6 +706,9 @@ class AirfieldGroundLightingMixin:
                         offset_m,
                         LIGHT_COLOUR_WHITE,
                         ref_mos,
+                        angle_deg=outward_azimuth,
+                        symbol_angle_deg=outward_azimuth,
+                        beam_type=AGL_BEAM_UNIDIRECTIONAL,
                     )
                 )
         for crossbar_m in profile.get("crossbars_m", []):
@@ -713,6 +737,9 @@ class AirfieldGroundLightingMixin:
                             crossbar_offset_m,
                             LIGHT_COLOUR_WHITE,
                             ref_mos,
+                            angle_deg=outward_azimuth,
+                            symbol_angle_deg=outward_azimuth,
+                            beam_type=AGL_BEAM_UNIDIRECTIONAL,
                         )
                     )
 
@@ -750,6 +777,7 @@ class AirfieldGroundLightingMixin:
                         MOS_REF_RUNWAY_END,
                         angle_deg=observable_azimuth,
                         symbol_angle_deg=observable_azimuth,
+                        beam_type=AGL_BEAM_UNIDIRECTIONAL,
                     )
                 )
 
@@ -762,6 +790,7 @@ class AirfieldGroundLightingMixin:
         threshold_point: QgsPointXY,
         azimuth_left: float,
         azimuth_right: float,
+        observable_azimuth: float,
         half_width: float,
     ) -> None:
         for side_name, azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
@@ -781,6 +810,9 @@ class AirfieldGroundLightingMixin:
                             lateral_m,
                             LIGHT_COLOUR_GREEN,
                             MOS_REF_THRESHOLD_WING_BARS,
+                            angle_deg=observable_azimuth,
+                            symbol_angle_deg=observable_azimuth,
+                            beam_type=AGL_BEAM_UNIDIRECTIONAL,
                         )
                     )
 
@@ -793,6 +825,7 @@ class AirfieldGroundLightingMixin:
         threshold_point: QgsPointXY,
         azimuth_left: float,
         azimuth_right: float,
+        observable_azimuth: float,
         half_width: float,
     ) -> None:
         lateral_m = half_width + RTIL_DEFAULT_LATERAL_FROM_EDGE_LIGHTS_M
@@ -811,6 +844,9 @@ class AirfieldGroundLightingMixin:
                         lateral_m,
                         LIGHT_COLOUR_FLASHING_WHITE,
                         MOS_REF_RTIL,
+                        angle_deg=observable_azimuth,
+                        symbol_angle_deg=observable_azimuth,
+                        beam_type=AGL_BEAM_UNIDIRECTIONAL,
                     )
                 )
 
@@ -823,6 +859,7 @@ class AirfieldGroundLightingMixin:
         threshold_point: QgsPointXY,
         azimuth_left: float,
         azimuth_right: float,
+        observable_azimuth: float,
         half_width: float,
     ) -> None:
         lights_per_side = temp_displaced_threshold_lights_per_side(half_width * 2.0)
@@ -843,6 +880,9 @@ class AirfieldGroundLightingMixin:
                             lateral_m,
                             LIGHT_COLOUR_GREEN,
                             MOS_REF_TEMP_DISPLACED_THRESHOLD,
+                            angle_deg=observable_azimuth,
+                            symbol_angle_deg=observable_azimuth,
+                            beam_type=AGL_BEAM_UNIDIRECTIONAL,
                         )
                     )
 
@@ -883,6 +923,9 @@ class AirfieldGroundLightingMixin:
                             longitudinal_m,
                             LIGHT_COLOUR_RED,
                             MOS_REF_STOPWAY,
+                            angle_deg=(outward_azimuth + 180.0) % 360.0,
+                            symbol_angle_deg=(outward_azimuth + 180.0) % 360.0,
+                            beam_type=AGL_BEAM_UNIDIRECTIONAL,
                         )
                     )
         stopway_end = start_point.project(stopway_length_m, outward_azimuth)
@@ -904,6 +947,9 @@ class AirfieldGroundLightingMixin:
                         stopway_length_m,
                         LIGHT_COLOUR_RED,
                         MOS_REF_STOPWAY,
+                        angle_deg=(outward_azimuth + 180.0) % 360.0,
+                        symbol_angle_deg=(outward_azimuth + 180.0) % 360.0,
+                        beam_type=AGL_BEAM_UNIDIRECTIONAL,
                     )
                 )
 
@@ -952,6 +998,7 @@ class AirfieldGroundLightingMixin:
                     colour_reciprocal=reciprocal_colour,
                     angle_deg=azimuth + 180.0,
                     symbol_angle_deg=azimuth + 180.0,
+                    beam_type=AGL_BEAM_BIDIRECTIONAL,
                 )
             )
 
@@ -966,6 +1013,31 @@ class AirfieldGroundLightingMixin:
         if primary_colour == reciprocal_colour:
             return primary_colour
         return f"{primary_colour}/{reciprocal_colour}"
+
+    def _runway_edge_beam_type(
+        self,
+        primary_colour: str,
+        reciprocal_colour: str,
+        primary_precision_edge_characteristics: bool,
+        reciprocal_precision_edge_characteristics: bool,
+    ) -> str:
+        if primary_colour != reciprocal_colour:
+            return AGL_BEAM_BIDIRECTIONAL
+        if primary_precision_edge_characteristics and reciprocal_precision_edge_characteristics:
+            return AGL_BEAM_BIDIRECTIONAL
+        if primary_precision_edge_characteristics or reciprocal_precision_edge_characteristics:
+            return AGL_BEAM_UNIDIRECTIONAL
+        return AGL_BEAM_OMNIDIRECTIONAL
+
+    def _agl_beam_type(self, colour: str, beam_type: str) -> str:
+        if beam_type in {AGL_BEAM_OMNIDIRECTIONAL, AGL_BEAM_UNIDIRECTIONAL, AGL_BEAM_BIDIRECTIONAL}:
+            return beam_type
+        if "/" in str(colour):
+            return AGL_BEAM_BIDIRECTIONAL
+        return AGL_BEAM_OMNIDIRECTIONAL
+
+    def _agl_style_key(self, colour: str, beam_type: str) -> str:
+        return f"{colour}|{beam_type}"
 
     def _append_tdz_lights(
         self,
@@ -1006,6 +1078,9 @@ class AirfieldGroundLightingMixin:
                                 longitudinal_m,
                                 LIGHT_COLOUR_VARIABLE_WHITE,
                                 MOS_REF_TDZ,
+                                angle_deg=(runway_azimuth + 180.0) % 360.0,
+                                symbol_angle_deg=(runway_azimuth + 180.0) % 360.0,
+                                beam_type=AGL_BEAM_UNIDIRECTIONAL,
                             )
                         )
 
@@ -1076,9 +1151,12 @@ class AirfieldGroundLightingMixin:
         colour_reciprocal: str = "",
         angle_deg: float = 0.0,
         symbol_angle_deg: float = 0.0,
+        beam_type: str = AGL_BEAM_OMNIDIRECTIONAL,
     ) -> QgsFeature:
         feature = QgsFeature(fields)
         feature.setGeometry(QgsGeometry.fromPointXY(point))
+        resolved_beam_type = self._agl_beam_type(colour, beam_type)
+        style_key = self._agl_style_key(colour, resolved_beam_type)
         feature.setAttributes(
             [
                 runway_name,
@@ -1088,6 +1166,8 @@ class AirfieldGroundLightingMixin:
                 colour,
                 colour_primary or colour,
                 colour_reciprocal or colour,
+                resolved_beam_type,
+                style_key,
                 round(float(spacing_m), 3),
                 round(float(offset_m), 3),
                 round(float(angle_deg) % 360.0, 3),
@@ -1172,6 +1252,7 @@ class AirfieldGroundLightingMixin:
             symbol_angle_deg=float(
                 threshold_feature.attribute("symbol_ang") or threshold_feature.attribute("angle_deg") or 0.0
             ),
+            beam_type=AGL_BEAM_BIDIRECTIONAL,
         )
 
     def _agl_overlap_priority(self, feature: QgsFeature) -> int:
@@ -1203,6 +1284,8 @@ class AirfieldGroundLightingMixin:
                 QgsField("colour", QVariant.String, self.tr("Colour"), 20),
                 QgsField("colour_p", QVariant.String, self.tr("Primary Direction Colour"), 20),
                 QgsField("colour_r", QVariant.String, self.tr("Reciprocal Direction Colour"), 20),
+                QgsField("beam_type", QVariant.String, self.tr("Beam Type"), 20),
+                QgsField("style_key", QVariant.String, self.tr("Style Key"), 40),
                 QgsField("spacing_m", QVariant.Double, self.tr("Spacing (m)"), 12, 3),
                 QgsField("offset_m", QVariant.Double, self.tr("Offset (m)"), 12, 3),
                 QgsField("angle_deg", QVariant.Double, self.tr("Display Angle (deg)"), 12, 3),

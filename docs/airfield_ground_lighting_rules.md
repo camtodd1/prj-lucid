@@ -11,7 +11,8 @@ This document is an implementation reference for the Safeguarding Builder AGL la
 - Where the MOS depends on operational intent that is not available in the runway geometry, the builder uses explicit user options rather than inferring intent. Examples include night use, RVR below 350 m, LAHSO, and optional CAT I lighting enhancements.
 - For runway edge-light triggers, if either runway end type is `Non-Instrument`, `Non-Precision`, or `Precision Approach`, the builder assumes the runway is intended for night use.
 - Blank or unsupported runway type values do not fall back to a default AGL standard. Type-dependent AGL features are not generated for unsupported runway ends. Shared runway features use the supported end types only; if neither end has a supported type, type-dependent AGL features are skipped.
-- Point symbols are used for light fittings. Bidirectional or dual-display lights are modelled as split circular markers with `colour_p`, `colour_r`, and `symbol_ang` fields. QGIS renderer rotation is applied after the QML style is loaded.
+- Point symbols are used for light fittings. Each feature records `beam_type` and `style_key` so symbology can distinguish omnidirectional, unidirectional, and bidirectional fittings without inferring from colour alone.
+- Omnidirectional lights are drawn as plain circular markers. Unidirectional lights are drawn as circular markers with prongs facing the observable direction. Bidirectional or dual-display lights are modelled as split circular markers with prongs on the observable axis, using `colour_p`, `colour_r`, and `symbol_ang` fields. QGIS renderer rotation is applied after the QML style is loaded.
 - Coincident lights are resolved before the AGL layer is written. Current assumptions:
   - Stopway end lights override stopway edge lights at the same point.
   - Threshold plus runway end lights at the same point are represented as one split green/red marker.
