@@ -105,6 +105,7 @@ class AirfieldGroundLightingMixin:
             try:
                 runway_success = self._create_agl_layer_for_runway(
                     runway_data,
+                    processed_runway_data_list,
                     layer_group,
                     threshold_inset_m,
                     centreline_offset_m,
@@ -124,6 +125,7 @@ class AirfieldGroundLightingMixin:
     def _create_agl_layer_for_runway(
         self,
         runway_data: dict,
+        processed_runway_data_list: List[dict],
         layer_group: QgsLayerTreeGroup,
         threshold_inset_m: float,
         centreline_offset_m: float,
@@ -173,6 +175,11 @@ class AirfieldGroundLightingMixin:
         edge_start_offset_m = edge_spacing_m if precision_runway else 0.0
         edge_end_offset_m = edge_spacing_m if precision_runway else 0.0
         physical_params = {**params, "length": physical_length}
+        edge_omission_geometries = (
+            []
+            if precision_runway
+            else self._agl_intersecting_runway_geometries(runway_data, processed_runway_data_list)
+        )
 
         self._append_runway_edge_lights(
             features,
@@ -186,7 +193,7 @@ class AirfieldGroundLightingMixin:
             edge_end_offset_m,
             disp_primary,
             disp_reciprocal,
-            precision_runway,
+            edge_omission_geometries,
         )
         self._append_threshold_lights(
             features,
@@ -407,12 +414,13 @@ class AirfieldGroundLightingMixin:
         end_offset_m: float,
         disp_primary_m: float,
         disp_reciprocal_m: float,
-        precision_runway: bool,
+        omission_geometries: List[QgsGeometry] | None = None,
     ) -> None:
         available_length_m = max(0.0, params["length"] - start_offset_m - end_offset_m)
         if available_length_m <= 0:
             return
         count = self._agl_interval_count(available_length_m, spacing_m)
+        omitted_indices_by_side: Dict[str, set] = {}
         for index in range(count + 1):
             offset_m = min(start_offset_m + index * spacing_m, params["length"] - end_offset_m)
             centre = thr_point.project(offset_m, params["azimuth_p_r"])
@@ -440,7 +448,9 @@ class AirfieldGroundLightingMixin:
                 if LIGHT_COLOUR_RED in {primary_colour_raw, reciprocal_colour_raw}
                 else MOS_REF_RUNWAY_EDGE
             )
-            if left is not None:
+            if left is not None and not self._should_omit_runway_edge_light(
+                left, index, "Left", omission_geometries, omitted_indices_by_side
+            ):
                 features.append(
                     self._agl_feature(
                         fields,
@@ -459,7 +469,9 @@ class AirfieldGroundLightingMixin:
                         symbol_angle_deg=params["azimuth_r_p"],
                     )
                 )
-            if right is not None:
+            if right is not None and not self._should_omit_runway_edge_light(
+                right, index, "Right", omission_geometries, omitted_indices_by_side
+            ):
                 features.append(
                     self._agl_feature(
                         fields,
@@ -478,6 +490,81 @@ class AirfieldGroundLightingMixin:
                         symbol_angle_deg=params["azimuth_r_p"],
                     )
                 )
+
+    def _should_omit_runway_edge_light(
+        self,
+        point: QgsPointXY,
+        index: int,
+        side: str,
+        omission_geometries: List[QgsGeometry] | None,
+        omitted_indices_by_side: Dict[str, set],
+    ) -> bool:
+        if not omission_geometries:
+            return False
+        point_geometry = QgsGeometry.fromPointXY(point)
+        if not any(geometry.intersects(point_geometry) for geometry in omission_geometries):
+            return False
+
+        omitted_indices = omitted_indices_by_side.setdefault(side, set())
+        if index - 1 in omitted_indices or index + 1 in omitted_indices:
+            return False
+        omitted_indices.add(index)
+        return True
+
+    def _agl_intersecting_runway_geometries(
+        self, runway_data: dict, processed_runway_data_list: List[dict]
+    ) -> List[QgsGeometry]:
+        current_index = runway_data.get("original_index")
+        current_name = runway_data.get("short_name")
+        geometries: List[QgsGeometry] = []
+        for other_runway_data in processed_runway_data_list:
+            if other_runway_data is runway_data:
+                continue
+            if current_index is not None and other_runway_data.get("original_index") == current_index:
+                continue
+            if current_name and other_runway_data.get("short_name") == current_name:
+                continue
+            geometry = self._agl_runway_pavement_geometry(other_runway_data)
+            if geometry is None or geometry.isEmpty():
+                continue
+            geometries.append(geometry.buffer(0.5, 8))
+        return geometries
+
+    def _agl_runway_pavement_geometry(self, runway_data: dict) -> QgsGeometry | None:
+        thr_point = runway_data.get("thr_point")
+        rec_thr_point = runway_data.get("rec_thr_point")
+        runway_width = self._non_negative_float(runway_data.get("width"), 0.0)
+        if thr_point is None or rec_thr_point is None or runway_width <= 0:
+            return None
+
+        params = self._get_runway_parameters(thr_point, rec_thr_point)
+        if not params:
+            return None
+
+        disp_primary = self._non_negative_float(runway_data.get("thr_displaced_1"), 0.0)
+        disp_reciprocal = self._non_negative_float(runway_data.get("thr_displaced_2"), 0.0)
+        physical_endpoints = self._get_physical_runway_endpoints(
+            thr_point,
+            rec_thr_point,
+            disp_primary,
+            disp_reciprocal,
+            params,
+        )
+        phys_primary, phys_reciprocal, _ = (
+            physical_endpoints if physical_endpoints is not None else (thr_point, rec_thr_point, params["length"])
+        )
+
+        half_width = runway_width / 2.0
+        primary_left = phys_primary.project(half_width, params["azimuth_perp_l"])
+        primary_right = phys_primary.project(half_width, params["azimuth_perp_r"])
+        reciprocal_left = phys_reciprocal.project(half_width, params["azimuth_perp_l"])
+        reciprocal_right = phys_reciprocal.project(half_width, params["azimuth_perp_r"])
+        if any(point is None for point in (primary_left, primary_right, reciprocal_left, reciprocal_right)):
+            return None
+
+        return QgsGeometry.fromPolygonXY(
+            [[primary_left, reciprocal_left, reciprocal_right, primary_right, primary_left]]
+        )
 
     def _append_threshold_lights(
         self,

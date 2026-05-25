@@ -9,6 +9,7 @@ This document is an implementation reference for the Safeguarding Builder AGL la
 - AGL generation is optional and controlled from the Lighting UI.
 - The builder models light locations and plan-view display characteristics. It does not validate photometric intensity, vertical beam distribution, circuiting, power supply, control, monitoring, or serviceability requirements.
 - Where the MOS depends on operational intent that is not available in the runway geometry, the builder uses explicit user options rather than inferring intent. Examples include night use, RVR below 350 m, LAHSO, and optional CAT I lighting enhancements.
+- For runway edge-light triggers, if either runway end type is `Non-Instrument`, `Non-Precision`, or `Precision Approach`, the builder assumes the runway is intended for night use.
 - Point symbols are used for light fittings. Bidirectional or dual-display lights are modelled as split circular markers with `colour_p`, `colour_r`, and `symbol_ang` fields. QGIS renderer rotation is applied after the QML style is loaded.
 - Coincident lights are resolved before the AGL layer is written. Current assumptions:
   - Stopway end lights override stopway edge lights at the same point.
@@ -37,6 +38,8 @@ MOS references: 9.51, 9.52, 9.53, 9.63.
   - Instrument runway: 60 m, tolerance +0 m / -5 m.
   - Non-instrument runway: 90 m +/- 10 m.
 - Intersection omissions or irregular spacing are allowed for non-instrument and non-precision runways only, subject to MOS constraints. Precision approach runway edge lights must not be omitted.
+- At runway or taxiway intersections on non-instrument and non-precision runways, runway edge lights may be irregularly spaced or omitted if no 2 consecutive lights are omitted and visual guidance is not significantly altered.
+- If a runway edge light cannot be omitted at an intersection, an inset runway edge light must replace the elevated light.
 - Edge rows should be along the declared runway edges or no more than 3 m outside them.
 - Runways less than 30 m wide are treated as 30 m wide for edge-light placement.
 
@@ -52,7 +55,9 @@ MOS references: 9.51, 9.52, 9.53, 9.63.
 - The builder uses `variable white` for ordinary runway edge lights and split directional markers for directional edge display.
 - Directional edge displays are stored as primary and reciprocal colours. Current split combinations include white/yellow, yellow/white, red/white, white/red, red/yellow, and yellow/red.
 - The 600 m yellow end-zone display is modelled as a directional split where one side faces the landing threshold direction and the opposite side remains white unless another rule applies.
-- Intersection omissions, inset replacement at intersections, circling guidance light rows, and toe-in angle are not modelled.
+- Intersecting runway omissions are modelled where both runway geometries are available. Edge lights on non-instrument and non-precision runways are omitted where they fall within another runway footprint, provided the omission does not remove 2 consecutive lights on the same side.
+- Taxiway intersection geometry is not recorded in the AGL inputs. Taxiway-related omissions, irregular spacing remarks, inset replacement at intersections, and related compliance checks are not modelled or coded.
+- Circling guidance light rows and toe-in angle are not modelled.
 
 ## Runway Threshold Lights
 
