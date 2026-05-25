@@ -17,6 +17,9 @@ from qgis.core import (  # type: ignore
 )
 
 from ..dimensions.agl_dimensions import (
+    CAT_II_III_CROSSBAR_MAX_SPACING_M,
+    CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M,
+    CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M,
     LIGHT_COLOUR_FLASHING_WHITE,
     LIGHT_COLOUR_GREEN,
     LIGHT_COLOUR_RED,
@@ -688,6 +691,19 @@ class AirfieldGroundLightingMixin:
     ) -> None:
         if length_m <= 0 or spacing_m <= 0:
             return
+        if profile.get("approach_type") == "cat_ii_iii":
+            self._append_cat_ii_iii_approach_lights(
+                features,
+                fields,
+                runway_name,
+                end_desig,
+                threshold_point,
+                outward_azimuth,
+                length_m,
+                spacing_m,
+                profile,
+            )
+            return
         ref_mos = str(profile.get("ref_mos", ""))
         count = self._agl_interval_count(length_m, spacing_m)
         for index in range(1, count + 1):
@@ -742,6 +758,269 @@ class AirfieldGroundLightingMixin:
                             beam_type=AGL_BEAM_UNIDIRECTIONAL,
                         )
                     )
+
+    def _append_cat_ii_iii_approach_lights(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        threshold_point: QgsPointXY,
+        outward_azimuth: float,
+        length_m: float,
+        spacing_m: float,
+        profile: Dict[str, object],
+    ) -> None:
+        ref_mos = str(profile.get("ref_mos", ""))
+        left_azimuth = (outward_azimuth - 90.0 + 360.0) % 360.0
+        right_azimuth = (outward_azimuth + 90.0) % 360.0
+        count = self._agl_interval_count(length_m, spacing_m)
+        for index in range(1, count + 1):
+            offset_m = min(index * spacing_m, length_m)
+            centre = threshold_point.project(offset_m, outward_azimuth)
+            if centre is None:
+                continue
+            if offset_m <= 300.0 + 1e-6:
+                self._append_approach_barrette(
+                    features,
+                    fields,
+                    runway_name,
+                    end_desig,
+                    centre,
+                    left_azimuth,
+                    right_azimuth,
+                    "Approach Centreline Barrette",
+                    "Centre",
+                    spacing_m,
+                    offset_m,
+                    LIGHT_COLOUR_VARIABLE_WHITE,
+                    ref_mos,
+                    outward_azimuth,
+                    [-2.25, -0.75, 0.75, 2.25],
+                )
+                self._append_cat_ii_iii_side_row_barrettes(
+                    features,
+                    fields,
+                    runway_name,
+                    end_desig,
+                    centre,
+                    left_azimuth,
+                    right_azimuth,
+                    spacing_m,
+                    offset_m,
+                    ref_mos,
+                    outward_azimuth,
+                )
+            elif offset_m <= 600.0 + 1e-6:
+                self._append_approach_barrette(
+                    features,
+                    fields,
+                    runway_name,
+                    end_desig,
+                    centre,
+                    left_azimuth,
+                    right_azimuth,
+                    "Approach Centreline",
+                    "Centre",
+                    spacing_m,
+                    offset_m,
+                    LIGHT_COLOUR_VARIABLE_WHITE,
+                    ref_mos,
+                    outward_azimuth,
+                    [-0.75, 0.75],
+                )
+            else:
+                self._append_approach_barrette(
+                    features,
+                    fields,
+                    runway_name,
+                    end_desig,
+                    centre,
+                    left_azimuth,
+                    right_azimuth,
+                    "Approach Centreline",
+                    "Centre",
+                    spacing_m,
+                    offset_m,
+                    LIGHT_COLOUR_VARIABLE_WHITE,
+                    ref_mos,
+                    outward_azimuth,
+                    [-1.5, 0.0, 1.5],
+                )
+
+        for crossbar_m in profile.get("crossbars_m", []):
+            crossbar_offset_m = float(crossbar_m)
+            if crossbar_offset_m > length_m:
+                continue
+            if abs(crossbar_offset_m - 150.0) <= 1e-6:
+                ranges = [
+                    (-CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M, -2.25),
+                    (2.25, CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M),
+                ]
+            elif abs(crossbar_offset_m - 300.0) <= 1e-6:
+                ranges = [
+                    (-CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M, -2.25),
+                    (2.25, CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M),
+                ]
+            else:
+                half_width = self._cat_ii_iii_additional_crossbar_half_width(crossbar_offset_m)
+                ranges = [(-half_width, -2.25), (2.25, half_width)]
+            self._append_approach_crossbar_ranges(
+                features,
+                fields,
+                runway_name,
+                end_desig,
+                threshold_point,
+                outward_azimuth,
+                left_azimuth,
+                right_azimuth,
+                crossbar_offset_m,
+                ranges,
+                ref_mos,
+            )
+
+    def _append_cat_ii_iii_side_row_barrettes(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        centre: QgsPointXY,
+        left_azimuth: float,
+        right_azimuth: float,
+        spacing_m: float,
+        offset_m: float,
+        ref_mos: str,
+        observable_azimuth: float,
+    ) -> None:
+        for side_name, sign in [("Left", -1.0), ("Right", 1.0)]:
+            lateral_offsets = [sign * value for value in (9.0, 10.5, 12.0)]
+            self._append_approach_barrette(
+                features,
+                fields,
+                runway_name,
+                end_desig,
+                centre,
+                left_azimuth,
+                right_azimuth,
+                "Approach Side Row Barrette",
+                side_name,
+                spacing_m,
+                offset_m,
+                LIGHT_COLOUR_RED,
+                ref_mos,
+                observable_azimuth,
+                lateral_offsets,
+            )
+
+    def _append_approach_barrette(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        centre: QgsPointXY,
+        left_azimuth: float,
+        right_azimuth: float,
+        light_type: str,
+        side: str,
+        spacing_m: float,
+        offset_m: float,
+        colour: str,
+        ref_mos: str,
+        observable_azimuth: float,
+        lateral_offsets: List[float],
+    ) -> None:
+        for lateral_m in lateral_offsets:
+            point = self._agl_lateral_point(centre, lateral_m, left_azimuth, right_azimuth)
+            if point is None:
+                continue
+            features.append(
+                self._agl_feature(
+                    fields,
+                    point,
+                    runway_name,
+                    end_desig,
+                    light_type,
+                    side,
+                    spacing_m,
+                    offset_m,
+                    colour,
+                    ref_mos,
+                    angle_deg=observable_azimuth,
+                    symbol_angle_deg=observable_azimuth,
+                    beam_type=AGL_BEAM_UNIDIRECTIONAL,
+                )
+            )
+
+    def _append_approach_crossbar_ranges(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        end_desig: str,
+        threshold_point: QgsPointXY,
+        outward_azimuth: float,
+        left_azimuth: float,
+        right_azimuth: float,
+        crossbar_offset_m: float,
+        lateral_ranges: List[tuple[float, float]],
+        ref_mos: str,
+    ) -> None:
+        crossbar_center = threshold_point.project(crossbar_offset_m, outward_azimuth)
+        if crossbar_center is None:
+            return
+        for start_m, end_m in lateral_ranges:
+            for lateral_m in self._agl_lateral_offsets_for_range(
+                start_m,
+                end_m,
+                CAT_II_III_CROSSBAR_MAX_SPACING_M,
+            ):
+                point = self._agl_lateral_point(crossbar_center, lateral_m, left_azimuth, right_azimuth)
+                if point is None:
+                    continue
+                features.append(
+                    self._agl_feature(
+                        fields,
+                        point,
+                        runway_name,
+                        end_desig,
+                        "Approach Crossbar",
+                        "Centre",
+                        CAT_II_III_CROSSBAR_MAX_SPACING_M,
+                        crossbar_offset_m,
+                        LIGHT_COLOUR_VARIABLE_WHITE,
+                        ref_mos,
+                        angle_deg=outward_azimuth,
+                        symbol_angle_deg=outward_azimuth,
+                        beam_type=AGL_BEAM_UNIDIRECTIONAL,
+                    )
+                )
+
+    def _cat_ii_iii_additional_crossbar_half_width(self, offset_m: float) -> float:
+        return max(0.0, (offset_m - 300.0) / 10.0)
+
+    def _agl_lateral_point(
+        self,
+        centre: QgsPointXY,
+        lateral_m: float,
+        left_azimuth: float,
+        right_azimuth: float,
+    ) -> QgsPointXY | None:
+        if abs(lateral_m) < 1e-6:
+            return centre
+        azimuth = left_azimuth if lateral_m < 0 else right_azimuth
+        return centre.project(abs(lateral_m), azimuth)
+
+    def _agl_lateral_offsets_for_range(self, start_m: float, end_m: float, max_spacing_m: float) -> List[float]:
+        if end_m < start_m:
+            start_m, end_m = end_m, start_m
+        length_m = end_m - start_m
+        if length_m <= 1e-6:
+            return [start_m]
+        steps = max(1, int(math.ceil(length_m / max_spacing_m)))
+        spacing_m = length_m / steps
+        return [start_m + index * spacing_m for index in range(steps + 1)]
 
     def _append_runway_end_lights(
         self,
@@ -1267,6 +1546,8 @@ class AirfieldGroundLightingMixin:
             "Threshold Wing Bar": 70,
             "TDZ Barrette": 65,
             "Runway Centreline": 60,
+            "Approach Side Row Barrette": 58,
+            "Approach Centreline Barrette": 56,
             "Approach Crossbar": 55,
             "Approach Centreline": 50,
             "Stopway Edge": 40,

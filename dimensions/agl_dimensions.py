@@ -41,6 +41,9 @@ PRECISION_APPROACH_POINT_D_M = 600.0
 PRECISION_APPROACH_POINT_E_M = 750.0
 PRECISION_CROSSBAR_LENGTH_M = 30.0
 CAT_II_III_SIDE_ROW_INNER_SPACING_M = 18.0
+CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M = CAT_II_III_SIDE_ROW_INNER_SPACING_M / 2.0
+CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M = 15.0
+CAT_II_III_CROSSBAR_MAX_SPACING_M = 2.7
 RUNWAY_END_MIN_LIGHTS = 6
 CAT_III_RUNWAY_END_MAX_SPACING_M = 6.0
 THRESHOLD_WING_BAR_LIGHTS_PER_SIDE = 5
@@ -156,6 +159,7 @@ def approach_profile_for_end(runway_type: str) -> Dict[str, object]:
             "crossbar_length_m": PRECISION_CROSSBAR_LENGTH_M,
             "side_rows_to_m": PRECISION_APPROACH_POINT_B_M,
             "side_row_inner_spacing_m": CAT_II_III_SIDE_ROW_INNER_SPACING_M,
+            "approach_type": "cat_ii_iii",
             "ref_mos": MOS_REF_APPROACH_CAT_II_III,
         }
     if "Precision Approach CAT I" in (runway_type or ""):
@@ -173,6 +177,7 @@ def approach_profile_for_end(runway_type: str) -> Dict[str, object]:
             "crossbar_length_m": PRECISION_CROSSBAR_LENGTH_M,
             "side_rows_to_m": 0.0,
             "side_row_inner_spacing_m": 0.0,
+            "approach_type": "cat_i",
             "ref_mos": MOS_REF_APPROACH_CAT_I,
         }
     if "Non-Precision" in (runway_type or ""):
@@ -184,6 +189,7 @@ def approach_profile_for_end(runway_type: str) -> Dict[str, object]:
             "crossbar_length_m": SALS_CROSSBAR_LENGTH_STANDARD_M,
             "side_rows_to_m": 0.0,
             "side_row_inner_spacing_m": 0.0,
+            "approach_type": "sals",
             "ref_mos": MOS_REF_APPROACH_SALS,
         }
     return {
@@ -194,5 +200,6 @@ def approach_profile_for_end(runway_type: str) -> Dict[str, object]:
         "crossbar_length_m": 0.0,
         "side_rows_to_m": 0.0,
         "side_row_inner_spacing_m": 0.0,
+        "approach_type": "none",
         "ref_mos": "",
     }

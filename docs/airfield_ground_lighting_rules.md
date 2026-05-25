@@ -19,6 +19,54 @@ This document is an implementation reference for the Safeguarding Builder AGL la
   - Otherwise, coincident lights are reduced by a fixed priority order to avoid unreadable overplotting.
 - Unless otherwise stated, lateral placement is generated relative to the runway centreline and current runway width, with runway edge light rows using at least a 30 m effective lit width where required.
 
+## Precision Approach CAT II/III Approach Lighting
+
+MOS reference: 9.42.
+
+### Triggers
+
+- A precision approach CAT II or CAT III lighting system must be provided for a precision approach CAT II or CAT III runway.
+- Where a precision approach CAT II or CAT III lighting system is provided, runway TDZ lights must also be provided.
+
+### Layout Requirements
+
+- The approach lighting system must include a row of lights on the extended runway centreline extending at least to Point B, 300 m from threshold.
+- The system must include 2 side rows of lights between the threshold and Point B.
+- The system must include crossbars at Point A, 150 m from threshold, and Point B, 300 m from threshold.
+- Centreline lights must be at equal longitudinal intervals between threshold and crossbars, or between crossbars, as close as possible to 30 m and within the MOS tolerance.
+- Side row lights must be:
+  - on each side of the centreline;
+  - longitudinally aligned with the centreline lights;
+  - at the same longitudinal spacing as the centreline lights; and
+  - laterally spaced so the innermost side-row lights are not less than 18 m and not more than 22.5 m apart.
+- The Point A crossbar must fill the gaps between the centreline and side row lights.
+- The Point B crossbar must extend on both sides of the centreline lights to 15 m from the centreline.
+- Where centreline lights continue beyond Point B using the distance-coded pattern, additional crossbars must be provided at Points C, D and E where those points are within the system length.
+- Additional crossbar outer ends must lie on straight lines converging to the runway centreline 300 m from threshold.
+- Object screening and horizontal plane requirements apply but are not modelled geometrically by the builder.
+
+### Characteristics
+
+- From threshold to Point B, centreline light positions consist of barrettes showing variable white.
+- Beyond Point B, the builder uses the MOS distance-coded centreline option:
+  - 2 variable-white light sources from Point B to Point D; and
+  - 3 variable-white light sources beyond Point D.
+- Centreline barrettes must be at least 4 m long. If composed of point-source lights, those lights must be uniformly spaced at intervals not exceeding 1.5 m.
+- Each side row light position consists of a red barrette, with length and light spacing equal to the TDZ barrettes.
+- Crossbar lights are fixed variable-white lights, uniformly spaced at intervals not exceeding 2.7 m.
+
+### Builder Assumptions
+
+- Generated for precision approach CAT II/III ends through the per-end approach lighting configuration.
+- The base generated CAT II/III system is 900 m long unless a user approach-length override is entered.
+- Centreline positions use 30 m spacing from threshold outward, subject to any user spacing override.
+- Centreline barrettes from threshold to Point B are represented by 4 point light units spaced 1.5 m apart, giving a 4.5 m barrette span.
+- Side row barrettes use the TDZ barrette pattern: 3 red light units at 1.5 m spacing, with innermost lights at 9 m each side of centreline.
+- Point A and Point B crossbars are generated as variable-white point lights at intervals not exceeding 2.7 m, avoiding the central centreline barrette gap.
+- Points C, D and E are generated when included within the selected approach length. Their half-widths are derived from the MOS convergence rule, using 300 m from threshold as the convergence point.
+- The builder uses the distance-coded centreline option beyond Point B. The alternative continuing-barrette centreline and associated sequenced flashing lights are not generated.
+- The less-than-420 m CAT II concession, displaced-threshold single-source concession, object-screening checks, photometric intensity, circuiting, and independent flasher operation are not modelled.
+
 ## Runway Edge Lights
 
 MOS references: 9.51, 9.52, 9.53, 9.63.
