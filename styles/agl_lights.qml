@@ -17,6 +17,8 @@
       <category value="yellow/variable white" symbol="12" label="Yellow / variable white"/>
       <category value="red/variable white" symbol="13" label="Red / variable white"/>
       <category value="variable white/red" symbol="14" label="Variable white / red"/>
+      <category value="red/yellow" symbol="15" label="Red / yellow"/>
+      <category value="yellow/red" symbol="16" label="Yellow / red"/>
     </categories>
     <symbols>
       <symbol name="0" type="marker" alpha="1">
@@ -302,6 +304,56 @@
             <Option name="name" value="semi_circle" type="QString"/>
             <Option name="angle" value="0" type="QString"/>
             <Option name="color" value="245,245,230,255" type="QString"/>
+            <Option name="outline_color" value="204,204,204,255" type="QString"/>
+            <Option name="size" value="3.2" type="QString"/>
+            <Option name="outline_width" value="0.25" type="QString"/>
+            <Option name="size_unit" value="MM" type="QString"/>
+            <Option name="outline_width_unit" value="MM" type="QString"/>
+          </Option>
+        </layer>
+      </symbol>
+      <symbol name="15" type="marker" alpha="1">
+        <layer class="SimpleMarker" enabled="1">
+          <Option type="Map">
+            <Option name="name" value="circle" type="QString"/>
+            <Option name="color" value="255,215,0,255" type="QString"/>
+            <Option name="outline_color" value="204,204,204,255" type="QString"/>
+            <Option name="size" value="3.2" type="QString"/>
+            <Option name="outline_width" value="0.25" type="QString"/>
+            <Option name="size_unit" value="MM" type="QString"/>
+            <Option name="outline_width_unit" value="MM" type="QString"/>
+          </Option>
+        </layer>
+        <layer class="SimpleMarker" enabled="1">
+          <Option type="Map">
+            <Option name="name" value="semi_circle" type="QString"/>
+            <Option name="angle" value="0" type="QString"/>
+            <Option name="color" value="220,35,35,255" type="QString"/>
+            <Option name="outline_color" value="204,204,204,255" type="QString"/>
+            <Option name="size" value="3.2" type="QString"/>
+            <Option name="outline_width" value="0.25" type="QString"/>
+            <Option name="size_unit" value="MM" type="QString"/>
+            <Option name="outline_width_unit" value="MM" type="QString"/>
+          </Option>
+        </layer>
+      </symbol>
+      <symbol name="16" type="marker" alpha="1">
+        <layer class="SimpleMarker" enabled="1">
+          <Option type="Map">
+            <Option name="name" value="circle" type="QString"/>
+            <Option name="color" value="220,35,35,255" type="QString"/>
+            <Option name="outline_color" value="204,204,204,255" type="QString"/>
+            <Option name="size" value="3.2" type="QString"/>
+            <Option name="outline_width" value="0.25" type="QString"/>
+            <Option name="size_unit" value="MM" type="QString"/>
+            <Option name="outline_width_unit" value="MM" type="QString"/>
+          </Option>
+        </layer>
+        <layer class="SimpleMarker" enabled="1">
+          <Option type="Map">
+            <Option name="name" value="semi_circle" type="QString"/>
+            <Option name="angle" value="0" type="QString"/>
+            <Option name="color" value="255,215,0,255" type="QString"/>
             <Option name="outline_color" value="204,204,204,255" type="QString"/>
             <Option name="size" value="3.2" type="QString"/>
             <Option name="outline_width" value="0.25" type="QString"/>

@@ -424,14 +424,12 @@ class AirfieldGroundLightingMixin:
                 offset_m,
                 params["length"],
                 disp_primary_m,
-                precision_runway,
                 landing_from_primary=True,
             )
             reciprocal_colour = self._runway_edge_light_colour_for_direction(
                 offset_m,
                 params["length"],
                 disp_reciprocal_m,
-                precision_runway,
                 landing_from_primary=False,
             )
             colour = self._combined_light_colour(primary_colour, reciprocal_colour)
@@ -1130,13 +1128,12 @@ class AirfieldGroundLightingMixin:
         offset_m: float,
         runway_length_m: float,
         displaced_threshold_m: float,
-        precision_runway: bool,
         landing_from_primary: bool,
     ) -> str:
         distance_from_threshold_m = offset_m if landing_from_primary else max(0.0, runway_length_m - offset_m)
         distance_to_runway_end_m = max(0.0, runway_length_m - offset_m) if landing_from_primary else offset_m
         if displaced_threshold_m > 0 and distance_from_threshold_m < displaced_threshold_m:
             return LIGHT_COLOUR_RED
-        if precision_runway and distance_to_runway_end_m <= 600.0:
+        if distance_to_runway_end_m <= 600.0:
             return LIGHT_COLOUR_YELLOW
         return LIGHT_COLOUR_VARIABLE_WHITE
