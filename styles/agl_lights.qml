@@ -134,7 +134,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -148,7 +148,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -279,7 +279,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -293,7 +293,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -413,7 +413,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -427,7 +427,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -547,7 +547,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -561,7 +561,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -692,7 +692,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -706,7 +706,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -837,7 +837,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -851,7 +851,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -982,7 +982,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -996,7 +996,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1062,7 +1062,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1076,7 +1076,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1143,7 +1143,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1157,7 +1157,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1224,7 +1224,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1238,7 +1238,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1305,7 +1305,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1319,7 +1319,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1386,7 +1386,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1400,7 +1400,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1467,7 +1467,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1481,7 +1481,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1548,7 +1548,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1562,7 +1562,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1629,7 +1629,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1643,7 +1643,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1710,7 +1710,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1724,7 +1724,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1791,7 +1791,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1805,7 +1805,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1872,7 +1872,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1886,7 +1886,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1953,7 +1953,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="215" type="QString"/>
+            <Option name="angle" value="35" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
@@ -1967,7 +1967,7 @@
         <layer class="SimpleMarker" enabled="1">
           <Option type="Map">
             <Option name="name" value="line" type="QString"/>
-            <Option name="angle" value="145" type="QString"/>
+            <Option name="angle" value="325" type="QString"/>
             <Option name="color" value="20,20,20,255" type="QString"/>
             <Option name="outline_color" value="20,20,20,255" type="QString"/>
             <Option name="size" value="1.9" type="QString"/>
