@@ -420,14 +420,26 @@ class AirfieldGroundLightingMixin:
                 continue
             left = centre.project(half_width, params["azimuth_perp_l"])
             right = centre.project(half_width, params["azimuth_perp_r"])
-            colour = self._runway_edge_light_colour(
+            primary_colour = self._runway_edge_light_colour_for_direction(
                 offset_m,
                 params["length"],
                 disp_primary_m,
+                precision_runway,
+                landing_from_primary=True,
+            )
+            reciprocal_colour = self._runway_edge_light_colour_for_direction(
+                offset_m,
+                params["length"],
                 disp_reciprocal_m,
                 precision_runway,
+                landing_from_primary=False,
             )
-            ref_mos = MOS_REF_DISPLACED_THRESHOLD_EDGE if colour == LIGHT_COLOUR_RED else MOS_REF_RUNWAY_EDGE
+            colour = self._combined_light_colour(primary_colour, reciprocal_colour)
+            ref_mos = (
+                MOS_REF_DISPLACED_THRESHOLD_EDGE
+                if LIGHT_COLOUR_RED in {primary_colour, reciprocal_colour}
+                else MOS_REF_RUNWAY_EDGE
+            )
             if left is not None:
                 features.append(
                     self._agl_feature(
@@ -441,6 +453,10 @@ class AirfieldGroundLightingMixin:
                         offset_m,
                         colour,
                         ref_mos,
+                        colour_primary=primary_colour,
+                        colour_reciprocal=reciprocal_colour,
+                        angle_deg=params["azimuth_r_p"],
+                        symbol_angle_deg=params["azimuth_r_p"],
                     )
                 )
             if right is not None:
@@ -456,6 +472,10 @@ class AirfieldGroundLightingMixin:
                         offset_m,
                         colour,
                         ref_mos,
+                        colour_primary=primary_colour,
+                        colour_reciprocal=reciprocal_colour,
+                        angle_deg=params["azimuth_r_p"],
+                        symbol_angle_deg=params["azimuth_r_p"],
                     )
                 )
 
@@ -1105,18 +1125,18 @@ class AirfieldGroundLightingMixin:
         spacing_m = (usable_half_width * 2.0) / (light_count - 1)
         return [-usable_half_width + (idx * spacing_m) for idx in range(light_count)]
 
-    def _runway_edge_light_colour(
+    def _runway_edge_light_colour_for_direction(
         self,
         offset_m: float,
         runway_length_m: float,
-        disp_primary_m: float,
-        disp_reciprocal_m: float,
+        displaced_threshold_m: float,
         precision_runway: bool,
+        landing_from_primary: bool,
     ) -> str:
-        if disp_primary_m > 0 and offset_m < disp_primary_m:
+        distance_from_threshold_m = offset_m if landing_from_primary else max(0.0, runway_length_m - offset_m)
+        distance_to_runway_end_m = max(0.0, runway_length_m - offset_m) if landing_from_primary else offset_m
+        if displaced_threshold_m > 0 and distance_from_threshold_m < displaced_threshold_m:
             return LIGHT_COLOUR_RED
-        if disp_reciprocal_m > 0 and (runway_length_m - offset_m) < disp_reciprocal_m:
-            return LIGHT_COLOUR_RED
-        if precision_runway and min(offset_m, max(0.0, runway_length_m - offset_m)) <= 600.0:
+        if precision_runway and distance_to_runway_end_m <= 600.0:
             return LIGHT_COLOUR_YELLOW
         return LIGHT_COLOUR_VARIABLE_WHITE
