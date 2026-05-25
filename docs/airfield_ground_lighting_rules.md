@@ -54,7 +54,8 @@ MOS references: 9.51, 9.52, 9.53, 9.63.
 
 - The builder uses `variable white` for ordinary runway edge lights and split directional markers for directional edge display.
 - Directional edge displays are stored as primary and reciprocal colours. Current split combinations include white/yellow, yellow/white, red/white, white/red, red/yellow, and yellow/red.
-- The 600 m yellow end-zone display is modelled as a directional split where one side faces the landing threshold direction and the opposite side remains white unless another rule applies.
+- The 600 m yellow end-zone display is modelled only where precision-style edge characteristics apply: precision approach runways, or runways marked for RVR below 350 m operations in the Lighting UI.
+- Where yellow end-zone display applies, it is modelled as a directional split where one side faces the landing threshold direction and the opposite side remains white unless another rule applies.
 - Intersecting runway omissions are modelled where both runway geometries are available. Edge lights on non-instrument and non-precision runways are omitted where they fall within another runway footprint, provided the omission does not remove 2 consecutive lights on the same side.
 - Taxiway intersection geometry is not recorded in the AGL inputs. Taxiway-related omissions, irregular spacing remarks, inset replacement at intersections, and related compliance checks are not modelled or coded.
 - Circling guidance light rows and toe-in angle are not modelled.

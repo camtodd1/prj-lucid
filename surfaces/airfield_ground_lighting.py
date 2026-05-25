@@ -172,6 +172,8 @@ class AirfieldGroundLightingMixin:
             runway_edge_spacing_for_end(reciprocal_type),
         )
         precision_runway = runway_is_precision(primary_type) or runway_is_precision(reciprocal_type)
+        low_visibility_operations = bool(approach_rows.get(("__options__", "centreline_low_visibility")))
+        precision_edge_characteristics = precision_runway or low_visibility_operations
         edge_start_offset_m = edge_spacing_m if precision_runway else 0.0
         edge_end_offset_m = edge_spacing_m if precision_runway else 0.0
         physical_params = {**params, "length": physical_length}
@@ -193,6 +195,7 @@ class AirfieldGroundLightingMixin:
             edge_end_offset_m,
             disp_primary,
             disp_reciprocal,
+            precision_edge_characteristics,
             edge_omission_geometries,
         )
         self._append_threshold_lights(
@@ -414,6 +417,7 @@ class AirfieldGroundLightingMixin:
         end_offset_m: float,
         disp_primary_m: float,
         disp_reciprocal_m: float,
+        precision_edge_characteristics: bool,
         omission_geometries: List[QgsGeometry] | None = None,
     ) -> None:
         available_length_m = max(0.0, params["length"] - start_offset_m - end_offset_m)
@@ -432,12 +436,14 @@ class AirfieldGroundLightingMixin:
                 offset_m,
                 params["length"],
                 disp_primary_m,
+                precision_edge_characteristics,
                 landing_from_primary=True,
             )
             reciprocal_colour_raw = self._runway_edge_light_colour_for_direction(
                 offset_m,
                 params["length"],
                 disp_reciprocal_m,
+                precision_edge_characteristics,
                 landing_from_primary=False,
             )
             primary_colour = self._runway_edge_display_colour(primary_colour_raw, reciprocal_colour_raw)
@@ -1217,13 +1223,14 @@ class AirfieldGroundLightingMixin:
         offset_m: float,
         runway_length_m: float,
         displaced_threshold_m: float,
+        precision_edge_characteristics: bool,
         landing_from_primary: bool,
     ) -> str:
         distance_from_threshold_m = offset_m if landing_from_primary else max(0.0, runway_length_m - offset_m)
         distance_to_runway_end_m = max(0.0, runway_length_m - offset_m) if landing_from_primary else offset_m
         if displaced_threshold_m > 0 and distance_from_threshold_m < displaced_threshold_m:
             return LIGHT_COLOUR_RED
-        if distance_to_runway_end_m <= 600.0:
+        if precision_edge_characteristics and distance_to_runway_end_m <= 600.0:
             return LIGHT_COLOUR_YELLOW
         return LIGHT_COLOUR_VARIABLE_WHITE
 

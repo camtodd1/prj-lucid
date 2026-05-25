@@ -86,7 +86,7 @@ class AglOptionsMixin:
         self.checkBox_agl_centreline_lights = QtWidgets.QCheckBox("Runway centreline lights for CAT II/III")
         self.checkBox_agl_centreline_lights.setObjectName("checkBox_agl_centreline_lights")
         self.checkBox_agl_centreline_lights.setChecked(True)
-        self.checkBox_agl_centreline_low_visibility = QtWidgets.QCheckBox("Centreline spacing for RVR below 350 m")
+        self.checkBox_agl_centreline_low_visibility = QtWidgets.QCheckBox("RVR below 350 m operations")
         self.checkBox_agl_centreline_low_visibility.setObjectName("checkBox_agl_centreline_low_visibility")
         self.checkBox_agl_cat_i_centreline_lights = QtWidgets.QCheckBox("Recommended centreline lights for CAT I >50 m")
         self.checkBox_agl_cat_i_centreline_lights.setObjectName("checkBox_agl_cat_i_centreline_lights")
