@@ -32,6 +32,12 @@ The plugin can generate:
 - Physical runway geometry, including runway pavement, shoulders, strips,
   runway-end safety areas, stopways, pre-threshold runway areas, and displaced
   threshold marking references.
+- Optional Airfield Ground Lighting (AGL) layers, including runway edge,
+  threshold, runway end, stopway, centreline, touchdown zone, and approach
+  lighting features.
+- MOS-informed AGL approach lighting for precision approach CAT II/III runway
+  ends, including centreline barrettes, side-row barrettes, crossbars, and
+  distance-coded centreline light positions.
 - Guideline B windshear assessment zones.
 - Guideline C wildlife management zones.
 - Guideline D wind turbine assessment zones.
@@ -58,6 +64,9 @@ Typical inputs include:
   aircraft reference code, runway type, instrument classification, and runway
   status details.
 - Optional displaced threshold and pre-threshold runway values.
+- Optional Lighting tab inputs for AGL generation, including per-runway-end
+  approach lighting parameters, low-visibility/RVR options, and optional CAT I
+  lighting enhancements where supported.
 - Optional MET station coordinates and elevation.
 - Optional CNS facility rows, including type, coordinates, elevation, antenna
   height, and related configuration values.
@@ -75,6 +84,13 @@ QGIS style files in `styles/` are applied automatically where a matching style
 key is available. The mapping between logical layer categories and QML files is
 defined in `core/styles.py`.
 
+AGL layers use point symbols to represent light fittings. The generated
+attributes distinguish omnidirectional, unidirectional, bidirectional, and
+split-colour light displays, and `styles/agl_lights.qml` draws the corresponding
+circle, split-circle, flashing, and direction-prong markers. Coincident AGL
+lights are resolved before output where a combined marker or priority rule is
+needed.
+
 ## Project Structure
 
 The central plugin file now focuses on QGIS lifecycle handling, dialog
@@ -91,6 +107,8 @@ dialog/runway_group.py           Dynamic runway input group widget.
 dialog/cns_table.py              CNS facility table setup, row handling, and
                                  CNS input validation.
 dialog/output_options.py         Memory/file output option setup and state.
+dialog/agl_options.py            Lighting tab setup, validation, and AGL input
+                                 persistence.
 dialog/persistence.py            Clear, save, and load behaviour for dialog
                                  input JSON.
 dialog/dialog_constants.py       Shared dialog labels, placeholders, logging
@@ -104,10 +122,15 @@ guidelines/guideline_constants.py
 guidelines/simple.py             Guideline A/B/C/D/G/I and CNS helper logic.
 guidelines/ols_guideline.py      Guideline F and airport-wide OLS generation.
 surfaces/physical.py             Physical runway and runway protection geometry.
+surfaces/airfield_ground_lighting.py
+                                 Airfield Ground Lighting generation and
+                                 coincident-light resolution.
 surfaces/specialised.py          Specialised surfaces such as RAOA and taxiway
                                  separation offsets.
 dimensions/ols_dimensions.py     CASA MOS-style physical and OLS dimensions.
 dimensions/cns_dimensions.py     CNS building restricted area dimensions.
+dimensions/agl_dimensions.py     MOS-derived AGL dimensions, trigger helpers,
+                                 and approach lighting profiles.
 docs/                            Planning notes, implementation matrices,
                                  TODOs, and reference mapping files.
 styles/*.qml                     QGIS layer styling files.
@@ -122,6 +145,10 @@ After editing Python modules, run a syntax check from the plugin directory:
 ```bash
 python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols_guideline.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/guideline_constants.py dimensions/*.py
 ```
+
+For AGL rule changes, also review `docs/airfield_ground_lighting_rules.md`.
+That file records the MOS sections, builder assumptions, and concessions that
+are documented but not generated.
 
 When adding new guideline logic, prefer placing it in the relevant
 `guidelines/` or `surfaces/` module and keeping `safeguarding_builder.py`
@@ -138,5 +165,11 @@ QGIS-compatible Qt resource compiler used by your local QGIS/PyQt installation.
 - Guideline A and Guideline H detailed generation are not fully implemented.
 - Some specialised CNS and OLS cases depend on the available parameter tables in
   `dimensions/cns_dimensions.py` and `dimensions/ols_dimensions.py`.
+- AGL generation models plan-view light locations and display characteristics.
+  It does not validate photometric intensity, vertical beam distribution,
+  circuiting, power supply, monitoring, serviceability, or obstacle screening.
+- Some AGL concessions are documented rather than generated, including shortened
+  CAT II approach lighting assessments and alternative CAT II/III continuing
+  barrette layouts with sequenced flashing lights.
 - Runtime validation should be performed in QGIS after code changes because many
   behaviours depend on QGIS APIs and live project state.

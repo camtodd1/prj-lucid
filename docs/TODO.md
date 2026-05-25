@@ -15,17 +15,6 @@
   - Top-level Guideline H groups are treated as expected empty placeholders.
   - `README.md` documents Guideline H as placeholder-only.
 
-## Airfield Ground Lighting Generation
-
-- [x] Add optional Airfield Ground Lighting (AGL) generation.
-
-  Scope:
-  - Add an additional UI dialog tab for AGL inputs.
-  - Capture additional AGL parameters per runway end.
-  - Make AGL generation opt-in so default runs avoid the extra processing cost.
-  - Keep generation logic separate from existing Guideline E lighting control zones unless shared helpers are genuinely useful.
-  - Include generated AGL layers in the normal output/grouping/style workflow when enabled.
-
 ## Declared Distances And Stopways
 
 - [ ] Add stopway geometry generation.
