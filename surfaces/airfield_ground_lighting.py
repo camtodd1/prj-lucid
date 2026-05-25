@@ -168,6 +168,8 @@ class AirfieldGroundLightingMixin:
         ]
         disp_primary = self._non_negative_float(runway_data.get("thr_displaced_1"), 0.0)
         disp_reciprocal = self._non_negative_float(runway_data.get("thr_displaced_2"), 0.0)
+        primary_available_pre_threshold_m = self._agl_available_pre_threshold_runway_length(disp_primary)
+        reciprocal_available_pre_threshold_m = self._agl_available_pre_threshold_runway_length(disp_reciprocal)
         physical_endpoints = self._get_physical_runway_endpoints(
             thr_point,
             rec_thr_point,
@@ -211,8 +213,8 @@ class AirfieldGroundLightingMixin:
                 edge_spacing_m,
                 edge_start_offset_m,
                 edge_end_offset_m,
-                disp_primary,
-                disp_reciprocal,
+                primary_available_pre_threshold_m,
+                reciprocal_available_pre_threshold_m,
                 primary_precision_edge_characteristics,
                 reciprocal_precision_edge_characteristics,
                 edge_omission_geometries,
@@ -446,8 +448,8 @@ class AirfieldGroundLightingMixin:
         spacing_m: float,
         start_offset_m: float,
         end_offset_m: float,
-        disp_primary_m: float,
-        disp_reciprocal_m: float,
+        primary_available_pre_threshold_m: float,
+        reciprocal_available_pre_threshold_m: float,
         primary_precision_edge_characteristics: bool,
         reciprocal_precision_edge_characteristics: bool,
         omission_geometries: List[QgsGeometry] | None = None,
@@ -467,14 +469,14 @@ class AirfieldGroundLightingMixin:
             primary_colour_raw = self._runway_edge_light_colour_for_direction(
                 offset_m,
                 params["length"],
-                disp_primary_m,
+                primary_available_pre_threshold_m,
                 primary_precision_edge_characteristics,
                 landing_from_primary=True,
             )
             reciprocal_colour_raw = self._runway_edge_light_colour_for_direction(
                 offset_m,
                 params["length"],
-                disp_reciprocal_m,
+                reciprocal_available_pre_threshold_m,
                 reciprocal_precision_edge_characteristics,
                 landing_from_primary=False,
             )
@@ -1237,6 +1239,9 @@ class AirfieldGroundLightingMixin:
             return 0
         return max(1, int(math.ceil(length_m / spacing_m)))
 
+    def _agl_available_pre_threshold_runway_length(self, displaced_threshold_m: float) -> float:
+        return max(0.0, float(displaced_threshold_m or 0.0))
+
     def _agl_lateral_offsets(self, usable_half_width: float, spacing_m: float) -> List[float]:
         steps = max(1, int(math.floor((usable_half_width * 2.0) / spacing_m)))
         if steps == 1:
@@ -1254,13 +1259,13 @@ class AirfieldGroundLightingMixin:
         self,
         offset_m: float,
         runway_length_m: float,
-        displaced_threshold_m: float,
+        available_pre_threshold_m: float,
         precision_edge_characteristics: bool,
         landing_from_primary: bool,
     ) -> str:
         distance_from_threshold_m = offset_m if landing_from_primary else max(0.0, runway_length_m - offset_m)
         distance_to_runway_end_m = max(0.0, runway_length_m - offset_m) if landing_from_primary else offset_m
-        if displaced_threshold_m > 0 and distance_from_threshold_m < displaced_threshold_m:
+        if available_pre_threshold_m > 0 and distance_from_threshold_m < available_pre_threshold_m:
             return LIGHT_COLOUR_RED
         if precision_edge_characteristics and distance_to_runway_end_m <= 600.0:
             return LIGHT_COLOUR_YELLOW
