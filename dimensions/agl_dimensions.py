@@ -77,6 +77,11 @@ def runway_is_precision(runway_type: str) -> bool:
     return "Precision Approach" in (runway_type or "")
 
 
+def runway_type_supports_agl(runway_type: str) -> bool:
+    value = runway_type or ""
+    return "Non-Instrument" in value or "Non-Precision" in value or runway_is_precision(value)
+
+
 def runway_is_instrument(runway_type: str) -> bool:
     value = runway_type or ""
     return "Non-Precision" in value or runway_is_precision(value)

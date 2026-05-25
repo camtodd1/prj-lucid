@@ -55,6 +55,7 @@ from ..dimensions.agl_dimensions import (
     runway_centreline_spacing,
     runway_edge_spacing_for_end,
     runway_is_precision,
+    runway_type_supports_agl,
     temp_displaced_threshold_lights_per_side,
     runway_end_light_count_for_end,
     threshold_light_count_for_end,
@@ -155,6 +156,16 @@ class AirfieldGroundLightingMixin:
         primary_desig, reciprocal_desig = self._agl_end_designators(runway_name)
         primary_type = runway_data.get("type1", "")
         reciprocal_type = runway_data.get("type2", "")
+        primary_type_supported = runway_type_supports_agl(primary_type)
+        reciprocal_type_supported = runway_type_supports_agl(reciprocal_type)
+        supported_runway_types = [
+            runway_type
+            for runway_type, is_supported in (
+                (primary_type, primary_type_supported),
+                (reciprocal_type, reciprocal_type_supported),
+            )
+            if is_supported
+        ]
         disp_primary = self._non_negative_float(runway_data.get("thr_displaced_1"), 0.0)
         disp_reciprocal = self._non_negative_float(runway_data.get("thr_displaced_2"), 0.0)
         physical_endpoints = self._get_physical_runway_endpoints(
@@ -167,14 +178,19 @@ class AirfieldGroundLightingMixin:
         phys_primary, phys_reciprocal, physical_length = (
             physical_endpoints if physical_endpoints is not None else (thr_point, rec_thr_point, params["length"])
         )
-        edge_spacing_m = min(
-            runway_edge_spacing_for_end(primary_type),
-            runway_edge_spacing_for_end(reciprocal_type),
+        edge_spacing_m = (
+            min(runway_edge_spacing_for_end(runway_type) for runway_type in supported_runway_types)
+            if supported_runway_types
+            else 0.0
         )
-        precision_runway = runway_is_precision(primary_type) or runway_is_precision(reciprocal_type)
+        precision_runway = any(runway_is_precision(runway_type) for runway_type in supported_runway_types)
         low_visibility_operations = bool(approach_rows.get(("__options__", "centreline_low_visibility")))
-        primary_precision_edge_characteristics = runway_is_precision(primary_type) or low_visibility_operations
-        reciprocal_precision_edge_characteristics = runway_is_precision(reciprocal_type) or low_visibility_operations
+        primary_precision_edge_characteristics = primary_type_supported and (
+            runway_is_precision(primary_type) or low_visibility_operations
+        )
+        reciprocal_precision_edge_characteristics = reciprocal_type_supported and (
+            runway_is_precision(reciprocal_type) or low_visibility_operations
+        )
         edge_start_offset_m = edge_spacing_m if precision_runway else 0.0
         edge_end_offset_m = edge_spacing_m if precision_runway else 0.0
         physical_params = {**params, "length": physical_length}
@@ -184,68 +200,72 @@ class AirfieldGroundLightingMixin:
             else self._agl_intersecting_runway_geometries(runway_data, processed_runway_data_list)
         )
 
-        self._append_runway_edge_lights(
-            features,
-            fields,
-            runway_name,
-            phys_primary,
-            physical_params,
-            lit_half_width,
-            edge_spacing_m,
-            edge_start_offset_m,
-            edge_end_offset_m,
-            disp_primary,
-            disp_reciprocal,
-            primary_precision_edge_characteristics,
-            reciprocal_precision_edge_characteristics,
-            edge_omission_geometries,
-        )
-        self._append_threshold_lights(
-            features,
-            fields,
-            runway_name,
-            primary_desig,
-            primary_type,
-            thr_point,
-            params["azimuth_perp_l"],
-            params["azimuth_perp_r"],
-            params["azimuth_r_p"],
-            lit_half_width,
-            threshold_inset_m,
-        )
-
-        if self._agl_option_enabled(approach_rows, "runway_end_lights"):
-            self._append_runway_end_lights(
+        if supported_runway_types:
+            self._append_runway_edge_lights(
+                features,
+                fields,
+                runway_name,
+                phys_primary,
+                physical_params,
+                lit_half_width,
+                edge_spacing_m,
+                edge_start_offset_m,
+                edge_end_offset_m,
+                disp_primary,
+                disp_reciprocal,
+                primary_precision_edge_characteristics,
+                reciprocal_precision_edge_characteristics,
+                edge_omission_geometries,
+            )
+        if primary_type_supported:
+            self._append_threshold_lights(
                 features,
                 fields,
                 runway_name,
                 primary_desig,
                 primary_type,
-                phys_primary,
-                params["azimuth_perp_l"],
-                params["azimuth_perp_r"],
-                params["azimuth_p_r"],
-                lit_half_width,
-            )
-            self._append_runway_end_lights(
-                features,
-                fields,
-                runway_name,
-                reciprocal_desig,
-                reciprocal_type,
-                phys_reciprocal,
+                thr_point,
                 params["azimuth_perp_l"],
                 params["azimuth_perp_r"],
                 params["azimuth_r_p"],
                 lit_half_width,
+                threshold_inset_m,
             )
+
+        if self._agl_option_enabled(approach_rows, "runway_end_lights"):
+            if primary_type_supported:
+                self._append_runway_end_lights(
+                    features,
+                    fields,
+                    runway_name,
+                    primary_desig,
+                    primary_type,
+                    phys_primary,
+                    params["azimuth_perp_l"],
+                    params["azimuth_perp_r"],
+                    params["azimuth_p_r"],
+                    lit_half_width,
+                )
+            if reciprocal_type_supported:
+                self._append_runway_end_lights(
+                    features,
+                    fields,
+                    runway_name,
+                    reciprocal_desig,
+                    reciprocal_type,
+                    phys_reciprocal,
+                    params["azimuth_perp_l"],
+                    params["azimuth_perp_r"],
+                    params["azimuth_r_p"],
+                    lit_half_width,
+                )
 
         if approach_rows.get(("__options__", "threshold_wing_bars")):
             for end_desig, runway_type, point in [
                 (primary_desig, primary_type, thr_point),
                 (reciprocal_desig, reciprocal_type, rec_thr_point),
             ]:
-                if runway_is_precision(runway_type):
+                if runway_type_supports_agl(runway_type) and runway_is_precision(runway_type):
                     self._append_threshold_wing_bars(
                         features,
                         fields,
@@ -291,7 +311,7 @@ class AirfieldGroundLightingMixin:
                         lit_half_width,
                     )
 
-        if approach_rows.get(("__options__", "stopway_lights")):
+        if approach_rows.get(("__options__", "stopway_lights")) and supported_runway_types:
             self._append_stopway_lights(
                 features,
                 fields,
@@ -320,7 +340,11 @@ class AirfieldGroundLightingMixin:
             )
 
         centreline_low_visibility = bool(approach_rows.get(("__options__", "centreline_low_visibility")))
-        centreline_required = runway_centreline_required(primary_type, reciprocal_type, centreline_low_visibility)
+        centreline_required = bool(supported_runway_types) and runway_centreline_required(
+            primary_type,
+            reciprocal_type,
+            centreline_low_visibility,
+        )
         centreline_recommended = bool(approach_rows.get(("__options__", "cat_i_centreline_lights"))) and (
             runway_centreline_recommended(primary_type, reciprocal_type, lit_half_width * 2.0)
         )
@@ -342,6 +366,8 @@ class AirfieldGroundLightingMixin:
                 ("primary", primary_desig, primary_type, thr_point, params["azimuth_p_r"]),
                 ("reciprocal", reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_r_p"]),
             ]:
+                if not runway_type_supports_agl(runway_type):
+                    continue
                 cat_ii_iii = "Precision Approach CAT II/III" in (runway_type or "")
                 cat_i_optional = "Precision Approach CAT I" in (runway_type or "") and approach_rows.get(
                     ("__options__", "cat_i_tdz_lights")
@@ -358,24 +384,27 @@ class AirfieldGroundLightingMixin:
                         params["azimuth_perp_r"],
                         self._tdz_lighting_extent(runway_data, end_desig, runway_type, physical_length),
                     )
-        self._append_threshold_lights(
-            features,
-            fields,
-            runway_name,
-            reciprocal_desig,
-            reciprocal_type,
-            rec_thr_point,
-            params["azimuth_perp_l"],
-            params["azimuth_perp_r"],
-            params["azimuth_p_r"],
-            lit_half_width,
-            threshold_inset_m,
-        )
+        if reciprocal_type_supported:
+            self._append_threshold_lights(
+                features,
+                fields,
+                runway_name,
+                reciprocal_desig,
+                reciprocal_type,
+                rec_thr_point,
+                params["azimuth_perp_l"],
+                params["azimuth_perp_r"],
+                params["azimuth_p_r"],
+                lit_half_width,
+                threshold_inset_m,
+            )
 
         for end_role, end_desig, runway_type, origin, outward_azimuth in [
             ("primary", primary_desig, primary_type, thr_point, params["azimuth_r_p"]),
             ("reciprocal", reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_p_r"]),
         ]:
+            if not runway_type_supports_agl(runway_type):
+                continue
             row = approach_rows.get((runway_index, end_role))
             profile = approach_profile_for_end(runway_type)
             if not row and not profile.get("length_m"):

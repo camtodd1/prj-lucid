@@ -10,6 +10,7 @@ This document is an implementation reference for the Safeguarding Builder AGL la
 - The builder models light locations and plan-view display characteristics. It does not validate photometric intensity, vertical beam distribution, circuiting, power supply, control, monitoring, or serviceability requirements.
 - Where the MOS depends on operational intent that is not available in the runway geometry, the builder uses explicit user options rather than inferring intent. Examples include night use, RVR below 350 m, LAHSO, and optional CAT I lighting enhancements.
 - For runway edge-light triggers, if either runway end type is `Non-Instrument`, `Non-Precision`, or `Precision Approach`, the builder assumes the runway is intended for night use.
+- Blank or unsupported runway type values do not fall back to a default AGL standard. Type-dependent AGL features are not generated for unsupported runway ends. Shared runway features use the supported end types only; if neither end has a supported type, type-dependent AGL features are skipped.
 - Point symbols are used for light fittings. Bidirectional or dual-display lights are modelled as split circular markers with `colour_p`, `colour_r`, and `symbol_ang` fields. QGIS renderer rotation is applied after the QML style is loaded.
 - Coincident lights are resolved before the AGL layer is written. Current assumptions:
   - Stopway end lights override stopway edge lights at the same point.
@@ -53,6 +54,8 @@ MOS references: 9.51, 9.52, 9.53, 9.63.
 ### Builder Assumptions
 
 - The builder uses `variable white` for ordinary runway edge lights and split directional markers for directional edge display.
+- Runway edge light spacing and shared row placement use the higher runway standard across the runway. If either end is instrument/precision, 60 m spacing applies to both edge rows. If both ends are non-instrument, 90 m spacing applies. If either end is precision approach, the shared edge rows use the precision one-light-space inset from both physical ends.
+- RVR below 350 m remains an optional Lighting UI input and does not otherwise override runway edge spacing or placement while RVR design data is not captured separately.
 - Directional edge displays are stored as primary and reciprocal colours. Current split combinations include white/yellow, yellow/white, red/white, white/red, red/yellow, and yellow/red.
 - The 600 m yellow end-zone display is assessed per landing direction. It applies to the direction whose runway end is a precision approach runway, or to both directions when the runway is marked for RVR below 350 m operations in the Lighting UI.
 - Where yellow end-zone display applies, it is modelled as a directional split where one side faces the landing threshold direction and the opposite side remains white unless another rule applies.
