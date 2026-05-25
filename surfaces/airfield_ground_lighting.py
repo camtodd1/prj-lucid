@@ -173,7 +173,8 @@ class AirfieldGroundLightingMixin:
         )
         precision_runway = runway_is_precision(primary_type) or runway_is_precision(reciprocal_type)
         low_visibility_operations = bool(approach_rows.get(("__options__", "centreline_low_visibility")))
-        precision_edge_characteristics = precision_runway or low_visibility_operations
+        primary_precision_edge_characteristics = runway_is_precision(primary_type) or low_visibility_operations
+        reciprocal_precision_edge_characteristics = runway_is_precision(reciprocal_type) or low_visibility_operations
         edge_start_offset_m = edge_spacing_m if precision_runway else 0.0
         edge_end_offset_m = edge_spacing_m if precision_runway else 0.0
         physical_params = {**params, "length": physical_length}
@@ -195,7 +196,8 @@ class AirfieldGroundLightingMixin:
             edge_end_offset_m,
             disp_primary,
             disp_reciprocal,
-            precision_edge_characteristics,
+            primary_precision_edge_characteristics,
+            reciprocal_precision_edge_characteristics,
             edge_omission_geometries,
         )
         self._append_threshold_lights(
@@ -417,7 +419,8 @@ class AirfieldGroundLightingMixin:
         end_offset_m: float,
         disp_primary_m: float,
         disp_reciprocal_m: float,
-        precision_edge_characteristics: bool,
+        primary_precision_edge_characteristics: bool,
+        reciprocal_precision_edge_characteristics: bool,
         omission_geometries: List[QgsGeometry] | None = None,
     ) -> None:
         available_length_m = max(0.0, params["length"] - start_offset_m - end_offset_m)
@@ -436,14 +439,14 @@ class AirfieldGroundLightingMixin:
                 offset_m,
                 params["length"],
                 disp_primary_m,
-                precision_edge_characteristics,
+                primary_precision_edge_characteristics,
                 landing_from_primary=True,
             )
             reciprocal_colour_raw = self._runway_edge_light_colour_for_direction(
                 offset_m,
                 params["length"],
                 disp_reciprocal_m,
-                precision_edge_characteristics,
+                reciprocal_precision_edge_characteristics,
                 landing_from_primary=False,
             )
             primary_colour = self._runway_edge_display_colour(primary_colour_raw, reciprocal_colour_raw)
