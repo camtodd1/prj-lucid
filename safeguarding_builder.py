@@ -1258,6 +1258,21 @@ class SafeguardingBuilder(
         ]:
             self._merge_or_move_direct_group(main_group, self.tr(group_name), infrastructure_group)
 
+        physical_geometry_group = self._find_group_by_path(
+            main_group, ["02 Runway Infrastructure", "Physical Geometry"]
+        )
+        if physical_geometry_group is not None and runway_centreline_group is not None:
+            for child in list(physical_geometry_group.children()):
+                if not isinstance(child, QgsLayerTreeLayer):
+                    continue
+                layer = child.layer()
+                layer_name = layer.name() if layer is not None else child.name()
+                style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
+                if style_key == "Runway Centreline" or (
+                    "Centreline" in layer_name and "Marking" not in layer_name
+                ):
+                    self._move_layer_tree_node(child, runway_centreline_group)
+
         for group_name in [
             "Runway Protection Areas",
             "Specialised Runway Safeguarding",
