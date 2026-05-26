@@ -750,6 +750,7 @@ class SafeguardingBuilder(
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
+            self._repair_output_layer_tree(main_group)
 
             self._final_feedback(
                 main_group,
@@ -1104,11 +1105,24 @@ class SafeguardingBuilder(
         """Find or create a child group and stage it for generated output."""
         if parent_group is None:
             return None
-        group = parent_group.findGroup(self.tr(name))
+        group = self._find_direct_child_group(parent_group, self.tr(name))
         if group is None:
             group = parent_group.addGroup(self.tr(name))
         self._stage_layer_tree_node(group)
         return group
+
+    def _find_direct_child_group(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        name: str,
+    ) -> Optional[QgsLayerTreeGroup]:
+        """Return a direct child group by name without recursively searching other branches."""
+        if parent_group is None:
+            return None
+        for child in parent_group.children():
+            if isinstance(child, QgsLayerTreeGroup) and child.name() == name:
+                return child
+        return None
 
     def _create_output_layer_groups(
         self,
@@ -1142,6 +1156,118 @@ class SafeguardingBuilder(
                 protection_group, "Specialised Runway Safeguarding"
             )
         return groups
+
+    def _move_layer_tree_node(
+        self,
+        node: QgsLayerTreeNode,
+        destination_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Move a layer tree node by cloning it to a destination and removing the original."""
+        if node is None or destination_group is None:
+            return False
+        parent = node.parent()
+        if parent is None or parent == destination_group:
+            return False
+        try:
+            if isinstance(node, QgsLayerTreeLayer):
+                layer_id = node.layerId()
+                if layer_id:
+                    for child in destination_group.children():
+                        if isinstance(child, QgsLayerTreeLayer) and child.layerId() == layer_id:
+                            parent.removeChildNode(node)
+                            return True
+            cloned_node = node.clone()
+            self._stage_layer_tree_node(cloned_node)
+            destination_group.insertChildNode(len(destination_group.children()), cloned_node)
+            parent.removeChildNode(node)
+            return True
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"Warning: Failed to move layer tree node '{node.name()}': {e}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+            return False
+
+    def _merge_or_move_direct_group(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        source_group_name: str,
+        destination_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Move a direct child group into a destination, merging with an existing child group if present."""
+        source_group = self._find_direct_child_group(parent_group, source_group_name)
+        if source_group is None or destination_group is None or source_group == destination_group:
+            return False
+
+        existing_destination_child = self._find_direct_child_group(destination_group, source_group_name)
+        if existing_destination_child is None:
+            return self._move_layer_tree_node(source_group, destination_group)
+
+        moved_any = False
+        for child in list(source_group.children()):
+            moved_any = self._move_layer_tree_node(child, existing_destination_child) or moved_any
+        try:
+            parent_group.removeChildNode(source_group)
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"Warning: Failed to remove empty duplicate group '{source_group_name}': {e}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+        return moved_any
+
+    def _repair_output_layer_tree(self, main_group: QgsLayerTreeGroup) -> None:
+        """Move known generated nodes into the reviewed layer hierarchy if QGIS added them at root level."""
+        if main_group is None:
+            return
+
+        reference_group = self._ensure_layer_group(main_group, "01 Reference Data")
+        infrastructure_group = self._ensure_layer_group(main_group, "02 Runway Infrastructure")
+        protection_group = self._ensure_layer_group(main_group, "03 Runway Protection And Separation")
+        nasf_group = self._ensure_layer_group(main_group, "04 NASF Safeguarding Guidelines")
+        if reference_group is None or infrastructure_group is None or protection_group is None or nasf_group is None:
+            return
+
+        runway_centreline_group = self._ensure_layer_group(reference_group, "Runway Centrelines")
+        self._merge_or_move_direct_group(main_group, self.tr("Runway Centrelines"), reference_group)
+        self._merge_or_move_direct_group(main_group, self.tr("Meteorological Instrument Station"), reference_group)
+        self._merge_or_move_direct_group(main_group, self.tr("CNS Facilities / Source Facilities"), reference_group)
+
+        for child in list(main_group.children()):
+            if not isinstance(child, QgsLayerTreeLayer):
+                continue
+            layer = child.layer()
+            layer_name = layer.name() if layer is not None else child.name()
+            style_key = layer.customProperty("safeguarding_style_key") if layer is not None else None
+            if style_key == "ARP" or layer_name.endswith(f" {self.tr('ARP')}"):
+                self._move_layer_tree_node(child, reference_group)
+            elif "Centreline" in layer_name and runway_centreline_group is not None:
+                self._move_layer_tree_node(child, runway_centreline_group)
+
+        for group_name in [
+            "Airfield Ground Lighting (AGL)",
+            "Markings",
+            "Physical Geometry",
+        ]:
+            self._merge_or_move_direct_group(main_group, self.tr(group_name), infrastructure_group)
+
+        for group_name in [
+            "Runway Protection Areas",
+            "Specialised Runway Safeguarding",
+        ]:
+            self._merge_or_move_direct_group(main_group, self.tr(group_name), protection_group)
+
+        for group_name in [
+            "Guideline B - Windshear",
+            "Guideline C - Wildlife",
+            "Guideline D - Wind Turbine",
+            "Guideline E - Lighting Control",
+            "Guideline F - Airspace / OLS",
+            "Guideline G - CNS",
+            "Guideline I - Public Safety Areas",
+        ]:
+            self._merge_or_move_direct_group(main_group, self.tr(group_name), nasf_group)
 
     def _create_guideline_groups(self, main_group: QgsLayerTreeGroup) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Creates the top-level groups for each guideline."""
