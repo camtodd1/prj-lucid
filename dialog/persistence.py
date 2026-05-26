@@ -14,8 +14,6 @@ from qgis.PyQt.QtWidgets import (  # type: ignore
 
 from .dialog_constants import (
     DEFAULT_OUTPUT_FORMAT,
-    DEFAULT_RUNWAY_SURFACE_CATEGORY,
-    DEFAULT_RUNWAY_SURFACE_MATERIAL,
     DIALOG_LOG_TAG,
     OUTPUT_FORMATS,
 )
@@ -386,8 +384,8 @@ class PersistenceMixin:
             runway_data["stopway1_len"] = runway_data.get("thr_pre_area_1")
         if not runway_data.get("stopway2_len") and runway_data.get("thr_pre_area_2"):
             runway_data["stopway2_len"] = runway_data.get("thr_pre_area_2")
-        runway_data.setdefault("surface_category", DEFAULT_RUNWAY_SURFACE_CATEGORY)
-        runway_data.setdefault("surface_material", DEFAULT_RUNWAY_SURFACE_MATERIAL)
+        runway_data.setdefault("surface_category", "")
+        runway_data.setdefault("surface_material", "")
         runway_data.setdefault("takeoff_available_1", True)
         runway_data.setdefault("takeoff_available_2", True)
         runway_data.setdefault("landing_available_1", True)
