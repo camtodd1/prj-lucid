@@ -1837,7 +1837,7 @@ class OlsGuidelineMixin:
                         contour_fields,
                         runway_name,
                         "Transitional Strip Adjacent Surface",
-                        z_start,
+                        z_start if abs(z_start - z_end) < 0.05 else None,
                         side_label=side_label,
                         transitional_ref=transitional_ref,
                     )
@@ -2021,7 +2021,7 @@ class OlsGuidelineMixin:
                                 contour_fields,
                                 runway_name,
                                 f"Transitional {end_desig} Approach Adjacent Surface",
-                                za_start_clipped,
+                                None,
                                 side_label=side_label,
                                 end_desig=end_desig,
                                 transitional_ref=transitional_ref,
