@@ -360,6 +360,8 @@ class LayerMixin:
                             return
                     if str(style_key) == "AGL Light":
                         self._apply_agl_rotation_field(layer)
+                    if str(style_key) == "OLS Transitional Contour":
+                        layer.setLabelsEnabled(True)
                     layer.triggerRepaint()
                 except Exception as e_load:
                     QgsMessageLog.logMessage(
