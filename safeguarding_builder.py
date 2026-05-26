@@ -688,7 +688,7 @@ class SafeguardingBuilder(
             else:
                 self._log("Airfield Ground Lighting skipped: option not enabled.")
 
-            guideline_groups = self._create_guideline_groups(nasf_guidelines_group)
+            guideline_groups = self._create_guideline_groups(nasf_guidelines_group, bool(cns_input_list))
 
             airport_wide_ols_group = None
             runway_ols_group = None
@@ -751,6 +751,7 @@ class SafeguardingBuilder(
 
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
             self._repair_output_layer_tree(main_group)
+            self._remove_empty_generated_groups(main_group)
 
             self._final_feedback(
                 main_group,
@@ -1366,7 +1367,11 @@ class SafeguardingBuilder(
                 if destination_group is not None and destination_group != group:
                     self._move_layer_tree_node(child, destination_group)
 
-    def _create_guideline_groups(self, main_group: QgsLayerTreeGroup) -> Dict[str, Optional[QgsLayerTreeGroup]]:
+    def _create_guideline_groups(
+        self,
+        main_group: QgsLayerTreeGroup,
+        include_cns: bool = True,
+    ) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Creates the top-level groups for each guideline."""
         guideline_defs = {
             "B": "Guideline B - Windshear",
@@ -1379,6 +1384,9 @@ class SafeguardingBuilder(
         }
         guideline_groups: Dict[str, Optional[QgsLayerTreeGroup]] = {}
         for key, name in guideline_defs.items():
+            if key == "G" and not include_cns:
+                guideline_groups[key] = None
+                continue
             grp = self._ensure_layer_group(main_group, name)
             guideline_groups[key] = grp
             if grp is None:
@@ -1541,6 +1549,36 @@ class SafeguardingBuilder(
                 empty_layers.extend(child_empty)
 
         return layer_count, feature_count, empty_layers
+
+    def _remove_empty_generated_groups(self, main_group: Optional[QgsLayerTreeGroup]) -> None:
+        """Remove empty generated groups so disabled or inputless options do not clutter the layer tree."""
+        if main_group is None:
+            return
+
+        removable_names = {
+            self.tr("Meteorological Instrument Station"),
+            self.tr("CNS Facilities / Source Facilities"),
+            self.tr("Airfield Ground Lighting (AGL)"),
+            self.tr("Guideline G - CNS"),
+        }
+
+        def prune(group: QgsLayerTreeGroup) -> bool:
+            for child in list(group.children()):
+                if isinstance(child, QgsLayerTreeGroup):
+                    prune(child)
+
+            if group == main_group or group.name() not in removable_names:
+                return False
+
+            layer_count, feature_count, _ = self._count_layer_tree_contents(group)
+            if layer_count == 0 and feature_count == 0:
+                parent = group.parent()
+                if parent is not None:
+                    parent.removeChildNode(group)
+                    return True
+            return False
+
+        prune(main_group)
 
     def _empty_group_reason(self, group_name: str, met_ok: bool) -> str:
         """Return a concise explanation for expected empty top-level groups."""
