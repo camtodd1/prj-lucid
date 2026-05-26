@@ -1338,6 +1338,69 @@ class SafeguardingBuilder(
             ):
                 self._move_layer_tree_node(child, airport_wide_group)
 
+        self._sort_guideline_f_airport_wide_layers(airport_wide_group)
+
+    def _sort_guideline_f_airport_wide_layers(self, airport_wide_group: QgsLayerTreeGroup) -> None:
+        """Order airport-wide OLS layers so contours sit with their parent surfaces."""
+        if airport_wide_group is None:
+            return
+
+        style_order = {
+            "OLS IHS": 0,
+            "OLS Conical": 1,
+            "OLS Conical Contour": 2,
+            "OLS OHS": 3,
+            "OLS Transitional": 4,
+            "OLS Transitional Contour": 5,
+        }
+
+        def airport_wide_sort_key(node: QgsLayerTreeLayer) -> int:
+            layer = node.layer()
+            layer_name = layer.name() if layer is not None else node.name()
+            style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
+            if style_key in style_order:
+                return style_order[style_key]
+            if "OLS IHS" in layer_name:
+                return 0
+            if "OLS Conical Contours" in layer_name:
+                return 2
+            if "OLS Conical" in layer_name:
+                return 1
+            if "OLS OHS" in layer_name:
+                return 3
+            if "OLS Transitional Contours" in layer_name:
+                return 5
+            if "OLS Transitional" in layer_name:
+                return 4
+            return 99
+
+        ordered_nodes = sorted(
+            [
+                child
+                for child in airport_wide_group.children()
+                if isinstance(child, QgsLayerTreeLayer) and airport_wide_sort_key(child) < 99
+            ],
+            key=airport_wide_sort_key,
+        )
+
+        if len(ordered_nodes) < 2:
+            return
+
+        try:
+            clones = [node.clone() for node in ordered_nodes]
+            for clone in clones:
+                self._stage_layer_tree_node(clone)
+            for node in ordered_nodes:
+                airport_wide_group.removeChildNode(node)
+            for index, clone in enumerate(clones):
+                airport_wide_group.insertChildNode(index, clone)
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"Warning: Failed to order airport-wide OLS layers: {e}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
     def _create_guideline_groups(self, main_group: QgsLayerTreeGroup) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Creates the top-level groups for each guideline."""
         guideline_defs = {
