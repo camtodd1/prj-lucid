@@ -1900,6 +1900,74 @@ class SafeguardingBuilder(
         _ = (met_ok, guide_c_ok, guide_d_ok, guide_g_ok, guide_rwy_ok, physical_protection_ok)
         return items
 
+    def _render_generation_summary(self, checklist_items: List[str]) -> List[str]:
+        """Render checklist items as a compact grouped final summary."""
+        section_order = [
+            "Reference Data",
+            "Runway Infrastructure",
+            "Runway Protection And Separation",
+            "NASF Safeguarding Guidelines",
+        ]
+        section_map = {
+            "ARP": "Reference Data",
+            "Runway centrelines": "Reference Data",
+            "Meteorological Instrument Station": "Reference Data",
+            "CNS Facilities / Source Facilities": "Reference Data",
+            "Airfield Ground Lighting": "Runway Infrastructure",
+            "Runway markings": "Runway Infrastructure",
+            "Physical geometry": "Runway Infrastructure",
+            "Runway protection areas": "Runway Protection And Separation",
+            "Specialised runway safeguarding": "Runway Protection And Separation",
+            "Guideline B - Windshear": "NASF Safeguarding Guidelines",
+            "Guideline C - Wildlife": "NASF Safeguarding Guidelines",
+            "Guideline D - Wind Turbine": "NASF Safeguarding Guidelines",
+            "Guideline E - Lighting Control": "NASF Safeguarding Guidelines",
+            "Guideline F - Airport-wide OLS": "NASF Safeguarding Guidelines",
+            "Guideline F - Runway Approach And Take-off": "NASF Safeguarding Guidelines",
+            "Guideline F - Obstacle Free Zone": "NASF Safeguarding Guidelines",
+            "Guideline G - CNS": "NASF Safeguarding Guidelines",
+            "Guideline I - Public Safety Areas": "NASF Safeguarding Guidelines",
+        }
+        generated_by_section: Dict[str, List[str]] = {section: [] for section in section_order}
+        skipped: List[str] = []
+        attention: List[str] = []
+
+        for item in checklist_items:
+            label, separator, detail = item.partition(": ")
+            if not separator:
+                attention.append(item)
+                continue
+
+            if detail.startswith("generated - "):
+                stats = detail.replace("generated - ", "", 1)
+                section = section_map.get(label, "NASF Safeguarding Guidelines")
+                generated_by_section.setdefault(section, []).append(f"  - {label}: {stats}")
+            elif detail.startswith("input not provided - "):
+                reason = detail.replace("input not provided - ", "", 1)
+                skipped.append(f"- {label}: input not provided ({reason})")
+            elif detail.startswith("not applicable - "):
+                reason = detail.replace("not applicable - ", "", 1)
+                skipped.append(f"- {label}: not applicable ({reason})")
+            elif detail.startswith("failed/check warnings - "):
+                reason = detail.replace("failed/check warnings - ", "", 1)
+                attention.append(f"- {label}: check warnings ({reason})")
+            else:
+                attention.append(item)
+
+        lines: List[str] = []
+        for section in section_order:
+            section_items = generated_by_section.get(section, [])
+            if section_items:
+                lines.append(f"{section}:")
+                lines.extend(section_items)
+        if skipped:
+            lines.append("Skipped / not applicable:")
+            lines.extend(skipped)
+        if attention:
+            lines.append("Needs attention:")
+            lines.extend(attention)
+        return lines
+
     def _final_feedback(
         self,
         main_group: Optional[QgsLayerTreeGroup],
@@ -1938,8 +2006,8 @@ class SafeguardingBuilder(
 
         if anything_successfully_generated:
             (
-                populated_summaries,
-                empty_summaries,
+                _populated_summaries,
+                _empty_summaries,
                 tree_layer_count,
                 tree_feature_count,
             ) = self._build_layer_tree_summary(main_group, met_ok)
@@ -1962,13 +2030,8 @@ class SafeguardingBuilder(
                 red_ok,
                 pa_runways_exist,
             )
+            generation_summary = self._render_generation_summary(generation_checklist)
             num_layers_created = tree_layer_count or len(self.successfully_generated_layers)
-            if not met_ok:
-                empty_summaries.append(
-                    "Meteorological Instrument Station: MET coordinates not provided; group not created"
-                )
-            if not arp_ok:
-                empty_summaries.append("ARP: ARP coordinates not provided; layer not created")
             runway_summary = (
                 f"runways={processed_rwy_count}/{total_runways_in_input}" if total_runways_in_input else "runways=0"
             )
@@ -1993,12 +2056,8 @@ class SafeguardingBuilder(
                 self.tr("Success"), final_user_message, level=Qgis.Success, duration=10
             )  # Increased duration
             self._log_success(final_log_message, notify_user=True)
-            if populated_summaries:
-                self._log("Generated groups:\n- " + "\n- ".join(populated_summaries))
-            if empty_summaries:
-                self._log("Not generated:\n- " + "\n- ".join(empty_summaries))
-            if generation_checklist:
-                self._log("Generation checklist:\n- " + "\n- ".join(generation_checklist))
+            if generation_summary:
+                self._log("Generation summary:\n" + "\n".join(generation_summary))
 
             if (
                 main_group is not None
