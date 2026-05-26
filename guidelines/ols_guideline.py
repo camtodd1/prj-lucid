@@ -1504,11 +1504,7 @@ class OlsGuidelineMixin:
                     "section_desc": section_desc,
                     "side": side_label,
                     "end_desig": end_desig,
-                    "contour_role": "Interval",
                     "contour_elev_am": current_z,
-                    "elev_start_am": current_z,
-                    "elev_end_am": current_z,
-                    "contour_label": self._format_transitional_elevation_label(current_z, current_z),
                     "ref_mos": transitional_ref,
                 }
                 for name, value in attr_map.items():
@@ -1521,34 +1517,13 @@ class OlsGuidelineMixin:
 
         return contours
 
-    def _format_transitional_elevation_label(self, elev_start: Optional[float], elev_end: Optional[float]) -> str:
-        """Format a transitional contour label, including sloping lower-edge ranges."""
-        if elev_start is None and elev_end is None:
-            return ""
-        if elev_start is None:
-            elev_start = elev_end
-        if elev_end is None:
-            elev_end = elev_start
-
-        def fmt(value: float) -> str:
-            rounded_int = round(value)
-            if abs(value - rounded_int) < 0.05:
-                return str(int(rounded_int))
-            return f"{value:.1f}".rstrip("0").rstrip(".")
-
-        if abs(float(elev_start) - float(elev_end)) < 0.05:
-            return fmt(float(elev_start))
-        return f"{fmt(float(elev_start))}-{fmt(float(elev_end))}"
-
     def _make_transitional_contour_feature(
         self,
         geom: QgsGeometry,
         contour_fields: QgsFields,
         runway_name: str,
         section_desc: str,
-        contour_role: str,
-        elev_start: Optional[float],
-        elev_end: Optional[float],
+        contour_elevation: Optional[float],
         side_label: Optional[str] = None,
         end_desig: Optional[str] = None,
         transitional_ref: Optional[str] = None,
@@ -1558,20 +1533,13 @@ class OlsGuidelineMixin:
             return None
         feat = QgsFeature(contour_fields)
         feat.setGeometry(geom)
-        contour_elev = None
-        if elev_start is not None and elev_end is not None and abs(elev_start - elev_end) < 0.05:
-            contour_elev = elev_start
         attr_map = {
             "rwy_name": runway_name,
             "surface": "Transitional",
             "section_desc": section_desc,
             "side": side_label,
             "end_desig": end_desig,
-            "contour_role": contour_role,
-            "contour_elev_am": contour_elev,
-            "elev_start_am": elev_start,
-            "elev_end_am": elev_end,
-            "contour_label": self._format_transitional_elevation_label(elev_start, elev_end),
+            "contour_elev_am": contour_elevation,
             "ref_mos": transitional_ref,
         }
         for name, value in attr_map.items():
@@ -1869,9 +1837,7 @@ class OlsGuidelineMixin:
                         contour_fields,
                         runway_name,
                         "Transitional Strip Adjacent Surface",
-                        "Lower edge",
                         z_start,
-                        z_end,
                         side_label=side_label,
                         transitional_ref=transitional_ref,
                     )
@@ -1880,8 +1846,6 @@ class OlsGuidelineMixin:
                         contour_fields,
                         runway_name,
                         "Transitional Strip Adjacent Surface",
-                        "Upper edge",
-                        IHS_ELEVATION_AMSL,
                         IHS_ELEVATION_AMSL,
                         side_label=side_label,
                         transitional_ref=transitional_ref,
@@ -2057,9 +2021,7 @@ class OlsGuidelineMixin:
                                 contour_fields,
                                 runway_name,
                                 f"Transitional {end_desig} Approach Adjacent Surface",
-                                "Lower edge",
                                 za_start_clipped,
-                                za_end_clipped,
                                 side_label=side_label,
                                 end_desig=end_desig,
                                 transitional_ref=transitional_ref,
@@ -2069,8 +2031,6 @@ class OlsGuidelineMixin:
                                 contour_fields,
                                 runway_name,
                                 f"Transitional {end_desig} Approach Adjacent Surface",
-                                "Upper edge",
-                                IHS_ELEVATION_AMSL,
                                 IHS_ELEVATION_AMSL,
                                 side_label=side_label,
                                 end_desig=end_desig,
@@ -2167,11 +2127,7 @@ class OlsGuidelineMixin:
                 "surface": "Transitional",
                 "section_desc": section_desc,
                 "side": side_label,
-                "contour_role": "Interval",
                 "contour_elev_am": current_z,
-                "elev_start_am": current_z,
-                "elev_end_am": current_z,
-                "contour_label": self._format_transitional_elevation_label(current_z, current_z),
                 "ref_mos": transitional_ref,
             }
             #     QgsMessageLog.logMessage(
@@ -2227,10 +2183,6 @@ class OlsGuidelineMixin:
                     10,
                     2,
                 ),
-                QgsField("elev_start_am", QVariant.Double, self.tr("Start Elev (AMSL)"), 10, 2),
-                QgsField("elev_end_am", QVariant.Double, self.tr("End Elev (AMSL)"), 10, 2),
-                QgsField("contour_label", QVariant.String, self.tr("Label"), 30),
-                QgsField("contour_role", QVariant.String, self.tr("Contour Role"), 30),
                 QgsField("side", QVariant.String, self.tr("Side"), 5),
                 QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
                 QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
