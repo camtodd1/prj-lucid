@@ -21,14 +21,15 @@ data. The main workflow is:
 3. Generate memory layers or write outputs to a selected file format.
 4. Review the generated layer tree and styled map outputs in QGIS.
 
-The generated outputs are grouped under an airport-specific safeguarding group
-in the QGIS layer tree.
+The generated outputs are grouped under an airport-specific Safeguarding Builder
+group in the QGIS layer tree.
 
 ## Main Functions
 
 The plugin can generate:
 
-- Airport reference point and runway centreline layers.
+- Airport reference point, runway centreline, and CNS source facility reference
+  layers.
 - Physical runway geometry, including runway pavement, shoulders, strips,
   runway-end safety areas, stopways, pre-threshold runway areas, and displaced
   threshold marking references.
@@ -51,8 +52,8 @@ The plugin can generate:
   taxiway separation offsets.
 - MET station safeguarding surfaces where MET inputs are supplied.
 
-Guideline A and Guideline H are currently represented as placeholders or layer
-groups where relevant; their detailed generation logic is not yet implemented.
+Guideline A and Guideline H detailed generation logic is not yet implemented,
+so placeholder layer groups are not generated for them.
 
 ## Inputs
 
@@ -119,7 +120,7 @@ core/styles.py                   Mapping between layer style keys and QML files.
 guidelines/guideline_constants.py
                                  Shared constants for guideline dimensions,
                                  references, contour intervals, and offsets.
-guidelines/simple.py             Guideline A/B/C/D/G/I and CNS helper logic.
+guidelines/simple.py             Guideline B/C/D/G/I and helper logic.
 guidelines/ols_guideline.py      Guideline F and airport-wide OLS generation.
 surfaces/physical.py             Physical runway and runway protection geometry.
 surfaces/airfield_ground_lighting.py

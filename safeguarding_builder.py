@@ -577,7 +577,7 @@ class SafeguardingBuilder(
             self.style_map = dict(DEFAULT_STYLE_MAP)
 
             root = project.layerTreeRoot()
-            main_group_name = f"{icao_code} {self.tr('Safeguarding Surfaces')}"
+            main_group_name = f"{icao_code} {self.tr('Safeguarding Builder')}"
             main_group = self._setup_main_group(root, main_group_name, project)
             if main_group is None:
                 self.iface.messageBar().pushMessage(
@@ -588,6 +588,10 @@ class SafeguardingBuilder(
                 )
                 return
 
+            output_groups = self._create_output_layer_groups(main_group, bool(agl_options.get("enabled")))
+            reference_group = output_groups.get("reference_data") or main_group
+            nasf_guidelines_group = output_groups.get("nasf_guidelines") or main_group
+
             arp_layer_created = False
             if arp_point is not None:
                 arp_layer = self.create_arp_layer(
@@ -596,7 +600,7 @@ class SafeguardingBuilder(
                     arp_north,
                     icao_code,
                     target_crs,
-                    main_group,
+                    reference_group,
                     self.arp_elevation_amsl,
                 )
                 if arp_layer is not None:
@@ -610,9 +614,13 @@ class SafeguardingBuilder(
                             level=Qgis.Warning,
                         )
 
+            runway_centreline_group = (
+                self._ensure_layer_group(reference_group, "Runway Centrelines") or reference_group
+            )
+
             met_layers_created_ok = False
             if met_point is not None:
-                met_group = main_group.addGroup(self.tr("Meteorological Instrument Station"))
+                met_group = reference_group.addGroup(self.tr("Meteorological Instrument Station"))
                 if met_group is not None:
                     self._stage_layer_tree_node(met_group)
                     met_layers_created_ok, _ = self.process_met_station_surfaces(
@@ -627,8 +635,16 @@ class SafeguardingBuilder(
             else:
                 self._log("MET skipped: no MET coordinates provided; MET station surfaces not generated.")
 
+            if cns_input_list:
+                cns_source_group = reference_group.addGroup(self.tr("CNS Facilities / Source Facilities"))
+                if cns_source_group is not None:
+                    self._stage_layer_tree_node(cns_source_group)
+                    self.create_cns_source_facility_layer(cns_input_list, icao_code, cns_source_group)
+                else:
+                    self._log_warning("CNS source facilities skipped: failed to create reference group.")
+
             processed_runway_data_list, any_runway_base_data_ok = self._process_runways_part1(
-                main_group, project, target_crs, icao_code, runway_input_list
+                runway_centreline_group, project, target_crs, icao_code, runway_input_list
             )
 
             if any_runway_base_data_ok:
@@ -639,7 +655,7 @@ class SafeguardingBuilder(
 
             agl_group = None
             if agl_options.get("enabled"):
-                agl_group = main_group.addGroup(self.tr("Airfield Ground Lighting"))
+                agl_group = output_groups.get("airfield_ground_lighting")
                 if agl_group is not None:
                     self._stage_layer_tree_node(agl_group)
 
@@ -651,6 +667,12 @@ class SafeguardingBuilder(
                 icao_code,
                 processed_runway_data_list,
                 any_runway_base_data_ok,
+                {
+                    "markings": output_groups.get("markings"),
+                    "physical_geometry": output_groups.get("physical_geometry"),
+                    "runway_protection_areas": output_groups.get("runway_protection_areas"),
+                    "specialised_safeguarding": output_groups.get("specialised_safeguarding"),
+                },
             )
 
             agl_processed_ok = False
@@ -666,11 +688,17 @@ class SafeguardingBuilder(
             else:
                 self._log("Airfield Ground Lighting skipped: option not enabled.")
 
-            guideline_groups = self._create_guideline_groups(main_group)
+            guideline_groups = self._create_guideline_groups(nasf_guidelines_group)
 
+            airport_wide_ols_group = None
+            runway_ols_group = None
             ofz_group = None
             if guideline_groups.get("F") is not None:
-                ofz_group = guideline_groups["F"].addGroup(self.tr("OLS Obstacle Free Zone"))
+                airport_wide_ols_group = guideline_groups["F"].addGroup(self.tr("Airport-wide OLS"))
+                self._stage_layer_tree_node(airport_wide_ols_group)
+                runway_ols_group = guideline_groups["F"].addGroup(self.tr("Runway Approach And Take-off"))
+                self._stage_layer_tree_node(runway_ols_group)
+                ofz_group = guideline_groups["F"].addGroup(self.tr("Obstacle Free Zone"))
                 self._stage_layer_tree_node(ofz_group)
 
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
@@ -709,6 +737,7 @@ class SafeguardingBuilder(
                 guideline_groups,
                 specialised_safeguarding_group,
                 ofz_group,
+                runway_ols_group,
             )
 
             any_guideline_processed_ok = self._process_airport_wide_ols_if_possible(
@@ -716,6 +745,7 @@ class SafeguardingBuilder(
                 processed_runway_data_list,
                 icao_code,
                 any_guideline_processed_ok,
+                airport_wide_ols_group,
             )
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
@@ -802,6 +832,7 @@ class SafeguardingBuilder(
         processed_runway_data_list: List[dict],
         icao_code: str,
         any_guideline_processed_ok: bool,
+        airport_wide_ols_group: Optional[QgsLayerTreeGroup] = None,
     ) -> bool:
         plugin_tag = PLUGIN_TAG
         airport_wide_ols_processed = False
@@ -810,7 +841,7 @@ class SafeguardingBuilder(
                 try:
                     airport_wide_ols_processed = self._generate_airport_wide_ols(
                         processed_runway_data_list,
-                        guideline_groups["F"],
+                        airport_wide_ols_group or guideline_groups["F"],
                         self.reference_elevation_datum,
                         icao_code,
                     )
@@ -1065,27 +1096,70 @@ class SafeguardingBuilder(
             return True
         return str(value).strip().lower() not in {"0", "false", "no", "off"}
 
+    def _ensure_layer_group(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        name: str,
+    ) -> Optional[QgsLayerTreeGroup]:
+        """Find or create a child group and stage it for generated output."""
+        if parent_group is None:
+            return None
+        group = parent_group.findGroup(self.tr(name))
+        if group is None:
+            group = parent_group.addGroup(self.tr(name))
+        self._stage_layer_tree_node(group)
+        return group
+
+    def _create_output_layer_groups(
+        self,
+        main_group: QgsLayerTreeGroup,
+        agl_enabled: bool,
+    ) -> Dict[str, Optional[QgsLayerTreeGroup]]:
+        """Create the main generated layer tree sections in display order."""
+        groups: Dict[str, Optional[QgsLayerTreeGroup]] = {}
+        groups["reference_data"] = self._ensure_layer_group(main_group, "01 Reference Data")
+        groups["runway_infrastructure"] = self._ensure_layer_group(main_group, "02 Runway Infrastructure")
+        groups["runway_protection_and_separation"] = self._ensure_layer_group(
+            main_group, "03 Runway Protection And Separation"
+        )
+        groups["nasf_guidelines"] = self._ensure_layer_group(main_group, "04 NASF Safeguarding Guidelines")
+
+        infrastructure_group = groups["runway_infrastructure"]
+        if infrastructure_group is not None:
+            if agl_enabled:
+                groups["airfield_ground_lighting"] = self._ensure_layer_group(
+                    infrastructure_group, "Airfield Ground Lighting (AGL)"
+                )
+            groups["markings"] = self._ensure_layer_group(infrastructure_group, "Markings")
+            groups["physical_geometry"] = self._ensure_layer_group(infrastructure_group, "Physical Geometry")
+
+        protection_group = groups["runway_protection_and_separation"]
+        if protection_group is not None:
+            groups["runway_protection_areas"] = self._ensure_layer_group(
+                protection_group, "Runway Protection Areas"
+            )
+            groups["specialised_safeguarding"] = self._ensure_layer_group(
+                protection_group, "Specialised Runway Safeguarding"
+            )
+        return groups
+
     def _create_guideline_groups(self, main_group: QgsLayerTreeGroup) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Creates the top-level groups for each guideline."""
         guideline_defs = {
-            "A": "Guideline A: Noise",
-            "B": "Guideline B: Windshear",
-            "C": "Guideline C: Wildlife",
-            "D": "Guideline D: Wind Turbine",
-            "E": "Guideline E: Lighting",
-            "F": "Guideline F: Airspace",
-            "G": "Guideline G: CNS",
-            "H": "Guideline H: Heli",
-            "I": "Guideline I: Safety",
+            "B": "Guideline B - Windshear",
+            "C": "Guideline C - Wildlife",
+            "D": "Guideline D - Wind Turbine",
+            "E": "Guideline E - Lighting Control",
+            "F": "Guideline F - Airspace / OLS",
+            "G": "Guideline G - CNS",
+            "I": "Guideline I - Public Safety Areas",
         }
         guideline_groups: Dict[str, Optional[QgsLayerTreeGroup]] = {}
         for key, name in guideline_defs.items():
-            grp = main_group.addGroup(self.tr(name))
+            grp = self._ensure_layer_group(main_group, name)
             guideline_groups[key] = grp
             if grp is None:
                 QgsMessageLog.logMessage(f"Failed create group: {name}", PLUGIN_TAG, level=Qgis.Warning)
-            else:
-                self._stage_layer_tree_node(grp)
         return guideline_groups
 
     def _ensure_valid_geometry(self, geom: Optional[QgsGeometry], description: str) -> Optional[QgsGeometry]:
@@ -1169,6 +1243,7 @@ class SafeguardingBuilder(
         guideline_groups: Dict[str, Optional[QgsLayerTreeGroup]],
         specialised_group_node: Optional[QgsLayerTreeGroup],
         ofz_group: Optional[QgsLayerTreeGroup],
+        runway_ols_group: Optional[QgsLayerTreeGroup] = None,
     ) -> bool:
         """Processes runway-specific guidelines."""
         any_guideline_processed_ok = False
@@ -1184,7 +1259,11 @@ class SafeguardingBuilder(
                     run_success_flags.append(self.process_guideline_e(runway_data, guideline_groups["E"]))
                 if guideline_groups.get("F") is not None:
                     run_success_flags.append(
-                        self.process_guideline_f(runway_data, guideline_groups["F"], ofz_group)
+                        self.process_guideline_f(
+                            runway_data,
+                            runway_ols_group or guideline_groups["F"],
+                            ofz_group,
+                        )
                     )  # F = OLS App/TOCS
                 if guideline_groups.get("I") is not None:
                     run_success_flags.append(self.process_guideline_i(runway_data, guideline_groups["I"]))
@@ -1242,31 +1321,37 @@ class SafeguardingBuilder(
 
     def _empty_group_reason(self, group_name: str, met_ok: bool) -> str:
         """Return a concise explanation for expected empty top-level groups."""
-        if group_name.startswith(self.tr("Guideline A:")):
-            return "placeholder only; no surface construction logic implemented"
-        if group_name.startswith(self.tr("Guideline B:")):
+        if group_name == self.tr("01 Reference Data"):
+            return "no reference layers generated; check ARP, runway, MET, and CNS inputs"
+        if group_name == self.tr("02 Runway Infrastructure"):
+            return "no runway infrastructure layers generated; check runway dimensions and coordinates"
+        if group_name == self.tr("03 Runway Protection And Separation"):
+            return "no protection or separation layers generated; check runway inputs and preceding warnings"
+        if group_name == self.tr("04 NASF Safeguarding Guidelines"):
+            return "no NASF guideline layers generated; check prerequisite ARP, runway, and CNS inputs"
+        if group_name.startswith(self.tr("Guideline B -")):
             return "no windshear layers generated; check runway inputs and preceding warnings"
-        if group_name.startswith(self.tr("Guideline C:")):
+        if group_name.startswith(self.tr("Guideline C -")):
             return "ARP missing or wildlife zone generation failed; check preceding Wildlife warnings"
-        if group_name.startswith(self.tr("Guideline D:")):
+        if group_name.startswith(self.tr("Guideline D -")):
             return "ARP missing or wind turbine zone generation failed"
-        if group_name.startswith(self.tr("Guideline E:")):
+        if group_name.startswith(self.tr("Guideline E -")):
             return "no lighting layers generated; check runway inputs and preceding warnings"
-        if group_name.startswith(self.tr("Guideline F:")):
+        if group_name.startswith(self.tr("Guideline F -")):
             return "no airspace/OLS layers generated; check runway, approach, and RED inputs"
-        if group_name.startswith(self.tr("Guideline G:")):
+        if group_name.startswith(self.tr("Guideline G -")):
             return "no CNS layers generated, or CNS input was not provided"
-        if group_name.startswith(self.tr("Guideline H:")):
-            return "placeholder only; no surface construction logic implemented"
-        if group_name.startswith(self.tr("Guideline I:")):
+        if group_name.startswith(self.tr("Guideline I -")):
             return "no public safety area layers generated; check runway inputs and preceding warnings"
+        if group_name == self.tr("Airfield Ground Lighting (AGL)"):
+            return "AGL was enabled, but no lighting points were generated; check Lighting tab inputs"
+        if group_name == self.tr("Markings"):
+            return "no runway markings generated; check runway dimensions and marking prerequisites"
         if group_name == self.tr("Physical Geometry"):
             return "no physical geometry generated; check runway dimensions and coordinates"
         if group_name == self.tr("Runway Protection Areas"):
             return "no protection areas generated; check runway inputs and preceding warnings"
-        if group_name == self.tr("Airfield Ground Lighting"):
-            return "AGL was enabled, but no lighting points were generated; check Lighting tab inputs"
-        if group_name == self.tr("Specialised Safeguarding"):
+        if group_name == self.tr("Specialised Runway Safeguarding"):
             return "no specialised safeguarding layers generated; check runway inputs and preceding warnings"
         if group_name == self.tr("Meteorological Instrument Station") and not met_ok:
             return "MET coordinates not provided"
@@ -1494,6 +1579,60 @@ class SafeguardingBuilder(
         except Exception as e:
             QgsMessageLog.logMessage(f"Error in create_arp_layer: {e}", PLUGIN_TAG, level=Qgis.Critical)
             return None
+
+    def create_cns_source_facility_layer(
+        self,
+        cns_facilities_data: List[Dict[str, Any]],
+        icao_code: str,
+        layer_group: QgsLayerTreeGroup,
+    ) -> Optional[QgsVectorLayer]:
+        """Creates a reference point layer for manually supplied CNS facilities."""
+        if not cns_facilities_data or layer_group is None:
+            return None
+
+        fields = QgsFields(
+            [
+                QgsField("facility_id", QVariant.String, self.tr("Facility ID"), 50),
+                QgsField("facility_type", QVariant.String, self.tr("Facility Type"), 100),
+                QgsField("coord_east", QVariant.Double, self.tr("Easting"), 12, 3),
+                QgsField("coord_north", QVariant.Double, self.tr("Northing"), 12, 3),
+                QgsField("elev_m", QVariant.Double, self.tr("Elevation AMSL (m)"), 12, 3),
+            ]
+        )
+        features: List[QgsFeature] = []
+        for facility_data in cns_facilities_data:
+            geom = facility_data.get("geom")
+            if geom is None or geom.isNull() or geom.isEmpty():
+                continue
+            try:
+                point = geom.asPoint()
+            except Exception:
+                point = None
+            if point is None:
+                continue
+
+            feature = QgsFeature(fields)
+            feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(point.x(), point.y())))
+            feature.setAttributes(
+                [
+                    facility_data.get("id", ""),
+                    facility_data.get("type", ""),
+                    point.x(),
+                    point.y(),
+                    facility_data.get("elevation"),
+                ]
+            )
+            features.append(feature)
+
+        return self._create_and_add_layer(
+            "Point",
+            f"CNS_Source_Facilities_{icao_code}",
+            f"{icao_code} {self.tr('CNS Source Facilities')}",
+            fields,
+            features,
+            layer_group,
+            "Default Point",
+        )
 
     def _create_centered_oriented_square(
         self, center_point: QgsPointXY, side_length: float, description: str = "Square"

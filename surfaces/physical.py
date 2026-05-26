@@ -35,6 +35,7 @@ class PhysicalGeometryMixin:
         icao_code: str,
         processed_runway_data_list: List[dict],
         any_runway_base_data_ok: bool,
+        layer_groups: Optional[Dict[str, Optional[QgsLayerTreeGroup]]] = None,
     ) -> Tuple[Optional[QgsLayerTreeGroup], bool]:
         plugin_tag = PLUGIN_TAG
         specialised_safeguarding_group = None
@@ -46,15 +47,24 @@ class PhysicalGeometryMixin:
         any_physical_or_protection_ok = False
 
         if processed_runway_data_list and any_runway_base_data_ok:
-            detailed_marking_group = main_group.addGroup(self.tr("Detailed Runway Markings"))
+            layer_groups = layer_groups or {}
+            detailed_marking_group = layer_groups.get("markings")
+            if detailed_marking_group is None:
+                detailed_marking_group = main_group.addGroup(self.tr("Markings"))
             self._stage_layer_tree_node(detailed_marking_group)
-            physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
+            physical_geom_group = layer_groups.get("physical_geometry")
+            if physical_geom_group is None:
+                physical_geom_group = main_group.addGroup(self.tr("Physical Geometry"))
             self._stage_layer_tree_node(physical_geom_group)
-            protection_area_group = main_group.addGroup(self.tr("Runway Protection Areas"))
+            protection_area_group = layer_groups.get("runway_protection_areas")
+            if protection_area_group is None:
+                protection_area_group = main_group.addGroup(self.tr("Runway Protection Areas"))
             self._stage_layer_tree_node(protection_area_group)
-            specialised_safeguarding_group = main_group.findGroup(self.tr("Specialised Safeguarding"))
-            if specialised_safeguarding_group is None:  # Should have been created earlier
-                specialised_safeguarding_group = main_group.addGroup(self.tr("Specialised Safeguarding"))
+            specialised_safeguarding_group = layer_groups.get("specialised_safeguarding")
+            if specialised_safeguarding_group is None:
+                specialised_safeguarding_group = main_group.findGroup(self.tr("Specialised Runway Safeguarding"))
+            if specialised_safeguarding_group is None:
+                specialised_safeguarding_group = main_group.addGroup(self.tr("Specialised Runway Safeguarding"))
             self._stage_layer_tree_node(specialised_safeguarding_group)
 
             if (
