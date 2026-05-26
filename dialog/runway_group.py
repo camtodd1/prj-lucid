@@ -48,6 +48,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
         self._setup_ui()
         self._autofilled_stopways = {"1": "", "2": ""}
+        self._autofilled_clearways = {"1": "", "2": ""}
         self._connect_signals()
 
     def _setup_ui(self):
@@ -444,6 +445,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             widget.textChanged.connect(self.inputChanged.emit)
         self.thr_pre_area_1_le.textChanged.connect(lambda value: self._sync_pre_threshold_stopway("1", value))
         self.thr_pre_area_2_le.textChanged.connect(lambda value: self._sync_pre_threshold_stopway("2", value))
+        self.thr_displaced_1_le.textChanged.connect(lambda value: self._sync_displaced_threshold_clearway("1", value))
+        self.thr_displaced_2_le.textChanged.connect(lambda value: self._sync_displaced_threshold_clearway("2", value))
         for checkbox in [
             self.takeoff_available_1_cb,
             self.takeoff_available_2_cb,
@@ -476,6 +479,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.removeRequested.emit(self.index)
 
     def get_input_data(self) -> Dict[str, str]:
+        clearway1 = self.clearway1_len_le.text() or self.thr_displaced_1_le.text()
+        clearway2 = self.clearway2_len_le.text() or self.thr_displaced_2_le.text()
         stopway1 = self.stopway1_len_le.text() or self.thr_pre_area_1_le.text()
         stopway2 = self.stopway2_len_le.text() or self.thr_pre_area_2_le.text()
         return {
@@ -493,8 +498,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "thr_pre_area_2": self.thr_pre_area_2_le.text(),
             "width": self.width_le.text(),
             "shoulder": self.shoulder_le.text(),
-            "clearway1_len": self.clearway1_len_le.text(),
-            "clearway2_len": self.clearway2_len_le.text(),
+            "clearway1_len": clearway1,
+            "clearway2_len": clearway2,
             "stopway1_len": stopway1,
             "stopway2_len": stopway2,
             "takeoff_available_1": self.takeoff_available_1_cb.isChecked(),
@@ -529,10 +534,22 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.thr_pre_area_2_le.setText(data.get("thr_pre_area_2", ""))
             self.width_le.setText(data.get("width", ""))
             self.shoulder_le.setText(data.get("shoulder", ""))
-            self.clearway1_len_le.setText(data.get("clearway1_len", ""))
-            self.clearway2_len_le.setText(data.get("clearway2_len", ""))
+            self.clearway1_len_le.setText(data.get("clearway1_len", "") or data.get("thr_displaced_1", ""))
+            self.clearway2_len_le.setText(data.get("clearway2_len", "") or data.get("thr_displaced_2", ""))
             self.stopway1_len_le.setText(data.get("stopway1_len", "") or data.get("thr_pre_area_1", ""))
             self.stopway2_len_le.setText(data.get("stopway2_len", "") or data.get("thr_pre_area_2", ""))
+            self._autofilled_clearways = {
+                "1": (
+                    self.clearway1_len_le.text()
+                    if self.clearway1_len_le.text() == self.thr_displaced_1_le.text()
+                    else ""
+                ),
+                "2": (
+                    self.clearway2_len_le.text()
+                    if self.clearway2_len_le.text() == self.thr_displaced_2_le.text()
+                    else ""
+                ),
+            }
             self._autofilled_stopways = {
                 "1": (
                     self.stopway1_len_le.text() if self.stopway1_len_le.text() == self.thr_pre_area_1_le.text() else ""
@@ -575,6 +592,21 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         finally:
             stopway_widget.blockSignals(False)
         self._autofilled_stopways[end_id] = pre_threshold_value
+        self.inputChanged.emit()
+
+    def _sync_displaced_threshold_clearway(self, end_id: str, displaced_threshold_value: str) -> None:
+        clearway_widget = self.clearway1_len_le if end_id == "1" else self.clearway2_len_le
+        previous_auto_value = self._autofilled_clearways.get(end_id, "")
+        current_clearway = clearway_widget.text()
+        if current_clearway not in ("", previous_auto_value):
+            self._autofilled_clearways[end_id] = ""
+            return
+        clearway_widget.blockSignals(True)
+        try:
+            clearway_widget.setText(displaced_threshold_value)
+        finally:
+            clearway_widget.blockSignals(False)
+        self._autofilled_clearways[end_id] = displaced_threshold_value
         self.inputChanged.emit()
 
     def update_display_labels(self, results: Dict[str, str]):
