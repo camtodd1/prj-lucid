@@ -766,6 +766,12 @@ class SafeguardingBuilder(
                 len(processed_runway_data_list),
                 len(runway_input_list),
                 any_physical_or_protection_ok,
+                arp_point is not None,
+                met_point is not None,
+                bool(agl_options.get("enabled")),
+                len(cns_input_list),
+                self.reference_elevation_datum is not None,
+                pa_runways_exist,
             )
 
             self._log("Finished safeguarding generation.")
@@ -1618,6 +1624,267 @@ class SafeguardingBuilder(
 
         return populated, empty, total_layers, total_features
 
+    def _find_group_by_path(
+        self,
+        root_group: Optional[QgsLayerTreeGroup],
+        path: List[str],
+    ) -> Optional[QgsLayerTreeGroup]:
+        """Find a direct-descendant group path below root_group."""
+        group = root_group
+        for segment in path:
+            if group is None:
+                return None
+            group = self._find_direct_child_group(group, self.tr(segment))
+        return group
+
+    def _count_matching_layers(
+        self,
+        node: Optional[QgsLayerTreeNode],
+        style_keys: Optional[set] = None,
+        name_contains: Optional[List[str]] = None,
+    ) -> Tuple[int, int]:
+        """Count layers below node matching style keys or name fragments."""
+        if node is None:
+            return 0, 0
+
+        layer_count = 0
+        feature_count = 0
+        if isinstance(node, QgsLayerTreeLayer):
+            layer = node.layer()
+            if layer is None or not layer.isValid():
+                return 0, 0
+            style_key = str(layer.customProperty("safeguarding_style_key") or "")
+            layer_name = layer.name()
+            style_match = bool(style_keys and style_key in style_keys)
+            name_match = bool(name_contains and any(fragment in layer_name for fragment in name_contains))
+            if style_match or name_match:
+                layer_count = 1
+                try:
+                    feature_count = max(0, int(layer.featureCount()))
+                except Exception:
+                    feature_count = 0
+            return layer_count, feature_count
+
+        if isinstance(node, QgsLayerTreeGroup):
+            for child in node.children():
+                child_layers, child_features = self._count_matching_layers(child, style_keys, name_contains)
+                layer_count += child_layers
+                feature_count += child_features
+        return layer_count, feature_count
+
+    def _format_checklist_item(
+        self,
+        main_group: Optional[QgsLayerTreeGroup],
+        label: str,
+        path: List[str],
+        missing_reason: Optional[str] = None,
+        not_applicable_reason: Optional[str] = None,
+        failed_reason: Optional[str] = None,
+    ) -> str:
+        """Format one final-generation checklist line."""
+        group = self._find_group_by_path(main_group, path)
+        layer_count, feature_count, empty_layers = self._count_layer_tree_contents(group) if group else (0, 0, [])
+        if feature_count > 0:
+            return f"{label}: generated - {layer_count} layer(s), {feature_count} feature(s)"
+        if missing_reason:
+            return f"{label}: input not provided - {missing_reason}"
+        if not_applicable_reason:
+            return f"{label}: not applicable - {not_applicable_reason}"
+        if layer_count > 0:
+            empty_detail = f"; empty layer(s): {', '.join(empty_layers)}" if empty_layers else ""
+            return f"{label}: failed/check warnings - {layer_count} layer(s), 0 feature(s){empty_detail}"
+        return f"{label}: failed/check warnings - {failed_reason or 'expected output was not generated'}"
+
+    def _format_checklist_layer_item(
+        self,
+        main_group: Optional[QgsLayerTreeGroup],
+        label: str,
+        path: List[str],
+        style_keys: Optional[set] = None,
+        name_contains: Optional[List[str]] = None,
+        missing_reason: Optional[str] = None,
+        failed_reason: Optional[str] = None,
+    ) -> str:
+        """Format a checklist line for expected layers inside a broader group."""
+        group = self._find_group_by_path(main_group, path)
+        layer_count, feature_count = self._count_matching_layers(group, style_keys, name_contains)
+        if feature_count > 0:
+            return f"{label}: generated - {layer_count} layer(s), {feature_count} feature(s)"
+        if missing_reason:
+            return f"{label}: input not provided - {missing_reason}"
+        if layer_count > 0:
+            return f"{label}: failed/check warnings - {layer_count} layer(s), 0 feature(s)"
+        return f"{label}: failed/check warnings - {failed_reason or 'expected layer was not generated'}"
+
+    def _build_generation_checklist(
+        self,
+        main_group: Optional[QgsLayerTreeGroup],
+        arp_ok: bool,
+        met_ok: bool,
+        rwy_base_ok: bool,
+        guide_c_ok: bool,
+        guide_d_ok: bool,
+        guide_g_ok: bool,
+        guide_rwy_ok: bool,
+        processed_rwy_count: int,
+        total_runways_in_input: int,
+        physical_protection_ok: bool,
+        arp_input_provided: bool,
+        met_input_provided: bool,
+        agl_enabled: bool,
+        cns_count: int,
+        red_ok: bool,
+        pa_runways_exist: bool,
+    ) -> List[str]:
+        """Build an expanded final checklist with stats or clear skip reasons."""
+        no_runway_reason = None
+        if total_runways_in_input == 0:
+            no_runway_reason = "no runway definitions were provided"
+        elif not rwy_base_ok or processed_rwy_count == 0:
+            no_runway_reason = "runway input was provided but no valid runway centreline was generated"
+
+        arp_missing_reason = None if arp_input_provided else "ARP coordinates not provided"
+        red_missing_reason = None if red_ok else "RED unavailable; provide ARP elevation and runway-end elevations"
+        cns_missing_reason = None if cns_count else "no CNS facilities were entered"
+
+        items = [
+            self._format_checklist_layer_item(
+                main_group,
+                "ARP",
+                ["01 Reference Data"],
+                style_keys={"ARP"},
+                name_contains=[f" {self.tr('ARP')}"],
+                missing_reason=arp_missing_reason,
+                failed_reason="ARP layer failed to create",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Runway centrelines",
+                ["01 Reference Data", "Runway Centrelines"],
+                missing_reason=no_runway_reason,
+                failed_reason="runway centreline layer failed to create",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Meteorological Instrument Station",
+                ["01 Reference Data", "Meteorological Instrument Station"],
+                missing_reason=None if met_input_provided else "MET coordinates not provided",
+                failed_reason="MET station surfaces failed to generate",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "CNS Facilities / Source Facilities",
+                ["01 Reference Data", "CNS Facilities / Source Facilities"],
+                missing_reason=cns_missing_reason,
+                failed_reason="CNS source facility layer failed to create",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Airfield Ground Lighting",
+                ["02 Runway Infrastructure", "Airfield Ground Lighting (AGL)"],
+                missing_reason=no_runway_reason,
+                not_applicable_reason=None if agl_enabled else "AGL option is disabled",
+                failed_reason="AGL was enabled but no lighting features were generated",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Runway markings",
+                ["02 Runway Infrastructure", "Markings"],
+                missing_reason=no_runway_reason,
+                failed_reason="marking prerequisites were not met or generation failed",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Physical geometry",
+                ["02 Runway Infrastructure", "Physical Geometry"],
+                missing_reason=no_runway_reason,
+                failed_reason="physical geometry prerequisites were not met or generation failed",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Runway protection areas",
+                ["03 Runway Protection And Separation", "Runway Protection Areas"],
+                missing_reason=no_runway_reason,
+                failed_reason="runway protection areas failed to generate",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Specialised runway safeguarding",
+                ["03 Runway Protection And Separation", "Specialised Runway Safeguarding"],
+                missing_reason=no_runway_reason,
+                failed_reason="specialised safeguarding failed to generate",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Guideline B - Windshear",
+                ["04 NASF Safeguarding Guidelines", "Guideline B - Windshear"],
+                missing_reason=no_runway_reason,
+                failed_reason="windshear zone generation failed",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Guideline C - Wildlife",
+                ["04 NASF Safeguarding Guidelines", "Guideline C - Wildlife"],
+                missing_reason=arp_missing_reason,
+                failed_reason="wildlife zone generation failed",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Guideline D - Wind Turbine",
+                ["04 NASF Safeguarding Guidelines", "Guideline D - Wind Turbine"],
+                missing_reason=arp_missing_reason,
+                failed_reason="wind turbine zone generation failed",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Guideline E - Lighting Control",
+                ["04 NASF Safeguarding Guidelines", "Guideline E - Lighting Control"],
+                missing_reason=no_runway_reason,
+                failed_reason="lighting control surface generation failed",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Guideline F - Airport-wide OLS",
+                ["04 NASF Safeguarding Guidelines", "Guideline F - Airspace / OLS", "Airport-wide OLS"],
+                missing_reason=no_runway_reason or red_missing_reason,
+                failed_reason="airport-wide OLS failed; check RED, runway strip dimensions, ARP, and preceding warnings",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Guideline F - Runway Approach And Take-off",
+                ["04 NASF Safeguarding Guidelines", "Guideline F - Airspace / OLS", "Runway Approach And Take-off"],
+                missing_reason=no_runway_reason,
+                failed_reason="approach or TOCS generation failed; check runway type, elevations, clearway, and preceding warnings",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Guideline F - Obstacle Free Zone",
+                ["04 NASF Safeguarding Guidelines", "Guideline F - Airspace / OLS", "Obstacle Free Zone"],
+                missing_reason=no_runway_reason,
+                not_applicable_reason=None if pa_runways_exist else "no precision approach runway was entered",
+                failed_reason="OFZ generation failed; check precision approach type, elevations, IHS/RED, and preceding warnings",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Guideline G - CNS",
+                ["04 NASF Safeguarding Guidelines", "Guideline G - CNS"],
+                missing_reason=cns_missing_reason,
+                failed_reason="CNS safeguarding generation failed",
+            ),
+            self._format_checklist_item(
+                main_group,
+                "Guideline I - Public Safety Areas",
+                ["04 NASF Safeguarding Guidelines", "Guideline I - Public Safety Areas"],
+                missing_reason=no_runway_reason,
+                failed_reason="public safety area generation failed",
+            ),
+        ]
+
+        # Keep these booleans referenced in the checklist builder so future readers
+        # can see they are intentionally part of the final diagnostic contract.
+        _ = (met_ok, guide_c_ok, guide_d_ok, guide_g_ok, guide_rwy_ok, physical_protection_ok)
+        return items
+
     def _final_feedback(
         self,
         main_group: Optional[QgsLayerTreeGroup],
@@ -1633,6 +1900,12 @@ class SafeguardingBuilder(
         processed_rwy_count: int,
         total_runways_in_input: int,
         physical_protection_ok: bool,
+        arp_input_provided: bool,
+        met_input_provided: bool,
+        agl_enabled: bool,
+        cns_count: int,
+        red_ok: bool,
+        pa_runways_exist: bool,
     ):
         """Provides final user feedback."""
         if main_group is None and self.output_mode == "memory":  # If no group and memory, something is wrong
@@ -1655,6 +1928,25 @@ class SafeguardingBuilder(
                 tree_layer_count,
                 tree_feature_count,
             ) = self._build_layer_tree_summary(main_group, met_ok)
+            generation_checklist = self._build_generation_checklist(
+                main_group,
+                arp_ok,
+                met_ok,
+                rwy_base_ok,
+                guide_c_ok,
+                guide_d_ok,
+                guide_g_ok,
+                guide_rwy_ok,
+                processed_rwy_count,
+                total_runways_in_input,
+                physical_protection_ok,
+                arp_input_provided,
+                met_input_provided,
+                agl_enabled,
+                cns_count,
+                red_ok,
+                pa_runways_exist,
+            )
             num_layers_created = tree_layer_count or len(self.successfully_generated_layers)
             if not met_ok:
                 empty_summaries.append(
@@ -1690,6 +1982,8 @@ class SafeguardingBuilder(
                 self._log("Generated groups:\n- " + "\n- ".join(populated_summaries))
             if empty_summaries:
                 self._log("Not generated:\n- " + "\n- ".join(empty_summaries))
+            if generation_checklist:
+                self._log("Generation checklist:\n- " + "\n- ".join(generation_checklist))
 
             if (
                 main_group is not None
