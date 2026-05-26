@@ -1269,6 +1269,75 @@ class SafeguardingBuilder(
         ]:
             self._merge_or_move_direct_group(main_group, self.tr(group_name), nasf_group)
 
+        self._repair_guideline_f_layer_tree(nasf_group)
+
+    def _repair_guideline_f_layer_tree(self, nasf_group: QgsLayerTreeGroup) -> None:
+        """Move direct Guideline F OLS layers into their reviewed OLS subfolders."""
+        guideline_f_group = self._find_direct_child_group(nasf_group, self.tr("Guideline F - Airspace / OLS"))
+        if guideline_f_group is None:
+            return
+
+        airport_wide_group = self._ensure_layer_group(guideline_f_group, "Airport-wide OLS")
+        runway_group = self._ensure_layer_group(guideline_f_group, "Runway Approach And Take-off")
+        ofz_group = self._ensure_layer_group(guideline_f_group, "Obstacle Free Zone")
+        if airport_wide_group is None or runway_group is None or ofz_group is None:
+            return
+
+        airport_wide_style_keys = {
+            "OLS IHS",
+            "OLS Conical",
+            "OLS Conical Contour",
+            "OLS OHS",
+            "OLS Transitional",
+            "OLS Transitional Contour",
+        }
+        runway_style_keys = {
+            "OLS Approach",
+            "OLS Approach Contour",
+            "OLS TOCS",
+            "OLS TOCS Contour",
+        }
+        ofz_style_keys = {
+            "OLS Inner Approach",
+            "OLS Inner Transitional",
+            "OLS Baulked Landing",
+        }
+
+        for child in list(guideline_f_group.children()):
+            if not isinstance(child, QgsLayerTreeLayer):
+                continue
+            layer = child.layer()
+            layer_name = layer.name() if layer is not None else child.name()
+            style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
+
+            if style_key in ofz_style_keys or any(
+                label in layer_name
+                for label in [
+                    "OLS Inner Approach",
+                    "OLS Inner Transitional",
+                    "OLS Baulked Landing",
+                ]
+            ):
+                self._move_layer_tree_node(child, ofz_group)
+            elif style_key in runway_style_keys or any(
+                label in layer_name
+                for label in [
+                    "OLS Approach",
+                    "OLS TOCS",
+                ]
+            ):
+                self._move_layer_tree_node(child, runway_group)
+            elif style_key in airport_wide_style_keys or any(
+                label in layer_name
+                for label in [
+                    "OLS IHS",
+                    "OLS Conical",
+                    "OLS OHS",
+                    "OLS Transitional",
+                ]
+            ):
+                self._move_layer_tree_node(child, airport_wide_group)
+
     def _create_guideline_groups(self, main_group: QgsLayerTreeGroup) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Creates the top-level groups for each guideline."""
         guideline_defs = {
