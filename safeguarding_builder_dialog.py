@@ -761,6 +761,10 @@ class SafeguardingBuilderDialog(
             final_data["dissolve_output"] = self.checkBox_dissolveLayers.isChecked()
         else:
             final_data["dissolve_output"] = False
+        if hasattr(self, "get_contour_interval_options"):
+            final_data["contour_intervals"] = self.get_contour_interval_options()
+        else:
+            final_data["contour_intervals"] = {}
 
         return final_data
 

@@ -24,3 +24,12 @@ OUTPUT_FORMATS = {
     "GeoJSON": ("GeoJSON", "GeoJSON", ".geojson"),
 }
 DEFAULT_OUTPUT_FORMAT = "ESRI Shapefile"
+
+DEFAULT_CONTOUR_INTERVAL = 10.0
+CONTOUR_INTERVAL_KEYS = ("approach", "tocs", "transitional", "conical")
+CONTOUR_INTERVAL_LABELS = {
+    "approach": "OLS Approach",
+    "tocs": "OLS TOCS",
+    "transitional": "OLS Transitional",
+    "conical": "OLS Conical",
+}

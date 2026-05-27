@@ -94,6 +94,7 @@ class SafeguardingBuilder(
         self.output_format_driver: Optional[str] = None
         self.output_format_extension: Optional[str] = None
         self.dissolve_output: bool = False
+        self.contour_intervals: Dict[str, float] = {}
         self.debug_logging: bool = False
 
         self._init_locale()
@@ -469,6 +470,7 @@ class SafeguardingBuilder(
         self.output_format_driver = None
         self.output_format_extension = None
         self.dissolve_output = False
+        self.contour_intervals = {}
 
         if self.dlg is None:
             self._log_critical("Processing aborted: dialog reference missing.")
@@ -540,6 +542,7 @@ class SafeguardingBuilder(
         self.output_format_driver = input_data.get("output_format_driver")
         self.output_format_extension = input_data.get("output_format_extension")
         self.dissolve_output = input_data.get("dissolve_output", False)
+        self.contour_intervals = input_data.get("contour_intervals", {})
 
         icao_code = input_data.get("icao_code", "UNKNOWN")
         arp_point = input_data.get("arp_point")

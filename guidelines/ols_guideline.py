@@ -35,6 +35,15 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class OlsGuidelineMixin:
+    def _get_contour_interval(self, surface_key: str, fallback: float) -> float:
+        """Return a positive contour interval from dialog options, or the default fallback."""
+        intervals = getattr(self, "contour_intervals", {}) or {}
+        try:
+            value = float(intervals.get(surface_key, fallback))
+        except (TypeError, ValueError):
+            return fallback
+        return value if value > 0 else fallback
+
     def _generate_airport_wide_ols(
         self,
         processed_runway_data_list: List[dict],
@@ -463,8 +472,9 @@ class OlsGuidelineMixin:
             and height_extent_agl > 0
             and conical_outer_elevation is not None
         ):
+            conical_contour_interval = self._get_contour_interval("conical", CONICAL_CONTOUR_INTERVAL)
             QgsMessageLog.logMessage(
-                f"Generating Conical Contours at {CONICAL_CONTOUR_INTERVAL}m intervals...",
+                f"Generating Conical Contours at {conical_contour_interval}m intervals...",
                 plugin_tag,
                 level=Qgis.Info,
             )
@@ -510,11 +520,11 @@ class OlsGuidelineMixin:
                     )
 
             # 2. Interval contours (main loop)
-            if IHS_ELEVATION_AMSL % CONICAL_CONTOUR_INTERVAL == 0:
-                first_contour_elev_amsl = IHS_ELEVATION_AMSL + CONICAL_CONTOUR_INTERVAL
+            if IHS_ELEVATION_AMSL % conical_contour_interval == 0:
+                first_contour_elev_amsl = IHS_ELEVATION_AMSL + conical_contour_interval
             else:
                 first_contour_elev_amsl = (
-                    math.ceil(IHS_ELEVATION_AMSL / CONICAL_CONTOUR_INTERVAL) * CONICAL_CONTOUR_INTERVAL
+                    math.ceil(IHS_ELEVATION_AMSL / conical_contour_interval) * conical_contour_interval
                 )
             current_target_contour_elev_amsl = first_contour_elev_amsl
 
@@ -524,7 +534,7 @@ class OlsGuidelineMixin:
                     height_extent_agl,
                 )
                 if contour_h_above_ihs < 1e-6:
-                    current_target_contour_elev_amsl += CONICAL_CONTOUR_INTERVAL
+                    current_target_contour_elev_amsl += conical_contour_interval
                     continue
                 try:
                     horizontal_dist = contour_h_above_ihs / slope
@@ -560,7 +570,7 @@ class OlsGuidelineMixin:
                         plugin_tag,
                         Qgis.Warning,
                     )
-                current_target_contour_elev_amsl += CONICAL_CONTOUR_INTERVAL
+                current_target_contour_elev_amsl += conical_contour_interval
 
             # 3. End contour at conical outer elevation
             end_geom = outer_conical_geom
@@ -1569,7 +1579,7 @@ class OlsGuidelineMixin:
         transitional_contour_features: List[QgsFeature] = []
         transitional_fields = self._get_ols_fields("Transitional")
         contour_fields = self._get_transitional_contour_fields()
-        contour_interval = TRANSITIONAL_CONTOUR_INTERVAL
+        contour_interval = self._get_contour_interval("transitional", TRANSITIONAL_CONTOUR_INTERVAL)
 
         if IHS_ELEVATION_AMSL is None:
             QgsMessageLog.logMessage(
@@ -2474,6 +2484,7 @@ class OlsGuidelineMixin:
         # --- Initialize Variables ---
         main_polygon_features: List[QgsFeature] = []
         contour_line_features: List[QgsFeature] = []
+        approach_contour_interval = self._get_contour_interval("approach", APPROACH_CONTOUR_INTERVAL)
         # calculated_total_length = 0.0 # No longer needed for overall feature
         # final_outer_width = 0.0     # No longer needed for overall feature
         # final_outer_elevation = threshold_elevation # No longer needed for overall feature
@@ -2645,14 +2656,14 @@ class OlsGuidelineMixin:
                     contour_elevs.add(round(end_elev, 6))
                 else:
                     # Sloped section: intervals + start
-                    first_contour = math.ceil(start_elev / APPROACH_CONTOUR_INTERVAL) * APPROACH_CONTOUR_INTERVAL
+                    first_contour = math.ceil(start_elev / approach_contour_interval) * approach_contour_interval
                     if first_contour < start_elev - 1e-6:
-                        first_contour += APPROACH_CONTOUR_INTERVAL
+                        first_contour += approach_contour_interval
 
                     c_elev = first_contour
                     while c_elev <= end_elev + 1e-6:
                         contour_elevs.add(round(c_elev, 6))
-                        c_elev += APPROACH_CONTOUR_INTERVAL
+                        c_elev += approach_contour_interval
 
                     contour_elevs.add(round(start_elev, 6))
 
@@ -2742,6 +2753,7 @@ class OlsGuidelineMixin:
         # Always define these!
         final_geom = None
         tocs_contour_features = []
+        tocs_contour_interval = self._get_contour_interval("tocs", TOCS_CONTOUR_INTERVAL)
 
         # 1. Get Parameters
         params = ols_dimensions.get_ols_params(arc_num, None, "TOCS")
@@ -2941,14 +2953,14 @@ class OlsGuidelineMixin:
             contour_elevs = set()
 
             # Add interval contours
-            first_contour = math.ceil(start_elev / TOCS_CONTOUR_INTERVAL) * TOCS_CONTOUR_INTERVAL
+            first_contour = math.ceil(start_elev / tocs_contour_interval) * tocs_contour_interval
             if first_contour < start_elev - 1e-6:
-                first_contour += TOCS_CONTOUR_INTERVAL
+                first_contour += tocs_contour_interval
 
             c_elev = first_contour
             while c_elev <= end_elev + 1e-6:
                 contour_elevs.add(round(c_elev, 6))
-                c_elev += TOCS_CONTOUR_INTERVAL
+                c_elev += tocs_contour_interval
 
             # Always add start and end elevation
             contour_elevs.add(round(start_elev, 6))

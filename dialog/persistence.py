@@ -13,6 +13,8 @@ from qgis.PyQt.QtWidgets import (  # type: ignore
 )
 
 from .dialog_constants import (
+    CONTOUR_INTERVAL_KEYS,
+    DEFAULT_CONTOUR_INTERVAL,
     DEFAULT_OUTPUT_FORMAT,
     DIALOG_LOG_TAG,
     OUTPUT_FORMATS,
@@ -151,6 +153,8 @@ class PersistenceMixin:
             "format": self.comboOutputFormat.currentText(),
             "dissolve": self.checkBox_dissolveLayers.isChecked() if hasattr(self, "checkBox_dissolveLayers") else False,
         }
+        if hasattr(self, "get_contour_interval_options"):
+            data_to_save["output_options"]["contour_intervals"] = self.get_contour_interval_options()
         return data_to_save
 
     def _get_cns_save_rows(self):
@@ -326,6 +330,8 @@ class PersistenceMixin:
 
         if hasattr(self, "checkBox_dissolveLayers"):
             self.checkBox_dissolveLayers.setChecked(bool(output_options.get("dissolve", False)))
+        if hasattr(self, "set_contour_interval_options"):
+            self.set_contour_interval_options(output_options.get("contour_intervals", {}))
         self._on_output_option_changed()
 
     def _reset_output_options(self) -> None:
@@ -337,6 +343,8 @@ class PersistenceMixin:
             self.comboOutputFormat.setCurrentText(DEFAULT_OUTPUT_FORMAT)
         if hasattr(self, "checkBox_dissolveLayers"):
             self.checkBox_dissolveLayers.setChecked(False)
+        if hasattr(self, "set_contour_interval_options"):
+            self.set_contour_interval_options({})
         self._on_output_option_changed()
 
     def _output_options_changed(self) -> bool:
@@ -346,6 +354,13 @@ class PersistenceMixin:
             return True
         if hasattr(self, "checkBox_dissolveLayers") and self.checkBox_dissolveLayers.isChecked():
             return True
+        if hasattr(self, "get_contour_interval_options"):
+            contour_options = self.get_contour_interval_options()
+            if abs(float(contour_options.get("default", DEFAULT_CONTOUR_INTERVAL)) - DEFAULT_CONTOUR_INTERVAL) > 1e-9:
+                return True
+            for key in CONTOUR_INTERVAL_KEYS:
+                if abs(float(contour_options.get(key, DEFAULT_CONTOUR_INTERVAL)) - DEFAULT_CONTOUR_INTERVAL) > 1e-9:
+                    return True
         return False
 
     def _handle_load_error(self, file_path: str, error: Exception, unexpected: bool) -> None:
