@@ -1974,8 +1974,7 @@ class OlsGuidelineMixin:
                             connector_base_start = connector_start_ctr.project(
                                 strip_overall_half_width, outward_perp_azimuth
                             )
-                            threshold_side_pt = end_thr_pt.project(strip_overall_half_width, outward_perp_azimuth)
-                            connector_base_end = threshold_side_pt or QgsPointXY(pa_start.x(), pa_start.y())
+                            connector_base_end = QgsPointXY(pa_start.x(), pa_start.y())
                             if connector_base_start:
                                 connector_len = math.hypot(
                                     connector_base_end.x() - connector_base_start.x(),
