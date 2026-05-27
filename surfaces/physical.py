@@ -1246,6 +1246,22 @@ class PhysicalGeometryMixin:
                 if outside_center is None:
                     continue
                 for side_label, lateral_sign in [("L", -1.0), ("R", 1.0)]:
+                    lateral_offset = lateral_sign * (graded_half_width - marker_length / 2.0)
+                    marker_center = self._project_lateral(outside_center, lateral_offset, runway_azimuth)
+                    geom = self._create_oriented_marker_rectangle(
+                        marker_center,
+                        short_edge_azimuth,
+                        marker_length,
+                        marker_width,
+                        f"Gable Marker {log_name} {end_label} Corner {side_label}",
+                    )
+                    _add_marker(
+                        geom,
+                        f"{end_label}-{side_label}-Corner",
+                        None,
+                        "Short-edge corner marker; marker corner touches graded strip corner.",
+                    )
+                for side_label, lateral_sign in [("L", -1.0), ("R", 1.0)]:
                     lateral_offset = lateral_sign * (dimension_a_min / 2.0 + marker_length / 2.0)
                     marker_center = self._project_lateral(outside_center, lateral_offset, runway_azimuth)
                     geom = self._create_oriented_marker_rectangle(
