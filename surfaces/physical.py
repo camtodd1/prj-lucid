@@ -943,13 +943,23 @@ class PhysicalGeometryMixin:
                 continue
 
             points = []
-            polyline = intersection.asPolyline()
-            if polyline:
-                points.extend(polyline)
-            for line in intersection.asMultiPolyline() or []:
-                points.extend(line)
+            try:
+                polyline = intersection.asPolyline()
+                if polyline:
+                    points.extend(polyline)
+            except TypeError:
+                pass
+            if not points:
+                try:
+                    for line in intersection.asMultiPolyline() or []:
+                        points.extend(line)
+                except TypeError:
+                    pass
             if not points and hasattr(intersection, "vertices"):
-                points.extend(QgsPointXY(vertex) for vertex in intersection.vertices())
+                try:
+                    points.extend(QgsPointXY(vertex) for vertex in intersection.vertices())
+                except TypeError:
+                    pass
             if not points:
                 continue
 
