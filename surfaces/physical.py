@@ -94,17 +94,6 @@ class PhysicalGeometryMixin:
                 stopway_resa_fields = common_fields + [
                     QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
-                gable_marker_fields = common_fields + [
-                    QgsField("side", QVariant.String, self.tr("Side"), 10),
-                    QgsField("marker_no", QVariant.Int, self.tr("Marker No.")),
-                    QgsField("height_m", QVariant.Double, self.tr("height_m"), 12, 3),
-                    QgsField("spacing_m", QVariant.Double, self.tr("spacing_m"), 12, 3),
-                    QgsField("max_spc_m", QVariant.Double, self.tr("Max Spacing (m)"), 12, 3),
-                    QgsField("dim_a_min", QVariant.Double, self.tr("Dimension A Min (m)"), 12, 3),
-                    QgsField("shape", QVariant.String, self.tr("Shape"), 30),
-                    QgsField("colour", QVariant.String, self.tr("Colour"), 20),
-                    QgsField("notes", QVariant.String, self.tr("Notes"), 250),
-                ]
                 pre_threshold_fields = common_fields + [
                     QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
@@ -363,11 +352,6 @@ class PhysicalGeometryMixin:
                         "fields": common_fields,
                         "group": protection_area_group,
                     },
-                    "GableMarker": {
-                        "name": self.tr("Gable Markers"),
-                        "fields": gable_marker_fields,
-                        "group": protection_area_group,
-                    },
                     "RESA": {
                         "name": self.tr("Runway End Safety Area (RESA)"),
                         "fields": stopway_resa_fields,
@@ -394,11 +378,9 @@ class PhysicalGeometryMixin:
                     "GradedStrip": "Runway Graded Strips",
                     "FlyoverStrip": "Runway Strip Flyover Area",
                     "OverallStrip": "Runway Overall Strips",
-                    "GableMarker": "Runway Marking White",
                     "RESA": "Runway End Safety Areas (RESA)",
                 }
                 layer_creation_order = [
-                    "GableMarker",
                     "rwy",
                     "PreThresholdRunway",
                     "PreThresholdArea",
@@ -612,19 +594,6 @@ class PhysicalGeometryMixin:
                         level=Qgis.Info,
                     )
 
-                gable_marker_count = self._populate_gable_marker_features(
-                    physical_features,
-                    physical_layer_specs,
-                    processed_runway_data_list,
-                )
-                if gable_marker_count:
-                    QgsMessageLog.logMessage(
-                        "Generated "
-                        f"{gable_marker_count} gable marker feature(s), excluding intersecting runway strips.",
-                        plugin_tag,
-                        level=Qgis.Info,
-                    )
-
                 QgsMessageLog.logMessage(
                     "Finalizing and saving physical geometry & protection area layers...",
                     plugin_tag,
@@ -652,8 +621,6 @@ class PhysicalGeometryMixin:
                         if final_layer is not None:
                             if element_type == "DetailedDesignationMarking":
                                 self._style_runway_designation_layer(final_layer)
-                            if element_type == "GableMarker":
-                                self._move_layer_to_group_top(final_layer, spec["group"])
                             any_physical_or_protection_ok = True
                             any_layer_successfully_processed_in_this_block = True
                         features_to_write.clear()
@@ -850,221 +817,6 @@ class PhysicalGeometryMixin:
         cloned_feature.setAttributes(source_feature.attributes())
         cloned_feature.setGeometry(geometry)
         return cloned_feature
-
-    def _axis_station(self, origin: QgsPointXY, axis_azimuth: float, point: QgsPointXY) -> float:
-        axis_azimuth_rad = math.radians(axis_azimuth)
-        axis_x = math.sin(axis_azimuth_rad)
-        axis_y = math.cos(axis_azimuth_rad)
-        return ((point.x() - origin.x()) * axis_x) + ((point.y() - origin.y()) * axis_y)
-
-    def _blocked_gable_marker_intervals(self, context: dict, contexts: List[dict]) -> List[Tuple[float, float]]:
-        blocked: List[Tuple[float, float]] = []
-        strip_geom = context.get("strip_geom")
-        strip_start = context.get("strip_start_center")
-        strip_length = float(context.get("strip_length") or 0.0)
-        runway_azimuth = float(context.get("runway_azimuth") or 0.0)
-        if strip_geom is None or strip_start is None or strip_length <= 0:
-            return blocked
-
-        for other in contexts:
-            if other is context or other.get("runway_name") == context.get("runway_name"):
-                continue
-            other_geom = other.get("strip_geom")
-            if other_geom is None:
-                continue
-            try:
-                intersection = strip_geom.intersection(other_geom)
-            except Exception:
-                continue
-            if intersection is None or intersection.isEmpty():
-                continue
-            vertices = []
-            for polygon_geom in self._polygonal_layer_geometries(intersection, "gable marker strip intersection"):
-                polygon = polygon_geom.asPolygon()
-                for ring in polygon:
-                    vertices.extend(ring)
-            if not vertices:
-                bbox = intersection.boundingBox()
-                vertices = [
-                    QgsPointXY(bbox.xMinimum(), bbox.yMinimum()),
-                    QgsPointXY(bbox.xMinimum(), bbox.yMaximum()),
-                    QgsPointXY(bbox.xMaximum(), bbox.yMinimum()),
-                    QgsPointXY(bbox.xMaximum(), bbox.yMaximum()),
-                ]
-            stations = [self._axis_station(strip_start, runway_azimuth, QgsPointXY(point)) for point in vertices]
-            blocked_start = max(0.0, min(stations))
-            blocked_end = min(strip_length, max(stations))
-            if blocked_end - blocked_start > 1e-3:
-                blocked.append((blocked_start, blocked_end))
-
-        if not blocked:
-            return blocked
-        blocked.sort()
-        merged: List[Tuple[float, float]] = []
-        for start, end in blocked:
-            if not merged or start > merged[-1][1] + 1e-3:
-                merged.append((start, end))
-            else:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
-        return merged
-
-    def _blocked_gable_marker_intervals_for_side(
-        self,
-        context: dict,
-        contexts: List[dict],
-        lateral_sign: float,
-    ) -> List[Tuple[float, float]]:
-        blocked: List[Tuple[float, float]] = []
-        strip_start = context.get("strip_start_center")
-        strip_length = float(context.get("strip_length") or 0.0)
-        runway_azimuth = float(context.get("runway_azimuth") or 0.0)
-        graded_half_width = float(context.get("graded_half_width") or 0.0)
-        if strip_start is None or strip_length <= 0 or graded_half_width <= 0:
-            return blocked
-
-        edge_start = self._project_lateral(strip_start, lateral_sign * graded_half_width, runway_azimuth)
-        strip_end = strip_start.project(strip_length, runway_azimuth)
-        edge_end = self._project_lateral(strip_end, lateral_sign * graded_half_width, runway_azimuth) if strip_end else None
-        if edge_start is None or edge_end is None:
-            return blocked
-        edge_geom = QgsGeometry.fromPolylineXY([edge_start, edge_end])
-
-        for other in contexts:
-            if other is context or other.get("runway_name") == context.get("runway_name"):
-                continue
-            other_geom = other.get("strip_geom")
-            if other_geom is None:
-                continue
-            try:
-                intersection = edge_geom.intersection(other_geom)
-            except Exception:
-                continue
-            if intersection is None or intersection.isEmpty():
-                continue
-
-            points = []
-            try:
-                polyline = intersection.asPolyline()
-                if polyline:
-                    points.extend(polyline)
-            except TypeError:
-                pass
-            if not points:
-                try:
-                    for line in intersection.asMultiPolyline() or []:
-                        points.extend(line)
-                except TypeError:
-                    pass
-            if not points and hasattr(intersection, "vertices"):
-                try:
-                    points.extend(QgsPointXY(vertex) for vertex in intersection.vertices())
-                except TypeError:
-                    pass
-            if not points:
-                continue
-
-            stations = [self._axis_station(strip_start, runway_azimuth, QgsPointXY(point)) for point in points]
-            blocked_start = max(0.0, min(stations))
-            blocked_end = min(strip_length, max(stations))
-            if blocked_end - blocked_start > 1e-3:
-                blocked.append((blocked_start, blocked_end))
-
-        if not blocked:
-            return blocked
-        blocked.sort()
-        merged: List[Tuple[float, float]] = []
-        for start, end in blocked:
-            if not merged or start > merged[-1][1] + 1e-3:
-                merged.append((start, end))
-            else:
-                merged[-1] = (merged[-1][0], max(merged[-1][1], end))
-        return merged
-
-    def _gable_marker_intersects_other_strip(self, geom: QgsGeometry, runway_name: str, contexts: List[dict]) -> bool:
-        for context in contexts:
-            if context.get("runway_name") == runway_name:
-                continue
-            strip_geom = context.get("strip_geom")
-            if strip_geom is None:
-                continue
-            try:
-                intersection = geom.intersection(strip_geom)
-            except Exception:
-                continue
-            if intersection is not None and not intersection.isEmpty() and intersection.area() > 1e-3:
-                return True
-        return False
-
-    def _populate_gable_marker_features(
-        self,
-        physical_features: Dict[str, List[QgsFeature]],
-        physical_layer_specs: Dict[str, dict],
-        processed_runway_data_list: List[dict],
-    ) -> int:
-        target_spec = physical_layer_specs.get("GableMarker")
-        if target_spec is None:
-            return 0
-
-        contexts = [
-            runway_data.get("gable_marker_context")
-            for runway_data in processed_runway_data_list
-            if runway_data.get("gable_marker_context")
-        ]
-        physical_features["GableMarker"] = []
-        for context in contexts:
-            blocked_intervals = self._blocked_gable_marker_intervals(context, contexts)
-            side_blocked_intervals = {
-                "L": self._blocked_gable_marker_intervals_for_side(context, contexts, -1.0),
-                "R": self._blocked_gable_marker_intervals_for_side(context, contexts, 1.0),
-            }
-            for element_type, geometry, attributes in self._generate_gable_markers(
-                context["runway_name"],
-                context["log_name"],
-                context["strip_start_center"],
-                context["graded_half_width"],
-                context["graded_width"],
-                context["strip_length"],
-                context["runway_azimuth"],
-                blocked_intervals=blocked_intervals,
-                side_blocked_intervals=side_blocked_intervals,
-                other_strip_geometries=[
-                    other_context.get("strip_geom")
-                    for other_context in contexts
-                    if other_context.get("runway_name") != context["runway_name"]
-                ],
-            ):
-                if element_type != "GableMarker" or geometry is None or geometry.isEmpty():
-                    continue
-                if not geometry.isGeosValid():
-                    geometry = geometry.makeValid()
-                if geometry is None or geometry.isEmpty() or not geometry.isGeosValid():
-                    continue
-                if self._gable_marker_intersects_other_strip(geometry, context["runway_name"], contexts):
-                    continue
-
-                feature = QgsFeature(target_spec["fields"])
-                feature.setGeometry(geometry)
-                for field_name, value in attributes.items():
-                    idx = feature.fieldNameIndex(field_name)
-                    if idx != -1:
-                        feature.setAttribute(idx, value)
-                physical_features["GableMarker"].append(feature)
-
-        return len(physical_features["GableMarker"])
-
-    def _move_layer_to_group_top(self, layer: QgsVectorLayer, layer_group: Optional[QgsLayerTreeGroup]) -> None:
-        if layer is None or layer_group is None:
-            return
-        node = layer_group.findLayer(layer.id())
-        if node is None:
-            return
-        parent = node.parent()
-        if parent is None:
-            return
-        cloned_node = node.clone()
-        self._stage_layer_tree_node(cloned_node)
-        layer_group.insertChildNode(0, cloned_node)
-        parent.removeChildNode(node)
 
     def _normalise_side_stripe_features_for_layer(self, features: List[QgsFeature]) -> List[QgsFeature]:
         """Prepare side-stripe features as fresh single-part polygons."""
@@ -1330,303 +1082,6 @@ class PhysicalGeometryMixin:
         if not all(corners):
             return None
         return self._create_polygon_from_corners(corners, description)
-
-    def _gable_marker_dimension_a_min(self, graded_width: float) -> Optional[float]:
-        table_values = [
-            (30.0, 10.0),
-            (45.0, 20.0),
-            (60.0, 20.0),
-            (90.0, 30.0),
-            (150.0, 60.0),
-        ]
-        fallback = None
-        for width, dimension_a in table_values:
-            if abs(graded_width - width) < 1e-6:
-                return dimension_a
-            if graded_width >= width:
-                fallback = dimension_a
-        return fallback
-
-    def _create_oriented_marker_rectangle(
-        self,
-        center: QgsPointXY,
-        long_axis_azimuth: float,
-        length_m: float,
-        width_m: float,
-        description: str,
-    ) -> Optional[QgsGeometry]:
-        if length_m <= 0 or width_m <= 0:
-            return None
-        half_length = length_m / 2.0
-        half_width = width_m / 2.0
-        reverse_azimuth = (long_axis_azimuth + 180.0) % 360.0
-        az_l = (long_axis_azimuth - 90.0 + 360.0) % 360.0
-        az_r = (long_axis_azimuth + 90.0) % 360.0
-        start_center = center.project(half_length, reverse_azimuth)
-        end_center = center.project(half_length, long_axis_azimuth)
-        if start_center is None or end_center is None:
-            return None
-        corners = [
-            start_center.project(half_width, az_l),
-            start_center.project(half_width, az_r),
-            end_center.project(half_width, az_r),
-            end_center.project(half_width, az_l),
-        ]
-        if not all(corners):
-            return None
-        return self._create_polygon_from_corners(corners, description)
-
-    def _create_corner_anchored_rectangle(
-        self,
-        anchor_corner: QgsPointXY,
-        length_azimuth: float,
-        width_azimuth: float,
-        length_m: float,
-        width_m: float,
-        description: str,
-    ) -> Optional[QgsGeometry]:
-        if length_m <= 0 or width_m <= 0:
-            return None
-        length_corner = anchor_corner.project(length_m, length_azimuth)
-        width_corner = anchor_corner.project(width_m, width_azimuth)
-        if length_corner is None or width_corner is None:
-            return None
-        far_corner = length_corner.project(width_m, width_azimuth)
-        if far_corner is None:
-            return None
-        return self._create_polygon_from_corners(
-            [anchor_corner, length_corner, far_corner, width_corner],
-            description,
-        )
-
-    def _generate_gable_markers(
-        self,
-        runway_name: str,
-        log_name: str,
-        strip_start_center: QgsPointXY,
-        graded_half_width: float,
-        graded_width: float,
-        strip_length: float,
-        runway_azimuth: float,
-        blocked_intervals: Optional[List[Tuple[float, float]]] = None,
-        side_blocked_intervals: Optional[Dict[str, List[Tuple[float, float]]]] = None,
-        other_strip_geometries: Optional[List[QgsGeometry]] = None,
-    ) -> List[Tuple[str, QgsGeometry, dict]]:
-        """Generate MOS 8.09/8.11 gable marker footprints along graded strip edges."""
-        markers: List[Tuple[str, QgsGeometry, dict]] = []
-        marker_length = 3.0
-        marker_width = 0.9
-        marker_height = 0.5
-        max_spacing = 180.0
-        if strip_length <= 0:
-            return markers
-
-        blocked_intervals = blocked_intervals or []
-        side_blocked_intervals = side_blocked_intervals or {}
-        other_strip_geometries = [geom for geom in (other_strip_geometries or []) if geom is not None]
-
-        def _clear_segments(intervals: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
-            segments: List[Tuple[float, float]] = []
-            cursor = 0.0
-            for blocked_start, blocked_end in intervals:
-                blocked_start = max(0.0, min(strip_length, blocked_start))
-                blocked_end = max(0.0, min(strip_length, blocked_end))
-                if blocked_start > cursor + 1e-3:
-                    segments.append((cursor, blocked_start))
-                cursor = max(cursor, blocked_end)
-            if cursor < strip_length - 1e-3:
-                segments.append((cursor, strip_length))
-            return segments
-
-        general_clear_segments = _clear_segments(blocked_intervals)
-        if not general_clear_segments:
-            return markers
-
-        dimension_a_min = self._gable_marker_dimension_a_min(graded_width)
-        table_widths = [30.0, 45.0, 60.0, 90.0, 150.0]
-        if dimension_a_min is None:
-            dimension_a_note = "Dimension A not available for this graded strip width."
-        elif any(abs(graded_width - width) < 1e-6 for width in table_widths):
-            dimension_a_note = "Exact Table 8.11(6) graded strip width used."
-        else:
-            dimension_a_note = "Nearest lower Table 8.11(6) graded strip width used for Dimension A."
-        notes = (
-            "Evenly spaced using the minimum marker count required to keep spacing at or below 180 m. "
-            "Corner marker footprints touch graded strip corners at marker corners. "
-            "Footprint shown in plan; gable height is stored as an attribute."
-        )
-        marker_no = 0
-
-        def _attrs(side_label: str, spacing_value: Optional[float], placement_note: str) -> dict:
-            return {
-                "rwy": runway_name,
-                "desc": "Gable Marker",
-                "len_m": marker_length,
-                "wid_m": marker_width,
-                "height_m": marker_height,
-                "side": side_label,
-                "marker_no": marker_no,
-                "spacing_m": round(spacing_value, 3) if spacing_value is not None else None,
-                "max_spc_m": max_spacing,
-                "dim_a_min": dimension_a_min,
-                "shape": "Triangular gable",
-                "colour": "White",
-                "ref_mos": "MOS 8.09; MOS 8.11(1); MOS 8.11(4); Table 8.11(6)",
-                "notes": f"{notes} {placement_note} {dimension_a_note}",
-            }
-
-        def _add_marker(
-            geom: Optional[QgsGeometry],
-            side_label: str,
-            spacing_value: Optional[float],
-            placement_note: str,
-        ):
-            nonlocal marker_no
-            if geom is None:
-                return
-            marker_no += 1
-            markers.append(("GableMarker", geom, _attrs(side_label, spacing_value, placement_note)))
-
-        short_edge_azimuth = (runway_azimuth + 90.0) % 360.0
-
-        def _overlap_area_with_other_strips(candidate: Optional[QgsGeometry]) -> float:
-            if candidate is None or candidate.isEmpty():
-                return 0.0
-            overlap_area = 0.0
-            for other_geom in other_strip_geometries:
-                try:
-                    intersection = candidate.intersection(other_geom)
-                except Exception:
-                    continue
-                if intersection is not None and not intersection.isEmpty():
-                    overlap_area += intersection.area()
-            return overlap_area
-
-        def _add_short_edge_corner_marker(
-            boundary_station: float,
-            clear_side_azimuth: float,
-            boundary_label: str,
-            side_label: str,
-            lateral_sign: float,
-        ):
-            boundary_center = strip_start_center.project(boundary_station, runway_azimuth)
-            if boundary_center is None:
-                return
-            anchor_corner = self._project_lateral(boundary_center, lateral_sign * graded_half_width, runway_azimuth)
-            if anchor_corner is None:
-                return
-            lateral_azimuth = (
-                (runway_azimuth + 90.0) % 360.0
-                if lateral_sign > 0.0
-                else (runway_azimuth - 90.0 + 360.0) % 360.0
-            )
-            preferred_geom = self._create_corner_anchored_rectangle(
-                anchor_corner,
-                lateral_azimuth,
-                clear_side_azimuth,
-                marker_length,
-                marker_width,
-                f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
-            )
-            alternate_geom = self._create_corner_anchored_rectangle(
-                anchor_corner,
-                lateral_azimuth,
-                (clear_side_azimuth + 180.0) % 360.0,
-                marker_length,
-                marker_width,
-                f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
-            )
-            geom = preferred_geom
-            if (
-                _overlap_area_with_other_strips(preferred_geom) > 1e-3
-                and _overlap_area_with_other_strips(alternate_geom) <= 1e-3
-            ):
-                geom = alternate_geom
-            _add_marker(
-                geom,
-                f"{boundary_label}-{side_label}-Corner",
-                None,
-                "Short-edge corner marker; marker corner touches graded strip corner.",
-            )
-
-        for side_label, lateral_sign in [("L", -1.0), ("R", 1.0)]:
-            side_clear_segments = _clear_segments(side_blocked_intervals.get(side_label, blocked_intervals))
-            for segment_start, segment_end in side_clear_segments:
-                segment_length = segment_end - segment_start
-                if segment_length < marker_length - 1e-6:
-                    continue
-                start_clear_side_azimuth = (
-                    (runway_azimuth + 180.0) % 360.0 if segment_start <= 1e-3 else runway_azimuth
-                )
-                end_clear_side_azimuth = (
-                    runway_azimuth if segment_end >= strip_length - 1e-3 else (runway_azimuth + 180.0) % 360.0
-                )
-                _add_short_edge_corner_marker(
-                    segment_start,
-                    start_clear_side_azimuth,
-                    f"{side_label}S{len(markers) + 1}Start",
-                    side_label,
-                    lateral_sign,
-                )
-                _add_short_edge_corner_marker(
-                    segment_end,
-                    end_clear_side_azimuth,
-                    f"{side_label}S{len(markers) + 1}End",
-                    side_label,
-                    lateral_sign,
-                )
-                interval_count = max(1, int(math.ceil(segment_length / max_spacing)))
-                marker_count_per_side = interval_count + 1
-                spacing = segment_length / interval_count
-                lateral_center = lateral_sign * (graded_half_width + marker_width / 2.0)
-                for marker_index in range(marker_count_per_side):
-                    anchor_station = segment_start + marker_index * spacing
-                    if marker_index == 0:
-                        start_offset = segment_start
-                    elif marker_index == marker_count_per_side - 1:
-                        start_offset = max(segment_start, segment_end - marker_length)
-                    else:
-                        start_offset = anchor_station - marker_length / 2.0
-                    geom = self._create_runway_marking_rectangle(
-                        strip_start_center,
-                        runway_azimuth,
-                        start_offset,
-                        marker_length,
-                        lateral_center,
-                        marker_width,
-                        f"Gable Marker {log_name} {side_label}{marker_index + 1}",
-                    )
-                    _add_marker(geom, side_label, spacing, "Long-edge marker.")
-
-        if dimension_a_min is not None:
-            end_specs = [
-                ("Start", strip_start_center, (runway_azimuth + 180.0) % 360.0),
-                ("End", strip_start_center.project(strip_length, runway_azimuth), runway_azimuth),
-            ]
-            for end_label, end_center, outward_end_azimuth in end_specs:
-                if end_center is None:
-                    continue
-                outside_center = end_center.project(marker_width / 2.0, outward_end_azimuth)
-                if outside_center is None:
-                    continue
-                for side_label, lateral_sign in [("L", -1.0), ("R", 1.0)]:
-                    lateral_offset = lateral_sign * (dimension_a_min / 2.0 + marker_length / 2.0)
-                    marker_center = self._project_lateral(outside_center, lateral_offset, runway_azimuth)
-                    geom = self._create_oriented_marker_rectangle(
-                        marker_center,
-                        short_edge_azimuth,
-                        marker_length,
-                        marker_width,
-                        f"Gable Marker {log_name} {end_label} Edge {side_label}",
-                    )
-                    _add_marker(
-                        geom,
-                        f"{end_label}-{side_label}",
-                        None,
-                        "Short-edge marker placed with Dimension A between inner marker ends.",
-                    )
-
-        return markers
 
     def _create_pre_threshold_chevron_polygon(
         self,
@@ -2634,7 +2089,6 @@ class PhysicalGeometryMixin:
         shoulder_width = runway_data.get("shoulder")
         runway_name = runway_data.get("short_name", "RWY")
         log_name = runway_name if runway_name != "RWY" else f"RWY_{runway_data.get('original_index', '?')}"
-        runway_data.pop("gable_marker_context", None)
 
         disp_val_1 = runway_data.get("thr_displaced_1")
         disp_val_2 = runway_data.get("thr_displaced_2")
@@ -3053,16 +2507,6 @@ class PhysicalGeometryMixin:
                             "ref_mos": graded_ref,
                         }
                         generated_elements.append(("GradedStrip", graded_strip_geom, graded_attrs))
-                        runway_data["gable_marker_context"] = {
-                            "runway_name": runway_name,
-                            "log_name": log_name,
-                            "strip_start_center": strip_end_center_p,
-                            "graded_half_width": graded_half_width,
-                            "graded_width": graded_width,
-                            "strip_length": strip_length,
-                            "runway_azimuth": rwy_params["azimuth_p_r"],
-                            "strip_geom": QgsGeometry(graded_strip_geom),
-                        }
 
                     overall_strip_geom = self._create_runway_aligned_rectangle(
                         strip_end_center_p,
