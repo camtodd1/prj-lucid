@@ -1668,8 +1668,6 @@ class OlsGuidelineMixin:
             calculated_strip_dims = runway_data.get("calculated_strip_dims")
             disp_at_primary_thr = float(runway_data.get("thr_displaced_1", 0.0) or 0.0)
             disp_at_reciprocal_thr = float(runway_data.get("thr_displaced_2", 0.0) or 0.0)
-            stopway_at_primary_end = float(runway_data.get("stopway1_len", 0.0) or 0.0)
-            stopway_at_reciprocal_end = float(runway_data.get("stopway2_len", 0.0) or 0.0)
 
             if not all(
                 [
@@ -1776,8 +1774,8 @@ class OlsGuidelineMixin:
             strip_overall_half_width = strip_overall_width / 2.0
             strip_end_p = phys_end_p.project(strip_extension, rwy_params["azimuth_r_p"])
             strip_end_r = phys_end_r.project(strip_extension, rwy_params["azimuth_p_r"])
-            strip_surface_end_p = phys_end_p.project(stopway_at_primary_end, rwy_params["azimuth_r_p"])
-            strip_surface_end_r = phys_end_r.project(stopway_at_reciprocal_end, rwy_params["azimuth_p_r"])
+            strip_surface_end_p = thr_point
+            strip_surface_end_r = rec_thr_point
             if not strip_end_p or not strip_end_r or not strip_surface_end_p or not strip_surface_end_r:
                 QgsMessageLog.logMessage(
                     f"Skipping Transitional features for {runway_name}: Failed strip end points.",
@@ -1974,8 +1972,7 @@ class OlsGuidelineMixin:
                             connector_base_start = connector_start_ctr.project(
                                 strip_overall_half_width, outward_perp_azimuth
                             )
-                            threshold_side_pt = end_thr_pt.project(strip_overall_half_width, outward_perp_azimuth)
-                            connector_base_end = threshold_side_pt or QgsPointXY(pa_start.x(), pa_start.y())
+                            connector_base_end = QgsPointXY(pa_start.x(), pa_start.y())
                             if connector_base_start:
                                 connector_len = math.hypot(
                                     connector_base_end.x() - connector_base_start.x(),
