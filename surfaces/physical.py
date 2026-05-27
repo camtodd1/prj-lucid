@@ -1502,7 +1502,7 @@ class PhysicalGeometryMixin:
             boundary_center = strip_start_center.project(boundary_station, runway_azimuth)
             if boundary_center is None:
                 return
-            lateral_offset = lateral_sign * (graded_half_width - marker_length / 2.0)
+            lateral_offset = lateral_sign * (graded_half_width + marker_length / 2.0)
             candidate_geometries = []
             for candidate_azimuth in [clear_side_azimuth, (clear_side_azimuth + 180.0) % 360.0]:
                 outside_center = boundary_center.project(marker_width / 2.0, candidate_azimuth)
