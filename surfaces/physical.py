@@ -1376,6 +1376,29 @@ class PhysicalGeometryMixin:
             return None
         return self._create_polygon_from_corners(corners, description)
 
+    def _create_corner_anchored_rectangle(
+        self,
+        anchor_corner: QgsPointXY,
+        length_azimuth: float,
+        width_azimuth: float,
+        length_m: float,
+        width_m: float,
+        description: str,
+    ) -> Optional[QgsGeometry]:
+        if length_m <= 0 or width_m <= 0:
+            return None
+        length_corner = anchor_corner.project(length_m, length_azimuth)
+        width_corner = anchor_corner.project(width_m, width_azimuth)
+        if length_corner is None or width_corner is None:
+            return None
+        far_corner = length_corner.project(width_m, width_azimuth)
+        if far_corner is None:
+            return None
+        return self._create_polygon_from_corners(
+            [anchor_corner, length_corner, far_corner, width_corner],
+            description,
+        )
+
     def _generate_gable_markers(
         self,
         runway_name: str,
@@ -1502,16 +1525,20 @@ class PhysicalGeometryMixin:
             boundary_center = strip_start_center.project(boundary_station, runway_azimuth)
             if boundary_center is None:
                 return
-            lateral_offset = lateral_sign * (graded_half_width + marker_length / 2.0)
+            anchor_corner = self._project_lateral(boundary_center, lateral_sign * graded_half_width, runway_azimuth)
+            if anchor_corner is None:
+                return
+            inward_lateral_azimuth = (
+                (runway_azimuth + 90.0) % 360.0
+                if lateral_sign < 0
+                else (runway_azimuth - 90.0 + 360.0) % 360.0
+            )
             candidate_geometries = []
             for candidate_azimuth in [clear_side_azimuth, (clear_side_azimuth + 180.0) % 360.0]:
-                outside_center = boundary_center.project(marker_width / 2.0, candidate_azimuth)
-                if outside_center is None:
-                    continue
-                marker_center = self._project_lateral(outside_center, lateral_offset, runway_azimuth)
-                geom = self._create_oriented_marker_rectangle(
-                    marker_center,
-                    short_edge_azimuth,
+                geom = self._create_corner_anchored_rectangle(
+                    anchor_corner,
+                    inward_lateral_azimuth,
+                    candidate_azimuth,
                     marker_length,
                     marker_width,
                     f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
