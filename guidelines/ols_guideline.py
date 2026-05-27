@@ -1937,7 +1937,8 @@ class OlsGuidelineMixin:
                 for i, section_params in enumerate(approach_sections_params):
                     section_length = section_params.get("length", 0.0)
                     section_slope = section_params.get("slope", 0.0)
-                    section_params.get("divergence", 0.0)
+                    section_divergence = section_params.get("divergence", 0.0)
+                    start_dist = 0.0
                     if section_length <= 0:
                         continue
                     if i == 0:
@@ -1974,8 +1975,21 @@ class OlsGuidelineMixin:
                             connector_base_start = connector_start_ctr.project(
                                 strip_overall_half_width, outward_perp_azimuth
                             )
-                            threshold_side_pt = end_thr_pt.project(strip_overall_half_width, outward_perp_azimuth)
-                            connector_base_end = threshold_side_pt or QgsPointXY(pa_start.x(), pa_start.y())
+                            if section_length > 1e-6:
+                                threshold_fraction = -float(start_dist or 0.0) / section_length
+                                connector_base_end = QgsPointXY(
+                                    pa_start.x() + threshold_fraction * (pa_end.x() - pa_start.x()),
+                                    pa_start.y() + threshold_fraction * (pa_end.y() - pa_start.y()),
+                                )
+                            else:
+                                threshold_half_width = max(
+                                    0.0,
+                                    (section_params.get("start_width", 0.0) / 2.0)
+                                    - (float(start_dist or 0.0) * section_divergence),
+                                )
+                                connector_base_end = end_thr_pt.project(
+                                    threshold_half_width, outward_perp_azimuth
+                                ) or QgsPointXY(pa_start.x(), pa_start.y())
                             if connector_base_start:
                                 connector_len = math.hypot(
                                     connector_base_end.x() - connector_base_start.x(),
