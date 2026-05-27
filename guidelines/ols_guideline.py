@@ -1803,12 +1803,56 @@ class OlsGuidelineMixin:
                 if stopway_at_reciprocal_end > 1e-6
                 else None
             )
+
+            def _approach_inner_boundary(
+                end_type: str,
+                end_thr_pt: QgsPointXY,
+                end_thr_elev: float,
+                outward_az: float,
+                end_desig: str,
+            ) -> Optional[Tuple[QgsPointXY, float]]:
+                approach_params = ols_dimensions.get_ols_params(arc_num, end_type, "APPROACH")
+                if not approach_params:
+                    QgsMessageLog.logMessage(
+                        f"Transitional strip clipping skipped for {runway_name} {end_desig}: no approach params.",
+                        plugin_tag,
+                        level=Qgis.Warning,
+                    )
+                    return None
+                start_dist = approach_params[0].get("start_dist_from_thr", 0.0)
+                boundary_pt = end_thr_pt.project(start_dist, outward_az)
+                if not boundary_pt:
+                    QgsMessageLog.logMessage(
+                        f"Transitional strip clipping skipped for {runway_name} {end_desig}: failed approach inner-edge projection.",
+                        plugin_tag,
+                        level=Qgis.Warning,
+                    )
+                    return None
+                return boundary_pt, end_thr_elev
+
+            primary_approach_inner = _approach_inner_boundary(
+                type1_str,
+                thr_point,
+                thr_elev,
+                rwy_params["azimuth_r_p"],
+                primary_desig,
+            )
+            reciprocal_approach_inner = _approach_inner_boundary(
+                type2_str,
+                rec_thr_point,
+                rec_thr_elev,
+                rwy_params["azimuth_p_r"],
+                reciprocal_desig,
+            )
+
             strip_breakpoints = [
                 (strip_end_p, runway_end_elev),
                 (primary_stopway_end, runway_end_elev),
                 (phys_end_p, runway_end_elev),
+                primary_approach_inner if primary_approach_inner else (None, None),
                 (thr_point, thr_elev),
                 (rec_thr_point, rec_thr_elev),
+                reciprocal_approach_inner if reciprocal_approach_inner else (None, None),
                 (phys_end_r, rec_runway_end_elev),
                 (reciprocal_stopway_end, rec_runway_end_elev),
                 (strip_end_r, rec_runway_end_elev),
@@ -1831,6 +1875,17 @@ class OlsGuidelineMixin:
                         ordered_strip_breakpoints[-1] = (point_xy, elev)
                         continue
                 ordered_strip_breakpoints.append((point_xy, elev))
+
+            if primary_approach_inner and reciprocal_approach_inner:
+                primary_limit = _strip_station(primary_approach_inner[0])
+                reciprocal_limit = _strip_station(reciprocal_approach_inner[0])
+                lower_limit = min(primary_limit, reciprocal_limit)
+                upper_limit = max(primary_limit, reciprocal_limit)
+                ordered_strip_breakpoints = [
+                    (point_xy, elev)
+                    for point_xy, elev in ordered_strip_breakpoints
+                    if lower_limit - 1e-3 <= _strip_station(point_xy) <= upper_limit + 1e-3
+                ]
 
             if len(ordered_strip_breakpoints) < 2:
                 QgsMessageLog.logMessage(
