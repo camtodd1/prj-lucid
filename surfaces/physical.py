@@ -991,7 +991,7 @@ class PhysicalGeometryMixin:
                 intersection = geom.intersection(strip_geom)
             except Exception:
                 continue
-            if intersection is not None and not intersection.isEmpty() and intersection.area() > 1e-6:
+            if intersection is not None and not intersection.isEmpty() and intersection.area() > 1e-3:
                 return True
         return False
 
@@ -1509,11 +1509,37 @@ class PhysicalGeometryMixin:
                 return 0.0
             return intersection.area()
 
-        def _corner_candidate_score(candidate: Optional[QgsGeometry]) -> float:
+        def _corner_candidate_overlap_score(candidate: Optional[QgsGeometry]) -> float:
             score = _intersection_area(candidate, graded_strip_geom_for_marker_side)
             for other_geom in other_strip_geometries:
                 score += _intersection_area(candidate, other_geom) * 10.0
             return score
+
+        def _point_inside_strip(point: Optional[QgsPointXY], strip_geom: Optional[QgsGeometry]) -> bool:
+            if point is None or strip_geom is None or strip_geom.isEmpty():
+                return False
+            try:
+                return strip_geom.contains(QgsGeometry.fromPointXY(point))
+            except Exception:
+                return False
+
+        def _corner_candidate_sample_point(
+            anchor_corner: QgsPointXY,
+            lateral_azimuth: float,
+            boundary_azimuth: float,
+        ) -> Optional[QgsPointXY]:
+            length_midpoint = anchor_corner.project(marker_length / 2.0, lateral_azimuth)
+            if length_midpoint is None:
+                return None
+            return length_midpoint.project(marker_width / 2.0, boundary_azimuth)
+
+        def _corner_candidate_inside_strip_count(
+            sample_point: Optional[QgsPointXY],
+        ) -> int:
+            if sample_point is None:
+                return 99
+            strip_geometries = [graded_strip_geom_for_marker_side] + other_strip_geometries
+            return sum(1 for strip_geom in strip_geometries if _point_inside_strip(sample_point, strip_geom))
 
         def _add_short_edge_corner_marker(
             boundary_station: float,
@@ -1544,10 +1570,21 @@ class PhysicalGeometryMixin:
                         marker_width,
                         f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
                     )
-                    candidate_geometries.append((geom, _corner_candidate_score(geom)))
+                    sample_point = _corner_candidate_sample_point(
+                        anchor_corner,
+                        lateral_azimuth,
+                        boundary_azimuth,
+                    )
+                    candidate_geometries.append(
+                        (
+                            geom,
+                            _corner_candidate_inside_strip_count(sample_point),
+                            _corner_candidate_overlap_score(geom),
+                        )
+                    )
             if not candidate_geometries:
                 return
-            geom = min(candidate_geometries, key=lambda item: item[1])[0]
+            geom = min(candidate_geometries, key=lambda item: (item[1], item[2]))[0]
             _add_marker(
                 geom,
                 f"{boundary_label}-{side_label}-Corner",
