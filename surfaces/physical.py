@@ -1102,17 +1102,49 @@ class PhysicalGeometryMixin:
         return self._create_polygon_from_corners(corners, description)
 
     def _gable_marker_dimension_a_min(self, graded_width: float) -> Optional[float]:
-        table_values = {
-            30.0: 10.0,
-            45.0: 20.0,
-            60.0: 20.0,
-            90.0: 30.0,
-            150.0: 60.0,
-        }
-        for width, dimension_a in table_values.items():
+        table_values = [
+            (30.0, 10.0),
+            (45.0, 20.0),
+            (60.0, 20.0),
+            (90.0, 30.0),
+            (150.0, 60.0),
+        ]
+        fallback = None
+        for width, dimension_a in table_values:
             if abs(graded_width - width) < 1e-6:
                 return dimension_a
-        return None
+            if graded_width >= width:
+                fallback = dimension_a
+        return fallback
+
+    def _create_oriented_marker_rectangle(
+        self,
+        center: QgsPointXY,
+        long_axis_azimuth: float,
+        length_m: float,
+        width_m: float,
+        description: str,
+    ) -> Optional[QgsGeometry]:
+        if length_m <= 0 or width_m <= 0:
+            return None
+        half_length = length_m / 2.0
+        half_width = width_m / 2.0
+        reverse_azimuth = (long_axis_azimuth + 180.0) % 360.0
+        az_l = (long_axis_azimuth - 90.0 + 360.0) % 360.0
+        az_r = (long_axis_azimuth + 90.0) % 360.0
+        start_center = center.project(half_length, reverse_azimuth)
+        end_center = center.project(half_length, long_axis_azimuth)
+        if start_center is None or end_center is None:
+            return None
+        corners = [
+            start_center.project(half_width, az_l),
+            start_center.project(half_width, az_r),
+            end_center.project(half_width, az_r),
+            end_center.project(half_width, az_l),
+        ]
+        if not all(corners):
+            return None
+        return self._create_polygon_from_corners(corners, description)
 
     def _generate_gable_markers(
         self,
@@ -1137,43 +1169,98 @@ class PhysicalGeometryMixin:
         marker_count_per_side = interval_count + 1
         spacing = strip_length / interval_count
         dimension_a_min = self._gable_marker_dimension_a_min(graded_width)
+        table_widths = [30.0, 45.0, 60.0, 90.0, 150.0]
+        dimension_a_note = (
+            "Exact Table 8.11(6) graded strip width used."
+            if dimension_a_min is not None and any(abs(graded_width - width) < 1e-6 for width in table_widths)
+            else "Nearest lower Table 8.11(6) graded strip width used for Dimension A."
+        )
         notes = (
             "Evenly spaced using the minimum marker count required to keep spacing at or below 180 m. "
+            "Corner marker footprints touch graded strip corners at marker corners. "
             "Footprint shown in plan; gable height is stored as an attribute."
         )
+        marker_no = 0
+
+        def _attrs(side_label: str, spacing_value: Optional[float], placement_note: str) -> dict:
+            return {
+                "rwy": runway_name,
+                "desc": "Gable Marker",
+                "len_m": marker_length,
+                "wid_m": marker_width,
+                "height_m": marker_height,
+                "side": side_label,
+                "marker_no": marker_no,
+                "spacing_m": round(spacing_value, 3) if spacing_value is not None else None,
+                "max_spc_m": max_spacing,
+                "dim_a_min": dimension_a_min,
+                "shape": "Triangular gable",
+                "colour": "White",
+                "ref_mos": "MOS 8.09; MOS 8.11(1); MOS 8.11(4); Table 8.11(6)",
+                "notes": f"{notes} {placement_note} {dimension_a_note}",
+            }
+
+        def _add_marker(
+            geom: Optional[QgsGeometry],
+            side_label: str,
+            spacing_value: Optional[float],
+            placement_note: str,
+        ):
+            nonlocal marker_no
+            if geom is None:
+                return
+            marker_no += 1
+            markers.append(("GableMarker", geom, _attrs(side_label, spacing_value, placement_note)))
 
         for side_label, lateral_sign in [("L", -1.0), ("R", 1.0)]:
             lateral_center = lateral_sign * (graded_half_width + marker_width / 2.0)
             for marker_index in range(marker_count_per_side):
-                station = marker_index * spacing
+                anchor_station = marker_index * spacing
+                if marker_index == 0:
+                    start_offset = 0.0
+                elif marker_index == marker_count_per_side - 1:
+                    start_offset = max(0.0, strip_length - marker_length)
+                else:
+                    start_offset = anchor_station - marker_length / 2.0
                 geom = self._create_runway_marking_rectangle(
                     strip_start_center,
                     runway_azimuth,
-                    station - marker_length / 2.0,
+                    start_offset,
                     marker_length,
                     lateral_center,
                     marker_width,
                     f"Gable Marker {log_name} {side_label}{marker_index + 1}",
                 )
-                if geom is None:
+                _add_marker(geom, side_label, spacing, "Long-edge marker.")
+
+        if dimension_a_min is not None:
+            end_specs = [
+                ("Start", strip_start_center, (runway_azimuth + 180.0) % 360.0),
+                ("End", strip_start_center.project(strip_length, runway_azimuth), runway_azimuth),
+            ]
+            short_edge_azimuth = (runway_azimuth + 90.0) % 360.0
+            for end_label, end_center, outward_end_azimuth in end_specs:
+                if end_center is None:
                     continue
-                attrs = {
-                    "rwy": runway_name,
-                    "desc": "Gable Marker",
-                    "len_m": marker_length,
-                    "wid_m": marker_width,
-                    "height_m": marker_height,
-                    "side": side_label,
-                    "marker_no": marker_index + 1,
-                    "spacing_m": round(spacing, 3),
-                    "max_spc_m": max_spacing,
-                    "dim_a_min": dimension_a_min,
-                    "shape": "Triangular gable",
-                    "colour": "White",
-                    "ref_mos": "MOS 8.09; MOS 8.11(1); MOS 8.11(4); Table 8.11(6)",
-                    "notes": notes,
-                }
-                markers.append(("GableMarker", geom, attrs))
+                outside_center = end_center.project(marker_width / 2.0, outward_end_azimuth)
+                if outside_center is None:
+                    continue
+                for side_label, lateral_sign in [("L", -1.0), ("R", 1.0)]:
+                    lateral_offset = lateral_sign * (dimension_a_min / 2.0 + marker_length / 2.0)
+                    marker_center = self._project_lateral(outside_center, lateral_offset, runway_azimuth)
+                    geom = self._create_oriented_marker_rectangle(
+                        marker_center,
+                        short_edge_azimuth,
+                        marker_length,
+                        marker_width,
+                        f"Gable Marker {log_name} {end_label} Edge {side_label}",
+                    )
+                    _add_marker(
+                        geom,
+                        f"{end_label}-{side_label}",
+                        None,
+                        "Short-edge marker placed with Dimension A between inner marker ends.",
+                    )
 
         return markers
 
