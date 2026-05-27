@@ -1668,6 +1668,8 @@ class OlsGuidelineMixin:
             calculated_strip_dims = runway_data.get("calculated_strip_dims")
             disp_at_primary_thr = float(runway_data.get("thr_displaced_1", 0.0) or 0.0)
             disp_at_reciprocal_thr = float(runway_data.get("thr_displaced_2", 0.0) or 0.0)
+            stopway_at_primary_end = float(runway_data.get("stopway1_len", 0.0) or 0.0)
+            stopway_at_reciprocal_end = float(runway_data.get("stopway2_len", 0.0) or 0.0)
 
             if not all(
                 [
@@ -1781,118 +1783,138 @@ class OlsGuidelineMixin:
                     level=Qgis.Warning,
                 )
                 continue
-            strip_corner_p_l = strip_end_p.project(strip_overall_half_width, rwy_params["azimuth_perp_l"])
-            strip_corner_p_r = strip_end_p.project(strip_overall_half_width, rwy_params["azimuth_perp_r"])
-            strip_corner_r_l = strip_end_r.project(strip_overall_half_width, rwy_params["azimuth_perp_l"])
-            strip_corner_r_r = strip_end_r.project(strip_overall_half_width, rwy_params["azimuth_perp_r"])
-            if not all([strip_corner_p_l, strip_corner_p_r, strip_corner_r_l, strip_corner_r_r]):
+            primary_stopway_end = (
+                phys_end_p.project(min(stopway_at_primary_end, strip_extension), rwy_params["azimuth_r_p"])
+                if stopway_at_primary_end > 1e-6
+                else None
+            )
+            reciprocal_stopway_end = (
+                phys_end_r.project(min(stopway_at_reciprocal_end, strip_extension), rwy_params["azimuth_p_r"])
+                if stopway_at_reciprocal_end > 1e-6
+                else None
+            )
+            strip_breakpoints = [
+                (strip_end_p, runway_end_elev),
+                (primary_stopway_end, runway_end_elev),
+                (phys_end_p, runway_end_elev),
+                (thr_point, thr_elev),
+                (rec_thr_point, rec_thr_elev),
+                (phys_end_r, rec_runway_end_elev),
+                (reciprocal_stopway_end, rec_runway_end_elev),
+                (strip_end_r, rec_runway_end_elev),
+            ]
+            axis_azimuth_rad = math.radians(rwy_params["azimuth_p_r"])
+            axis_x = math.sin(axis_azimuth_rad)
+            axis_y = math.cos(axis_azimuth_rad)
+
+            def _strip_station(point_xy: QgsPointXY) -> float:
+                return ((point_xy.x() - strip_end_p.x()) * axis_x) + ((point_xy.y() - strip_end_p.y()) * axis_y)
+
+            ordered_strip_breakpoints = []
+            for point_xy, elev in sorted(
+                ((pt, elev) for pt, elev in strip_breakpoints if pt is not None and elev is not None),
+                key=lambda item: _strip_station(item[0]),
+            ):
+                if ordered_strip_breakpoints:
+                    prev_pt, _ = ordered_strip_breakpoints[-1]
+                    if point_xy.distance(prev_pt) < 1e-3:
+                        ordered_strip_breakpoints[-1] = (point_xy, elev)
+                        continue
+                ordered_strip_breakpoints.append((point_xy, elev))
+
+            if len(ordered_strip_breakpoints) < 2:
                 QgsMessageLog.logMessage(
-                    f"Skipping Transitional features for {runway_name}: Failed strip corners.",
+                    f"Skipping Transitional features for {runway_name}: Failed strip segment points.",
                     plugin_tag,
                     level=Qgis.Warning,
                 )
                 continue
-            strip_edge_l = QgsLineString([strip_corner_p_l, strip_corner_r_l])
-            strip_edge_r = QgsLineString([strip_corner_p_r, strip_corner_r_r])
 
-            # --- Generate Strip Transitional Sides (rectangular) ---
-            for side_label, strip_edge, outward_azimuth in [
-                ("L", strip_edge_l, rwy_params["azimuth_perp_l"]),
-                ("R", strip_edge_r, rwy_params["azimuth_perp_r"]),
+            # --- Generate Strip Transitional Sides ---
+            for side_label, outward_azimuth in [
+                ("L", rwy_params["azimuth_perp_l"]),
+                ("R", rwy_params["azimuth_perp_r"]),
             ]:
-                if not strip_edge or strip_edge.isEmpty():
-                    continue
-                p_start_qgsp = strip_edge.startPoint()
-                p_end_qgsp = strip_edge.endPoint()
-                p_start_xy = QgsPointXY(p_start_qgsp.x(), p_start_qgsp.y())
-                p_end_xy = QgsPointXY(p_end_qgsp.x(), p_end_qgsp.y())
-                z_start = self._get_elevation_at_point_along_gradient(
-                    p_start_xy,
-                    phys_end_p,
-                    phys_end_r,
-                    runway_end_elev,
-                    rec_runway_end_elev,
-                    target_crs,
-                )
-                z_end = self._get_elevation_at_point_along_gradient(
-                    p_end_xy,
-                    phys_end_p,
-                    phys_end_r,
-                    runway_end_elev,
-                    rec_runway_end_elev,
-                    target_crs,
-                )
-                if z_start is None or z_end is None:
-                    continue
-                if z_start >= IHS_ELEVATION_AMSL and z_end >= IHS_ELEVATION_AMSL:
-                    continue
-                h_dist_start = max(0.0, (IHS_ELEVATION_AMSL - z_start) / transitional_slope)
-                h_dist_end = max(0.0, (IHS_ELEVATION_AMSL - z_end) / transitional_slope)
-                p_upper_start = p_start_xy.project(h_dist_start, outward_azimuth)
-                p_upper_end = p_end_xy.project(h_dist_end, outward_azimuth)
-                if not p_upper_start or not p_upper_end:
-                    continue
-                corners = [p_start_xy, p_end_xy, p_upper_end, p_upper_start]
-                poly_geom = self._create_polygon_from_corners(corners, f"Trans Strip {side_label} {runway_name}")
-                if poly_geom:
-                    feat = QgsFeature(transitional_fields)
-                    feat.setGeometry(poly_geom)
-                    attr_map = {
-                        "rwy_name": runway_name,
-                        "surface": "Transitional",
-                        "section_desc": "Transitional Strip Adjacent Surface",
-                        "elev_m": IHS_ELEVATION_AMSL,
-                        "height_agl": IHS_ELEVATION_AMSL - min(z_start, z_end),
-                        "side": side_label,
-                        "slope_perc": transitional_slope * 100.0,
-                        "ref_mos": transitional_ref,
-                    }
-                    for name, value in attr_map.items():
-                        idx = transitional_fields.indexFromName(name)
-                        if idx != -1:
-                            feat.setAttribute(idx, value)
-                    transitional_features.append(feat)
+                for segment_index, ((cl_start, z_start), (cl_end, z_end)) in enumerate(
+                    zip(ordered_strip_breakpoints[:-1], ordered_strip_breakpoints[1:]),
+                    start=1,
+                ):
+                    if cl_start.distance(cl_end) < 1e-3:
+                        continue
+                    p_start_xy = cl_start.project(strip_overall_half_width, outward_azimuth)
+                    p_end_xy = cl_end.project(strip_overall_half_width, outward_azimuth)
+                    if not p_start_xy or not p_end_xy:
+                        continue
+                    if z_start >= IHS_ELEVATION_AMSL and z_end >= IHS_ELEVATION_AMSL:
+                        continue
+                    h_dist_start = max(0.0, (IHS_ELEVATION_AMSL - z_start) / transitional_slope)
+                    h_dist_end = max(0.0, (IHS_ELEVATION_AMSL - z_end) / transitional_slope)
+                    p_upper_start = p_start_xy.project(h_dist_start, outward_azimuth)
+                    p_upper_end = p_end_xy.project(h_dist_end, outward_azimuth)
+                    if not p_upper_start or not p_upper_end:
+                        continue
+                    corners = [p_start_xy, p_end_xy, p_upper_end, p_upper_start]
+                    poly_geom = self._create_polygon_from_corners(
+                        corners, f"Trans Strip {side_label} {runway_name} S{segment_index}"
+                    )
+                    if poly_geom:
+                        feat = QgsFeature(transitional_fields)
+                        feat.setGeometry(poly_geom)
+                        attr_map = {
+                            "rwy_name": runway_name,
+                            "surface": "Transitional",
+                            "section_desc": "Transitional Strip Adjacent Surface",
+                            "elev_m": IHS_ELEVATION_AMSL,
+                            "height_agl": IHS_ELEVATION_AMSL - min(z_start, z_end),
+                            "side": side_label,
+                            "slope_perc": transitional_slope * 100.0,
+                            "ref_mos": transitional_ref,
+                        }
+                        for name, value in attr_map.items():
+                            idx = transitional_fields.indexFromName(name)
+                            if idx != -1:
+                                feat.setAttribute(idx, value)
+                        transitional_features.append(feat)
 
-                    lower_edge = self._make_transitional_contour_feature(
-                        QgsGeometry.fromPolylineXY([p_start_xy, p_end_xy]),
-                        contour_fields,
-                        runway_name,
-                        "Transitional Strip Adjacent Surface",
-                        z_start if abs(z_start - z_end) < 0.05 else None,
-                        side_label=side_label,
-                        transitional_ref=transitional_ref,
-                    )
-                    upper_edge = self._make_transitional_contour_feature(
-                        QgsGeometry.fromPolylineXY([p_upper_start, p_upper_end]),
-                        contour_fields,
-                        runway_name,
-                        "Transitional Strip Adjacent Surface",
-                        IHS_ELEVATION_AMSL,
-                        side_label=side_label,
-                        transitional_ref=transitional_ref,
-                    )
-                    transitional_contour_features.extend(
-                        feature for feature in [lower_edge, upper_edge] if feature is not None
-                    )
+                        lower_edge = self._make_transitional_contour_feature(
+                            QgsGeometry.fromPolylineXY([p_start_xy, p_end_xy]),
+                            contour_fields,
+                            runway_name,
+                            "Transitional Strip Adjacent Surface",
+                            z_start if abs(z_start - z_end) < 0.05 else None,
+                            side_label=side_label,
+                            transitional_ref=transitional_ref,
+                        )
+                        upper_edge = self._make_transitional_contour_feature(
+                            QgsGeometry.fromPolylineXY([p_upper_start, p_upper_end]),
+                            contour_fields,
+                            runway_name,
+                            "Transitional Strip Adjacent Surface",
+                            IHS_ELEVATION_AMSL,
+                            side_label=side_label,
+                            transitional_ref=transitional_ref,
+                        )
+                        transitional_contour_features.extend(
+                            feature for feature in [lower_edge, upper_edge] if feature is not None
+                        )
 
-                    # ---- Generate contours for this strip-adjacent section ----
-                    strip_contours = self._generate_transitional_strip_contours(
-                        base_start=p_start_xy,
-                        base_end=p_end_xy,
-                        top_start=p_upper_start,
-                        top_end=p_upper_end,
-                        z_start=z_start,
-                        z_end=z_end,
-                        IHS_ELEVATION_AMSL=IHS_ELEVATION_AMSL,
-                        contour_fields=contour_fields,
-                        contour_interval=contour_interval,
-                        section_desc="Transitional Strip Adjacent Surface",
-                        side_label=side_label,
-                        runway_name=runway_name,
-                        transitional_ref=transitional_ref,
-                        bounding_polygon=poly_geom,
-                    )
-                    transitional_contour_features.extend(strip_contours)
+                        strip_contours = self._generate_transitional_strip_contours(
+                            base_start=p_start_xy,
+                            base_end=p_end_xy,
+                            top_start=p_upper_start,
+                            top_end=p_upper_end,
+                            z_start=z_start,
+                            z_end=z_end,
+                            IHS_ELEVATION_AMSL=IHS_ELEVATION_AMSL,
+                            contour_fields=contour_fields,
+                            contour_interval=contour_interval,
+                            section_desc="Transitional Strip Adjacent Surface",
+                            side_label=side_label,
+                            runway_name=runway_name,
+                            transitional_ref=transitional_ref,
+                            bounding_polygon=poly_geom,
+                        )
+                        transitional_contour_features.extend(strip_contours)
 
             # --- Approach-Adjacent Transitional Surfaces (this section is updated) ---
             for end_idx, (
