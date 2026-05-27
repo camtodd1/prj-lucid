@@ -1488,58 +1488,19 @@ class PhysicalGeometryMixin:
             markers.append(("GableMarker", geom, _attrs(side_label, spacing_value, placement_note)))
 
         short_edge_azimuth = (runway_azimuth + 90.0) % 360.0
-        graded_strip_geom_for_marker_side = self._create_runway_marking_rectangle(
-            strip_start_center,
-            runway_azimuth,
-            0.0,
-            strip_length,
-            0.0,
-            graded_width,
-            f"Gable Marker Strip Bounds {log_name}",
-        )
 
-        def _intersection_area(candidate: Optional[QgsGeometry], other: Optional[QgsGeometry]) -> float:
-            if candidate is None or other is None:
+        def _overlap_area_with_other_strips(candidate: Optional[QgsGeometry]) -> float:
+            if candidate is None or candidate.isEmpty():
                 return 0.0
-            try:
-                intersection = candidate.intersection(other)
-            except Exception:
-                return 0.0
-            if intersection is None or intersection.isEmpty():
-                return 0.0
-            return intersection.area()
-
-        def _corner_candidate_overlap_score(candidate: Optional[QgsGeometry]) -> float:
-            score = _intersection_area(candidate, graded_strip_geom_for_marker_side)
+            overlap_area = 0.0
             for other_geom in other_strip_geometries:
-                score += _intersection_area(candidate, other_geom) * 10.0
-            return score
-
-        def _point_inside_strip(point: Optional[QgsPointXY], strip_geom: Optional[QgsGeometry]) -> bool:
-            if point is None or strip_geom is None or strip_geom.isEmpty():
-                return False
-            try:
-                return strip_geom.contains(QgsGeometry.fromPointXY(point))
-            except Exception:
-                return False
-
-        def _corner_candidate_sample_point(
-            anchor_corner: QgsPointXY,
-            lateral_azimuth: float,
-            boundary_azimuth: float,
-        ) -> Optional[QgsPointXY]:
-            length_midpoint = anchor_corner.project(marker_length / 2.0, lateral_azimuth)
-            if length_midpoint is None:
-                return None
-            return length_midpoint.project(marker_width / 2.0, boundary_azimuth)
-
-        def _corner_candidate_inside_strip_count(
-            sample_point: Optional[QgsPointXY],
-        ) -> int:
-            if sample_point is None:
-                return 99
-            strip_geometries = [graded_strip_geom_for_marker_side] + other_strip_geometries
-            return sum(1 for strip_geom in strip_geometries if _point_inside_strip(sample_point, strip_geom))
+                try:
+                    intersection = candidate.intersection(other_geom)
+                except Exception:
+                    continue
+                if intersection is not None and not intersection.isEmpty():
+                    overlap_area += intersection.area()
+            return overlap_area
 
         def _add_short_edge_corner_marker(
             boundary_station: float,
@@ -1554,37 +1515,33 @@ class PhysicalGeometryMixin:
             anchor_corner = self._project_lateral(boundary_center, lateral_sign * graded_half_width, runway_azimuth)
             if anchor_corner is None:
                 return
-            candidate_geometries = []
-            lateral_azimuths = [
-                (runway_azimuth - 90.0 + 360.0) % 360.0,
-                (runway_azimuth + 90.0) % 360.0,
-            ]
-            boundary_azimuths = [clear_side_azimuth, (clear_side_azimuth + 180.0) % 360.0]
-            for lateral_azimuth in lateral_azimuths:
-                for boundary_azimuth in boundary_azimuths:
-                    geom = self._create_corner_anchored_rectangle(
-                        anchor_corner,
-                        lateral_azimuth,
-                        boundary_azimuth,
-                        marker_length,
-                        marker_width,
-                        f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
-                    )
-                    sample_point = _corner_candidate_sample_point(
-                        anchor_corner,
-                        lateral_azimuth,
-                        boundary_azimuth,
-                    )
-                    candidate_geometries.append(
-                        (
-                            geom,
-                            _corner_candidate_inside_strip_count(sample_point),
-                            _corner_candidate_overlap_score(geom),
-                        )
-                    )
-            if not candidate_geometries:
-                return
-            geom = min(candidate_geometries, key=lambda item: (item[1], item[2]))[0]
+            lateral_azimuth = (
+                (runway_azimuth + 90.0) % 360.0
+                if lateral_sign > 0.0
+                else (runway_azimuth - 90.0 + 360.0) % 360.0
+            )
+            preferred_geom = self._create_corner_anchored_rectangle(
+                anchor_corner,
+                lateral_azimuth,
+                clear_side_azimuth,
+                marker_length,
+                marker_width,
+                f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
+            )
+            alternate_geom = self._create_corner_anchored_rectangle(
+                anchor_corner,
+                lateral_azimuth,
+                (clear_side_azimuth + 180.0) % 360.0,
+                marker_length,
+                marker_width,
+                f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
+            )
+            geom = preferred_geom
+            if (
+                _overlap_area_with_other_strips(preferred_geom) > 1e-3
+                and _overlap_area_with_other_strips(alternate_geom) <= 1e-3
+            ):
+                geom = alternate_geom
             _add_marker(
                 geom,
                 f"{boundary_label}-{side_label}-Corner",
