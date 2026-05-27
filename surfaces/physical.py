@@ -94,6 +94,17 @@ class PhysicalGeometryMixin:
                 stopway_resa_fields = common_fields + [
                     QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
+                gable_marker_fields = common_fields + [
+                    QgsField("side", QVariant.String, self.tr("Side"), 10),
+                    QgsField("marker_no", QVariant.Int, self.tr("Marker No.")),
+                    QgsField("height_m", QVariant.Double, self.tr("height_m"), 12, 3),
+                    QgsField("spacing_m", QVariant.Double, self.tr("spacing_m"), 12, 3),
+                    QgsField("max_spc_m", QVariant.Double, self.tr("Max Spacing (m)"), 12, 3),
+                    QgsField("dim_a_min", QVariant.Double, self.tr("Dimension A Min (m)"), 12, 3),
+                    QgsField("shape", QVariant.String, self.tr("Shape"), 30),
+                    QgsField("colour", QVariant.String, self.tr("Colour"), 20),
+                    QgsField("notes", QVariant.String, self.tr("Notes"), 250),
+                ]
                 pre_threshold_fields = common_fields + [
                     QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
@@ -352,6 +363,11 @@ class PhysicalGeometryMixin:
                         "fields": common_fields,
                         "group": protection_area_group,
                     },
+                    "GableMarker": {
+                        "name": self.tr("Gable Markers"),
+                        "fields": gable_marker_fields,
+                        "group": protection_area_group,
+                    },
                     "RESA": {
                         "name": self.tr("Runway End Safety Area (RESA)"),
                         "fields": stopway_resa_fields,
@@ -378,6 +394,7 @@ class PhysicalGeometryMixin:
                     "GradedStrip": "Runway Graded Strips",
                     "FlyoverStrip": "Runway Strip Flyover Area",
                     "OverallStrip": "Runway Overall Strips",
+                    "GableMarker": "Runway Marking White",
                     "RESA": "Runway End Safety Areas (RESA)",
                 }
                 layer_creation_order = [
@@ -400,6 +417,7 @@ class PhysicalGeometryMixin:
                     "GradedStrip",
                     "FlyoverStrip",
                     "OverallStrip",
+                    "GableMarker",
                     "RESA",
                 ]
 
@@ -1082,6 +1100,82 @@ class PhysicalGeometryMixin:
         if not all(corners):
             return None
         return self._create_polygon_from_corners(corners, description)
+
+    def _gable_marker_dimension_a_min(self, graded_width: float) -> Optional[float]:
+        table_values = {
+            30.0: 10.0,
+            45.0: 20.0,
+            60.0: 20.0,
+            90.0: 30.0,
+            150.0: 60.0,
+        }
+        for width, dimension_a in table_values.items():
+            if abs(graded_width - width) < 1e-6:
+                return dimension_a
+        return None
+
+    def _generate_gable_markers(
+        self,
+        runway_name: str,
+        log_name: str,
+        strip_start_center: QgsPointXY,
+        graded_half_width: float,
+        graded_width: float,
+        strip_length: float,
+        runway_azimuth: float,
+    ) -> List[Tuple[str, QgsGeometry, dict]]:
+        """Generate MOS 8.09/8.11 gable marker footprints along graded strip edges."""
+        markers: List[Tuple[str, QgsGeometry, dict]] = []
+        marker_length = 3.0
+        marker_width = 0.9
+        marker_height = 0.5
+        max_spacing = 180.0
+        if strip_length <= 0:
+            return markers
+
+        interval_count = max(1, int(math.ceil(strip_length / max_spacing)))
+        marker_count_per_side = interval_count + 1
+        spacing = strip_length / interval_count
+        dimension_a_min = self._gable_marker_dimension_a_min(graded_width)
+        notes = (
+            "Evenly spaced using the minimum marker count required to keep spacing at or below 180 m. "
+            "Footprint shown in plan; gable height is stored as an attribute."
+        )
+
+        for side_label, lateral_sign in [("L", -1.0), ("R", 1.0)]:
+            lateral_center = lateral_sign * (graded_half_width + marker_width / 2.0)
+            for marker_index in range(marker_count_per_side):
+                station = marker_index * spacing
+                geom = self._create_runway_marking_rectangle(
+                    strip_start_center,
+                    runway_azimuth,
+                    station - marker_length / 2.0,
+                    marker_length,
+                    lateral_center,
+                    marker_width,
+                    f"Gable Marker {log_name} {side_label}{marker_index + 1}",
+                )
+                if geom is None:
+                    continue
+                attrs = {
+                    "rwy": runway_name,
+                    "desc": "Gable Marker",
+                    "len_m": marker_length,
+                    "wid_m": marker_width,
+                    "height_m": marker_height,
+                    "side": side_label,
+                    "marker_no": marker_index + 1,
+                    "spacing_m": round(spacing, 3),
+                    "max_spc_m": max_spacing,
+                    "dim_a_min": dimension_a_min,
+                    "shape": "Triangular gable",
+                    "colour": "White",
+                    "ref_mos": "MOS 8.09; MOS 8.11(1); MOS 8.11(4); Table 8.11(6)",
+                    "notes": notes,
+                }
+                markers.append(("GableMarker", geom, attrs))
+
+        return markers
 
     def _create_pre_threshold_chevron_polygon(
         self,
@@ -2507,6 +2601,18 @@ class PhysicalGeometryMixin:
                             "ref_mos": graded_ref,
                         }
                         generated_elements.append(("GradedStrip", graded_strip_geom, graded_attrs))
+
+                    generated_elements.extend(
+                        self._generate_gable_markers(
+                            runway_name,
+                            log_name,
+                            strip_end_center_p,
+                            graded_half_width,
+                            graded_width,
+                            strip_length,
+                            rwy_params["azimuth_p_r"],
+                        )
+                    )
 
                     overall_strip_geom = self._create_runway_aligned_rectangle(
                         strip_end_center_p,
