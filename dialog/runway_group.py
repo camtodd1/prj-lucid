@@ -47,7 +47,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         )
 
         self._setup_ui()
-        self._autofilled_stopways = {"1": "", "2": ""}
         self._connect_signals()
 
     def _setup_ui(self):
@@ -470,8 +469,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.stopway2_len_le,
         ]:
             widget.textChanged.connect(self.inputChanged.emit)
-        self.thr_pre_area_1_le.textChanged.connect(lambda value: self._sync_pre_threshold_stopway("1", value))
-        self.thr_pre_area_2_le.textChanged.connect(lambda value: self._sync_pre_threshold_stopway("2", value))
         for checkbox in [
             self.takeoff_available_1_cb,
             self.takeoff_available_2_cb,
@@ -504,8 +501,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.removeRequested.emit(self.index)
 
     def get_input_data(self) -> Dict[str, str]:
-        stopway1 = self.stopway1_len_le.text() or self.thr_pre_area_1_le.text()
-        stopway2 = self.stopway2_len_le.text() or self.thr_pre_area_2_le.text()
         return {
             "designator_str": self.desig_le.text(),
             "suffix": self.suffix_combo.currentText(),
@@ -527,8 +522,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "shoulder": self.shoulder_le.text(),
             "clearway1_len": self.clearway1_len_le.text(),
             "clearway2_len": self.clearway2_len_le.text(),
-            "stopway1_len": stopway1,
-            "stopway2_len": stopway2,
+            "stopway1_len": self.stopway1_len_le.text(),
+            "stopway2_len": self.stopway2_len_le.text(),
             "takeoff_available_1": self.takeoff_available_1_cb.isChecked(),
             "takeoff_available_2": self.takeoff_available_2_cb.isChecked(),
             "landing_available_1": self.landing_available_1_cb.isChecked(),
@@ -565,16 +560,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.shoulder_le.setText(data.get("shoulder", ""))
             self.clearway1_len_le.setText(data.get("clearway1_len", ""))
             self.clearway2_len_le.setText(data.get("clearway2_len", ""))
-            self.stopway1_len_le.setText(data.get("stopway1_len", "") or data.get("thr_pre_area_1", ""))
-            self.stopway2_len_le.setText(data.get("stopway2_len", "") or data.get("thr_pre_area_2", ""))
-            self._autofilled_stopways = {
-                "1": (
-                    self.stopway1_len_le.text() if self.stopway1_len_le.text() == self.thr_pre_area_1_le.text() else ""
-                ),
-                "2": (
-                    self.stopway2_len_le.text() if self.stopway2_len_le.text() == self.thr_pre_area_2_le.text() else ""
-                ),
-            }
+            self.stopway1_len_le.setText(data.get("stopway1_len", ""))
+            self.stopway2_len_le.setText(data.get("stopway2_len", ""))
             self.takeoff_available_1_cb.setChecked(self._bool_from_saved_value(data.get("takeoff_available_1", True)))
             self.takeoff_available_2_cb.setChecked(self._bool_from_saved_value(data.get("takeoff_available_2", True)))
             self.landing_available_1_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_1", True)))
@@ -595,21 +582,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             for widget in widgets_to_block:
                 widget.blockSignals(False)
             self.inputChanged.emit()
-
-    def _sync_pre_threshold_stopway(self, end_id: str, pre_threshold_value: str) -> None:
-        stopway_widget = self.stopway1_len_le if end_id == "1" else self.stopway2_len_le
-        previous_auto_value = self._autofilled_stopways.get(end_id, "")
-        current_stopway = stopway_widget.text()
-        if current_stopway not in ("", previous_auto_value):
-            self._autofilled_stopways[end_id] = ""
-            return
-        stopway_widget.blockSignals(True)
-        try:
-            stopway_widget.setText(pre_threshold_value)
-        finally:
-            stopway_widget.blockSignals(False)
-        self._autofilled_stopways[end_id] = pre_threshold_value
-        self.inputChanged.emit()
 
     def update_display_labels(self, results: Dict[str, str]):
         self.rec_desig_hdr_lbl.setText(results.get("reciprocal_desig_full", NA_PLACEHOLDER))

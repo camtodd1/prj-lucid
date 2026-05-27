@@ -384,10 +384,6 @@ class PersistenceMixin:
         runway_data.setdefault("clearway2_len", "")
         runway_data.setdefault("stopway1_len", "")
         runway_data.setdefault("stopway2_len", "")
-        if not runway_data.get("stopway1_len") and runway_data.get("thr_pre_area_1"):
-            runway_data["stopway1_len"] = runway_data.get("thr_pre_area_1")
-        if not runway_data.get("stopway2_len") and runway_data.get("thr_pre_area_2"):
-            runway_data["stopway2_len"] = runway_data.get("thr_pre_area_2")
         runway_data.setdefault("surface_category", "")
         runway_data.setdefault("surface_material", "")
         runway_data.setdefault("takeoff_available_1", True)
