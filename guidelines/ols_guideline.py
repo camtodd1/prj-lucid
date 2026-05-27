@@ -1900,7 +1900,6 @@ class OlsGuidelineMixin:
                 end_type,
                 end_thr_pt,
                 end_thr_elev,
-                strip_end_at_end,
                 outward_az,
             ) in enumerate(
                 [
@@ -1909,7 +1908,6 @@ class OlsGuidelineMixin:
                         type1_str,
                         thr_point,
                         thr_elev,
-                        strip_end_p,
                         rwy_params["azimuth_r_p"],
                     ),
                     (
@@ -1917,7 +1915,6 @@ class OlsGuidelineMixin:
                         type2_str,
                         rec_thr_point,
                         rec_thr_elev,
-                        strip_end_r,
                         rwy_params["azimuth_p_r"],
                     ),
                 ]
@@ -1966,132 +1963,6 @@ class OlsGuidelineMixin:
                         pa_end = approach_edge.endPoint()
                         za_start = current_section_start_elev
                         za_end = section_end_elev
-                        if i == 0:
-                            connector_base_start = strip_end_at_end.project(
-                                strip_overall_half_width, outward_perp_azimuth
-                            )
-                            connector_base_end = QgsPointXY(pa_start.x(), pa_start.y())
-                            if connector_base_start:
-                                connector_len = math.hypot(
-                                    connector_base_end.x() - connector_base_start.x(),
-                                    connector_base_end.y() - connector_base_start.y(),
-                                )
-                                if connector_len > 1e-3:
-                                    z_connector_start = self._get_elevation_at_point_along_gradient(
-                                        connector_base_start,
-                                        phys_end_p,
-                                        phys_end_r,
-                                        runway_end_elev,
-                                        rec_runway_end_elev,
-                                        target_crs,
-                                    )
-                                    z_connector_end = za_start
-                                    if (
-                                        z_connector_start is not None
-                                        and z_connector_end is not None
-                                        and not (
-                                            z_connector_start >= IHS_ELEVATION_AMSL
-                                            and z_connector_end >= IHS_ELEVATION_AMSL
-                                        )
-                                    ):
-                                        h_dist_start = max(
-                                            0.0,
-                                            (IHS_ELEVATION_AMSL - z_connector_start) / transitional_slope,
-                                        )
-                                        h_dist_end = max(
-                                            0.0,
-                                            (IHS_ELEVATION_AMSL - z_connector_end) / transitional_slope,
-                                        )
-                                        connector_top_start = connector_base_start.project(
-                                            h_dist_start, outward_perp_azimuth
-                                        )
-                                        connector_top_end = connector_base_end.project(
-                                            h_dist_end, outward_perp_azimuth
-                                        )
-                                        if connector_top_start and connector_top_end:
-                                            connector_geom = self._create_polygon_from_corners(
-                                                [
-                                                    connector_base_start,
-                                                    connector_base_end,
-                                                    connector_top_end,
-                                                    connector_top_start,
-                                                ],
-                                                f"Trans Connector {end_desig} {side_label}",
-                                            )
-                                            if connector_geom:
-                                                connector_feat = QgsFeature(transitional_fields)
-                                                connector_feat.setGeometry(connector_geom)
-                                                attr_map = {
-                                                    "rwy_name": runway_name,
-                                                    "surface": "Transitional",
-                                                    "end_desig": end_desig,
-                                                    "section_desc": f"Transitional {end_desig} Connector Surface",
-                                                    "elev_m": IHS_ELEVATION_AMSL,
-                                                    "height_agl": IHS_ELEVATION_AMSL
-                                                    - min(z_connector_start, z_connector_end),
-                                                    "side": side_label,
-                                                    "slope_perc": transitional_slope * 100.0,
-                                                    "ref_mos": transitional_ref,
-                                                }
-                                                for name, value in attr_map.items():
-                                                    idx = transitional_fields.indexFromName(name)
-                                                    if idx != -1:
-                                                        connector_feat.setAttribute(idx, value)
-                                                transitional_features.append(connector_feat)
-
-                                                lower_edge = self._make_transitional_contour_feature(
-                                                    QgsGeometry.fromPolylineXY(
-                                                        [connector_base_start, connector_base_end]
-                                                    ),
-                                                    contour_fields,
-                                                    runway_name,
-                                                    f"Transitional {end_desig} Connector Surface",
-                                                    (
-                                                        z_connector_start
-                                                        if abs(z_connector_start - z_connector_end) < 0.05
-                                                        else None
-                                                    ),
-                                                    side_label=side_label,
-                                                    end_desig=end_desig,
-                                                    transitional_ref=transitional_ref,
-                                                )
-                                                upper_edge = self._make_transitional_contour_feature(
-                                                    QgsGeometry.fromPolylineXY(
-                                                        [connector_top_start, connector_top_end]
-                                                    ),
-                                                    contour_fields,
-                                                    runway_name,
-                                                    f"Transitional {end_desig} Connector Surface",
-                                                    IHS_ELEVATION_AMSL,
-                                                    side_label=side_label,
-                                                    end_desig=end_desig,
-                                                    transitional_ref=transitional_ref,
-                                                )
-                                                transitional_contour_features.extend(
-                                                    feature
-                                                    for feature in [lower_edge, upper_edge]
-                                                    if feature is not None
-                                                )
-
-                                                connector_contours = self._generate_parallel_contours_in_panel(
-                                                    top_start=connector_top_start,
-                                                    top_end=connector_top_end,
-                                                    IHS_ELEVATION_AMSL=IHS_ELEVATION_AMSL,
-                                                    base_start=connector_base_start,
-                                                    base_end=connector_base_end,
-                                                    z_start=z_connector_start,
-                                                    z_end=z_connector_end,
-                                                    transitional_slope=transitional_slope,
-                                                    contour_fields=contour_fields,
-                                                    contour_interval=contour_interval,
-                                                    panel_geom=connector_geom,
-                                                    section_desc=f"Transitional {end_desig} Connector Surface",
-                                                    side_label=side_label,
-                                                    runway_name=runway_name,
-                                                    end_desig=end_desig,
-                                                    transitional_ref=transitional_ref,
-                                                )
-                                                transitional_contour_features.extend(connector_contours)
 
                         # --- Clip approach side at IHS elevation ---
                         pa_start_clipped = pa_start
