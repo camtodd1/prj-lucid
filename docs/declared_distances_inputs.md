@@ -24,8 +24,10 @@ These values are already collected by the dialog and passed into
 - `short_name`: calculated runway name, for example `07/25`.
 - `thr_point`: primary threshold coordinate.
 - `rec_thr_point`: reciprocal threshold coordinate.
-- `thr_elev_1`: primary threshold elevation.
-- `thr_elev_2`: reciprocal threshold elevation.
+- `runway_end_elev_1`: primary physical runway-end elevation.
+- `runway_end_elev_2`: reciprocal physical runway-end elevation.
+- `threshold_elev_1`: primary landing-threshold elevation, defaulting to `runway_end_elev_1` when blank.
+- `threshold_elev_2`: reciprocal landing-threshold elevation, defaulting to `runway_end_elev_2` when blank.
 - `thr_displaced_1`: displaced threshold length at the primary end.
 - `thr_displaced_2`: displaced threshold length at the reciprocal end.
 - `thr_pre_area_1`: pre-threshold area length at the primary end.

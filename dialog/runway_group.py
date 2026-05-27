@@ -65,8 +65,14 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         label_easting_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         label_northing_row = QtWidgets.QLabel("Northing:")
         label_northing_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        label_elevation_row = QtWidgets.QLabel("Elevation (m):")
-        label_elevation_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        label_runway_end_elevation_row = QtWidgets.QLabel("Runway End Elev. (m):")
+        label_runway_end_elevation_row.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
+        label_threshold_elevation_row = QtWidgets.QLabel("Threshold Elev. (m):")
+        label_threshold_elevation_row.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
+        )
         label_displaced_row = QtWidgets.QLabel("Displaced (m):")
         label_displaced_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         label_pre_threshold_area_row = QtWidgets.QLabel("Pre-threshold Area (m):")
@@ -117,17 +123,33 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.rec_north_le.setToolTip("Northing coordinate of reciprocal threshold")
         self.rec_north_le.setValidator(self.coord_validator)
 
-        self.thr_elev_1_le = QtWidgets.QLineEdit()
-        self.thr_elev_1_le.setObjectName(f"lineEdit_thr_elev_1_{self.index}")
-        self.thr_elev_1_le.setPlaceholderText("e.g., 150.5")
-        self.thr_elev_1_le.setToolTip("Elevation (AMSL) of primary threshold")
-        self.thr_elev_1_le.setValidator(self.numeric_validator)
+        self.runway_end_elev_1_le = QtWidgets.QLineEdit()
+        self.runway_end_elev_1_le.setObjectName(f"lineEdit_runway_end_elev_1_{self.index}")
+        self.runway_end_elev_1_le.setPlaceholderText("e.g., 150.5")
+        self.runway_end_elev_1_le.setToolTip("Elevation (AMSL) at the physical primary runway end. Used for RED.")
+        self.runway_end_elev_1_le.setValidator(self.numeric_validator)
 
-        self.thr_elev_2_le = QtWidgets.QLineEdit()
-        self.thr_elev_2_le.setObjectName(f"lineEdit_thr_elev_2_{self.index}")
-        self.thr_elev_2_le.setPlaceholderText("e.g., 149.8")
-        self.thr_elev_2_le.setToolTip("Elevation (AMSL) of reciprocal threshold")
-        self.thr_elev_2_le.setValidator(self.numeric_validator)
+        self.runway_end_elev_2_le = QtWidgets.QLineEdit()
+        self.runway_end_elev_2_le.setObjectName(f"lineEdit_runway_end_elev_2_{self.index}")
+        self.runway_end_elev_2_le.setPlaceholderText("e.g., 149.8")
+        self.runway_end_elev_2_le.setToolTip("Elevation (AMSL) at the physical reciprocal runway end. Used for RED.")
+        self.runway_end_elev_2_le.setValidator(self.numeric_validator)
+
+        self.threshold_elev_1_le = QtWidgets.QLineEdit()
+        self.threshold_elev_1_le.setObjectName(f"lineEdit_threshold_elev_1_{self.index}")
+        self.threshold_elev_1_le.setPlaceholderText("blank = runway end elev.")
+        self.threshold_elev_1_le.setToolTip(
+            "Elevation (AMSL) of the primary landing threshold. Leave blank to use the runway-end elevation."
+        )
+        self.threshold_elev_1_le.setValidator(self.numeric_validator)
+
+        self.threshold_elev_2_le = QtWidgets.QLineEdit()
+        self.threshold_elev_2_le.setObjectName(f"lineEdit_threshold_elev_2_{self.index}")
+        self.threshold_elev_2_le.setPlaceholderText("blank = runway end elev.")
+        self.threshold_elev_2_le.setToolTip(
+            "Elevation (AMSL) of the reciprocal landing threshold. Leave blank to use the runway-end elevation."
+        )
+        self.threshold_elev_2_le.setValidator(self.numeric_validator)
 
         self.thr_displaced_1_le = QtWidgets.QLineEdit()
         self.thr_displaced_1_le.setObjectName(f"lineEdit_thr_displaced_1_{self.index}")
@@ -172,9 +194,13 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         gridLayout_Coords.addWidget(self.thr_north_le, current_coord_row, 1)
         gridLayout_Coords.addWidget(self.rec_north_le, current_coord_row, 2)
         current_coord_row += 1
-        gridLayout_Coords.addWidget(label_elevation_row, current_coord_row, 0)
-        gridLayout_Coords.addWidget(self.thr_elev_1_le, current_coord_row, 1)
-        gridLayout_Coords.addWidget(self.thr_elev_2_le, current_coord_row, 2)
+        gridLayout_Coords.addWidget(label_runway_end_elevation_row, current_coord_row, 0)
+        gridLayout_Coords.addWidget(self.runway_end_elev_1_le, current_coord_row, 1)
+        gridLayout_Coords.addWidget(self.runway_end_elev_2_le, current_coord_row, 2)
+        current_coord_row += 1
+        gridLayout_Coords.addWidget(label_threshold_elevation_row, current_coord_row, 0)
+        gridLayout_Coords.addWidget(self.threshold_elev_1_le, current_coord_row, 1)
+        gridLayout_Coords.addWidget(self.threshold_elev_2_le, current_coord_row, 2)
         current_coord_row += 1
         gridLayout_Coords.addWidget(label_displaced_row, current_coord_row, 0)
         gridLayout_Coords.addWidget(self.thr_displaced_1_le, current_coord_row, 1)
@@ -428,8 +454,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.thr_north_le,
             self.rec_east_le,
             self.rec_north_le,
-            self.thr_elev_1_le,
-            self.thr_elev_2_le,
+            self.runway_end_elev_1_le,
+            self.runway_end_elev_2_le,
+            self.threshold_elev_1_le,
+            self.threshold_elev_2_le,
             self.thr_displaced_1_le,
             self.thr_displaced_2_le,
             self.thr_pre_area_1_le,
@@ -485,8 +513,12 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "thr_northing": self.thr_north_le.text(),
             "rec_easting": self.rec_east_le.text(),
             "rec_northing": self.rec_north_le.text(),
-            "thr_elev_1": self.thr_elev_1_le.text(),
-            "thr_elev_2": self.thr_elev_2_le.text(),
+            "runway_end_elev_1": self.runway_end_elev_1_le.text(),
+            "runway_end_elev_2": self.runway_end_elev_2_le.text(),
+            "threshold_elev_1": self.threshold_elev_1_le.text(),
+            "threshold_elev_2": self.threshold_elev_2_le.text(),
+            "thr_elev_1": self.threshold_elev_1_le.text() or self.runway_end_elev_1_le.text(),
+            "thr_elev_2": self.threshold_elev_2_le.text() or self.runway_end_elev_2_le.text(),
             "thr_displaced_1": self.thr_displaced_1_le.text(),
             "thr_displaced_2": self.thr_displaced_2_le.text(),
             "thr_pre_area_1": self.thr_pre_area_1_le.text(),
@@ -521,8 +553,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.thr_north_le.setText(data.get("thr_northing", ""))
             self.rec_east_le.setText(data.get("rec_easting", ""))
             self.rec_north_le.setText(data.get("rec_northing", ""))
-            self.thr_elev_1_le.setText(data.get("thr_elev_1", ""))
-            self.thr_elev_2_le.setText(data.get("thr_elev_2", ""))
+            self.runway_end_elev_1_le.setText(data.get("runway_end_elev_1", "") or data.get("thr_elev_1", ""))
+            self.runway_end_elev_2_le.setText(data.get("runway_end_elev_2", "") or data.get("thr_elev_2", ""))
+            self.threshold_elev_1_le.setText(data.get("threshold_elev_1", ""))
+            self.threshold_elev_2_le.setText(data.get("threshold_elev_2", ""))
             self.thr_displaced_1_le.setText(data.get("thr_displaced_1", ""))
             self.thr_displaced_2_le.setText(data.get("thr_displaced_2", ""))
             self.thr_pre_area_1_le.setText(data.get("thr_pre_area_1", ""))
@@ -593,8 +627,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.thr_north_le,
             self.rec_east_le,
             self.rec_north_le,
-            self.thr_elev_1_le,
-            self.thr_elev_2_le,
+            self.runway_end_elev_1_le,
+            self.runway_end_elev_2_le,
+            self.threshold_elev_1_le,
+            self.threshold_elev_2_le,
             self.thr_displaced_1_le,
             self.thr_displaced_2_le,
             self.thr_pre_area_1_le,

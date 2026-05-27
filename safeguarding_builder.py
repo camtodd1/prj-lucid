@@ -322,7 +322,7 @@ class SafeguardingBuilder(
         """
         Calculates the Reference Elevation Datum based on CASA MOS 139 requirements.
         Rounds result down to the nearest half metre.
-        Uses validated runway data containing 'thr_elev_1' and 'thr_elev_2'.
+        Uses validated runway data containing runway-end elevations.
         """
         plugin_tag = PLUGIN_TAG  # Local variable for convenience
 
@@ -344,42 +344,41 @@ class SafeguardingBuilder(
             )
             return None
 
-        threshold_elevations: List[float] = []
+        runway_end_elevations: List[float] = []
         missing_elev_rwy_summaries: List[str] = []  # Store summary strings for missing elevations
 
         for rwy_data in runway_data_list:
-            # Use validated keys 'thr_elev_1' and 'thr_elev_2'
-            thr_elev = rwy_data.get("thr_elev_1")
-            rec_thr_elev = rwy_data.get("thr_elev_2")
+            end_elev = rwy_data.get("runway_end_elev_1")
+            rec_end_elev = rwy_data.get("runway_end_elev_2")
 
             # Generate a name for logging/reporting
             rwy_name = rwy_data.get("short_name", f"RWY Index {rwy_data.get('original_index', '?')}")
 
             # Check if the retrieved values are valid floats
-            valid_thr = isinstance(thr_elev, (int, float))
-            valid_rec = isinstance(rec_thr_elev, (int, float))
+            valid_end = isinstance(end_elev, (int, float))
+            valid_rec = isinstance(rec_end_elev, (int, float))
 
             # Add valid elevations to the list
-            if valid_thr:
-                threshold_elevations.append(float(thr_elev))
+            if valid_end:
+                runway_end_elevations.append(float(end_elev))
             if valid_rec:
-                threshold_elevations.append(float(rec_thr_elev))
+                runway_end_elevations.append(float(rec_end_elev))
 
             # Collect summary if elevations are missing for this runway
-            if not valid_thr or not valid_rec:
+            if not valid_end or not valid_rec:
                 missing_parts = []
-                if not valid_thr:
-                    missing_parts.append("THR1")
+                if not valid_end:
+                    missing_parts.append("END1")
                 if not valid_rec:
-                    missing_parts.append("THR2")
+                    missing_parts.append("END2")
                 missing_elev_rwy_summaries.append(f"{rwy_name} ({'/'.join(missing_parts)})")
 
         # --- Post-Loop Checks and Logging ---
 
-        # Critical Error: No valid threshold elevations found at all.
-        if not threshold_elevations:
+        # Critical Error: No valid runway-end elevations found at all.
+        if not runway_end_elevations:
             QgsMessageLog.logMessage(
-                "Cannot calculate RED: No valid threshold elevations found in any runway data.",
+                "Cannot calculate RED: No valid runway-end elevations found in any runway data.",
                 plugin_tag,
                 level=Qgis.Critical,
             )
@@ -387,7 +386,7 @@ class SafeguardingBuilder(
             if self.iface:
                 self.iface.messageBar().pushMessage(
                     self.tr("Error"),
-                    self.tr("Cannot calculate Reference Elevation Datum: No valid threshold elevations found."),
+                    self.tr("Cannot calculate Reference Elevation Datum: No valid runway-end elevations found."),
                     level=Qgis.Critical,
                     duration=10,
                 )
@@ -398,7 +397,7 @@ class SafeguardingBuilder(
             summary_str = ", ".join(missing_elev_rwy_summaries)
             # Log a single warning summarizing all missing elevations.
             QgsMessageLog.logMessage(
-                f"Warning: Missing threshold elevations for: [{summary_str}]. "
+                f"Warning: Missing runway-end elevations for: [{summary_str}]. "
                 "RED calculation proceeding with available data.",
                 plugin_tag,
                 level=Qgis.Warning,
@@ -408,7 +407,7 @@ class SafeguardingBuilder(
                 self.iface.messageBar().pushMessage(
                     self.tr("Warning"),
                     self.tr(
-                        "Missing threshold elevations for some runways. "
+                        "Missing runway-end elevations for some runways. "
                         "RED calculation may be inaccurate. Check Log Messages panel for details."
                     ),
                     level=Qgis.Warning,
@@ -416,29 +415,29 @@ class SafeguardingBuilder(
                 )
 
         # --- Calculation ---
-        avg_thr_elev = sum(threshold_elevations) / len(threshold_elevations)
+        avg_end_elev = sum(runway_end_elevations) / len(runway_end_elevations)
         # Info: Log the average value used in the calculation.
         QgsMessageLog.logMessage(
-            f"Calculated Average Threshold Elevation: {avg_thr_elev:.3f}m AMSL",
+            f"Calculated Average Runway-End Elevation: {avg_end_elev:.3f}m AMSL",
             plugin_tag,
             level=Qgis.Info,
         )
 
         reference_elevation_unrounded: float
         # Apply MOS 139 rule
-        if abs(arp_elevation - avg_thr_elev) <= 3.0:
+        if abs(arp_elevation - avg_end_elev) <= 3.0:
             reference_elevation_unrounded = arp_elevation
             # Info: Log the basis for the RED value.
             QgsMessageLog.logMessage(
-                "RED based on ARP Elevation (within 3m of average THR elev).",
+                "RED based on ARP Elevation (within 3m of average runway-end elev).",
                 plugin_tag,
                 level=Qgis.Info,
             )
         else:
-            reference_elevation_unrounded = avg_thr_elev
+            reference_elevation_unrounded = avg_end_elev
             # Info: Log the basis for the RED value.
             QgsMessageLog.logMessage(
-                "RED based on Average Threshold Elevation (>3m difference from ARP).",
+                "RED based on Average Runway-End Elevation (>3m difference from ARP).",
                 plugin_tag,
                 level=Qgis.Info,
             )

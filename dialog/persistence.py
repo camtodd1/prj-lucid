@@ -372,6 +372,10 @@ class PersistenceMixin:
             )
 
     def _with_runway_defaults(self, runway_data):
+        runway_data.setdefault("runway_end_elev_1", runway_data.get("thr_elev_1", ""))
+        runway_data.setdefault("runway_end_elev_2", runway_data.get("thr_elev_2", ""))
+        runway_data.setdefault("threshold_elev_1", "")
+        runway_data.setdefault("threshold_elev_2", "")
         runway_data.setdefault("thr_pre_area_1", "")
         runway_data.setdefault("thr_pre_area_2", "")
         runway_data.setdefault("thr_displaced_1", "")

@@ -1197,7 +1197,7 @@ class OlsGuidelineMixin:
             self._log_debug(f"BLS {end_desig} skipped: failed to calculate inner edge centre.")
             return None
 
-        required_rwy_keys = ["thr_point", "rec_thr_point", "thr_elev_1", "thr_elev_2"]
+        required_rwy_keys = ["thr_point", "rec_thr_point", "threshold_elev_1", "threshold_elev_2"]
         if not all(key in runway_data and runway_data[key] is not None for key in required_rwy_keys):
             self._log_debug(f"BLS {end_desig} skipped: runway data missing keys for elevation calculation.")
             return None
@@ -1206,8 +1206,8 @@ class OlsGuidelineMixin:
             inner_edge_center_pt,
             runway_data.get("thr_point"),
             runway_data.get("rec_thr_point"),
-            runway_data.get("thr_elev_1"),
-            runway_data.get("thr_elev_2"),
+            runway_data.get("threshold_elev_1"),
+            runway_data.get("threshold_elev_2"),
             QgsProject.instance().crs(),
         )
         if inner_edge_elev_amsl is None:
@@ -1658,12 +1658,16 @@ class OlsGuidelineMixin:
             runway_name = runway_data.get("short_name")
             thr_point = runway_data.get("thr_point")
             rec_thr_point = runway_data.get("rec_thr_point")
-            thr_elev = runway_data.get("thr_elev_1")
-            rec_thr_elev = runway_data.get("thr_elev_2")
+            thr_elev = runway_data.get("threshold_elev_1")
+            rec_thr_elev = runway_data.get("threshold_elev_2")
+            runway_end_elev = runway_data.get("runway_end_elev_1")
+            rec_runway_end_elev = runway_data.get("runway_end_elev_2")
             arc_num_str = runway_data.get("arc_num")
             type1_str = runway_data.get("type1")
             type2_str = runway_data.get("type2")
             calculated_strip_dims = runway_data.get("calculated_strip_dims")
+            disp_at_primary_thr = float(runway_data.get("thr_displaced_1", 0.0) or 0.0)
+            disp_at_reciprocal_thr = float(runway_data.get("thr_displaced_2", 0.0) or 0.0)
 
             if not all(
                 [
@@ -1674,6 +1678,8 @@ class OlsGuidelineMixin:
                     calculated_strip_dims,
                     thr_elev is not None,
                     rec_thr_elev is not None,
+                    runway_end_elev is not None,
+                    rec_runway_end_elev is not None,
                 ]
             ):
                 QgsMessageLog.logMessage(
@@ -1699,6 +1705,21 @@ class OlsGuidelineMixin:
                     level=Qgis.Warning,
                 )
                 continue
+            physical_endpoints = self._get_physical_runway_endpoints(
+                thr_point,
+                rec_thr_point,
+                disp_at_primary_thr,
+                disp_at_reciprocal_thr,
+                rwy_params,
+            )
+            if physical_endpoints is None:
+                QgsMessageLog.logMessage(
+                    f"Skipping Transitional features for {runway_name}: Failed physical runway end points.",
+                    plugin_tag,
+                    level=Qgis.Warning,
+                )
+                continue
+            phys_end_p, phys_end_r, _ = physical_endpoints
             primary_desig, reciprocal_desig = runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
 
             # --- Get Transitional Slope ---
@@ -1751,8 +1772,8 @@ class OlsGuidelineMixin:
                 )
                 continue
             strip_overall_half_width = strip_overall_width / 2.0
-            strip_end_p = thr_point.project(strip_extension, rwy_params["azimuth_r_p"])
-            strip_end_r = rec_thr_point.project(strip_extension, rwy_params["azimuth_p_r"])
+            strip_end_p = phys_end_p.project(strip_extension, rwy_params["azimuth_r_p"])
+            strip_end_r = phys_end_r.project(strip_extension, rwy_params["azimuth_p_r"])
             if not strip_end_p or not strip_end_r:
                 QgsMessageLog.logMessage(
                     f"Skipping Transitional features for {runway_name}: Failed strip end points.",
@@ -1787,18 +1808,18 @@ class OlsGuidelineMixin:
                 p_end_xy = QgsPointXY(p_end_qgsp.x(), p_end_qgsp.y())
                 z_start = self._get_elevation_at_point_along_gradient(
                     p_start_xy,
-                    thr_point,
-                    rec_thr_point,
-                    thr_elev,
-                    rec_thr_elev,
+                    phys_end_p,
+                    phys_end_r,
+                    runway_end_elev,
+                    rec_runway_end_elev,
                     target_crs,
                 )
                 z_end = self._get_elevation_at_point_along_gradient(
                     p_end_xy,
-                    thr_point,
-                    rec_thr_point,
-                    thr_elev,
-                    rec_thr_elev,
+                    phys_end_p,
+                    phys_end_r,
+                    runway_end_elev,
+                    rec_runway_end_elev,
                     target_crs,
                 )
                 if z_start is None or z_end is None:
@@ -2998,8 +3019,10 @@ class OlsGuidelineMixin:
         arc_num_str = runway_data.get("arc_num")
         primary_approach_type_str = runway_data.get("type1", "")
         reciprocal_approach_type_str = runway_data.get("type2", "")
-        primary_thr_elev = runway_data.get("thr_elev_1")
-        reciprocal_thr_elev = runway_data.get("thr_elev_2")
+        primary_thr_elev = runway_data.get("threshold_elev_1")
+        reciprocal_thr_elev = runway_data.get("threshold_elev_2")
+        primary_runway_end_elev = runway_data.get("runway_end_elev_1")
+        reciprocal_runway_end_elev = runway_data.get("runway_end_elev_2")
 
         runway_actual_width_val = runway_data.get("width")
         if runway_actual_width_val is None:
@@ -3516,7 +3539,7 @@ class OlsGuidelineMixin:
                         config["tocs_clearway_len_at_departure_end"],
                         config["tocs_flight_path_azimuth"],
                     )
-                else:
+                if tocs_plane_origin_pt:
                     tocs_plane_origin_pt = tocs_plane_origin_pt.project(
                         origin_offset_param_val, config["tocs_flight_path_azimuth"]
                     )
@@ -3525,10 +3548,10 @@ class OlsGuidelineMixin:
                 if tocs_plane_origin_pt:
                     tocs_actual_start_elevation = self._get_elevation_at_point_along_gradient(
                         tocs_plane_origin_pt,
-                        primary_threshold_point,
-                        reciprocal_threshold_point,
-                        primary_thr_elev,
-                        reciprocal_thr_elev,
+                        phys_pavement_end_near_primary_thr,
+                        phys_pavement_end_near_reciprocal_thr,
+                        primary_runway_end_elev,
+                        reciprocal_runway_end_elev,
                         QgsProject.instance().crs(),
                     )
 

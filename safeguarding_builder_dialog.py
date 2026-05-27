@@ -667,6 +667,10 @@ class SafeguardingBuilderDialog(
                 validated_runway = self._validate_runway_data(index, runway_inputs, error_messages)
                 if validated_runway:
                     # Ensure keys exist (validator should add them, but be safe)
+                    validated_runway.setdefault("runway_end_elev_1", None)
+                    validated_runway.setdefault("runway_end_elev_2", None)
+                    validated_runway.setdefault("threshold_elev_1", None)
+                    validated_runway.setdefault("threshold_elev_2", None)
                     validated_runway.setdefault("thr_elev_1", None)
                     validated_runway.setdefault("thr_elev_2", None)
                     validated_runway.setdefault("thr_displaced_1", None)
@@ -814,20 +818,55 @@ class SafeguardingBuilderDialog(
             current_errors += 1
 
         # Elevations (Optional)
-        try:  # Primary Elevation
-            elev1_str = inputs.get("thr_elev_1", "").strip()
-            validated["thr_elev_1"] = float(elev1_str) if elev1_str else None
+        try:  # Primary runway end elevation
+            end_elev1_raw = inputs.get("runway_end_elev_1")
+            if end_elev1_raw is None:
+                end_elev1_raw = inputs.get("thr_elev_1", "")
+            end_elev1_str = str(end_elev1_raw).strip()
+            validated["runway_end_elev_1"] = float(end_elev1_str) if end_elev1_str else None
         except ValueError:
-            errors.append(f"Rwy {index}: Invalid primary elevation '{inputs.get('thr_elev_1', '')}'.")
+            errors.append(
+                f"Rwy {index}: Invalid primary runway end elevation '{inputs.get('runway_end_elev_1', '')}'."
+            )
             current_errors += 1
-            validated["thr_elev_1"] = None
-        try:  # Reciprocal Elevation
-            elev2_str = inputs.get("thr_elev_2", "").strip()
-            validated["thr_elev_2"] = float(elev2_str) if elev2_str else None
+            validated["runway_end_elev_1"] = None
+        try:  # Reciprocal runway end elevation
+            end_elev2_raw = inputs.get("runway_end_elev_2")
+            if end_elev2_raw is None:
+                end_elev2_raw = inputs.get("thr_elev_2", "")
+            end_elev2_str = str(end_elev2_raw).strip()
+            validated["runway_end_elev_2"] = float(end_elev2_str) if end_elev2_str else None
         except ValueError:
-            errors.append(f"Rwy {index}: Invalid reciprocal elevation '{inputs.get('thr_elev_2', '')}'.")
+            errors.append(
+                f"Rwy {index}: Invalid reciprocal runway end elevation '{inputs.get('runway_end_elev_2', '')}'."
+            )
             current_errors += 1
-            validated["thr_elev_2"] = None
+            validated["runway_end_elev_2"] = None
+
+        try:  # Primary threshold elevation
+            threshold_elev1_str = inputs.get("threshold_elev_1", "").strip()
+            validated["threshold_elev_1"] = (
+                float(threshold_elev1_str) if threshold_elev1_str else validated["runway_end_elev_1"]
+            )
+        except ValueError:
+            errors.append(f"Rwy {index}: Invalid primary threshold elevation '{inputs.get('threshold_elev_1', '')}'.")
+            current_errors += 1
+            validated["threshold_elev_1"] = validated.get("runway_end_elev_1")
+        try:  # Reciprocal threshold elevation
+            threshold_elev2_str = inputs.get("threshold_elev_2", "").strip()
+            validated["threshold_elev_2"] = (
+                float(threshold_elev2_str) if threshold_elev2_str else validated["runway_end_elev_2"]
+            )
+        except ValueError:
+            errors.append(
+                f"Rwy {index}: Invalid reciprocal threshold elevation '{inputs.get('threshold_elev_2', '')}'."
+            )
+            current_errors += 1
+            validated["threshold_elev_2"] = validated.get("runway_end_elev_2")
+
+        # Legacy aliases used by existing OLS code paths until all callers are migrated.
+        validated["thr_elev_1"] = validated["threshold_elev_1"]
+        validated["thr_elev_2"] = validated["threshold_elev_2"]
 
         # Displaced Thresholds (Optional, non-negative)
         try:  # Primary Displaced

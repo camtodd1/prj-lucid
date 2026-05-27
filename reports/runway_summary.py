@@ -57,14 +57,16 @@ def _build_runway_summary(runway_data: Dict[str, Any]) -> Dict[str, Any]:
             {
                 "end": _split_designators(runway_name)[0],
                 "point": runway_data.get("thr_point"),
-                "elevation": runway_data.get("thr_elev_1"),
+                "runway_end_elevation": runway_data.get("runway_end_elev_1"),
+                "threshold_elevation": runway_data.get("threshold_elev_1"),
                 "displaced": _number_or_zero(runway_data.get("thr_displaced_1")),
                 "pre_threshold_area": _number_or_zero(runway_data.get("thr_pre_area_1")),
             },
             {
                 "end": _split_designators(runway_name)[1],
                 "point": runway_data.get("rec_thr_point"),
-                "elevation": runway_data.get("thr_elev_2"),
+                "runway_end_elevation": runway_data.get("runway_end_elev_2"),
+                "threshold_elevation": runway_data.get("threshold_elev_2"),
                 "displaced": _number_or_zero(runway_data.get("thr_displaced_2")),
                 "pre_threshold_area": _number_or_zero(runway_data.get("thr_pre_area_2")),
             },
@@ -95,18 +97,19 @@ def _render_runway_summary(summary: Dict[str, Any]) -> List[str]:
         f"| Runway width | {_format_number(summary.get('width'), ' m')} |",
         "",
         "### Ends",
-        "| End | Threshold coordinate | Elevation | Displaced threshold | Pre-threshold area | Clearway | Stopway |",
-        "| --- | --- | ---: | ---: | ---: | ---: | ---: |",
+        "| End | Threshold coordinate | Runway end elev. | Threshold elev. | Displaced threshold | Pre-threshold area | Clearway | Stopway |",
+        "| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |",
     ]
 
     clearways = [summary.get("clearway_primary_end"), summary.get("clearway_reciprocal_end")]
     stopways = [summary.get("stopway_primary_end"), summary.get("stopway_reciprocal_end")]
     for index, threshold in enumerate(summary["thresholds"]):
         lines.append(
-            "| {end} | {point} | {elev} | {disp} | {pre} | {clearway} | {stopway} |".format(
+            "| {end} | {point} | {end_elev} | {thr_elev} | {disp} | {pre} | {clearway} | {stopway} |".format(
                 end=threshold["end"],
                 point=_format_point(threshold.get("point")),
-                elev=_format_number(threshold.get("elevation"), " m"),
+                end_elev=_format_number(threshold.get("runway_end_elevation"), " m"),
+                thr_elev=_format_number(threshold.get("threshold_elevation"), " m"),
                 disp=_format_number(threshold.get("displaced"), " m"),
                 pre=_format_number(threshold.get("pre_threshold_area"), " m"),
                 clearway=_format_number(clearways[index], " m"),
