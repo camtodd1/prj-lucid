@@ -68,18 +68,15 @@ For the common case with no operational restrictions:
 - `TODA = TORA + clearway at departure end`
 - `ASDA = TORA + stopway at departure end`
 
-## Partially Present But Not Exposed In The Dialog
+## Clearway Defaults And Dialog Overrides
 
-`guidelines/ols_guideline.py` already looks for:
+Clearways are generated per MOS 6.27-6.29. By default, each clearway extends
+from the physical runway end to the calculated runway strip end. A
+user-supplied clearway length:
 
-- `clearway1_len`
-- `clearway2_len`
-
-These are not currently collected by `RunwayWidgetGroup`, so they always default
-to zero unless another workflow injects them into `runway_data`.
-
-Recommendation: promote clearway length to explicit dialog inputs so TOCS and
-declared distances use the same user-supplied values.
+- overrides the default when it is longer than the runway-to-strip-end distance;
+- is ignored with a warning when it is shorter than that default;
+- is capped at half the TORA.
 
 ## Missing Inputs Needed For Correct Declared Distances
 

@@ -2715,88 +2715,118 @@ class PhysicalGeometryMixin:
             )
 
         # --- 5. Stopways and clearways ---
-        if runway_width is not None and runway_width > 0:
-            try:
-                primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
-                reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
-                half_width = runway_width / 2.0
+        try:
+            primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
+            reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
+            clearway_specs = self._calculate_effective_clearway_specs(
+                runway_data,
+                physical_length,
+            )
 
-                diagnostic_area_specs = [
+            stopway_specs = []
+            if runway_width is not None and runway_width > 0:
+                stopway_specs = [
                     (
                         "Stopway",
                         "Stopway",
                         self._non_negative_float(runway_data.get("stopway1_len"), 0.0),
+                        runway_width,
                         phys_p_start,
                         rwy_params["azimuth_r_p"],
                         primary_desig,
+                        "MOS 6.25",
                     ),
                     (
                         "Stopway",
                         "Stopway",
                         self._non_negative_float(runway_data.get("stopway2_len"), 0.0),
+                        runway_width,
                         phys_p_end,
                         rwy_params["azimuth_p_r"],
                         reciprocal_desig,
-                    ),
-                    (
-                        "Clearway",
-                        "Clearway",
-                        self._non_negative_float(runway_data.get("clearway1_len"), 0.0),
-                        phys_p_start,
-                        rwy_params["azimuth_r_p"],
-                        primary_desig,
-                    ),
-                    (
-                        "Clearway",
-                        "Clearway",
-                        self._non_negative_float(runway_data.get("clearway2_len"), 0.0),
-                        phys_p_end,
-                        rwy_params["azimuth_p_r"],
-                        reciprocal_desig,
+                        "MOS 6.25",
                     ),
                 ]
-
-                for element_type, desc, length_m, start_point, outward_azimuth, end_desig in diagnostic_area_specs:
-                    if length_m <= 1e-6:
-                        continue
-                    geom = self._create_rectangle_from_start(
-                        start_point,
-                        outward_azimuth,
-                        length_m,
-                        half_width,
-                        f"{desc} {end_desig}",
-                    )
-                    if geom:
-                        generated_elements.append(
-                            (
-                                element_type,
-                                geom,
-                                {
-                                    "rwy": runway_name,
-                                    "desc": f"{desc} ({end_desig})",
-                                    "surf_cat": runway_data.get("surface_category") or "",
-                                    "surf_mat": runway_data.get("surface_material") or "",
-                                    "len_m": round(length_m, 3),
-                                    "wid_m": runway_width,
-                                    "ref_mos": "Diagnostic geometry from declared distance input",
-                                    "end_desig": end_desig,
-                                },
-                            )
-                        )
-            except Exception as e_diag:
+            elif self._non_negative_float(runway_data.get("stopway1_len"), 0.0) > 1e-6 or self._non_negative_float(
+                runway_data.get("stopway2_len"), 0.0
+            ) > 1e-6:
                 QgsMessageLog.logMessage(
-                    f"Warning: Error generating stopway/clearway diagnostics for {log_name}: {e_diag}",
+                    f"Info: Skipping stopway geometry for {log_name}: Runway width missing.",
                     plugin_tag,
-                    level=Qgis.Warning,
+                    level=Qgis.Info,
                 )
-        elif any(
-            self._non_negative_float(runway_data.get(key), 0.0) > 1e-6
-            for key in ("stopway1_len", "stopway2_len", "clearway1_len", "clearway2_len")
-        ):
+
+            clearway_area_specs = [
+                (
+                    "Clearway",
+                    "Clearway",
+                    clearway_specs["primary"]["length_m"],
+                    clearway_specs["primary"]["width_m"],
+                    phys_p_start,
+                    rwy_params["azimuth_r_p"],
+                    primary_desig,
+                    clearway_specs["primary"]["ref_mos"],
+                ),
+                (
+                    "Clearway",
+                    "Clearway",
+                    clearway_specs["reciprocal"]["length_m"],
+                    clearway_specs["reciprocal"]["width_m"],
+                    phys_p_end,
+                    rwy_params["azimuth_p_r"],
+                    reciprocal_desig,
+                    clearway_specs["reciprocal"]["ref_mos"],
+                ),
+            ]
+
+            for (
+                element_type,
+                desc,
+                length_m,
+                width_m,
+                start_point,
+                outward_azimuth,
+                end_desig,
+                ref_mos,
+            ) in stopway_specs + clearway_area_specs:
+                if length_m <= 1e-6:
+                    continue
+                if width_m <= 1e-6:
+                    QgsMessageLog.logMessage(
+                        f"Info: Skipping {desc.lower()} geometry for {log_name} {end_desig}: width unavailable.",
+                        plugin_tag,
+                        level=Qgis.Info,
+                    )
+                    continue
+                geom = self._create_rectangle_from_start(
+                    start_point,
+                    outward_azimuth,
+                    length_m,
+                    width_m / 2.0,
+                    f"{desc} {end_desig}",
+                )
+                if geom:
+                    generated_elements.append(
+                        (
+                            element_type,
+                            geom,
+                            {
+                                "rwy": runway_name,
+                                "desc": f"{desc} ({end_desig})",
+                                "surf_cat": runway_data.get("surface_category") or "",
+                                "surf_mat": runway_data.get("surface_material") or "",
+                                "len_m": round(length_m, 3),
+                                "wid_m": round(width_m, 3),
+                                "ref_mos": ref_mos,
+                                "end_desig": end_desig,
+                            },
+                        )
+                    )
+        except Exception as e_diag:
             QgsMessageLog.logMessage(
-                f"Info: Skipping stopway/clearway diagnostics for {log_name}: Runway width missing.",
+                f"Warning: Error generating stopway/clearway geometry for {log_name}: {e_diag}",
                 plugin_tag,
-                level=Qgis.Info,
+                level=Qgis.Warning,
             )
 
         QgsMessageLog.logMessage(

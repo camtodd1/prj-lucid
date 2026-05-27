@@ -42,6 +42,7 @@ from .surfaces.met import MetSurfacesMixin
 from .guidelines.simple import SimpleGuidelinesMixin
 from .guidelines.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
+from .dimensions import ols_dimensions
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 
 
@@ -1035,8 +1036,9 @@ class SafeguardingBuilder(
             primary_desig = runway_name
             reciprocal_desig = "Reciprocal"
 
-        clearway_primary_end = self._non_negative_float(runway_data.get("clearway1_len"), 0.0)
-        clearway_reciprocal_end = self._non_negative_float(runway_data.get("clearway2_len"), 0.0)
+        clearway_specs = self._calculate_effective_clearway_specs(runway_data, physical_length)
+        clearway_primary_end = clearway_specs["primary"]["length_m"]
+        clearway_reciprocal_end = clearway_specs["reciprocal"]["length_m"]
         stopway_primary_end = self._non_negative_float(runway_data.get("stopway1_len"), 0.0)
         stopway_reciprocal_end = self._non_negative_float(runway_data.get("stopway2_len"), 0.0)
 
@@ -1088,6 +1090,94 @@ class SafeguardingBuilder(
                 "lda_m": reciprocal_lda,
             },
         ]
+
+    def _calculate_effective_clearway_specs(
+        self,
+        runway_data: Dict[str, Any],
+        physical_length: Optional[float] = None,
+    ) -> Dict[str, Dict[str, Any]]:
+        """Return MOS 6.27-6.29 clearway length and width specs for each runway end."""
+        cached_specs = runway_data.get("_effective_clearway_specs")
+        if isinstance(cached_specs, dict) and "primary" in cached_specs and "reciprocal" in cached_specs:
+            return cached_specs
+
+        runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
+        runway_width = self._non_negative_float(runway_data.get("width"), 0.0)
+        try:
+            arc_num = int(float(runway_data.get("arc_num") or 0))
+        except (TypeError, ValueError):
+            arc_num = 0
+
+        type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type1"))
+        type2_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type2"))
+        is_instrument_runway = type1_abbr in {"NPA", "PA_I", "PA_II_III"} or type2_abbr in {
+            "NPA",
+            "PA_I",
+            "PA_II_III",
+        }
+
+        strip_dims = runway_data.get("calculated_strip_dims")
+        if not strip_dims:
+            strip_dims = ols_dimensions.get_strip_params(arc_num, type1_abbr, runway_width or None)
+            runway_data["calculated_strip_dims"] = strip_dims
+
+        strip_extension = self._non_negative_float((strip_dims or {}).get("extension_length"), 0.0)
+        strip_overall_width = self._non_negative_float((strip_dims or {}).get("overall_width"), 0.0)
+        clearway_width = 150.0 if is_instrument_runway else strip_overall_width
+        if clearway_width <= 1e-6 and runway_width > 0:
+            clearway_width = runway_width
+            QgsMessageLog.logMessage(
+                f"Clearway width for {runway_name} fell back to runway width because strip width was unavailable.",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
+        max_clearway_length = None
+        if physical_length is not None and physical_length > 0:
+            max_clearway_length = physical_length / 2.0
+
+        def end_spec(end_key: str, input_key: str, stopway_key: str) -> Dict[str, Any]:
+            input_length = self._non_negative_float(runway_data.get(input_key), 0.0)
+            default_length = strip_extension + self._non_negative_float(runway_data.get(stopway_key), 0.0)
+            effective_length = max(input_length, default_length)
+            source = "input" if input_length >= default_length and input_length > 1e-6 else "runway-strip default"
+
+            if input_length > 1e-6 and input_length < default_length:
+                QgsMessageLog.logMessage(
+                    f"Clearway input for {runway_name} {end_key} end ({input_length:.3f} m) is shorter than "
+                    f"the default runway-to-strip-end distance ({default_length:.3f} m); using the default.",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
+
+            if max_clearway_length is not None and effective_length > max_clearway_length:
+                QgsMessageLog.logMessage(
+                    f"Clearway length for {runway_name} {end_key} end ({effective_length:.3f} m) exceeds "
+                    f"half the TORA ({max_clearway_length:.3f} m); capping to MOS 6.29(1).",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
+                effective_length = max_clearway_length
+                source = f"{source}; capped"
+
+            return {
+                "length_m": round(effective_length, 3),
+                "width_m": round(clearway_width, 3),
+                "input_length_m": round(input_length, 3),
+                "default_length_m": round(default_length, 3),
+                "source": source,
+                "ref_mos": "MOS 6.27; MOS 6.28; MOS 6.29",
+            }
+
+        specs = {
+            "primary": end_spec("primary", "clearway1_len", "stopway1_len"),
+            "reciprocal": end_spec("reciprocal", "clearway2_len", "stopway2_len"),
+        }
+        runway_data["_effective_clearway_specs"] = specs
+        runway_data["effective_clearway1_len"] = specs["primary"]["length_m"]
+        runway_data["effective_clearway2_len"] = specs["reciprocal"]["length_m"]
+        runway_data["effective_clearway_width_m"] = clearway_width
+        return specs
 
     def _non_negative_float(self, value: Any, default: float = 0.0) -> float:
         try:

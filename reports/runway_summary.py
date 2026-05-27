@@ -71,8 +71,12 @@ def _build_runway_summary(runway_data: Dict[str, Any]) -> Dict[str, Any]:
                 "pre_threshold_area": _number_or_zero(runway_data.get("thr_pre_area_2")),
             },
         ],
-        "clearway_primary_end": _number_or_zero(runway_data.get("clearway1_len")),
-        "clearway_reciprocal_end": _number_or_zero(runway_data.get("clearway2_len")),
+        "clearway_primary_end": _number_or_zero(
+            runway_data.get("effective_clearway1_len", runway_data.get("clearway1_len"))
+        ),
+        "clearway_reciprocal_end": _number_or_zero(
+            runway_data.get("effective_clearway2_len", runway_data.get("clearway2_len"))
+        ),
         "stopway_primary_end": _number_or_zero(runway_data.get("stopway1_len")),
         "stopway_reciprocal_end": _number_or_zero(runway_data.get("stopway2_len")),
         "declared_distances": declared_distances,
@@ -174,13 +178,11 @@ def _collect_mos_refs(runway_data: Dict[str, Any]) -> List[str]:
 
 def _collect_warnings(runway_data: Dict[str, Any], feature_counts: Dict[str, int]) -> List[str]:
     warnings = list(runway_data.get("summary_warnings") or [])
-    if _number_or_zero(runway_data.get("clearway1_len")) == 0:
-        warnings.append("Primary-end clearway is 0 m; TODA uses no clearway extension at that departure end.")
-    if _number_or_zero(runway_data.get("clearway2_len")) == 0:
-        warnings.append("Reciprocal-end clearway is 0 m; TODA uses no clearway extension at that departure end.")
-    if _number_or_zero(runway_data.get("stopway1_len")) > 0 or _number_or_zero(runway_data.get("stopway2_len")) > 0:
-        if not feature_counts.get("Stopway"):
-            warnings.append("Stopway length is used in ASDA, but stopway geometry generation is not implemented yet.")
+    if (
+        _number_or_zero(runway_data.get("effective_clearway1_len")) > 0
+        or _number_or_zero(runway_data.get("effective_clearway2_len")) > 0
+    ) and not feature_counts.get("Clearway"):
+        warnings.append("Clearway length is used in TODA, but clearway geometry was not generated.")
     if not runway_data.get("declared_distances"):
         warnings.append("Declared distances could not be calculated for this runway.")
     return sorted(set(warnings))
