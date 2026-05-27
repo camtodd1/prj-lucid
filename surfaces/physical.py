@@ -1458,6 +1458,26 @@ class PhysicalGeometryMixin:
             markers.append(("GableMarker", geom, _attrs(side_label, spacing_value, placement_note)))
 
         short_edge_azimuth = (runway_azimuth + 90.0) % 360.0
+        graded_strip_geom_for_marker_side = self._create_runway_marking_rectangle(
+            strip_start_center,
+            runway_azimuth,
+            0.0,
+            strip_length,
+            0.0,
+            graded_width,
+            f"Gable Marker Strip Bounds {log_name}",
+        )
+
+        def _intersection_area(candidate: Optional[QgsGeometry], other: Optional[QgsGeometry]) -> float:
+            if candidate is None or other is None:
+                return 0.0
+            try:
+                intersection = candidate.intersection(other)
+            except Exception:
+                return 0.0
+            if intersection is None or intersection.isEmpty():
+                return 0.0
+            return intersection.area()
 
         def _add_short_edge_corner_marker(
             boundary_station: float,
@@ -1469,18 +1489,24 @@ class PhysicalGeometryMixin:
             boundary_center = strip_start_center.project(boundary_station, runway_azimuth)
             if boundary_center is None:
                 return
-            outside_center = boundary_center.project(marker_width / 2.0, clear_side_azimuth)
-            if outside_center is None:
-                return
             lateral_offset = lateral_sign * (graded_half_width - marker_length / 2.0)
-            marker_center = self._project_lateral(outside_center, lateral_offset, runway_azimuth)
-            geom = self._create_oriented_marker_rectangle(
-                marker_center,
-                short_edge_azimuth,
-                marker_length,
-                marker_width,
-                f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
-            )
+            candidate_geometries = []
+            for candidate_azimuth in [clear_side_azimuth, (clear_side_azimuth + 180.0) % 360.0]:
+                outside_center = boundary_center.project(marker_width / 2.0, candidate_azimuth)
+                if outside_center is None:
+                    continue
+                marker_center = self._project_lateral(outside_center, lateral_offset, runway_azimuth)
+                geom = self._create_oriented_marker_rectangle(
+                    marker_center,
+                    short_edge_azimuth,
+                    marker_length,
+                    marker_width,
+                    f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
+                )
+                candidate_geometries.append((geom, _intersection_area(geom, graded_strip_geom_for_marker_side)))
+            if not candidate_geometries:
+                return
+            geom = min(candidate_geometries, key=lambda item: item[1])[0]
             _add_marker(
                 geom,
                 f"{boundary_label}-{side_label}-Corner",
