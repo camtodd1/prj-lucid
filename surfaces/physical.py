@@ -1528,22 +1528,23 @@ class PhysicalGeometryMixin:
             anchor_corner = self._project_lateral(boundary_center, lateral_sign * graded_half_width, runway_azimuth)
             if anchor_corner is None:
                 return
-            inward_lateral_azimuth = (
-                (runway_azimuth + 90.0) % 360.0
-                if lateral_sign < 0
-                else (runway_azimuth - 90.0 + 360.0) % 360.0
-            )
             candidate_geometries = []
-            for candidate_azimuth in [clear_side_azimuth, (clear_side_azimuth + 180.0) % 360.0]:
-                geom = self._create_corner_anchored_rectangle(
-                    anchor_corner,
-                    inward_lateral_azimuth,
-                    candidate_azimuth,
-                    marker_length,
-                    marker_width,
-                    f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
-                )
-                candidate_geometries.append((geom, _corner_candidate_score(geom)))
+            lateral_azimuths = [
+                (runway_azimuth - 90.0 + 360.0) % 360.0,
+                (runway_azimuth + 90.0) % 360.0,
+            ]
+            boundary_azimuths = [clear_side_azimuth, (clear_side_azimuth + 180.0) % 360.0]
+            for lateral_azimuth in lateral_azimuths:
+                for boundary_azimuth in boundary_azimuths:
+                    geom = self._create_corner_anchored_rectangle(
+                        anchor_corner,
+                        lateral_azimuth,
+                        boundary_azimuth,
+                        marker_length,
+                        marker_width,
+                        f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
+                    )
+                    candidate_geometries.append((geom, _corner_candidate_score(geom)))
             if not candidate_geometries:
                 return
             geom = min(candidate_geometries, key=lambda item: item[1])[0]
