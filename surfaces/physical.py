@@ -878,14 +878,20 @@ class PhysicalGeometryMixin:
                 continue
             if intersection is None or intersection.isEmpty():
                 continue
-            bbox = intersection.boundingBox()
-            corners = [
-                QgsPointXY(bbox.xMinimum(), bbox.yMinimum()),
-                QgsPointXY(bbox.xMinimum(), bbox.yMaximum()),
-                QgsPointXY(bbox.xMaximum(), bbox.yMinimum()),
-                QgsPointXY(bbox.xMaximum(), bbox.yMaximum()),
-            ]
-            stations = [self._axis_station(strip_start, runway_azimuth, point) for point in corners]
+            vertices = []
+            for polygon_geom in self._polygonal_layer_geometries(intersection, "gable marker strip intersection"):
+                polygon = polygon_geom.asPolygon()
+                for ring in polygon:
+                    vertices.extend(ring)
+            if not vertices:
+                bbox = intersection.boundingBox()
+                vertices = [
+                    QgsPointXY(bbox.xMinimum(), bbox.yMinimum()),
+                    QgsPointXY(bbox.xMinimum(), bbox.yMaximum()),
+                    QgsPointXY(bbox.xMaximum(), bbox.yMinimum()),
+                    QgsPointXY(bbox.xMaximum(), bbox.yMaximum()),
+                ]
+            stations = [self._axis_station(strip_start, runway_azimuth, QgsPointXY(point)) for point in vertices]
             blocked_start = max(0.0, min(stations))
             blocked_end = min(strip_length, max(stations))
             if blocked_end - blocked_start > 1e-3:
