@@ -1660,8 +1660,6 @@ class OlsGuidelineMixin:
             rec_thr_point = runway_data.get("rec_thr_point")
             thr_elev = runway_data.get("threshold_elev_1")
             rec_thr_elev = runway_data.get("threshold_elev_2")
-            runway_end_elev = runway_data.get("runway_end_elev_1")
-            rec_runway_end_elev = runway_data.get("runway_end_elev_2")
             arc_num_str = runway_data.get("arc_num")
             type1_str = runway_data.get("type1")
             type2_str = runway_data.get("type2")
@@ -1678,8 +1676,6 @@ class OlsGuidelineMixin:
                     calculated_strip_dims,
                     thr_elev is not None,
                     rec_thr_elev is not None,
-                    runway_end_elev is not None,
-                    rec_runway_end_elev is not None,
                 ]
             ):
                 QgsMessageLog.logMessage(
@@ -1810,18 +1806,18 @@ class OlsGuidelineMixin:
                 p_end_xy = QgsPointXY(p_end_qgsp.x(), p_end_qgsp.y())
                 z_start = self._get_elevation_at_point_along_gradient(
                     p_start_xy,
-                    phys_end_p,
-                    phys_end_r,
-                    runway_end_elev,
-                    rec_runway_end_elev,
+                    thr_point,
+                    rec_thr_point,
+                    thr_elev,
+                    rec_thr_elev,
                     target_crs,
                 )
                 z_end = self._get_elevation_at_point_along_gradient(
                     p_end_xy,
-                    phys_end_p,
-                    phys_end_r,
-                    runway_end_elev,
-                    rec_runway_end_elev,
+                    thr_point,
+                    rec_thr_point,
+                    thr_elev,
+                    rec_thr_elev,
                     target_crs,
                 )
                 if z_start is None or z_end is None:
@@ -1981,10 +1977,10 @@ class OlsGuidelineMixin:
                                 if connector_len > 1e-3:
                                     z_connector_start = self._get_elevation_at_point_along_gradient(
                                         connector_base_start,
-                                        phys_end_p,
-                                        phys_end_r,
-                                        runway_end_elev,
-                                        rec_runway_end_elev,
+                                        thr_point,
+                                        rec_thr_point,
+                                        thr_elev,
+                                        rec_thr_elev,
                                         target_crs,
                                     )
                                     z_connector_end = za_start
