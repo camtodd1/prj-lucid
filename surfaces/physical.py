@@ -1027,6 +1027,11 @@ class PhysicalGeometryMixin:
                 context["runway_azimuth"],
                 blocked_intervals=blocked_intervals,
                 side_blocked_intervals=side_blocked_intervals,
+                other_strip_geometries=[
+                    other_context.get("strip_geom")
+                    for other_context in contexts
+                    if other_context.get("runway_name") != context["runway_name"]
+                ],
             ):
                 if element_type != "GableMarker" or geometry is None or geometry.isEmpty():
                     continue
@@ -1382,6 +1387,7 @@ class PhysicalGeometryMixin:
         runway_azimuth: float,
         blocked_intervals: Optional[List[Tuple[float, float]]] = None,
         side_blocked_intervals: Optional[Dict[str, List[Tuple[float, float]]]] = None,
+        other_strip_geometries: Optional[List[QgsGeometry]] = None,
     ) -> List[Tuple[str, QgsGeometry, dict]]:
         """Generate MOS 8.09/8.11 gable marker footprints along graded strip edges."""
         markers: List[Tuple[str, QgsGeometry, dict]] = []
@@ -1394,6 +1400,7 @@ class PhysicalGeometryMixin:
 
         blocked_intervals = blocked_intervals or []
         side_blocked_intervals = side_blocked_intervals or {}
+        other_strip_geometries = [geom for geom in (other_strip_geometries or []) if geom is not None]
 
         def _clear_segments(intervals: List[Tuple[float, float]]) -> List[Tuple[float, float]]:
             segments: List[Tuple[float, float]] = []
@@ -1479,6 +1486,12 @@ class PhysicalGeometryMixin:
                 return 0.0
             return intersection.area()
 
+        def _corner_candidate_score(candidate: Optional[QgsGeometry]) -> float:
+            score = _intersection_area(candidate, graded_strip_geom_for_marker_side)
+            for other_geom in other_strip_geometries:
+                score += _intersection_area(candidate, other_geom) * 10.0
+            return score
+
         def _add_short_edge_corner_marker(
             boundary_station: float,
             clear_side_azimuth: float,
@@ -1503,7 +1516,7 @@ class PhysicalGeometryMixin:
                     marker_width,
                     f"Gable Marker {log_name} {boundary_label} Corner {side_label}",
                 )
-                candidate_geometries.append((geom, _intersection_area(geom, graded_strip_geom_for_marker_side)))
+                candidate_geometries.append((geom, _corner_candidate_score(geom)))
             if not candidate_geometries:
                 return
             geom = min(candidate_geometries, key=lambda item: item[1])[0]
