@@ -165,10 +165,80 @@ class PlanarControllingOlsEngine:
         return features
 
     def region_boundary_features(self, fields: QgsFields) -> List[QgsFeature]:
-        """Return line features where solved controlling regions share a boundary."""
+        """Return line features where solved controlling region boundaries change controller."""
         region_parts = self._controlling_region_geometries()
         features: List[QgsFeature] = []
         seen_keys = set()
+        for region_candidate, region in region_parts:
+            try:
+                boundary = region.boundary()
+            except Exception:
+                continue
+            for line_points in self._line_parts(boundary):
+                for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+                    controllers = self._controllers_across_segment(start_point, end_point)
+                    if controllers is None:
+                        continue
+                    first_controller, second_controller = controllers
+                    if first_controller.surface_id == second_controller.surface_id:
+                        continue
+                    segment_points = [start_point, end_point]
+                    key = self._line_key(
+                        segment_points,
+                        first_controller.surface_id,
+                        second_controller.surface_id,
+                    )
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    z_values = self._transition_z_values(segment_points, first_controller, second_controller)
+                    z_line = self._line_points_to_z_geometry(segment_points, z_values)
+                    if z_line is None or z_line.isEmpty():
+                        continue
+                    feature = QgsFeature(fields)
+                    feature.setGeometry(z_line)
+                    feature.setAttributes(
+                        [
+                            f"{first_controller.surface_id}|{second_controller.surface_id}"[:160],
+                            "Transition",
+                            min(z_values),
+                            max(z_values),
+                            f"{first_controller.surface_id}|{second_controller.surface_id}"[:254],
+                            "sampled_region_boundary",
+                        ]
+                    )
+                    features.append(feature)
+        return features
+
+    def _controllers_across_segment(
+        self,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+    ) -> Optional[Tuple[ControllingOlsCandidate, ControllingOlsCandidate]]:
+        dx = end_point.x() - start_point.x()
+        dy = end_point.y() - start_point.y()
+        length = math.hypot(dx, dy)
+        if length <= 1e-6:
+            return None
+        mid_point = QgsPointXY((start_point.x() + end_point.x()) / 2.0, (start_point.y() + end_point.y()) / 2.0)
+        nx = -dy / length
+        ny = dx / length
+        for offset in [max(min(length * 0.02, 5.0), 0.25), 10.0, 25.0]:
+            left = self.controlling_candidate_at_xy(QgsPointXY(mid_point.x() + nx * offset, mid_point.y() + ny * offset))
+            right = self.controlling_candidate_at_xy(QgsPointXY(mid_point.x() - nx * offset, mid_point.y() - ny * offset))
+            if left is None or right is None:
+                continue
+            if left[0].surface_id != right[0].surface_id:
+                return left[0], right[0]
+        return None
+
+    def _legacy_shared_boundary_features(
+        self,
+        fields: QgsFields,
+        region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]],
+        seen_keys: set,
+    ) -> List[QgsFeature]:
+        features: List[QgsFeature] = []
         for index, (first_candidate, first_region) in enumerate(region_parts):
             for second_candidate, second_region in region_parts[index + 1 :]:
                 try:
@@ -260,10 +330,9 @@ class PlanarControllingOlsEngine:
             if min_diff > self.tie_tolerance_m:
                 return None
 
-        if abs(a) >= abs(b):
-            point_on_line = QgsPointXY(-c / a, 0.0)
-        else:
-            point_on_line = QgsPointXY(0.0, -c / b)
+        point_on_line = self._point_on_line_near_geometry(overlap, a, b, c)
+        if point_on_line is None:
+            return None
 
         normal_length = math.hypot(a, b)
         nx = a / normal_length
@@ -325,10 +394,9 @@ class PlanarControllingOlsEngine:
         if abs(a) <= 1e-12 and abs(b) <= 1e-12:
             return None
 
-        if abs(a) >= abs(b):
-            point_on_line = QgsPointXY(-c / a, 0.0)
-        else:
-            point_on_line = QgsPointXY(0.0, -c / b)
+        point_on_line = self._point_on_line_near_geometry(domain, a, b, c)
+        if point_on_line is None:
+            return None
         return self._clip_long_line_to_domain(domain, point_on_line, -b, a)
 
     def _axis_constant_line(
@@ -450,6 +518,30 @@ class PlanarControllingOlsEngine:
         except Exception:
             return False
         return False
+
+    def _point_on_line_near_geometry(
+        self,
+        geometry: Optional[QgsGeometry],
+        a: float,
+        b: float,
+        c: float,
+    ) -> Optional[QgsPointXY]:
+        normal_squared = (a * a) + (b * b)
+        if normal_squared <= 1e-24:
+            return None
+        if geometry is not None and not geometry.isEmpty():
+            bbox = geometry.boundingBox()
+        elif self.bounds is not None and not self.bounds.isEmpty():
+            bbox = self.bounds
+        else:
+            return None
+        center_x = (bbox.xMinimum() + bbox.xMaximum()) / 2.0
+        center_y = (bbox.yMinimum() + bbox.yMaximum()) / 2.0
+        signed_distance_factor = ((a * center_x) + (b * center_y) + c) / normal_squared
+        return QgsPointXY(
+            center_x - (a * signed_distance_factor),
+            center_y - (b * signed_distance_factor),
+        )
 
     def _plane_difference_samples(
         self,
@@ -710,40 +802,46 @@ class ControllingOlsEngineMixin:
         group_name = self.tr("Controlling OLS POC")
         if layer_group is not None and layer_group.name() == group_name:
             return layer_group
-        output_group = self._ensure_layer_group(layer_group, group_name) or layer_group
-        return self._place_controlling_ols_poc_after_nasf(layer_group, output_group)
+        return self._ensure_controlling_ols_poc_group(layer_group, group_name) or layer_group
 
-    def _place_controlling_ols_poc_after_nasf(
+    def _ensure_controlling_ols_poc_group(
         self,
         parent_group: QgsLayerTreeGroup,
-        output_group: QgsLayerTreeGroup,
-    ) -> QgsLayerTreeGroup:
+        group_name: str,
+    ) -> Optional[QgsLayerTreeGroup]:
         """Keep the POC group as a top-level generated group after NASF."""
-        if parent_group is None or output_group is None:
-            return output_group
-        try:
-            children = list(parent_group.children())
-            output_index = children.index(output_group)
-        except ValueError:
-            return output_group
+        if parent_group is None:
+            return None
+
+        existing_group = self._find_direct_child_group(parent_group, group_name)
+        children = list(parent_group.children())
 
         nasf_group = None
         for child in children:
             if isinstance(child, QgsLayerTreeGroup) and child.name() == self.tr("04 NASF Safeguarding Guidelines"):
                 nasf_group = child
                 break
-        if nasf_group is None:
+        target_index = children.index(nasf_group) + 1 if nasf_group is not None else len(children)
+
+        if existing_group is None:
+            try:
+                output_group = parent_group.insertGroup(target_index, group_name)
+            except AttributeError:
+                output_group = parent_group.addGroup(group_name)
+            self._stage_layer_tree_node(output_group)
             return output_group
 
-        nasf_index = children.index(nasf_group)
-        target_index = nasf_index + 1
-        if output_index == target_index:
-            return output_group
+        try:
+            current_index = children.index(existing_group)
+        except ValueError:
+            return existing_group
+        if current_index == target_index:
+            return existing_group
 
-        cloned_group = output_group.clone()
+        cloned_group = existing_group.clone()
         self._stage_layer_tree_node(cloned_group)
         parent_group.insertChildNode(target_index, cloned_group)
-        parent_group.removeChildNode(output_group)
+        parent_group.removeChildNode(existing_group)
         return cloned_group
 
     def _create_controlling_candidate_layer(
