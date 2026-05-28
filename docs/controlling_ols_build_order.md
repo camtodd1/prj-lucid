@@ -95,6 +95,11 @@ Acceptance criteria:
 
 Add transitional candidates before declaring the planar engine complete.
 
+Implementation status: initial integration complete. Generated transitional
+strip-adjacent and approach-adjacent panels are registered as generic planar
+candidates and participate in the Controlling OLS POC candidate, region, and
+transition-edge layers.
+
 Transitional surfaces must include:
 
 - runway-side transitional pieces;

@@ -34,6 +34,7 @@ from .controlling_ols_engine import (
     ControllingOlsCandidate,
     axis_elevation_evaluator,
     constant_elevation_evaluator,
+    plane_elevation_evaluator,
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
@@ -1602,6 +1603,90 @@ class OlsGuidelineMixin:
                 feat.setAttribute(idx, value)
         return feat
 
+    def _plane_coefficients_from_points(
+        self,
+        first_xy: QgsPointXY,
+        first_z: float,
+        second_xy: QgsPointXY,
+        second_z: float,
+        third_xy: QgsPointXY,
+        third_z: float,
+    ) -> Optional[Tuple[float, float, float]]:
+        """Return z = ax + by + c through three non-collinear 3D points."""
+        determinant = (
+            first_xy.x() * (second_xy.y() - third_xy.y())
+            + second_xy.x() * (third_xy.y() - first_xy.y())
+            + third_xy.x() * (first_xy.y() - second_xy.y())
+        )
+        if abs(determinant) <= 1e-9:
+            return None
+
+        a = (
+            first_z * (second_xy.y() - third_xy.y())
+            + second_z * (third_xy.y() - first_xy.y())
+            + third_z * (first_xy.y() - second_xy.y())
+        ) / determinant
+        b = (
+            first_xy.x() * (second_z - third_z)
+            + second_xy.x() * (third_z - first_z)
+            + third_xy.x() * (first_z - second_z)
+        ) / determinant
+        c = (
+            first_xy.x() * (second_xy.y() * third_z - third_xy.y() * second_z)
+            + second_xy.x() * (third_xy.y() * first_z - first_xy.y() * third_z)
+            + third_xy.x() * (first_xy.y() * second_z - second_xy.y() * first_z)
+        ) / determinant
+        return a, b, c
+
+    def _register_transitional_controlling_candidate(
+        self,
+        geom: QgsGeometry,
+        runway_name: str,
+        section_desc: str,
+        side_label: str,
+        sequence: int,
+        first_xy: QgsPointXY,
+        first_z: float,
+        second_xy: QgsPointXY,
+        second_z: float,
+        third_xy: QgsPointXY,
+        third_z: float,
+        metadata: Optional[dict] = None,
+    ) -> None:
+        """Register a generated transitional panel as a generic planar controlling candidate."""
+        if not hasattr(self, "_register_controlling_ols_candidate"):
+            return
+        if geom is None or geom.isEmpty():
+            return
+        if any(value is None for value in [first_xy, second_xy, third_xy, first_z, second_z, third_z]):
+            return
+        plane = self._plane_coefficients_from_points(first_xy, first_z, second_xy, second_z, third_xy, third_z)
+        if plane is None:
+            return
+        safe_runway_name = str(runway_name or "RWY").replace("/", "-").replace(" ", "_")
+        safe_side = str(side_label or "").replace(" ", "_")
+        surface_id = f"TRANS:{safe_runway_name}:{safe_side}:{sequence}"
+        candidate_metadata = {
+            "plane_a": plane[0],
+            "plane_b": plane[1],
+            "plane_c": plane[2],
+            "runway_name": runway_name,
+            "section_desc": section_desc,
+            "side": side_label,
+        }
+        if metadata:
+            candidate_metadata.update(metadata)
+        self._register_controlling_ols_candidate(
+            ControllingOlsCandidate(
+                surface_id=surface_id,
+                surface_type="Transitional",
+                footprint=QgsGeometry(geom),
+                elevation_at_xy=plane_elevation_evaluator(*plane),
+                model="plane",
+                metadata=candidate_metadata,
+            )
+        )
+
     def _generate_transitional_features(
         self,
         processed_runway_data_list: List[dict],
@@ -1624,6 +1709,7 @@ class OlsGuidelineMixin:
         transitional_fields = self._get_ols_fields("Transitional")
         contour_fields = self._get_transitional_contour_fields()
         contour_interval = self._get_contour_interval("transitional", TRANSITIONAL_CONTOUR_INTERVAL)
+        transitional_candidate_sequence = 0
 
         if IHS_ELEVATION_AMSL is None:
             QgsMessageLog.logMessage(
@@ -1984,6 +2070,25 @@ class OlsGuidelineMixin:
                             if idx != -1:
                                 feat.setAttribute(idx, value)
                         transitional_features.append(feat)
+                        transitional_candidate_sequence += 1
+                        self._register_transitional_controlling_candidate(
+                            poly_geom,
+                            runway_name,
+                            "Transitional Strip Adjacent Surface",
+                            side_label,
+                            transitional_candidate_sequence,
+                            p_start_xy,
+                            z_start,
+                            p_end_xy,
+                            z_end,
+                            p_upper_start,
+                            IHS_ELEVATION_AMSL,
+                            metadata={
+                                "slope": transitional_slope,
+                                "ref_mos": transitional_ref,
+                                "segment_index": segment_index,
+                            },
+                        )
 
                         lower_edge = self._make_transitional_contour_feature(
                             QgsGeometry.fromPolylineXY([p_start_xy, p_end_xy]),
@@ -2165,6 +2270,26 @@ class OlsGuidelineMixin:
                                 if idx != -1:
                                     feat.setAttribute(idx, value)
                             transitional_features.append(feat)
+                            transitional_candidate_sequence += 1
+                            self._register_transitional_controlling_candidate(
+                                poly_geom,
+                                runway_name,
+                                f"Transitional {end_desig} Approach Adjacent Surface",
+                                side_label,
+                                transitional_candidate_sequence,
+                                points_base[0],
+                                za_start_clipped,
+                                points_base[1],
+                                za_end_clipped,
+                                points_top[0],
+                                IHS_ELEVATION_AMSL,
+                                metadata={
+                                    "slope": transitional_slope,
+                                    "ref_mos": transitional_ref,
+                                    "end_desig": end_desig,
+                                    "approach_section_index": i + 1,
+                                },
+                            )
 
                             top_start = points_top[0]
                             top_end = points_top[1]

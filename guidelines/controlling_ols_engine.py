@@ -78,6 +78,15 @@ def axis_elevation_evaluator(
     return _evaluate
 
 
+def plane_elevation_evaluator(a: float, b: float, c: float) -> ElevationEvaluator:
+    """Return an evaluator for a generic planar surface z = ax + by + c."""
+
+    def _evaluate(point_xy: QgsPointXY) -> Optional[float]:
+        return (a * point_xy.x()) + (b * point_xy.y()) + c
+
+    return _evaluate
+
+
 class PlanarControllingOlsEngine:
     """Compute exact transition edges between planar OLS candidates."""
 
@@ -85,7 +94,7 @@ class PlanarControllingOlsEngine:
         self.candidates = [
             candidate
             for candidate in candidates
-            if candidate.model in {"constant", "axis"}
+            if candidate.model in {"constant", "axis", "plane"}
             and candidate.footprint is not None
             and not candidate.footprint.isEmpty()
         ]
@@ -242,13 +251,30 @@ class PlanarControllingOlsEngine:
         first_candidate: ControllingOlsCandidate,
         second_candidate: ControllingOlsCandidate,
     ) -> Optional[QgsGeometry]:
-        if first_candidate.model == "axis" and second_candidate.model == "constant":
-            return self._axis_constant_line(domain, first_candidate, second_candidate)
-        if first_candidate.model == "constant" and second_candidate.model == "axis":
-            return self._axis_constant_line(domain, second_candidate, first_candidate)
-        if first_candidate.model == "axis" and second_candidate.model == "axis":
-            return self._axis_axis_line(domain, first_candidate, second_candidate)
-        return None
+        return self._plane_plane_line(domain, first_candidate, second_candidate)
+
+    def _plane_plane_line(
+        self,
+        domain: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        first_plane = self._linear_plane(first_candidate)
+        second_plane = self._linear_plane(second_candidate)
+        if first_plane is None or second_plane is None:
+            return None
+
+        a = first_plane[0] - second_plane[0]
+        b = first_plane[1] - second_plane[1]
+        c = first_plane[2] - second_plane[2]
+        if abs(a) <= 1e-12 and abs(b) <= 1e-12:
+            return None
+
+        if abs(a) >= abs(b):
+            point_on_line = QgsPointXY(-c / a, 0.0)
+        else:
+            point_on_line = QgsPointXY(0.0, -c / b)
+        return self._clip_long_line_to_domain(domain, point_on_line, -b, a)
 
     def _axis_constant_line(
         self,
@@ -391,6 +417,15 @@ class PlanarControllingOlsEngine:
             elevation = self._constant_elevation(candidate)
             return (0.0, 0.0, elevation) if elevation is not None else None
         if candidate.model != "axis":
+            if candidate.model == "plane":
+                try:
+                    return (
+                        float(candidate.metadata["plane_a"]),
+                        float(candidate.metadata["plane_b"]),
+                        float(candidate.metadata["plane_c"]),
+                    )
+                except (KeyError, TypeError, ValueError):
+                    return None
             return None
         axis = self._axis_model(candidate)
         if axis is None:
@@ -545,7 +580,7 @@ class ControllingOlsEngineMixin:
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
-        planar_candidates = [candidate for candidate in candidates if candidate.model in {"constant", "axis"}]
+        planar_candidates = [candidate for candidate in candidates if candidate.model in {"constant", "axis", "plane"}]
         if not planar_candidates:
             QgsMessageLog.logMessage(
                 "Controlling OLS planar POC skipped: no planar candidate surfaces were registered.",
@@ -745,6 +780,8 @@ class ControllingOlsEngineMixin:
                 return min(origin_elevation, end_elevation), max(origin_elevation, end_elevation)
             except (KeyError, TypeError, ValueError):
                 return None, None
+        if candidate.model == "plane":
+            return self._geometry_elevation_range(candidate.footprint, candidate)
 
         sample_points: List[QgsPointXY] = []
         try:
