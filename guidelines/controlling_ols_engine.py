@@ -288,11 +288,16 @@ class PlanarControllingOlsEngine:
                 if not self._has_polygon_area(overlap):
                     continue
                 halfplane = self._candidate_lower_halfplane(candidate, competitor, overlap)
-                if halfplane is None:
-                    region = QgsGeometry()
-                    break
                 try:
-                    region = region.intersection(halfplane)
+                    outside_overlap = region.difference(overlap)
+                    retained_parts = []
+                    if outside_overlap is not None and not outside_overlap.isEmpty():
+                        retained_parts.append(outside_overlap)
+                    if halfplane is not None:
+                        clipped_overlap = overlap.intersection(halfplane)
+                        if clipped_overlap is not None and not clipped_overlap.isEmpty():
+                            retained_parts.append(clipped_overlap)
+                    region = QgsGeometry.unaryUnion(retained_parts) if retained_parts else QgsGeometry()
                 except Exception:
                     region = QgsGeometry()
                     break
