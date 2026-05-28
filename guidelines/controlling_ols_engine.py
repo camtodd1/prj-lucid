@@ -215,7 +215,12 @@ class PlanarControllingOlsEngine:
                         continue
                 except Exception:
                     continue
-                halfplane = self._candidate_lower_halfplane(candidate, competitor)
+                overlap = None
+                try:
+                    overlap = region.intersection(competitor.footprint)
+                except Exception:
+                    overlap = None
+                halfplane = self._candidate_lower_halfplane(candidate, competitor, overlap)
                 if halfplane is None:
                     region = QgsGeometry()
                     break
@@ -235,6 +240,7 @@ class PlanarControllingOlsEngine:
         self,
         candidate: ControllingOlsCandidate,
         competitor: ControllingOlsCandidate,
+        overlap: Optional[QgsGeometry] = None,
     ) -> Optional[QgsGeometry]:
         """Return a large polygon where candidate elevation is <= competitor elevation."""
         candidate_plane = self._linear_plane(candidate)
@@ -247,6 +253,15 @@ class PlanarControllingOlsEngine:
         c = candidate_plane[2] - competitor_plane[2]
         if abs(a) <= 1e-12 and abs(b) <= 1e-12:
             return self._global_extent_polygon() if c <= self.tie_tolerance_m else None
+
+        sampled_differences = self._plane_difference_samples(overlap, a, b, c)
+        if sampled_differences:
+            max_diff = max(sampled_differences)
+            min_diff = min(sampled_differences)
+            if max_diff <= self.tie_tolerance_m:
+                return self._global_extent_polygon()
+            if min_diff > self.tie_tolerance_m:
+                return None
 
         if abs(a) >= abs(b):
             point_on_line = QgsPointXY(-c / a, 0.0)
@@ -427,6 +442,38 @@ class PlanarControllingOlsEngine:
         canonical_points = rounded_points if rounded_points <= reversed_points else reversed_points
         integer_points = tuple((int(round(x * 1000)), int(round(y * 1000))) for x, y in canonical_points)
         return surface_ids[0], surface_ids[1], integer_points
+
+    def _plane_difference_samples(
+        self,
+        geometry: Optional[QgsGeometry],
+        a: float,
+        b: float,
+        c: float,
+    ) -> List[float]:
+        if geometry is None or geometry.isEmpty():
+            return []
+        sample_points: List[QgsPointXY] = []
+        try:
+            point_on_surface = geometry.pointOnSurface()
+            if point_on_surface is not None and not point_on_surface.isEmpty():
+                point = point_on_surface.asPoint()
+                sample_points.append(QgsPointXY(point.x(), point.y()))
+            bbox = geometry.boundingBox()
+            for fx, fy in [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0), (0.5, 0.5)]:
+                point_xy = QgsPointXY(
+                    bbox.xMinimum() + (bbox.width() * fx),
+                    bbox.yMinimum() + (bbox.height() * fy),
+                )
+                if geometry.intersects(QgsGeometry.fromPointXY(point_xy)):
+                    sample_points.append(point_xy)
+            if geometry.type() == QgsWkbTypes.PolygonGeometry:
+                polygons = geometry.asMultiPolygon() if geometry.isMultipart() else [geometry.asPolygon()]
+                for polygon in polygons:
+                    if polygon and polygon[0]:
+                        sample_points.extend(QgsPointXY(point.x(), point.y()) for point in polygon[0])
+        except Exception:
+            return []
+        return [(a * point.x()) + (b * point.y()) + c for point in sample_points]
 
     def _clip_long_line_to_domain(
         self,
