@@ -696,6 +696,22 @@ class ControllingOlsEngineMixin:
         return False
 
     def _candidate_elevation_range(self, candidate: ControllingOlsCandidate) -> Tuple[Optional[float], Optional[float]]:
+        if candidate.model == "constant":
+            try:
+                elevation = float(candidate.metadata["elevation_m"])
+                return elevation, elevation
+            except (KeyError, TypeError, ValueError):
+                return None, None
+        if candidate.model == "axis":
+            try:
+                origin_elevation = float(candidate.metadata["origin_elevation_m"])
+                slope = float(candidate.metadata["slope"])
+                max_distance = float(candidate.metadata["max_distance_m"])
+                end_elevation = origin_elevation + (slope * max_distance)
+                return min(origin_elevation, end_elevation), max(origin_elevation, end_elevation)
+            except (KeyError, TypeError, ValueError):
+                return None, None
+
         sample_points: List[QgsPointXY] = []
         try:
             bbox = candidate.footprint.boundingBox()
