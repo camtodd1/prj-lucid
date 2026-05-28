@@ -159,6 +159,10 @@ guidelines.
 
 If icons or Qt resources are changed, regenerate `resources_rc.py` with the
 QGIS-compatible Qt resource compiler used by your local QGIS/PyQt installation.
+The generated file must import Qt through `qgis.PyQt`, for example
+`from qgis.PyQt import QtCore`; do not commit generated resources that import
+`PySide6` or top-level `PyQt6`, because packaged QGIS plugin installs should
+only rely on QGIS' bundled Python/Qt compatibility layer.
 
 ## Current Limitations
 
