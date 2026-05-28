@@ -33,4 +33,5 @@ def classFactory(iface):  # pylint: disable=invalid-name
     """
     #
     from .safeguarding_builder import SafeguardingBuilder
+
     return SafeguardingBuilder(iface)
