@@ -30,6 +30,11 @@ from .guideline_constants import (
     TOCS_CONTOUR_INTERVAL,
     TRANSITIONAL_CONTOUR_INTERVAL,
 )
+from .controlling_ols_engine import (
+    ControllingOlsCandidate,
+    axis_elevation_evaluator,
+    constant_elevation_evaluator,
+)
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
@@ -360,6 +365,17 @@ class OlsGuidelineMixin:
                 )
                 if layer is not None:
                     overall_success = True
+                if hasattr(self, "_register_controlling_ols_candidate"):
+                    self._register_controlling_ols_candidate(
+                        ControllingOlsCandidate(
+                            surface_id=f"IHS:{icao_code}",
+                            surface_type="IHS",
+                            footprint=QgsGeometry(ihs_base_geom),
+                            elevation_at_xy=constant_elevation_evaluator(IHS_ELEVATION_AMSL),
+                            model="constant",
+                            metadata={"elevation_m": IHS_ELEVATION_AMSL},
+                        )
+                    )
             except Exception as e_ihs_layer:
                 QgsMessageLog.logMessage(
                     f"Critical error creating IHS Feature/Layer: {e_ihs_layer}\n{traceback.format_exc()}",
@@ -780,6 +796,17 @@ class OlsGuidelineMixin:
                             )
                             if layer is not None:
                                 overall_success = True
+                            if hasattr(self, "_register_controlling_ols_candidate"):
+                                self._register_controlling_ols_candidate(
+                                    ControllingOlsCandidate(
+                                        surface_id=f"OHS:{icao_code}",
+                                        surface_type="OHS",
+                                        footprint=QgsGeometry(ohs_final_geom),
+                                        elevation_at_xy=constant_elevation_evaluator(ohs_elevation_amsl),
+                                        model="constant",
+                                        metadata={"elevation_m": ohs_elevation_amsl},
+                                    )
+                                )
                         else:
                             QgsMessageLog.logMessage(
                                 "Failed create valid OHS full circle geom.",
@@ -2688,6 +2715,40 @@ class OlsGuidelineMixin:
                             feature.setAttribute(idx, value)
 
                     main_polygon_features.append(feature)  # Add section feature to the list
+                    if (
+                        hasattr(self, "_register_controlling_ols_candidate")
+                        and current_elevation_amsl is not None
+                        and current_start_point is not None
+                    ):
+                        self._register_controlling_ols_candidate(
+                            ControllingOlsCandidate(
+                                surface_id=(
+                                    f"APP:{runway_data.get('short_name', 'N/A')}:"
+                                    f"{end_desig}:S{i + 1}"
+                                ),
+                                surface_type="Approach",
+                                footprint=QgsGeometry(valid_geom),
+                                elevation_at_xy=axis_elevation_evaluator(
+                                    current_start_point,
+                                    outward_azimuth,
+                                    current_elevation_amsl,
+                                    section_slope,
+                                    section_length,
+                                ),
+                                model="axis",
+                                metadata={
+                                    "origin_x": current_start_point.x(),
+                                    "origin_y": current_start_point.y(),
+                                    "azimuth_degrees": outward_azimuth,
+                                    "origin_elevation_m": current_elevation_amsl,
+                                    "slope": section_slope,
+                                    "max_distance_m": section_length,
+                                    "runway": runway_data.get("short_name", "N/A"),
+                                    "end": end_desig,
+                                    "section": i + 1,
+                                },
+                            )
+                        )
 
                 except Exception as e_feat:
                     QgsMessageLog.logMessage(
@@ -2997,6 +3058,32 @@ class OlsGuidelineMixin:
             idx = fields.indexFromName(name)
             if idx != -1:
                 feature.setAttribute(idx, value)
+        if hasattr(self, "_register_controlling_ols_candidate") and origin_elevation is not None:
+            self._register_controlling_ols_candidate(
+                ControllingOlsCandidate(
+                    surface_id=f"TOCS:{runway_data.get('short_name', 'N/A')}:{end_desig}",
+                    surface_type="TOCS",
+                    footprint=QgsGeometry(final_geom),
+                    elevation_at_xy=axis_elevation_evaluator(
+                        start_point,
+                        outward_azimuth,
+                        origin_elevation,
+                        slope,
+                        overall_length,
+                    ),
+                    model="axis",
+                    metadata={
+                        "origin_x": start_point.x(),
+                        "origin_y": start_point.y(),
+                        "azimuth_degrees": outward_azimuth,
+                        "origin_elevation_m": origin_elevation,
+                        "slope": slope,
+                        "max_distance_m": overall_length,
+                        "runway": runway_data.get("short_name", "N/A"),
+                        "end": end_desig,
+                    },
+                )
+            )
 
         # ---- TOCS Contour Features with Clipping ----
         # TOCS_CONTOUR_INTERVAL = 10.0  # Adjust as needed

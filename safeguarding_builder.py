@@ -42,6 +42,7 @@ from .surfaces.met import MetSurfacesMixin
 from .guidelines.simple import SimpleGuidelinesMixin
 from .guidelines.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
+from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
 from .dimensions import ols_dimensions
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 
@@ -67,6 +68,7 @@ PLUGIN_TAG = "SafeguardingBuilder"
 class SafeguardingBuilder(
     SimpleGuidelinesMixin,
     LightingGuidelineMixin,
+    ControllingOlsEngineMixin,
     OlsGuidelineMixin,
     PhysicalGeometryMixin,
     AirfieldGroundLightingMixin,
@@ -692,6 +694,7 @@ class SafeguardingBuilder(
                 self._log("Airfield Ground Lighting skipped: option not enabled.")
 
             guideline_groups = self._create_guideline_groups(nasf_guidelines_group, bool(cns_input_list))
+            self._reset_controlling_ols_engine()
 
             airport_wide_ols_group = None
             runway_ols_group = None
@@ -750,6 +753,12 @@ class SafeguardingBuilder(
                 any_guideline_processed_ok,
                 airport_wide_ols_group,
             )
+            if guideline_groups.get("F") is not None:
+                controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
+                    icao_code,
+                    guideline_groups["F"],
+                )
+                any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
             self._write_runway_summary_report(icao_code, processed_runway_data_list)

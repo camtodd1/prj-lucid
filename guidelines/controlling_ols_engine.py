@@ -1,0 +1,720 @@
+# -*- coding: utf-8 -*-
+"""Planar lower-envelope engine for controlling OLS proof-of-concept outputs."""
+
+import math
+from dataclasses import dataclass, field
+from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
+
+from qgis.PyQt.QtCore import QVariant  # type: ignore
+from qgis.core import (  # type: ignore
+    Qgis,
+    QgsFeature,
+    QgsField,
+    QgsFields,
+    QgsGeometry,
+    QgsLayerTreeGroup,
+    QgsLineString,
+    QgsMessageLog,
+    QgsPoint,
+    QgsPointXY,
+    QgsRectangle,
+    QgsWkbTypes,
+)
+
+PLUGIN_TAG = "SafeguardingBuilder"
+
+ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
+
+
+@dataclass(frozen=True)
+class ControllingOlsCandidate:
+    """A candidate OLS surface represented by a 2D domain and an elevation function."""
+
+    surface_id: str
+    surface_type: str
+    footprint: QgsGeometry
+    elevation_at_xy: ElevationEvaluator
+    model: str
+    metadata: Dict[str, object] = field(default_factory=dict)
+
+    def contains_xy(self, point_xy: QgsPointXY) -> bool:
+        if self.footprint is None or self.footprint.isEmpty():
+            return False
+        return bool(self.footprint.intersects(QgsGeometry.fromPointXY(point_xy)))
+
+
+def constant_elevation_evaluator(elevation_m: float) -> ElevationEvaluator:
+    """Return an evaluator for a flat OLS plane."""
+
+    def _evaluate(_point_xy: QgsPointXY) -> Optional[float]:
+        return elevation_m
+
+    return _evaluate
+
+
+def axis_elevation_evaluator(
+    origin_xy: QgsPointXY,
+    azimuth_degrees: float,
+    origin_elevation_m: float,
+    slope: float,
+    max_distance_m: Optional[float] = None,
+) -> ElevationEvaluator:
+    """Return an evaluator for a planar surface rising along an axis."""
+    azimuth_radians = math.radians(azimuth_degrees)
+    ux = math.sin(azimuth_radians)
+    uy = math.cos(azimuth_radians)
+
+    def _evaluate(point_xy: QgsPointXY) -> Optional[float]:
+        distance_along = ((point_xy.x() - origin_xy.x()) * ux) + ((point_xy.y() - origin_xy.y()) * uy)
+        if distance_along < -1e-6:
+            return None
+        if max_distance_m is not None and distance_along > max_distance_m + 1e-6:
+            return None
+        clamped = max(0.0, distance_along)
+        if max_distance_m is not None:
+            clamped = min(max_distance_m, clamped)
+        return origin_elevation_m + (clamped * slope)
+
+    return _evaluate
+
+
+class PlanarControllingOlsEngine:
+    """Compute exact transition edges between planar OLS candidates."""
+
+    def __init__(self, candidates: Sequence[ControllingOlsCandidate], tie_tolerance_m: float = 0.01):
+        self.candidates = [
+            candidate
+            for candidate in candidates
+            if candidate.model in {"constant", "axis"}
+            and candidate.footprint is not None
+            and not candidate.footprint.isEmpty()
+        ]
+        self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
+        self.bounds = self._combined_bounds(self.candidates)
+
+    def controlling_candidate_at_xy(self, point_xy: QgsPointXY) -> Optional[Tuple[ControllingOlsCandidate, float]]:
+        """Return the lowest applicable planar candidate at a point."""
+        evaluated: List[Tuple[ControllingOlsCandidate, float]] = []
+        for candidate in self.candidates:
+            if not candidate.contains_xy(point_xy):
+                continue
+            elevation = candidate.elevation_at_xy(point_xy)
+            if elevation is None or not math.isfinite(elevation):
+                continue
+            evaluated.append((candidate, elevation))
+        if not evaluated:
+            return None
+        evaluated.sort(key=lambda item: item[1])
+        return evaluated[0]
+
+    def transition_features(self, fields: QgsFields) -> List[QgsFeature]:
+        """Return exact line features where supported planar candidates exchange control."""
+        features: List[QgsFeature] = []
+        for index, first_candidate in enumerate(self.candidates):
+            for second_candidate in self.candidates[index + 1 :]:
+                for transition_line in self._candidate_transition_lines(first_candidate, second_candidate):
+                    for line_points in self._line_parts(transition_line):
+                        if len(line_points) < 2:
+                            continue
+                        z_values = self._transition_z_values(line_points, first_candidate, second_candidate)
+                        z_line = self._line_points_to_z_geometry(line_points, z_values)
+                        if z_line is None or z_line.isEmpty():
+                            continue
+                        feature = QgsFeature(fields)
+                        feature.setGeometry(z_line)
+                        feature.setAttributes(
+                            [
+                                f"{first_candidate.surface_id}|{second_candidate.surface_id}"[:160],
+                                "Transition",
+                                min(z_values),
+                                max(z_values),
+                                f"{first_candidate.surface_id}|{second_candidate.surface_id}"[:254],
+                                "exact_planar_transition",
+                            ]
+                        )
+                        features.append(feature)
+        return features
+
+    def region_features(self, fields: QgsFields) -> List[QgsFeature]:
+        """Return regions where each planar candidate is lower than all overlapping candidates."""
+        features: List[QgsFeature] = []
+        for candidate in self.candidates:
+            region = QgsGeometry(candidate.footprint)
+            for competitor in self.candidates:
+                if competitor.surface_id == candidate.surface_id:
+                    continue
+                if region is None or region.isEmpty():
+                    break
+                try:
+                    if not competitor.footprint.intersects(region):
+                        continue
+                except Exception:
+                    continue
+                halfplane = self._candidate_lower_halfplane(candidate, competitor)
+                if halfplane is None:
+                    region = QgsGeometry()
+                    break
+                try:
+                    region = region.intersection(halfplane)
+                except Exception:
+                    region = QgsGeometry()
+                    break
+
+            for region_part in self._polygon_parts(region):
+                if region_part.area() <= 1e-3:
+                    continue
+                feature = QgsFeature(fields)
+                feature.setGeometry(region_part)
+                min_elev, max_elev = self._geometry_elevation_range(region_part, candidate)
+                feature.setAttributes(
+                    [
+                        candidate.surface_id,
+                        candidate.surface_type,
+                        candidate.model,
+                        min_elev,
+                        max_elev,
+                        "exact_planar_halfplane",
+                    ]
+                )
+                features.append(feature)
+        return features
+
+    def _candidate_lower_halfplane(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        """Return a large polygon where candidate elevation is <= competitor elevation."""
+        candidate_plane = self._linear_plane(candidate)
+        competitor_plane = self._linear_plane(competitor)
+        if candidate_plane is None or competitor_plane is None:
+            return None
+
+        a = candidate_plane[0] - competitor_plane[0]
+        b = candidate_plane[1] - competitor_plane[1]
+        c = candidate_plane[2] - competitor_plane[2]
+        if abs(a) <= 1e-12 and abs(b) <= 1e-12:
+            return self._global_extent_polygon() if c <= self.tie_tolerance_m else None
+
+        if abs(a) >= abs(b):
+            point_on_line = QgsPointXY(-c / a, 0.0)
+        else:
+            point_on_line = QgsPointXY(0.0, -c / b)
+
+        normal_length = math.hypot(a, b)
+        nx = a / normal_length
+        ny = b / normal_length
+        dx = -ny
+        dy = nx
+        span = self._global_span()
+
+        p1 = QgsPointXY(point_on_line.x() - (dx * span), point_on_line.y() - (dy * span))
+        p2 = QgsPointXY(point_on_line.x() + (dx * span), point_on_line.y() + (dy * span))
+        # The negative normal side has candidate - competitor <= 0.
+        p3 = QgsPointXY(p2.x() - (nx * span * 2.0), p2.y() - (ny * span * 2.0))
+        p4 = QgsPointXY(p1.x() - (nx * span * 2.0), p1.y() - (ny * span * 2.0))
+        return QgsGeometry.fromPolygonXY([[p1, p2, p3, p4, p1]])
+
+    def _candidate_transition_lines(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> List[QgsGeometry]:
+        try:
+            overlap = first_candidate.footprint.intersection(second_candidate.footprint)
+        except Exception:
+            overlap = None
+        if overlap is None or overlap.isEmpty():
+            return []
+
+        lines: List[QgsGeometry] = []
+        for overlap_part in self._polygon_parts(overlap):
+            line = self._equality_line_for_pair(overlap_part, first_candidate, second_candidate)
+            if line is None or line.isEmpty():
+                continue
+            if self._line_separates_controllers(line, first_candidate, second_candidate):
+                lines.append(line)
+        return lines
+
+    def _equality_line_for_pair(
+        self,
+        domain: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        if first_candidate.model == "axis" and second_candidate.model == "constant":
+            return self._axis_constant_line(domain, first_candidate, second_candidate)
+        if first_candidate.model == "constant" and second_candidate.model == "axis":
+            return self._axis_constant_line(domain, second_candidate, first_candidate)
+        if first_candidate.model == "axis" and second_candidate.model == "axis":
+            return self._axis_axis_line(domain, first_candidate, second_candidate)
+        return None
+
+    def _axis_constant_line(
+        self,
+        domain: QgsGeometry,
+        axis_candidate: ControllingOlsCandidate,
+        constant_candidate: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        axis = self._axis_model(axis_candidate)
+        constant_elevation = self._constant_elevation(constant_candidate)
+        if axis is None or constant_elevation is None or abs(axis["slope"]) <= 1e-12:
+            return None
+
+        station = (constant_elevation - axis["origin_elevation_m"]) / axis["slope"]
+        max_distance = axis.get("max_distance_m")
+        if station < -1e-6:
+            return None
+        if max_distance is not None and station > max_distance + 1e-6:
+            return None
+
+        point_on_axis = QgsPointXY(
+            axis["origin_x"] + (axis["ux"] * station),
+            axis["origin_y"] + (axis["uy"] * station),
+        )
+        return self._clip_long_line_to_domain(domain, point_on_axis, -axis["uy"], axis["ux"])
+
+    def _axis_axis_line(
+        self,
+        domain: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        first_axis = self._axis_model(first_candidate)
+        second_axis = self._axis_model(second_candidate)
+        if first_axis is None or second_axis is None:
+            return None
+
+        a = (first_axis["slope"] * first_axis["ux"]) - (second_axis["slope"] * second_axis["ux"])
+        b = (first_axis["slope"] * first_axis["uy"]) - (second_axis["slope"] * second_axis["uy"])
+        c = (
+            first_axis["origin_elevation_m"]
+            - (first_axis["slope"] * ((first_axis["origin_x"] * first_axis["ux"]) + (first_axis["origin_y"] * first_axis["uy"])))
+            - second_axis["origin_elevation_m"]
+            + (second_axis["slope"] * ((second_axis["origin_x"] * second_axis["ux"]) + (second_axis["origin_y"] * second_axis["uy"])))
+        )
+
+        if abs(a) <= 1e-12 and abs(b) <= 1e-12:
+            return None
+
+        if abs(a) >= abs(b):
+            point_on_line = QgsPointXY(-c / a, 0.0)
+        else:
+            point_on_line = QgsPointXY(0.0, -c / b)
+        return self._clip_long_line_to_domain(domain, point_on_line, -b, a)
+
+    def _line_separates_controllers(
+        self,
+        line: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> bool:
+        expected_ids = {first_candidate.surface_id, second_candidate.surface_id}
+        for points in self._line_parts(line):
+            for start_point, end_point in zip(points[:-1], points[1:]):
+                dx = end_point.x() - start_point.x()
+                dy = end_point.y() - start_point.y()
+                length = math.hypot(dx, dy)
+                if length <= 1e-6:
+                    continue
+                mid_point = QgsPointXY((start_point.x() + end_point.x()) / 2.0, (start_point.y() + end_point.y()) / 2.0)
+                nx = -dy / length
+                ny = dx / length
+                offset = max(min(length * 0.05, 5.0), 0.5)
+                left = self.controlling_candidate_at_xy(QgsPointXY(mid_point.x() + nx * offset, mid_point.y() + ny * offset))
+                right = self.controlling_candidate_at_xy(QgsPointXY(mid_point.x() - nx * offset, mid_point.y() - ny * offset))
+                if left is None or right is None:
+                    continue
+                observed_ids = {left[0].surface_id, right[0].surface_id}
+                if observed_ids == expected_ids and left[0].surface_id != right[0].surface_id:
+                    return True
+        return False
+
+    def _transition_z_values(
+        self,
+        line_points: List[QgsPointXY],
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> List[float]:
+        values: List[float] = []
+        for point_xy in line_points:
+            elevations = []
+            for candidate in (first_candidate, second_candidate):
+                elevation = candidate.elevation_at_xy(point_xy)
+                if elevation is not None and math.isfinite(elevation):
+                    elevations.append(float(elevation))
+            values.append(sum(elevations) / len(elevations) if elevations else 0.0)
+        return values
+
+    def _clip_long_line_to_domain(
+        self,
+        domain: QgsGeometry,
+        point_on_line: QgsPointXY,
+        direction_x: float,
+        direction_y: float,
+    ) -> Optional[QgsGeometry]:
+        direction_length = math.hypot(direction_x, direction_y)
+        if domain is None or domain.isEmpty() or direction_length <= 1e-12:
+            return None
+        direction_x /= direction_length
+        direction_y /= direction_length
+        bbox = domain.boundingBox()
+        length = max(bbox.width(), bbox.height(), 1.0) * 4.0
+        line = QgsGeometry.fromPolylineXY(
+            [
+                QgsPointXY(point_on_line.x() - (direction_x * length), point_on_line.y() - (direction_y * length)),
+                QgsPointXY(point_on_line.x() + (direction_x * length), point_on_line.y() + (direction_y * length)),
+            ]
+        )
+        clipped = line.intersection(domain)
+        return clipped if clipped is not None and not clipped.isEmpty() else None
+
+    def _axis_model(self, candidate: ControllingOlsCandidate) -> Optional[dict]:
+        try:
+            azimuth = math.radians(float(candidate.metadata["azimuth_degrees"]))
+            max_distance_raw = candidate.metadata.get("max_distance_m")
+            return {
+                "origin_x": float(candidate.metadata["origin_x"]),
+                "origin_y": float(candidate.metadata["origin_y"]),
+                "origin_elevation_m": float(candidate.metadata["origin_elevation_m"]),
+                "slope": float(candidate.metadata["slope"]),
+                "max_distance_m": float(max_distance_raw) if max_distance_raw is not None else None,
+                "ux": math.sin(azimuth),
+                "uy": math.cos(azimuth),
+            }
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _linear_plane(self, candidate: ControllingOlsCandidate) -> Optional[Tuple[float, float, float]]:
+        """Return z = ax + by + c for supported planar candidates."""
+        if candidate.model == "constant":
+            elevation = self._constant_elevation(candidate)
+            return (0.0, 0.0, elevation) if elevation is not None else None
+        if candidate.model != "axis":
+            return None
+        axis = self._axis_model(candidate)
+        if axis is None:
+            return None
+        a = axis["slope"] * axis["ux"]
+        b = axis["slope"] * axis["uy"]
+        c = axis["origin_elevation_m"] - (
+            axis["slope"] * ((axis["origin_x"] * axis["ux"]) + (axis["origin_y"] * axis["uy"]))
+        )
+        return (a, b, c)
+
+    def _constant_elevation(self, candidate: ControllingOlsCandidate) -> Optional[float]:
+        try:
+            return float(candidate.metadata["elevation_m"])
+        except (KeyError, TypeError, ValueError):
+            return None
+
+    def _line_points_to_z_geometry(self, points: List[QgsPointXY], z_values: List[float]) -> Optional[QgsGeometry]:
+        if len(points) < 2 or len(points) != len(z_values):
+            return None
+        line = QgsLineString()
+        for point_xy, z_value in zip(points, z_values):
+            line.addVertex(QgsPoint(point_xy.x(), point_xy.y(), z_value))
+        geometry = QgsGeometry(line)
+        return geometry if geometry is not None and not geometry.isEmpty() else None
+
+    def _geometry_elevation_range(
+        self,
+        geometry: QgsGeometry,
+        candidate: ControllingOlsCandidate,
+    ) -> Tuple[Optional[float], Optional[float]]:
+        sample_points: List[QgsPointXY] = []
+        try:
+            point_on_surface = geometry.pointOnSurface()
+            if point_on_surface is not None and not point_on_surface.isEmpty():
+                point = point_on_surface.asPoint()
+                sample_points.append(QgsPointXY(point.x(), point.y()))
+            bbox = geometry.boundingBox()
+            for fx, fy in [(0.25, 0.25), (0.25, 0.75), (0.75, 0.25), (0.75, 0.75), (0.5, 0.5)]:
+                point_xy = QgsPointXY(
+                    bbox.xMinimum() + (bbox.width() * fx),
+                    bbox.yMinimum() + (bbox.height() * fy),
+                )
+                if geometry.intersects(QgsGeometry.fromPointXY(point_xy)):
+                    sample_points.append(point_xy)
+        except Exception:
+            return None, None
+
+        values = []
+        for point_xy in sample_points:
+            elevation = candidate.elevation_at_xy(point_xy)
+            if elevation is not None and math.isfinite(elevation):
+                values.append(float(elevation))
+        return (min(values), max(values)) if values else (None, None)
+
+    def _combined_bounds(self, candidates: Iterable[ControllingOlsCandidate]) -> Optional[QgsRectangle]:
+        combined: Optional[QgsRectangle] = None
+        for candidate in candidates:
+            try:
+                candidate_bounds = candidate.footprint.boundingBox()
+            except Exception:
+                continue
+            if combined is None:
+                combined = QgsRectangle(candidate_bounds)
+            else:
+                combined.combineExtentWith(candidate_bounds)
+        return combined
+
+    def _global_span(self) -> float:
+        if self.bounds is None or self.bounds.isEmpty():
+            return 100000.0
+        return max(self.bounds.width(), self.bounds.height(), 1.0) * 8.0
+
+    def _global_extent_polygon(self) -> QgsGeometry:
+        if self.bounds is None or self.bounds.isEmpty():
+            span = self._global_span()
+            return QgsGeometry.fromPolygonXY(
+                [[QgsPointXY(-span, -span), QgsPointXY(span, -span), QgsPointXY(span, span), QgsPointXY(-span, span), QgsPointXY(-span, -span)]]
+            )
+        span = self._global_span()
+        return QgsGeometry.fromPolygonXY(
+            [
+                [
+                    QgsPointXY(self.bounds.xMinimum() - span, self.bounds.yMinimum() - span),
+                    QgsPointXY(self.bounds.xMaximum() + span, self.bounds.yMinimum() - span),
+                    QgsPointXY(self.bounds.xMaximum() + span, self.bounds.yMaximum() + span),
+                    QgsPointXY(self.bounds.xMinimum() - span, self.bounds.yMaximum() + span),
+                    QgsPointXY(self.bounds.xMinimum() - span, self.bounds.yMinimum() - span),
+                ]
+            ]
+        )
+
+    def _line_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
+        if geometry is None or geometry.isEmpty():
+            return []
+        try:
+            if geometry.type() == QgsWkbTypes.LineGeometry:
+                if geometry.isMultipart():
+                    return [part for part in geometry.asMultiPolyline() if len(part) >= 2]
+                line = geometry.asPolyline()
+                return [line] if len(line) >= 2 else []
+            if hasattr(geometry, "asGeometryCollection"):
+                parts: List[List[QgsPointXY]] = []
+                for part_geom in geometry.asGeometryCollection():
+                    parts.extend(self._line_parts(part_geom))
+                return parts
+        except Exception:
+            return []
+        return []
+
+    def _polygon_parts(self, geometry: Optional[QgsGeometry]) -> List[QgsGeometry]:
+        if geometry is None or geometry.isEmpty():
+            return []
+        parts: List[QgsGeometry] = []
+        try:
+            if not geometry.isGeosValid():
+                geometry = geometry.makeValid()
+            if geometry is None or geometry.isEmpty():
+                return []
+            if geometry.type() == QgsWkbTypes.PolygonGeometry:
+                if geometry.isMultipart():
+                    for polygon in geometry.asMultiPolygon():
+                        part = QgsGeometry.fromPolygonXY(polygon)
+                        if part is not None and not part.isEmpty() and part.area() > 1e-3:
+                            parts.append(part)
+                else:
+                    parts.append(geometry)
+            elif hasattr(geometry, "asGeometryCollection"):
+                for part_geom in geometry.asGeometryCollection():
+                    parts.extend(self._polygon_parts(part_geom))
+        except Exception:
+            return []
+        return parts
+
+
+class ControllingOlsEngineMixin:
+    """Register planar OLS candidates and emit milestone-1 controlling outputs."""
+
+    def _reset_controlling_ols_engine(self) -> None:
+        self._controlling_ols_candidates: List[ControllingOlsCandidate] = []
+
+    def _register_controlling_ols_candidate(self, candidate: ControllingOlsCandidate) -> None:
+        if candidate.footprint is None or candidate.footprint.isEmpty():
+            return
+        if not hasattr(self, "_controlling_ols_candidates"):
+            self._reset_controlling_ols_engine()
+        self._controlling_ols_candidates.append(candidate)
+
+    def _create_controlling_ols_planar_poc_layers(
+        self,
+        icao_code: str,
+        layer_group: QgsLayerTreeGroup,
+    ) -> bool:
+        candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+        planar_candidates = [candidate for candidate in candidates if candidate.model in {"constant", "axis"}]
+        if not planar_candidates:
+            QgsMessageLog.logMessage(
+                "Controlling OLS planar POC skipped: no planar candidate surfaces were registered.",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return False
+
+        output_group = self._controlling_ols_poc_group(layer_group)
+        candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, output_group, planar_candidates)
+        region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, planar_candidates)
+        transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, planar_candidates)
+        return candidate_layer_ok or region_layer_ok or transition_layer_ok
+
+    def _controlling_ols_poc_group(self, layer_group: QgsLayerTreeGroup) -> QgsLayerTreeGroup:
+        group_name = self.tr("Controlling OLS POC")
+        if layer_group is not None and layer_group.name() == group_name:
+            return layer_group
+        return self._ensure_layer_group(layer_group, group_name) or layer_group
+
+    def _create_controlling_candidate_layer(
+        self,
+        icao_code: str,
+        output_group: QgsLayerTreeGroup,
+        candidates: Sequence[ControllingOlsCandidate],
+    ) -> bool:
+        fields = QgsFields(
+            [
+                QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
+                QgsField("surface", QVariant.String, self.tr("Surface Type"), 50),
+                QgsField("model", QVariant.String, self.tr("Model"), 30),
+                QgsField("elev_min", QVariant.Double, self.tr("Min Elev AMSL"), 12, 3),
+                QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
+            ]
+        )
+        features: List[QgsFeature] = []
+        for candidate in candidates:
+            feature = QgsFeature(fields)
+            feature.setGeometry(QgsGeometry(candidate.footprint))
+            min_elev, max_elev = self._candidate_elevation_range(candidate)
+            feature.setAttributes([candidate.surface_id, candidate.surface_type, candidate.model, min_elev, max_elev])
+            features.append(feature)
+
+        layer = self._create_and_add_layer(
+            "Polygon",
+            f"OLS_Controlling_Planar_Candidates_{icao_code}",
+            f"{self.tr('OLS')} Controlling Planar Candidates POC {icao_code}",
+            fields,
+            features,
+            output_group,
+            "Default Polygon",
+        )
+        if layer is not None:
+            QgsMessageLog.logMessage(
+                f"Created controlling OLS planar candidate POC with {len(candidates)} candidate surface(s).",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return True
+        return False
+
+    def _create_controlling_region_layer(
+        self,
+        icao_code: str,
+        output_group: QgsLayerTreeGroup,
+        candidates: Sequence[ControllingOlsCandidate],
+    ) -> bool:
+        fields = QgsFields(
+            [
+                QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
+                QgsField("surface", QVariant.String, self.tr("Surface Type"), 50),
+                QgsField("model", QVariant.String, self.tr("Model"), 30),
+                QgsField("elev_min", QVariant.Double, self.tr("Min Elev AMSL"), 12, 3),
+                QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
+                QgsField("method", QVariant.String, self.tr("Method"), 50),
+            ]
+        )
+        engine = PlanarControllingOlsEngine(candidates)
+        features = engine.region_features(fields)
+        if not features:
+            QgsMessageLog.logMessage(
+                "Controlling OLS planar regions POC skipped: no controlling planar regions were produced.",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return False
+        feature_count = len(features)
+        layer = self._create_and_add_layer(
+            "Polygon",
+            f"OLS_Controlling_Planar_Regions_{icao_code}",
+            f"{self.tr('OLS')} Controlling Planar Regions POC {icao_code}",
+            fields,
+            features,
+            output_group,
+            "Default Polygon",
+        )
+        if layer is not None:
+            QgsMessageLog.logMessage(
+                f"Created controlling OLS planar regions POC with {feature_count} region feature(s).",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return True
+        return False
+
+    def _create_controlling_transition_layer(
+        self,
+        icao_code: str,
+        output_group: QgsLayerTreeGroup,
+        candidates: Sequence[ControllingOlsCandidate],
+    ) -> bool:
+        fields = QgsFields(
+            [
+                QgsField("transition_id", QVariant.String, self.tr("Transition ID"), 160),
+                QgsField("surface", QVariant.String, self.tr("Surface"), 50),
+                QgsField("elev_min", QVariant.Double, self.tr("Min Elev AMSL"), 12, 3),
+                QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
+                QgsField("adjacent", QVariant.String, self.tr("Adjacent Surfaces"), 254),
+                QgsField("method", QVariant.String, self.tr("Method"), 50),
+            ]
+        )
+        engine = PlanarControllingOlsEngine(candidates)
+        features = engine.transition_features(fields)
+        if not features:
+            QgsMessageLog.logMessage(
+                "Controlling OLS planar transition POC skipped: no exact transition edges were produced.",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return False
+        feature_count = len(features)
+        layer = self._create_and_add_layer(
+            "LineStringZ",
+            f"OLS_Controlling_Planar_Transitions_{icao_code}",
+            f"{self.tr('OLS')} Controlling Planar Transitions POC {icao_code}",
+            fields,
+            features,
+            output_group,
+            "Default Line",
+        )
+        if layer is not None:
+            QgsMessageLog.logMessage(
+                f"Created controlling OLS planar transition POC with {feature_count} exact transition edge(s).",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return True
+        return False
+
+    def _candidate_elevation_range(self, candidate: ControllingOlsCandidate) -> Tuple[Optional[float], Optional[float]]:
+        sample_points: List[QgsPointXY] = []
+        try:
+            bbox = candidate.footprint.boundingBox()
+            sample_points.extend(
+                [
+                    QgsPointXY(bbox.xMinimum(), bbox.yMinimum()),
+                    QgsPointXY(bbox.xMinimum(), bbox.yMaximum()),
+                    QgsPointXY(bbox.xMaximum(), bbox.yMinimum()),
+                    QgsPointXY(bbox.xMaximum(), bbox.yMaximum()),
+                    QgsPointXY((bbox.xMinimum() + bbox.xMaximum()) / 2.0, (bbox.yMinimum() + bbox.yMaximum()) / 2.0),
+                ]
+            )
+        except Exception:
+            return None, None
+        values = []
+        for point_xy in sample_points:
+            if not candidate.contains_xy(point_xy):
+                continue
+            elevation = candidate.elevation_at_xy(point_xy)
+            if elevation is not None and math.isfinite(elevation):
+                values.append(float(elevation))
+        return (min(values), max(values)) if values else (None, None)
