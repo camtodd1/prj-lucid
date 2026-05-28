@@ -780,11 +780,17 @@ class ControllingOlsEngineMixin:
                 return min(origin_elevation, end_elevation), max(origin_elevation, end_elevation)
             except (KeyError, TypeError, ValueError):
                 return None, None
-        if candidate.model == "plane":
-            return self._geometry_elevation_range(candidate.footprint, candidate)
-
         sample_points: List[QgsPointXY] = []
         try:
+            point_on_surface = candidate.footprint.pointOnSurface()
+            if point_on_surface is not None and not point_on_surface.isEmpty():
+                point = point_on_surface.asPoint()
+                sample_points.append(QgsPointXY(point.x(), point.y()))
+            if candidate.footprint.type() == QgsWkbTypes.PolygonGeometry:
+                polygons = candidate.footprint.asMultiPolygon() if candidate.footprint.isMultipart() else [candidate.footprint.asPolygon()]
+                for polygon in polygons:
+                    if polygon and polygon[0]:
+                        sample_points.extend(QgsPointXY(point.x(), point.y()) for point in polygon[0])
             bbox = candidate.footprint.boundingBox()
             sample_points.extend(
                 [
