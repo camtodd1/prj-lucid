@@ -756,7 +756,7 @@ class SafeguardingBuilder(
             if guideline_groups.get("F") is not None:
                 controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
                     icao_code,
-                    guideline_groups["F"],
+                    main_group,
                 )
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok

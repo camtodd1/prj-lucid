@@ -564,7 +564,41 @@ class ControllingOlsEngineMixin:
         group_name = self.tr("Controlling OLS POC")
         if layer_group is not None and layer_group.name() == group_name:
             return layer_group
-        return self._ensure_layer_group(layer_group, group_name) or layer_group
+        output_group = self._ensure_layer_group(layer_group, group_name) or layer_group
+        return self._place_controlling_ols_poc_after_nasf(layer_group, output_group)
+
+    def _place_controlling_ols_poc_after_nasf(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        output_group: QgsLayerTreeGroup,
+    ) -> QgsLayerTreeGroup:
+        """Keep the POC group as a top-level generated group after NASF."""
+        if parent_group is None or output_group is None:
+            return output_group
+        try:
+            children = list(parent_group.children())
+            output_index = children.index(output_group)
+        except ValueError:
+            return output_group
+
+        nasf_group = None
+        for child in children:
+            if isinstance(child, QgsLayerTreeGroup) and child.name() == self.tr("04 NASF Safeguarding Guidelines"):
+                nasf_group = child
+                break
+        if nasf_group is None:
+            return output_group
+
+        nasf_index = children.index(nasf_group)
+        target_index = nasf_index + 1
+        if output_index == target_index:
+            return output_group
+
+        cloned_group = output_group.clone()
+        self._stage_layer_tree_node(cloned_group)
+        parent_group.insertChildNode(target_index, cloned_group)
+        parent_group.removeChildNode(output_group)
+        return cloned_group
 
     def _create_controlling_candidate_layer(
         self,
