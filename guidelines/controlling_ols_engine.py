@@ -210,16 +210,13 @@ class PlanarControllingOlsEngine:
                     continue
                 if region is None or region.isEmpty():
                     break
-                try:
-                    if not competitor.footprint.intersects(region):
-                        continue
-                except Exception:
-                    continue
                 overlap = None
                 try:
                     overlap = region.intersection(competitor.footprint)
                 except Exception:
                     overlap = None
+                if not self._has_polygon_area(overlap):
+                    continue
                 halfplane = self._candidate_lower_halfplane(candidate, competitor, overlap)
                 if halfplane is None:
                     region = QgsGeometry()
@@ -442,6 +439,17 @@ class PlanarControllingOlsEngine:
         canonical_points = rounded_points if rounded_points <= reversed_points else reversed_points
         integer_points = tuple((int(round(x * 1000)), int(round(y * 1000))) for x, y in canonical_points)
         return surface_ids[0], surface_ids[1], integer_points
+
+    def _has_polygon_area(self, geometry: Optional[QgsGeometry], min_area: float = 1e-3) -> bool:
+        if geometry is None or geometry.isEmpty():
+            return False
+        try:
+            for part in self._polygon_parts(geometry):
+                if part.area() > min_area:
+                    return True
+        except Exception:
+            return False
+        return False
 
     def _plane_difference_samples(
         self,
@@ -841,8 +849,8 @@ class ControllingOlsEngineMixin:
         )
         engine = PlanarControllingOlsEngine(candidates)
         features = engine.transition_features(fields)
-        if not features:
-            features = engine.region_boundary_features(fields)
+        features.extend(engine.region_boundary_features(fields))
+        features = self._deduplicate_controlling_transition_features(features)
         if not features:
             QgsMessageLog.logMessage(
                 "Controlling OLS planar transition POC skipped: no exact transition edges were produced.",
@@ -868,6 +876,25 @@ class ControllingOlsEngineMixin:
             )
             return True
         return False
+
+    def _deduplicate_controlling_transition_features(self, features: List[QgsFeature]) -> List[QgsFeature]:
+        deduplicated: List[QgsFeature] = []
+        seen = set()
+        for feature in features:
+            geom = feature.geometry()
+            if geom is None or geom.isEmpty():
+                continue
+            try:
+                key = geom.asWkt(3)
+            except Exception:
+                key = str(id(feature))
+            adjacent = feature.attribute("adjacent") if feature.fields().indexFromName("adjacent") != -1 else None
+            compound_key = (adjacent, key)
+            if compound_key in seen:
+                continue
+            seen.add(compound_key)
+            deduplicated.append(feature)
+        return deduplicated
 
     def _candidate_elevation_range(self, candidate: ControllingOlsCandidate) -> Tuple[Optional[float], Optional[float]]:
         if candidate.model == "constant":
