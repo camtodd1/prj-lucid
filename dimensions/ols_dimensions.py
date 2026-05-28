@@ -602,7 +602,8 @@ IHS_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 # Extends until reaching height specified in Table 8.2-1 ('Height (m)' column for Conical),
 # which is interpreted here as height *above the IHS*.
 # 'height_extent_agl' is this height difference above the IHS.
-# VERIFY interpretation against MOS 139 8.2.19.
+# If an OHS is present and this height does not reach the OHS elevation, the
+# generator extends the conical on the same plane until it meets OHS per MOS 7.06(3).
 CONICAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Non-Instrument
     (1, "NI"): {

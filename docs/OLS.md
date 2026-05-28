@@ -38,3 +38,33 @@ The calculation method matches the MOS rule because RED now uses the physical ru
   - ARP more than 3 m from average runway-end elevation;
   - rounding down to the nearest half metre;
   - multiple existing/proposed runway ends.
+
+## Section 7.06 Conical Surface And OHS Continuation
+
+### MOS Requirement
+
+If an outer horizontal surface is present and the conical surface does not
+terminate directly into the commencement of the outer horizontal surface, the
+conical surface must continue outwards on the same plane perpendicular to the
+periphery of the inner horizontal surface until it reaches the commencement of
+the outer horizontal surface.
+
+### Implementation
+
+Implemented in `GuidelineOlsMixin._generate_airport_wide_ols`.
+
+The current logic:
+
+- starts with the conical height extent from `CONICAL_PARAMS`;
+- checks whether an OHS applies for the highest airport-wide ARC/type combination;
+- compares the tabular conical top against the OHS height when OHS applies;
+- extends the conical height extent to `OHS height above RED - IHS height above RED` when that value is greater than the tabular conical extent;
+- uses the effective conical extent for the conical polygon, conical contours, attributes, and the OHS-minus-conical geometry difference.
+
+For Code 3/4 precision cases this changes the effective conical extent from
+100 m above IHS to 105 m above IHS, so the conical surface reaches the OHS at
+150 m above RED.
+
+### Compliance Finding
+
+Status: implemented.

@@ -393,6 +393,23 @@ class OlsGuidelineMixin:
                 slope = conical_params.get("slope")
                 ref = conical_params.get("ref", "MOS 8.2.19")
                 if slope is not None and slope > 0 and height_extent_agl is not None and height_extent_agl > 0:
+                    ohs_params_for_conical = ols_dimensions.get_ols_params(
+                        highest_arc_num, highest_precision_type_str, "OHS"
+                    )
+                    if ohs_params_for_conical:
+                        ohs_height_agl = ohs_params_for_conical.get("height_agl")
+                        if isinstance(ohs_height_agl, (int, float)):
+                            height_extent_to_ohs = float(ohs_height_agl) - ihs_base_height_agl
+                            if height_extent_to_ohs > height_extent_agl:
+                                QgsMessageLog.logMessage(
+                                    "Extending Conical Surface per MOS 7.06(3): "
+                                    f"base height extent {height_extent_agl:.1f}m does not reach "
+                                    f"OHS at {float(ohs_height_agl):.1f}m above RED; "
+                                    f"using {height_extent_to_ohs:.1f}m above IHS.",
+                                    plugin_tag,
+                                    level=Qgis.Info,
+                                )
+                                height_extent_agl = height_extent_to_ohs
                     horizontal_extent = height_extent_agl / slope
                     conical_outer_elevation = IHS_ELEVATION_AMSL + height_extent_agl
                     QgsMessageLog.logMessage(
