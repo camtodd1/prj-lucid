@@ -147,6 +147,62 @@ class PlanarControllingOlsEngine:
     def region_features(self, fields: QgsFields) -> List[QgsFeature]:
         """Return regions where each planar candidate is lower than all overlapping candidates."""
         features: List[QgsFeature] = []
+        for candidate, region_part in self._controlling_region_geometries():
+            feature = QgsFeature(fields)
+            feature.setGeometry(region_part)
+            min_elev, max_elev = self._geometry_elevation_range(region_part, candidate)
+            feature.setAttributes(
+                [
+                    candidate.surface_id,
+                    candidate.surface_type,
+                    candidate.model,
+                    min_elev,
+                    max_elev,
+                    "exact_planar_halfplane",
+                ]
+            )
+            features.append(feature)
+        return features
+
+    def region_boundary_features(self, fields: QgsFields) -> List[QgsFeature]:
+        """Return line features where solved controlling regions share a boundary."""
+        region_parts = self._controlling_region_geometries()
+        features: List[QgsFeature] = []
+        seen_keys = set()
+        for index, (first_candidate, first_region) in enumerate(region_parts):
+            for second_candidate, second_region in region_parts[index + 1 :]:
+                try:
+                    boundary = first_region.boundary().intersection(second_region.boundary())
+                except Exception:
+                    continue
+                for line_points in self._line_parts(boundary):
+                    if len(line_points) < 2:
+                        continue
+                    key = self._line_key(line_points, first_candidate.surface_id, second_candidate.surface_id)
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    z_values = self._transition_z_values(line_points, first_candidate, second_candidate)
+                    z_line = self._line_points_to_z_geometry(line_points, z_values)
+                    if z_line is None or z_line.isEmpty():
+                        continue
+                    feature = QgsFeature(fields)
+                    feature.setGeometry(z_line)
+                    feature.setAttributes(
+                        [
+                            f"{first_candidate.surface_id}|{second_candidate.surface_id}"[:160],
+                            "Transition",
+                            min(z_values),
+                            max(z_values),
+                            f"{first_candidate.surface_id}|{second_candidate.surface_id}"[:254],
+                            "exact_region_boundary",
+                        ]
+                    )
+                    features.append(feature)
+        return features
+
+    def _controlling_region_geometries(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
             region = QgsGeometry(candidate.footprint)
             for competitor in self.candidates:
@@ -172,21 +228,8 @@ class PlanarControllingOlsEngine:
             for region_part in self._polygon_parts(region):
                 if region_part.area() <= 1e-3:
                     continue
-                feature = QgsFeature(fields)
-                feature.setGeometry(region_part)
-                min_elev, max_elev = self._geometry_elevation_range(region_part, candidate)
-                feature.setAttributes(
-                    [
-                        candidate.surface_id,
-                        candidate.surface_type,
-                        candidate.model,
-                        min_elev,
-                        max_elev,
-                        "exact_planar_halfplane",
-                    ]
-                )
-                features.append(feature)
-        return features
+                region_parts.append((candidate, region_part))
+        return region_parts
 
     def _candidate_lower_halfplane(
         self,
@@ -371,6 +414,19 @@ class PlanarControllingOlsEngine:
                     elevations.append(float(elevation))
             values.append(sum(elevations) / len(elevations) if elevations else 0.0)
         return values
+
+    def _line_key(
+        self,
+        line_points: List[QgsPointXY],
+        first_surface_id: str,
+        second_surface_id: str,
+    ) -> Tuple[str, str, Tuple[Tuple[int, int], ...]]:
+        surface_ids = tuple(sorted([first_surface_id, second_surface_id]))
+        rounded_points = tuple((round(point.x(), 3), round(point.y(), 3)) for point in line_points)
+        reversed_points = tuple(reversed(rounded_points))
+        canonical_points = rounded_points if rounded_points <= reversed_points else reversed_points
+        integer_points = tuple((int(round(x * 1000)), int(round(y * 1000))) for x, y in canonical_points)
+        return surface_ids[0], surface_ids[1], integer_points
 
     def _clip_long_line_to_domain(
         self,
@@ -738,6 +794,8 @@ class ControllingOlsEngineMixin:
         )
         engine = PlanarControllingOlsEngine(candidates)
         features = engine.transition_features(fields)
+        if not features:
+            features = engine.region_boundary_features(fields)
         if not features:
             QgsMessageLog.logMessage(
                 "Controlling OLS planar transition POC skipped: no exact transition edges were produced.",
