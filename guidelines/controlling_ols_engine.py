@@ -180,11 +180,7 @@ class PlanarControllingOlsEngine:
         features: List[QgsFeature] = []
         seen_keys = set()
         for region_candidate, region in region_parts:
-            try:
-                boundary = region.boundary()
-            except Exception:
-                continue
-            for line_points in self._line_parts(boundary):
+            for line_points in self._polygon_boundary_parts(region):
                 for start_point, end_point in zip(line_points[:-1], line_points[1:]):
                     adjacent_surface_id = self._adjacent_controller_across_segment(
                         start_point,
@@ -221,6 +217,23 @@ class PlanarControllingOlsEngine:
                     )
                     features.append(feature)
         return features
+
+    def _polygon_boundary_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
+        """Return exterior and interior polygon rings as line point lists."""
+        if geometry is None or geometry.isEmpty():
+            return []
+        rings: List[List[QgsPointXY]] = []
+        try:
+            if geometry.type() != QgsWkbTypes.PolygonGeometry:
+                return []
+            polygons = geometry.asMultiPolygon() if geometry.isMultipart() else [geometry.asPolygon()]
+            for polygon in polygons:
+                for ring in polygon:
+                    if len(ring) >= 2:
+                        rings.append(ring)
+        except Exception:
+            return []
+        return rings
 
     def _adjacent_controller_across_segment(
         self,
