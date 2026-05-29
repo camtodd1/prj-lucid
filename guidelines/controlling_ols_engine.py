@@ -186,22 +186,24 @@ class PlanarControllingOlsEngine:
                 continue
             for line_points in self._line_parts(boundary):
                 for start_point, end_point in zip(line_points[:-1], line_points[1:]):
-                    controllers = self._controllers_across_segment(start_point, end_point)
-                    if controllers is None:
-                        continue
-                    first_controller, second_controller = controllers
-                    if first_controller.surface_id == second_controller.surface_id:
-                        continue
+                    adjacent_surface_id = self._adjacent_controller_across_segment(
+                        start_point,
+                        end_point,
+                        region_candidate.surface_id,
+                    )
                     segment_points = [start_point, end_point]
                     key = self._line_key(
                         segment_points,
-                        first_controller.surface_id,
-                        second_controller.surface_id,
+                        region_candidate.surface_id,
+                        adjacent_surface_id,
                     )
                     if key in seen_keys:
                         continue
                     seen_keys.add(key)
-                    z_values = self._transition_z_values(segment_points, first_controller, second_controller)
+                    z_values = [
+                        float(region_candidate.elevation_at_xy(point) or 0.0)
+                        for point in segment_points
+                    ]
                     z_line = self._line_points_to_z_geometry(segment_points, z_values)
                     if z_line is None or z_line.isEmpty():
                         continue
@@ -209,38 +211,42 @@ class PlanarControllingOlsEngine:
                     feature.setGeometry(z_line)
                     feature.setAttributes(
                         [
-                            f"{first_controller.surface_id}|{second_controller.surface_id}"[:160],
+                            f"{region_candidate.surface_id}|{adjacent_surface_id}"[:160],
                             "Transition",
                             min(z_values),
                             max(z_values),
-                            f"{first_controller.surface_id}|{second_controller.surface_id}"[:254],
-                            "sampled_region_boundary",
+                            f"{region_candidate.surface_id}|{adjacent_surface_id}"[:254],
+                            "region_boundary",
                         ]
                     )
                     features.append(feature)
         return features
 
-    def _controllers_across_segment(
+    def _adjacent_controller_across_segment(
         self,
         start_point: QgsPointXY,
         end_point: QgsPointXY,
-    ) -> Optional[Tuple[ControllingOlsCandidate, ControllingOlsCandidate]]:
+        source_surface_id: str,
+    ) -> str:
         dx = end_point.x() - start_point.x()
         dy = end_point.y() - start_point.y()
         length = math.hypot(dx, dy)
         if length <= 1e-6:
-            return None
+            return "Boundary"
         mid_point = QgsPointXY((start_point.x() + end_point.x()) / 2.0, (start_point.y() + end_point.y()) / 2.0)
         nx = -dy / length
         ny = dx / length
-        for offset in [max(min(length * 0.02, 5.0), 0.25), 10.0, 25.0]:
-            left = self.controlling_candidate_at_xy(QgsPointXY(mid_point.x() + nx * offset, mid_point.y() + ny * offset))
-            right = self.controlling_candidate_at_xy(QgsPointXY(mid_point.x() - nx * offset, mid_point.y() - ny * offset))
-            if left is None or right is None:
-                continue
-            if left[0].surface_id != right[0].surface_id:
-                return left[0], right[0]
-        return None
+        for offset in [0.1, 0.25, 0.5, 1.0, max(min(length * 0.02, 5.0), 0.25), 10.0]:
+            for sign in [1.0, -1.0]:
+                controller = self.controlling_candidate_at_xy(
+                    QgsPointXY(
+                        mid_point.x() + (nx * offset * sign),
+                        mid_point.y() + (ny * offset * sign),
+                    )
+                )
+                if controller is not None and controller[0].surface_id != source_surface_id:
+                    return controller[0].surface_id
+        return "No OLS/Outside"
 
     def _legacy_shared_boundary_features(
         self,
