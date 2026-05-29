@@ -2025,6 +2025,26 @@ class OlsGuidelineMixin:
                 )
                 continue
 
+            if hasattr(self, "_register_controlling_ols_exclusion_geometry"):
+                for exclusion_index, ((cl_start, _), (cl_end, _)) in enumerate(
+                    zip(ordered_strip_breakpoints[:-1], ordered_strip_breakpoints[1:]),
+                    start=1,
+                ):
+                    if cl_start.distance(cl_end) < 1e-3:
+                        continue
+                    start_left = cl_start.project(strip_overall_half_width, rwy_params["azimuth_perp_l"])
+                    end_left = cl_end.project(strip_overall_half_width, rwy_params["azimuth_perp_l"])
+                    end_right = cl_end.project(strip_overall_half_width, rwy_params["azimuth_perp_r"])
+                    start_right = cl_start.project(strip_overall_half_width, rwy_params["azimuth_perp_r"])
+                    if not all([start_left, end_left, end_right, start_right]):
+                        continue
+                    exclusion_geom = self._create_polygon_from_corners(
+                        [start_left, end_left, end_right, start_right],
+                        f"No OLS strip core {runway_name} S{exclusion_index}",
+                    )
+                    if exclusion_geom and not exclusion_geom.isEmpty():
+                        self._register_controlling_ols_exclusion_geometry(exclusion_geom)
+
             # --- Generate Strip Transitional Sides ---
             for side_label, outward_azimuth in [
                 ("L", rwy_params["azimuth_perp_l"]),

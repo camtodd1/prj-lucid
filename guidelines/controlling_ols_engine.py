@@ -90,13 +90,23 @@ def plane_elevation_evaluator(a: float, b: float, c: float) -> ElevationEvaluato
 class PlanarControllingOlsEngine:
     """Compute exact transition edges between planar OLS candidates."""
 
-    def __init__(self, candidates: Sequence[ControllingOlsCandidate], tie_tolerance_m: float = 0.01):
+    def __init__(
+        self,
+        candidates: Sequence[ControllingOlsCandidate],
+        tie_tolerance_m: float = 0.01,
+        exclusion_geometries: Optional[Sequence[QgsGeometry]] = None,
+    ):
         self.candidates = [
             candidate
             for candidate in candidates
             if candidate.model in {"constant", "axis", "plane"}
             and candidate.footprint is not None
             and not candidate.footprint.isEmpty()
+        ]
+        self.exclusion_geometries = [
+            QgsGeometry(geometry)
+            for geometry in (exclusion_geometries or [])
+            if geometry is not None and not geometry.isEmpty()
         ]
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
@@ -303,6 +313,14 @@ class PlanarControllingOlsEngine:
                     break
 
             for region_part in self._polygon_parts(region):
+                for exclusion in self.exclusion_geometries:
+                    try:
+                        if exclusion.intersects(region_part):
+                            region_part = region_part.difference(exclusion)
+                    except Exception:
+                        region_part = QgsGeometry()
+                    if region_part is None or region_part.isEmpty():
+                        break
                 if region_part.area() <= 1e-3:
                     continue
                 region_parts.append((candidate, region_part))
@@ -774,6 +792,7 @@ class ControllingOlsEngineMixin:
 
     def _reset_controlling_ols_engine(self) -> None:
         self._controlling_ols_candidates: List[ControllingOlsCandidate] = []
+        self._controlling_ols_exclusion_geometries: List[QgsGeometry] = []
 
     def _register_controlling_ols_candidate(self, candidate: ControllingOlsCandidate) -> None:
         if candidate.footprint is None or candidate.footprint.isEmpty():
@@ -782,12 +801,20 @@ class ControllingOlsEngineMixin:
             self._reset_controlling_ols_engine()
         self._controlling_ols_candidates.append(candidate)
 
+    def _register_controlling_ols_exclusion_geometry(self, geometry: QgsGeometry) -> None:
+        if geometry is None or geometry.isEmpty():
+            return
+        if not hasattr(self, "_controlling_ols_exclusion_geometries"):
+            self._controlling_ols_exclusion_geometries = []
+        self._controlling_ols_exclusion_geometries.append(QgsGeometry(geometry))
+
     def _create_controlling_ols_planar_poc_layers(
         self,
         icao_code: str,
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+        exclusion_geometries = list(getattr(self, "_controlling_ols_exclusion_geometries", []) or [])
         planar_candidates = [candidate for candidate in candidates if candidate.model in {"constant", "axis", "plane"}]
         if not planar_candidates:
             QgsMessageLog.logMessage(
@@ -799,8 +826,8 @@ class ControllingOlsEngineMixin:
 
         output_group = self._controlling_ols_poc_group(layer_group)
         candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, output_group, planar_candidates)
-        region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, planar_candidates)
-        transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, planar_candidates)
+        region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, planar_candidates, exclusion_geometries)
+        transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, planar_candidates, exclusion_geometries)
         return candidate_layer_ok or region_layer_ok or transition_layer_ok
 
     def _controlling_ols_poc_group(self, layer_group: QgsLayerTreeGroup) -> QgsLayerTreeGroup:
@@ -895,6 +922,7 @@ class ControllingOlsEngineMixin:
         icao_code: str,
         output_group: QgsLayerTreeGroup,
         candidates: Sequence[ControllingOlsCandidate],
+        exclusion_geometries: Sequence[QgsGeometry],
     ) -> bool:
         fields = QgsFields(
             [
@@ -906,7 +934,7 @@ class ControllingOlsEngineMixin:
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
             ]
         )
-        engine = PlanarControllingOlsEngine(candidates)
+        engine = PlanarControllingOlsEngine(candidates, exclusion_geometries=exclusion_geometries)
         features = engine.region_features(fields)
         if not features:
             QgsMessageLog.logMessage(
@@ -939,6 +967,7 @@ class ControllingOlsEngineMixin:
         icao_code: str,
         output_group: QgsLayerTreeGroup,
         candidates: Sequence[ControllingOlsCandidate],
+        exclusion_geometries: Sequence[QgsGeometry],
     ) -> bool:
         fields = QgsFields(
             [
@@ -950,7 +979,7 @@ class ControllingOlsEngineMixin:
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
             ]
         )
-        engine = PlanarControllingOlsEngine(candidates)
+        engine = PlanarControllingOlsEngine(candidates, exclusion_geometries=exclusion_geometries)
         features = engine.transition_features(fields)
         features.extend(engine.region_boundary_features(fields))
         features = self._deduplicate_controlling_transition_features(features)
