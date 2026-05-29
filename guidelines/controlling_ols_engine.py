@@ -981,12 +981,11 @@ class ControllingOlsEngineMixin:
             ]
         )
         engine = PlanarControllingOlsEngine(candidates, exclusion_geometries=exclusion_geometries)
-        features = engine.transition_features(fields)
-        features.extend(engine.region_boundary_features(fields))
+        features = engine.region_boundary_features(fields)
         features = self._deduplicate_controlling_transition_features(features)
         if not features:
             QgsMessageLog.logMessage(
-                "Controlling OLS planar transition POC skipped: no exact transition edges were produced.",
+                "Controlling OLS planar transition POC skipped: no region boundary transition edges were produced.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -1003,7 +1002,7 @@ class ControllingOlsEngineMixin:
         )
         if layer is not None:
             QgsMessageLog.logMessage(
-                f"Created controlling OLS planar transition POC with {feature_count} exact transition edge(s).",
+                f"Created controlling OLS planar transition POC with {feature_count} region boundary edge(s).",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
