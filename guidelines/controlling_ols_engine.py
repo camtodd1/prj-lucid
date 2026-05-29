@@ -341,10 +341,33 @@ class PlanarControllingOlsEngine:
                     if region_part is None or region_part.isEmpty():
                         break
                 for final_part in self._polygon_parts(region_part):
-                    if final_part.area() <= 1e-3:
-                        continue
-                    region_parts.append((candidate, final_part))
+                    for clean_part in self._clean_region_polygon_parts(final_part):
+                        if clean_part.area() <= 1e-3:
+                            continue
+                        region_parts.append((candidate, clean_part))
         return region_parts
+
+    def _clean_region_polygon_parts(self, geometry: QgsGeometry) -> List[QgsGeometry]:
+        """Rebuild solved region polygons to remove zero-width spike artifacts."""
+        if geometry is None or geometry.isEmpty():
+            return []
+        candidates = [geometry]
+        try:
+            buffered = geometry.buffer(0.0, 8)
+            if buffered is not None and not buffered.isEmpty():
+                candidates.insert(0, buffered)
+        except Exception:
+            pass
+        for candidate in candidates:
+            try:
+                if not candidate.isGeosValid():
+                    candidate = candidate.makeValid()
+            except Exception:
+                continue
+            parts = self._polygon_parts(candidate)
+            if parts:
+                return parts
+        return []
 
     def _candidate_lower_halfplane(
         self,
