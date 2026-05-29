@@ -321,9 +321,10 @@ class PlanarControllingOlsEngine:
                         region_part = QgsGeometry()
                     if region_part is None or region_part.isEmpty():
                         break
-                if region_part.area() <= 1e-3:
-                    continue
-                region_parts.append((candidate, region_part))
+                for final_part in self._polygon_parts(region_part):
+                    if final_part.area() <= 1e-3:
+                        continue
+                    region_parts.append((candidate, final_part))
         return region_parts
 
     def _candidate_lower_halfplane(
