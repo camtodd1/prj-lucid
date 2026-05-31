@@ -327,7 +327,7 @@ class PlanarControllingOlsEngine:
                     break
 
             for region_part in self._polygon_parts(region):
-                for exclusion in self.exclusion_geometries:
+                for exclusion in self._exclusions_for_candidate(candidate):
                     try:
                         if exclusion.intersects(region_part):
                             region_part = region_part.difference(exclusion)
@@ -341,6 +341,12 @@ class PlanarControllingOlsEngine:
                             continue
                         region_parts.append((candidate, clean_part))
         return region_parts
+
+    def _exclusions_for_candidate(self, candidate: ControllingOlsCandidate) -> List[QgsGeometry]:
+        """Return no-OLS exclusion masks that apply to this candidate surface."""
+        if candidate.surface_type not in {"IHS", "Transitional"}:
+            return []
+        return self.exclusion_geometries
 
     def _clean_region_polygon_parts(self, geometry: QgsGeometry) -> List[QgsGeometry]:
         """Rebuild solved region polygons to remove zero-width spike artifacts."""
