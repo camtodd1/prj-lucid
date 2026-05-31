@@ -397,12 +397,6 @@ class PlanarControllingOlsEngine:
         if geometry is None or geometry.isEmpty():
             return []
         candidates = [geometry]
-        try:
-            buffered = geometry.buffer(0.0, 8)
-            if buffered is not None and not buffered.isEmpty():
-                candidates.insert(0, buffered)
-        except Exception:
-            pass
         for candidate in candidates:
             try:
                 if not candidate.isGeosValid():
@@ -412,6 +406,14 @@ class PlanarControllingOlsEngine:
             parts = self._polygon_parts(candidate)
             if parts:
                 return parts
+        try:
+            buffered = geometry.buffer(0.0, 8)
+            if buffered is not None and not buffered.isEmpty():
+                parts = self._polygon_parts(buffered)
+                if parts:
+                    return parts
+        except Exception:
+            pass
         return []
 
     def _candidate_lower_region(
@@ -616,6 +618,17 @@ class PlanarControllingOlsEngine:
         points = self._triangulation_sample_points(geometry)
         if len(points) < 3:
             return None
+        differences = [
+            difference
+            for point in points
+            for difference in [self._candidate_difference(candidate, competitor, point)]
+            if difference is not None
+        ]
+        if differences:
+            if max(differences) <= self.tie_tolerance_m:
+                return self._global_extent_polygon()
+            if min(differences) > self.tie_tolerance_m:
+                return None
         try:
             tin = QgsGeometry.fromMultiPointXY(points).delaunayTriangulation(0.0, False)
         except Exception:
