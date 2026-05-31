@@ -108,6 +108,7 @@ class PlanarControllingOlsEngine:
             for geometry in (exclusion_geometries or [])
             if geometry is not None and not geometry.isEmpty()
         ]
+        self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
 
@@ -115,7 +116,8 @@ class PlanarControllingOlsEngine:
         """Return the lowest applicable planar candidate at a point."""
         evaluated: List[Tuple[ControllingOlsCandidate, float]] = []
         for candidate in self.candidates:
-            if not candidate.contains_xy(point_xy):
+            footprint = self._effective_footprint(candidate)
+            if footprint is None or footprint.isEmpty() or not footprint.intersects(QgsGeometry.fromPointXY(point_xy)):
                 continue
             elevation = candidate.elevation_at_xy(point_xy)
             if elevation is None or not math.isfinite(elevation):
@@ -302,7 +304,7 @@ class PlanarControllingOlsEngine:
     def _controlling_region_geometries(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
         region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
-            region = QgsGeometry(candidate.footprint)
+            region = self._effective_footprint(candidate)
             for competitor in self.candidates:
                 if competitor.surface_id == candidate.surface_id:
                     continue
@@ -310,7 +312,10 @@ class PlanarControllingOlsEngine:
                     break
                 overlap = None
                 try:
-                    overlap = region.intersection(competitor.footprint)
+                    competitor_footprint = self._effective_footprint(competitor)
+                    if competitor_footprint is None or competitor_footprint.isEmpty():
+                        continue
+                    overlap = region.intersection(competitor_footprint)
                 except Exception:
                     overlap = None
                 if not self._has_polygon_area(overlap):
@@ -327,20 +332,30 @@ class PlanarControllingOlsEngine:
                     break
 
             for region_part in self._polygon_parts(region):
-                for exclusion in self._exclusions_for_candidate(candidate):
-                    try:
-                        if exclusion.intersects(region_part):
-                            region_part = region_part.difference(exclusion)
-                    except Exception:
-                        region_part = QgsGeometry()
-                    if region_part is None or region_part.isEmpty():
-                        break
                 for final_part in self._polygon_parts(region_part):
                     for clean_part in self._clean_region_polygon_parts(final_part):
                         if clean_part.area() <= 1e-3:
                             continue
                         region_parts.append((candidate, clean_part))
         return region_parts
+
+    def _effective_footprint(self, candidate: ControllingOlsCandidate) -> QgsGeometry:
+        cached = self._effective_footprint_cache.get(candidate.surface_id)
+        if cached is not None:
+            return QgsGeometry(cached)
+        footprint = QgsGeometry(candidate.footprint)
+        for exclusion in self._exclusions_for_candidate(candidate):
+            try:
+                if exclusion.intersects(footprint):
+                    footprint = footprint.difference(exclusion)
+            except Exception:
+                footprint = QgsGeometry()
+                break
+            if footprint is None or footprint.isEmpty():
+                footprint = QgsGeometry()
+                break
+        self._effective_footprint_cache[candidate.surface_id] = QgsGeometry(footprint)
+        return footprint
 
     def _exclusions_for_candidate(self, candidate: ControllingOlsCandidate) -> List[QgsGeometry]:
         """Return no-OLS exclusion masks that apply to this candidate surface."""
@@ -639,23 +654,23 @@ class PlanarControllingOlsEngine:
             return []
         sample_points: List[QgsPointXY] = []
         try:
-            point_on_surface = geometry.pointOnSurface()
-            if point_on_surface is not None and not point_on_surface.isEmpty():
-                point = point_on_surface.asPoint()
-                sample_points.append(QgsPointXY(point.x(), point.y()))
-            bbox = geometry.boundingBox()
-            for fx, fy in [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0), (0.5, 0.5)]:
-                point_xy = QgsPointXY(
-                    bbox.xMinimum() + (bbox.width() * fx),
-                    bbox.yMinimum() + (bbox.height() * fy),
-                )
-                if geometry.intersects(QgsGeometry.fromPointXY(point_xy)):
-                    sample_points.append(point_xy)
-            if geometry.type() == QgsWkbTypes.PolygonGeometry:
-                polygons = geometry.asMultiPolygon() if geometry.isMultipart() else [geometry.asPolygon()]
+            for polygon_part in self._polygon_parts(geometry):
+                point_on_surface = polygon_part.pointOnSurface()
+                if point_on_surface is not None and not point_on_surface.isEmpty():
+                    point = point_on_surface.asPoint()
+                    sample_points.append(QgsPointXY(point.x(), point.y()))
+                bbox = polygon_part.boundingBox()
+                for fx, fy in [(0.0, 0.0), (0.0, 1.0), (1.0, 0.0), (1.0, 1.0), (0.5, 0.5)]:
+                    point_xy = QgsPointXY(
+                        bbox.xMinimum() + (bbox.width() * fx),
+                        bbox.yMinimum() + (bbox.height() * fy),
+                    )
+                    if polygon_part.intersects(QgsGeometry.fromPointXY(point_xy)):
+                        sample_points.append(point_xy)
+                polygons = polygon_part.asMultiPolygon() if polygon_part.isMultipart() else [polygon_part.asPolygon()]
                 for polygon in polygons:
-                    if polygon and polygon[0]:
-                        sample_points.extend(QgsPointXY(point.x(), point.y()) for point in polygon[0])
+                    for ring in polygon:
+                        sample_points.extend(QgsPointXY(point.x(), point.y()) for point in ring)
         except Exception:
             return []
         return [(a * point.x()) + (b * point.y()) + c for point in sample_points]
