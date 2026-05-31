@@ -358,7 +358,7 @@ class PlanarControllingOlsEngine:
 
             for region_part in self._polygon_parts(region):
                 for final_part in self._polygon_parts(region_part):
-                    for clean_part in self._clean_region_polygon_parts(final_part):
+                    for clean_part in self._clean_region_polygon_parts(final_part, candidate):
                         if clean_part.area() <= 1e-3:
                             continue
                         region_parts.append((candidate, clean_part))
@@ -388,7 +388,11 @@ class PlanarControllingOlsEngine:
             return []
         return self.exclusion_geometries
 
-    def _clean_region_polygon_parts(self, geometry: QgsGeometry) -> List[QgsGeometry]:
+    def _clean_region_polygon_parts(
+        self,
+        geometry: QgsGeometry,
+        candidate: Optional[ControllingOlsCandidate] = None,
+    ) -> List[QgsGeometry]:
         """Rebuild solved region polygons to remove zero-width spike artifacts."""
         if geometry is None or geometry.isEmpty():
             return []
@@ -400,7 +404,7 @@ class PlanarControllingOlsEngine:
         except Exception:
             pass
         try:
-            cleanup_tolerance = self._region_cleanup_tolerance(geometry)
+            cleanup_tolerance = self._region_cleanup_tolerance(geometry, candidate)
             opened = geometry.buffer(-cleanup_tolerance, 8)
             if opened is not None and not opened.isEmpty():
                 reopened = opened.buffer(cleanup_tolerance, 8)
@@ -419,11 +423,17 @@ class PlanarControllingOlsEngine:
                 return parts
         return []
 
-    def _region_cleanup_tolerance(self, geometry: QgsGeometry) -> float:
+    def _region_cleanup_tolerance(
+        self,
+        geometry: QgsGeometry,
+        candidate: Optional[ControllingOlsCandidate] = None,
+    ) -> float:
         """Return a small map-unit tolerance for collapsing zero-width boundary spikes."""
         try:
             bbox = geometry.boundingBox()
             span = max(bbox.width(), bbox.height(), 1.0)
+            if candidate is not None and candidate.surface_type == "Conical":
+                return max(0.5, min(span * 5e-5, 5.0))
             return max(0.02, min(span * 1e-6, 0.25))
         except Exception:
             return 0.02
@@ -543,7 +553,7 @@ class PlanarControllingOlsEngine:
                 conical_is_candidate,
             )
 
-        threshold_elevation = self._representative_linear_elevation(linear_plane, overlap)
+        threshold_elevation = self._representative_linear_elevation(linear_plane, overlap, mode="max")
         if threshold_elevation is None:
             return None
         return self._conical_constant_lower_region(
@@ -614,6 +624,7 @@ class PlanarControllingOlsEngine:
         self,
         linear_plane: Tuple[float, float, float],
         geometry: QgsGeometry,
+        mode: str = "median",
     ) -> Optional[float]:
         values = [
             (linear_plane[0] * point.x()) + (linear_plane[1] * point.y()) + linear_plane[2]
@@ -622,6 +633,10 @@ class PlanarControllingOlsEngine:
         if not values:
             return None
         values.sort()
+        if mode == "max":
+            return values[-1]
+        if mode == "min":
+            return values[0]
         return values[len(values) // 2]
 
     def _sampled_candidate_lower_region(
