@@ -46,6 +46,7 @@ DEFAULT_STYLE_MAP = {
     "OLS Conical": "default_ols_polygon.qml",
     "OLS Conical Contour": "ols_conical_contours.qml",
     "OLS OHS": "default_ols_polygon.qml",
+    "OLS Controlling Planar Region": "test_ols_polygon.qml",
     "CNS Circle Zone": "default_cns_zone_polygon.qml",
     "CNS Donut Zone": "default_cns_zone_polygon.qml",
     "Default CNS": "default_cns_zone_polygon.qml",

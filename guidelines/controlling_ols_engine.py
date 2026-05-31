@@ -157,12 +157,13 @@ class PlanarControllingOlsEngine:
     def region_features(self, fields: QgsFields) -> List[QgsFeature]:
         """Return regions where each planar candidate is lower than all overlapping candidates."""
         features: List[QgsFeature] = []
-        for candidate, region_part in self._controlling_region_geometries():
+        for region_id, (candidate, region_part) in enumerate(self._controlling_region_geometries(), start=1):
             feature = QgsFeature(fields)
             feature.setGeometry(region_part)
             min_elev, max_elev = self._geometry_elevation_range(region_part, candidate)
             feature.setAttributes(
                 [
+                    region_id,
                     candidate.surface_id,
                     candidate.surface_type,
                     candidate.model,
@@ -939,6 +940,7 @@ class ControllingOlsEngineMixin:
     ) -> bool:
         fields = QgsFields(
             [
+                QgsField("region_id", QVariant.Int, self.tr("Region ID"), 10),
                 QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
                 QgsField("surface", QVariant.String, self.tr("Surface Type"), 50),
                 QgsField("model", QVariant.String, self.tr("Model"), 30),
@@ -1006,7 +1008,7 @@ class ControllingOlsEngineMixin:
             fields,
             features,
             output_group,
-            "Default Polygon",
+            "OLS Controlling Planar Region",
         )
         if layer is not None:
             QgsMessageLog.logMessage(
