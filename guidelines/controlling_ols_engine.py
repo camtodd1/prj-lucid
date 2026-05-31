@@ -520,14 +520,20 @@ class PlanarControllingOlsEngine:
         overlap: QgsGeometry,
         conical_is_candidate: bool,
     ) -> Optional[QgsGeometry]:
+        sampled_decision = self._sampled_lower_decision(
+            conical_candidate if conical_is_candidate else linear_candidate,
+            linear_candidate if conical_is_candidate else conical_candidate,
+            overlap,
+        )
+        if sampled_decision == "all_lower":
+            return self._global_extent_polygon()
+        if sampled_decision == "all_higher":
+            return None
+
         conical_model = self._conical_model(conical_candidate)
         linear_plane = self._linear_plane(linear_candidate)
         if conical_model is None or linear_plane is None:
-            return self._sampled_candidate_lower_region(
-                conical_candidate if conical_is_candidate else linear_candidate,
-                linear_candidate if conical_is_candidate else conical_candidate,
-                overlap,
-            )
+            return None
 
         if abs(linear_plane[0]) <= 1e-12 and abs(linear_plane[1]) <= 1e-12:
             return self._conical_constant_lower_region(
@@ -538,20 +544,23 @@ class PlanarControllingOlsEngine:
             )
 
         pieces: List[QgsGeometry] = []
-        for band, mid_distance in self._conical_bands(conical_model, overlap):
-            mid_elevation = conical_model["base_elevation_m"] + (mid_distance * conical_model["slope"])
+        for band, inner_distance, outer_distance in self._conical_bands(conical_model, overlap):
+            comparison_distance = outer_distance if conical_is_candidate else inner_distance
+            comparison_elevation = conical_model["base_elevation_m"] + (
+                comparison_distance * conical_model["slope"]
+            )
             if conical_is_candidate:
                 lower_region = self._coefficient_lower_region(
                     -linear_plane[0],
                     -linear_plane[1],
-                    mid_elevation - linear_plane[2],
+                    comparison_elevation - linear_plane[2],
                     band,
                 )
             else:
                 lower_region = self._coefficient_lower_region(
                     linear_plane[0],
                     linear_plane[1],
-                    linear_plane[2] - mid_elevation,
+                    linear_plane[2] - comparison_elevation,
                     band,
                 )
             if lower_region is None or lower_region.isEmpty():
@@ -614,15 +623,15 @@ class PlanarControllingOlsEngine:
         except Exception:
             return None
 
-    def _conical_bands(self, conical_model: dict, overlap: QgsGeometry) -> List[Tuple[QgsGeometry, float]]:
+    def _conical_bands(self, conical_model: dict, overlap: QgsGeometry) -> List[Tuple[QgsGeometry, float, float]]:
         max_distance = conical_model.get("max_distance_m")
         if max_distance is None:
             max_distance = self._global_span()
         max_distance = max(0.0, float(max_distance))
         if max_distance <= 1e-6:
             return []
-        band_width = max(25.0, min(max_distance / 80.0, 100.0))
-        bands: List[Tuple[QgsGeometry, float]] = []
+        band_width = max(5.0, min(max_distance / 200.0, 25.0))
+        bands: List[Tuple[QgsGeometry, float, float]] = []
         previous_buffer = QgsGeometry(conical_model["base_footprint"])
         distance = 0.0
         while distance < max_distance - 1e-6:
@@ -635,7 +644,7 @@ class PlanarControllingOlsEngine:
             except Exception:
                 band = None
             if self._has_polygon_area(band):
-                bands.extend((part, (distance + next_distance) / 2.0) for part in self._polygon_parts(band))
+                bands.extend((part, distance, next_distance) for part in self._polygon_parts(band))
             previous_buffer = next_buffer if next_buffer is not None and not next_buffer.isEmpty() else previous_buffer
             distance = next_distance
         return bands
@@ -659,6 +668,19 @@ class PlanarControllingOlsEngine:
         competitor: ControllingOlsCandidate,
         overlap: QgsGeometry,
     ) -> Optional[QgsGeometry]:
+        decision = self._sampled_lower_decision(candidate, competitor, overlap)
+        if decision == "all_lower":
+            return self._global_extent_polygon()
+        if decision == "all_higher":
+            return None
+        return None
+
+    def _sampled_lower_decision(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+    ) -> str:
         differences = []
         for point_xy in self._geometry_sample_points(overlap):
             candidate_elevation = candidate.elevation_at_xy(point_xy)
@@ -672,12 +694,12 @@ class PlanarControllingOlsEngine:
                 continue
             differences.append(float(candidate_elevation) - float(competitor_elevation))
         if not differences:
-            return None
+            return "unknown"
         if max(differences) <= self.tie_tolerance_m:
-            return self._global_extent_polygon()
+            return "all_lower"
         if min(differences) > self.tie_tolerance_m:
-            return None
-        return None
+            return "all_higher"
+        return "mixed"
 
     def _candidate_transition_lines(
         self,
