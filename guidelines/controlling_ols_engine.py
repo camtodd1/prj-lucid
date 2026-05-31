@@ -940,7 +940,6 @@ class ControllingOlsEngineMixin:
     ) -> bool:
         fields = QgsFields(
             [
-                QgsField("region_id", QVariant.Int, self.tr("Region ID"), 10),
                 QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
                 QgsField("surface", QVariant.String, self.tr("Surface Type"), 50),
                 QgsField("model", QVariant.String, self.tr("Model"), 30),
@@ -983,6 +982,7 @@ class ControllingOlsEngineMixin:
     ) -> bool:
         fields = QgsFields(
             [
+                QgsField("region_id", QVariant.Int, self.tr("Region ID"), 10),
                 QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
                 QgsField("surface", QVariant.String, self.tr("Surface Type"), 50),
                 QgsField("model", QVariant.String, self.tr("Model"), 30),
