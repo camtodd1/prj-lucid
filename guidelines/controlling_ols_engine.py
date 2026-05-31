@@ -405,11 +405,12 @@ class PlanarControllingOlsEngine:
             pass
         try:
             cleanup_tolerance = self._region_cleanup_tolerance(geometry, candidate)
-            opened = geometry.buffer(-cleanup_tolerance, 8)
-            if opened is not None and not opened.isEmpty():
-                reopened = opened.buffer(cleanup_tolerance, 8)
-                if reopened is not None and not reopened.isEmpty():
-                    candidates.insert(0, reopened)
+            if cleanup_tolerance > 0.0:
+                opened = geometry.buffer(-cleanup_tolerance, 8)
+                if opened is not None and not opened.isEmpty():
+                    reopened = opened.buffer(cleanup_tolerance, 8)
+                    if reopened is not None and not reopened.isEmpty():
+                        candidates.insert(0, reopened)
         except Exception:
             pass
         for candidate in candidates:
@@ -433,7 +434,7 @@ class PlanarControllingOlsEngine:
             bbox = geometry.boundingBox()
             span = max(bbox.width(), bbox.height(), 1.0)
             if candidate is not None and candidate.surface_type == "Conical":
-                return max(0.5, min(span * 5e-5, 5.0))
+                return 0.0
             return max(0.02, min(span * 1e-6, 0.25))
         except Exception:
             return 0.02
@@ -530,16 +531,6 @@ class PlanarControllingOlsEngine:
         overlap: QgsGeometry,
         conical_is_candidate: bool,
     ) -> Optional[QgsGeometry]:
-        sampled_decision = self._sampled_lower_decision(
-            conical_candidate if conical_is_candidate else linear_candidate,
-            linear_candidate if conical_is_candidate else conical_candidate,
-            overlap,
-        )
-        if sampled_decision == "all_lower":
-            return self._global_extent_polygon()
-        if sampled_decision == "all_higher":
-            return None
-
         conical_model = self._conical_model(conical_candidate)
         linear_plane = self._linear_plane(linear_candidate)
         if conical_model is None or linear_plane is None:
@@ -553,14 +544,10 @@ class PlanarControllingOlsEngine:
                 conical_is_candidate,
             )
 
-        threshold_distance = self._conical_plane_threshold_distance(conical_model, linear_plane, overlap)
-        if threshold_distance is None:
-            return None
-        return self._conical_distance_lower_region(
-            conical_model,
-            threshold_distance,
+        return self._triangulated_candidate_lower_region(
+            conical_candidate if conical_is_candidate else linear_candidate,
+            linear_candidate if conical_is_candidate else conical_candidate,
             overlap,
-            conical_is_candidate,
         )
 
     def _conical_constant_lower_region(
@@ -645,58 +632,164 @@ class PlanarControllingOlsEngine:
             self._conical_buffer_cache[key] = QgsGeometry(buffered)
         return buffered
 
-    def _conical_plane_threshold_distance(
+    def _triangulated_candidate_lower_region(
         self,
-        conical_model: dict,
-        linear_plane: Tuple[float, float, float],
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
         geometry: QgsGeometry,
-    ) -> Optional[float]:
-        crossings: List[float] = []
-        closest_distance = None
-        closest_abs_difference = None
+    ) -> Optional[QgsGeometry]:
+        points = self._triangulation_sample_points(geometry)
+        if len(points) < 3:
+            return None
+        try:
+            tin = QgsGeometry.fromMultiPointXY(points).delaunayTriangulation(0.0, False)
+        except Exception:
+            return None
+        pieces: List[QgsGeometry] = []
+        for triangle in self._polygon_parts(tin):
+            try:
+                clipped_triangle = triangle.intersection(geometry)
+            except Exception:
+                clipped_triangle = None
+            for polygon_part in self._polygon_parts(clipped_triangle):
+                for lower_ring in self._lower_polygon_rings(polygon_part, candidate, competitor):
+                    if len(lower_ring) < 4:
+                        continue
+                    lower_geom = QgsGeometry.fromPolygonXY([lower_ring])
+                    if lower_geom is not None and not lower_geom.isEmpty() and lower_geom.area() > 1e-3:
+                        pieces.append(lower_geom)
+        if not pieces:
+            return None
+        try:
+            combined = QgsGeometry.unaryUnion(pieces)
+        except Exception:
+            combined = None
+        return combined if self._has_polygon_area(combined) else None
 
-        for ring_points in self._densified_polygon_boundary_parts(geometry):
-            previous_point = None
-            previous_difference = None
-            previous_distance = None
-            for point_xy in ring_points:
-                point_geometry = QgsGeometry.fromPointXY(point_xy)
-                distance = conical_model["base_footprint"].distance(point_geometry)
-                conical_elevation = conical_model["base_elevation_m"] + (distance * conical_model["slope"])
-                plane_elevation = (
-                    (linear_plane[0] * point_xy.x())
-                    + (linear_plane[1] * point_xy.y())
-                    + linear_plane[2]
-                )
-                difference = conical_elevation - plane_elevation
-                abs_difference = abs(difference)
-                if closest_abs_difference is None or abs_difference < closest_abs_difference:
-                    closest_abs_difference = abs_difference
-                    closest_distance = distance
-                if abs_difference <= self.tie_tolerance_m:
-                    crossings.append(distance)
-                if (
-                    previous_point is not None
-                    and previous_difference is not None
-                    and previous_distance is not None
-                    and difference * previous_difference < 0.0
-                ):
-                    fraction = abs(previous_difference) / (abs(previous_difference) + abs_difference)
-                    crossing_x = previous_point.x() + ((point_xy.x() - previous_point.x()) * fraction)
-                    crossing_y = previous_point.y() + ((point_xy.y() - previous_point.y()) * fraction)
-                    crossing_point = QgsPointXY(crossing_x, crossing_y)
-                    crossing_distance = conical_model["base_footprint"].distance(
-                        QgsGeometry.fromPointXY(crossing_point)
+    def _lower_polygon_rings(
+        self,
+        geometry: QgsGeometry,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+    ) -> List[List[QgsPointXY]]:
+        rings: List[List[QgsPointXY]] = []
+        try:
+            polygons = geometry.asMultiPolygon() if geometry.isMultipart() else [geometry.asPolygon()]
+        except Exception:
+            return rings
+        for polygon in polygons:
+            if not polygon or not polygon[0]:
+                continue
+            clipped = self._clip_ring_by_elevation_difference(polygon[0], candidate, competitor)
+            if len(clipped) >= 3:
+                if clipped[0].distance(clipped[-1]) > 1e-6:
+                    clipped.append(clipped[0])
+                rings.append(clipped)
+        return rings
+
+    def _clip_ring_by_elevation_difference(
+        self,
+        ring: List[QgsPointXY],
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+    ) -> List[QgsPointXY]:
+        points = ring[:-1] if len(ring) > 1 and ring[0].distance(ring[-1]) <= 1e-6 else ring
+        if not points:
+            return []
+        output: List[QgsPointXY] = []
+        previous_point = points[-1]
+        previous_difference = self._candidate_difference(candidate, competitor, previous_point)
+        previous_inside = previous_difference is not None and previous_difference <= self.tie_tolerance_m
+        for current_point in points:
+            current_difference = self._candidate_difference(candidate, competitor, current_point)
+            current_inside = current_difference is not None and current_difference <= self.tie_tolerance_m
+            if current_difference is None or previous_difference is None:
+                if current_inside:
+                    output.append(current_point)
+                previous_point = current_point
+                previous_difference = current_difference
+                previous_inside = current_inside
+                continue
+            if current_inside != previous_inside:
+                output.append(
+                    self._interpolated_zero_crossing(
+                        previous_point,
+                        current_point,
+                        previous_difference,
+                        current_difference,
                     )
-                    crossings.append(crossing_distance)
-                previous_point = point_xy
-                previous_difference = difference
-                previous_distance = distance
+                )
+            if current_inside:
+                output.append(current_point)
+            previous_point = current_point
+            previous_difference = current_difference
+            previous_inside = current_inside
+        return output
 
-        if crossings:
-            crossings.sort()
-            return crossings[len(crossings) // 2]
-        return closest_distance
+    def _candidate_difference(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        point_xy: QgsPointXY,
+    ) -> Optional[float]:
+        candidate_elevation = candidate.elevation_at_xy(point_xy)
+        competitor_elevation = competitor.elevation_at_xy(point_xy)
+        if (
+            candidate_elevation is None
+            or competitor_elevation is None
+            or not math.isfinite(candidate_elevation)
+            or not math.isfinite(competitor_elevation)
+        ):
+            return None
+        return float(candidate_elevation) - float(competitor_elevation)
+
+    def _interpolated_zero_crossing(
+        self,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+        start_difference: float,
+        end_difference: float,
+    ) -> QgsPointXY:
+        denominator = abs(start_difference) + abs(end_difference)
+        fraction = 0.5 if denominator <= 1e-12 else abs(start_difference) / denominator
+        return QgsPointXY(
+            start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+            start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+        )
+
+    def _triangulation_sample_points(self, geometry: QgsGeometry) -> List[QgsPointXY]:
+        points: List[QgsPointXY] = []
+        seen = set()
+
+        def _add(point_xy: QgsPointXY) -> None:
+            key = (round(point_xy.x(), 3), round(point_xy.y(), 3))
+            if key in seen:
+                return
+            seen.add(key)
+            points.append(point_xy)
+
+        for ring_points in self._densified_polygon_boundary_parts(geometry, max_segment_length=15.0):
+            for point_xy in ring_points:
+                _add(point_xy)
+        try:
+            bbox = geometry.boundingBox()
+            spacing = max(15.0, min(max(bbox.width(), bbox.height()) / 35.0, 60.0))
+            x = bbox.xMinimum()
+            while x <= bbox.xMaximum() + 1e-6:
+                y = bbox.yMinimum()
+                while y <= bbox.yMaximum() + 1e-6:
+                    point_xy = QgsPointXY(x, y)
+                    if geometry.intersects(QgsGeometry.fromPointXY(point_xy)):
+                        _add(point_xy)
+                    y += spacing
+                x += spacing
+            point_on_surface = geometry.pointOnSurface()
+            if point_on_surface is not None and not point_on_surface.isEmpty():
+                point = point_on_surface.asPoint()
+                _add(QgsPointXY(point.x(), point.y()))
+        except Exception:
+            pass
+        return points
 
     def _densified_polygon_boundary_parts(
         self,
@@ -724,25 +817,6 @@ class PlanarControllingOlsEngine:
             if len(densified) >= 2:
                 densified_parts.append(densified)
         return densified_parts
-
-    def _representative_linear_elevation(
-        self,
-        linear_plane: Tuple[float, float, float],
-        geometry: QgsGeometry,
-        mode: str = "median",
-    ) -> Optional[float]:
-        values = [
-            (linear_plane[0] * point.x()) + (linear_plane[1] * point.y()) + linear_plane[2]
-            for point in self._geometry_sample_points(geometry)
-        ]
-        if not values:
-            return None
-        values.sort()
-        if mode == "max":
-            return values[-1]
-        if mode == "min":
-            return values[0]
-        return values[len(values) // 2]
 
     def _sampled_candidate_lower_region(
         self,

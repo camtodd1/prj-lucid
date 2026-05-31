@@ -228,10 +228,12 @@ constructed exactly rather than by a sampled grid.
 Conical has been reintroduced as a non-planar candidate. Its evaluator derives
 elevation from horizontal distance to the IHS footprint. Conical-vs-flat
 interactions are clipped by exact distance buffers. Conical-vs-sloping planar
-interactions sample the overlap boundary and locate real `conical_z =
-plane_z` crossings. Those crossing points are converted back to distance from
-the IHS footprint, and the resulting distance is used as the conical buffer
-offset for that planar overlap.
+interactions are clipped as a local elevation-equality problem. The solver
+samples and triangulates the overlap, evaluates `candidate_z - competitor_z`
+at triangle vertices, and clips each triangle along the interpolated zero
+crossing. This avoids treating a sloping-plane/conical intersection as a single
+constant-distance buffer, which is not geometrically correct and can round
+planar corners or place the equality edge at the wrong height.
 
 No-OLS strip-core exclusion masks are applied to runway-related planar
 candidates before competition. These masks suppress IHS, Approach, TOCS, and
