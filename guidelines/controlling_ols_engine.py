@@ -502,7 +502,7 @@ class PlanarControllingOlsEngine:
         competitor: ControllingOlsCandidate,
         overlap: Optional[QgsGeometry],
     ) -> Optional[QgsGeometry]:
-        """Return conical-vs-planar lower geometry, using exact flat clips and banded curved clips."""
+        """Return conical-vs-planar lower geometry using IHS-offset buffer clips."""
         if overlap is None or overlap.isEmpty():
             return None
         if candidate.model == "conical" and competitor.model == "conical":
@@ -543,41 +543,15 @@ class PlanarControllingOlsEngine:
                 conical_is_candidate,
             )
 
-        pieces: List[QgsGeometry] = []
-        for band, inner_distance, outer_distance in self._conical_bands(conical_model, overlap):
-            comparison_distance = (inner_distance + outer_distance) / 2.0
-            comparison_elevation = conical_model["base_elevation_m"] + (
-                comparison_distance * conical_model["slope"]
-            )
-            if conical_is_candidate:
-                lower_region = self._coefficient_lower_region(
-                    -linear_plane[0],
-                    -linear_plane[1],
-                    comparison_elevation - linear_plane[2],
-                    band,
-                )
-            else:
-                lower_region = self._coefficient_lower_region(
-                    linear_plane[0],
-                    linear_plane[1],
-                    linear_plane[2] - comparison_elevation,
-                    band,
-                )
-            if lower_region is None or lower_region.isEmpty():
-                continue
-            try:
-                piece = band.intersection(lower_region)
-            except Exception:
-                piece = None
-            if self._has_polygon_area(piece):
-                pieces.extend(self._polygon_parts(piece))
-        if not pieces:
+        threshold_elevation = self._representative_linear_elevation(linear_plane, overlap)
+        if threshold_elevation is None:
             return None
-        try:
-            combined = QgsGeometry.unaryUnion(pieces)
-        except Exception:
-            combined = None
-        return combined if self._has_polygon_area(combined) else None
+        return self._conical_constant_lower_region(
+            conical_model,
+            threshold_elevation,
+            overlap,
+            conical_is_candidate,
+        )
 
     def _conical_constant_lower_region(
         self,
@@ -623,32 +597,6 @@ class PlanarControllingOlsEngine:
         except Exception:
             return None
 
-    def _conical_bands(self, conical_model: dict, overlap: QgsGeometry) -> List[Tuple[QgsGeometry, float, float]]:
-        max_distance = conical_model.get("max_distance_m")
-        if max_distance is None:
-            max_distance = self._global_span()
-        max_distance = max(0.0, float(max_distance))
-        if max_distance <= 1e-6:
-            return []
-        band_width = max(5.0, min(max_distance / 200.0, 25.0))
-        bands: List[Tuple[QgsGeometry, float, float]] = []
-        previous_buffer = QgsGeometry(conical_model["base_footprint"])
-        distance = 0.0
-        while distance < max_distance - 1e-6:
-            next_distance = min(max_distance, distance + band_width)
-            next_buffer = None
-            try:
-                next_buffer = self._conical_buffer(conical_model, next_distance)
-                band = next_buffer.difference(previous_buffer)
-                band = band.intersection(overlap)
-            except Exception:
-                band = None
-            if self._has_polygon_area(band):
-                bands.extend((part, distance, next_distance) for part in self._polygon_parts(band))
-            previous_buffer = next_buffer if next_buffer is not None and not next_buffer.isEmpty() else previous_buffer
-            distance = next_distance
-        return bands
-
     def _conical_buffer(self, conical_model: dict, distance_m: float) -> Optional[QgsGeometry]:
         key = (str(conical_model.get("surface_id", "conical")), int(round(max(0.0, distance_m) * 1000.0)))
         cached = self._conical_buffer_cache.get(key)
@@ -661,6 +609,20 @@ class PlanarControllingOlsEngine:
         if buffered is not None and not buffered.isEmpty():
             self._conical_buffer_cache[key] = QgsGeometry(buffered)
         return buffered
+
+    def _representative_linear_elevation(
+        self,
+        linear_plane: Tuple[float, float, float],
+        geometry: QgsGeometry,
+    ) -> Optional[float]:
+        values = [
+            (linear_plane[0] * point.x()) + (linear_plane[1] * point.y()) + linear_plane[2]
+            for point in self._geometry_sample_points(geometry)
+        ]
+        if not values:
+            return None
+        values.sort()
+        return values[len(values) // 2]
 
     def _sampled_candidate_lower_region(
         self,
