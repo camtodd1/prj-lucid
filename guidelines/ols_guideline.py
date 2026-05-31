@@ -33,6 +33,7 @@ from .guideline_constants import (
 from .controlling_ols_engine import (
     ControllingOlsCandidate,
     axis_elevation_evaluator,
+    conical_elevation_evaluator,
     constant_elevation_evaluator,
     plane_elevation_evaluator,
 )
@@ -459,6 +460,28 @@ class OlsGuidelineMixin:
                                 if layer is not None:
                                     overall_success = True
                                     conical_layer_created = True
+                                if hasattr(self, "_register_controlling_ols_candidate"):
+                                    self._register_controlling_ols_candidate(
+                                        ControllingOlsCandidate(
+                                            surface_id=f"CONICAL:{icao_code}",
+                                            surface_type="Conical",
+                                            footprint=QgsGeometry(temp_conical_geom),
+                                            elevation_at_xy=conical_elevation_evaluator(
+                                                ihs_base_geom,
+                                                IHS_ELEVATION_AMSL,
+                                                slope,
+                                                horizontal_extent,
+                                            ),
+                                            model="conical",
+                                            metadata={
+                                                "base_footprint": QgsGeometry(ihs_base_geom),
+                                                "base_elevation_m": IHS_ELEVATION_AMSL,
+                                                "slope": slope,
+                                                "max_distance_m": horizontal_extent,
+                                                "height_extent_agl": height_extent_agl,
+                                            },
+                                        )
+                                    )
                             else:
                                 QgsMessageLog.logMessage(
                                     "Failed generate valid Conical ring geometry.",

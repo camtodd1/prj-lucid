@@ -209,20 +209,27 @@ group containing:
 - solved controlling planar region polygons;
 - solved controlling transition edge diagnostics.
 
-The planar lower-envelope model currently includes:
+The controlling lower-envelope model currently includes:
 
 - IHS constant planes;
 - OHS constant planes;
 - Approach axis-rising planar sections;
 - TOCS axis-rising planar surfaces;
-- Transitional strip-adjacent and approach-adjacent planar panels.
+- Transitional strip-adjacent and approach-adjacent planar panels;
+- Conical distance-rising surfaces from the IHS footprint.
 
-The solver treats all registered planar candidates from all runways as one
+The solver treats all registered candidates from all runways as one
 airport-wide competition set. For each candidate, its controlling region is
 constructed by subtracting the parts of its footprint where any other
-applicable planar candidate is lower. The equality boundary between two planar
+applicable candidate is lower. The equality boundary between two planar
 candidates is represented as a half-plane split, so planar interactions are
 constructed exactly rather than by a sampled grid.
+
+Conical has been reintroduced as a non-planar candidate. Its evaluator derives
+elevation from horizontal distance to the IHS footprint. Conical-vs-flat
+interactions are clipped by exact distance buffers. Conical-vs-sloping planar
+interactions are currently approximated by narrow conical distance bands, with
+each band compared against the competing plane.
 
 No-OLS strip-core exclusion masks are applied to runway-related planar
 candidates before competition. These masks suppress IHS, Approach, TOCS, and
@@ -238,7 +245,8 @@ diagnostic labelling and GeoJSON review. The region layer uses the
 Known remaining limitations:
 
 - curved lower-edge boundaries are not yet modelled;
-- conical is not yet part of the lower-envelope competition;
+- conical-vs-sloping-surface boundaries are banded approximations and should be
+  validated visually before promotion;
 - transition-edge diagnostics are secondary to the region layer and may still
   need output hygiene as curved boundaries are introduced;
 - contour clipping is still a later milestone.
@@ -260,7 +268,7 @@ candidate evaluations by elevation and keeps the first candidate where surfaces
 are equal within tolerance, so ties should resolve to one retained region rather
 than overlapping duplicate regions. If meaningful polygon overlap is observed,
 it should be treated as a bug or as evidence that a missing surface model, such
-as curved lower edges or conical, is not yet represented in the competition.
+as curved lower edges, is not yet represented in the competition.
 
 ### Equal-Elevation Tie Handling
 

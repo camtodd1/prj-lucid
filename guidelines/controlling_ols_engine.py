@@ -87,6 +87,30 @@ def plane_elevation_evaluator(a: float, b: float, c: float) -> ElevationEvaluato
     return _evaluate
 
 
+def conical_elevation_evaluator(
+    base_footprint: QgsGeometry,
+    base_elevation_m: float,
+    slope: float,
+    max_distance_m: Optional[float] = None,
+) -> ElevationEvaluator:
+    """Return an evaluator for a conical surface rising outwards from an IHS footprint."""
+    base_geometry = QgsGeometry(base_footprint)
+
+    def _evaluate(point_xy: QgsPointXY) -> Optional[float]:
+        if base_geometry is None or base_geometry.isEmpty() or slope <= 0:
+            return None
+        point_geometry = QgsGeometry.fromPointXY(point_xy)
+        distance = base_geometry.distance(point_geometry)
+        if max_distance_m is not None and distance > max_distance_m + 1e-6:
+            return None
+        distance = max(0.0, distance)
+        if max_distance_m is not None:
+            distance = min(max_distance_m, distance)
+        return base_elevation_m + (distance * slope)
+
+    return _evaluate
+
+
 class PlanarControllingOlsEngine:
     """Compute exact transition edges between planar OLS candidates."""
 
@@ -99,7 +123,7 @@ class PlanarControllingOlsEngine:
         self.candidates = [
             candidate
             for candidate in candidates
-            if candidate.model in {"constant", "axis", "plane"}
+            if candidate.model in {"constant", "axis", "plane", "conical"}
             and candidate.footprint is not None
             and not candidate.footprint.isEmpty()
         ]
@@ -109,6 +133,7 @@ class PlanarControllingOlsEngine:
             if geometry is not None and not geometry.isEmpty()
         ]
         self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
+        self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
 
@@ -320,11 +345,11 @@ class PlanarControllingOlsEngine:
                     overlap = None
                 if not self._has_polygon_area(overlap):
                     continue
-                halfplane = self._candidate_lower_halfplane(candidate, competitor, overlap)
+                lower_region = self._candidate_lower_region(candidate, competitor, overlap)
                 try:
                     losing_area = overlap
-                    if halfplane is not None:
-                        losing_area = overlap.difference(halfplane)
+                    if lower_region is not None:
+                        losing_area = overlap.difference(lower_region)
                     if losing_area is not None and not losing_area.isEmpty() and self._has_polygon_area(losing_area):
                         region = region.difference(losing_area)
                 except Exception:
@@ -403,6 +428,17 @@ class PlanarControllingOlsEngine:
         except Exception:
             return 0.02
 
+    def _candidate_lower_region(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        overlap: Optional[QgsGeometry] = None,
+    ) -> Optional[QgsGeometry]:
+        """Return the geometry where candidate elevation is <= competitor elevation."""
+        if candidate.model == "conical" or competitor.model == "conical":
+            return self._curved_candidate_lower_region(candidate, competitor, overlap)
+        return self._candidate_lower_halfplane(candidate, competitor, overlap)
+
     def _candidate_lower_halfplane(
         self,
         candidate: ControllingOlsCandidate,
@@ -415,9 +451,21 @@ class PlanarControllingOlsEngine:
         if candidate_plane is None or competitor_plane is None:
             return None
 
-        a = candidate_plane[0] - competitor_plane[0]
-        b = candidate_plane[1] - competitor_plane[1]
-        c = candidate_plane[2] - competitor_plane[2]
+        return self._coefficient_lower_region(
+            candidate_plane[0] - competitor_plane[0],
+            candidate_plane[1] - competitor_plane[1],
+            candidate_plane[2] - competitor_plane[2],
+            overlap,
+        )
+
+    def _coefficient_lower_region(
+        self,
+        a: float,
+        b: float,
+        c: float,
+        overlap: Optional[QgsGeometry] = None,
+    ) -> Optional[QgsGeometry]:
+        """Return a large polygon where ax + by + c <= tolerance."""
         if abs(a) <= 1e-12 and abs(b) <= 1e-12:
             return self._global_extent_polygon() if c <= self.tie_tolerance_m else None
 
@@ -447,6 +495,189 @@ class PlanarControllingOlsEngine:
         p3 = QgsPointXY(p2.x() - (nx * span * 2.0), p2.y() - (ny * span * 2.0))
         p4 = QgsPointXY(p1.x() - (nx * span * 2.0), p1.y() - (ny * span * 2.0))
         return QgsGeometry.fromPolygonXY([[p1, p2, p3, p4, p1]])
+
+    def _curved_candidate_lower_region(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        overlap: Optional[QgsGeometry],
+    ) -> Optional[QgsGeometry]:
+        """Return conical-vs-planar lower geometry, using exact flat clips and banded curved clips."""
+        if overlap is None or overlap.isEmpty():
+            return None
+        if candidate.model == "conical" and competitor.model == "conical":
+            return self._sampled_candidate_lower_region(candidate, competitor, overlap)
+        if candidate.model == "conical":
+            return self._conical_linear_lower_region(candidate, competitor, overlap, conical_is_candidate=True)
+        if competitor.model == "conical":
+            return self._conical_linear_lower_region(competitor, candidate, overlap, conical_is_candidate=False)
+        return None
+
+    def _conical_linear_lower_region(
+        self,
+        conical_candidate: ControllingOlsCandidate,
+        linear_candidate: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+        conical_is_candidate: bool,
+    ) -> Optional[QgsGeometry]:
+        conical_model = self._conical_model(conical_candidate)
+        linear_plane = self._linear_plane(linear_candidate)
+        if conical_model is None or linear_plane is None:
+            return self._sampled_candidate_lower_region(
+                conical_candidate if conical_is_candidate else linear_candidate,
+                linear_candidate if conical_is_candidate else conical_candidate,
+                overlap,
+            )
+
+        if abs(linear_plane[0]) <= 1e-12 and abs(linear_plane[1]) <= 1e-12:
+            return self._conical_constant_lower_region(
+                conical_model,
+                float(linear_plane[2]),
+                overlap,
+                conical_is_candidate,
+            )
+
+        pieces: List[QgsGeometry] = []
+        for band, mid_distance in self._conical_bands(conical_model, overlap):
+            mid_elevation = conical_model["base_elevation_m"] + (mid_distance * conical_model["slope"])
+            if conical_is_candidate:
+                lower_region = self._coefficient_lower_region(
+                    -linear_plane[0],
+                    -linear_plane[1],
+                    mid_elevation - linear_plane[2],
+                    band,
+                )
+            else:
+                lower_region = self._coefficient_lower_region(
+                    linear_plane[0],
+                    linear_plane[1],
+                    linear_plane[2] - mid_elevation,
+                    band,
+                )
+            if lower_region is None or lower_region.isEmpty():
+                continue
+            try:
+                piece = band.intersection(lower_region)
+            except Exception:
+                piece = None
+            if self._has_polygon_area(piece):
+                pieces.extend(self._polygon_parts(piece))
+        if not pieces:
+            return None
+        try:
+            combined = QgsGeometry.unaryUnion(pieces)
+        except Exception:
+            combined = None
+        return combined if self._has_polygon_area(combined) else None
+
+    def _conical_constant_lower_region(
+        self,
+        conical_model: dict,
+        constant_elevation: float,
+        overlap: QgsGeometry,
+        conical_is_candidate: bool,
+    ) -> Optional[QgsGeometry]:
+        threshold_distance = (constant_elevation - conical_model["base_elevation_m"]) / conical_model["slope"]
+        max_distance = conical_model.get("max_distance_m")
+        if max_distance is not None:
+            max_distance = float(max_distance)
+        if conical_is_candidate:
+            if threshold_distance < -self.tie_tolerance_m:
+                return None
+            if max_distance is not None and threshold_distance >= max_distance - 1e-6:
+                return self._global_extent_polygon()
+            return self._distance_region_from_conical_base(conical_model, max(0.0, threshold_distance), overlap)
+
+        if threshold_distance < -self.tie_tolerance_m:
+            return self._global_extent_polygon()
+        if max_distance is not None and threshold_distance >= max_distance - 1e-6:
+            return None
+        lower_conical = self._distance_region_from_conical_base(conical_model, max(0.0, threshold_distance), overlap)
+        if lower_conical is None or lower_conical.isEmpty():
+            return self._global_extent_polygon()
+        try:
+            return overlap.difference(lower_conical)
+        except Exception:
+            return None
+
+    def _distance_region_from_conical_base(
+        self,
+        conical_model: dict,
+        distance_m: float,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        try:
+            distance_region = self._conical_buffer(conical_model, distance_m)
+            if distance_region is None or distance_region.isEmpty():
+                return None
+            return overlap.intersection(distance_region)
+        except Exception:
+            return None
+
+    def _conical_bands(self, conical_model: dict, overlap: QgsGeometry) -> List[Tuple[QgsGeometry, float]]:
+        max_distance = conical_model.get("max_distance_m")
+        if max_distance is None:
+            max_distance = self._global_span()
+        max_distance = max(0.0, float(max_distance))
+        if max_distance <= 1e-6:
+            return []
+        band_width = max(25.0, min(max_distance / 80.0, 100.0))
+        bands: List[Tuple[QgsGeometry, float]] = []
+        previous_buffer = QgsGeometry(conical_model["base_footprint"])
+        distance = 0.0
+        while distance < max_distance - 1e-6:
+            next_distance = min(max_distance, distance + band_width)
+            next_buffer = None
+            try:
+                next_buffer = self._conical_buffer(conical_model, next_distance)
+                band = next_buffer.difference(previous_buffer)
+                band = band.intersection(overlap)
+            except Exception:
+                band = None
+            if self._has_polygon_area(band):
+                bands.extend((part, (distance + next_distance) / 2.0) for part in self._polygon_parts(band))
+            previous_buffer = next_buffer if next_buffer is not None and not next_buffer.isEmpty() else previous_buffer
+            distance = next_distance
+        return bands
+
+    def _conical_buffer(self, conical_model: dict, distance_m: float) -> Optional[QgsGeometry]:
+        key = (str(conical_model.get("surface_id", "conical")), int(round(max(0.0, distance_m) * 1000.0)))
+        cached = self._conical_buffer_cache.get(key)
+        if cached is not None:
+            return QgsGeometry(cached)
+        try:
+            buffered = conical_model["base_footprint"].buffer(max(0.0, distance_m), 48)
+        except Exception:
+            return None
+        if buffered is not None and not buffered.isEmpty():
+            self._conical_buffer_cache[key] = QgsGeometry(buffered)
+        return buffered
+
+    def _sampled_candidate_lower_region(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        differences = []
+        for point_xy in self._geometry_sample_points(overlap):
+            candidate_elevation = candidate.elevation_at_xy(point_xy)
+            competitor_elevation = competitor.elevation_at_xy(point_xy)
+            if (
+                candidate_elevation is None
+                or competitor_elevation is None
+                or not math.isfinite(candidate_elevation)
+                or not math.isfinite(competitor_elevation)
+            ):
+                continue
+            differences.append(float(candidate_elevation) - float(competitor_elevation))
+        if not differences:
+            return None
+        if max(differences) <= self.tie_tolerance_m:
+            return self._global_extent_polygon()
+        if min(differences) > self.tie_tolerance_m:
+            return None
+        return None
 
     def _candidate_transition_lines(
         self,
@@ -714,6 +945,22 @@ class PlanarControllingOlsEngine:
         except (KeyError, TypeError, ValueError):
             return None
 
+    def _conical_model(self, candidate: ControllingOlsCandidate) -> Optional[dict]:
+        try:
+            base_footprint = candidate.metadata["base_footprint"]
+            if base_footprint is None or base_footprint.isEmpty():
+                return None
+            max_distance_raw = candidate.metadata.get("max_distance_m")
+            return {
+                "surface_id": candidate.surface_id,
+                "base_footprint": QgsGeometry(base_footprint),
+                "base_elevation_m": float(candidate.metadata["base_elevation_m"]),
+                "slope": float(candidate.metadata["slope"]),
+                "max_distance_m": float(max_distance_raw) if max_distance_raw is not None else None,
+            }
+        except (KeyError, TypeError, ValueError, AttributeError):
+            return None
+
     def _linear_plane(self, candidate: ControllingOlsCandidate) -> Optional[Tuple[float, float, float]]:
         """Return z = ax + by + c for supported planar candidates."""
         if candidate.model == "constant":
@@ -760,6 +1007,15 @@ class PlanarControllingOlsEngine:
         geometry: QgsGeometry,
         candidate: ControllingOlsCandidate,
     ) -> Tuple[Optional[float], Optional[float]]:
+        sample_points = self._geometry_sample_points(geometry)
+        values = []
+        for point_xy in sample_points:
+            elevation = candidate.elevation_at_xy(point_xy)
+            if elevation is not None and math.isfinite(elevation):
+                values.append(float(elevation))
+        return (min(values), max(values)) if values else (None, None)
+
+    def _geometry_sample_points(self, geometry: QgsGeometry) -> List[QgsPointXY]:
         sample_points: List[QgsPointXY] = []
         try:
             point_on_surface = geometry.pointOnSurface()
@@ -774,15 +1030,14 @@ class PlanarControllingOlsEngine:
                 )
                 if geometry.intersects(QgsGeometry.fromPointXY(point_xy)):
                     sample_points.append(point_xy)
+            for polygon_part in self._polygon_parts(geometry):
+                polygons = polygon_part.asMultiPolygon() if polygon_part.isMultipart() else [polygon_part.asPolygon()]
+                for polygon in polygons:
+                    for ring in polygon:
+                        sample_points.extend(QgsPointXY(point.x(), point.y()) for point in ring)
         except Exception:
-            return None, None
-
-        values = []
-        for point_xy in sample_points:
-            elevation = candidate.elevation_at_xy(point_xy)
-            if elevation is not None and math.isfinite(elevation):
-                values.append(float(elevation))
-        return (min(values), max(values)) if values else (None, None)
+            return []
+        return sample_points
 
     def _combined_bounds(self, candidates: Iterable[ControllingOlsCandidate]) -> Optional[QgsRectangle]:
         combined: Optional[QgsRectangle] = None
@@ -892,7 +1147,11 @@ class ControllingOlsEngineMixin:
     ) -> bool:
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
         exclusion_geometries = list(getattr(self, "_controlling_ols_exclusion_geometries", []) or [])
-        planar_candidates = [candidate for candidate in candidates if candidate.model in {"constant", "axis", "plane"}]
+        planar_candidates = [
+            candidate
+            for candidate in candidates
+            if candidate.model in {"constant", "axis", "plane", "conical"}
+        ]
         if not planar_candidates:
             QgsMessageLog.logMessage(
                 "Controlling OLS planar POC skipped: no planar candidate surfaces were registered.",
