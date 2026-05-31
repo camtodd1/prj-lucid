@@ -197,3 +197,89 @@ The first useful milestone is:
 
 Once this matches known-good planar behaviour, add transitional surfaces as the
 next milestone.
+
+## Planar Milestone Status
+
+Status: validated as a proof-of-concept for planar controlling regions.
+
+The current implementation generates a derived `Controlling OLS POC` output
+group containing:
+
+- candidate surface diagnostics;
+- solved controlling planar region polygons;
+- solved controlling transition edge diagnostics.
+
+The planar lower-envelope model currently includes:
+
+- IHS constant planes;
+- OHS constant planes;
+- Approach axis-rising planar sections;
+- TOCS axis-rising planar surfaces;
+- Transitional strip-adjacent and approach-adjacent planar panels.
+
+The solver treats all registered planar candidates from all runways as one
+airport-wide competition set. For each candidate, its controlling region is
+constructed by subtracting the parts of its footprint where any other
+applicable planar candidate is lower. The equality boundary between two planar
+candidates is represented as a half-plane split, so planar interactions are
+constructed exactly rather than by a sampled grid.
+
+No-OLS strip-core exclusion masks are applied to runway-related planar
+candidates before competition. These masks suppress IHS, Approach, TOCS, and
+Transitional candidate footprints within the runway strip core/lower-edge
+corridor where no OLS surface should be apparent. OHS is intentionally not
+masked by these strip-core exclusions, so it can remain the controlling
+airport-wide surface where no lower runway-related candidate applies.
+
+The planar region output now includes a stable `region_id` attribute for
+diagnostic labelling and GeoJSON review. The region layer uses the
+`test_ols_polygon.qml` style during development.
+
+Known remaining limitations:
+
+- curved lower-edge boundaries are not yet modelled;
+- conical is not yet part of the lower-envelope competition;
+- transition-edge diagnostics are secondary to the region layer and may still
+  need output hygiene as curved boundaries are introduced;
+- contour clipping is still a later milestone.
+
+### Current Non-Overlap Expectation
+
+Within the planar model, solved region features are expected to be mutually
+exclusive in plan view for areas where the candidate footprints and no-OLS
+exclusions have been represented correctly. A point should not normally belong
+to two different controlling region polygons in the output layer.
+
+Small numerical artefacts can still occur at boundaries because QGIS/GEOS
+overlay operations work with finite precision. These should be limited to
+coincident boundaries, tiny slivers, or duplicate-looking linework rather than
+meaningful overlapping area.
+
+There are also intentional equal-elevation/tie cases. The current engine sorts
+candidate evaluations by elevation and keeps the first candidate where surfaces
+are equal within tolerance, so ties should resolve to one retained region rather
+than overlapping duplicate regions. If meaningful polygon overlap is observed,
+it should be treated as a bug or as evidence that a missing surface model, such
+as curved lower edges or conical, is not yet represented in the competition.
+
+### Equal-Elevation Tie Handling
+
+Equal-elevation overlaps are currently resolved implicitly by candidate
+registration order. Python sorting is stable, so where two or more candidates
+evaluate to the same elevation within tolerance, the candidate that entered the
+engine first is retained as the controlling region and later equal candidates
+are suppressed.
+
+This keeps the output layer non-overlapping, but it is not yet an explicit MOS
+or domain-priority rule. The behaviour is deterministic for a given generation
+run, but the selected surface may change if candidate registration order changes.
+
+Future work should consider an explicit tie-break policy, for example:
+
+- prefer the surface family with the more specific regulatory role;
+- prefer runway-specific surfaces over airport-wide surfaces;
+- prefer a stable configured surface-type priority order;
+- mark true equal-elevation areas with a diagnostic tie flag.
+
+Until that policy is defined, broad equal-elevation overlaps should be reviewed
+as a potential modelling decision rather than assumed to be fully resolved.
