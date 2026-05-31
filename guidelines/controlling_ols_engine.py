@@ -352,6 +352,15 @@ class PlanarControllingOlsEngine:
                 candidates.insert(0, buffered)
         except Exception:
             pass
+        try:
+            cleanup_tolerance = self._region_cleanup_tolerance(geometry)
+            opened = geometry.buffer(-cleanup_tolerance, 8)
+            if opened is not None and not opened.isEmpty():
+                reopened = opened.buffer(cleanup_tolerance, 8)
+                if reopened is not None and not reopened.isEmpty():
+                    candidates.insert(0, reopened)
+        except Exception:
+            pass
         for candidate in candidates:
             try:
                 if not candidate.isGeosValid():
@@ -362,6 +371,15 @@ class PlanarControllingOlsEngine:
             if parts:
                 return parts
         return []
+
+    def _region_cleanup_tolerance(self, geometry: QgsGeometry) -> float:
+        """Return a small map-unit tolerance for collapsing zero-width boundary spikes."""
+        try:
+            bbox = geometry.boundingBox()
+            span = max(bbox.width(), bbox.height(), 1.0)
+            return max(0.02, min(span * 1e-6, 0.25))
+        except Exception:
+            return 0.02
 
     def _candidate_lower_halfplane(
         self,
