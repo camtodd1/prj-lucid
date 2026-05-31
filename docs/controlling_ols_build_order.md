@@ -228,9 +228,10 @@ constructed exactly rather than by a sampled grid.
 Conical has been reintroduced as a non-planar candidate. Its evaluator derives
 elevation from horizontal distance to the IHS footprint. Conical-vs-flat
 interactions are clipped by exact distance buffers. Conical-vs-sloping planar
-interactions first sample the real conical and planar elevations across the
-overlap; only genuinely mixed overlaps fall back to a representative conical
-buffer offset for the overlapping planar region.
+interactions sample the overlap boundary and locate real `conical_z =
+plane_z` crossings. Those crossing points are converted back to distance from
+the IHS footprint, and the resulting distance is used as the conical buffer
+offset for that planar overlap.
 
 No-OLS strip-core exclusion masks are applied to runway-related planar
 candidates before competition. These masks suppress IHS, Approach, TOCS, and
@@ -246,7 +247,7 @@ diagnostic labelling and GeoJSON review. The region layer uses the
 Known remaining limitations:
 
 - curved lower-edge boundaries are not yet modelled;
-- conical-vs-sloping-surface boundaries use representative buffer offsets and
+- conical-vs-sloping-surface boundaries use equality-derived buffer offsets and
   should be validated visually before promotion;
 - transition-edge diagnostics are secondary to the region layer and may still
   need output hygiene as curved boundaries are introduced;

@@ -553,12 +553,12 @@ class PlanarControllingOlsEngine:
                 conical_is_candidate,
             )
 
-        threshold_elevation = self._representative_linear_elevation(linear_plane, overlap, mode="max")
-        if threshold_elevation is None:
+        threshold_distance = self._conical_plane_threshold_distance(conical_model, linear_plane, overlap)
+        if threshold_distance is None:
             return None
-        return self._conical_constant_lower_region(
+        return self._conical_distance_lower_region(
             conical_model,
-            threshold_elevation,
+            threshold_distance,
             overlap,
             conical_is_candidate,
         )
@@ -583,6 +583,31 @@ class PlanarControllingOlsEngine:
 
         if threshold_distance < -self.tie_tolerance_m:
             return self._global_extent_polygon()
+        if max_distance is not None and threshold_distance >= max_distance - 1e-6:
+            return None
+        return self._conical_distance_lower_region(
+            conical_model,
+            max(0.0, threshold_distance),
+            overlap,
+            conical_is_candidate,
+        )
+
+    def _conical_distance_lower_region(
+        self,
+        conical_model: dict,
+        threshold_distance: float,
+        overlap: QgsGeometry,
+        conical_is_candidate: bool,
+    ) -> Optional[QgsGeometry]:
+        max_distance = conical_model.get("max_distance_m")
+        if max_distance is not None:
+            max_distance = float(max_distance)
+        threshold_distance = max(0.0, threshold_distance)
+        if conical_is_candidate:
+            if max_distance is not None and threshold_distance >= max_distance - 1e-6:
+                return self._global_extent_polygon()
+            return self._distance_region_from_conical_base(conical_model, threshold_distance, overlap)
+
         if max_distance is not None and threshold_distance >= max_distance - 1e-6:
             return None
         lower_conical = self._distance_region_from_conical_base(conical_model, max(0.0, threshold_distance), overlap)
@@ -619,6 +644,86 @@ class PlanarControllingOlsEngine:
         if buffered is not None and not buffered.isEmpty():
             self._conical_buffer_cache[key] = QgsGeometry(buffered)
         return buffered
+
+    def _conical_plane_threshold_distance(
+        self,
+        conical_model: dict,
+        linear_plane: Tuple[float, float, float],
+        geometry: QgsGeometry,
+    ) -> Optional[float]:
+        crossings: List[float] = []
+        closest_distance = None
+        closest_abs_difference = None
+
+        for ring_points in self._densified_polygon_boundary_parts(geometry):
+            previous_point = None
+            previous_difference = None
+            previous_distance = None
+            for point_xy in ring_points:
+                point_geometry = QgsGeometry.fromPointXY(point_xy)
+                distance = conical_model["base_footprint"].distance(point_geometry)
+                conical_elevation = conical_model["base_elevation_m"] + (distance * conical_model["slope"])
+                plane_elevation = (
+                    (linear_plane[0] * point_xy.x())
+                    + (linear_plane[1] * point_xy.y())
+                    + linear_plane[2]
+                )
+                difference = conical_elevation - plane_elevation
+                abs_difference = abs(difference)
+                if closest_abs_difference is None or abs_difference < closest_abs_difference:
+                    closest_abs_difference = abs_difference
+                    closest_distance = distance
+                if abs_difference <= self.tie_tolerance_m:
+                    crossings.append(distance)
+                if (
+                    previous_point is not None
+                    and previous_difference is not None
+                    and previous_distance is not None
+                    and difference * previous_difference < 0.0
+                ):
+                    fraction = abs(previous_difference) / (abs(previous_difference) + abs_difference)
+                    crossing_x = previous_point.x() + ((point_xy.x() - previous_point.x()) * fraction)
+                    crossing_y = previous_point.y() + ((point_xy.y() - previous_point.y()) * fraction)
+                    crossing_point = QgsPointXY(crossing_x, crossing_y)
+                    crossing_distance = conical_model["base_footprint"].distance(
+                        QgsGeometry.fromPointXY(crossing_point)
+                    )
+                    crossings.append(crossing_distance)
+                previous_point = point_xy
+                previous_difference = difference
+                previous_distance = distance
+
+        if crossings:
+            crossings.sort()
+            return crossings[len(crossings) // 2]
+        return closest_distance
+
+    def _densified_polygon_boundary_parts(
+        self,
+        geometry: QgsGeometry,
+        max_segment_length: float = 25.0,
+    ) -> List[List[QgsPointXY]]:
+        densified_parts: List[List[QgsPointXY]] = []
+        for ring in self._polygon_boundary_parts(geometry):
+            if len(ring) < 2:
+                continue
+            densified: List[QgsPointXY] = []
+            for start_point, end_point in zip(ring[:-1], ring[1:]):
+                if not densified:
+                    densified.append(start_point)
+                length = start_point.distance(end_point)
+                steps = max(1, int(math.ceil(length / max_segment_length)))
+                for step in range(1, steps + 1):
+                    fraction = step / steps
+                    densified.append(
+                        QgsPointXY(
+                            start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+                            start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+                        )
+                    )
+            if len(densified) >= 2:
+                densified_parts.append(densified)
+        return densified_parts
 
     def _representative_linear_elevation(
         self,
