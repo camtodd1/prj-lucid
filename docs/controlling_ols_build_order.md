@@ -230,7 +230,7 @@ elevation from horizontal distance to the IHS footprint. Conical-vs-flat
 interactions are clipped by exact distance buffers. Conical-vs-sloping planar
 interactions first sample the real conical and planar elevations across the
 overlap; only genuinely mixed overlaps fall back to narrow conical distance
-bands, with each band compared conservatively against the competing plane.
+bands, with each band compared against the competing plane at the band midpoint.
 
 No-OLS strip-core exclusion masks are applied to runway-related planar
 candidates before competition. These masks suppress IHS, Approach, TOCS, and

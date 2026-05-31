@@ -545,7 +545,7 @@ class PlanarControllingOlsEngine:
 
         pieces: List[QgsGeometry] = []
         for band, inner_distance, outer_distance in self._conical_bands(conical_model, overlap):
-            comparison_distance = outer_distance if conical_is_candidate else inner_distance
+            comparison_distance = (inner_distance + outer_distance) / 2.0
             comparison_elevation = conical_model["base_elevation_m"] + (
                 comparison_distance * conical_model["slope"]
             )
