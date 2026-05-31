@@ -393,7 +393,7 @@ class PlanarControllingOlsEngine:
         geometry: QgsGeometry,
         candidate: Optional[ControllingOlsCandidate] = None,
     ) -> List[QgsGeometry]:
-        """Rebuild solved region polygons to remove zero-width spike artifacts."""
+        """Rebuild solved region polygons without changing their solved boundaries."""
         if geometry is None or geometry.isEmpty():
             return []
         candidates = [geometry]
@@ -401,16 +401,6 @@ class PlanarControllingOlsEngine:
             buffered = geometry.buffer(0.0, 8)
             if buffered is not None and not buffered.isEmpty():
                 candidates.insert(0, buffered)
-        except Exception:
-            pass
-        try:
-            cleanup_tolerance = self._region_cleanup_tolerance(geometry, candidate)
-            if cleanup_tolerance > 0.0:
-                opened = geometry.buffer(-cleanup_tolerance, 8)
-                if opened is not None and not opened.isEmpty():
-                    reopened = opened.buffer(cleanup_tolerance, 8)
-                    if reopened is not None and not reopened.isEmpty():
-                        candidates.insert(0, reopened)
         except Exception:
             pass
         for candidate in candidates:
@@ -423,21 +413,6 @@ class PlanarControllingOlsEngine:
             if parts:
                 return parts
         return []
-
-    def _region_cleanup_tolerance(
-        self,
-        geometry: QgsGeometry,
-        candidate: Optional[ControllingOlsCandidate] = None,
-    ) -> float:
-        """Return a small map-unit tolerance for collapsing zero-width boundary spikes."""
-        try:
-            bbox = geometry.boundingBox()
-            span = max(bbox.width(), bbox.height(), 1.0)
-            if candidate is not None and candidate.surface_type == "Conical":
-                return 0.0
-            return max(0.02, min(span * 1e-6, 0.25))
-        except Exception:
-            return 0.02
 
     def _candidate_lower_region(
         self,
