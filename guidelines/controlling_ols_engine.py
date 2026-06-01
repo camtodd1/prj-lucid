@@ -330,7 +330,7 @@ class PlanarControllingOlsEngine:
         region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
             region = self._effective_footprint(candidate)
-            for competitor in self.candidates:
+            for competitor in self._ordered_competitors(candidate):
                 if competitor.surface_id == candidate.surface_id:
                     continue
                 if region is None or region.isEmpty():
@@ -356,12 +356,26 @@ class PlanarControllingOlsEngine:
                     region = QgsGeometry()
                     break
 
-            region = self._merged_region_geometry(region)
-            for clean_part in self._clean_region_polygon_parts(region, candidate):
-                if clean_part.area() <= 1e-3:
-                    continue
-                region_parts.append((candidate, clean_part))
-        return self._reconciled_region_parts(region_parts)
+            for region_part in self._polygon_parts(region):
+                for final_part in self._polygon_parts(region_part):
+                    for clean_part in self._clean_region_polygon_parts(final_part, candidate):
+                        if clean_part.area() <= 1e-3:
+                            continue
+                        region_parts.append((candidate, clean_part))
+        return region_parts
+
+    def _ordered_competitors(self, candidate: ControllingOlsCandidate) -> List[ControllingOlsCandidate]:
+        """Apply exact planar competitors before curved competitors."""
+        planar: List[ControllingOlsCandidate] = []
+        curved: List[ControllingOlsCandidate] = []
+        for competitor in self.candidates:
+            if competitor.surface_id == candidate.surface_id:
+                continue
+            if candidate.model == "conical" or competitor.model == "conical":
+                curved.append(competitor)
+            else:
+                planar.append(competitor)
+        return planar + curved
 
     def _effective_footprint(self, candidate: ControllingOlsCandidate) -> QgsGeometry:
         cached = self._effective_footprint_cache.get(candidate.surface_id)
@@ -414,75 +428,6 @@ class PlanarControllingOlsEngine:
         except Exception:
             pass
         return []
-
-    def _merged_region_geometry(self, geometry: QgsGeometry) -> QgsGeometry:
-        """Dissolve touching polygon parts belonging to the same solved candidate."""
-        parts = self._polygon_parts(geometry)
-        if not parts:
-            return geometry
-        if len(parts) == 1:
-            return parts[0]
-        try:
-            merged = QgsGeometry.unaryUnion(parts)
-            if merged is not None and not merged.isEmpty():
-                return merged
-        except Exception:
-            pass
-        return geometry
-
-    def _reconciled_region_parts(
-        self,
-        region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]],
-    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
-        """Fill accidental solver cracks inside the effective candidate coverage."""
-        if not region_parts:
-            return []
-        by_candidate: Dict[str, Tuple[ControllingOlsCandidate, List[QgsGeometry]]] = {}
-        for candidate, geometry in region_parts:
-            by_candidate.setdefault(candidate.surface_id, (candidate, []))[1].append(geometry)
-
-        try:
-            coverage = QgsGeometry.unaryUnion(
-                [
-                    footprint
-                    for candidate in self.candidates
-                    for footprint in [self._effective_footprint(candidate)]
-                    if footprint is not None and not footprint.isEmpty()
-                ]
-            )
-            solved = QgsGeometry.unaryUnion([geometry for _, geometry in region_parts])
-            gaps = coverage.difference(solved) if coverage is not None and solved is not None else None
-        except Exception:
-            gaps = None
-
-        for gap_part in self._polygon_parts(gaps):
-            if gap_part.area() <= 1e-3:
-                continue
-            try:
-                point_on_surface = gap_part.pointOnSurface()
-                if point_on_surface is None or point_on_surface.isEmpty():
-                    continue
-                point = point_on_surface.asPoint()
-                controlling = self.controlling_candidate_at_xy(QgsPointXY(point.x(), point.y()))
-            except Exception:
-                controlling = None
-            if controlling is None:
-                continue
-            candidate = controlling[0]
-            by_candidate.setdefault(candidate.surface_id, (candidate, []))[1].append(gap_part)
-
-        reconciled: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
-        for candidate, geometries in by_candidate.values():
-            try:
-                merged = QgsGeometry.unaryUnion(geometries)
-            except Exception:
-                merged = None
-            if merged is None or merged.isEmpty():
-                merged = QgsGeometry.unaryUnion([geometry for geometry in geometries if geometry is not None])
-            for part in self._clean_region_polygon_parts(merged, candidate):
-                if part.area() > 1e-3:
-                    reconciled.append((candidate, part))
-        return reconciled
 
     def _candidate_lower_region(
         self,
