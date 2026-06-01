@@ -958,13 +958,14 @@ class PlanarControllingOlsEngine:
     ) -> Optional[float]:
         candidate_elevation = candidate.elevation_at_xy(point_xy)
         competitor_elevation = competitor.elevation_at_xy(point_xy)
-        if (
-            candidate_elevation is None
-            or competitor_elevation is None
-            or not math.isfinite(candidate_elevation)
-            or not math.isfinite(competitor_elevation)
-        ):
+        candidate_valid = candidate_elevation is not None and math.isfinite(candidate_elevation)
+        competitor_valid = competitor_elevation is not None and math.isfinite(competitor_elevation)
+        if not candidate_valid and not competitor_valid:
             return None
+        if not candidate_valid:
+            return math.inf
+        if not competitor_valid:
+            return -math.inf
         return float(candidate_elevation) - float(competitor_elevation)
 
     def _interpolated_zero_crossing(
@@ -1063,16 +1064,10 @@ class PlanarControllingOlsEngine:
     ) -> str:
         differences = []
         for point_xy in self._geometry_sample_points(overlap):
-            candidate_elevation = candidate.elevation_at_xy(point_xy)
-            competitor_elevation = competitor.elevation_at_xy(point_xy)
-            if (
-                candidate_elevation is None
-                or competitor_elevation is None
-                or not math.isfinite(candidate_elevation)
-                or not math.isfinite(competitor_elevation)
-            ):
+            difference = self._candidate_difference(candidate, competitor, point_xy)
+            if difference is None:
                 continue
-            differences.append(float(candidate_elevation) - float(competitor_elevation))
+            differences.append(difference)
         if not differences:
             return "unknown"
         if max(differences) <= self.tie_tolerance_m:
