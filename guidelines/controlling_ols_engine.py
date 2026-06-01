@@ -702,6 +702,8 @@ class PlanarControllingOlsEngine:
             if not polygon or not polygon[0]:
                 continue
             cleaned_polygon = []
+            outer_geometry = None
+            kept_hole_geometries: List[QgsGeometry] = []
             for ring_index, ring in enumerate(polygon):
                 cleaned_ring, ring_changed = self._despiked_ring(ring)
                 changed = changed or ring_changed
@@ -710,8 +712,18 @@ class PlanarControllingOlsEngine:
                         cleaned_polygon = []
                         break
                     cleaned_polygon.append(cleaned_ring)
-                elif len(cleaned_ring) >= 4 and abs(self._ring_signed_area(cleaned_ring)) > 1.0:
+                    outer_geometry = QgsGeometry.fromPolygonXY([cleaned_ring])
+                elif (
+                    len(cleaned_ring) >= 4
+                    and abs(self._ring_signed_area(cleaned_ring)) > 1.0
+                    and self._is_strict_interior_ring(
+                        cleaned_ring,
+                        outer_geometry,
+                        kept_hole_geometries,
+                    )
+                ):
                     cleaned_polygon.append(cleaned_ring)
+                    kept_hole_geometries.append(QgsGeometry.fromPolygonXY([cleaned_ring]))
                 elif len(cleaned_ring) >= 4:
                     changed = True
             if cleaned_polygon:
@@ -723,6 +735,31 @@ class PlanarControllingOlsEngine:
         if len(cleaned_parts) == 1:
             return QgsGeometry.fromPolygonXY(cleaned_parts[0])
         return QgsGeometry.fromMultiPolygonXY(cleaned_parts)
+
+    def _is_strict_interior_ring(
+        self,
+        ring: List[QgsPointXY],
+        outer_geometry: Optional[QgsGeometry],
+        kept_hole_geometries: Sequence[QgsGeometry],
+    ) -> bool:
+        """Keep only true holes, not boundary-touching slivers or overlapping rings."""
+        if outer_geometry is None or outer_geometry.isEmpty():
+            return False
+        try:
+            ring_geometry = QgsGeometry.fromPolygonXY([ring])
+            if ring_geometry is None or ring_geometry.isEmpty() or ring_geometry.area() <= 1.0:
+                return False
+            outer_boundary = outer_geometry.boundary()
+            if outer_boundary is not None and not outer_boundary.isEmpty() and ring_geometry.intersects(outer_boundary):
+                return False
+            if not outer_geometry.contains(ring_geometry):
+                return False
+            for kept_hole_geometry in kept_hole_geometries:
+                if ring_geometry.intersects(kept_hole_geometry):
+                    return False
+        except Exception:
+            return False
+        return True
 
     def _despiked_ring(self, ring: List[QgsPointXY]) -> Tuple[List[QgsPointXY], bool]:
         if len(ring) < 4:
