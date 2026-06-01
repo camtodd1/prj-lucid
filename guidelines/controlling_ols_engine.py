@@ -511,6 +511,8 @@ class PlanarControllingOlsEngine:
         if candidate.model == "conical":
             return self._conical_linear_lower_region(candidate, competitor, overlap, conical_is_candidate=True)
         if competitor.model == "conical":
+            if candidate.model in {"axis", "plane"}:
+                return self._global_extent_polygon()
             return self._conical_linear_lower_region(competitor, candidate, overlap, conical_is_candidate=False)
         return None
 

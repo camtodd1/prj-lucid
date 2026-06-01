@@ -228,12 +228,10 @@ constructed exactly rather than by a sampled grid.
 Conical has been reintroduced as a non-planar candidate. Its evaluator derives
 elevation from horizontal distance to the IHS footprint. Conical-vs-flat
 interactions are clipped by exact distance buffers. Conical-vs-sloping planar
-interactions are clipped as a local elevation-equality problem. The solver
-samples and triangulates the overlap, evaluates `candidate_z - competitor_z`
-at triangle vertices, and clips each triangle along the interpolated zero
-crossing. This avoids treating a sloping-plane/conical intersection as a single
-constant-distance buffer, which is not geometrically correct and can round
-planar corners or place the equality edge at the wrong height.
+interactions are currently one-sided: sloping planar candidates keep their
+exact planar footprints, while the conical candidate is trimmed where those
+planar candidates control. This preserves the validated planar boundary network
+while still allowing conical regions to appear around the planar regions.
 
 No-OLS strip-core exclusion masks are applied to runway-related planar
 candidates before competition. These masks suppress IHS, Approach, TOCS, and
@@ -253,8 +251,8 @@ then lets conical intersections trim the already-established planar regions.
 Known remaining limitations:
 
 - curved lower-edge boundaries are not yet modelled;
-- conical-vs-sloping-surface boundaries use equality-derived buffer offsets and
-  should be validated visually before promotion;
+- conical-vs-sloping-surface clipping is one-sided in this milestone; allowing
+  conical to carve sloping planar candidates is deferred to contour clipping;
 - transition-edge diagnostics are secondary to the region layer and may still
   need output hygiene as curved boundaries are introduced;
 - contour clipping is still a later milestone.
