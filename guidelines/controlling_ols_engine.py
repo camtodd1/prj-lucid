@@ -23,7 +23,7 @@ from qgis.core import (  # type: ignore
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
-CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-gap-lower-envelope-2026-06-01"
+CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-empty-conical-lower-fix-2026-06-01"
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -926,7 +926,7 @@ class PlanarControllingOlsEngine:
             conical_lower = overlap.difference(axis_lower)
         except Exception:
             return None
-        return conical_lower if self._has_polygon_area(conical_lower) else None
+        return conical_lower if self._has_polygon_area(conical_lower) else QgsGeometry()
 
     def _axis_lower_than_conical_region(
         self,
