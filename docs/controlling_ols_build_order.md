@@ -208,7 +208,8 @@ group containing:
 
 - candidate surface diagnostics;
 - solved controlling planar region polygons;
-- solved controlling transition edge diagnostics.
+- solved controlling transition edge diagnostics;
+- clipped controlling contour diagnostics for Approach, TOCS, and Conical.
 
 The controlling lower-envelope model currently includes:
 
@@ -364,7 +365,19 @@ Known remaining limitations:
 - transition-edge diagnostics remain secondary to the region layer and should
   be rechecked as contour clipping and any promoted transition outputs are
   introduced;
-- contour clipping is still a later milestone.
+- transitional contour clipping is still a later milestone.
+
+### Contour Clipping Checkpoint
+
+Initial contour clipping has started for the solved `Controlling OLS POC`
+regions. Approach, TOCS, and Conical source contours now carry/register the
+same stable `surface_id` used by their controlling candidate surface. The POC
+contour output clips each registered contour to the solved region for its
+matching parent surface and emits only the retained contour segments.
+
+Transitional surface contours are intentionally excluded from this first
+clipping pass. Transitional panels and their contours require different
+parentage and overlap logic before they can be clipped reliably.
 
 ### Current Non-Overlap Expectation
 

@@ -538,6 +538,7 @@ class OlsGuidelineMixin:
             contour_features: List[QgsFeature] = []
             ref = conical_params.get("ref", "MOS 8.2.19")
             fields = self._get_conical_contour_fields()
+            conical_surface_id = f"CONICAL:{icao_code}"
 
             def _extract_exterior_ring_line(geom: QgsGeometry) -> Optional[QgsGeometry]:
                 # Returns a LineString geometry of the exterior ring, or None if not available.
@@ -563,6 +564,7 @@ class OlsGuidelineMixin:
                     feat.setAttribute(fields.indexFromName("contour_elev_am"), IHS_ELEVATION_AMSL)
                     feat.setAttribute(fields.indexFromName("contour_hgt_abv"), 0)
                     feat.setAttribute(fields.indexFromName("ref_mos"), ref)
+                    feat.setAttribute(fields.indexFromName("surface_id"), conical_surface_id)
                     contour_features.append(feat)
                     # QgsMessageLog.logMessage(
                     #     f"Conical start contour at {IHS_ELEVATION_AMSL:.2f}m AMSL.",
@@ -617,6 +619,7 @@ class OlsGuidelineMixin:
                                 contour_h_above_ihs,
                             )
                             feat.setAttribute(fields.indexFromName("ref_mos"), ref)
+                            feat.setAttribute(fields.indexFromName("surface_id"), conical_surface_id)
                             contour_features.append(feat)
                             # QgsMessageLog.logMessage(
                             #     f"Conical interval contour at {current_target_contour_elev_amsl:.2f}m AMSL.", plugin_tag, Qgis.Info
@@ -650,6 +653,7 @@ class OlsGuidelineMixin:
                         )
                         feat.setAttribute(fields.indexFromName("contour_hgt_abv"), height_extent_agl)
                         feat.setAttribute(fields.indexFromName("ref_mos"), ref)
+                        feat.setAttribute(fields.indexFromName("surface_id"), conical_surface_id)
                         contour_features.append(feat)
                         # QgsMessageLog.logMessage(
                         #     f"Conical end contour at {conical_outer_elevation:.2f}m AMSL.",
@@ -665,6 +669,14 @@ class OlsGuidelineMixin:
 
             # 4. Layer creation
             if contour_features:
+                if hasattr(self, "_register_controlling_ols_contour"):
+                    for contour_feature in contour_features:
+                        self._register_controlling_ols_contour(
+                            conical_surface_id,
+                            "Conical",
+                            contour_feature,
+                            "OLS Conical Contour",
+                        )
                 conical_contour_count = len(contour_features)
                 contour_layer = self._create_and_add_layer(
                     "LineString",
@@ -2485,6 +2497,7 @@ class OlsGuidelineMixin:
                     2,
                 ),
                 QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
+                QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
             ]
         )
         return fields
@@ -2506,6 +2519,7 @@ class OlsGuidelineMixin:
                 QgsField("side", QVariant.String, self.tr("Side"), 5),
                 QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
                 QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
+                QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
             ]
         )
         return fields
@@ -2517,6 +2531,7 @@ class OlsGuidelineMixin:
                 QgsField("end_desig", QVariant.String),
                 QgsField("surface", QVariant.String),
                 QgsField("contour_elev_am", QVariant.Double),
+                QgsField("surface_id", QVariant.String),
             ]
         )
 
@@ -2770,6 +2785,7 @@ class OlsGuidelineMixin:
         current_dist_from_thr = 0.0  # Keep track of cumulative distance for Origin_Offset
 
         for i, section_params in enumerate(sections):
+            section_surface_id = f"APP:{runway_data.get('short_name', 'N/A')}:{end_desig}:S{i + 1}"
             # --- Get section parameters ---
             section_length = section_params.get("length", 0.0)
             section_slope = section_params.get("slope", 0.0)
@@ -2907,10 +2923,7 @@ class OlsGuidelineMixin:
                     ):
                         self._register_controlling_ols_candidate(
                             ControllingOlsCandidate(
-                                surface_id=(
-                                    f"APP:{runway_data.get('short_name', 'N/A')}:"
-                                    f"{end_desig}:S{i + 1}"
-                                ),
+                                surface_id=section_surface_id,
                                 surface_type="Approach",
                                 footprint=QgsGeometry(valid_geom),
                                 elevation_at_xy=axis_elevation_evaluator(
@@ -3002,14 +3015,7 @@ class OlsGuidelineMixin:
                                 if valid_geom:  # Clip to current section
                                     clipped_geom = contour_geom.intersection(valid_geom)
                                     if clipped_geom and not clipped_geom.isEmpty():
-                                        contour_fields = QgsFields(
-                                            [
-                                                QgsField("rwy_name", QVariant.String),
-                                                QgsField("end_desig", QVariant.String),
-                                                QgsField("surface", QVariant.String),
-                                                QgsField("contour_elev_am", QVariant.Double),
-                                            ]
-                                        )
+                                        contour_fields = self._get_approach_contour_fields()
                                         contour_feature = QgsFeature(contour_fields)
                                         contour_feature.setGeometry(clipped_geom)
                                         contour_attr_map = {
@@ -3017,8 +3023,19 @@ class OlsGuidelineMixin:
                                             "end_desig": end_desig,
                                             "surface": "Approach",
                                             "contour_elev_am": target_elev,
+                                            "surface_id": section_surface_id,
                                         }
-                                        contour_feature.setAttributes([contour_attr_map[k] for k in contour_attr_map])
+                                        for name, value in contour_attr_map.items():
+                                            idx = contour_fields.indexFromName(name)
+                                            if idx != -1:
+                                                contour_feature.setAttribute(idx, value)
+                                        if hasattr(self, "_register_controlling_ols_contour"):
+                                            self._register_controlling_ols_contour(
+                                                section_surface_id,
+                                                "Approach",
+                                                contour_feature,
+                                                "OLS Approach Contour",
+                                            )
                                         contour_line_features.append(contour_feature)
 
             # --- Update for next iteration ---
@@ -3225,6 +3242,7 @@ class OlsGuidelineMixin:
         fields = self._get_ols_fields("TOCS")
         feature = QgsFeature(fields)
         feature.setGeometry(final_geom)
+        tocs_surface_id = f"TOCS:{runway_data.get('short_name', 'N/A')}:{end_desig}"
         attr_map = {
             "rwy_name": runway_data.get("short_name", "N/A"),
             "surface": "TOCS",
@@ -3246,7 +3264,7 @@ class OlsGuidelineMixin:
         if hasattr(self, "_register_controlling_ols_candidate") and origin_elevation is not None:
             self._register_controlling_ols_candidate(
                 ControllingOlsCandidate(
-                    surface_id=f"TOCS:{runway_data.get('short_name', 'N/A')}:{end_desig}",
+                    surface_id=tocs_surface_id,
                     surface_type="TOCS",
                     footprint=QgsGeometry(final_geom),
                     elevation_at_xy=axis_elevation_evaluator(
@@ -3340,14 +3358,7 @@ class OlsGuidelineMixin:
                             final_contour_geom = contour_geom.intersection(final_geom)
                 # If valid, create the feature
                 if "final_contour_geom" in locals() and final_contour_geom and not final_contour_geom.isEmpty():
-                    contour_fields = QgsFields(
-                        [
-                            QgsField("rwy_name", QVariant.String),
-                            QgsField("end_desig", QVariant.String),
-                            QgsField("surface", QVariant.String),
-                            QgsField("contour_elev_am", QVariant.Double),
-                        ]
-                    )
+                    contour_fields = self._get_tocs_contour_fields()
                     contour_feature = QgsFeature(contour_fields)
                     contour_feature.setGeometry(final_contour_geom)
                     contour_attr_map = {
@@ -3355,8 +3366,19 @@ class OlsGuidelineMixin:
                         "end_desig": end_desig,
                         "surface": "TOCS",
                         "contour_elev_am": target_elev,
+                        "surface_id": tocs_surface_id,
                     }
-                    contour_feature.setAttributes([contour_attr_map[k] for k in contour_attr_map])
+                    for name, value in contour_attr_map.items():
+                        idx = contour_fields.indexFromName(name)
+                        if idx != -1:
+                            contour_feature.setAttribute(idx, value)
+                    if hasattr(self, "_register_controlling_ols_contour"):
+                        self._register_controlling_ols_contour(
+                            tocs_surface_id,
+                            "TOCS",
+                            contour_feature,
+                            "OLS TOCS Contour",
+                        )
                     tocs_contour_features.append(contour_feature)
                 # Clean up variable for next loop
                 if "final_contour_geom" in locals():

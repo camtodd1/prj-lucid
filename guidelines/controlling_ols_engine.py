@@ -45,6 +45,17 @@ class ControllingOlsCandidate:
         return bool(self.footprint.intersects(QgsGeometry.fromPointXY(point_xy)))
 
 
+@dataclass(frozen=True)
+class ControllingOlsContour:
+    """A source contour line linked to its parent controlling OLS candidate."""
+
+    surface_id: str
+    surface_type: str
+    geometry: QgsGeometry
+    contour_elevation_m: Optional[float]
+    source_layer: str
+
+
 def constant_elevation_evaluator(elevation_m: float) -> ElevationEvaluator:
     """Return an evaluator for a flat OLS plane."""
 
@@ -1883,6 +1894,7 @@ class ControllingOlsEngineMixin:
     def _reset_controlling_ols_engine(self) -> None:
         self._controlling_ols_candidates: List[ControllingOlsCandidate] = []
         self._controlling_ols_exclusion_geometries: List[QgsGeometry] = []
+        self._controlling_ols_contours: List[ControllingOlsContour] = []
 
     def _register_controlling_ols_candidate(self, candidate: ControllingOlsCandidate) -> None:
         if candidate.footprint is None or candidate.footprint.isEmpty():
@@ -1897,6 +1909,35 @@ class ControllingOlsEngineMixin:
         if not hasattr(self, "_controlling_ols_exclusion_geometries"):
             self._controlling_ols_exclusion_geometries = []
         self._controlling_ols_exclusion_geometries.append(QgsGeometry(geometry))
+
+    def _register_controlling_ols_contour(
+        self,
+        surface_id: str,
+        surface_type: str,
+        contour_feature: QgsFeature,
+        source_layer: str,
+    ) -> None:
+        geometry = contour_feature.geometry()
+        if geometry is None or geometry.isEmpty():
+            return
+        if surface_type == "Transitional":
+            return
+        if not hasattr(self, "_controlling_ols_contours"):
+            self._controlling_ols_contours = []
+        try:
+            contour_elevation = contour_feature.attribute("contour_elev_am")
+            contour_elevation = float(contour_elevation) if contour_elevation is not None else None
+        except (KeyError, TypeError, ValueError):
+            contour_elevation = None
+        self._controlling_ols_contours.append(
+            ControllingOlsContour(
+                surface_id=surface_id,
+                surface_type=surface_type,
+                geometry=QgsGeometry(geometry),
+                contour_elevation_m=contour_elevation,
+                source_layer=source_layer,
+            )
+        )
 
     def _create_controlling_ols_planar_poc_layers(
         self,
@@ -1922,7 +1963,14 @@ class ControllingOlsEngineMixin:
         candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, output_group, planar_candidates)
         region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, planar_candidates, exclusion_geometries)
         transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, planar_candidates, exclusion_geometries)
-        return candidate_layer_ok or region_layer_ok or transition_layer_ok
+        contour_layer_ok = self._create_controlling_contour_layer(
+            icao_code,
+            output_group,
+            planar_candidates,
+            exclusion_geometries,
+            list(getattr(self, "_controlling_ols_contours", []) or []),
+        )
+        return candidate_layer_ok or region_layer_ok or transition_layer_ok or contour_layer_ok
 
     def _controlling_ols_poc_group(self, layer_group: QgsLayerTreeGroup) -> QgsLayerTreeGroup:
         group_name = self.tr("Controlling OLS POC")
@@ -2097,6 +2145,110 @@ class ControllingOlsEngineMixin:
         if layer is not None:
             QgsMessageLog.logMessage(
                 f"Created controlling OLS planar transition POC with {feature_count} region boundary edge(s).",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return True
+        return False
+
+    def _create_controlling_contour_layer(
+        self,
+        icao_code: str,
+        output_group: QgsLayerTreeGroup,
+        candidates: Sequence[ControllingOlsCandidate],
+        exclusion_geometries: Sequence[QgsGeometry],
+        contours: Sequence[ControllingOlsContour],
+    ) -> bool:
+        contours = [contour for contour in contours if contour.surface_type != "Transitional"]
+        if not contours:
+            QgsMessageLog.logMessage(
+                "Controlling OLS clipped contours POC skipped: no source planar/conical contours were registered.",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return False
+
+        engine = PlanarControllingOlsEngine(candidates, exclusion_geometries=exclusion_geometries)
+        region_parts = [
+            (candidate, region)
+            for candidate, region in engine._controlling_region_geometries()
+            if candidate.surface_type != "Transitional"
+        ]
+        if not region_parts:
+            QgsMessageLog.logMessage(
+                "Controlling OLS clipped contours POC skipped: no non-transitional controlling regions were produced.",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return False
+
+        regions_by_surface_id: Dict[str, List[QgsGeometry]] = {}
+        for candidate, region in region_parts:
+            regions_by_surface_id.setdefault(candidate.surface_id, []).append(region)
+
+        fields = QgsFields(
+            [
+                QgsField("contour_id", QVariant.Int, self.tr("Contour ID"), 10),
+                QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
+                QgsField("surface", QVariant.String, self.tr("Surface Type"), 50),
+                QgsField("contour_elev_am", QVariant.Double, self.tr("Contour Elev AMSL"), 12, 3),
+                QgsField("source_layer", QVariant.String, self.tr("Source Layer"), 80),
+                QgsField("method", QVariant.String, self.tr("Method"), 50),
+            ]
+        )
+        features: List[QgsFeature] = []
+        contour_id = 1
+        for contour in contours:
+            matching_regions = regions_by_surface_id.get(contour.surface_id, [])
+            if not matching_regions:
+                continue
+            for region in matching_regions:
+                try:
+                    clipped = contour.geometry.intersection(region)
+                except Exception:
+                    continue
+                for line_points in engine._line_parts(clipped):
+                    if len(line_points) < 2:
+                        continue
+                    line_geometry = QgsGeometry.fromPolylineXY(line_points)
+                    if line_geometry is None or line_geometry.isEmpty():
+                        continue
+                    feature = QgsFeature(fields)
+                    feature.setGeometry(line_geometry)
+                    feature.setAttributes(
+                        [
+                            contour_id,
+                            contour.surface_id,
+                            contour.surface_type,
+                            contour.contour_elevation_m,
+                            contour.source_layer,
+                            "clip_to_controlling_region",
+                        ]
+                    )
+                    features.append(feature)
+                    contour_id += 1
+
+        if not features:
+            QgsMessageLog.logMessage(
+                "Controlling OLS clipped contours POC skipped: registered contours did not intersect matching regions.",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+            return False
+
+        feature_count = len(features)
+        layer = self._create_and_add_layer(
+            "LineString",
+            f"OLS_Controlling_Contours_{icao_code}",
+            f"{self.tr('OLS')} Controlling Contours POC {icao_code}",
+            fields,
+            features,
+            output_group,
+            "Default Line",
+        )
+        if layer is not None:
+            QgsMessageLog.logMessage(
+                f"Created controlling OLS clipped contours POC with {feature_count} contour segment(s).",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
