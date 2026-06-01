@@ -1,7 +1,7 @@
 from typing import Dict, Optional, List, Any  # Added type hinting
 
-# NASF Guideline G BRA Dimensions based on provided table Figure 2
-# IMPORTANT: Height rules and values are NOT specified in the table image.
+# NASF Guideline G BRA Dimensions based on safeguarding rules for CNS facilities.
+# IMPORTANT: Height rules and values are NOT specified.
 #            Placeholders are used below and MUST be replaced with actual
 #            Guideline G specifications for height restrictions.
 
