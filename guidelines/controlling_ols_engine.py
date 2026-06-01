@@ -23,7 +23,7 @@ from qgis.core import (  # type: ignore
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
-CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-axis-conical-unknown-clip-2026-06-01"
+CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-dissolve-same-candidate-2026-06-01"
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -301,6 +301,8 @@ class PlanarControllingOlsEngine:
         features: List[QgsFeature] = []
         for index, (first_candidate, first_region) in enumerate(region_parts):
             for second_candidate, second_region in region_parts[index + 1 :]:
+                if first_candidate.surface_id == second_candidate.surface_id:
+                    continue
                 try:
                     boundary = first_region.boundary().intersection(second_region.boundary())
                 except Exception:
@@ -394,8 +396,46 @@ class PlanarControllingOlsEngine:
                             continue
                         region_parts.append((candidate, clean_part))
         self._repair_region_coverage(region_parts)
+        region_parts = self._merge_region_parts_by_candidate(region_parts)
         self._log_region_diagnostics(time.perf_counter() - started_at)
         return region_parts
+
+    def _merge_region_parts_by_candidate(
+        self,
+        region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        """Dissolve adjacent solved parts for the same controlling candidate."""
+        grouped: Dict[str, Tuple[ControllingOlsCandidate, List[QgsGeometry]]] = {}
+        for candidate, geometry in region_parts:
+            if not self._has_polygon_area(geometry):
+                continue
+            if candidate.surface_id not in grouped:
+                grouped[candidate.surface_id] = (candidate, [])
+            grouped[candidate.surface_id][1].append(geometry)
+
+        merged_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
+        merged_count = 0
+        for candidate in self.candidates:
+            grouped_entry = grouped.get(candidate.surface_id)
+            if grouped_entry is None:
+                continue
+            _, geometries = grouped_entry
+            try:
+                merged = QgsGeometry.unaryUnion(geometries) if len(geometries) > 1 else QgsGeometry(geometries[0])
+            except Exception:
+                merged = QgsGeometry()
+            if not self._has_polygon_area(merged):
+                continue
+            output_count_before = len(merged_parts)
+            for polygon_part in self._polygon_parts(merged):
+                for clean_part in self._clean_region_polygon_parts(polygon_part, candidate):
+                    if clean_part.area() <= 1e-3:
+                        continue
+                    merged_parts.append((candidate, clean_part))
+            merged_count += max(0, len(geometries) - (len(merged_parts) - output_count_before))
+        if merged_count:
+            self._diagnostics.append(f"same-candidate dissolve removed {merged_count} internal region part(s)")
+        return merged_parts
 
     def _unresolved_comparison_removes_candidate(
         self,
