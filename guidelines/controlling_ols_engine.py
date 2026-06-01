@@ -23,6 +23,7 @@ from qgis.core import (  # type: ignore
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
+CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-overlap-clipped-lower-2026-06-01"
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -135,7 +136,7 @@ class PlanarControllingOlsEngine:
         ]
         self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
         self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
-        self._diagnostics: List[str] = []
+        self._diagnostics: List[str] = [f"engine_build={CONTROLLING_OLS_ENGINE_BUILD}"]
         self._candidate_loss_diagnostics: Dict[str, List[Tuple[float, str, str, float, Optional[float]]]] = {}
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
@@ -354,7 +355,9 @@ class PlanarControllingOlsEngine:
                 try:
                     losing_area = overlap
                     if lower_region is not None:
-                        losing_area = overlap.difference(lower_region)
+                        lower_region = self._clip_lower_region_to_overlap(lower_region, overlap)
+                        if lower_region is not None and not lower_region.isEmpty():
+                            losing_area = overlap.difference(lower_region)
                     if losing_area is not None and not losing_area.isEmpty() and self._has_polygon_area(losing_area):
                         self._record_candidate_loss(candidate, competitor, losing_area, overlap, lower_region)
                         region = region.difference(losing_area)
@@ -412,6 +415,19 @@ class PlanarControllingOlsEngine:
                 )
             lines.append(f"loss summary for {surface_id}: " + "; ".join(formatted_entries))
         QgsMessageLog.logMessage("\n".join(lines), PLUGIN_TAG, Qgis.Info)
+
+    def _clip_lower_region_to_overlap(
+        self,
+        lower_region: QgsGeometry,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        if lower_region is None or lower_region.isEmpty() or overlap is None or overlap.isEmpty():
+            return None
+        try:
+            clipped = overlap.intersection(lower_region)
+        except Exception:
+            return lower_region
+        return clipped if clipped is not None and not clipped.isEmpty() else QgsGeometry()
 
     def _effective_footprint(self, candidate: ControllingOlsCandidate) -> QgsGeometry:
         cached = self._effective_footprint_cache.get(candidate.surface_id)
