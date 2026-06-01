@@ -246,6 +246,12 @@ The planar region output now includes a stable `region_id` attribute for
 diagnostic labelling and GeoJSON review. The region layer uses the
 `test_ols_polygon.qml` style during development.
 
+After pairwise competition, the solver dissolves touching polygon parts from
+the same candidate and audits coverage inside the effective candidate
+footprints. Any accidental crack left by numerical clipping is assigned back to
+the lowest applicable candidate at a point inside the crack, while areas outside
+all effective footprints remain empty.
+
 Known remaining limitations:
 
 - curved lower-edge boundaries are not yet modelled;
