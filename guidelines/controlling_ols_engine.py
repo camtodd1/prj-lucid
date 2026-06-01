@@ -618,11 +618,242 @@ class PlanarControllingOlsEngine:
                 conical_is_candidate,
             )
 
+        if linear_candidate.model == "axis":
+            return self._axis_conical_lower_region(
+                conical_candidate,
+                linear_candidate,
+                overlap,
+                conical_is_candidate,
+            )
+
         return self._triangulated_candidate_lower_region(
             conical_candidate if conical_is_candidate else linear_candidate,
             linear_candidate if conical_is_candidate else conical_candidate,
             overlap,
         )
+
+    def _axis_conical_lower_region(
+        self,
+        conical_candidate: ControllingOlsCandidate,
+        axis_candidate: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+        conical_is_candidate: bool,
+    ) -> Optional[QgsGeometry]:
+        """Resolve axis-rising surface vs conical by station, not by lateral TIN cuts."""
+        axis = self._axis_model(axis_candidate)
+        if axis is None or overlap is None or overlap.isEmpty():
+            return None
+
+        axis_lower = self._axis_lower_than_conical_region(axis_candidate, conical_candidate, axis, overlap)
+        if not conical_is_candidate:
+            return axis_lower
+
+        if axis_lower is None or axis_lower.isEmpty():
+            return self._global_extent_polygon()
+        try:
+            conical_lower = overlap.difference(axis_lower)
+        except Exception:
+            return None
+        return conical_lower if self._has_polygon_area(conical_lower) else None
+
+    def _axis_lower_than_conical_region(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+        axis: dict,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        station_range = self._axis_station_range(axis, overlap)
+        if station_range is None:
+            return None
+        min_station, max_station = station_range
+        if max_station - min_station <= 1e-6:
+            return None
+
+        stations = self._axis_conical_sample_stations(axis, overlap, min_station, max_station)
+        if len(stations) < 2:
+            return None
+
+        samples: List[Tuple[float, Optional[float]]] = []
+        for station in stations:
+            sample_point = self._axis_station_sample_point(axis, station, overlap)
+            if sample_point is None:
+                samples.append((station, None))
+                continue
+            difference = self._candidate_difference(axis_candidate, conical_candidate, sample_point)
+            samples.append((station, difference))
+
+        intervals: List[Tuple[float, float]] = []
+        current_start: Optional[float] = None
+        previous_station, previous_difference = samples[0]
+        previous_inside = previous_difference is not None and previous_difference <= self.tie_tolerance_m
+        if previous_inside:
+            current_start = previous_station
+
+        for station, difference in samples[1:]:
+            inside = difference is not None and difference <= self.tie_tolerance_m
+            if difference is None or previous_difference is None:
+                if previous_inside and current_start is not None:
+                    intervals.append((current_start, previous_station))
+                    current_start = None
+                if inside:
+                    current_start = station
+            elif inside != previous_inside:
+                crossing = self._interpolated_station_zero_crossing(
+                    previous_station,
+                    station,
+                    previous_difference,
+                    difference,
+                )
+                if inside:
+                    current_start = crossing
+                elif current_start is not None:
+                    intervals.append((current_start, crossing))
+                    current_start = None
+            if inside and current_start is None:
+                current_start = station
+            previous_station = station
+            previous_difference = difference
+            previous_inside = inside
+
+        if previous_inside and current_start is not None:
+            intervals.append((current_start, previous_station))
+
+        pieces: List[QgsGeometry] = []
+        for start_station, end_station in intervals:
+            if end_station - start_station <= 1e-6:
+                continue
+            interval_geometry = self._axis_station_interval_geometry(axis, start_station, end_station, overlap)
+            if interval_geometry is not None and self._has_polygon_area(interval_geometry):
+                pieces.append(interval_geometry)
+        if not pieces:
+            return None
+        try:
+            combined = QgsGeometry.unaryUnion(pieces) if len(pieces) > 1 else QgsGeometry(pieces[0])
+        except Exception:
+            combined = None
+        return combined if self._has_polygon_area(combined) else None
+
+    def _axis_station_range(self, axis: dict, geometry: QgsGeometry) -> Optional[Tuple[float, float]]:
+        stations: List[float] = []
+        for ring in self._polygon_boundary_parts(geometry):
+            for point_xy in ring:
+                stations.append(self._axis_station(axis, point_xy))
+        if not stations:
+            try:
+                point = geometry.pointOnSurface().asPoint()
+                stations.append(self._axis_station(axis, QgsPointXY(point.x(), point.y())))
+            except Exception:
+                return None
+        max_distance = axis.get("max_distance_m")
+        min_station = max(0.0, min(stations))
+        max_station = max(stations)
+        if max_distance is not None:
+            max_station = min(float(max_distance), max_station)
+        if max_station < min_station:
+            return None
+        return min_station, max_station
+
+    def _axis_conical_sample_stations(
+        self,
+        axis: dict,
+        geometry: QgsGeometry,
+        min_station: float,
+        max_station: float,
+    ) -> List[float]:
+        stations = {round(min_station, 6), round(max_station, 6)}
+        for ring in self._densified_polygon_boundary_parts(geometry, max_segment_length=25.0):
+            for point_xy in ring:
+                station = self._axis_station(axis, point_xy)
+                if min_station - 1e-6 <= station <= max_station + 1e-6:
+                    stations.add(round(max(min_station, min(max_station, station)), 6))
+        spacing = max(10.0, min((max_station - min_station) / 80.0, 50.0))
+        station = min_station
+        while station <= max_station + 1e-6:
+            stations.add(round(max(min_station, min(max_station, station)), 6))
+            station += spacing
+        return sorted(stations)
+
+    def _axis_station_sample_point(
+        self,
+        axis: dict,
+        station: float,
+        geometry: QgsGeometry,
+    ) -> Optional[QgsPointXY]:
+        ux = float(axis["ux"])
+        uy = float(axis["uy"])
+        origin_x = float(axis["origin_x"])
+        origin_y = float(axis["origin_y"])
+        center = QgsPointXY(origin_x + (ux * station), origin_y + (uy * station))
+        normal_x = -uy
+        normal_y = ux
+        span = self._global_span()
+        sample_line = QgsGeometry.fromPolylineXY(
+            [
+                QgsPointXY(center.x() - (normal_x * span), center.y() - (normal_y * span)),
+                QgsPointXY(center.x() + (normal_x * span), center.y() + (normal_y * span)),
+            ]
+        )
+        try:
+            station_cross_section = sample_line.intersection(geometry)
+        except Exception:
+            station_cross_section = None
+        longest_line: Optional[List[QgsPointXY]] = None
+        longest_length = 0.0
+        for line in self._line_parts(station_cross_section):
+            length = self._polyline_length(line)
+            if length > longest_length:
+                longest_length = length
+                longest_line = line
+        if longest_line:
+            return self._polyline_point_at_fraction(longest_line, 0.5)
+        try:
+            point_geometry = QgsGeometry.fromPointXY(center)
+            if geometry.intersects(point_geometry):
+                return center
+        except Exception:
+            pass
+        try:
+            point = geometry.pointOnSurface().asPoint()
+            return QgsPointXY(point.x(), point.y())
+        except Exception:
+            return None
+
+    def _axis_station_interval_geometry(
+        self,
+        axis: dict,
+        start_station: float,
+        end_station: float,
+        domain: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        ux = float(axis["ux"])
+        uy = float(axis["uy"])
+        origin_dot = (float(axis["origin_x"]) * ux) + (float(axis["origin_y"]) * uy)
+        lower_half = self._coefficient_lower_region(-ux, -uy, origin_dot + start_station, domain)
+        upper_half = self._coefficient_lower_region(ux, uy, -(origin_dot + end_station), domain)
+        if lower_half is None or upper_half is None:
+            return None
+        try:
+            interval = domain.intersection(lower_half).intersection(upper_half)
+        except Exception:
+            return None
+        return interval if self._has_polygon_area(interval) else None
+
+    def _axis_station(self, axis: dict, point_xy: QgsPointXY) -> float:
+        return ((point_xy.x() - float(axis["origin_x"])) * float(axis["ux"])) + (
+            (point_xy.y() - float(axis["origin_y"])) * float(axis["uy"])
+        )
+
+    def _interpolated_station_zero_crossing(
+        self,
+        start_station: float,
+        end_station: float,
+        start_difference: float,
+        end_difference: float,
+    ) -> float:
+        denominator = abs(start_difference) + abs(end_difference)
+        fraction = 0.5 if denominator <= 1e-12 else abs(start_difference) / denominator
+        return start_station + ((end_station - start_station) * fraction)
 
     def _conical_constant_lower_region(
         self,
@@ -1356,6 +1587,31 @@ class PlanarControllingOlsEngine:
         except Exception:
             return []
         return []
+
+    def _polyline_length(self, points: List[QgsPointXY]) -> float:
+        if len(points) < 2:
+            return 0.0
+        return sum(start.distance(end) for start, end in zip(points[:-1], points[1:]))
+
+    def _polyline_point_at_fraction(self, points: List[QgsPointXY], fraction: float) -> Optional[QgsPointXY]:
+        if not points:
+            return None
+        if len(points) == 1:
+            return points[0]
+        target_length = self._polyline_length(points) * max(0.0, min(1.0, fraction))
+        walked = 0.0
+        for start, end in zip(points[:-1], points[1:]):
+            segment_length = start.distance(end)
+            if segment_length <= 1e-12:
+                continue
+            if walked + segment_length >= target_length:
+                segment_fraction = (target_length - walked) / segment_length
+                return QgsPointXY(
+                    start.x() + ((end.x() - start.x()) * segment_fraction),
+                    start.y() + ((end.y() - start.y()) * segment_fraction),
+                )
+            walked += segment_length
+        return points[-1]
 
     def _polygon_parts(self, geometry: Optional[QgsGeometry]) -> List[QgsGeometry]:
         if geometry is None or geometry.isEmpty():
