@@ -2,6 +2,7 @@
 """Planar lower-envelope engine for controlling OLS proof-of-concept outputs."""
 
 import math
+import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -134,6 +135,8 @@ class PlanarControllingOlsEngine:
         ]
         self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
         self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
+        self._diagnostics: List[str] = []
+        self._candidate_loss_diagnostics: Dict[str, List[Tuple[float, str, str, float, Optional[float]]]] = {}
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
 
@@ -328,8 +331,10 @@ class PlanarControllingOlsEngine:
 
     def _controlling_region_geometries(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
         region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
+        started_at = time.perf_counter()
         for candidate in self.candidates:
             region = self._effective_footprint(candidate)
+            initial_area = region.area() if region is not None and not region.isEmpty() else 0.0
             for competitor in self.candidates:
                 if competitor.surface_id == candidate.surface_id:
                     continue
@@ -351,18 +356,62 @@ class PlanarControllingOlsEngine:
                     if lower_region is not None:
                         losing_area = overlap.difference(lower_region)
                     if losing_area is not None and not losing_area.isEmpty() and self._has_polygon_area(losing_area):
+                        self._record_candidate_loss(candidate, competitor, losing_area, overlap, lower_region)
                         region = region.difference(losing_area)
                 except Exception:
                     region = QgsGeometry()
                     break
 
+            final_area = region.area() if region is not None and not region.isEmpty() else 0.0
+            if initial_area > 0.0 and final_area < initial_area * 0.05:
+                self._diagnostics.append(
+                    "candidate nearly removed: "
+                    f"{candidate.surface_id}; initial_area={initial_area:.3f}; final_area={final_area:.3f}"
+                )
             for region_part in self._polygon_parts(region):
                 for final_part in self._polygon_parts(region_part):
                     for clean_part in self._clean_region_polygon_parts(final_part, candidate):
                         if clean_part.area() <= 1e-3:
                             continue
                         region_parts.append((candidate, clean_part))
+        self._log_region_diagnostics(time.perf_counter() - started_at)
         return region_parts
+
+    def _record_candidate_loss(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        losing_area: QgsGeometry,
+        overlap: Optional[QgsGeometry],
+        lower_region: Optional[QgsGeometry],
+    ) -> None:
+        loss_area = losing_area.area() if losing_area is not None and not losing_area.isEmpty() else 0.0
+        if loss_area <= 1e-3:
+            return
+        overlap_area = overlap.area() if overlap is not None and not overlap.isEmpty() else 0.0
+        lower_area = lower_region.area() if lower_region is not None and not lower_region.isEmpty() else None
+        entries = self._candidate_loss_diagnostics.setdefault(candidate.surface_id, [])
+        entries.append((loss_area, competitor.surface_id, competitor.surface_type, overlap_area, lower_area))
+        entries.sort(key=lambda item: item[0], reverse=True)
+        del entries[4:]
+
+    def _log_region_diagnostics(self, elapsed_seconds: float) -> None:
+        if not self._diagnostics and not self._candidate_loss_diagnostics:
+            return
+        lines = [f"Controlling OLS diagnostics: region solve elapsed={elapsed_seconds:.3f}s"]
+        lines.extend(self._diagnostics[:40])
+        for surface_id, entries in sorted(self._candidate_loss_diagnostics.items()):
+            if not entries:
+                continue
+            formatted_entries = []
+            for loss_area, competitor_id, competitor_type, overlap_area, lower_area in entries:
+                lower_text = "None" if lower_area is None else f"{lower_area:.3f}"
+                formatted_entries.append(
+                    f"{competitor_id}({competitor_type}) loss={loss_area:.3f} "
+                    f"overlap={overlap_area:.3f} lower={lower_text}"
+                )
+            lines.append(f"loss summary for {surface_id}: " + "; ".join(formatted_entries))
+        QgsMessageLog.logMessage("\n".join(lines), PLUGIN_TAG, Qgis.Info)
 
     def _effective_footprint(self, candidate: ControllingOlsCandidate) -> QgsGeometry:
         cached = self._effective_footprint_cache.get(candidate.surface_id)
@@ -674,34 +723,64 @@ class PlanarControllingOlsEngine:
         if len(stations) < 2:
             return None
 
+        started_at = time.perf_counter()
         pieces: List[QgsGeometry] = []
+        band_count = 0
+        lower_count = 0
+        higher_count = 0
+        mixed_count = 0
+        triangulated_count = 0
+        triangulated_area = 0.0
+        output_area = 0.0
         for start_station, end_station in zip(stations[:-1], stations[1:]):
             if end_station - start_station <= 1e-6:
                 continue
             station_band = self._axis_station_interval_geometry(axis, start_station, end_station, overlap)
             if station_band is None or not self._has_polygon_area(station_band):
                 continue
+            band_count += 1
             decision = self._sampled_lower_decision(
                 axis_candidate,
                 conical_candidate,
                 station_band,
-                dense=True,
-                all_higher_margin_m=2.0,
             )
             if decision == "all_lower":
                 pieces.append(station_band)
+                lower_count += 1
+                output_area += station_band.area()
                 continue
             if decision == "all_higher":
+                higher_count += 1
                 continue
+            mixed_count += 1
             lower_band = self._triangulated_candidate_lower_region(axis_candidate, conical_candidate, station_band)
             if lower_band is not None and self._has_polygon_area(lower_band):
+                triangulated_count += 1
+                lower_area = lower_band.area()
+                triangulated_area += lower_area
+                output_area += lower_area
                 pieces.append(lower_band)
         if not pieces:
+            self._diagnostics.append(
+                "axis/conical comparison produced no axis-lower area: "
+                f"axis={axis_candidate.surface_id}; conical={conical_candidate.surface_id}; "
+                f"overlap_area={overlap.area():.3f}; stations={len(stations)}; bands={band_count}; "
+                f"lower={lower_count}; higher={higher_count}; mixed={mixed_count}; "
+                f"triangulated={triangulated_count}; elapsed={time.perf_counter() - started_at:.3f}s"
+            )
             return None
         try:
             combined = QgsGeometry.unaryUnion(pieces) if len(pieces) > 1 else QgsGeometry(pieces[0])
         except Exception:
             combined = None
+        self._diagnostics.append(
+            "axis/conical comparison: "
+            f"axis={axis_candidate.surface_id}; conical={conical_candidate.surface_id}; "
+            f"overlap_area={overlap.area():.3f}; result_area={combined.area() if combined is not None and not combined.isEmpty() else 0.0:.3f}; "
+            f"stations={len(stations)}; bands={band_count}; lower={lower_count}; higher={higher_count}; "
+            f"mixed={mixed_count}; triangulated={triangulated_count}; triangulated_area={triangulated_area:.3f}; "
+            f"piece_area_sum={output_area:.3f}; elapsed={time.perf_counter() - started_at:.3f}s"
+        )
         return combined if self._has_polygon_area(combined) else None
 
     def _axis_station_range(self, axis: dict, geometry: QgsGeometry) -> Optional[Tuple[float, float]]:
