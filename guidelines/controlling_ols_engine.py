@@ -681,13 +681,21 @@ class PlanarControllingOlsEngine:
             station_band = self._axis_station_interval_geometry(axis, start_station, end_station, overlap)
             if station_band is None or not self._has_polygon_area(station_band):
                 continue
+            decision = self._sampled_lower_decision(
+                axis_candidate,
+                conical_candidate,
+                station_band,
+                dense=True,
+                all_higher_margin_m=2.0,
+            )
+            if decision == "all_lower":
+                pieces.append(station_band)
+                continue
+            if decision == "all_higher":
+                continue
             lower_band = self._triangulated_candidate_lower_region(axis_candidate, conical_candidate, station_band)
             if lower_band is not None and self._has_polygon_area(lower_band):
                 pieces.append(lower_band)
-                continue
-            decision = self._sampled_lower_decision(axis_candidate, conical_candidate, station_band)
-            if decision == "all_lower":
-                pieces.append(station_band)
         if not pieces:
             return None
         try:
@@ -1059,9 +1067,15 @@ class PlanarControllingOlsEngine:
         candidate: ControllingOlsCandidate,
         competitor: ControllingOlsCandidate,
         overlap: QgsGeometry,
+        dense: bool = False,
+        all_higher_margin_m: float = 0.0,
     ) -> str:
         differences = []
-        for point_xy in self._geometry_sample_points(overlap):
+        sample_points = self._geometry_sample_points(overlap)
+        if dense:
+            for ring_points in self._densified_polygon_boundary_parts(overlap, max_segment_length=5.0):
+                sample_points.extend(ring_points)
+        for point_xy in sample_points:
             difference = self._candidate_difference(candidate, competitor, point_xy)
             if difference is None:
                 continue
@@ -1070,7 +1084,7 @@ class PlanarControllingOlsEngine:
             return "unknown"
         if max(differences) <= self.tie_tolerance_m:
             return "all_lower"
-        if min(differences) > self.tie_tolerance_m:
+        if min(differences) > self.tie_tolerance_m + max(0.0, all_higher_margin_m):
             return "all_higher"
         return "mixed"
 
