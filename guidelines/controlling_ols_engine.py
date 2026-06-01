@@ -601,14 +601,14 @@ class PlanarControllingOlsEngine:
     ) -> Optional[QgsGeometry]:
         """Return a large polygon where ax + by + c <= tolerance."""
         if abs(a) <= 1e-12 and abs(b) <= 1e-12:
-            return self._global_extent_polygon() if c <= self.tie_tolerance_m else None
+            return self._all_overlap_lower_region(overlap) if c <= self.tie_tolerance_m else None
 
         sampled_differences = self._plane_difference_samples(overlap, a, b, c)
         if sampled_differences:
             max_diff = max(sampled_differences)
             min_diff = min(sampled_differences)
             if max_diff <= self.tie_tolerance_m:
-                return self._global_extent_polygon()
+                return self._all_overlap_lower_region(overlap)
             if min_diff > self.tie_tolerance_m:
                 return None
 
@@ -698,7 +698,7 @@ class PlanarControllingOlsEngine:
             return axis_lower
 
         if axis_lower is None or axis_lower.isEmpty():
-            return self._global_extent_polygon()
+            return self._all_overlap_lower_region(overlap)
         try:
             conical_lower = overlap.difference(axis_lower)
         except Exception:
@@ -872,11 +872,11 @@ class PlanarControllingOlsEngine:
             if threshold_distance < -self.tie_tolerance_m:
                 return None
             if max_distance is not None and threshold_distance >= max_distance - 1e-6:
-                return self._global_extent_polygon()
+                return self._all_overlap_lower_region(overlap)
             return self._distance_region_from_conical_base(conical_model, max(0.0, threshold_distance), overlap)
 
         if threshold_distance < -self.tie_tolerance_m:
-            return self._global_extent_polygon()
+            return self._all_overlap_lower_region(overlap)
         if max_distance is not None and threshold_distance >= max_distance - 1e-6:
             return None
         return self._conical_distance_lower_region(
@@ -899,14 +899,14 @@ class PlanarControllingOlsEngine:
         threshold_distance = max(0.0, threshold_distance)
         if conical_is_candidate:
             if max_distance is not None and threshold_distance >= max_distance - 1e-6:
-                return self._global_extent_polygon()
+                return self._all_overlap_lower_region(overlap)
             return self._distance_region_from_conical_base(conical_model, threshold_distance, overlap)
 
         if max_distance is not None and threshold_distance >= max_distance - 1e-6:
             return None
         lower_conical = self._distance_region_from_conical_base(conical_model, max(0.0, threshold_distance), overlap)
         if lower_conical is None or lower_conical.isEmpty():
-            return self._global_extent_polygon()
+            return self._all_overlap_lower_region(overlap)
         try:
             return overlap.difference(lower_conical)
         except Exception:
@@ -1145,7 +1145,7 @@ class PlanarControllingOlsEngine:
     ) -> Optional[QgsGeometry]:
         decision = self._sampled_lower_decision(candidate, competitor, overlap)
         if decision == "all_lower":
-            return self._global_extent_polygon()
+            return self._all_overlap_lower_region(overlap)
         if decision == "all_higher":
             return None
         return None
@@ -1590,6 +1590,11 @@ class PlanarControllingOlsEngine:
                 ]
             ]
         )
+
+    def _all_overlap_lower_region(self, overlap: Optional[QgsGeometry]) -> QgsGeometry:
+        if overlap is not None and self._has_polygon_area(overlap):
+            return QgsGeometry(overlap)
+        return self._global_extent_polygon()
 
     def _line_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
         if geometry is None or geometry.isEmpty():
