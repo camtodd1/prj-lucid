@@ -23,7 +23,7 @@ from qgis.core import (  # type: ignore
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
-CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-coverage-repair-2026-06-01"
+CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-axis-conical-unknown-clip-2026-06-01"
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -355,15 +355,21 @@ class PlanarControllingOlsEngine:
                 lower_region = self._candidate_lower_region(candidate, competitor, overlap)
                 try:
                     if lower_region is None:
-                        self._record_candidate_unknown(candidate, competitor, overlap)
-                        continue
+                        if self._unresolved_comparison_removes_candidate(candidate, competitor, overlap):
+                            lower_region = QgsGeometry()
+                        else:
+                            self._record_candidate_unknown(candidate, competitor, overlap)
+                            continue
                     if lower_region.isEmpty():
                         losing_area = overlap
                     else:
                         lower_region = self._clip_lower_region_to_overlap(lower_region, overlap)
                         if lower_region is None:
-                            self._record_candidate_unknown(candidate, competitor, overlap)
-                            continue
+                            if self._unresolved_comparison_removes_candidate(candidate, competitor, overlap):
+                                lower_region = QgsGeometry()
+                            else:
+                                self._record_candidate_unknown(candidate, competitor, overlap)
+                                continue
                         if lower_region.isEmpty():
                             losing_area = overlap
                         else:
@@ -390,6 +396,22 @@ class PlanarControllingOlsEngine:
         self._repair_region_coverage(region_parts)
         self._log_region_diagnostics(time.perf_counter() - started_at)
         return region_parts
+
+    def _unresolved_comparison_removes_candidate(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        overlap: Optional[QgsGeometry],
+    ) -> bool:
+        """Avoid retaining axis surfaces over conical regions when the exact solve is inconclusive."""
+        if candidate.model == "axis" and competitor.model == "conical":
+            overlap_area = overlap.area() if overlap is not None and not overlap.isEmpty() else 0.0
+            self._diagnostics.append(
+                "axis/conical unresolved comparison clipped candidate: "
+                f"axis={candidate.surface_id}; conical={competitor.surface_id}; overlap={overlap_area:.3f}"
+            )
+            return True
+        return False
 
     def _repair_region_coverage(self, region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]]) -> None:
         coverage_parts = []
