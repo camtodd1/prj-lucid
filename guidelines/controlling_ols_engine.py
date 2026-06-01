@@ -1920,8 +1920,6 @@ class ControllingOlsEngineMixin:
         geometry = contour_feature.geometry()
         if geometry is None or geometry.isEmpty():
             return
-        if surface_type == "Transitional":
-            return
         if not hasattr(self, "_controlling_ols_contours"):
             self._controlling_ols_contours = []
         try:
@@ -2159,10 +2157,9 @@ class ControllingOlsEngineMixin:
         exclusion_geometries: Sequence[QgsGeometry],
         contours: Sequence[ControllingOlsContour],
     ) -> bool:
-        contours = [contour for contour in contours if contour.surface_type != "Transitional"]
         if not contours:
             QgsMessageLog.logMessage(
-                "Controlling OLS clipped contours POC skipped: no source planar/conical contours were registered.",
+                "Controlling OLS clipped contours POC skipped: no source contours were registered.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2172,11 +2169,10 @@ class ControllingOlsEngineMixin:
         region_parts = [
             (candidate, region)
             for candidate, region in engine._controlling_region_geometries()
-            if candidate.surface_type != "Transitional"
         ]
         if not region_parts:
             QgsMessageLog.logMessage(
-                "Controlling OLS clipped contours POC skipped: no non-transitional controlling regions were produced.",
+                "Controlling OLS clipped contours POC skipped: no controlling regions were produced.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )

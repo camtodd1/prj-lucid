@@ -1506,6 +1506,7 @@ class OlsGuidelineMixin:
         runway_name: str,
         end_desig: str,
         transitional_ref: str,
+        surface_id: Optional[str] = None,
     ) -> list:
         """
         For an approach-adjacent panel, generate contour lines at regular intervals parallel to the top edge,
@@ -1596,6 +1597,7 @@ class OlsGuidelineMixin:
                     "end_desig": end_desig,
                     "contour_elev_am": current_z,
                     "ref_mos": transitional_ref,
+                    "surface_id": surface_id,
                 }
                 for name, value in attr_map.items():
                     idx = contour_fields.indexFromName(name)
@@ -1617,6 +1619,7 @@ class OlsGuidelineMixin:
         side_label: Optional[str] = None,
         end_desig: Optional[str] = None,
         transitional_ref: Optional[str] = None,
+        surface_id: Optional[str] = None,
     ) -> Optional[QgsFeature]:
         """Create a labelled transitional contour/edge feature."""
         if geom is None or geom.isEmpty():
@@ -1631,6 +1634,7 @@ class OlsGuidelineMixin:
             "end_desig": end_desig,
             "contour_elev_am": contour_elevation,
             "ref_mos": transitional_ref,
+            "surface_id": surface_id,
         }
         for name, value in attr_map.items():
             idx = contour_fields.indexFromName(name)
@@ -1687,17 +1691,17 @@ class OlsGuidelineMixin:
         third_xy: QgsPointXY,
         third_z: float,
         metadata: Optional[dict] = None,
-    ) -> None:
+    ) -> Optional[str]:
         """Register a generated transitional panel as a generic planar controlling candidate."""
         if not hasattr(self, "_register_controlling_ols_candidate"):
-            return
+            return None
         if geom is None or geom.isEmpty():
-            return
+            return None
         if any(value is None for value in [first_xy, second_xy, third_xy, first_z, second_z, third_z]):
-            return
+            return None
         plane = self._plane_coefficients_from_points(first_xy, first_z, second_xy, second_z, third_xy, third_z)
         if plane is None:
-            return
+            return None
         safe_runway_name = str(runway_name or "RWY").replace("/", "-").replace(" ", "_")
         safe_side = str(side_label or "").replace(" ", "_")
         surface_id = f"TRANS:{safe_runway_name}:{safe_side}:{sequence}"
@@ -1721,6 +1725,7 @@ class OlsGuidelineMixin:
                 metadata=candidate_metadata,
             )
         )
+        return surface_id
 
     def _generate_transitional_features(
         self,
@@ -2126,7 +2131,7 @@ class OlsGuidelineMixin:
                                 feat.setAttribute(idx, value)
                         transitional_features.append(feat)
                         transitional_candidate_sequence += 1
-                        self._register_transitional_controlling_candidate(
+                        transitional_surface_id = self._register_transitional_controlling_candidate(
                             poly_geom,
                             runway_name,
                             "Transitional Strip Adjacent Surface",
@@ -2153,6 +2158,7 @@ class OlsGuidelineMixin:
                             z_start if abs(z_start - z_end) < 0.05 else None,
                             side_label=side_label,
                             transitional_ref=transitional_ref,
+                            surface_id=transitional_surface_id,
                         )
                         upper_edge = self._make_transitional_contour_feature(
                             QgsGeometry.fromPolylineXY([p_upper_start, p_upper_end]),
@@ -2162,10 +2168,18 @@ class OlsGuidelineMixin:
                             IHS_ELEVATION_AMSL,
                             side_label=side_label,
                             transitional_ref=transitional_ref,
+                            surface_id=transitional_surface_id,
                         )
-                        transitional_contour_features.extend(
-                            feature for feature in [lower_edge, upper_edge] if feature is not None
-                        )
+                        edge_contours = [feature for feature in [lower_edge, upper_edge] if feature is not None]
+                        if transitional_surface_id and hasattr(self, "_register_controlling_ols_contour"):
+                            for contour_feature in edge_contours:
+                                self._register_controlling_ols_contour(
+                                    transitional_surface_id,
+                                    "Transitional",
+                                    contour_feature,
+                                    "OLS Transitional Contour",
+                                )
+                        transitional_contour_features.extend(edge_contours)
 
                         strip_contours = self._generate_transitional_strip_contours(
                             base_start=p_start_xy,
@@ -2182,7 +2196,16 @@ class OlsGuidelineMixin:
                             runway_name=runway_name,
                             transitional_ref=transitional_ref,
                             bounding_polygon=poly_geom,
+                            surface_id=transitional_surface_id,
                         )
+                        if transitional_surface_id and hasattr(self, "_register_controlling_ols_contour"):
+                            for contour_feature in strip_contours:
+                                self._register_controlling_ols_contour(
+                                    transitional_surface_id,
+                                    "Transitional",
+                                    contour_feature,
+                                    "OLS Transitional Contour",
+                                )
                         transitional_contour_features.extend(strip_contours)
 
             # --- Approach-Adjacent Transitional Surfaces (this section is updated) ---
@@ -2326,7 +2349,7 @@ class OlsGuidelineMixin:
                                     feat.setAttribute(idx, value)
                             transitional_features.append(feat)
                             transitional_candidate_sequence += 1
-                            self._register_transitional_controlling_candidate(
+                            transitional_surface_id = self._register_transitional_controlling_candidate(
                                 poly_geom,
                                 runway_name,
                                 f"Transitional {end_desig} Approach Adjacent Surface",
@@ -2357,6 +2380,7 @@ class OlsGuidelineMixin:
                                 side_label=side_label,
                                 end_desig=end_desig,
                                 transitional_ref=transitional_ref,
+                                surface_id=transitional_surface_id,
                             )
                             upper_edge = self._make_transitional_contour_feature(
                                 QgsGeometry.fromPolylineXY([top_start, top_end]),
@@ -2367,10 +2391,18 @@ class OlsGuidelineMixin:
                                 side_label=side_label,
                                 end_desig=end_desig,
                                 transitional_ref=transitional_ref,
+                                surface_id=transitional_surface_id,
                             )
-                            transitional_contour_features.extend(
-                                feature for feature in [lower_edge, upper_edge] if feature is not None
-                            )
+                            edge_contours = [feature for feature in [lower_edge, upper_edge] if feature is not None]
+                            if transitional_surface_id and hasattr(self, "_register_controlling_ols_contour"):
+                                for contour_feature in edge_contours:
+                                    self._register_controlling_ols_contour(
+                                        transitional_surface_id,
+                                        "Transitional",
+                                        contour_feature,
+                                        "OLS Transitional Contour",
+                                    )
+                            transitional_contour_features.extend(edge_contours)
 
                             approach_contours = self._generate_parallel_contours_in_panel(
                                 top_start=top_start,
@@ -2389,7 +2421,16 @@ class OlsGuidelineMixin:
                                 runway_name=runway_name,
                                 end_desig=end_desig,
                                 transitional_ref=transitional_ref,
+                                surface_id=transitional_surface_id,
                             )
+                            if transitional_surface_id and hasattr(self, "_register_controlling_ols_contour"):
+                                for contour_feature in approach_contours:
+                                    self._register_controlling_ols_contour(
+                                        transitional_surface_id,
+                                        "Transitional",
+                                        contour_feature,
+                                        "OLS Transitional Contour",
+                                    )
                             transitional_contour_features.extend(approach_contours)
 
                     current_section_start_elev = section_end_elev
@@ -2419,6 +2460,7 @@ class OlsGuidelineMixin:
         runway_name: str,
         transitional_ref: str,
         bounding_polygon=None,
+        surface_id: Optional[str] = None,
     ) -> List[QgsFeature]:
         """
         Generates contour lines for a rectangular (strip-adjacent) transitional surface section.
@@ -2461,6 +2503,7 @@ class OlsGuidelineMixin:
                 "side": side_label,
                 "contour_elev_am": current_z,
                 "ref_mos": transitional_ref,
+                "surface_id": surface_id,
             }
             #     QgsMessageLog.logMessage(
             #     f"Setting contour_elev_am for contour: current_z={current_z} (type={type(current_z)})",
@@ -2551,6 +2594,10 @@ class OlsGuidelineMixin:
                     10,
                     2,
                 ),
+                QgsField("side", QVariant.String, self.tr("Side"), 5),
+                QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
+                QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
+                QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
             ]
         )
 

@@ -364,22 +364,21 @@ Known remaining limitations:
 
 - transition-edge diagnostics remain secondary to the region layer and should
   be rechecked as contour clipping and any promoted transition outputs are
-  introduced;
-- transitional contour clipping is still a later milestone.
+  introduced.
 
 ### Contour Clipping Checkpoint
 
-Initial contour clipping has started for the solved `Controlling OLS POC`
-regions. Approach, TOCS, and Conical source contours now carry/register the
+Contour clipping is implemented for the solved `Controlling OLS POC` regions.
+Approach, TOCS, Conical, and Transitional source contours carry/register the
 same stable `surface_id` used by their controlling candidate surface. The POC
 contour output clips each registered contour to the solved region for its
 matching parent surface and emits only the retained contour geometry. Retained
 parts from the same source contour are collected into one multipart feature so
 labels are not repeated along region-boundary fragments.
 
-Transitional surface contours are intentionally excluded from this first
-clipping pass. Transitional panels and their contours require different
-parentage and overlap logic before they can be clipped reliably.
+Transitional contours now use the generated transitional panel `surface_id`,
+including strip-adjacent lower/upper edges, strip interval contours,
+approach-adjacent lower/upper edges, and approach-adjacent interval contours.
 
 ### Current Non-Overlap Expectation
 
