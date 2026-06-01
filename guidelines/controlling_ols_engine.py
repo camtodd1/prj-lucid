@@ -23,7 +23,7 @@ from qgis.core import (  # type: ignore
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
-CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-overlap-clipped-lower-2026-06-01"
+CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-coverage-repair-2026-06-01"
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -138,6 +138,7 @@ class PlanarControllingOlsEngine:
         self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
         self._diagnostics: List[str] = [f"engine_build={CONTROLLING_OLS_ENGINE_BUILD}"]
         self._candidate_loss_diagnostics: Dict[str, List[Tuple[float, str, str, float, Optional[float]]]] = {}
+        self._candidate_unknown_diagnostics: Dict[str, List[Tuple[float, str, str]]] = {}
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
 
@@ -353,10 +354,19 @@ class PlanarControllingOlsEngine:
                     continue
                 lower_region = self._candidate_lower_region(candidate, competitor, overlap)
                 try:
-                    losing_area = overlap
-                    if lower_region is not None:
+                    if lower_region is None:
+                        self._record_candidate_unknown(candidate, competitor, overlap)
+                        continue
+                    if lower_region.isEmpty():
+                        losing_area = overlap
+                    else:
                         lower_region = self._clip_lower_region_to_overlap(lower_region, overlap)
-                        if lower_region is not None and not lower_region.isEmpty():
+                        if lower_region is None:
+                            self._record_candidate_unknown(candidate, competitor, overlap)
+                            continue
+                        if lower_region.isEmpty():
+                            losing_area = overlap
+                        else:
                             losing_area = overlap.difference(lower_region)
                     if losing_area is not None and not losing_area.isEmpty() and self._has_polygon_area(losing_area):
                         self._record_candidate_loss(candidate, competitor, losing_area, overlap, lower_region)
@@ -377,8 +387,70 @@ class PlanarControllingOlsEngine:
                         if clean_part.area() <= 1e-3:
                             continue
                         region_parts.append((candidate, clean_part))
+        self._repair_region_coverage(region_parts)
         self._log_region_diagnostics(time.perf_counter() - started_at)
         return region_parts
+
+    def _repair_region_coverage(self, region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]]) -> None:
+        coverage_parts = []
+        for candidate in self.candidates:
+            footprint = self._effective_footprint(candidate)
+            if self._has_polygon_area(footprint):
+                coverage_parts.append(footprint)
+        if not coverage_parts:
+            return
+        try:
+            coverage = QgsGeometry.unaryUnion(coverage_parts) if len(coverage_parts) > 1 else QgsGeometry(coverage_parts[0])
+        except Exception:
+            return
+        if not self._has_polygon_area(coverage):
+            return
+
+        solved_parts = [geometry for _, geometry in region_parts if self._has_polygon_area(geometry)]
+        try:
+            solved = QgsGeometry.unaryUnion(solved_parts) if solved_parts else QgsGeometry()
+        except Exception:
+            solved = QgsGeometry()
+        try:
+            gaps = coverage.difference(solved) if solved is not None and not solved.isEmpty() else coverage
+        except Exception:
+            return
+
+        repaired_count = 0
+        repaired_area = 0.0
+        for gap_part in self._polygon_parts(gaps):
+            if gap_part.area() <= 1.0:
+                continue
+            candidate = self._candidate_for_gap(gap_part)
+            if candidate is None:
+                self._diagnostics.append(
+                    f"coverage gap retained empty: area={gap_part.area():.3f}"
+                )
+                continue
+            for clean_part in self._clean_region_polygon_parts(gap_part, candidate):
+                if clean_part.area() <= 1.0:
+                    continue
+                region_parts.append((candidate, clean_part))
+                repaired_count += 1
+                repaired_area += clean_part.area()
+        if repaired_count:
+            self._diagnostics.append(
+                f"coverage repair added {repaired_count} gap region(s); area={repaired_area:.3f}"
+            )
+
+    def _candidate_for_gap(self, gap_geometry: QgsGeometry) -> Optional[ControllingOlsCandidate]:
+        sample_points: List[QgsPointXY] = []
+        try:
+            point = gap_geometry.pointOnSurface().asPoint()
+            sample_points.append(QgsPointXY(point.x(), point.y()))
+        except Exception:
+            pass
+        sample_points.extend(self._geometry_sample_points(gap_geometry))
+        for point_xy in sample_points:
+            result = self.controlling_candidate_at_xy(point_xy)
+            if result is not None:
+                return result[0]
+        return None
 
     def _record_candidate_loss(
         self,
@@ -398,8 +470,22 @@ class PlanarControllingOlsEngine:
         entries.sort(key=lambda item: item[0], reverse=True)
         del entries[4:]
 
+    def _record_candidate_unknown(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        overlap: Optional[QgsGeometry],
+    ) -> None:
+        overlap_area = overlap.area() if overlap is not None and not overlap.isEmpty() else 0.0
+        if overlap_area <= 1e-3:
+            return
+        entries = self._candidate_unknown_diagnostics.setdefault(candidate.surface_id, [])
+        entries.append((overlap_area, competitor.surface_id, competitor.surface_type))
+        entries.sort(key=lambda item: item[0], reverse=True)
+        del entries[4:]
+
     def _log_region_diagnostics(self, elapsed_seconds: float) -> None:
-        if not self._diagnostics and not self._candidate_loss_diagnostics:
+        if not self._diagnostics and not self._candidate_loss_diagnostics and not self._candidate_unknown_diagnostics:
             return
         lines = [f"Controlling OLS diagnostics: region solve elapsed={elapsed_seconds:.3f}s"]
         lines.extend(self._diagnostics[:40])
@@ -414,6 +500,14 @@ class PlanarControllingOlsEngine:
                     f"overlap={overlap_area:.3f} lower={lower_text}"
                 )
             lines.append(f"loss summary for {surface_id}: " + "; ".join(formatted_entries))
+        for surface_id, entries in sorted(self._candidate_unknown_diagnostics.items()):
+            if not entries:
+                continue
+            formatted_entries = [
+                f"{competitor_id}({competitor_type}) overlap={overlap_area:.3f}"
+                for overlap_area, competitor_id, competitor_type in entries
+            ]
+            lines.append(f"unknown comparison retained for {surface_id}: " + "; ".join(formatted_entries))
         QgsMessageLog.logMessage("\n".join(lines), PLUGIN_TAG, Qgis.Info)
 
     def _clip_lower_region_to_overlap(
@@ -617,7 +711,7 @@ class PlanarControllingOlsEngine:
     ) -> Optional[QgsGeometry]:
         """Return a large polygon where ax + by + c <= tolerance."""
         if abs(a) <= 1e-12 and abs(b) <= 1e-12:
-            return self._all_overlap_lower_region(overlap) if c <= self.tie_tolerance_m else None
+            return self._all_overlap_lower_region(overlap) if c <= self.tie_tolerance_m else QgsGeometry()
 
         sampled_differences = self._plane_difference_samples(overlap, a, b, c)
         if sampled_differences:
@@ -626,7 +720,7 @@ class PlanarControllingOlsEngine:
             if max_diff <= self.tie_tolerance_m:
                 return self._all_overlap_lower_region(overlap)
             if min_diff > self.tie_tolerance_m:
-                return None
+                return QgsGeometry()
 
         point_on_line = self._point_on_line_near_geometry(overlap, a, b, c)
         if point_on_line is None:
@@ -713,7 +807,9 @@ class PlanarControllingOlsEngine:
         if not conical_is_candidate:
             return axis_lower
 
-        if axis_lower is None or axis_lower.isEmpty():
+        if axis_lower is None:
+            return None
+        if axis_lower.isEmpty():
             return self._all_overlap_lower_region(overlap)
         try:
             conical_lower = overlap.difference(axis_lower)
@@ -793,7 +889,11 @@ class PlanarControllingOlsEngine:
                 f"max_diff={max_difference if max_difference is not None else 'None'}; "
                 f"elapsed={time.perf_counter() - started_at:.3f}s"
             )
-            return QgsGeometry(overlap)
+            if fallback_decision == "all_higher":
+                return QgsGeometry()
+            if fallback_decision == "all_lower":
+                return QgsGeometry(overlap)
+            return None
         try:
             combined = QgsGeometry.unaryUnion(pieces) if len(pieces) > 1 else QgsGeometry(pieces[0])
         except Exception:
@@ -806,7 +906,7 @@ class PlanarControllingOlsEngine:
             f"mixed={mixed_count}; triangulated={triangulated_count}; triangulated_area={triangulated_area:.3f}; "
             f"piece_area_sum={output_area:.3f}; elapsed={time.perf_counter() - started_at:.3f}s"
         )
-        return combined if self._has_polygon_area(combined) else None
+        return combined if self._has_polygon_area(combined) else QgsGeometry()
 
     def _axis_station_range(self, axis: dict, geometry: QgsGeometry) -> Optional[Tuple[float, float]]:
         stations: List[float] = []
@@ -886,7 +986,7 @@ class PlanarControllingOlsEngine:
             max_distance = float(max_distance)
         if conical_is_candidate:
             if threshold_distance < -self.tie_tolerance_m:
-                return None
+                return QgsGeometry()
             if max_distance is not None and threshold_distance >= max_distance - 1e-6:
                 return self._all_overlap_lower_region(overlap)
             return self._distance_region_from_conical_base(conical_model, max(0.0, threshold_distance), overlap)
@@ -894,7 +994,7 @@ class PlanarControllingOlsEngine:
         if threshold_distance < -self.tie_tolerance_m:
             return self._all_overlap_lower_region(overlap)
         if max_distance is not None and threshold_distance >= max_distance - 1e-6:
-            return None
+            return QgsGeometry()
         return self._conical_distance_lower_region(
             conical_model,
             max(0.0, threshold_distance),
@@ -919,7 +1019,7 @@ class PlanarControllingOlsEngine:
             return self._distance_region_from_conical_base(conical_model, threshold_distance, overlap)
 
         if max_distance is not None and threshold_distance >= max_distance - 1e-6:
-            return None
+            return QgsGeometry()
         lower_conical = self._distance_region_from_conical_base(conical_model, max(0.0, threshold_distance), overlap)
         if lower_conical is None or lower_conical.isEmpty():
             return self._all_overlap_lower_region(overlap)
@@ -1163,7 +1263,7 @@ class PlanarControllingOlsEngine:
         if decision == "all_lower":
             return self._all_overlap_lower_region(overlap)
         if decision == "all_higher":
-            return None
+            return QgsGeometry()
         return None
 
     def _sampled_lower_decision(
