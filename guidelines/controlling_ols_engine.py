@@ -330,7 +330,7 @@ class PlanarControllingOlsEngine:
         region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
             region = self._effective_footprint(candidate)
-            for competitor in self._ordered_competitors(candidate):
+            for competitor in self.candidates:
                 if competitor.surface_id == candidate.surface_id:
                     continue
                 if region is None or region.isEmpty():
@@ -364,19 +364,6 @@ class PlanarControllingOlsEngine:
                         region_parts.append((candidate, clean_part))
         return region_parts
 
-    def _ordered_competitors(self, candidate: ControllingOlsCandidate) -> List[ControllingOlsCandidate]:
-        """Apply exact planar competitors before curved competitors."""
-        planar: List[ControllingOlsCandidate] = []
-        curved: List[ControllingOlsCandidate] = []
-        for competitor in self.candidates:
-            if competitor.surface_id == candidate.surface_id:
-                continue
-            if candidate.model == "conical" or competitor.model == "conical":
-                curved.append(competitor)
-            else:
-                planar.append(competitor)
-        return planar + curved
-
     def _effective_footprint(self, candidate: ControllingOlsCandidate) -> QgsGeometry:
         cached = self._effective_footprint_cache.get(candidate.surface_id)
         if cached is not None:
@@ -406,10 +393,26 @@ class PlanarControllingOlsEngine:
         geometry: QgsGeometry,
         candidate: Optional[ControllingOlsCandidate] = None,
     ) -> List[QgsGeometry]:
-        """Rebuild solved region polygons without changing their solved boundaries."""
+        """Rebuild solved region polygons to remove zero-width spike artifacts."""
         if geometry is None or geometry.isEmpty():
             return []
         candidates = [geometry]
+        try:
+            buffered = geometry.buffer(0.0, 8)
+            if buffered is not None and not buffered.isEmpty():
+                candidates.insert(0, buffered)
+        except Exception:
+            pass
+        try:
+            cleanup_tolerance = self._region_cleanup_tolerance(geometry, candidate)
+            if cleanup_tolerance > 0.0:
+                opened = geometry.buffer(-cleanup_tolerance, 8)
+                if opened is not None and not opened.isEmpty():
+                    reopened = opened.buffer(cleanup_tolerance, 8)
+                    if reopened is not None and not reopened.isEmpty():
+                        candidates.insert(0, reopened)
+        except Exception:
+            pass
         for candidate in candidates:
             try:
                 if not candidate.isGeosValid():
@@ -419,15 +422,22 @@ class PlanarControllingOlsEngine:
             parts = self._polygon_parts(candidate)
             if parts:
                 return parts
-        try:
-            buffered = geometry.buffer(0.0, 8)
-            if buffered is not None and not buffered.isEmpty():
-                parts = self._polygon_parts(buffered)
-                if parts:
-                    return parts
-        except Exception:
-            pass
         return []
+
+    def _region_cleanup_tolerance(
+        self,
+        geometry: QgsGeometry,
+        candidate: Optional[ControllingOlsCandidate] = None,
+    ) -> float:
+        """Return a small map-unit tolerance for collapsing zero-width boundary spikes."""
+        try:
+            bbox = geometry.boundingBox()
+            span = max(bbox.width(), bbox.height(), 1.0)
+            if candidate is not None and candidate.surface_type == "Conical":
+                return 0.0
+            return max(0.02, min(span * 1e-6, 0.25))
+        except Exception:
+            return 0.02
 
     def _candidate_lower_region(
         self,
@@ -511,8 +521,6 @@ class PlanarControllingOlsEngine:
         if candidate.model == "conical":
             return self._conical_linear_lower_region(candidate, competitor, overlap, conical_is_candidate=True)
         if competitor.model == "conical":
-            if candidate.model in {"axis", "plane"}:
-                return self._global_extent_polygon()
             return self._conical_linear_lower_region(competitor, candidate, overlap, conical_is_candidate=False)
         return None
 
@@ -633,17 +641,6 @@ class PlanarControllingOlsEngine:
         points = self._triangulation_sample_points(geometry)
         if len(points) < 3:
             return None
-        differences = [
-            difference
-            for point in points
-            for difference in [self._candidate_difference(candidate, competitor, point)]
-            if difference is not None
-        ]
-        if differences:
-            if max(differences) <= self.tie_tolerance_m:
-                return self._global_extent_polygon()
-            if min(differences) > self.tie_tolerance_m:
-                return None
         try:
             tin = QgsGeometry.fromMultiPointXY(points).delaunayTriangulation(0.0, False)
         except Exception:
@@ -667,6 +664,17 @@ class PlanarControllingOlsEngine:
             combined = QgsGeometry.unaryUnion(pieces)
         except Exception:
             combined = None
+        if combined is not None and not combined.isEmpty():
+            try:
+                normalized = combined.buffer(0.0, 8)
+                if normalized is not None and not normalized.isEmpty():
+                    combined = normalized
+            except Exception:
+                pass
+            try:
+                combined = combined.intersection(geometry)
+            except Exception:
+                pass
         return combined if self._has_polygon_area(combined) else None
 
     def _lower_polygon_rings(
