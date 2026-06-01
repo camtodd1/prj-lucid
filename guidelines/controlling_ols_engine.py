@@ -23,7 +23,7 @@ from qgis.core import (  # type: ignore
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
-CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-dissolve-same-candidate-2026-06-01"
+CONTROLLING_OLS_ENGINE_BUILD = "controlling-ols-gap-lower-envelope-2026-06-01"
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -483,15 +483,13 @@ class PlanarControllingOlsEngine:
         for gap_part in self._polygon_parts(gaps):
             if gap_part.area() <= 1.0:
                 continue
-            candidate = self._candidate_for_gap(gap_part)
-            if candidate is None:
+            repaired_parts = self._gap_lower_envelope_parts(gap_part)
+            if not repaired_parts:
                 self._diagnostics.append(
                     f"coverage gap retained empty: area={gap_part.area():.3f}"
                 )
                 continue
-            for clean_part in self._clean_region_polygon_parts(gap_part, candidate):
-                if clean_part.area() <= 1.0:
-                    continue
+            for candidate, clean_part in repaired_parts:
                 region_parts.append((candidate, clean_part))
                 repaired_count += 1
                 repaired_area += clean_part.area()
@@ -499,6 +497,57 @@ class PlanarControllingOlsEngine:
             self._diagnostics.append(
                 f"coverage repair added {repaired_count} gap region(s); area={repaired_area:.3f}"
             )
+
+    def _gap_lower_envelope_parts(
+        self,
+        gap_geometry: QgsGeometry,
+    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        repaired_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
+        for candidate in self.candidates:
+            try:
+                candidate_region = gap_geometry.intersection(self._effective_footprint(candidate))
+            except Exception:
+                candidate_region = None
+            if not self._has_polygon_area(candidate_region):
+                continue
+            for competitor in self.candidates:
+                if competitor.surface_id == candidate.surface_id:
+                    continue
+                if candidate_region is None or candidate_region.isEmpty():
+                    break
+                try:
+                    overlap = candidate_region.intersection(self._effective_footprint(competitor))
+                except Exception:
+                    overlap = None
+                if not self._has_polygon_area(overlap):
+                    continue
+                lower_region = self._candidate_lower_region(candidate, competitor, overlap)
+                if lower_region is None:
+                    if self._unresolved_comparison_removes_candidate(candidate, competitor, overlap):
+                        lower_region = QgsGeometry()
+                    else:
+                        continue
+                if lower_region.isEmpty():
+                    losing_area = overlap
+                else:
+                    lower_region = self._clip_lower_region_to_overlap(lower_region, overlap)
+                    if lower_region is None:
+                        if self._unresolved_comparison_removes_candidate(candidate, competitor, overlap):
+                            lower_region = QgsGeometry()
+                        else:
+                            continue
+                    losing_area = overlap if lower_region.isEmpty() else overlap.difference(lower_region)
+                if self._has_polygon_area(losing_area):
+                    try:
+                        candidate_region = candidate_region.difference(losing_area)
+                    except Exception:
+                        candidate_region = QgsGeometry()
+                        break
+            for region_part in self._polygon_parts(candidate_region):
+                for clean_part in self._clean_region_polygon_parts(region_part, candidate):
+                    if clean_part.area() > 1.0:
+                        repaired_parts.append((candidate, clean_part))
+        return repaired_parts
 
     def _candidate_for_gap(self, gap_geometry: QgsGeometry) -> Optional[ControllingOlsCandidate]:
         sample_points: List[QgsPointXY] = []
