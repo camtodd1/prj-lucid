@@ -761,14 +761,23 @@ class PlanarControllingOlsEngine:
                 output_area += lower_area
                 pieces.append(lower_band)
         if not pieces:
+            fallback_decision, sample_count, min_difference, max_difference = self._sampled_lower_summary(
+                axis_candidate,
+                conical_candidate,
+                overlap,
+                all_higher_margin_m=2.0,
+            )
             self._diagnostics.append(
                 "axis/conical comparison produced no axis-lower area: "
                 f"axis={axis_candidate.surface_id}; conical={conical_candidate.surface_id}; "
                 f"overlap_area={overlap.area():.3f}; stations={len(stations)}; bands={band_count}; "
                 f"lower={lower_count}; higher={higher_count}; mixed={mixed_count}; "
-                f"triangulated={triangulated_count}; elapsed={time.perf_counter() - started_at:.3f}s"
+                f"triangulated={triangulated_count}; fallback={fallback_decision}; samples={sample_count}; "
+                f"min_diff={min_difference if min_difference is not None else 'None'}; "
+                f"max_diff={max_difference if max_difference is not None else 'None'}; "
+                f"elapsed={time.perf_counter() - started_at:.3f}s"
             )
-            return None
+            return QgsGeometry(overlap)
         try:
             combined = QgsGeometry.unaryUnion(pieces) if len(pieces) > 1 else QgsGeometry(pieces[0])
         except Exception:
@@ -1149,6 +1158,22 @@ class PlanarControllingOlsEngine:
         dense: bool = False,
         all_higher_margin_m: float = 0.0,
     ) -> str:
+        return self._sampled_lower_summary(
+            candidate,
+            competitor,
+            overlap,
+            dense=dense,
+            all_higher_margin_m=all_higher_margin_m,
+        )[0]
+
+    def _sampled_lower_summary(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+        dense: bool = False,
+        all_higher_margin_m: float = 0.0,
+    ) -> Tuple[str, int, Optional[float], Optional[float]]:
         differences = []
         sample_points = self._geometry_sample_points(overlap)
         if dense:
@@ -1160,12 +1185,14 @@ class PlanarControllingOlsEngine:
                 continue
             differences.append(difference)
         if not differences:
-            return "unknown"
-        if max(differences) <= self.tie_tolerance_m:
-            return "all_lower"
-        if min(differences) > self.tie_tolerance_m + max(0.0, all_higher_margin_m):
-            return "all_higher"
-        return "mixed"
+            return "unknown", 0, None, None
+        min_difference = min(differences)
+        max_difference = max(differences)
+        if max_difference <= self.tie_tolerance_m:
+            return "all_lower", len(differences), min_difference, max_difference
+        if min_difference > self.tie_tolerance_m + max(0.0, all_higher_margin_m):
+            return "all_higher", len(differences), min_difference, max_difference
+        return "mixed", len(differences), min_difference, max_difference
 
     def _candidate_transition_lines(
         self,
