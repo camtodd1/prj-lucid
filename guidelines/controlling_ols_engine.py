@@ -710,8 +710,10 @@ class PlanarControllingOlsEngine:
                         cleaned_polygon = []
                         break
                     cleaned_polygon.append(cleaned_ring)
-                elif len(cleaned_ring) >= 4:
+                elif len(cleaned_ring) >= 4 and abs(self._ring_signed_area(cleaned_ring)) > 1.0:
                     cleaned_polygon.append(cleaned_ring)
+                elif len(cleaned_ring) >= 4:
+                    changed = True
             if cleaned_polygon:
                 cleaned_parts.append(cleaned_polygon)
         if not cleaned_parts:
@@ -782,6 +784,15 @@ class PlanarControllingOlsEngine:
         cleaned = list(points)
         cleaned.append(cleaned[0])
         return cleaned, changed
+
+    def _ring_signed_area(self, ring: Sequence[QgsPointXY]) -> float:
+        if len(ring) < 3:
+            return 0.0
+        points = ring[:-1] if ring[0].distance(ring[-1]) <= 1e-9 else list(ring)
+        area = 0.0
+        for start_point, end_point in zip(points, points[1:] + points[:1]):
+            area += (start_point.x() * end_point.y()) - (end_point.x() * start_point.y())
+        return area / 2.0
 
     def _candidate_lower_region(
         self,
