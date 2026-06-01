@@ -379,6 +379,11 @@ labels are not repeated along region-boundary fragments.
 Transitional contours now use the generated transitional panel `surface_id`,
 including strip-adjacent lower/upper edges, strip interval contours,
 approach-adjacent lower/upper edges, and approach-adjacent interval contours.
+Because transitional lower/top contours can lie exactly on no-OLS strip-core or
+IHS/equality boundaries, the clipping pass uses a small spatial tolerance for
+Transitional contours before intersecting them with the matching controlling
+region. This keeps legitimate shared-edge contours from disappearing due to
+polygon-boundary precision effects.
 
 ### Current Non-Overlap Expectation
 

@@ -2198,21 +2198,23 @@ class ControllingOlsEngineMixin:
             matching_regions = regions_by_surface_id.get(contour.surface_id, [])
             if not matching_regions:
                 continue
+            clip_geometry = self._controlling_contour_clip_geometry(contour.surface_type, matching_regions)
+            if clip_geometry is None or clip_geometry.isEmpty():
+                continue
             clipped_line_parts: List[List[QgsPointXY]] = []
             seen_part_keys = set()
-            for region in matching_regions:
-                try:
-                    clipped = contour.geometry.intersection(region)
-                except Exception:
+            try:
+                clipped = contour.geometry.intersection(clip_geometry)
+            except Exception:
+                continue
+            for line_points in engine._line_parts(clipped):
+                if len(line_points) < 2:
                     continue
-                for line_points in engine._line_parts(clipped):
-                    if len(line_points) < 2:
-                        continue
-                    part_key = self._controlling_contour_part_key(line_points)
-                    if part_key in seen_part_keys:
-                        continue
-                    seen_part_keys.add(part_key)
-                    clipped_line_parts.append(line_points)
+                part_key = self._controlling_contour_part_key(line_points)
+                if part_key in seen_part_keys:
+                    continue
+                seen_part_keys.add(part_key)
+                clipped_line_parts.append(line_points)
             line_geometry = self._controlling_contour_geometry_from_parts(clipped_line_parts)
             if line_geometry is None or line_geometry.isEmpty():
                 continue
@@ -2257,6 +2259,29 @@ class ControllingOlsEngineMixin:
             )
             return True
         return False
+
+    def _controlling_contour_clip_geometry(
+        self,
+        surface_type: str,
+        regions: Sequence[QgsGeometry],
+    ) -> Optional[QgsGeometry]:
+        valid_regions = [QgsGeometry(region) for region in regions if region is not None and not region.isEmpty()]
+        if not valid_regions:
+            return None
+        try:
+            clip_geometry = QgsGeometry.unaryUnion(valid_regions) if len(valid_regions) > 1 else valid_regions[0]
+        except Exception:
+            clip_geometry = valid_regions[0]
+        if clip_geometry is None or clip_geometry.isEmpty():
+            return None
+        if surface_type == "Transitional":
+            try:
+                buffered = clip_geometry.buffer(0.05, 4)
+                if buffered is not None and not buffered.isEmpty():
+                    return buffered
+            except Exception:
+                pass
+        return clip_geometry
 
     def _controlling_contour_geometry_from_parts(
         self,
