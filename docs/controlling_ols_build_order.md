@@ -339,11 +339,10 @@ In geometry extraction and validity helpers:
   collection results into usable polygon parts, calling `makeValid()` where
   needed. Revisit goal: reduce geometry collections from upstream overlay
   operations where practical.
-- `_despiked_polygon_geometry(...)`, `_despiked_ring(...)`, and
-  `_is_strict_interior_ring(...)` remove zero-width out-and-back ring spikes and
-  reject interior rings that touch the exterior boundary or overlap another
-  retained hole. Revisit goal: identify which overlay operations introduce ring
-  spikes or boundary-touching holes and prevent them before final cleanup.
+- `_despiked_polygon_geometry(...)` and `_despiked_ring(...)` remove
+  zero-width out-and-back ring spikes without removing legitimate interior
+  rings. Revisit goal: identify which overlay operations introduce ring spikes
+  and prevent them before final cleanup.
 - `_has_polygon_area(...)` applies a minimum-area test before regions,
   repaired parts, and transition inputs are accepted. Revisit goal: decide
   whether the current area thresholds are numerical tolerances or should become
