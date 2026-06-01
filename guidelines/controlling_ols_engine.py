@@ -681,15 +681,13 @@ class PlanarControllingOlsEngine:
             station_band = self._axis_station_interval_geometry(axis, start_station, end_station, overlap)
             if station_band is None or not self._has_polygon_area(station_band):
                 continue
-            decision = self._sampled_lower_decision(axis_candidate, conical_candidate, station_band)
-            if decision == "all_lower":
-                pieces.append(station_band)
-                continue
-            if decision == "all_higher":
-                continue
             lower_band = self._triangulated_candidate_lower_region(axis_candidate, conical_candidate, station_band)
             if lower_band is not None and self._has_polygon_area(lower_band):
                 pieces.append(lower_band)
+                continue
+            decision = self._sampled_lower_decision(axis_candidate, conical_candidate, station_band)
+            if decision == "all_lower":
+                pieces.append(station_band)
         if not pieces:
             return None
         try:
