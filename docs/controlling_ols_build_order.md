@@ -373,7 +373,9 @@ Initial contour clipping has started for the solved `Controlling OLS POC`
 regions. Approach, TOCS, and Conical source contours now carry/register the
 same stable `surface_id` used by their controlling candidate surface. The POC
 contour output clips each registered contour to the solved region for its
-matching parent surface and emits only the retained contour segments.
+matching parent surface and emits only the retained contour geometry. Retained
+parts from the same source contour are collected into one multipart feature so
+labels are not repeated along region-boundary fragments.
 
 Transitional surface contours are intentionally excluded from this first
 clipping pass. Transitional panels and their contours require different

@@ -2202,6 +2202,8 @@ class ControllingOlsEngineMixin:
             matching_regions = regions_by_surface_id.get(contour.surface_id, [])
             if not matching_regions:
                 continue
+            clipped_line_parts: List[List[QgsPointXY]] = []
+            seen_part_keys = set()
             for region in matching_regions:
                 try:
                     clipped = contour.geometry.intersection(region)
@@ -2210,23 +2212,28 @@ class ControllingOlsEngineMixin:
                 for line_points in engine._line_parts(clipped):
                     if len(line_points) < 2:
                         continue
-                    line_geometry = QgsGeometry.fromPolylineXY(line_points)
-                    if line_geometry is None or line_geometry.isEmpty():
+                    part_key = self._controlling_contour_part_key(line_points)
+                    if part_key in seen_part_keys:
                         continue
-                    feature = QgsFeature(fields)
-                    feature.setGeometry(line_geometry)
-                    feature.setAttributes(
-                        [
-                            contour_id,
-                            contour.surface_id,
-                            contour.surface_type,
-                            contour.contour_elevation_m,
-                            contour.source_layer,
-                            "clip_to_controlling_region",
-                        ]
-                    )
-                    features.append(feature)
-                    contour_id += 1
+                    seen_part_keys.add(part_key)
+                    clipped_line_parts.append(line_points)
+            line_geometry = self._controlling_contour_geometry_from_parts(clipped_line_parts)
+            if line_geometry is None or line_geometry.isEmpty():
+                continue
+            feature = QgsFeature(fields)
+            feature.setGeometry(line_geometry)
+            feature.setAttributes(
+                [
+                    contour_id,
+                    contour.surface_id,
+                    contour.surface_type,
+                    contour.contour_elevation_m,
+                    contour.source_layer,
+                    "clip_to_controlling_region",
+                ]
+            )
+            features.append(feature)
+            contour_id += 1
 
         if not features:
             QgsMessageLog.logMessage(
@@ -2238,7 +2245,7 @@ class ControllingOlsEngineMixin:
 
         feature_count = len(features)
         layer = self._create_and_add_layer(
-            "LineString",
+            "MultiLineString",
             f"OLS_Controlling_Contours_{icao_code}",
             f"{self.tr('OLS')} Controlling Contours POC {icao_code}",
             fields,
@@ -2248,12 +2255,31 @@ class ControllingOlsEngineMixin:
         )
         if layer is not None:
             QgsMessageLog.logMessage(
-                f"Created controlling OLS clipped contours POC with {feature_count} contour segment(s).",
+                f"Created controlling OLS clipped contours POC with {feature_count} contour feature(s).",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
             return True
         return False
+
+    def _controlling_contour_geometry_from_parts(
+        self,
+        line_parts: Sequence[Sequence[QgsPointXY]],
+    ) -> Optional[QgsGeometry]:
+        valid_parts = [list(part) for part in line_parts if len(part) >= 2]
+        if not valid_parts:
+            return None
+        try:
+            return QgsGeometry.fromMultiPolylineXY(valid_parts)
+        except Exception:
+            if len(valid_parts) == 1:
+                return QgsGeometry.fromPolylineXY(valid_parts[0])
+        return None
+
+    def _controlling_contour_part_key(self, line_points: Sequence[QgsPointXY]) -> Tuple[Tuple[int, int], ...]:
+        rounded_points = tuple((int(round(point.x() * 1000.0)), int(round(point.y() * 1000.0))) for point in line_points)
+        reversed_points = tuple(reversed(rounded_points))
+        return rounded_points if rounded_points <= reversed_points else reversed_points
 
     def _deduplicate_controlling_transition_features(self, features: List[QgsFeature]) -> List[QgsFeature]:
         deduplicated: List[QgsFeature] = []
