@@ -396,7 +396,11 @@ class PlanarControllingOlsEngine:
         """Rebuild solved region polygons without changing solved boundaries."""
         if geometry is None or geometry.isEmpty():
             return []
-        candidates = [geometry]
+        candidates = []
+        despiked = self._despiked_polygon_geometry(geometry)
+        if despiked is not None and not despiked.isEmpty():
+            candidates.append(despiked)
+        candidates.append(geometry)
         for candidate in candidates:
             try:
                 if not candidate.isGeosValid():
@@ -415,6 +419,99 @@ class PlanarControllingOlsEngine:
         except Exception:
             pass
         return []
+
+    def _despiked_polygon_geometry(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
+        """Remove zero-width out-and-back ring spikes without buffering corners."""
+        cleaned_parts = []
+        changed = False
+        try:
+            polygons = geometry.asMultiPolygon() if geometry.isMultipart() else [geometry.asPolygon()]
+        except Exception:
+            return None
+        for polygon in polygons:
+            if not polygon or not polygon[0]:
+                continue
+            cleaned_polygon = []
+            for ring_index, ring in enumerate(polygon):
+                cleaned_ring, ring_changed = self._despiked_ring(ring)
+                changed = changed or ring_changed
+                if ring_index == 0:
+                    if len(cleaned_ring) < 4:
+                        cleaned_polygon = []
+                        break
+                    cleaned_polygon.append(cleaned_ring)
+                elif len(cleaned_ring) >= 4:
+                    cleaned_polygon.append(cleaned_ring)
+            if cleaned_polygon:
+                cleaned_parts.append(cleaned_polygon)
+        if not cleaned_parts:
+            return None
+        if not changed:
+            return QgsGeometry(geometry)
+        if len(cleaned_parts) == 1:
+            return QgsGeometry.fromPolygonXY(cleaned_parts[0])
+        return QgsGeometry.fromMultiPolygonXY(cleaned_parts)
+
+    def _despiked_ring(self, ring: List[QgsPointXY]) -> Tuple[List[QgsPointXY], bool]:
+        if len(ring) < 4:
+            return ring, False
+        tolerance = 0.05
+        angle_tolerance_degrees = 1.0
+        points = ring[:-1] if ring[0].distance(ring[-1]) <= tolerance else list(ring)
+        changed = False
+
+        def _dedupe(vertices: List[QgsPointXY]) -> Tuple[List[QgsPointXY], bool]:
+            deduped: List[QgsPointXY] = []
+            did_change = False
+            for point in vertices:
+                if deduped and point.distance(deduped[-1]) <= tolerance:
+                    did_change = True
+                    continue
+                deduped.append(point)
+            if len(deduped) > 1 and deduped[0].distance(deduped[-1]) <= tolerance:
+                deduped.pop()
+                did_change = True
+            return deduped, did_change
+
+        points, did_change = _dedupe(points)
+        changed = changed or did_change
+        while len(points) >= 3:
+            removed = False
+            for index, point in enumerate(points):
+                previous_point = points[index - 1]
+                next_point = points[(index + 1) % len(points)]
+                if previous_point.distance(next_point) <= tolerance:
+                    points.pop(index)
+                    changed = True
+                    removed = True
+                    break
+                ux = previous_point.x() - point.x()
+                uy = previous_point.y() - point.y()
+                vx = next_point.x() - point.x()
+                vy = next_point.y() - point.y()
+                u_length = math.hypot(ux, uy)
+                v_length = math.hypot(vx, vy)
+                if u_length <= tolerance or v_length <= tolerance:
+                    points.pop(index)
+                    changed = True
+                    removed = True
+                    break
+                cosine = max(-1.0, min(1.0, ((ux * vx) + (uy * vy)) / (u_length * v_length)))
+                angle = math.degrees(math.acos(cosine))
+                if angle <= angle_tolerance_degrees:
+                    points.pop(index)
+                    changed = True
+                    removed = True
+                    break
+            if not removed:
+                break
+            points, did_change = _dedupe(points)
+            changed = changed or did_change
+        if len(points) < 3:
+            return [], True
+        cleaned = list(points)
+        cleaned.append(cleaned[0])
+        return cleaned, changed
 
     def _candidate_lower_region(
         self,
