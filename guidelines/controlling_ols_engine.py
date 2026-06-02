@@ -29,10 +29,11 @@ CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2 = 0.05
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-10
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
-AXIS_CONICAL_EXACT_SOLVER_ENABLED = False
+AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
-AXIS_CONICAL_EXACT_MAX_STATION_STEP_M = 1.0
-AXIS_CONICAL_EXACT_MAX_LATERAL_STEP_M = 2.0
+AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
+AXIS_CONICAL_VERTEX_CURVE_STATION_STEP_M = 5.0
+AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M = 0.5
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -1612,108 +1613,412 @@ class PlanarControllingOlsEngine:
         overlap: QgsGeometry,
     ) -> Optional[QgsGeometry]:
         station_range = self._axis_station_range(axis, overlap)
-        if station_range is None:
+        conical_slope = float(conical_model["slope"])
+        base_footprint = conical_model.get("base_footprint")
+        if station_range is None or base_footprint is None or conical_slope <= 0.0:
             return None
         min_station, max_station = station_range
         if max_station - min_station <= 1e-6:
             return None
 
-        base_footprint = conical_model.get("base_footprint")
-        conical_slope = float(conical_model["slope"])
         a_offset = (float(axis["origin_elevation_m"]) - float(conical_model["base_elevation_m"])) / conical_slope
         b_slope = float(axis["slope"]) / conical_slope
         max_distance = conical_model.get("max_distance_m")
         max_distance = float(max_distance) if max_distance is not None else None
 
-        bbox = overlap.boundingBox()
-        l_min, l_max = self._axis_lateral_bounds(axis, bbox)
-        if l_max - l_min <= 1e-6:
-            return None
-        station_step = max(
-            0.25,
-            min((max_station - min_station) / 480.0, AXIS_CONICAL_EXACT_MAX_STATION_STEP_M),
-        )
-        lateral_step = max(
-            0.5,
-            min((l_max - l_min) / 240.0, AXIS_CONICAL_EXACT_MAX_LATERAL_STEP_M),
-        )
-
-        tracks: List[List[QgsPointXY]] = []
-        active_track_indices: List[int] = []
-        max_link_distance = max(3.0, (station_step * 2.5) + (lateral_step * 2.0))
-        t = min_station
-        while t <= max_station + 1e-6:
-            required_distance = a_offset + (b_slope * t)
-            roots: List[QgsPointXY] = []
-            if required_distance >= -self.tie_tolerance_m:
-                if max_distance is None or required_distance <= max_distance + self.tie_tolerance_m:
-                    roots = self._axis_conical_lateral_roots(
+        curve_pieces: List[QgsGeometry] = []
+        for ring in self._polygon_boundary_parts(base_footprint):
+            points = ring[:-1] if len(ring) > 1 and ring[0].distance(ring[-1]) <= 1e-6 else ring
+            if len(points) < 2:
+                continue
+            for index, start_point in enumerate(points):
+                end_point = points[(index + 1) % len(points)]
+                curve_pieces.extend(
+                    self._axis_conical_edge_transition_pieces(
                         axis,
                         base_footprint,
-                        t,
-                        max(0.0, required_distance),
-                        l_min,
-                        l_max,
-                        lateral_step,
+                        start_point,
+                        end_point,
+                        a_offset,
+                        b_slope,
+                        max_distance,
+                        overlap,
                     )
-            active_track_indices = self._append_axis_conical_curve_roots(
-                tracks,
-                active_track_indices,
-                roots[:4],
-                max_link_distance,
-            )
-            t += station_step
+                )
+            for vertex in points:
+                curve_pieces.extend(
+                    self._axis_conical_vertex_transition_pieces(
+                        axis,
+                        base_footprint,
+                        vertex,
+                        a_offset,
+                        b_slope,
+                        max_distance,
+                        min_station,
+                        max_station,
+                        overlap,
+                    )
+                )
 
-        line_geometries: List[QgsGeometry] = []
-        for track in tracks:
-            if len(track) < 2:
-                continue
-            line = QgsGeometry.fromPolylineXY(track)
-            if line is None or line.isEmpty():
-                continue
-            try:
-                clipped = line.intersection(overlap)
-            except Exception:
-                clipped = line
-            for line_points in self._line_parts(clipped):
-                if len(line_points) >= 2:
-                    line_geometries.append(QgsGeometry.fromPolylineXY(line_points))
-        if not line_geometries:
+        if not curve_pieces:
             return None
         try:
-            return QgsGeometry.unaryUnion(line_geometries) if len(line_geometries) > 1 else line_geometries[0]
+            return QgsGeometry.unaryUnion(curve_pieces) if len(curve_pieces) > 1 else curve_pieces[0]
         except Exception:
-            return line_geometries[0]
+            return curve_pieces[0]
 
-    def _append_axis_conical_curve_roots(
+    def _axis_conical_edge_transition_pieces(
         self,
-        tracks: List[List[QgsPointXY]],
-        active_track_indices: Sequence[int],
-        roots: Sequence[QgsPointXY],
-        max_link_distance: float,
-    ) -> List[int]:
-        if not roots:
+        axis: dict,
+        base_footprint: QgsGeometry,
+        edge_start: QgsPointXY,
+        edge_end: QgsPointXY,
+        a_offset: float,
+        b_slope: float,
+        max_distance: Optional[float],
+        overlap: QgsGeometry,
+    ) -> List[QgsGeometry]:
+        edge_length = edge_start.distance(edge_end)
+        if edge_length <= 1e-6:
             return []
-        next_active: List[int] = []
-        used_tracks = set()
-        for root in roots:
-            best_index = None
-            best_distance = max_link_distance
-            for track_index in active_track_indices:
-                if track_index in used_tracks or track_index >= len(tracks) or not tracks[track_index]:
-                    continue
-                distance = root.distance(tracks[track_index][-1])
-                if distance < best_distance:
-                    best_distance = distance
-                    best_index = track_index
-            if best_index is None:
-                tracks.append([QgsPointXY(root)])
-                next_active.append(len(tracks) - 1)
+        ex = (edge_end.x() - edge_start.x()) / edge_length
+        ey = (edge_end.y() - edge_start.y()) / edge_length
+        pieces: List[QgsGeometry] = []
+        for nx, ny in ((-ey, ex), (ey, -ex)):
+            ux = float(axis["ux"])
+            uy = float(axis["uy"])
+            origin_dot = (ux * float(axis["origin_x"])) + (uy * float(axis["origin_y"]))
+            a = nx - (b_slope * ux)
+            b = ny - (b_slope * uy)
+            c = -((nx * edge_start.x()) + (ny * edge_start.y())) - a_offset + (b_slope * origin_dot)
+            point_on_line = self._point_on_line_near_geometry(overlap, a, b, c)
+            if point_on_line is None:
                 continue
-            tracks[best_index].append(QgsPointXY(root))
-            used_tracks.add(best_index)
-            next_active.append(best_index)
-        return next_active
+            line = self._clip_long_line_to_domain(overlap, point_on_line, -b, a)
+            if line is None or line.isEmpty():
+                continue
+            for line_points in self._line_parts(line):
+                pieces.extend(
+                    self._filtered_axis_conical_curve_segments(
+                        axis,
+                        base_footprint,
+                        line_points,
+                        a_offset,
+                        b_slope,
+                        max_distance,
+                        overlap,
+                        edge_start=edge_start,
+                        edge_end=edge_end,
+                    )
+                )
+        return pieces
+
+    def _axis_conical_vertex_transition_pieces(
+        self,
+        axis: dict,
+        base_footprint: QgsGeometry,
+        vertex: QgsPointXY,
+        a_offset: float,
+        b_slope: float,
+        max_distance: Optional[float],
+        min_station: float,
+        max_station: float,
+        overlap: QgsGeometry,
+    ) -> List[QgsGeometry]:
+        tv, lv = self._axis_local_coordinates(axis, vertex)
+        station_step = AXIS_CONICAL_VERTEX_CURVE_STATION_STEP_M
+        curves: List[QgsGeometry] = []
+        for sign in (-1.0, 1.0):
+            current_points: List[QgsPointXY] = []
+            t = min_station
+            while t <= max_station + 1e-6:
+                point_xy = self._axis_conical_vertex_curve_point(axis, tv, lv, a_offset, b_slope, t, sign)
+                if point_xy is not None and self._axis_conical_curve_point_is_valid(
+                    axis,
+                    base_footprint,
+                    point_xy,
+                    a_offset,
+                    b_slope,
+                    max_distance,
+                    overlap,
+                    vertex=vertex,
+                ):
+                    current_points.append(point_xy)
+                else:
+                    if len(current_points) >= 2:
+                        curves.extend(
+                            self._densified_axis_conical_vertex_curve(
+                                axis,
+                                base_footprint,
+                                current_points,
+                                tv,
+                                lv,
+                                a_offset,
+                                b_slope,
+                                max_distance,
+                                overlap,
+                                vertex,
+                                sign,
+                            )
+                        )
+                    current_points = []
+                t += station_step
+            if len(current_points) >= 2:
+                curves.extend(
+                    self._densified_axis_conical_vertex_curve(
+                        axis,
+                        base_footprint,
+                        current_points,
+                        tv,
+                        lv,
+                        a_offset,
+                        b_slope,
+                        max_distance,
+                        overlap,
+                        vertex,
+                        sign,
+                    )
+                )
+        return curves
+
+    def _axis_local_coordinates(self, axis: dict, point_xy: QgsPointXY) -> Tuple[float, float]:
+        ux = float(axis["ux"])
+        uy = float(axis["uy"])
+        vx = -uy
+        vy = ux
+        dx = point_xy.x() - float(axis["origin_x"])
+        dy = point_xy.y() - float(axis["origin_y"])
+        return (dx * ux) + (dy * uy), (dx * vx) + (dy * vy)
+
+    def _axis_point_from_local(self, axis: dict, station: float, lateral: float) -> QgsPointXY:
+        ux = float(axis["ux"])
+        uy = float(axis["uy"])
+        vx = -uy
+        vy = ux
+        return QgsPointXY(
+            float(axis["origin_x"]) + (station * ux) + (lateral * vx),
+            float(axis["origin_y"]) + (station * uy) + (lateral * vy),
+        )
+
+    def _axis_conical_vertex_curve_point(
+        self,
+        axis: dict,
+        vertex_station: float,
+        vertex_lateral: float,
+        a_offset: float,
+        b_slope: float,
+        station: float,
+        sign: float,
+    ) -> Optional[QgsPointXY]:
+        required_distance = a_offset + (b_slope * station)
+        discriminant = (required_distance * required_distance) - ((station - vertex_station) ** 2)
+        if discriminant < -1e-9:
+            return None
+        lateral = vertex_lateral + (sign * math.sqrt(max(0.0, discriminant)))
+        return self._axis_point_from_local(axis, station, lateral)
+
+    def _axis_conical_curve_point_is_valid(
+        self,
+        axis: dict,
+        base_footprint: QgsGeometry,
+        point_xy: QgsPointXY,
+        a_offset: float,
+        b_slope: float,
+        max_distance: Optional[float],
+        overlap: QgsGeometry,
+        edge_start: Optional[QgsPointXY] = None,
+        edge_end: Optional[QgsPointXY] = None,
+        vertex: Optional[QgsPointXY] = None,
+    ) -> bool:
+        try:
+            point_geometry = QgsGeometry.fromPointXY(point_xy)
+            if not overlap.intersects(point_geometry):
+                return False
+            station = self._axis_station(axis, point_xy)
+            required_distance = max(0.0, a_offset + (b_slope * station))
+            if max_distance is not None and required_distance > max_distance + self.tie_tolerance_m:
+                return False
+            actual_distance = point_geometry.distance(base_footprint)
+            if abs(actual_distance - required_distance) > AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M:
+                return False
+            if edge_start is not None and edge_end is not None:
+                edge_length = edge_start.distance(edge_end)
+                if edge_length <= 1e-6:
+                    return False
+                projection = (
+                    ((point_xy.x() - edge_start.x()) * (edge_end.x() - edge_start.x()))
+                    + ((point_xy.y() - edge_start.y()) * (edge_end.y() - edge_start.y()))
+                ) / (edge_length * edge_length)
+                if projection < -1e-6 or projection > 1.0 + 1e-6:
+                    return False
+            if vertex is not None:
+                vertex_distance = point_xy.distance(vertex)
+                if abs(vertex_distance - actual_distance) > AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M:
+                    return False
+        except Exception:
+            return False
+        return True
+
+    def _filtered_axis_conical_curve_segments(
+        self,
+        axis: dict,
+        base_footprint: QgsGeometry,
+        line_points: Sequence[QgsPointXY],
+        a_offset: float,
+        b_slope: float,
+        max_distance: Optional[float],
+        overlap: QgsGeometry,
+        edge_start: Optional[QgsPointXY] = None,
+        edge_end: Optional[QgsPointXY] = None,
+        vertex: Optional[QgsPointXY] = None,
+    ) -> List[QgsGeometry]:
+        pieces: List[QgsGeometry] = []
+        current: List[QgsPointXY] = []
+        for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+            segment_length = start_point.distance(end_point)
+            steps = max(1, int(math.ceil(segment_length / 2.0)))
+            for step in range(steps + 1):
+                fraction = step / steps
+                point_xy = QgsPointXY(
+                    start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+                    start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+                )
+                if self._axis_conical_curve_point_is_valid(
+                    axis,
+                    base_footprint,
+                    point_xy,
+                    a_offset,
+                    b_slope,
+                    max_distance,
+                    overlap,
+                    edge_start=edge_start,
+                    edge_end=edge_end,
+                    vertex=vertex,
+                ):
+                    if not current or point_xy.distance(current[-1]) > 1e-6:
+                        current.append(point_xy)
+                else:
+                    if len(current) >= 2:
+                        pieces.append(QgsGeometry.fromPolylineXY(current))
+                    current = []
+        if len(current) >= 2:
+            pieces.append(QgsGeometry.fromPolylineXY(current))
+        return [piece for piece in pieces if piece is not None and not piece.isEmpty()]
+
+    def _densified_axis_conical_vertex_curve(
+        self,
+        axis: dict,
+        base_footprint: QgsGeometry,
+        seed_points: Sequence[QgsPointXY],
+        vertex_station: float,
+        vertex_lateral: float,
+        a_offset: float,
+        b_slope: float,
+        max_distance: Optional[float],
+        overlap: QgsGeometry,
+        vertex: QgsPointXY,
+        sign: float,
+    ) -> List[QgsGeometry]:
+        densified: List[QgsPointXY] = []
+        for start_point, end_point in zip(seed_points[:-1], seed_points[1:]):
+            start_station = self._axis_station(axis, start_point)
+            end_station = self._axis_station(axis, end_point)
+            segment_points = self._axis_conical_vertex_curve_segment_points(
+                axis,
+                vertex_station,
+                vertex_lateral,
+                a_offset,
+                b_slope,
+                start_station,
+                end_station,
+                sign,
+            )
+            for point_xy in segment_points:
+                if not self._axis_conical_curve_point_is_valid(
+                    axis,
+                    base_footprint,
+                    point_xy,
+                    a_offset,
+                    b_slope,
+                    max_distance,
+                    overlap,
+                    vertex=vertex,
+                ):
+                    continue
+                if not densified or point_xy.distance(densified[-1]) > 1e-6:
+                    densified.append(point_xy)
+        if len(densified) < 2:
+            return []
+        return [QgsGeometry.fromPolylineXY(densified)]
+
+    def _axis_conical_vertex_curve_segment_points(
+        self,
+        axis: dict,
+        vertex_station: float,
+        vertex_lateral: float,
+        a_offset: float,
+        b_slope: float,
+        start_station: float,
+        end_station: float,
+        sign: float,
+        depth: int = 0,
+    ) -> List[QgsPointXY]:
+        start_point = self._axis_conical_vertex_curve_point(
+            axis, vertex_station, vertex_lateral, a_offset, b_slope, start_station, sign
+        )
+        end_point = self._axis_conical_vertex_curve_point(
+            axis, vertex_station, vertex_lateral, a_offset, b_slope, end_station, sign
+        )
+        if start_point is None or end_point is None:
+            return []
+        mid_station = (start_station + end_station) / 2.0
+        mid_point = self._axis_conical_vertex_curve_point(
+            axis, vertex_station, vertex_lateral, a_offset, b_slope, mid_station, sign
+        )
+        if mid_point is None:
+            return [start_point, end_point]
+        chord_distance = self._point_to_segment_distance(mid_point, start_point, end_point)
+        if chord_distance <= AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M or depth >= 8:
+            return [start_point, end_point]
+        left = self._axis_conical_vertex_curve_segment_points(
+            axis,
+            vertex_station,
+            vertex_lateral,
+            a_offset,
+            b_slope,
+            start_station,
+            mid_station,
+            sign,
+            depth + 1,
+        )
+        right = self._axis_conical_vertex_curve_segment_points(
+            axis,
+            vertex_station,
+            vertex_lateral,
+            a_offset,
+            b_slope,
+            mid_station,
+            end_station,
+            sign,
+            depth + 1,
+        )
+        return left[:-1] + right if left and right else left + right
+
+    def _point_to_segment_distance(
+        self,
+        point_xy: QgsPointXY,
+        segment_start: QgsPointXY,
+        segment_end: QgsPointXY,
+    ) -> float:
+        projection = self._point_projection_fraction(segment_start, segment_end, point_xy)
+        if projection is None:
+            return point_xy.distance(segment_start)
+        projection = max(0.0, min(1.0, projection))
+        projected = QgsPointXY(
+            segment_start.x() + ((segment_end.x() - segment_start.x()) * projection),
+            segment_start.y() + ((segment_end.y() - segment_start.y()) * projection),
+        )
+        return point_xy.distance(projected)
 
     def _axis_lateral_bounds(self, axis: dict, bbox: QgsRectangle) -> Tuple[float, float]:
         ux = float(axis["ux"])
@@ -1808,6 +2113,10 @@ class PlanarControllingOlsEngine:
         overlap: QgsGeometry,
         transition_curve: QgsGeometry,
     ) -> List[QgsGeometry]:
+        polygonized_parts = self._polygonize_overlap_by_transition_curve(overlap, transition_curve)
+        if polygonized_parts:
+            return polygonized_parts
+
         parts = self._polygon_parts(overlap)
         for line_points in self._line_parts(transition_curve):
             if len(line_points) < 2:
@@ -1818,6 +2127,38 @@ class PlanarControllingOlsEngine:
                 next_parts.extend(split_result if split_result else [part])
             parts = next_parts
         return [part for part in parts if self._has_polygon_area(part)]
+
+    def _polygonize_overlap_by_transition_curve(
+        self,
+        overlap: QgsGeometry,
+        transition_curve: QgsGeometry,
+    ) -> List[QgsGeometry]:
+        if not hasattr(QgsGeometry, "polygonize"):
+            return []
+        linework: List[QgsGeometry] = []
+        try:
+            for boundary_points in self._polygon_boundary_parts(overlap):
+                if len(boundary_points) >= 2:
+                    linework.append(QgsGeometry.fromPolylineXY(boundary_points))
+            for curve_points in self._line_parts(transition_curve):
+                if len(curve_points) >= 2:
+                    linework.append(QgsGeometry.fromPolylineXY(curve_points))
+            linework = [geometry for geometry in linework if geometry is not None and not geometry.isEmpty()]
+            if len(linework) < 2:
+                return []
+            polygonized = QgsGeometry.polygonize(linework)
+        except Exception:
+            return []
+        faces: List[QgsGeometry] = []
+        for face in self._polygon_parts(polygonized):
+            try:
+                clipped = face.intersection(overlap)
+            except Exception:
+                clipped = None
+            for part in self._polygon_parts(clipped):
+                if self._has_polygon_area(part):
+                    faces.append(part)
+        return faces if self._split_parts_are_valid(overlap, faces) else []
 
     def _split_polygon_part_by_line(
         self,
