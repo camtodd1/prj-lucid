@@ -151,6 +151,7 @@ class PlanarControllingOlsEngine:
         ]
         self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
         self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
+        self._controlling_region_geometries_cache: Optional[List[Tuple[ControllingOlsCandidate, QgsGeometry]]] = None
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
 
@@ -346,6 +347,14 @@ class PlanarControllingOlsEngine:
         return features
 
     def _controlling_region_geometries(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        if self._controlling_region_geometries_cache is None:
+            self._controlling_region_geometries_cache = self._build_controlling_region_geometries()
+        return [
+            (candidate, QgsGeometry(region))
+            for candidate, region in self._controlling_region_geometries_cache
+        ]
+
+    def _build_controlling_region_geometries(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
         region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
             region = self._effective_footprint(candidate)
@@ -2185,14 +2194,14 @@ class ControllingOlsEngineMixin:
             return False
 
         output_group = self._controlling_ols_poc_group(layer_group)
+        engine = PlanarControllingOlsEngine(planar_candidates, exclusion_geometries=exclusion_geometries)
         candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, output_group, planar_candidates)
-        region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, planar_candidates, exclusion_geometries)
-        transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, planar_candidates, exclusion_geometries)
+        region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, engine)
+        transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, engine)
         contour_layer_ok = self._create_controlling_contour_layer(
             icao_code,
             output_group,
-            planar_candidates,
-            exclusion_geometries,
+            engine,
             list(getattr(self, "_controlling_ols_contours", []) or []),
         )
         return candidate_layer_ok or region_layer_ok or transition_layer_ok or contour_layer_ok
@@ -2288,8 +2297,7 @@ class ControllingOlsEngineMixin:
         self,
         icao_code: str,
         output_group: QgsLayerTreeGroup,
-        candidates: Sequence[ControllingOlsCandidate],
-        exclusion_geometries: Sequence[QgsGeometry],
+        engine: PlanarControllingOlsEngine,
     ) -> bool:
         fields = QgsFields(
             [
@@ -2302,7 +2310,6 @@ class ControllingOlsEngineMixin:
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
             ]
         )
-        engine = PlanarControllingOlsEngine(candidates, exclusion_geometries=exclusion_geometries)
         features = engine.region_features(fields)
         if not features:
             QgsMessageLog.logMessage(
@@ -2334,8 +2341,7 @@ class ControllingOlsEngineMixin:
         self,
         icao_code: str,
         output_group: QgsLayerTreeGroup,
-        candidates: Sequence[ControllingOlsCandidate],
-        exclusion_geometries: Sequence[QgsGeometry],
+        engine: PlanarControllingOlsEngine,
     ) -> bool:
         fields = QgsFields(
             [
@@ -2347,7 +2353,6 @@ class ControllingOlsEngineMixin:
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
             ]
         )
-        engine = PlanarControllingOlsEngine(candidates, exclusion_geometries=exclusion_geometries)
         features = engine.region_boundary_features(fields)
         features = self._deduplicate_controlling_transition_features(features)
         if not features:
@@ -2380,8 +2385,7 @@ class ControllingOlsEngineMixin:
         self,
         icao_code: str,
         output_group: QgsLayerTreeGroup,
-        candidates: Sequence[ControllingOlsCandidate],
-        exclusion_geometries: Sequence[QgsGeometry],
+        engine: PlanarControllingOlsEngine,
         contours: Sequence[ControllingOlsContour],
     ) -> bool:
         if not contours:
@@ -2392,7 +2396,6 @@ class ControllingOlsEngineMixin:
             )
             return False
 
-        engine = PlanarControllingOlsEngine(candidates, exclusion_geometries=exclusion_geometries)
         region_parts = [
             (candidate, region)
             for candidate, region in engine._controlling_region_geometries()
