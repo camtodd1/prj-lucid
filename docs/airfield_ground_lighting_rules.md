@@ -244,7 +244,7 @@ MOS reference: 9.63.
 - The displaced-threshold length input is interpreted as runway pavement before the displaced threshold that remains available for aircraft use, consistent with take-off use and landing from the opposite direction.
 - The separate pre-threshold area input is treated as stopway by default in the declared-distance workflow and does not trigger section 9.63 runway edge-light treatment.
 - Starter-extension classification is not currently captured, so the blue opposite-direction starter-extension case is not generated.
-- Closed pre-threshold areas are not inferred automatically. If closed-area behaviour is needed, it should be controlled by an explicit future input.
+- Closed pre-threshold areas are not inferred automatically. Explicit closed-area input support is tracked in `docs/TODO.md`.
 
 ## Runway End Lights
 
@@ -298,8 +298,7 @@ MOS reference: 9.67.
 
 ### Builder Assumptions
 
-- Not currently generated as part of runway AGL except for any future starter-extension handling.
-- Requires pad, bypass, or starter-extension geometry not presently captured in the core runway input model.
+- Not currently generated as part of runway AGL. Pad, bypass, and starter-extension geometry support is tracked in `docs/TODO.md`.
 
 ## Stopway Lights
 
@@ -354,7 +353,7 @@ MOS reference: 9.69.
 ### Builder Assumptions
 
 - Not currently generated.
-- Requires LAHSO-specific input, hold short line location, and intersecting runway context.
+- LAHSO-specific input, hold-short line location, and intersecting runway context are tracked in `docs/TODO.md`.
 
 ## Runway Centreline Lights
 

@@ -146,15 +146,10 @@ Add validation for:
   available.
 - Override values should be positive when supplied.
 
-## Recommended Implementation Sequence
+## Implementation Status
 
-1. Add clearway and stopway inputs to `RunwayWidgetGroup`. (Done)
-2. Persist and restore the new inputs in `dialog/persistence.py`. (Done)
-3. Validate the new inputs in `SafeguardingBuilderDialog._validate_runway_data`. (Done)
-4. Reuse `clearway1_len` and `clearway2_len` in existing TOCS logic.
-5. Add a pure calculation helper for declared distances. (Done)
-6. Add a generated point layer or table with two records per runway. (Done)
-7. Populate the centreline placeholder fields where practical. (Done)
-8. Add validation warnings for inconsistent declared-distance results.
-9. Add optional override fields.
-10. Feed declared-distance outputs into the future runway summary report.
+The first-pass declared-distance implementation is complete for clearway and
+stopway inputs, persistence, validation, declared-distance calculation,
+generated output records, centreline field population, and TOCS clearway reuse.
+
+Outstanding declared-distance work is tracked centrally in `docs/TODO.md`.

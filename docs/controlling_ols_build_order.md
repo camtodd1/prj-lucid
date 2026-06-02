@@ -209,7 +209,8 @@ group containing:
 - candidate surface diagnostics;
 - solved controlling planar region polygons;
 - solved controlling transition edge diagnostics;
-- clipped controlling contour diagnostics for Approach, TOCS, and Conical.
+- clipped controlling contour diagnostics for Approach, TOCS, Conical, and
+  Transitional.
 
 The controlling lower-envelope model currently includes:
 
@@ -285,80 +286,14 @@ Several implementation details are important to preserve this behaviour:
 The current engine contains several post-construction geometry defenders. These
 are deliberate safeguards around QGIS/GEOS overlay behaviour and around known
 places where the proof-of-concept solver can produce slivers, gaps, internal
-seams, or invalid polygon artefacts. They are useful for the milestone, but
-should be treated as revisit points for future root-cause cleanup.
+seams, or invalid polygon artefacts.
 
-In `PlanarControllingOlsEngine._controlling_region_geometries`:
-
-- `_clean_region_polygon_parts(...)` is applied to each solved region before it
-  is emitted. This is the main final-shape cleanup pass for region polygons.
-  It tries to preserve solved boundaries while removing zero-width spikes,
-  validating geometry, extracting polygon parts, and only falling back to
-  `buffer(0)` if less invasive cleanup fails. Revisit goal: reduce the need for
-  ring despiking and fallback buffering by preventing invalid or out-and-back
-  rings during subtraction.
-- `_repair_region_coverage(...)` runs after the first lower-envelope solve. It
-  compares the union of candidate footprints with the union of solved regions
-  and identifies unexpected gaps. Revisit goal: determine why any gap is
-  produced by the primary solve rather than accepting gap repair as permanent
-  behaviour.
-- `_gap_lower_envelope_parts(...)` fills each detected gap by rerunning a local
-  lower-envelope competition inside the gap. This replaced an earlier
-  sample-point assignment because a repaired sliver can cross a valid
-  candidate boundary, especially between opposing Approach surfaces. Revisit
-  goal: make the primary region solve complete enough that local gap solving is
-  no longer required.
-- `_merge_region_parts_by_candidate(...)` dissolves adjacent solved fragments
-  for the same `surface_id` after coverage repair. This suppresses same-surface
-  seams and prevents repaired fragments from appearing as zero-volume transition
-  rings. Revisit goal: avoid creating same-candidate fragments that need a
-  later dissolve, or make the dissolve an explicit output-normalisation step
-  rather than a geometry workaround.
-
-In lower-region comparison handling:
-
-- `_clip_lower_region_to_overlap(...)` clips every computed lower region back
-  to the actual candidate/competitor overlap before subtraction. This prevents
-  broad half-plane or helper geometries from removing area outside the current
-  comparison domain. Revisit goal: keep comparison constructors domain-limited
-  enough that this remains a safety check, not a corrective step.
-- `_unresolved_comparison_removes_candidate(...)` handles a specific
-  axis-vs-conical failure mode. If an axis candidate cannot resolve its
-  comparison against conical, the unresolved overlap is clipped from the axis
-  candidate and left for coverage repair/local lower-envelope resolution.
-  Revisit goal: make axis/conical comparison complete enough that unresolved
-  axis-vs-conical overlaps disappear from diagnostics.
-- `_axis_conical_lower_region(...)` must return an explicit empty
-  `QgsGeometry()` when conical has no lower area against an axis surface. This
-  is a semantic defender: `None` means unknown/retain, while an empty geometry
-  means known loser/remove. Revisit goal: keep this distinction documented and
-  covered by tests so future geometry fixes do not reintroduce conical remnants.
-
-In geometry extraction and validity helpers:
-
-- `_polygon_parts(...)` normalises polygon, multipolygon, and geometry
-  collection results into usable polygon parts, calling `makeValid()` where
-  needed. Revisit goal: reduce geometry collections from upstream overlay
-  operations where practical.
-- `_despiked_polygon_geometry(...)` and `_despiked_ring(...)` remove
-  zero-width out-and-back ring spikes without removing legitimate interior
-  rings. Revisit goal: identify which overlay operations introduce ring spikes
-  and prevent them before final cleanup.
-- `_has_polygon_area(...)` applies a minimum-area test before regions,
-  repaired parts, and transition inputs are accepted. Revisit goal: decide
-  whether the current area thresholds are numerical tolerances or should become
-  configurable QA parameters.
-
-In output hygiene:
-
-- `region_boundary_features(...)` and `_legacy_shared_boundary_features(...)`
-  suppress same-`surface_id` transition edges. Revisit goal: ensure transition
-  diagnostics represent only real controller changes, not internal boundaries
-  created by region fragmentation.
-- `_deduplicate_controlling_transition_features(...)` removes repeated
-  transition line features by adjacent-surface key and WKT. Revisit goal:
-  replace WKT-based deduplication with a more explicit topology/keying strategy
-  if transition diagnostics become a promoted output.
+The main safeguards are region polygon cleanup, coverage repair, local
+lower-envelope repair for unexpected gaps, same-candidate region dissolves,
+domain clipping for computed lower regions, explicit unresolved axis/conical
+handling, polygon-part normalisation, ring despiking, minimum-area filtering,
+and transition-edge de-duplication. Outstanding cleanup and hardening items are
+tracked centrally in `docs/TODO.md`.
 
 Known remaining limitations:
 
