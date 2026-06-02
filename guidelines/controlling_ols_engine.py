@@ -153,6 +153,7 @@ class PlanarControllingOlsEngine:
         self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
         self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
         self._controlling_region_geometries_cache: Optional[List[Tuple[ControllingOlsCandidate, QgsGeometry]]] = None
+        self._region_solve_stats: Dict[str, float] = {}
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
 
@@ -356,12 +357,29 @@ class PlanarControllingOlsEngine:
         ]
 
     def _build_controlling_region_geometries(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        solve_start = time.perf_counter()
+        self._region_solve_stats = {
+            "pair_checks": 0.0,
+            "bbox_skips": 0.0,
+            "geos_intersections": 0.0,
+            "geos_intersection_time_s": 0.0,
+            "lower_region_calls": 0.0,
+            "linear_lower_time_s": 0.0,
+            "curved_lower_time_s": 0.0,
+            "losing_difference_time_s": 0.0,
+            "region_difference_time_s": 0.0,
+            "cleanup_time_s": 0.0,
+            "repair_time_s": 0.0,
+            "merge_time_s": 0.0,
+            "total_time_s": 0.0,
+        }
         region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
             region = self._effective_footprint(candidate)
             for competitor in self.candidates:
                 if competitor.surface_id == candidate.surface_id:
                     continue
+                self._region_solve_stats["pair_checks"] += 1.0
                 if region is None or region.isEmpty():
                     break
                 overlap = None
@@ -370,8 +388,12 @@ class PlanarControllingOlsEngine:
                     if competitor_footprint is None or competitor_footprint.isEmpty():
                         continue
                     if not self._bounding_boxes_intersect(region, competitor_footprint):
+                        self._region_solve_stats["bbox_skips"] += 1.0
                         continue
+                    intersection_start = time.perf_counter()
                     overlap = region.intersection(competitor_footprint)
+                    self._region_solve_stats["geos_intersections"] += 1.0
+                    self._region_solve_stats["geos_intersection_time_s"] += time.perf_counter() - intersection_start
                 except Exception:
                     overlap = None
                 if not self._has_polygon_area(overlap):
@@ -395,22 +417,55 @@ class PlanarControllingOlsEngine:
                         if lower_region.isEmpty():
                             losing_area = overlap
                         else:
+                            difference_start = time.perf_counter()
                             losing_area = overlap.difference(lower_region)
+                            self._region_solve_stats["losing_difference_time_s"] += time.perf_counter() - difference_start
                     if losing_area is not None and not losing_area.isEmpty() and self._has_polygon_area(losing_area):
+                        difference_start = time.perf_counter()
                         region = region.difference(losing_area)
+                        self._region_solve_stats["region_difference_time_s"] += time.perf_counter() - difference_start
                 except Exception:
                     region = QgsGeometry()
                     break
 
+            cleanup_start = time.perf_counter()
             for region_part in self._polygon_parts(region):
                 for final_part in self._polygon_parts(region_part):
                     for clean_part in self._clean_region_polygon_parts(final_part, candidate):
                         if clean_part.area() <= 1e-3:
                             continue
                         region_parts.append((candidate, clean_part))
+            self._region_solve_stats["cleanup_time_s"] += time.perf_counter() - cleanup_start
+
+        repair_start = time.perf_counter()
         self._repair_region_coverage(region_parts)
+        self._region_solve_stats["repair_time_s"] = time.perf_counter() - repair_start
+        merge_start = time.perf_counter()
         region_parts = self._merge_region_parts_by_candidate(region_parts)
+        self._region_solve_stats["merge_time_s"] = time.perf_counter() - merge_start
+        self._region_solve_stats["total_time_s"] = time.perf_counter() - solve_start
         return region_parts
+
+    def region_solve_timing_summary(self) -> str:
+        stats = self._region_solve_stats or {}
+        if not stats:
+            return "region solve stats unavailable"
+        pair_checks = int(stats.get("pair_checks", 0.0))
+        bbox_skips = int(stats.get("bbox_skips", 0.0))
+        intersections = int(stats.get("geos_intersections", 0.0))
+        lower_calls = int(stats.get("lower_region_calls", 0.0))
+        return (
+            f"region solve: pairs={pair_checks}, bbox_skips={bbox_skips}, "
+            f"intersections={intersections} ({stats.get('geos_intersection_time_s', 0.0):.2f}s), "
+            f"lower_calls={lower_calls}, linear={stats.get('linear_lower_time_s', 0.0):.2f}s, "
+            f"curved={stats.get('curved_lower_time_s', 0.0):.2f}s, "
+            f"losing_diff={stats.get('losing_difference_time_s', 0.0):.2f}s, "
+            f"region_diff={stats.get('region_difference_time_s', 0.0):.2f}s, "
+            f"cleanup={stats.get('cleanup_time_s', 0.0):.2f}s, "
+            f"repair={stats.get('repair_time_s', 0.0):.2f}s, "
+            f"merge={stats.get('merge_time_s', 0.0):.2f}s, "
+            f"total={stats.get('total_time_s', 0.0):.2f}s"
+        )
 
     def _merge_region_parts_by_candidate(
         self,
@@ -1092,9 +1147,23 @@ class PlanarControllingOlsEngine:
         overlap: Optional[QgsGeometry] = None,
     ) -> Optional[QgsGeometry]:
         """Return the geometry where candidate elevation is <= competitor elevation."""
+        start_time = time.perf_counter()
+        self._region_solve_stats["lower_region_calls"] = self._region_solve_stats.get("lower_region_calls", 0.0) + 1.0
         if candidate.model == "conical" or competitor.model == "conical":
-            return self._curved_candidate_lower_region(candidate, competitor, overlap)
-        return self._candidate_lower_halfplane(candidate, competitor, overlap)
+            try:
+                return self._curved_candidate_lower_region(candidate, competitor, overlap)
+            finally:
+                self._region_solve_stats["curved_lower_time_s"] = (
+                    self._region_solve_stats.get("curved_lower_time_s", 0.0)
+                    + (time.perf_counter() - start_time)
+                )
+        try:
+            return self._candidate_lower_halfplane(candidate, competitor, overlap)
+        finally:
+            self._region_solve_stats["linear_lower_time_s"] = (
+                self._region_solve_stats.get("linear_lower_time_s", 0.0)
+                + (time.perf_counter() - start_time)
+            )
 
     def _candidate_lower_halfplane(
         self,
@@ -2361,10 +2430,11 @@ class ControllingOlsEngineMixin:
             ]
         )
         features = engine.region_features(fields)
+        solve_summary = engine.region_solve_timing_summary()
         if not features:
             QgsMessageLog.logMessage(
                 "Controlling OLS planar regions POC skipped: no controlling planar regions were produced "
-                f"after {time.perf_counter() - start_time:.2f}s.",
+                f"after {time.perf_counter() - start_time:.2f}s. {solve_summary}.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2382,7 +2452,7 @@ class ControllingOlsEngineMixin:
         if layer is not None:
             QgsMessageLog.logMessage(
                 f"Created controlling OLS planar regions POC with {feature_count} region feature(s) "
-                f"in {time.perf_counter() - start_time:.2f}s.",
+                f"in {time.perf_counter() - start_time:.2f}s. {solve_summary}.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
