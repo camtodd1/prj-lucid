@@ -388,6 +388,12 @@ class PlanarControllingOlsEngine:
             "axis_exact_success": 0.0,
             "axis_exact_fallback": 0.0,
             "axis_exact_unresolved": 0.0,
+            "axis_exact_bad_model": 0.0,
+            "axis_exact_no_curve": 0.0,
+            "axis_exact_no_curve_mixed": 0.0,
+            "axis_exact_split_invalid": 0.0,
+            "axis_exact_union_failed": 0.0,
+            "axis_exact_exception": 0.0,
             "axis_exact_curve_time_s": 0.0,
             "axis_exact_split_time_s": 0.0,
             "axis_exact_classify_time_s": 0.0,
@@ -511,6 +517,12 @@ class PlanarControllingOlsEngine:
             f"success={int(stats.get('axis_exact_success', 0.0))}, "
             f"fallback={int(stats.get('axis_exact_fallback', 0.0))}, "
             f"unresolved={int(stats.get('axis_exact_unresolved', 0.0))}, "
+            f"reasons[bad_model={int(stats.get('axis_exact_bad_model', 0.0))}, "
+            f"no_curve={int(stats.get('axis_exact_no_curve', 0.0))}, "
+            f"no_curve_mixed={int(stats.get('axis_exact_no_curve_mixed', 0.0))}, "
+            f"split_invalid={int(stats.get('axis_exact_split_invalid', 0.0))}, "
+            f"union_failed={int(stats.get('axis_exact_union_failed', 0.0))}, "
+            f"exception={int(stats.get('axis_exact_exception', 0.0))}], "
             f"curve={stats.get('axis_exact_curve_time_s', 0.0):.2f}s, "
             f"split={stats.get('axis_exact_split_time_s', 0.0):.2f}s, "
             f"classify={stats.get('axis_exact_classify_time_s', 0.0):.2f}s, "
@@ -1523,7 +1535,7 @@ class PlanarControllingOlsEngine:
         try:
             conical_model = self._conical_model(conical_candidate)
             if conical_model is None or float(conical_model.get("slope", 0.0)) <= 0.0:
-                return self._record_axis_exact_fallback(total_start)
+                return self._record_axis_exact_fallback(total_start, "bad_model")
 
             curve_start = time.perf_counter()
             transition_curve = self._axis_conical_transition_curve(axis, conical_model, overlap)
@@ -1533,6 +1545,9 @@ class PlanarControllingOlsEngine:
             )
 
             if transition_curve is None or transition_curve.isEmpty():
+                self._region_solve_stats["axis_exact_no_curve"] = (
+                    self._region_solve_stats.get("axis_exact_no_curve", 0.0) + 1.0
+                )
                 decision_start = time.perf_counter()
                 decision = self._sampled_lower_decision(axis_candidate, conical_candidate, overlap, dense=True)
                 self._region_solve_stats["axis_exact_classify_time_s"] = (
@@ -1545,7 +1560,7 @@ class PlanarControllingOlsEngine:
                 if decision == "all_higher":
                     self._record_axis_exact_success(total_start)
                     return QgsGeometry()
-                return self._record_axis_exact_fallback(total_start)
+                return self._record_axis_exact_fallback(total_start, "no_curve_mixed")
 
             split_start = time.perf_counter()
             split_parts = self._split_overlap_by_transition_curve(overlap, transition_curve)
@@ -1554,7 +1569,7 @@ class PlanarControllingOlsEngine:
                 + (time.perf_counter() - split_start)
             )
             if len(split_parts) <= 1 or not self._split_parts_are_valid(overlap, split_parts):
-                return self._record_axis_exact_fallback(total_start)
+                return self._record_axis_exact_fallback(total_start, "split_invalid")
 
             classify_start = time.perf_counter()
             kept_parts: List[QgsGeometry] = []
@@ -1579,13 +1594,13 @@ class PlanarControllingOlsEngine:
             try:
                 combined = QgsGeometry.unaryUnion(kept_parts) if len(kept_parts) > 1 else QgsGeometry(kept_parts[0])
             except Exception:
-                return self._record_axis_exact_fallback(total_start)
+                return self._record_axis_exact_fallback(total_start, "union_failed")
             if combined is None:
-                return self._record_axis_exact_fallback(total_start)
+                return self._record_axis_exact_fallback(total_start, "union_failed")
             self._record_axis_exact_success(total_start)
             return combined if self._has_polygon_area(combined) else QgsGeometry()
         except Exception:
-            return self._record_axis_exact_fallback(total_start)
+            return self._record_axis_exact_fallback(total_start, "exception")
 
     def _record_axis_exact_success(self, start_time: float) -> None:
         self._region_solve_stats["axis_exact_success"] = (
@@ -1596,10 +1611,12 @@ class PlanarControllingOlsEngine:
             + (time.perf_counter() - start_time)
         )
 
-    def _record_axis_exact_fallback(self, start_time: float) -> None:
+    def _record_axis_exact_fallback(self, start_time: float, reason: str) -> None:
         self._region_solve_stats["axis_exact_fallback"] = (
             self._region_solve_stats.get("axis_exact_fallback", 0.0) + 1.0
         )
+        reason_key = f"axis_exact_{reason}"
+        self._region_solve_stats[reason_key] = self._region_solve_stats.get(reason_key, 0.0) + 1.0
         self._region_solve_stats["axis_exact_total_time_s"] = (
             self._region_solve_stats.get("axis_exact_total_time_s", 0.0)
             + (time.perf_counter() - start_time)
