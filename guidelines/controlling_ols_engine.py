@@ -1540,7 +1540,7 @@ class PlanarControllingOlsEngine:
                 self._region_solve_stats.get("axis_exact_split_time_s", 0.0)
                 + (time.perf_counter() - split_start)
             )
-            if len(split_parts) <= 1:
+            if len(split_parts) <= 1 or not self._split_parts_are_valid(overlap, split_parts):
                 return self._record_axis_exact_fallback(total_start)
 
             classify_start = time.perf_counter()
@@ -1621,6 +1621,8 @@ class PlanarControllingOlsEngine:
         lateral_step = max(2.0, min((l_max - l_min) / 120.0, 10.0))
 
         tracks: List[List[QgsPointXY]] = []
+        active_track_indices: List[int] = []
+        max_link_distance = max(25.0, (station_step * 4.0) + (lateral_step * 3.0))
         t = min_station
         while t <= max_station + 1e-6:
             required_distance = a_offset + (b_slope * t)
@@ -1636,10 +1638,12 @@ class PlanarControllingOlsEngine:
                         l_max,
                         lateral_step,
                     )
-            for index, point_xy in enumerate(roots[:4]):
-                while len(tracks) <= index:
-                    tracks.append([])
-                tracks[index].append(point_xy)
+            active_track_indices = self._append_axis_conical_curve_roots(
+                tracks,
+                active_track_indices,
+                roots[:4],
+                max_link_distance,
+            )
             t += station_step
 
         line_geometries: List[QgsGeometry] = []
@@ -1662,6 +1666,36 @@ class PlanarControllingOlsEngine:
             return QgsGeometry.unaryUnion(line_geometries) if len(line_geometries) > 1 else line_geometries[0]
         except Exception:
             return line_geometries[0]
+
+    def _append_axis_conical_curve_roots(
+        self,
+        tracks: List[List[QgsPointXY]],
+        active_track_indices: Sequence[int],
+        roots: Sequence[QgsPointXY],
+        max_link_distance: float,
+    ) -> List[int]:
+        if not roots:
+            return []
+        next_active: List[int] = []
+        used_tracks = set()
+        for root in roots:
+            best_index = None
+            best_distance = max_link_distance
+            for track_index in active_track_indices:
+                if track_index in used_tracks or track_index >= len(tracks) or not tracks[track_index]:
+                    continue
+                distance = root.distance(tracks[track_index][-1])
+                if distance < best_distance:
+                    best_distance = distance
+                    best_index = track_index
+            if best_index is None:
+                tracks.append([QgsPointXY(root)])
+                next_active.append(len(tracks) - 1)
+                continue
+            tracks[best_index].append(QgsPointXY(root))
+            used_tracks.add(best_index)
+            next_active.append(best_index)
+        return next_active
 
     def _axis_lateral_bounds(self, axis: dict, bbox: QgsRectangle) -> Tuple[float, float]:
         ux = float(axis["ux"])
@@ -1786,6 +1820,26 @@ class PlanarControllingOlsEngine:
         split_parts = [split_target]
         split_parts.extend(QgsGeometry(geometry) for geometry in new_geometries)
         return [part for part in split_parts if self._has_polygon_area(part)]
+
+    def _split_parts_are_valid(self, overlap: QgsGeometry, parts: Sequence[QgsGeometry]) -> bool:
+        valid_parts = [part for part in parts if self._has_polygon_area(part)]
+        if len(valid_parts) <= 1 or not self._has_polygon_area(overlap):
+            return False
+        try:
+            overlap_area = abs(overlap.area())
+            part_area_sum = sum(abs(part.area()) for part in valid_parts)
+            union = QgsGeometry.unaryUnion(valid_parts) if len(valid_parts) > 1 else QgsGeometry(valid_parts[0])
+            if not self._has_polygon_area(union):
+                return False
+            union_area = abs(union.area())
+        except Exception:
+            return False
+        tolerance = max(1.0, overlap_area * 1e-6)
+        if abs(union_area - overlap_area) > tolerance:
+            return False
+        if abs(part_area_sum - union_area) > tolerance:
+            return False
+        return True
 
     def _axis_station_range(self, axis: dict, geometry: QgsGeometry) -> Optional[Tuple[float, float]]:
         stations: List[float] = []
