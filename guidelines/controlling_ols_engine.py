@@ -34,6 +34,8 @@ AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
 AXIS_CONICAL_VERTEX_CURVE_STATION_STEP_M = 5.0
 AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M = 0.5
+AXIS_CONICAL_CURVE_ENDPOINT_SNAP_TOLERANCE_M = 2.0
+AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M = 25.0
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -394,6 +396,8 @@ class PlanarControllingOlsEngine:
             "axis_exact_split_invalid": 0.0,
             "axis_exact_union_failed": 0.0,
             "axis_exact_exception": 0.0,
+            "axis_exact_polygonize_success": 0.0,
+            "axis_exact_splitgeometry_used": 0.0,
             "axis_exact_curve_time_s": 0.0,
             "axis_exact_split_time_s": 0.0,
             "axis_exact_classify_time_s": 0.0,
@@ -523,6 +527,8 @@ class PlanarControllingOlsEngine:
             f"split_invalid={int(stats.get('axis_exact_split_invalid', 0.0))}, "
             f"union_failed={int(stats.get('axis_exact_union_failed', 0.0))}, "
             f"exception={int(stats.get('axis_exact_exception', 0.0))}], "
+            f"split_method[polygonize={int(stats.get('axis_exact_polygonize_success', 0.0))}, "
+            f"splitGeometry={int(stats.get('axis_exact_splitgeometry_used', 0.0))}], "
             f"curve={stats.get('axis_exact_curve_time_s', 0.0):.2f}s, "
             f"split={stats.get('axis_exact_split_time_s', 0.0):.2f}s, "
             f"classify={stats.get('axis_exact_classify_time_s', 0.0):.2f}s, "
@@ -2132,6 +2138,9 @@ class PlanarControllingOlsEngine:
     ) -> List[QgsGeometry]:
         polygonized_parts = self._polygonize_overlap_by_transition_curve(overlap, transition_curve)
         if polygonized_parts:
+            self._region_solve_stats["axis_exact_polygonize_success"] = (
+                self._region_solve_stats.get("axis_exact_polygonize_success", 0.0) + 1.0
+            )
             return polygonized_parts
 
         parts = self._polygon_parts(overlap)
@@ -2143,7 +2152,12 @@ class PlanarControllingOlsEngine:
                 split_result = self._split_polygon_part_by_line(part, line_points)
                 next_parts.extend(split_result if split_result else [part])
             parts = next_parts
-        return [part for part in parts if self._has_polygon_area(part)]
+        split_parts = [part for part in parts if self._has_polygon_area(part)]
+        if len(split_parts) > 1:
+            self._region_solve_stats["axis_exact_splitgeometry_used"] = (
+                self._region_solve_stats.get("axis_exact_splitgeometry_used", 0.0) + 1.0
+            )
+        return split_parts
 
     def _polygonize_overlap_by_transition_curve(
         self,
@@ -2158,6 +2172,7 @@ class PlanarControllingOlsEngine:
                 if len(boundary_points) >= 2:
                     linework.append(QgsGeometry.fromPolylineXY(boundary_points))
             for curve_points in self._line_parts(transition_curve):
+                curve_points = self._condition_transition_curve_for_polygonize(curve_points, overlap)
                 if len(curve_points) >= 2:
                     linework.append(QgsGeometry.fromPolylineXY(curve_points))
             linework = [geometry for geometry in linework if geometry is not None and not geometry.isEmpty()]
@@ -2176,6 +2191,134 @@ class PlanarControllingOlsEngine:
                 if self._has_polygon_area(part):
                     faces.append(part)
         return faces if self._split_parts_are_valid(overlap, faces) else []
+
+    def _condition_transition_curve_for_polygonize(
+        self,
+        curve_points: Sequence[QgsPointXY],
+        overlap: QgsGeometry,
+    ) -> List[QgsPointXY]:
+        conditioned = [QgsPointXY(point.x(), point.y()) for point in curve_points]
+        if len(conditioned) < 2 or overlap is None or overlap.isEmpty():
+            return conditioned
+        conditioned[0] = self._condition_transition_curve_endpoint(
+            conditioned[0],
+            conditioned[1],
+            overlap,
+        )
+        conditioned[-1] = self._condition_transition_curve_endpoint(
+            conditioned[-1],
+            conditioned[-2],
+            overlap,
+        )
+        return conditioned
+
+    def _condition_transition_curve_endpoint(
+        self,
+        endpoint: QgsPointXY,
+        adjacent_point: QgsPointXY,
+        overlap: QgsGeometry,
+    ) -> QgsPointXY:
+        nearest_boundary_point, nearest_distance = self._nearest_boundary_point(overlap, endpoint)
+        if (
+            nearest_boundary_point is not None
+            and nearest_distance <= AXIS_CONICAL_CURVE_ENDPOINT_SNAP_TOLERANCE_M
+        ):
+            return nearest_boundary_point
+
+        dx = endpoint.x() - adjacent_point.x()
+        dy = endpoint.y() - adjacent_point.y()
+        length = math.hypot(dx, dy)
+        if length <= 1e-9:
+            return endpoint
+        direction = QgsPointXY(dx / length, dy / length)
+        boundary_point = self._first_boundary_intersection_along_ray(
+            endpoint,
+            direction,
+            overlap,
+            AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M,
+        )
+        if boundary_point is not None:
+            return boundary_point
+        return endpoint
+
+    def _nearest_boundary_point(
+        self,
+        geometry: QgsGeometry,
+        point_xy: QgsPointXY,
+    ) -> Tuple[Optional[QgsPointXY], float]:
+        nearest_point: Optional[QgsPointXY] = None
+        nearest_distance = math.inf
+        for ring in self._polygon_boundary_parts(geometry):
+            for start_point, end_point in zip(ring[:-1], ring[1:]):
+                projected = self._project_point_to_segment(start_point, end_point, point_xy)
+                if projected is None:
+                    continue
+                distance = projected.distance(point_xy)
+                if distance < nearest_distance:
+                    nearest_point = projected
+                    nearest_distance = distance
+        return nearest_point, nearest_distance
+
+    def _project_point_to_segment(
+        self,
+        segment_start: QgsPointXY,
+        segment_end: QgsPointXY,
+        point_xy: QgsPointXY,
+    ) -> Optional[QgsPointXY]:
+        projection = self._point_projection_fraction(segment_start, segment_end, point_xy)
+        if projection is None:
+            return None
+        projection = max(0.0, min(1.0, projection))
+        return QgsPointXY(
+            segment_start.x() + ((segment_end.x() - segment_start.x()) * projection),
+            segment_start.y() + ((segment_end.y() - segment_start.y()) * projection),
+        )
+
+    def _first_boundary_intersection_along_ray(
+        self,
+        origin: QgsPointXY,
+        direction: QgsPointXY,
+        geometry: QgsGeometry,
+        max_distance: float,
+    ) -> Optional[QgsPointXY]:
+        best_t = math.inf
+        best_point: Optional[QgsPointXY] = None
+        for ring in self._polygon_boundary_parts(geometry):
+            for start_point, end_point in zip(ring[:-1], ring[1:]):
+                intersection = self._ray_segment_intersection(origin, direction, start_point, end_point)
+                if intersection is None:
+                    continue
+                t, point_xy = intersection
+                if 1e-6 < t <= max_distance and t < best_t:
+                    best_t = t
+                    best_point = point_xy
+        return best_point
+
+    def _ray_segment_intersection(
+        self,
+        origin: QgsPointXY,
+        direction: QgsPointXY,
+        segment_start: QgsPointXY,
+        segment_end: QgsPointXY,
+    ) -> Optional[Tuple[float, QgsPointXY]]:
+        sx = segment_end.x() - segment_start.x()
+        sy = segment_end.y() - segment_start.y()
+        denominator = (direction.x() * sy) - (direction.y() * sx)
+        if abs(denominator) <= 1e-12:
+            return None
+        ox = segment_start.x() - origin.x()
+        oy = segment_start.y() - origin.y()
+        t = ((ox * sy) - (oy * sx)) / denominator
+        u = ((ox * direction.y()) - (oy * direction.x())) / denominator
+        if t < -1e-9 or u < -1e-9 or u > 1.0 + 1e-9:
+            return None
+        return (
+            t,
+            QgsPointXY(
+                origin.x() + (direction.x() * t),
+                origin.y() + (direction.y() * t),
+            ),
+        )
 
     def _split_polygon_part_by_line(
         self,
