@@ -400,9 +400,6 @@ class PlanarControllingOlsEngine:
             "axis_exact_polygonize_success": 0.0,
             "axis_exact_splitgeometry_used": 0.0,
             "axis_exact_manual_split_used": 0.0,
-            "axis_exact_supplemental_calls": 0.0,
-            "axis_exact_supplemental_success": 0.0,
-            "axis_exact_supplemental_time_s": 0.0,
             "axis_exact_curve_vertices_raw": 0.0,
             "axis_exact_curve_vertices_simplified": 0.0,
             "axis_exact_curve_time_s": 0.0,
@@ -537,9 +534,6 @@ class PlanarControllingOlsEngine:
             f"split_method[polygonize={int(stats.get('axis_exact_polygonize_success', 0.0))}, "
             f"manual={int(stats.get('axis_exact_manual_split_used', 0.0))}, "
             f"splitGeometry={int(stats.get('axis_exact_splitgeometry_used', 0.0))}], "
-            f"supplemental[calls={int(stats.get('axis_exact_supplemental_calls', 0.0))}, "
-            f"success={int(stats.get('axis_exact_supplemental_success', 0.0))}, "
-            f"time={stats.get('axis_exact_supplemental_time_s', 0.0):.2f}s], "
             f"curve_vertices[raw={int(stats.get('axis_exact_curve_vertices_raw', 0.0))}, "
             f"simplified={int(stats.get('axis_exact_curve_vertices_simplified', 0.0))}], "
             f"curve={stats.get('axis_exact_curve_time_s', 0.0):.2f}s, "
@@ -1579,20 +1573,6 @@ class PlanarControllingOlsEngine:
                 if decision == "all_higher":
                     self._record_axis_exact_success(total_start)
                     return QgsGeometry()
-                supplemental_curve = self._axis_conical_supplemental_transition_curve(axis, conical_model, overlap)
-                if supplemental_curve is not None and not supplemental_curve.isEmpty():
-                    supplemental_region = self._axis_conical_region_from_transition_curve(
-                        axis_candidate,
-                        conical_candidate,
-                        overlap,
-                        supplemental_curve,
-                    )
-                    if supplemental_region is not None:
-                        self._region_solve_stats["axis_exact_supplemental_success"] = (
-                            self._region_solve_stats.get("axis_exact_supplemental_success", 0.0) + 1.0
-                        )
-                        self._record_axis_exact_success(total_start)
-                        return supplemental_region
                 return self._record_axis_exact_fallback(total_start, "no_curve_mixed")
 
             combined = self._axis_conical_region_from_transition_curve(
@@ -1602,21 +1582,6 @@ class PlanarControllingOlsEngine:
                 transition_curve,
             )
             if combined is None:
-                supplemental_curve = self._axis_conical_supplemental_transition_curve(axis, conical_model, overlap)
-                if supplemental_curve is not None and not supplemental_curve.isEmpty():
-                    combined_curve = self._combine_linework([transition_curve, supplemental_curve])
-                    supplemental_region = self._axis_conical_region_from_transition_curve(
-                        axis_candidate,
-                        conical_candidate,
-                        overlap,
-                        combined_curve if combined_curve is not None else supplemental_curve,
-                    )
-                    if supplemental_region is not None:
-                        self._region_solve_stats["axis_exact_supplemental_success"] = (
-                            self._region_solve_stats.get("axis_exact_supplemental_success", 0.0) + 1.0
-                        )
-                        self._record_axis_exact_success(total_start)
-                        return supplemental_region
                 return self._record_axis_exact_fallback(total_start, "split_invalid")
             self._record_axis_exact_success(total_start)
             return combined if self._has_polygon_area(combined) else QgsGeometry()
@@ -1747,124 +1712,6 @@ class PlanarControllingOlsEngine:
             return QgsGeometry.unaryUnion(curve_pieces) if len(curve_pieces) > 1 else curve_pieces[0]
         except Exception:
             return curve_pieces[0]
-
-    def _axis_conical_supplemental_transition_curve(
-        self,
-        axis: dict,
-        conical_model: dict,
-        overlap: QgsGeometry,
-    ) -> Optional[QgsGeometry]:
-        self._region_solve_stats["axis_exact_supplemental_calls"] = (
-            self._region_solve_stats.get("axis_exact_supplemental_calls", 0.0) + 1.0
-        )
-        start_time = time.perf_counter()
-        try:
-            station_range = self._axis_station_range(axis, overlap)
-            base_footprint = conical_model.get("base_footprint")
-            conical_slope = float(conical_model.get("slope", 0.0))
-            if station_range is None or base_footprint is None or conical_slope <= 0.0:
-                return None
-            min_station, max_station = station_range
-            if max_station - min_station <= 1e-6:
-                return None
-            a_offset = (float(axis["origin_elevation_m"]) - float(conical_model["base_elevation_m"])) / conical_slope
-            b_slope = float(axis["slope"]) / conical_slope
-            max_distance = conical_model.get("max_distance_m")
-            max_distance = float(max_distance) if max_distance is not None else None
-            bbox = overlap.boundingBox()
-            l_min, l_max = self._axis_lateral_bounds(axis, bbox)
-            lateral_span = max(l_max - l_min, 1.0)
-            station_spacing = max(2.5, min((max_station - min_station) / 100.0, 12.5))
-            lateral_step = max(2.5, min(lateral_span / 120.0, 12.5))
-            stations = {round(min_station, 6), round(max_station, 6)}
-            for ring in self._densified_polygon_boundary_parts(overlap, max_segment_length=10.0):
-                for point_xy in ring:
-                    station = self._axis_station(axis, point_xy)
-                    if min_station - 1e-6 <= station <= max_station + 1e-6:
-                        stations.add(round(max(min_station, min(max_station, station)), 6))
-            station = min_station
-            while station <= max_station + 1e-6:
-                stations.add(round(max(min_station, min(max_station, station)), 6))
-                station += station_spacing
-
-            curves: List[List[QgsPointXY]] = []
-            for station in sorted(stations):
-                required_distance = a_offset + (b_slope * station)
-                if required_distance < -self.tie_tolerance_m:
-                    continue
-                if max_distance is not None and required_distance > max_distance + self.tie_tolerance_m:
-                    continue
-                roots = self._axis_conical_lateral_roots(
-                    axis,
-                    base_footprint,
-                    station,
-                    max(0.0, required_distance),
-                    l_min,
-                    l_max,
-                    lateral_step,
-                )
-                valid_roots = [
-                    point_xy
-                    for point_xy in roots
-                    if self._axis_conical_curve_point_is_valid(
-                        axis,
-                        base_footprint,
-                        point_xy,
-                        a_offset,
-                        b_slope,
-                        max_distance,
-                        overlap,
-                    )
-                ]
-                self._append_axis_conical_station_roots_to_curves(curves, valid_roots)
-            pieces = [
-                QgsGeometry.fromPolylineXY(self._simplify_transition_curve_points(points, AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M))
-                for points in curves
-                if len(points) >= 2
-            ]
-            pieces = [piece for piece in pieces if piece is not None and not piece.isEmpty()]
-            if not pieces:
-                return None
-            return self._combine_linework(pieces)
-        finally:
-            self._region_solve_stats["axis_exact_supplemental_time_s"] = (
-                self._region_solve_stats.get("axis_exact_supplemental_time_s", 0.0)
-                + (time.perf_counter() - start_time)
-            )
-
-    def _append_axis_conical_station_roots_to_curves(
-        self,
-        curves: List[List[QgsPointXY]],
-        roots: Sequence[QgsPointXY],
-    ) -> None:
-        if not roots:
-            return
-        unused_curve_indexes = set(range(len(curves)))
-        for root in roots:
-            best_index: Optional[int] = None
-            best_distance = math.inf
-            for curve_index in list(unused_curve_indexes):
-                curve = curves[curve_index]
-                if not curve:
-                    continue
-                distance = root.distance(curve[-1])
-                if distance < best_distance:
-                    best_distance = distance
-                    best_index = curve_index
-            if best_index is not None and best_distance <= 25.0:
-                curves[best_index].append(root)
-                unused_curve_indexes.remove(best_index)
-            else:
-                curves.append([root])
-
-    def _combine_linework(self, geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
-        linework = [geometry for geometry in geometries if geometry is not None and not geometry.isEmpty()]
-        if not linework:
-            return None
-        try:
-            return QgsGeometry.unaryUnion(linework) if len(linework) > 1 else QgsGeometry(linework[0])
-        except Exception:
-            return QgsGeometry(linework[0])
 
     def _axis_conical_edge_transition_pieces(
         self,
