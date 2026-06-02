@@ -424,7 +424,8 @@ class PlanarControllingOlsEngine:
                 merged = QgsGeometry()
             if not self._has_polygon_area(merged):
                 continue
-            cleaned_merged = self._clean_merged_region_geometry(merged, candidate)
+            source_boundary = self._combined_boundary_geometry(geometries)
+            cleaned_merged = self._clean_merged_region_geometry(merged, candidate, source_boundary)
             if self._has_polygon_area(cleaned_merged):
                 merged_parts.append((candidate, cleaned_merged))
         return merged_parts
@@ -433,6 +434,7 @@ class PlanarControllingOlsEngine:
         self,
         geometry: QgsGeometry,
         candidate: ControllingOlsCandidate,
+        source_boundary: Optional[QgsGeometry] = None,
     ) -> Optional[QgsGeometry]:
         """Clean dissolved same-candidate regions while preserving multipart output."""
         cleaned_parts: List[QgsGeometry] = []
@@ -449,7 +451,9 @@ class PlanarControllingOlsEngine:
             dissolved = QgsGeometry.unaryUnion(cleaned_parts)
         except Exception:
             dissolved = None
-        dissolved = self._finalize_dissolved_region_geometry(dissolved)
+        if source_boundary is None:
+            source_boundary = self._combined_boundary_geometry(cleaned_parts)
+        dissolved = self._finalize_dissolved_region_geometry(dissolved, source_boundary=source_boundary)
         if self._has_polygon_area(dissolved):
             return dissolved
 
@@ -463,20 +467,26 @@ class PlanarControllingOlsEngine:
                 multi_polygon.append(polygon)
         return QgsGeometry.fromMultiPolygonXY(multi_polygon) if multi_polygon else None
 
-    def _finalize_dissolved_region_geometry(self, geometry: Optional[QgsGeometry]) -> Optional[QgsGeometry]:
+    def _finalize_dissolved_region_geometry(
+        self,
+        geometry: Optional[QgsGeometry],
+        source_boundary: Optional[QgsGeometry] = None,
+    ) -> Optional[QgsGeometry]:
         """Collapse shared internal multipart boundaries after same-candidate dissolves."""
         if not self._has_polygon_area(geometry):
             return geometry
-        candidates: List[QgsGeometry] = [geometry]
+        candidates: List[QgsGeometry] = []
+        if not self._introduces_long_new_boundary_segment(geometry, source_boundary):
+            candidates.append(geometry)
         try:
             buffered = geometry.buffer(0.0, 8)
-            if self._has_polygon_area(buffered):
+            if self._has_polygon_area(buffered) and not self._introduces_long_new_boundary_segment(buffered, source_boundary):
                 candidates.append(buffered)
         except Exception:
             pass
         try:
             repaired = geometry.makeValid() if not geometry.isGeosValid() else QgsGeometry(geometry)
-            if self._has_polygon_area(repaired):
+            if self._has_polygon_area(repaired) and not self._introduces_long_new_boundary_segment(repaired, source_boundary):
                 candidates.append(repaired)
         except Exception:
             pass
@@ -486,12 +496,12 @@ class PlanarControllingOlsEngine:
                 segments = CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS
                 closed = geometry.buffer(tolerance, segments).buffer(-tolerance, segments)
                 closed = self._normalised_polygon_geometry(closed)
-                if self._topology_weld_is_acceptable(geometry, closed):
+                if self._topology_weld_is_acceptable(geometry, closed, source_boundary):
                     candidates.append(closed)
             except Exception:
                 pass
 
-        return min(candidates, key=self._polygon_part_count)
+        return min(candidates, key=self._polygon_part_count) if candidates else None
 
     def _polygon_part_count(self, geometry: Optional[QgsGeometry]) -> int:
         parts = self._polygon_parts(geometry)
@@ -517,6 +527,7 @@ class PlanarControllingOlsEngine:
         self,
         original: Optional[QgsGeometry],
         welded: Optional[QgsGeometry],
+        source_boundary: Optional[QgsGeometry] = None,
     ) -> bool:
         if not self._has_polygon_area(original) or not self._has_polygon_area(welded):
             return False
@@ -536,31 +547,45 @@ class PlanarControllingOlsEngine:
         )
         if abs(welded_area - original_area) > allowed_delta:
             return False
-        return not self._weld_introduces_long_new_boundary_segment(original, welded)
+        return not self._introduces_long_new_boundary_segment(welded, source_boundary)
 
-    def _weld_introduces_long_new_boundary_segment(
+    def _introduces_long_new_boundary_segment(
         self,
-        original: QgsGeometry,
-        welded: QgsGeometry,
+        geometry: QgsGeometry,
+        source_boundary: Optional[QgsGeometry],
     ) -> bool:
         """Reject topology welds that shortcut boundaries with new long chords."""
-        original_boundary = self._normalised_boundary_geometry(original)
-        if original_boundary is None or original_boundary.isEmpty():
+        if source_boundary is None or source_boundary.isEmpty():
             return False
         max_new_segment_length = CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M
         distance_tolerance = CONTROLLING_REGION_TOPOLOGY_WELD_M * 2.0
-        for ring in self._polygon_boundary_parts(welded):
+        for ring in self._polygon_boundary_parts(geometry):
             for start_point, end_point in zip(ring, ring[1:]):
                 segment_length = start_point.distance(end_point)
                 if segment_length <= max_new_segment_length:
                     continue
-                segment = QgsGeometry.fromPolylineXY([start_point, end_point])
-                try:
-                    if segment.distance(original_boundary) > distance_tolerance:
-                        return True
-                except Exception:
-                    continue
+                if self._segment_has_sample_away_from_boundary(
+                    start_point,
+                    end_point,
+                    source_boundary,
+                    distance_tolerance,
+                ):
+                    return True
         return False
+
+    def _combined_boundary_geometry(self, geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
+        boundaries: List[QgsGeometry] = []
+        for geometry in geometries:
+            boundary = self._normalised_boundary_geometry(geometry)
+            if boundary is not None and not boundary.isEmpty():
+                boundaries.append(boundary)
+        if not boundaries:
+            return None
+        try:
+            combined = QgsGeometry.unaryUnion(boundaries) if len(boundaries) > 1 else QgsGeometry(boundaries[0])
+        except Exception:
+            combined = QgsGeometry(boundaries[0])
+        return combined if combined is not None and not combined.isEmpty() else None
 
     def _normalised_boundary_geometry(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
         try:
@@ -570,6 +595,25 @@ class PlanarControllingOlsEngine:
         if boundary is None or boundary.isEmpty():
             return None
         return boundary
+
+    def _segment_has_sample_away_from_boundary(
+        self,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+        boundary: QgsGeometry,
+        distance_tolerance: float,
+    ) -> bool:
+        for fraction in (0.25, 0.5, 0.75):
+            sample = QgsPointXY(
+                start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+                start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+            )
+            try:
+                if QgsGeometry.fromPointXY(sample).distance(boundary) > distance_tolerance:
+                    return True
+            except Exception:
+                continue
+        return False
 
     def _unresolved_comparison_removes_candidate(
         self,
