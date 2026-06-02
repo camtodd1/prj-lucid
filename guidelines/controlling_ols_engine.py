@@ -34,6 +34,7 @@ AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
 AXIS_CONICAL_VERTEX_CURVE_STATION_STEP_M = 5.0
 AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M = 0.5
+AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M = 0.5
 AXIS_CONICAL_CURVE_ENDPOINT_SNAP_TOLERANCE_M = 2.0
 AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M = 25.0
 
@@ -398,6 +399,8 @@ class PlanarControllingOlsEngine:
             "axis_exact_exception": 0.0,
             "axis_exact_polygonize_success": 0.0,
             "axis_exact_splitgeometry_used": 0.0,
+            "axis_exact_curve_vertices_raw": 0.0,
+            "axis_exact_curve_vertices_simplified": 0.0,
             "axis_exact_curve_time_s": 0.0,
             "axis_exact_split_time_s": 0.0,
             "axis_exact_classify_time_s": 0.0,
@@ -529,6 +532,8 @@ class PlanarControllingOlsEngine:
             f"exception={int(stats.get('axis_exact_exception', 0.0))}], "
             f"split_method[polygonize={int(stats.get('axis_exact_polygonize_success', 0.0))}, "
             f"splitGeometry={int(stats.get('axis_exact_splitgeometry_used', 0.0))}], "
+            f"curve_vertices[raw={int(stats.get('axis_exact_curve_vertices_raw', 0.0))}, "
+            f"simplified={int(stats.get('axis_exact_curve_vertices_simplified', 0.0))}], "
             f"curve={stats.get('axis_exact_curve_time_s', 0.0):.2f}s, "
             f"split={stats.get('axis_exact_split_time_s', 0.0):.2f}s, "
             f"classify={stats.get('axis_exact_classify_time_s', 0.0):.2f}s, "
@@ -2172,6 +2177,18 @@ class PlanarControllingOlsEngine:
                 if len(boundary_points) >= 2:
                     linework.append(QgsGeometry.fromPolylineXY(boundary_points))
             for curve_points in self._line_parts(transition_curve):
+                self._region_solve_stats["axis_exact_curve_vertices_raw"] = (
+                    self._region_solve_stats.get("axis_exact_curve_vertices_raw", 0.0)
+                    + float(len(curve_points))
+                )
+                curve_points = self._simplify_transition_curve_points(
+                    curve_points,
+                    AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
+                )
+                self._region_solve_stats["axis_exact_curve_vertices_simplified"] = (
+                    self._region_solve_stats.get("axis_exact_curve_vertices_simplified", 0.0)
+                    + float(len(curve_points))
+                )
                 curve_points = self._condition_transition_curve_for_polygonize(curve_points, overlap)
                 if len(curve_points) >= 2:
                     linework.append(QgsGeometry.fromPolylineXY(curve_points))
@@ -2191,6 +2208,35 @@ class PlanarControllingOlsEngine:
                 if self._has_polygon_area(part):
                     faces.append(part)
         return faces if self._split_parts_are_valid(overlap, faces) else []
+
+    def _simplify_transition_curve_points(
+        self,
+        curve_points: Sequence[QgsPointXY],
+        tolerance_m: float,
+    ) -> List[QgsPointXY]:
+        points = [QgsPointXY(point.x(), point.y()) for point in curve_points]
+        if len(points) <= 2 or tolerance_m <= 0.0:
+            return points
+        keep_indexes = {0, len(points) - 1}
+        stack: List[Tuple[int, int]] = [(0, len(points) - 1)]
+        while stack:
+            start_index, end_index = stack.pop()
+            if end_index - start_index <= 1:
+                continue
+            start_point = points[start_index]
+            end_point = points[end_index]
+            max_distance = -1.0
+            max_index: Optional[int] = None
+            for index in range(start_index + 1, end_index):
+                distance = self._point_to_segment_distance(points[index], start_point, end_point)
+                if distance > max_distance:
+                    max_distance = distance
+                    max_index = index
+            if max_index is not None and max_distance > tolerance_m:
+                keep_indexes.add(max_index)
+                stack.append((start_index, max_index))
+                stack.append((max_index, end_index))
+        return [points[index] for index in sorted(keep_indexes)]
 
     def _condition_transition_curve_for_polygonize(
         self,
