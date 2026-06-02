@@ -1447,15 +1447,7 @@ class PlanarControllingOlsEngine:
                 self._region_solve_stats.get("axis_triangulated_bands", 0.0) + 1.0
             )
             triangulation_start = time.perf_counter()
-            lower_band = self._triangulated_candidate_lower_region(
-                axis_candidate,
-                conical_candidate,
-                station_band,
-                boundary_max_segment_length=25.0,
-                grid_divisions=18.0,
-                grid_min_spacing=25.0,
-                grid_max_spacing=80.0,
-            )
+            lower_band = self._triangulated_candidate_lower_region(axis_candidate, conical_candidate, station_band)
             self._region_solve_stats["axis_band_triangulation_time_s"] = (
                 self._region_solve_stats.get("axis_band_triangulation_time_s", 0.0)
                 + (time.perf_counter() - triangulation_start)
@@ -1637,20 +1629,10 @@ class PlanarControllingOlsEngine:
         candidate: ControllingOlsCandidate,
         competitor: ControllingOlsCandidate,
         geometry: QgsGeometry,
-        boundary_max_segment_length: float = 15.0,
-        grid_divisions: float = 35.0,
-        grid_min_spacing: float = 15.0,
-        grid_max_spacing: float = 60.0,
     ) -> Optional[QgsGeometry]:
         start_time = time.perf_counter()
         try:
-            points = self._triangulation_sample_points(
-                geometry,
-                boundary_max_segment_length=boundary_max_segment_length,
-                grid_divisions=grid_divisions,
-                grid_min_spacing=grid_min_spacing,
-                grid_max_spacing=grid_max_spacing,
-            )
+            points = self._triangulation_sample_points(geometry)
             point_count = len(points)
             self._region_solve_stats["triangulation_calls"] = (
                 self._region_solve_stats.get("triangulation_calls", 0.0) + 1.0
@@ -1800,10 +1782,6 @@ class PlanarControllingOlsEngine:
     def _triangulation_sample_points(
         self,
         geometry: QgsGeometry,
-        boundary_max_segment_length: float = 15.0,
-        grid_divisions: float = 35.0,
-        grid_min_spacing: float = 15.0,
-        grid_max_spacing: float = 60.0,
     ) -> List[QgsPointXY]:
         points: List[QgsPointXY] = []
         seen = set()
@@ -1815,18 +1793,12 @@ class PlanarControllingOlsEngine:
             seen.add(key)
             points.append(point_xy)
 
-        for ring_points in self._densified_polygon_boundary_parts(
-            geometry,
-            max_segment_length=max(1.0, float(boundary_max_segment_length)),
-        ):
+        for ring_points in self._densified_polygon_boundary_parts(geometry, max_segment_length=15.0):
             for point_xy in ring_points:
                 _add(point_xy)
         try:
             bbox = geometry.boundingBox()
-            spacing = max(
-                float(grid_min_spacing),
-                min(max(bbox.width(), bbox.height()) / max(1.0, float(grid_divisions)), float(grid_max_spacing)),
-            )
+            spacing = max(15.0, min(max(bbox.width(), bbox.height()) / 35.0, 60.0))
             x = bbox.xMinimum()
             while x <= bbox.xMaximum() + 1e-6:
                 y = bbox.yMinimum()
