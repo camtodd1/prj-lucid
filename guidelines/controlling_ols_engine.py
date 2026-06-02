@@ -27,6 +27,7 @@ CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS = 8
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2 = 0.05
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-10
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M = 50.0
+CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -771,7 +772,10 @@ class PlanarControllingOlsEngine:
         if geometry is None or geometry.isEmpty():
             return []
         candidates = []
-        despiked = self._despiked_polygon_geometry(geometry)
+        opened = self._open_boundary_touching_holes_geometry(geometry)
+        if opened is not None and not opened.isEmpty():
+            candidates.append(opened)
+        despiked = self._despiked_polygon_geometry(opened if opened is not None else geometry)
         if despiked is not None and not despiked.isEmpty():
             candidates.append(despiked)
         candidates.append(geometry)
@@ -827,6 +831,171 @@ class PlanarControllingOlsEngine:
         if len(cleaned_parts) == 1:
             return QgsGeometry.fromPolygonXY(cleaned_parts[0])
         return QgsGeometry.fromMultiPolygonXY(cleaned_parts)
+
+    def _open_boundary_touching_holes_geometry(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
+        """Convert holes touching an exterior edge into open notches."""
+        changed = False
+        rebuilt_polygons = []
+        try:
+            polygons = geometry.asMultiPolygon() if geometry.isMultipart() else [geometry.asPolygon()]
+        except Exception:
+            return None
+        for polygon in polygons:
+            if not polygon or not polygon[0]:
+                continue
+            exterior = list(polygon[0])
+            remaining_holes = []
+            for hole in polygon[1:]:
+                opened_exterior = self._open_boundary_touching_hole(exterior, list(hole))
+                if opened_exterior is None:
+                    remaining_holes.append(list(hole))
+                    continue
+                exterior = opened_exterior
+                changed = True
+            rebuilt_polygons.append([exterior] + remaining_holes)
+        if not changed or not rebuilt_polygons:
+            return None
+        if len(rebuilt_polygons) == 1:
+            return QgsGeometry.fromPolygonXY(rebuilt_polygons[0])
+        return QgsGeometry.fromMultiPolygonXY(rebuilt_polygons)
+
+    def _open_boundary_touching_hole(
+        self,
+        exterior_ring: Sequence[QgsPointXY],
+        hole_ring: Sequence[QgsPointXY],
+    ) -> Optional[List[QgsPointXY]]:
+        exterior_points = list(exterior_ring[:-1]) if exterior_ring and exterior_ring[0].distance(exterior_ring[-1]) <= 1e-9 else list(exterior_ring)
+        hole_points = list(hole_ring[:-1]) if hole_ring and hole_ring[0].distance(hole_ring[-1]) <= 1e-9 else list(hole_ring)
+        if len(exterior_points) < 3 or len(hole_points) < 3:
+            return None
+
+        for exterior_index, start_point in enumerate(exterior_points):
+            end_point = exterior_points[(exterior_index + 1) % len(exterior_points)]
+            segment_length = start_point.distance(end_point)
+            if segment_length <= CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M:
+                continue
+            for hole_index, hole_start in enumerate(hole_points):
+                hole_end = hole_points[(hole_index + 1) % len(hole_points)]
+                start_projection = self._point_projection_fraction(start_point, end_point, hole_start)
+                end_projection = self._point_projection_fraction(start_point, end_point, hole_end)
+                if start_projection is None or end_projection is None:
+                    continue
+                if not self._point_lies_on_segment(start_point, end_point, hole_start, start_projection):
+                    continue
+                if not self._point_lies_on_segment(start_point, end_point, hole_end, end_projection):
+                    continue
+                if abs(start_projection - end_projection) * segment_length <= CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M:
+                    continue
+                if start_projection <= end_projection:
+                    notch_start = hole_start
+                    notch_end = hole_end
+                    notch_path = self._indirect_ring_path(hole_points, hole_index, (hole_index + 1) % len(hole_points))
+                else:
+                    notch_start = hole_end
+                    notch_end = hole_start
+                    notch_path = self._indirect_ring_path(hole_points, (hole_index + 1) % len(hole_points), hole_index)
+                opened = self._replace_exterior_segment_with_notch(
+                    exterior_points,
+                    exterior_index,
+                    notch_start,
+                    notch_path,
+                    notch_end,
+                )
+                if opened is not None and len(opened) >= 4:
+                    return opened
+        return None
+
+    def _replace_exterior_segment_with_notch(
+        self,
+        exterior_points: Sequence[QgsPointXY],
+        exterior_index: int,
+        notch_start: QgsPointXY,
+        notch_path: Sequence[QgsPointXY],
+        notch_end: QgsPointXY,
+    ) -> Optional[List[QgsPointXY]]:
+        if not notch_path:
+            return None
+        rebuilt: List[QgsPointXY] = []
+        point_count = len(exterior_points)
+        for index in range(point_count):
+            point = exterior_points[index]
+            if not rebuilt or rebuilt[-1].distance(point) > 1e-9:
+                rebuilt.append(point)
+            if index != exterior_index:
+                continue
+            if rebuilt[-1].distance(notch_start) > 1e-9:
+                rebuilt.append(QgsPointXY(notch_start))
+            for notch_point in notch_path[1:]:
+                if rebuilt[-1].distance(notch_point) > 1e-9:
+                    rebuilt.append(QgsPointXY(notch_point))
+            if rebuilt[-1].distance(notch_end) > 1e-9:
+                rebuilt.append(QgsPointXY(notch_end))
+            next_exterior = exterior_points[(index + 1) % point_count]
+            if rebuilt[-1].distance(next_exterior) > 1e-9:
+                rebuilt.append(QgsPointXY(next_exterior))
+        if rebuilt and rebuilt[0].distance(rebuilt[-1]) > 1e-9:
+            rebuilt.append(rebuilt[0])
+        return rebuilt
+
+    def _indirect_ring_path(
+        self,
+        ring_points: Sequence[QgsPointXY],
+        start_index: int,
+        end_index: int,
+    ) -> List[QgsPointXY]:
+        forward = self._ring_path(ring_points, start_index, end_index)
+        backward = self._ring_path(ring_points, end_index, start_index)
+        backward = list(reversed(backward))
+        return max((forward, backward), key=self._path_length)
+
+    def _ring_path(
+        self,
+        ring_points: Sequence[QgsPointXY],
+        start_index: int,
+        end_index: int,
+    ) -> List[QgsPointXY]:
+        if not ring_points:
+            return []
+        path = [QgsPointXY(ring_points[start_index])]
+        index = start_index
+        while index != end_index:
+            index = (index + 1) % len(ring_points)
+            path.append(QgsPointXY(ring_points[index]))
+            if len(path) > len(ring_points) + 1:
+                return []
+        return path
+
+    def _path_length(self, points: Sequence[QgsPointXY]) -> float:
+        return sum(start.distance(end) for start, end in zip(points, points[1:]))
+
+    def _point_projection_fraction(
+        self,
+        segment_start: QgsPointXY,
+        segment_end: QgsPointXY,
+        point: QgsPointXY,
+    ) -> Optional[float]:
+        dx = segment_end.x() - segment_start.x()
+        dy = segment_end.y() - segment_start.y()
+        length_squared = (dx * dx) + (dy * dy)
+        if length_squared <= 1e-12:
+            return None
+        return (((point.x() - segment_start.x()) * dx) + ((point.y() - segment_start.y()) * dy)) / length_squared
+
+    def _point_lies_on_segment(
+        self,
+        segment_start: QgsPointXY,
+        segment_end: QgsPointXY,
+        point: QgsPointXY,
+        projection_fraction: float,
+    ) -> bool:
+        tolerance = CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M
+        if projection_fraction < -1e-6 or projection_fraction > 1.0 + 1e-6:
+            return False
+        projected = QgsPointXY(
+            segment_start.x() + ((segment_end.x() - segment_start.x()) * projection_fraction),
+            segment_start.y() + ((segment_end.y() - segment_start.y()) * projection_fraction),
+        )
+        return projected.distance(point) <= tolerance
 
     def _despiked_ring(self, ring: List[QgsPointXY]) -> Tuple[List[QgsPointXY], bool]:
         if len(ring) < 4:
