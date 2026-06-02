@@ -444,6 +444,7 @@ class PlanarControllingOlsEngine:
             dissolved = QgsGeometry.unaryUnion(cleaned_parts)
         except Exception:
             dissolved = None
+        dissolved = self._finalize_dissolved_region_geometry(dissolved)
         if self._has_polygon_area(dissolved):
             return dissolved
 
@@ -456,6 +457,54 @@ class PlanarControllingOlsEngine:
             if polygon:
                 multi_polygon.append(polygon)
         return QgsGeometry.fromMultiPolygonXY(multi_polygon) if multi_polygon else None
+
+    def _finalize_dissolved_region_geometry(self, geometry: Optional[QgsGeometry]) -> Optional[QgsGeometry]:
+        """Collapse shared internal multipart boundaries after same-candidate dissolves."""
+        if not self._has_polygon_area(geometry):
+            return geometry
+        candidates: List[QgsGeometry] = [geometry]
+        try:
+            buffered = geometry.buffer(0.0, 8)
+            if self._has_polygon_area(buffered):
+                candidates.append(buffered)
+        except Exception:
+            pass
+        try:
+            repaired = geometry.makeValid() if not geometry.isGeosValid() else QgsGeometry(geometry)
+            if self._has_polygon_area(repaired):
+                candidates.append(repaired)
+        except Exception:
+            pass
+        if self._multipart_members_touch(geometry):
+            try:
+                tolerance = 0.01
+                closed = geometry.buffer(tolerance, 8).buffer(-tolerance, 8)
+                if self._has_polygon_area(closed):
+                    candidates.append(closed)
+            except Exception:
+                pass
+
+        return min(candidates, key=self._polygon_part_count)
+
+    def _multipart_members_touch(self, geometry: Optional[QgsGeometry]) -> bool:
+        parts = self._polygon_parts(geometry)
+        if len(parts) < 2:
+            return False
+        for index, first_part in enumerate(parts):
+            for second_part in parts[index + 1 :]:
+                try:
+                    if first_part.overlaps(second_part):
+                        return True
+                    intersection = first_part.intersection(second_part)
+                    if intersection is not None and not intersection.isEmpty() and intersection.length() > 1e-6:
+                        return True
+                except Exception:
+                    continue
+        return False
+
+    def _polygon_part_count(self, geometry: Optional[QgsGeometry]) -> int:
+        parts = self._polygon_parts(geometry)
+        return len(parts) if parts else 999999
 
     def _unresolved_comparison_removes_candidate(
         self,
