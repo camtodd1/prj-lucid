@@ -440,6 +440,7 @@ class PlanarControllingOlsEngine:
             return None
         if len(cleaned_parts) == 1:
             return cleaned_parts[0]
+        cleaned_parts.extend(self._same_surface_seam_fillers(cleaned_parts))
         try:
             dissolved = QgsGeometry.unaryUnion(cleaned_parts)
         except Exception:
@@ -505,6 +506,115 @@ class PlanarControllingOlsEngine:
     def _polygon_part_count(self, geometry: Optional[QgsGeometry]) -> int:
         parts = self._polygon_parts(geometry)
         return len(parts) if parts else 999999
+
+    def _same_surface_seam_fillers(self, parts: Sequence[QgsGeometry]) -> List[QgsGeometry]:
+        """Create small filler polygons for same-surface parts split by duplicate seam chains."""
+        fillers: List[QgsGeometry] = []
+        rings = [self._outer_ring_points(part) for part in parts]
+        for first_index, first_ring in enumerate(rings):
+            if len(first_ring) < 4:
+                continue
+            for second_ring in rings[first_index + 1 :]:
+                if len(second_ring) < 4:
+                    continue
+                fillers.extend(self._ring_seam_fillers(first_ring, second_ring))
+        return fillers
+
+    def _outer_ring_points(self, geometry: QgsGeometry) -> List[QgsPointXY]:
+        try:
+            polygon = geometry.asPolygon()
+        except Exception:
+            polygon = []
+        return list(polygon[0]) if polygon else []
+
+    def _ring_seam_fillers(
+        self,
+        first_ring: Sequence[QgsPointXY],
+        second_ring: Sequence[QgsPointXY],
+    ) -> List[QgsGeometry]:
+        first_index_by_key = self._ring_vertex_index(first_ring)
+        second_index_by_key = self._ring_vertex_index(second_ring)
+        shared_keys = sorted(set(first_index_by_key).intersection(second_index_by_key))
+        if len(shared_keys) < 2:
+            return []
+
+        fillers: List[QgsGeometry] = []
+        seen_pairs = set()
+        for first_key_index, start_key in enumerate(shared_keys):
+            for end_key in shared_keys[first_key_index + 1 :]:
+                pair_key = (start_key, end_key)
+                if pair_key in seen_pairs:
+                    continue
+                seen_pairs.add(pair_key)
+                filler = self._smallest_ring_gap_filler(
+                    first_ring,
+                    first_index_by_key[start_key],
+                    first_index_by_key[end_key],
+                    second_ring,
+                    second_index_by_key[start_key],
+                    second_index_by_key[end_key],
+                )
+                if self._has_polygon_area(filler):
+                    fillers.append(filler)
+        return fillers
+
+    def _ring_vertex_index(self, ring: Sequence[QgsPointXY]) -> Dict[Tuple[int, int], int]:
+        index_by_key: Dict[Tuple[int, int], int] = {}
+        points = ring[:-1] if ring and ring[0].distance(ring[-1]) <= 1e-9 else ring
+        for index, point in enumerate(points):
+            index_by_key.setdefault(self._rounded_point_key(point, scale=1000.0), index)
+        return index_by_key
+
+    def _smallest_ring_gap_filler(
+        self,
+        first_ring: Sequence[QgsPointXY],
+        first_start: int,
+        first_end: int,
+        second_ring: Sequence[QgsPointXY],
+        second_start: int,
+        second_end: int,
+    ) -> Optional[QgsGeometry]:
+        candidate_fillers: List[QgsGeometry] = []
+        for first_path in self._ring_paths_between(first_ring, first_start, first_end):
+            for second_path in self._ring_paths_between(second_ring, second_start, second_end):
+                if len(first_path) < 2 or len(second_path) < 2:
+                    continue
+                filler_ring = list(first_path) + list(reversed(second_path))[1:-1]
+                if len(filler_ring) < 3:
+                    continue
+                if filler_ring[0].distance(filler_ring[-1]) > 1e-9:
+                    filler_ring.append(filler_ring[0])
+                if abs(self._ring_signed_area(filler_ring)) <= 1e-3:
+                    continue
+                try:
+                    filler = QgsGeometry.fromPolygonXY([filler_ring])
+                except Exception:
+                    continue
+                if self._has_polygon_area(filler):
+                    candidate_fillers.append(filler)
+        if not candidate_fillers:
+            return None
+        return min(candidate_fillers, key=lambda geometry: geometry.area())
+
+    def _ring_paths_between(
+        self,
+        ring: Sequence[QgsPointXY],
+        start_index: int,
+        end_index: int,
+    ) -> Tuple[List[QgsPointXY], List[QgsPointXY]]:
+        points = list(ring[:-1]) if ring and ring[0].distance(ring[-1]) <= 1e-9 else list(ring)
+        if not points:
+            return [], []
+        if start_index <= end_index:
+            forward = points[start_index : end_index + 1]
+            backward = points[end_index:] + points[: start_index + 1]
+        else:
+            forward = points[start_index:] + points[: end_index + 1]
+            backward = points[end_index : start_index + 1]
+        return forward, list(reversed(backward))
+
+    def _rounded_point_key(self, point: QgsPointXY, scale: float = 1000.0) -> Tuple[int, int]:
+        return (int(round(point.x() * scale)), int(round(point.y() * scale)))
 
     def _unresolved_comparison_removes_candidate(
         self,
