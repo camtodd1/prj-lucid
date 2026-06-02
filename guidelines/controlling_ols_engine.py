@@ -399,6 +399,7 @@ class PlanarControllingOlsEngine:
             "axis_exact_exception": 0.0,
             "axis_exact_polygonize_success": 0.0,
             "axis_exact_splitgeometry_used": 0.0,
+            "axis_exact_manual_split_used": 0.0,
             "axis_exact_curve_vertices_raw": 0.0,
             "axis_exact_curve_vertices_simplified": 0.0,
             "axis_exact_curve_time_s": 0.0,
@@ -531,6 +532,7 @@ class PlanarControllingOlsEngine:
             f"union_failed={int(stats.get('axis_exact_union_failed', 0.0))}, "
             f"exception={int(stats.get('axis_exact_exception', 0.0))}], "
             f"split_method[polygonize={int(stats.get('axis_exact_polygonize_success', 0.0))}, "
+            f"manual={int(stats.get('axis_exact_manual_split_used', 0.0))}, "
             f"splitGeometry={int(stats.get('axis_exact_splitgeometry_used', 0.0))}], "
             f"curve_vertices[raw={int(stats.get('axis_exact_curve_vertices_raw', 0.0))}, "
             f"simplified={int(stats.get('axis_exact_curve_vertices_simplified', 0.0))}], "
@@ -2148,6 +2150,13 @@ class PlanarControllingOlsEngine:
             )
             return polygonized_parts
 
+        manual_parts = self._manual_split_overlap_by_transition_curve(overlap, transition_curve)
+        if manual_parts:
+            self._region_solve_stats["axis_exact_manual_split_used"] = (
+                self._region_solve_stats.get("axis_exact_manual_split_used", 0.0) + 1.0
+            )
+            return manual_parts
+
         parts = self._polygon_parts(overlap)
         for line_points in self._line_parts(transition_curve):
             if len(line_points) < 2:
@@ -2208,6 +2217,155 @@ class PlanarControllingOlsEngine:
                 if self._has_polygon_area(part):
                     faces.append(part)
         return faces if self._split_parts_are_valid(overlap, faces) else []
+
+    def _manual_split_overlap_by_transition_curve(
+        self,
+        overlap: QgsGeometry,
+        transition_curve: QgsGeometry,
+    ) -> List[QgsGeometry]:
+        parts = self._polygon_parts(overlap)
+        if not parts:
+            return []
+        for curve_points in self._line_parts(transition_curve):
+            if len(curve_points) < 2:
+                continue
+            curve_points = self._simplify_transition_curve_points(
+                curve_points,
+                AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
+            )
+            curve_points = self._condition_transition_curve_for_polygonize(curve_points, overlap)
+            next_parts: List[QgsGeometry] = []
+            changed = False
+            for part in parts:
+                split_parts = self._manual_split_polygon_part_by_curve(part, curve_points)
+                if split_parts:
+                    next_parts.extend(split_parts)
+                    changed = True
+                else:
+                    next_parts.append(part)
+            if changed:
+                parts = next_parts
+        parts = [part for part in parts if self._has_polygon_area(part)]
+        return parts if self._split_parts_are_valid(overlap, parts) else []
+
+    def _manual_split_polygon_part_by_curve(
+        self,
+        polygon: QgsGeometry,
+        curve_points: Sequence[QgsPointXY],
+    ) -> List[QgsGeometry]:
+        if polygon is None or polygon.isEmpty() or len(curve_points) < 2:
+            return []
+        try:
+            if polygon.isMultipart():
+                return []
+            polygon_rings = polygon.asPolygon()
+        except Exception:
+            return []
+        if not polygon_rings or not polygon_rings[0] or len(polygon_rings) > 1:
+            return []
+        exterior = (
+            list(polygon_rings[0][:-1])
+            if polygon_rings[0][0].distance(polygon_rings[0][-1]) <= 1e-9
+            else list(polygon_rings[0])
+        )
+        if len(exterior) < 3:
+            return []
+        start_location = self._ring_location_for_point(exterior, curve_points[0])
+        end_location = self._ring_location_for_point(exterior, curve_points[-1])
+        if start_location is None or end_location is None:
+            return []
+        if start_location[0] == end_location[0] and abs(start_location[1] - end_location[1]) <= 1e-6:
+            return []
+        forward_boundary = self._ring_path_between_locations(exterior, start_location, end_location)
+        backward_boundary = self._ring_path_between_locations(exterior, end_location, start_location)
+        if len(forward_boundary) < 2 or len(backward_boundary) < 2:
+            return []
+        curve_forward = [QgsPointXY(point.x(), point.y()) for point in curve_points]
+        curve_backward = list(reversed(curve_forward))
+        first_ring = self._closed_ring_from_paths(forward_boundary, curve_backward)
+        second_ring = self._closed_ring_from_paths(backward_boundary, curve_forward)
+        split_parts: List[QgsGeometry] = []
+        for ring in (first_ring, second_ring):
+            if len(ring) < 4:
+                continue
+            geom = QgsGeometry.fromPolygonXY([ring])
+            if geom is None or not self._has_polygon_area(geom):
+                continue
+            try:
+                geom = geom.intersection(polygon)
+            except Exception:
+                return []
+            for part in self._polygon_parts(geom):
+                if self._has_polygon_area(part):
+                    split_parts.append(part)
+        return split_parts if self._split_parts_are_valid(polygon, split_parts) else []
+
+    def _ring_location_for_point(
+        self,
+        ring_points: Sequence[QgsPointXY],
+        point_xy: QgsPointXY,
+    ) -> Optional[Tuple[int, float, QgsPointXY]]:
+        best_location: Optional[Tuple[int, float, QgsPointXY]] = None
+        best_distance = math.inf
+        point_count = len(ring_points)
+        for index in range(point_count):
+            start_point = ring_points[index]
+            end_point = ring_points[(index + 1) % point_count]
+            projection = self._point_projection_fraction(start_point, end_point, point_xy)
+            if projection is None:
+                continue
+            clamped_projection = max(0.0, min(1.0, projection))
+            projected = QgsPointXY(
+                start_point.x() + ((end_point.x() - start_point.x()) * clamped_projection),
+                start_point.y() + ((end_point.y() - start_point.y()) * clamped_projection),
+            )
+            distance = projected.distance(point_xy)
+            if distance < best_distance:
+                best_distance = distance
+                best_location = (index, clamped_projection, projected)
+        if best_distance > max(AXIS_CONICAL_CURVE_ENDPOINT_SNAP_TOLERANCE_M, CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M):
+            return None
+        return best_location
+
+    def _ring_path_between_locations(
+        self,
+        ring_points: Sequence[QgsPointXY],
+        start_location: Tuple[int, float, QgsPointXY],
+        end_location: Tuple[int, float, QgsPointXY],
+    ) -> List[QgsPointXY]:
+        point_count = len(ring_points)
+        if point_count < 3:
+            return []
+        start_segment, _, start_point = start_location
+        end_segment, _, end_point = end_location
+        path = [QgsPointXY(start_point)]
+        index = (start_segment + 1) % point_count
+        guard = 0
+        while index != (end_segment + 1) % point_count:
+            candidate = ring_points[index]
+            if path[-1].distance(candidate) > 1e-9:
+                path.append(QgsPointXY(candidate))
+            index = (index + 1) % point_count
+            guard += 1
+            if guard > point_count + 1:
+                return []
+        if path[-1].distance(end_point) > 1e-9:
+            path.append(QgsPointXY(end_point))
+        return path
+
+    def _closed_ring_from_paths(
+        self,
+        first_path: Sequence[QgsPointXY],
+        second_path: Sequence[QgsPointXY],
+    ) -> List[QgsPointXY]:
+        ring: List[QgsPointXY] = []
+        for point in list(first_path) + list(second_path):
+            point_xy = QgsPointXY(point.x(), point.y())
+            if not ring or ring[-1].distance(point_xy) > 1e-9:
+                ring.append(point_xy)
+        if ring and ring[0].distance(ring[-1]) > 1e-9:
+            ring.append(QgsPointXY(ring[0]))
+        return ring
 
     def _simplify_transition_curve_points(
         self,
