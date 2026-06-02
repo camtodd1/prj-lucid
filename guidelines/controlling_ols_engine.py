@@ -368,6 +368,8 @@ class PlanarControllingOlsEngine:
                     competitor_footprint = self._effective_footprint(competitor)
                     if competitor_footprint is None or competitor_footprint.isEmpty():
                         continue
+                    if not self._bounding_boxes_intersect(region, competitor_footprint):
+                        continue
                     overlap = region.intersection(competitor_footprint)
                 except Exception:
                     overlap = None
@@ -677,7 +679,10 @@ class PlanarControllingOlsEngine:
         repaired_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
             try:
-                candidate_region = gap_geometry.intersection(self._effective_footprint(candidate))
+                candidate_footprint = self._effective_footprint(candidate)
+                if not self._bounding_boxes_intersect(gap_geometry, candidate_footprint):
+                    continue
+                candidate_region = gap_geometry.intersection(candidate_footprint)
             except Exception:
                 candidate_region = None
             if not self._has_polygon_area(candidate_region):
@@ -688,7 +693,10 @@ class PlanarControllingOlsEngine:
                 if candidate_region is None or candidate_region.isEmpty():
                     break
                 try:
-                    overlap = candidate_region.intersection(self._effective_footprint(competitor))
+                    competitor_footprint = self._effective_footprint(competitor)
+                    if not self._bounding_boxes_intersect(candidate_region, competitor_footprint):
+                        continue
+                    overlap = candidate_region.intersection(competitor_footprint)
                 except Exception:
                     overlap = None
                 if not self._has_polygon_area(overlap):
@@ -1685,6 +1693,8 @@ class PlanarControllingOlsEngine:
         second_candidate: ControllingOlsCandidate,
     ) -> List[QgsGeometry]:
         try:
+            if not self._bounding_boxes_intersect(first_candidate.footprint, second_candidate.footprint):
+                return []
             overlap = first_candidate.footprint.intersection(second_candidate.footprint)
         except Exception:
             overlap = None
@@ -1849,6 +1859,14 @@ class PlanarControllingOlsEngine:
         except Exception:
             return False
         return False
+
+    def _bounding_boxes_intersect(self, first: Optional[QgsGeometry], second: Optional[QgsGeometry]) -> bool:
+        if first is None or second is None or first.isEmpty() or second.isEmpty():
+            return False
+        try:
+            return bool(first.boundingBox().intersects(second.boundingBox()))
+        except Exception:
+            return True
 
     def _point_on_line_near_geometry(
         self,
