@@ -25,7 +25,8 @@ PLUGIN_TAG = "SafeguardingBuilder"
 CONTROLLING_REGION_TOPOLOGY_WELD_M = 0.01
 CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS = 8
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2 = 0.05
-CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-8
+CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-10
+CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M = 50.0
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -533,7 +534,42 @@ class PlanarControllingOlsEngine:
             CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2,
             original_area * CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO,
         )
-        return abs(welded_area - original_area) <= allowed_delta
+        if abs(welded_area - original_area) > allowed_delta:
+            return False
+        return not self._weld_introduces_long_new_boundary_segment(original, welded)
+
+    def _weld_introduces_long_new_boundary_segment(
+        self,
+        original: QgsGeometry,
+        welded: QgsGeometry,
+    ) -> bool:
+        """Reject topology welds that shortcut boundaries with new long chords."""
+        original_boundary = self._normalised_boundary_geometry(original)
+        if original_boundary is None or original_boundary.isEmpty():
+            return False
+        max_new_segment_length = CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M
+        distance_tolerance = CONTROLLING_REGION_TOPOLOGY_WELD_M * 2.0
+        for ring in self._polygon_boundary_parts(welded):
+            for start_point, end_point in zip(ring, ring[1:]):
+                segment_length = start_point.distance(end_point)
+                if segment_length <= max_new_segment_length:
+                    continue
+                segment = QgsGeometry.fromPolylineXY([start_point, end_point])
+                try:
+                    if segment.distance(original_boundary) > distance_tolerance:
+                        return True
+                except Exception:
+                    continue
+        return False
+
+    def _normalised_boundary_geometry(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
+        try:
+            boundary = geometry.boundary()
+        except Exception:
+            return None
+        if boundary is None or boundary.isEmpty():
+            return None
+        return boundary
 
     def _unresolved_comparison_removes_candidate(
         self,
