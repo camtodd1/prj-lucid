@@ -366,6 +366,19 @@ class PlanarControllingOlsEngine:
             "lower_region_calls": 0.0,
             "linear_lower_time_s": 0.0,
             "curved_lower_time_s": 0.0,
+            "curved_conical_conical_calls": 0.0,
+            "curved_conical_constant_calls": 0.0,
+            "curved_axis_conical_calls": 0.0,
+            "curved_conical_plane_calls": 0.0,
+            "curved_other_calls": 0.0,
+            "sampled_lower_region_time_s": 0.0,
+            "conical_constant_time_s": 0.0,
+            "axis_conical_time_s": 0.0,
+            "conical_plane_triangulated_time_s": 0.0,
+            "triangulation_time_s": 0.0,
+            "axis_station_band_time_s": 0.0,
+            "axis_sample_decision_time_s": 0.0,
+            "axis_band_triangulation_time_s": 0.0,
             "losing_difference_time_s": 0.0,
             "region_difference_time_s": 0.0,
             "cleanup_time_s": 0.0,
@@ -459,6 +472,19 @@ class PlanarControllingOlsEngine:
             f"intersections={intersections} ({stats.get('geos_intersection_time_s', 0.0):.2f}s), "
             f"lower_calls={lower_calls}, linear={stats.get('linear_lower_time_s', 0.0):.2f}s, "
             f"curved={stats.get('curved_lower_time_s', 0.0):.2f}s, "
+            f"curved_calls[cc={int(stats.get('curved_conical_conical_calls', 0.0))}, "
+            f"const={int(stats.get('curved_conical_constant_calls', 0.0))}, "
+            f"axis={int(stats.get('curved_axis_conical_calls', 0.0))}, "
+            f"plane={int(stats.get('curved_conical_plane_calls', 0.0))}, "
+            f"other={int(stats.get('curved_other_calls', 0.0))}], "
+            f"curved_time[sampled={stats.get('sampled_lower_region_time_s', 0.0):.2f}s, "
+            f"const={stats.get('conical_constant_time_s', 0.0):.2f}s, "
+            f"axis={stats.get('axis_conical_time_s', 0.0):.2f}s, "
+            f"plane_tri={stats.get('conical_plane_triangulated_time_s', 0.0):.2f}s, "
+            f"tri_total={stats.get('triangulation_time_s', 0.0):.2f}s, "
+            f"axis_band={stats.get('axis_station_band_time_s', 0.0):.2f}s, "
+            f"axis_decision={stats.get('axis_sample_decision_time_s', 0.0):.2f}s, "
+            f"axis_tri={stats.get('axis_band_triangulation_time_s', 0.0):.2f}s], "
             f"losing_diff={stats.get('losing_difference_time_s', 0.0):.2f}s, "
             f"region_diff={stats.get('region_difference_time_s', 0.0):.2f}s, "
             f"cleanup={stats.get('cleanup_time_s', 0.0):.2f}s, "
@@ -1232,11 +1258,24 @@ class PlanarControllingOlsEngine:
         if overlap is None or overlap.isEmpty():
             return None
         if candidate.model == "conical" and competitor.model == "conical":
-            return self._sampled_candidate_lower_region(candidate, competitor, overlap)
+            self._region_solve_stats["curved_conical_conical_calls"] = (
+                self._region_solve_stats.get("curved_conical_conical_calls", 0.0) + 1.0
+            )
+            start_time = time.perf_counter()
+            try:
+                return self._sampled_candidate_lower_region(candidate, competitor, overlap)
+            finally:
+                self._region_solve_stats["sampled_lower_region_time_s"] = (
+                    self._region_solve_stats.get("sampled_lower_region_time_s", 0.0)
+                    + (time.perf_counter() - start_time)
+                )
         if candidate.model == "conical":
             return self._conical_linear_lower_region(candidate, competitor, overlap, conical_is_candidate=True)
         if competitor.model == "conical":
             return self._conical_linear_lower_region(competitor, candidate, overlap, conical_is_candidate=False)
+        self._region_solve_stats["curved_other_calls"] = (
+            self._region_solve_stats.get("curved_other_calls", 0.0) + 1.0
+        )
         return None
 
     def _conical_linear_lower_region(
@@ -1252,26 +1291,56 @@ class PlanarControllingOlsEngine:
             return None
 
         if abs(linear_plane[0]) <= 1e-12 and abs(linear_plane[1]) <= 1e-12:
-            return self._conical_constant_lower_region(
-                conical_model,
-                float(linear_plane[2]),
-                overlap,
-                conical_is_candidate,
+            self._region_solve_stats["curved_conical_constant_calls"] = (
+                self._region_solve_stats.get("curved_conical_constant_calls", 0.0) + 1.0
             )
+            start_time = time.perf_counter()
+            try:
+                return self._conical_constant_lower_region(
+                    conical_model,
+                    float(linear_plane[2]),
+                    overlap,
+                    conical_is_candidate,
+                )
+            finally:
+                self._region_solve_stats["conical_constant_time_s"] = (
+                    self._region_solve_stats.get("conical_constant_time_s", 0.0)
+                    + (time.perf_counter() - start_time)
+                )
 
         if linear_candidate.model == "axis":
-            return self._axis_conical_lower_region(
-                conical_candidate,
-                linear_candidate,
-                overlap,
-                conical_is_candidate,
+            self._region_solve_stats["curved_axis_conical_calls"] = (
+                self._region_solve_stats.get("curved_axis_conical_calls", 0.0) + 1.0
             )
+            start_time = time.perf_counter()
+            try:
+                return self._axis_conical_lower_region(
+                    conical_candidate,
+                    linear_candidate,
+                    overlap,
+                    conical_is_candidate,
+                )
+            finally:
+                self._region_solve_stats["axis_conical_time_s"] = (
+                    self._region_solve_stats.get("axis_conical_time_s", 0.0)
+                    + (time.perf_counter() - start_time)
+                )
 
-        return self._triangulated_candidate_lower_region(
-            conical_candidate if conical_is_candidate else linear_candidate,
-            linear_candidate if conical_is_candidate else conical_candidate,
-            overlap,
+        self._region_solve_stats["curved_conical_plane_calls"] = (
+            self._region_solve_stats.get("curved_conical_plane_calls", 0.0) + 1.0
         )
+        start_time = time.perf_counter()
+        try:
+            return self._triangulated_candidate_lower_region(
+                conical_candidate if conical_is_candidate else linear_candidate,
+                linear_candidate if conical_is_candidate else conical_candidate,
+                overlap,
+            )
+        finally:
+            self._region_solve_stats["conical_plane_triangulated_time_s"] = (
+                self._region_solve_stats.get("conical_plane_triangulated_time_s", 0.0)
+                + (time.perf_counter() - start_time)
+            )
 
     def _axis_conical_lower_region(
         self,
@@ -1321,28 +1390,48 @@ class PlanarControllingOlsEngine:
         for start_station, end_station in zip(stations[:-1], stations[1:]):
             if end_station - start_station <= 1e-6:
                 continue
+            band_start = time.perf_counter()
             station_band = self._axis_station_interval_geometry(axis, start_station, end_station, overlap)
+            self._region_solve_stats["axis_station_band_time_s"] = (
+                self._region_solve_stats.get("axis_station_band_time_s", 0.0)
+                + (time.perf_counter() - band_start)
+            )
             if station_band is None or not self._has_polygon_area(station_band):
                 continue
+            decision_start = time.perf_counter()
             decision = self._sampled_lower_decision(
                 axis_candidate,
                 conical_candidate,
                 station_band,
+            )
+            self._region_solve_stats["axis_sample_decision_time_s"] = (
+                self._region_solve_stats.get("axis_sample_decision_time_s", 0.0)
+                + (time.perf_counter() - decision_start)
             )
             if decision == "all_lower":
                 pieces.append(station_band)
                 continue
             if decision == "all_higher":
                 continue
+            triangulation_start = time.perf_counter()
             lower_band = self._triangulated_candidate_lower_region(axis_candidate, conical_candidate, station_band)
+            self._region_solve_stats["axis_band_triangulation_time_s"] = (
+                self._region_solve_stats.get("axis_band_triangulation_time_s", 0.0)
+                + (time.perf_counter() - triangulation_start)
+            )
             if lower_band is not None and self._has_polygon_area(lower_band):
                 pieces.append(lower_band)
         if not pieces:
+            decision_start = time.perf_counter()
             fallback_decision = self._sampled_lower_decision(
                 axis_candidate,
                 conical_candidate,
                 overlap,
                 all_higher_margin_m=2.0,
+            )
+            self._region_solve_stats["axis_sample_decision_time_s"] = (
+                self._region_solve_stats.get("axis_sample_decision_time_s", 0.0)
+                + (time.perf_counter() - decision_start)
             )
             if fallback_decision == "all_higher":
                 return QgsGeometry()
@@ -1508,44 +1597,51 @@ class PlanarControllingOlsEngine:
         competitor: ControllingOlsCandidate,
         geometry: QgsGeometry,
     ) -> Optional[QgsGeometry]:
-        points = self._triangulation_sample_points(geometry)
-        if len(points) < 3:
-            return None
+        start_time = time.perf_counter()
         try:
-            tin = QgsGeometry.fromMultiPointXY(points).delaunayTriangulation(0.0, False)
-        except Exception:
-            return None
-        pieces: List[QgsGeometry] = []
-        for triangle in self._polygon_parts(tin):
+            points = self._triangulation_sample_points(geometry)
+            if len(points) < 3:
+                return None
             try:
-                clipped_triangle = triangle.intersection(geometry)
+                tin = QgsGeometry.fromMultiPointXY(points).delaunayTriangulation(0.0, False)
             except Exception:
-                clipped_triangle = None
-            for polygon_part in self._polygon_parts(clipped_triangle):
-                for lower_ring in self._lower_polygon_rings(polygon_part, candidate, competitor):
-                    if len(lower_ring) < 4:
-                        continue
-                    lower_geom = QgsGeometry.fromPolygonXY([lower_ring])
-                    if lower_geom is not None and not lower_geom.isEmpty() and lower_geom.area() > 1e-3:
-                        pieces.append(lower_geom)
-        if not pieces:
-            return None
-        try:
-            combined = QgsGeometry.unaryUnion(pieces)
-        except Exception:
-            combined = None
-        if combined is not None and not combined.isEmpty():
+                return None
+            pieces: List[QgsGeometry] = []
+            for triangle in self._polygon_parts(tin):
+                try:
+                    clipped_triangle = triangle.intersection(geometry)
+                except Exception:
+                    clipped_triangle = None
+                for polygon_part in self._polygon_parts(clipped_triangle):
+                    for lower_ring in self._lower_polygon_rings(polygon_part, candidate, competitor):
+                        if len(lower_ring) < 4:
+                            continue
+                        lower_geom = QgsGeometry.fromPolygonXY([lower_ring])
+                        if lower_geom is not None and not lower_geom.isEmpty() and lower_geom.area() > 1e-3:
+                            pieces.append(lower_geom)
+            if not pieces:
+                return None
             try:
-                normalized = combined.buffer(0.0, 8)
-                if normalized is not None and not normalized.isEmpty():
-                    combined = normalized
+                combined = QgsGeometry.unaryUnion(pieces)
             except Exception:
-                pass
-            try:
-                combined = combined.intersection(geometry)
-            except Exception:
-                pass
-        return combined if self._has_polygon_area(combined) else None
+                combined = None
+            if combined is not None and not combined.isEmpty():
+                try:
+                    normalized = combined.buffer(0.0, 8)
+                    if normalized is not None and not normalized.isEmpty():
+                        combined = normalized
+                except Exception:
+                    pass
+                try:
+                    combined = combined.intersection(geometry)
+                except Exception:
+                    pass
+            return combined if self._has_polygon_area(combined) else None
+        finally:
+            self._region_solve_stats["triangulation_time_s"] = (
+                self._region_solve_stats.get("triangulation_time_s", 0.0)
+                + (time.perf_counter() - start_time)
+            )
 
     def _lower_polygon_rings(
         self,
