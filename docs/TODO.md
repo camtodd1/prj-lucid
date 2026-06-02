@@ -100,7 +100,6 @@
 - [ ] Add runway suitability inputs where marking applicability depends on unavailable pre-threshold areas.
 
   Notes:
-  - Runway surface category/material inputs are now present.
   - Pre-threshold area markings still need suitability and starter-extension classification inputs to fully match MOS applicability.
 
 - [ ] Confirm touchdown zone marking defaults and runway-length basis.
@@ -112,10 +111,3 @@
 - [ ] Add polygon glyph geometry for runway designation markings.
 
   Notes:
-  - Current matrix parks generated polygon glyphs for a later enhancement.
-  - Create local glyph templates for digits `0-9` and letters `L`, `C`, `R` based on Figure 8.18(8) dimensions.
-
-- [ ] Refine pre-threshold chevron clipping at runway end markings.
-
-  Source:
-  - `docs/runway_marking_matrix.md` notes future clipping can refine partial chevrons at the end marking.

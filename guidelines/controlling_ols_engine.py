@@ -419,12 +419,39 @@ class PlanarControllingOlsEngine:
                 merged = QgsGeometry()
             if not self._has_polygon_area(merged):
                 continue
-            for polygon_part in self._polygon_parts(merged):
-                for clean_part in self._clean_region_polygon_parts(polygon_part, candidate):
-                    if clean_part.area() <= 1e-3:
-                        continue
-                    merged_parts.append((candidate, clean_part))
+            cleaned_merged = self._clean_merged_region_geometry(merged, candidate)
+            if self._has_polygon_area(cleaned_merged):
+                merged_parts.append((candidate, cleaned_merged))
         return merged_parts
+
+    def _clean_merged_region_geometry(
+        self,
+        geometry: QgsGeometry,
+        candidate: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        """Clean dissolved same-candidate regions while preserving multipart output."""
+        cleaned_parts: List[QgsGeometry] = []
+        for polygon_part in self._polygon_parts(geometry):
+            for clean_part in self._clean_region_polygon_parts(polygon_part, candidate):
+                if clean_part.area() <= 1e-3:
+                    continue
+                cleaned_parts.append(clean_part)
+        if not cleaned_parts:
+            return None
+        if len(cleaned_parts) == 1:
+            return cleaned_parts[0]
+
+        multi_polygon = []
+        for clean_part in cleaned_parts:
+            try:
+                polygon = clean_part.asPolygon()
+            except Exception:
+                polygon = []
+            if polygon:
+                multi_polygon.append(polygon)
+        if not multi_polygon:
+            return None
+        return QgsGeometry.fromMultiPolygonXY(multi_polygon)
 
     def _unresolved_comparison_removes_candidate(
         self,
@@ -1955,7 +1982,7 @@ class ControllingOlsEngineMixin:
             return False
         feature_count = len(features)
         layer = self._create_and_add_layer(
-            "Polygon",
+            "MultiPolygon",
             f"OLS_Controlling_Planar_Regions_{icao_code}",
             f"{self.tr('OLS')} Controlling Planar Regions POC {icao_code}",
             fields,
