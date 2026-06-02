@@ -6,27 +6,20 @@ import re
 import traceback
 from typing import Dict, List, Optional
 
-from qgis.PyQt.QtCore import QPointF  # type: ignore
-from qgis.PyQt.QtGui import QColor  # type: ignore
 from qgis.core import (  # type: ignore
     Qgis,
     QgsCategorizedSymbolRenderer,
     QgsFeature,
     QgsFillSymbol,
-    QgsGradientFillSymbolLayer,
     QgsFields,
     QgsLayerTreeGroup,
     QgsLayerTreeLayer,
     QgsLayerTreeNode,
     QgsLineSymbol,
     QgsMessageLog,
-    QgsProperty,
     QgsProject,
     QgsRendererCategory,
-    QgsShapeburstFillSymbolLayer,
-    QgsSimpleFillSymbolLayer,
     QgsSingleSymbolRenderer,
-    QgsSymbolLayer,
     QgsVectorFileWriter,
     QgsVectorLayer,
     QgsWkbTypes,
@@ -400,106 +393,36 @@ class LayerMixin:
             )
 
     def _apply_controlling_region_style(self, layer: QgsVectorLayer):
-        """Apply the controlling OLS palette with axis and conical gradient fills."""
+        """Apply complementary solid fills for controlling OLS regions."""
         if layer is None or not layer.isValid():
             return
         try:
             categories = []
-            for surface, colors, fill_mode in [
-                ("Approach", ("54,160,180,165", "255,177,94,130", "29,92,110,255"), "axis"),
-                ("TOCS", ("91,125,218,160", "247,194,80,125", "43,70,145,255"), "axis"),
-                ("Transitional", ("91,184,132,150", "205,93,153,125", "46,105,70,255"), "plane"),
-                ("Conical", ("238,139,58,150", "84,97,188,105", "143,75,31,255"), "shapeburst"),
-                ("IHS", ("112,176,149,120", "246,207,113,100", "48,112,88,255"), "solid"),
-                ("OHS", ("125,134,148,105", "232,185,107,95", "79,87,100,255"), "solid"),
+            for surface, fill_color, outline_color in [
+                ("Approach", "42,157,181,150", "22,98,116,255"),
+                ("TOCS", "240,166,76,145", "150,85,31,255"),
+                ("Transitional", "88,178,124,140", "42,105,65,255"),
+                ("Conical", "160,105,194,140", "95,58,125,255"),
+                ("IHS", "236,205,91,130", "145,118,37,255"),
+                ("OHS", "119,135,158,120", "70,84,105,255"),
             ]:
-                symbol = self._controlling_region_symbol(colors, fill_mode)
+                symbol = QgsFillSymbol.createSimple(
+                    {
+                        "color": fill_color,
+                        "outline_color": outline_color,
+                        "outline_width": "0.22",
+                        "outline_width_unit": "MM",
+                        "style": "solid",
+                    }
+                )
                 categories.append(QgsRendererCategory(surface, symbol, surface))
             layer.setRenderer(QgsCategorizedSymbolRenderer("surface", categories))
         except Exception as exc:
             QgsMessageLog.logMessage(
-                f"Warning: failed to apply controlling OLS region gradient style: {exc}",
+                f"Warning: failed to apply controlling OLS region style: {exc}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
-
-    def _controlling_region_symbol(self, colors, fill_mode: str):
-        fill_color, secondary_color, outline_color = colors
-        symbol = QgsFillSymbol.createSimple(
-            {
-                "color": fill_color,
-                "outline_color": outline_color,
-                "outline_width": "0.22",
-                "outline_width_unit": "MM",
-                "style": "solid",
-            }
-        )
-        if fill_mode == "solid":
-            return symbol
-
-        fill_layer = None
-        if fill_mode == "shapeburst":
-            fill_layer = self._controlling_shapeburst_fill(fill_color, secondary_color)
-        else:
-            fill_layer = self._controlling_axis_gradient_fill(fill_color, secondary_color, fill_mode == "axis")
-
-        if fill_layer is not None:
-            symbol.changeSymbolLayer(0, fill_layer)
-            outline_layer = QgsSimpleFillSymbolLayer.create(
-                {
-                    "color": "0,0,0,0",
-                    "outline_color": outline_color,
-                    "outline_width": "0.22",
-                    "outline_width_unit": "MM",
-                    "style": "no",
-                }
-            )
-            if outline_layer is not None:
-                symbol.appendSymbolLayer(outline_layer)
-        return symbol
-
-    def _controlling_axis_gradient_fill(self, fill_color: str, secondary_color: str, use_axis_angle: bool):
-        try:
-            fill_layer = QgsGradientFillSymbolLayer(self._qcolor(fill_color), self._qcolor(secondary_color))
-            self._set_qgis_enum(fill_layer, "setGradientColorType", "GradientColorSource", "SimpleTwoColor")
-            self._set_qgis_enum(fill_layer, "setGradientType", "GradientType", "Linear")
-            self._set_qgis_enum(fill_layer, "setCoordinateMode", "SymbolCoordinateReference", "Feature")
-            self._set_qgis_enum(fill_layer, "setGradientSpread", "GradientSpread", "Pad")
-            fill_layer.setReferencePoint1(QPointF(0.05, 0.5))
-            fill_layer.setReferencePoint2(QPointF(0.95, 0.5))
-            if use_axis_angle and hasattr(QgsSymbolLayer, "PropertyGradientReference1X"):
-                properties = fill_layer.dataDefinedProperties()
-                angle = 'coalesce("style_angle", 0)'
-                properties.setProperty(
-                    QgsSymbolLayer.PropertyGradientReference1X,
-                    QgsProperty.fromExpression(f"0.5 - 0.45 * sin(radians({angle}))"),
-                )
-                properties.setProperty(
-                    QgsSymbolLayer.PropertyGradientReference1Y,
-                    QgsProperty.fromExpression(f"0.5 + 0.45 * cos(radians({angle}))"),
-                )
-                properties.setProperty(
-                    QgsSymbolLayer.PropertyGradientReference2X,
-                    QgsProperty.fromExpression(f"0.5 + 0.45 * sin(radians({angle}))"),
-                )
-                properties.setProperty(
-                    QgsSymbolLayer.PropertyGradientReference2Y,
-                    QgsProperty.fromExpression(f"0.5 - 0.45 * cos(radians({angle}))"),
-                )
-            return fill_layer
-        except Exception:
-            return None
-
-    def _controlling_shapeburst_fill(self, fill_color: str, secondary_color: str):
-        try:
-            fill_layer = QgsShapeburstFillSymbolLayer(self._qcolor(fill_color), self._qcolor(secondary_color))
-            self._set_qgis_enum(fill_layer, "setColorType", "GradientColorSource", "SimpleTwoColor")
-            fill_layer.setBlurRadius(1)
-            fill_layer.setUseWholeShape(True)
-            fill_layer.setIgnoreRings(False)
-            return fill_layer
-        except Exception:
-            return None
 
     def _apply_controlling_contour_style(self, layer: QgsVectorLayer):
         """Keep controlling contours visually distinct and label-ready."""
@@ -522,17 +445,6 @@ class LayerMixin:
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
-
-    def _set_qgis_enum(self, target, setter_name: str, enum_name: str, value_name: str):
-        enum_value = getattr(getattr(Qgis, enum_name, None), value_name, None)
-        if enum_value is not None and hasattr(target, setter_name):
-            getattr(target, setter_name)(enum_value)
-
-    def _qcolor(self, rgba_text: str) -> QColor:
-        parts = [int(float(part)) for part in rgba_text.split(",")[:4]]
-        while len(parts) < 4:
-            parts.append(255)
-        return QColor(parts[0], parts[1], parts[2], parts[3])
 
     def _apply_agl_rotation_field(self, layer: QgsVectorLayer) -> None:
         """Apply QGIS' renderer-level marker rotation for dual-aspect AGL point symbols."""
