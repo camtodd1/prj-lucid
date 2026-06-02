@@ -22,6 +22,10 @@ from qgis.core import (  # type: ignore
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
+CONTROLLING_REGION_TOPOLOGY_WELD_M = 0.01
+CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS = 8
+CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2 = 0.05
+CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-8
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -475,36 +479,61 @@ class PlanarControllingOlsEngine:
                 candidates.append(repaired)
         except Exception:
             pass
-        if self._multipart_members_touch(geometry):
+        if self._polygon_part_count(geometry) > 1:
             try:
-                tolerance = 0.01
-                closed = geometry.buffer(tolerance, 8).buffer(-tolerance, 8)
-                if self._has_polygon_area(closed):
+                tolerance = CONTROLLING_REGION_TOPOLOGY_WELD_M
+                segments = CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS
+                closed = geometry.buffer(tolerance, segments).buffer(-tolerance, segments)
+                closed = self._normalised_polygon_geometry(closed)
+                if self._topology_weld_is_acceptable(geometry, closed):
                     candidates.append(closed)
             except Exception:
                 pass
 
         return min(candidates, key=self._polygon_part_count)
 
-    def _multipart_members_touch(self, geometry: Optional[QgsGeometry]) -> bool:
-        parts = self._polygon_parts(geometry)
-        if len(parts) < 2:
-            return False
-        for index, first_part in enumerate(parts):
-            for second_part in parts[index + 1 :]:
-                try:
-                    if first_part.overlaps(second_part):
-                        return True
-                    intersection = first_part.intersection(second_part)
-                    if intersection is not None and not intersection.isEmpty() and intersection.length() > 1e-6:
-                        return True
-                except Exception:
-                    continue
-        return False
-
     def _polygon_part_count(self, geometry: Optional[QgsGeometry]) -> int:
         parts = self._polygon_parts(geometry)
         return len(parts) if parts else 999999
+
+    def _normalised_polygon_geometry(self, geometry: Optional[QgsGeometry]) -> Optional[QgsGeometry]:
+        if not self._has_polygon_area(geometry):
+            return geometry
+        try:
+            if not geometry.isGeosValid():
+                geometry = geometry.makeValid()
+        except Exception:
+            pass
+        try:
+            buffered = geometry.buffer(0.0, CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS)
+            if self._has_polygon_area(buffered):
+                return buffered
+        except Exception:
+            pass
+        return geometry
+
+    def _topology_weld_is_acceptable(
+        self,
+        original: Optional[QgsGeometry],
+        welded: Optional[QgsGeometry],
+    ) -> bool:
+        if not self._has_polygon_area(original) or not self._has_polygon_area(welded):
+            return False
+        try:
+            if not welded.isGeosValid():
+                return False
+        except Exception:
+            return False
+        try:
+            original_area = abs(original.area())
+            welded_area = abs(welded.area())
+        except Exception:
+            return False
+        allowed_delta = max(
+            CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2,
+            original_area * CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO,
+        )
+        return abs(welded_area - original_area) <= allowed_delta
 
     def _unresolved_comparison_removes_candidate(
         self,
