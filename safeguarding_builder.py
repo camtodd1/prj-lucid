@@ -478,6 +478,8 @@ class SafeguardingBuilder(
             self._log_critical("Processing aborted: dialog reference missing.")
             return
 
+        self._set_processing_status(self.tr("Starting safeguarding generation..."))
+
         project = QgsProject.instance()
         target_crs = project.crs()
         target_crs_authid = target_crs.authid()
@@ -489,6 +491,7 @@ class SafeguardingBuilder(
                 level=Qgis.Critical,
                 duration=10,
             )
+            self._clear_processing_status()
             return
 
         if self._crs_is_geographic(target_crs):
@@ -506,6 +509,7 @@ class SafeguardingBuilder(
                 level=Qgis.Critical,
                 duration=12,
             )
+            self._clear_processing_status()
             return
 
         self._log(f"Project CRS: {target_crs_authid} ({target_crs.description()}).")
@@ -522,11 +526,13 @@ class SafeguardingBuilder(
 
         input_data = None
         try:
+            self._set_processing_status(self.tr("Reading and validating inputs..."))
             input_data = self.dlg.get_all_input_data()
             if input_data is None:
                 self._log_warning(
                     "Processing aborted: input validation failed. Check the dialog and preceding messages."
                 )
+                self._clear_processing_status()
                 return
         except Exception as e:
             self._log_critical(f"Processing aborted: failed to read input data: {e}\n{traceback.format_exc()}")
@@ -536,6 +542,7 @@ class SafeguardingBuilder(
                 level=Qgis.Critical,
                 duration=10,
             )
+            self._clear_processing_status()
             return
 
         self.output_mode = input_data.get("output_mode", "memory")
@@ -577,9 +584,11 @@ class SafeguardingBuilder(
                 level=Qgis.Warning,
                 duration=5,
             )
+            self._clear_processing_status()
 
         if runway_input_list:
             self.style_map = dict(DEFAULT_STYLE_MAP)
+            self._set_processing_status(self.tr("Preparing output layer groups..."))
 
             root = project.layerTreeRoot()
             main_group_name = f"{icao_code} {self.tr('Safeguarding Builder')}"
@@ -591,6 +600,7 @@ class SafeguardingBuilder(
                     level=Qgis.Critical,
                     duration=10,
                 )
+                self._clear_processing_status()
                 return
 
             output_groups = self._create_output_layer_groups(main_group, bool(agl_options.get("enabled")))
@@ -648,6 +658,7 @@ class SafeguardingBuilder(
                 else:
                     self._log_warning("CNS source facilities skipped: failed to create reference group.")
 
+            self._set_processing_status(self.tr("Generating runway reference geometry..."))
             processed_runway_data_list, any_runway_base_data_ok = self._process_runways_part1(
                 runway_centreline_group, project, target_crs, icao_code, runway_input_list
             )
@@ -664,6 +675,7 @@ class SafeguardingBuilder(
                 if agl_group is not None:
                     self._stage_layer_tree_node(agl_group)
 
+            self._set_processing_status(self.tr("Generating physical and protection surfaces..."))
             (
                 specialised_safeguarding_group,
                 any_physical_or_protection_ok,
@@ -682,6 +694,7 @@ class SafeguardingBuilder(
 
             agl_processed_ok = False
             if agl_options.get("enabled"):
+                self._set_processing_status(self.tr("Generating airfield ground lighting layers..."))
                 if agl_group is not None:
                     agl_processed_ok = self.process_airfield_ground_lighting(
                         processed_runway_data_list,
@@ -693,6 +706,7 @@ class SafeguardingBuilder(
             else:
                 self._log("Airfield Ground Lighting skipped: option not enabled.")
 
+            self._set_processing_status(self.tr("Generating NASF guideline layers..."))
             guideline_groups = self._create_guideline_groups(nasf_guidelines_group, bool(cns_input_list))
             self._reset_controlling_ols_engine()
 
@@ -738,6 +752,7 @@ class SafeguardingBuilder(
                 guideline_groups,
             )
 
+            self._set_processing_status(self.tr("Generating runway OLS surfaces..."))
             any_guideline_processed_ok = self._process_runways_part2(
                 processed_runway_data_list,
                 guideline_groups,
@@ -746,6 +761,7 @@ class SafeguardingBuilder(
                 runway_ols_group,
             )
 
+            self._set_processing_status(self.tr("Generating airport-wide OLS surfaces..."))
             any_guideline_processed_ok = self._process_airport_wide_ols_if_possible(
                 guideline_groups,
                 processed_runway_data_list,
@@ -754,6 +770,7 @@ class SafeguardingBuilder(
                 airport_wide_ols_group,
             )
             if guideline_groups.get("F") is not None:
+                self._set_processing_status(self.tr("Solving controlling OLS lower envelope..."))
                 controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
                     icao_code,
                     main_group,
@@ -761,6 +778,7 @@ class SafeguardingBuilder(
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
+            self._set_processing_status(self.tr("Finalising generated layers..."))
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
             self._repair_output_layer_tree(main_group)
             self._remove_empty_generated_groups(main_group)
@@ -791,9 +809,20 @@ class SafeguardingBuilder(
 
             if self.successfully_generated_layers:
                 if self.dlg:
+                    self._set_processing_status(self.tr("Generation complete. Closing dialog..."))
                     self.dlg.accept()
             else:
-                pass
+                self._clear_processing_status()
+
+    def _set_processing_status(self, message: str) -> None:
+        if self.dlg is not None and hasattr(self.dlg, "set_processing_status"):
+            self.dlg.set_processing_status(message)
+        QCoreApplication.processEvents()
+
+    def _clear_processing_status(self) -> None:
+        if self.dlg is not None and hasattr(self.dlg, "clear_processing_status"):
+            self.dlg.clear_processing_status()
+        QCoreApplication.processEvents()
 
     # ============================================================
     # Helper Methods

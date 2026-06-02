@@ -93,6 +93,8 @@ class SafeguardingBuilderDialog(
         self._runway_id_counter = 0
         self._runway_groups: Dict[int, RunwayWidgetGroup] = {}
         self.scroll_area_layout: Optional[QtWidgets.QVBoxLayout] = None
+        self._processing_status_active = False
+        self._processing_progress_bar: Optional[QtWidgets.QProgressBar] = None
 
         # --- Scroll Area Setup ---
         scroll_area = self.findChild(QtWidgets.QScrollArea, "scrollArea_runways")
@@ -125,6 +127,8 @@ class SafeguardingBuilderDialog(
                 DIALOG_LOG_TAG,
                 level=Qgis.Critical,
             )
+
+        self._setup_processing_status_widgets()
 
         add_runway_button = self.findChild(QtWidgets.QPushButton, "pushButton_add_runway")
         if self.scroll_area_layout is None:
@@ -175,6 +179,51 @@ class SafeguardingBuilderDialog(
 
         QtCore.QTimer.singleShot(0, self._update_dialog_height)
         QtCore.QTimer.singleShot(0, self.update_dialog_status)
+
+    def _setup_processing_status_widgets(self) -> None:
+        """Add a compact indeterminate progress indicator to the dialog footer."""
+        footer_layout = getattr(self, "horizontalLayout_dialogFooter", None)
+        if footer_layout is None:
+            return
+        progress_bar = QtWidgets.QProgressBar(self)
+        progress_bar.setObjectName("progressBar_processing")
+        progress_bar.setRange(0, 0)
+        progress_bar.setTextVisible(False)
+        progress_bar.setFixedWidth(180)
+        progress_bar.setVisible(False)
+        footer_layout.insertWidget(1, progress_bar)
+        self._processing_progress_bar = progress_bar
+
+    def set_processing_status(self, message: str) -> None:
+        """Show brief generation progress feedback while synchronous processing runs."""
+        self._processing_status_active = True
+        if hasattr(self, "label_footer_status"):
+            self.label_footer_status.setText(message)
+        if self._processing_progress_bar is not None:
+            self._processing_progress_bar.setVisible(True)
+        generate_button = getattr(
+            self,
+            "pushButton_Generate",
+            self.findChild(QtWidgets.QPushButton, "pushButton_Generate"),
+        )
+        if generate_button:
+            generate_button.setEnabled(False)
+            generate_button.setText("Generating...")
+
+    def clear_processing_status(self) -> None:
+        """Restore normal footer status after generation finishes or aborts."""
+        self._processing_status_active = False
+        if self._processing_progress_bar is not None:
+            self._processing_progress_bar.setVisible(False)
+        generate_button = getattr(
+            self,
+            "pushButton_Generate",
+            self.findChild(QtWidgets.QPushButton, "pushButton_Generate"),
+        )
+        if generate_button:
+            generate_button.setEnabled(True)
+            generate_button.setText("Generate Airport Layers")
+        self.update_dialog_status()
 
     # --- Initialization Helpers ---
     def _setup_arp_validators(
@@ -353,7 +402,7 @@ class SafeguardingBuilderDialog(
         if hasattr(self, "label_output_status"):
             self.label_output_status.setText(output_text)
 
-        if hasattr(self, "label_footer_status"):
+        if hasattr(self, "label_footer_status") and not self._processing_status_active:
             footer_parts = []
             footer_parts.append(icao if icao else "No ICAO")
             footer_parts.append(f"{runway_count} runway(s)")
