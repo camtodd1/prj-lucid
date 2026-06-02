@@ -29,6 +29,10 @@ CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2 = 0.05
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-10
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
+AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
+AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = False
+AXIS_CONICAL_EXACT_MAX_STATION_STEP_M = 1.0
+AXIS_CONICAL_EXACT_MAX_LATERAL_STEP_M = 2.0
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -382,6 +386,7 @@ class PlanarControllingOlsEngine:
             "axis_exact_calls": 0.0,
             "axis_exact_success": 0.0,
             "axis_exact_fallback": 0.0,
+            "axis_exact_unresolved": 0.0,
             "axis_exact_curve_time_s": 0.0,
             "axis_exact_split_time_s": 0.0,
             "axis_exact_classify_time_s": 0.0,
@@ -504,6 +509,7 @@ class PlanarControllingOlsEngine:
             f"axis_exact[calls={int(stats.get('axis_exact_calls', 0.0))}, "
             f"success={int(stats.get('axis_exact_success', 0.0))}, "
             f"fallback={int(stats.get('axis_exact_fallback', 0.0))}, "
+            f"unresolved={int(stats.get('axis_exact_unresolved', 0.0))}, "
             f"curve={stats.get('axis_exact_curve_time_s', 0.0):.2f}s, "
             f"split={stats.get('axis_exact_split_time_s', 0.0):.2f}s, "
             f"classify={stats.get('axis_exact_classify_time_s', 0.0):.2f}s, "
@@ -1410,9 +1416,15 @@ class PlanarControllingOlsEngine:
         axis: dict,
         overlap: QgsGeometry,
     ) -> Optional[QgsGeometry]:
-        exact_region = self._axis_conical_exact_axis_lower_region(axis_candidate, conical_candidate, axis, overlap)
-        if exact_region is not None:
-            return exact_region
+        if AXIS_CONICAL_EXACT_SOLVER_ENABLED:
+            exact_region = self._axis_conical_exact_axis_lower_region(axis_candidate, conical_candidate, axis, overlap)
+            if exact_region is not None:
+                return exact_region
+            if not AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED:
+                self._region_solve_stats["axis_exact_unresolved"] = (
+                    self._region_solve_stats.get("axis_exact_unresolved", 0.0) + 1.0
+                )
+                return None
 
         station_range = self._axis_station_range(axis, overlap)
         if station_range is None:
@@ -1617,12 +1629,18 @@ class PlanarControllingOlsEngine:
         l_min, l_max = self._axis_lateral_bounds(axis, bbox)
         if l_max - l_min <= 1e-6:
             return None
-        station_step = max(1.0, min((max_station - min_station) / 240.0, 5.0))
-        lateral_step = max(2.0, min((l_max - l_min) / 120.0, 10.0))
+        station_step = max(
+            0.25,
+            min((max_station - min_station) / 480.0, AXIS_CONICAL_EXACT_MAX_STATION_STEP_M),
+        )
+        lateral_step = max(
+            0.5,
+            min((l_max - l_min) / 240.0, AXIS_CONICAL_EXACT_MAX_LATERAL_STEP_M),
+        )
 
         tracks: List[List[QgsPointXY]] = []
         active_track_indices: List[int] = []
-        max_link_distance = max(25.0, (station_step * 4.0) + (lateral_step * 3.0))
+        max_link_distance = max(3.0, (station_step * 2.5) + (lateral_step * 2.0))
         t = min_station
         while t <= max_station + 1e-6:
             required_distance = a_offset + (b_slope * t)
