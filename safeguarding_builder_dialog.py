@@ -344,6 +344,7 @@ class SafeguardingBuilderDialog(
             "comboOutputFormat",
             "fileWidgetOutputPath",
             "checkBox_dissolveLayers",
+            "checkBox_generateControllingOls",
         ]:
             widget = getattr(self, name, None)
             if not widget:
@@ -400,6 +401,8 @@ class SafeguardingBuilderDialog(
             path = self.fileWidgetOutputPath.filePath().strip()
             output_text = f"Output: {output_format} files" + (f" to {path}" if path else " (directory required)")
         if hasattr(self, "label_output_status"):
+            if hasattr(self, "checkBox_generateControllingOls") and not self.checkBox_generateControllingOls.isChecked():
+                output_text += " | controlling OLS skipped"
             self.label_output_status.setText(output_text)
 
         if hasattr(self, "label_footer_status") and not self._processing_status_active:
@@ -814,6 +817,10 @@ class SafeguardingBuilderDialog(
             final_data["contour_intervals"] = self.get_contour_interval_options()
         else:
             final_data["contour_intervals"] = {}
+        if hasattr(self, "checkBox_generateControllingOls"):
+            final_data["generate_controlling_ols"] = self.checkBox_generateControllingOls.isChecked()
+        else:
+            final_data["generate_controlling_ols"] = True
 
         return final_data
 

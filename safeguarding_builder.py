@@ -97,6 +97,7 @@ class SafeguardingBuilder(
         self.output_format_extension: Optional[str] = None
         self.dissolve_output: bool = False
         self.contour_intervals: Dict[str, float] = {}
+        self.generate_controlling_ols: bool = True
         self.debug_logging: bool = False
 
         self._init_locale()
@@ -473,6 +474,7 @@ class SafeguardingBuilder(
         self.output_format_extension = None
         self.dissolve_output = False
         self.contour_intervals = {}
+        self.generate_controlling_ols = True
 
         if self.dlg is None:
             self._log_critical("Processing aborted: dialog reference missing.")
@@ -552,6 +554,7 @@ class SafeguardingBuilder(
         self.output_format_extension = input_data.get("output_format_extension")
         self.dissolve_output = input_data.get("dissolve_output", False)
         self.contour_intervals = input_data.get("contour_intervals", {})
+        self.generate_controlling_ols = bool(input_data.get("generate_controlling_ols", True))
 
         icao_code = input_data.get("icao_code", "UNKNOWN")
         arp_point = input_data.get("arp_point")
@@ -769,13 +772,15 @@ class SafeguardingBuilder(
                 any_guideline_processed_ok,
                 airport_wide_ols_group,
             )
-            if guideline_groups.get("F") is not None:
+            if guideline_groups.get("F") is not None and self.generate_controlling_ols:
                 self._set_processing_status(self.tr("Solving controlling OLS lower envelope..."))
                 controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
                     icao_code,
                     main_group,
                 )
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
+            elif guideline_groups.get("F") is not None:
+                self._log("Controlling OLS generation skipped: output option disabled.")
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
             self._set_processing_status(self.tr("Finalising generated layers..."))

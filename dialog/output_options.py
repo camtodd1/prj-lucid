@@ -45,6 +45,7 @@ class OutputOptionsMixin:
         if DEFAULT_OUTPUT_FORMAT in OUTPUT_FORMATS:
             self.comboOutputFormat.setCurrentText(DEFAULT_OUTPUT_FORMAT)
 
+        self._setup_controlling_ols_control()
         self._setup_contour_interval_controls()
 
         self.radioMemoryOutput.setChecked(True)
@@ -61,7 +62,32 @@ class OutputOptionsMixin:
 
         self.radioMemoryOutput.toggled.connect(self._on_output_option_changed)
         self.comboOutputFormat.currentIndexChanged.connect(self._update_file_widget_filter)
+        if hasattr(self, "checkBox_generateControllingOls"):
+            self.checkBox_generateControllingOls.toggled.connect(self._on_output_option_changed)
         self._on_output_option_changed()
+
+    def _setup_controlling_ols_control(self):
+        """Add the development controlling OLS output toggle to the Output tab."""
+        if hasattr(self, "checkBox_generateControllingOls"):
+            return
+
+        parent_layout = getattr(self, "verticalLayout_5", None)
+        if parent_layout is None:
+            QgsMessageLog.logMessage(
+                "Controlling OLS output control setup skipped: output options layout missing.",
+                DIALOG_LOG_TAG,
+                level=Qgis.Warning,
+            )
+            return
+
+        checkbox = QtWidgets.QCheckBox(self.tr("Generate controlling OLS surfaces"))
+        checkbox.setObjectName("checkBox_generateControllingOls")
+        checkbox.setChecked(True)
+        checkbox.setToolTip(
+            self.tr("Include the development controlling OLS lower-envelope output layers.")
+        )
+        parent_layout.addWidget(checkbox)
+        self.checkBox_generateControllingOls = checkbox
 
     def _setup_contour_interval_controls(self):
         """Add contour interval controls to the Output tab."""
