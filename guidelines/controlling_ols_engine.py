@@ -2,6 +2,7 @@
 """Planar lower-envelope engine for controlling OLS proof-of-concept outputs."""
 
 import math
+import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -2196,8 +2197,10 @@ class ControllingOlsEngineMixin:
         icao_code: str,
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
+        overall_start = time.perf_counter()
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
         exclusion_geometries = list(getattr(self, "_controlling_ols_exclusion_geometries", []) or [])
+        contours = list(getattr(self, "_controlling_ols_contours", []) or [])
         planar_candidates = [
             candidate
             for candidate in candidates
@@ -2213,14 +2216,40 @@ class ControllingOlsEngineMixin:
 
         output_group = self._controlling_ols_poc_group(layer_group)
         engine = PlanarControllingOlsEngine(planar_candidates, exclusion_geometries=exclusion_geometries)
+        timing_splits: Dict[str, float] = {}
+
+        step_start = time.perf_counter()
         candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, output_group, planar_candidates)
+        timing_splits["candidates"] = time.perf_counter() - step_start
+
+        step_start = time.perf_counter()
         region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, engine)
+        timing_splits["regions"] = time.perf_counter() - step_start
+
+        step_start = time.perf_counter()
         transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, engine)
+        timing_splits["transitions"] = time.perf_counter() - step_start
+
+        step_start = time.perf_counter()
         contour_layer_ok = self._create_controlling_contour_layer(
             icao_code,
             output_group,
             engine,
-            list(getattr(self, "_controlling_ols_contours", []) or []),
+            contours,
+        )
+        timing_splits["contours"] = time.perf_counter() - step_start
+
+        QgsMessageLog.logMessage(
+            "Controlling OLS timing: "
+            f"candidates={timing_splits['candidates']:.2f}s, "
+            f"regions={timing_splits['regions']:.2f}s, "
+            f"transitions={timing_splits['transitions']:.2f}s, "
+            f"contours={timing_splits['contours']:.2f}s, "
+            f"total={time.perf_counter() - overall_start:.2f}s "
+            f"({len(planar_candidates)} candidate(s), {len(exclusion_geometries)} exclusion mask(s), "
+            f"{len(contours)} source contour(s)).",
+            PLUGIN_TAG,
+            Qgis.Info,
         )
         return candidate_layer_ok or region_layer_ok or transition_layer_ok or contour_layer_ok
 
@@ -2276,6 +2305,7 @@ class ControllingOlsEngineMixin:
         output_group: QgsLayerTreeGroup,
         candidates: Sequence[ControllingOlsCandidate],
     ) -> bool:
+        start_time = time.perf_counter()
         fields = QgsFields(
             [
                 QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
@@ -2304,7 +2334,8 @@ class ControllingOlsEngineMixin:
         )
         if layer is not None:
             QgsMessageLog.logMessage(
-                f"Created controlling OLS planar candidate POC with {len(candidates)} candidate surface(s).",
+                f"Created controlling OLS planar candidate POC with {len(candidates)} candidate surface(s) "
+                f"in {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2317,6 +2348,7 @@ class ControllingOlsEngineMixin:
         output_group: QgsLayerTreeGroup,
         engine: PlanarControllingOlsEngine,
     ) -> bool:
+        start_time = time.perf_counter()
         fields = QgsFields(
             [
                 QgsField("region_id", QVariant.Int, self.tr("Region ID"), 10),
@@ -2331,7 +2363,8 @@ class ControllingOlsEngineMixin:
         features = engine.region_features(fields)
         if not features:
             QgsMessageLog.logMessage(
-                "Controlling OLS planar regions POC skipped: no controlling planar regions were produced.",
+                "Controlling OLS planar regions POC skipped: no controlling planar regions were produced "
+                f"after {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2348,7 +2381,8 @@ class ControllingOlsEngineMixin:
         )
         if layer is not None:
             QgsMessageLog.logMessage(
-                f"Created controlling OLS planar regions POC with {feature_count} region feature(s).",
+                f"Created controlling OLS planar regions POC with {feature_count} region feature(s) "
+                f"in {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2361,6 +2395,7 @@ class ControllingOlsEngineMixin:
         output_group: QgsLayerTreeGroup,
         engine: PlanarControllingOlsEngine,
     ) -> bool:
+        start_time = time.perf_counter()
         fields = QgsFields(
             [
                 QgsField("transition_id", QVariant.String, self.tr("Transition ID"), 160),
@@ -2375,7 +2410,8 @@ class ControllingOlsEngineMixin:
         features = self._deduplicate_controlling_transition_features(features)
         if not features:
             QgsMessageLog.logMessage(
-                "Controlling OLS planar transition POC skipped: no region boundary transition edges were produced.",
+                "Controlling OLS planar transition POC skipped: no region boundary transition edges were produced "
+                f"after {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2392,7 +2428,8 @@ class ControllingOlsEngineMixin:
         )
         if layer is not None:
             QgsMessageLog.logMessage(
-                f"Created controlling OLS planar transition POC with {feature_count} region boundary edge(s).",
+                f"Created controlling OLS planar transition POC with {feature_count} region boundary edge(s) "
+                f"in {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2406,9 +2443,11 @@ class ControllingOlsEngineMixin:
         engine: PlanarControllingOlsEngine,
         contours: Sequence[ControllingOlsContour],
     ) -> bool:
+        start_time = time.perf_counter()
         if not contours:
             QgsMessageLog.logMessage(
-                "Controlling OLS clipped contours POC skipped: no source contours were registered.",
+                "Controlling OLS clipped contours POC skipped: no source contours were registered "
+                f"after {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2420,7 +2459,8 @@ class ControllingOlsEngineMixin:
         ]
         if not region_parts:
             QgsMessageLog.logMessage(
-                "Controlling OLS clipped contours POC skipped: no controlling regions were produced.",
+                "Controlling OLS clipped contours POC skipped: no controlling regions were produced "
+                f"after {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2483,7 +2523,8 @@ class ControllingOlsEngineMixin:
 
         if not features:
             QgsMessageLog.logMessage(
-                "Controlling OLS clipped contours POC skipped: registered contours did not intersect matching regions.",
+                "Controlling OLS clipped contours POC skipped: registered contours did not intersect matching regions "
+                f"after {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
@@ -2501,7 +2542,8 @@ class ControllingOlsEngineMixin:
         )
         if layer is not None:
             QgsMessageLog.logMessage(
-                f"Created controlling OLS clipped contours POC with {feature_count} contour feature(s).",
+                f"Created controlling OLS clipped contours POC with {feature_count} contour feature(s) "
+                f"in {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
