@@ -379,6 +379,13 @@ class PlanarControllingOlsEngine:
             "axis_station_band_time_s": 0.0,
             "axis_sample_decision_time_s": 0.0,
             "axis_band_triangulation_time_s": 0.0,
+            "axis_exact_calls": 0.0,
+            "axis_exact_success": 0.0,
+            "axis_exact_fallback": 0.0,
+            "axis_exact_curve_time_s": 0.0,
+            "axis_exact_split_time_s": 0.0,
+            "axis_exact_classify_time_s": 0.0,
+            "axis_exact_total_time_s": 0.0,
             "axis_all_lower_bands": 0.0,
             "axis_all_higher_bands": 0.0,
             "axis_mixed_bands": 0.0,
@@ -494,6 +501,13 @@ class PlanarControllingOlsEngine:
             f"curved_time[sampled={stats.get('sampled_lower_region_time_s', 0.0):.2f}s, "
             f"const={stats.get('conical_constant_time_s', 0.0):.2f}s, "
             f"axis={stats.get('axis_conical_time_s', 0.0):.2f}s, "
+            f"axis_exact[calls={int(stats.get('axis_exact_calls', 0.0))}, "
+            f"success={int(stats.get('axis_exact_success', 0.0))}, "
+            f"fallback={int(stats.get('axis_exact_fallback', 0.0))}, "
+            f"curve={stats.get('axis_exact_curve_time_s', 0.0):.2f}s, "
+            f"split={stats.get('axis_exact_split_time_s', 0.0):.2f}s, "
+            f"classify={stats.get('axis_exact_classify_time_s', 0.0):.2f}s, "
+            f"total={stats.get('axis_exact_total_time_s', 0.0):.2f}s], "
             f"plane_tri={stats.get('conical_plane_triangulated_time_s', 0.0):.2f}s, "
             f"tri_total={stats.get('triangulation_time_s', 0.0):.2f}s, "
             f"axis_band={stats.get('axis_station_band_time_s', 0.0):.2f}s, "
@@ -1396,6 +1410,10 @@ class PlanarControllingOlsEngine:
         axis: dict,
         overlap: QgsGeometry,
     ) -> Optional[QgsGeometry]:
+        exact_region = self._axis_conical_exact_axis_lower_region(axis_candidate, conical_candidate, axis, overlap)
+        if exact_region is not None:
+            return exact_region
+
         station_range = self._axis_station_range(axis, overlap)
         if station_range is None:
             return None
@@ -1476,6 +1494,298 @@ class PlanarControllingOlsEngine:
         except Exception:
             combined = None
         return combined if self._has_polygon_area(combined) else QgsGeometry()
+
+    def _axis_conical_exact_axis_lower_region(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+        axis: dict,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        """Try to solve axis-vs-conical by splitting on the equal-height curve."""
+        self._region_solve_stats["axis_exact_calls"] = (
+            self._region_solve_stats.get("axis_exact_calls", 0.0) + 1.0
+        )
+        total_start = time.perf_counter()
+        try:
+            conical_model = self._conical_model(conical_candidate)
+            if conical_model is None or float(conical_model.get("slope", 0.0)) <= 0.0:
+                return self._record_axis_exact_fallback(total_start)
+
+            curve_start = time.perf_counter()
+            transition_curve = self._axis_conical_transition_curve(axis, conical_model, overlap)
+            self._region_solve_stats["axis_exact_curve_time_s"] = (
+                self._region_solve_stats.get("axis_exact_curve_time_s", 0.0)
+                + (time.perf_counter() - curve_start)
+            )
+
+            if transition_curve is None or transition_curve.isEmpty():
+                decision_start = time.perf_counter()
+                decision = self._sampled_lower_decision(axis_candidate, conical_candidate, overlap, dense=True)
+                self._region_solve_stats["axis_exact_classify_time_s"] = (
+                    self._region_solve_stats.get("axis_exact_classify_time_s", 0.0)
+                    + (time.perf_counter() - decision_start)
+                )
+                if decision == "all_lower":
+                    self._record_axis_exact_success(total_start)
+                    return QgsGeometry(overlap)
+                if decision == "all_higher":
+                    self._record_axis_exact_success(total_start)
+                    return QgsGeometry()
+                return self._record_axis_exact_fallback(total_start)
+
+            split_start = time.perf_counter()
+            split_parts = self._split_overlap_by_transition_curve(overlap, transition_curve)
+            self._region_solve_stats["axis_exact_split_time_s"] = (
+                self._region_solve_stats.get("axis_exact_split_time_s", 0.0)
+                + (time.perf_counter() - split_start)
+            )
+            if len(split_parts) <= 1:
+                return self._record_axis_exact_fallback(total_start)
+
+            classify_start = time.perf_counter()
+            kept_parts: List[QgsGeometry] = []
+            for part in split_parts:
+                if not self._has_polygon_area(part):
+                    continue
+                try:
+                    point = part.pointOnSurface().asPoint()
+                    point_xy = QgsPointXY(point.x(), point.y())
+                except Exception:
+                    continue
+                difference = self._candidate_difference(axis_candidate, conical_candidate, point_xy)
+                if difference is not None and difference <= self.tie_tolerance_m:
+                    kept_parts.append(part)
+            self._region_solve_stats["axis_exact_classify_time_s"] = (
+                self._region_solve_stats.get("axis_exact_classify_time_s", 0.0)
+                + (time.perf_counter() - classify_start)
+            )
+            if not kept_parts:
+                self._record_axis_exact_success(total_start)
+                return QgsGeometry()
+            try:
+                combined = QgsGeometry.unaryUnion(kept_parts) if len(kept_parts) > 1 else QgsGeometry(kept_parts[0])
+            except Exception:
+                return self._record_axis_exact_fallback(total_start)
+            if combined is None:
+                return self._record_axis_exact_fallback(total_start)
+            self._record_axis_exact_success(total_start)
+            return combined if self._has_polygon_area(combined) else QgsGeometry()
+        except Exception:
+            return self._record_axis_exact_fallback(total_start)
+
+    def _record_axis_exact_success(self, start_time: float) -> None:
+        self._region_solve_stats["axis_exact_success"] = (
+            self._region_solve_stats.get("axis_exact_success", 0.0) + 1.0
+        )
+        self._region_solve_stats["axis_exact_total_time_s"] = (
+            self._region_solve_stats.get("axis_exact_total_time_s", 0.0)
+            + (time.perf_counter() - start_time)
+        )
+
+    def _record_axis_exact_fallback(self, start_time: float) -> None:
+        self._region_solve_stats["axis_exact_fallback"] = (
+            self._region_solve_stats.get("axis_exact_fallback", 0.0) + 1.0
+        )
+        self._region_solve_stats["axis_exact_total_time_s"] = (
+            self._region_solve_stats.get("axis_exact_total_time_s", 0.0)
+            + (time.perf_counter() - start_time)
+        )
+        return None
+
+    def _axis_conical_transition_curve(
+        self,
+        axis: dict,
+        conical_model: dict,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        station_range = self._axis_station_range(axis, overlap)
+        if station_range is None:
+            return None
+        min_station, max_station = station_range
+        if max_station - min_station <= 1e-6:
+            return None
+
+        base_footprint = conical_model.get("base_footprint")
+        conical_slope = float(conical_model["slope"])
+        a_offset = (float(axis["origin_elevation_m"]) - float(conical_model["base_elevation_m"])) / conical_slope
+        b_slope = float(axis["slope"]) / conical_slope
+        max_distance = conical_model.get("max_distance_m")
+        max_distance = float(max_distance) if max_distance is not None else None
+
+        bbox = overlap.boundingBox()
+        l_min, l_max = self._axis_lateral_bounds(axis, bbox)
+        if l_max - l_min <= 1e-6:
+            return None
+        station_step = max(1.0, min((max_station - min_station) / 240.0, 5.0))
+        lateral_step = max(2.0, min((l_max - l_min) / 120.0, 10.0))
+
+        tracks: List[List[QgsPointXY]] = []
+        t = min_station
+        while t <= max_station + 1e-6:
+            required_distance = a_offset + (b_slope * t)
+            roots: List[QgsPointXY] = []
+            if required_distance >= -self.tie_tolerance_m:
+                if max_distance is None or required_distance <= max_distance + self.tie_tolerance_m:
+                    roots = self._axis_conical_lateral_roots(
+                        axis,
+                        base_footprint,
+                        t,
+                        max(0.0, required_distance),
+                        l_min,
+                        l_max,
+                        lateral_step,
+                    )
+            for index, point_xy in enumerate(roots[:4]):
+                while len(tracks) <= index:
+                    tracks.append([])
+                tracks[index].append(point_xy)
+            t += station_step
+
+        line_geometries: List[QgsGeometry] = []
+        for track in tracks:
+            if len(track) < 2:
+                continue
+            line = QgsGeometry.fromPolylineXY(track)
+            if line is None or line.isEmpty():
+                continue
+            try:
+                clipped = line.intersection(overlap)
+            except Exception:
+                clipped = line
+            for line_points in self._line_parts(clipped):
+                if len(line_points) >= 2:
+                    line_geometries.append(QgsGeometry.fromPolylineXY(line_points))
+        if not line_geometries:
+            return None
+        try:
+            return QgsGeometry.unaryUnion(line_geometries) if len(line_geometries) > 1 else line_geometries[0]
+        except Exception:
+            return line_geometries[0]
+
+    def _axis_lateral_bounds(self, axis: dict, bbox: QgsRectangle) -> Tuple[float, float]:
+        ux = float(axis["ux"])
+        uy = float(axis["uy"])
+        vx = -uy
+        vy = ux
+        origin_x = float(axis["origin_x"])
+        origin_y = float(axis["origin_y"])
+        values = []
+        for x, y in (
+            (bbox.xMinimum(), bbox.yMinimum()),
+            (bbox.xMinimum(), bbox.yMaximum()),
+            (bbox.xMaximum(), bbox.yMinimum()),
+            (bbox.xMaximum(), bbox.yMaximum()),
+        ):
+            values.append(((x - origin_x) * vx) + ((y - origin_y) * vy))
+        padding = max(25.0, (max(values) - min(values)) * 0.05)
+        return min(values) - padding, max(values) + padding
+
+    def _axis_conical_lateral_roots(
+        self,
+        axis: dict,
+        base_footprint: QgsGeometry,
+        station: float,
+        required_distance: float,
+        l_min: float,
+        l_max: float,
+        lateral_step: float,
+    ) -> List[QgsPointXY]:
+        roots: List[QgsPointXY] = []
+
+        def _point_at(lateral: float) -> QgsPointXY:
+            ux = float(axis["ux"])
+            uy = float(axis["uy"])
+            vx = -uy
+            vy = ux
+            return QgsPointXY(
+                float(axis["origin_x"]) + (station * ux) + (lateral * vx),
+                float(axis["origin_y"]) + (station * uy) + (lateral * vy),
+            )
+
+        def _difference(lateral: float) -> float:
+            point_xy = _point_at(lateral)
+            return QgsGeometry.fromPointXY(point_xy).distance(base_footprint) - required_distance
+
+        previous_l = l_min
+        try:
+            previous_value = _difference(previous_l)
+        except Exception:
+            return []
+        l_value = l_min + lateral_step
+        while l_value <= l_max + 1e-6:
+            try:
+                current_value = _difference(l_value)
+            except Exception:
+                previous_l = l_value
+                l_value += lateral_step
+                continue
+            if previous_value == 0.0 or current_value == 0.0 or previous_value * current_value < 0.0:
+                root_l = self._axis_conical_bisect_lateral_root(_difference, previous_l, l_value)
+                point_xy = _point_at(root_l)
+                if not roots or point_xy.distance(roots[-1]) > 0.5:
+                    roots.append(point_xy)
+            previous_l = l_value
+            previous_value = current_value
+            l_value += lateral_step
+        return roots
+
+    def _axis_conical_bisect_lateral_root(
+        self,
+        difference_fn: Callable[[float], float],
+        lower_l: float,
+        upper_l: float,
+    ) -> float:
+        lower_value = difference_fn(lower_l)
+        upper_value = difference_fn(upper_l)
+        for _ in range(12):
+            mid_l = (lower_l + upper_l) / 2.0
+            mid_value = difference_fn(mid_l)
+            if abs(mid_value) <= 0.01:
+                return mid_l
+            if lower_value * mid_value <= 0.0:
+                upper_l = mid_l
+                upper_value = mid_value
+            else:
+                lower_l = mid_l
+                lower_value = mid_value
+        return (lower_l + upper_l) / 2.0
+
+    def _split_overlap_by_transition_curve(
+        self,
+        overlap: QgsGeometry,
+        transition_curve: QgsGeometry,
+    ) -> List[QgsGeometry]:
+        parts = self._polygon_parts(overlap)
+        for line_points in self._line_parts(transition_curve):
+            if len(line_points) < 2:
+                continue
+            next_parts: List[QgsGeometry] = []
+            for part in parts:
+                split_result = self._split_polygon_part_by_line(part, line_points)
+                next_parts.extend(split_result if split_result else [part])
+            parts = next_parts
+        return [part for part in parts if self._has_polygon_area(part)]
+
+    def _split_polygon_part_by_line(
+        self,
+        polygon: QgsGeometry,
+        line_points: Sequence[QgsPointXY],
+    ) -> List[QgsGeometry]:
+        try:
+            split_target = QgsGeometry(polygon)
+            result = split_target.splitGeometry(list(line_points), False)
+        except Exception:
+            return []
+        new_geometries = []
+        if isinstance(result, tuple):
+            if len(result) >= 2 and isinstance(result[1], list):
+                new_geometries = result[1]
+        if not new_geometries:
+            return []
+        split_parts = [split_target]
+        split_parts.extend(QgsGeometry(geometry) for geometry in new_geometries)
+        return [part for part in split_parts if self._has_polygon_area(part)]
 
     def _axis_station_range(self, axis: dict, geometry: QgsGeometry) -> Optional[Tuple[float, float]]:
         stations: List[float] = []
