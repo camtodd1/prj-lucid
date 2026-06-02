@@ -440,6 +440,12 @@ class PlanarControllingOlsEngine:
             return None
         if len(cleaned_parts) == 1:
             return cleaned_parts[0]
+        try:
+            dissolved = QgsGeometry.unaryUnion(cleaned_parts)
+        except Exception:
+            dissolved = None
+        if self._has_polygon_area(dissolved):
+            return dissolved
 
         multi_polygon = []
         for clean_part in cleaned_parts:
@@ -449,9 +455,7 @@ class PlanarControllingOlsEngine:
                 polygon = []
             if polygon:
                 multi_polygon.append(polygon)
-        if not multi_polygon:
-            return None
-        return QgsGeometry.fromMultiPolygonXY(multi_polygon)
+        return QgsGeometry.fromMultiPolygonXY(multi_polygon) if multi_polygon else None
 
     def _unresolved_comparison_removes_candidate(
         self,
