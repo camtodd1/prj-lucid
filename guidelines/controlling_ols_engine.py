@@ -208,10 +208,18 @@ class PlanarControllingOlsEngine:
                     min_elev,
                     max_elev,
                     "exact_planar_halfplane",
+                    self._candidate_style_angle(candidate),
                 ]
             )
             features.append(feature)
         return features
+
+    def _candidate_style_angle(self, candidate: ControllingOlsCandidate) -> Optional[float]:
+        """Return the azimuth used by data-defined axis gradient fills."""
+        try:
+            return float(candidate.metadata["azimuth_degrees"])
+        except (KeyError, TypeError, ValueError):
+            return None
 
     def region_boundary_features(self, fields: QgsFields) -> List[QgsFeature]:
         """Return line features where solved controlling region boundaries change controller."""
@@ -1942,6 +1950,7 @@ class ControllingOlsEngineMixin:
                 QgsField("elev_min", QVariant.Double, self.tr("Min Elev AMSL"), 12, 3),
                 QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
+                QgsField("style_angle", QVariant.Double, self.tr("Style Angle"), 8, 3),
             ]
         )
         engine = PlanarControllingOlsEngine(candidates, exclusion_geometries=exclusion_geometries)
@@ -2118,7 +2127,7 @@ class ControllingOlsEngineMixin:
             fields,
             features,
             output_group,
-            "Default Line",
+            "OLS Controlling Contour",
         )
         if layer is not None:
             QgsMessageLog.logMessage(
