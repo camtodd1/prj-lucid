@@ -384,6 +384,9 @@ class PlanarControllingOlsEngine:
             "axis_mixed_bands": 0.0,
             "axis_refined_bands": 0.0,
             "axis_triangulated_bands": 0.0,
+            "triangulation_calls": 0.0,
+            "triangulation_points_total": 0.0,
+            "triangulation_points_max": 0.0,
             "losing_difference_time_s": 0.0,
             "region_difference_time_s": 0.0,
             "cleanup_time_s": 0.0,
@@ -472,6 +475,12 @@ class PlanarControllingOlsEngine:
         bbox_skips = int(stats.get("bbox_skips", 0.0))
         intersections = int(stats.get("geos_intersections", 0.0))
         lower_calls = int(stats.get("lower_region_calls", 0.0))
+        triangulation_calls = int(stats.get("triangulation_calls", 0.0))
+        avg_tri_points = (
+            stats.get("triangulation_points_total", 0.0) / triangulation_calls
+            if triangulation_calls
+            else 0.0
+        )
         return (
             f"region solve: pairs={pair_checks}, bbox_skips={bbox_skips}, "
             f"intersections={intersections} ({stats.get('geos_intersection_time_s', 0.0):.2f}s), "
@@ -495,6 +504,8 @@ class PlanarControllingOlsEngine:
             f"mixed={int(stats.get('axis_mixed_bands', 0.0))}, "
             f"refined={int(stats.get('axis_refined_bands', 0.0))}, "
             f"triangulated={int(stats.get('axis_triangulated_bands', 0.0))}], "
+            f"tri_points[calls={triangulation_calls}, avg={avg_tri_points:.1f}, "
+            f"max={int(stats.get('triangulation_points_max', 0.0))}], "
             f"losing_diff={stats.get('losing_difference_time_s', 0.0):.2f}s, "
             f"region_diff={stats.get('region_difference_time_s', 0.0):.2f}s, "
             f"cleanup={stats.get('cleanup_time_s', 0.0):.2f}s, "
@@ -1436,7 +1447,15 @@ class PlanarControllingOlsEngine:
                 self._region_solve_stats.get("axis_triangulated_bands", 0.0) + 1.0
             )
             triangulation_start = time.perf_counter()
-            lower_band = self._triangulated_candidate_lower_region(axis_candidate, conical_candidate, station_band)
+            lower_band = self._triangulated_candidate_lower_region(
+                axis_candidate,
+                conical_candidate,
+                station_band,
+                boundary_max_segment_length=25.0,
+                grid_divisions=18.0,
+                grid_min_spacing=25.0,
+                grid_max_spacing=80.0,
+            )
             self._region_solve_stats["axis_band_triangulation_time_s"] = (
                 self._region_solve_stats.get("axis_band_triangulation_time_s", 0.0)
                 + (time.perf_counter() - triangulation_start)
@@ -1618,10 +1637,31 @@ class PlanarControllingOlsEngine:
         candidate: ControllingOlsCandidate,
         competitor: ControllingOlsCandidate,
         geometry: QgsGeometry,
+        boundary_max_segment_length: float = 15.0,
+        grid_divisions: float = 35.0,
+        grid_min_spacing: float = 15.0,
+        grid_max_spacing: float = 60.0,
     ) -> Optional[QgsGeometry]:
         start_time = time.perf_counter()
         try:
-            points = self._triangulation_sample_points(geometry)
+            points = self._triangulation_sample_points(
+                geometry,
+                boundary_max_segment_length=boundary_max_segment_length,
+                grid_divisions=grid_divisions,
+                grid_min_spacing=grid_min_spacing,
+                grid_max_spacing=grid_max_spacing,
+            )
+            point_count = len(points)
+            self._region_solve_stats["triangulation_calls"] = (
+                self._region_solve_stats.get("triangulation_calls", 0.0) + 1.0
+            )
+            self._region_solve_stats["triangulation_points_total"] = (
+                self._region_solve_stats.get("triangulation_points_total", 0.0) + float(point_count)
+            )
+            self._region_solve_stats["triangulation_points_max"] = max(
+                self._region_solve_stats.get("triangulation_points_max", 0.0),
+                float(point_count),
+            )
             if len(points) < 3:
                 return None
             try:
@@ -1757,7 +1797,14 @@ class PlanarControllingOlsEngine:
             start_point.y() + ((end_point.y() - start_point.y()) * fraction),
         )
 
-    def _triangulation_sample_points(self, geometry: QgsGeometry) -> List[QgsPointXY]:
+    def _triangulation_sample_points(
+        self,
+        geometry: QgsGeometry,
+        boundary_max_segment_length: float = 15.0,
+        grid_divisions: float = 35.0,
+        grid_min_spacing: float = 15.0,
+        grid_max_spacing: float = 60.0,
+    ) -> List[QgsPointXY]:
         points: List[QgsPointXY] = []
         seen = set()
 
@@ -1768,12 +1815,18 @@ class PlanarControllingOlsEngine:
             seen.add(key)
             points.append(point_xy)
 
-        for ring_points in self._densified_polygon_boundary_parts(geometry, max_segment_length=15.0):
+        for ring_points in self._densified_polygon_boundary_parts(
+            geometry,
+            max_segment_length=max(1.0, float(boundary_max_segment_length)),
+        ):
             for point_xy in ring_points:
                 _add(point_xy)
         try:
             bbox = geometry.boundingBox()
-            spacing = max(15.0, min(max(bbox.width(), bbox.height()) / 35.0, 60.0))
+            spacing = max(
+                float(grid_min_spacing),
+                min(max(bbox.width(), bbox.height()) / max(1.0, float(grid_divisions)), float(grid_max_spacing)),
+            )
             x = bbox.xMinimum()
             while x <= bbox.xMaximum() + 1e-6:
                 y = bbox.yMinimum()
