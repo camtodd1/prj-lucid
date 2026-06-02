@@ -29,6 +29,8 @@ CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2 = 0.05
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-10
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
+AXIS_CONICAL_REFINEMENT_MAX_DEPTH = 3
+AXIS_CONICAL_REFINEMENT_MIN_STATION_M = 2.5
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -379,6 +381,11 @@ class PlanarControllingOlsEngine:
             "axis_station_band_time_s": 0.0,
             "axis_sample_decision_time_s": 0.0,
             "axis_band_triangulation_time_s": 0.0,
+            "axis_all_lower_bands": 0.0,
+            "axis_all_higher_bands": 0.0,
+            "axis_mixed_bands": 0.0,
+            "axis_refined_bands": 0.0,
+            "axis_triangulated_bands": 0.0,
             "losing_difference_time_s": 0.0,
             "region_difference_time_s": 0.0,
             "cleanup_time_s": 0.0,
@@ -485,6 +492,11 @@ class PlanarControllingOlsEngine:
             f"axis_band={stats.get('axis_station_band_time_s', 0.0):.2f}s, "
             f"axis_decision={stats.get('axis_sample_decision_time_s', 0.0):.2f}s, "
             f"axis_tri={stats.get('axis_band_triangulation_time_s', 0.0):.2f}s], "
+            f"axis_bands[lower={int(stats.get('axis_all_lower_bands', 0.0))}, "
+            f"higher={int(stats.get('axis_all_higher_bands', 0.0))}, "
+            f"mixed={int(stats.get('axis_mixed_bands', 0.0))}, "
+            f"refined={int(stats.get('axis_refined_bands', 0.0))}, "
+            f"triangulated={int(stats.get('axis_triangulated_bands', 0.0))}], "
             f"losing_diff={stats.get('losing_difference_time_s', 0.0):.2f}s, "
             f"region_diff={stats.get('region_difference_time_s', 0.0):.2f}s, "
             f"cleanup={stats.get('cleanup_time_s', 0.0):.2f}s, "
@@ -1409,18 +1421,31 @@ class PlanarControllingOlsEngine:
                 + (time.perf_counter() - decision_start)
             )
             if decision == "all_lower":
+                self._region_solve_stats["axis_all_lower_bands"] = (
+                    self._region_solve_stats.get("axis_all_lower_bands", 0.0) + 1.0
+                )
                 pieces.append(station_band)
                 continue
             if decision == "all_higher":
+                self._region_solve_stats["axis_all_higher_bands"] = (
+                    self._region_solve_stats.get("axis_all_higher_bands", 0.0) + 1.0
+                )
                 continue
-            triangulation_start = time.perf_counter()
-            lower_band = self._triangulated_candidate_lower_region(axis_candidate, conical_candidate, station_band)
-            self._region_solve_stats["axis_band_triangulation_time_s"] = (
-                self._region_solve_stats.get("axis_band_triangulation_time_s", 0.0)
-                + (time.perf_counter() - triangulation_start)
+            self._region_solve_stats["axis_mixed_bands"] = (
+                self._region_solve_stats.get("axis_mixed_bands", 0.0) + 1.0
             )
-            if lower_band is not None and self._has_polygon_area(lower_band):
-                pieces.append(lower_band)
+            pieces.extend(
+                self._axis_conical_refined_lower_parts(
+                    axis_candidate,
+                    conical_candidate,
+                    axis,
+                    overlap,
+                    start_station,
+                    end_station,
+                    station_band,
+                    depth=0,
+                )
+            )
         if not pieces:
             decision_start = time.perf_counter()
             fallback_decision = self._sampled_lower_decision(
@@ -1443,6 +1468,101 @@ class PlanarControllingOlsEngine:
         except Exception:
             combined = None
         return combined if self._has_polygon_area(combined) else QgsGeometry()
+
+    def _axis_conical_refined_lower_parts(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+        axis: dict,
+        overlap: QgsGeometry,
+        start_station: float,
+        end_station: float,
+        station_band: QgsGeometry,
+        depth: int,
+    ) -> List[QgsGeometry]:
+        station_width = end_station - start_station
+        if depth >= AXIS_CONICAL_REFINEMENT_MAX_DEPTH or station_width <= AXIS_CONICAL_REFINEMENT_MIN_STATION_M:
+            self._region_solve_stats["axis_triangulated_bands"] = (
+                self._region_solve_stats.get("axis_triangulated_bands", 0.0) + 1.0
+            )
+            triangulation_start = time.perf_counter()
+            lower_band = self._triangulated_candidate_lower_region(axis_candidate, conical_candidate, station_band)
+            self._region_solve_stats["axis_band_triangulation_time_s"] = (
+                self._region_solve_stats.get("axis_band_triangulation_time_s", 0.0)
+                + (time.perf_counter() - triangulation_start)
+            )
+            return [lower_band] if lower_band is not None and self._has_polygon_area(lower_band) else []
+
+        self._region_solve_stats["axis_refined_bands"] = (
+            self._region_solve_stats.get("axis_refined_bands", 0.0) + 1.0
+        )
+        midpoint = (start_station + end_station) / 2.0
+        pieces: List[QgsGeometry] = []
+        for sub_start, sub_end in ((start_station, midpoint), (midpoint, end_station)):
+            pieces.extend(
+                self._axis_conical_classified_band_parts(
+                    axis_candidate,
+                    conical_candidate,
+                    axis,
+                    overlap,
+                    sub_start,
+                    sub_end,
+                    depth + 1,
+                )
+            )
+        return pieces
+
+    def _axis_conical_classified_band_parts(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+        axis: dict,
+        overlap: QgsGeometry,
+        start_station: float,
+        end_station: float,
+        depth: int,
+    ) -> List[QgsGeometry]:
+        if end_station - start_station <= 1e-6:
+            return []
+        band_start = time.perf_counter()
+        station_band = self._axis_station_interval_geometry(axis, start_station, end_station, overlap)
+        self._region_solve_stats["axis_station_band_time_s"] = (
+            self._region_solve_stats.get("axis_station_band_time_s", 0.0)
+            + (time.perf_counter() - band_start)
+        )
+        if station_band is None or not self._has_polygon_area(station_band):
+            return []
+
+        decision_start = time.perf_counter()
+        decision = self._sampled_lower_decision(axis_candidate, conical_candidate, station_band)
+        self._region_solve_stats["axis_sample_decision_time_s"] = (
+            self._region_solve_stats.get("axis_sample_decision_time_s", 0.0)
+            + (time.perf_counter() - decision_start)
+        )
+        if decision == "all_lower":
+            self._region_solve_stats["axis_all_lower_bands"] = (
+                self._region_solve_stats.get("axis_all_lower_bands", 0.0) + 1.0
+            )
+            return [station_band]
+        if decision == "all_higher":
+            self._region_solve_stats["axis_all_higher_bands"] = (
+                self._region_solve_stats.get("axis_all_higher_bands", 0.0) + 1.0
+            )
+            return []
+
+        self._region_solve_stats["axis_mixed_bands"] = (
+            self._region_solve_stats.get("axis_mixed_bands", 0.0) + 1.0
+        )
+        return self._axis_conical_refined_lower_parts(
+            axis_candidate,
+            conical_candidate,
+            axis,
+            overlap,
+            start_station,
+            end_station,
+            station_band,
+            depth,
+        )
 
     def _axis_station_range(self, axis: dict, geometry: QgsGeometry) -> Optional[Tuple[float, float]]:
         stations: List[float] = []
