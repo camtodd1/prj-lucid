@@ -135,7 +135,17 @@
        <string>Airport</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_airportTab">
-       <item>
+      <item>
+       <widget class="QLabel" name="coord_info">
+        <property name="text">
+         <string>Use project CRS Easting/Northing. Need Lat/Long conversion? See &lt;a href=&quot;https://geodesyapps.ga.gov.au/geographic-to-grid&quot;&gt;this link&lt;/a&gt;.</string>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item>
         <widget class="QFrame" name="frame_airport_identity">
          <property name="frameShape">
           <enum>QFrame::StyledPanel</enum>
@@ -218,16 +228,6 @@
              </spacer>
             </item>
            </layout>
-          </item>
-          <item>
-           <widget class="QLabel" name="coord_info">
-            <property name="text">
-             <string>Use project CRS Easting/Northing. Need Lat/Long conversion? See &lt;a href=&quot;https://geodesyapps.ga.gov.au/geographic-to-grid&quot;&gt;this link&lt;/a&gt;.</string>
-            </property>
-            <property name="wordWrap">
-             <bool>true</bool>
-            </property>
-           </widget>
           </item>
           <item>
            <widget class="QLabel" name="label_airport_status">

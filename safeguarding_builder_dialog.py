@@ -392,7 +392,9 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "coord_info"),
         )
         if coord_info:
-            coord_info.setStyleSheet("color: #444444; font-size: 11px;")
+            coord_info.setStyleSheet(
+                "QLabel { color: #4b4b4b; font-size: 11px; margin-left: 10px; margin-bottom: 2px; }"
+            )
 
         airport_identity_frame = getattr(
             self,
@@ -482,6 +484,16 @@ class SafeguardingBuilderDialog(
         if header_frame:
             header_frame.setStyleSheet(
                 "QFrame#frame_dialog_header { background: #fcfcfc; border-bottom: 1px solid #dedede; }"
+            )
+
+        heading_label = getattr(
+            self,
+            "label_dialog_heading",
+            self.findChild(QtWidgets.QLabel, "label_dialog_heading"),
+        )
+        if heading_label:
+            heading_label.setStyleSheet(
+                "QLabel { color: #232323; font-size: 20px; font-weight: 700; padding-bottom: 2px; }"
             )
 
         header_layout = getattr(
