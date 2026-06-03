@@ -371,29 +371,20 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         threshold_layout.addWidget(self.thr_pre_area_2_le, 3, 2)
 
         advanced_body_layout.addWidget(threshold_group)
-        self._add_declared_distance_controls(advanced_body_layout)
 
-        detailsLayout = QtWidgets.QGridLayout()
-        detailsLayout.setObjectName(f"detailsLayout_{self.index}")
-        detailsLayout.setColumnStretch(0, 1)
-        detailsLayout.setColumnStretch(1, 1)
-        current_details_row = 0
-
-        label_rwy_dist_text = QtWidgets.QLabel("Length (m):")
-        label_rwy_dist_text.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.dist_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.dist_lbl.setObjectName(f"label_rwy_distance_{self.index}")
-        detailsLayout.addWidget(label_rwy_dist_text, current_details_row, 0)
-        detailsLayout.addWidget(self.dist_lbl, current_details_row, 1)
-        current_details_row += 1
+        self.dist_lbl.hide()
 
-        label_rwy_azim_text = QtWidgets.QLabel("Azimuth (deg):")
-        label_rwy_azim_text.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.azim_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.azim_lbl.setObjectName(f"label_rwy_azimuth_{self.index}")
-        detailsLayout.addWidget(label_rwy_azim_text, current_details_row, 0)
-        detailsLayout.addWidget(self.azim_lbl, current_details_row, 1)
-        current_details_row += 1
+        self.azim_lbl.hide()
+
+        dimensions_group = QtWidgets.QGroupBox("Dimensions")
+        dimensions_group.setObjectName(f"groupBox_dimensions_{self.index}")
+        dimensions_layout = QtWidgets.QGridLayout(dimensions_group)
+        dimensions_layout.setColumnStretch(0, 2)
+        dimensions_layout.setColumnStretch(1, 1)
 
         label_runway_shoulder = QtWidgets.QLabel("Runway Shoulder (m):")
         label_runway_shoulder.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -402,15 +393,21 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.shoulder_le.setToolTip("Enter width of runway shoulder (each side, if applicable).")
         self.shoulder_le.setValidator(self.distance_validator)
         self.shoulder_le.setMinimumWidth(190)
-        detailsLayout.addWidget(label_runway_shoulder, current_details_row, 0)
-        detailsLayout.addWidget(self.shoulder_le, current_details_row, 1)
-        current_details_row += 1
+        dimensions_layout.addWidget(label_runway_shoulder, 0, 0)
+        dimensions_layout.addWidget(self.shoulder_le, 0, 1)
 
-        self._add_arc_controls(detailsLayout, current_details_row)
-        current_details_row += 4
-        self._add_runway_type_controls(detailsLayout, current_details_row)
+        advanced_body_layout.addWidget(dimensions_group)
+        self._add_declared_distance_controls(advanced_body_layout)
 
-        advanced_body_layout.addLayout(detailsLayout)
+        classification_group = QtWidgets.QGroupBox("Classification / Approach")
+        classification_group.setObjectName(f"groupBox_classification_{self.index}")
+        classification_layout = QtWidgets.QGridLayout(classification_group)
+        classification_layout.setColumnStretch(0, 2)
+        classification_layout.setColumnStretch(1, 1)
+        self._add_arc_controls(classification_layout, 0)
+        self._add_runway_type_controls(classification_layout, 4)
+
+        advanced_body_layout.addWidget(classification_group)
         advanced_layout.addWidget(advanced_body)
         groupBox_layout.addWidget(self.advanced_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
