@@ -40,12 +40,17 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.distance_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
 
         self.setObjectName(f"groupBox_runway_{self.index}")
+        self.setFlat(True)
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred,
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
         self.setStyleSheet(
             """
+            QGroupBox {
+                margin-top: 0px;
+                padding-top: 0px;
+            }
             QLineEdit, QComboBox {
                 min-height: 28px;
                 max-height: 28px;
