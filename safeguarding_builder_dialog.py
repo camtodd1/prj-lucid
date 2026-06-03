@@ -108,6 +108,9 @@ class SafeguardingBuilderDialog(
         self._airport_code_syncing = False
         self._airport_resolved_signature = ""
         self._airport_resolved_summary = ""
+        self._airport_lookup_state = "idle"
+        self._airport_lookup_status_message = ""
+        self._airport_lookup_status_signature = ""
         self._airport_lookup_timer = QtCore.QTimer(self)
         self._airport_lookup_timer.setSingleShot(True)
         self._airport_lookup_timer.timeout.connect(self._resolve_airport_lookup)
@@ -613,6 +616,9 @@ class SafeguardingBuilderDialog(
         """Clear resolved airport state when the user edits either code."""
         self._airport_resolved_signature = ""
         self._airport_resolved_summary = ""
+        self._airport_lookup_state = "idle"
+        self._airport_lookup_status_message = ""
+        self._airport_lookup_status_signature = ""
 
     def _queue_airport_lookup(self, code: Optional[str] = None, source: str = "icao") -> None:
         """Debounce airport metadata lookup so typing does not spam network calls."""
@@ -636,6 +642,9 @@ class SafeguardingBuilderDialog(
             self._airport_lookup_timer.stop()
             self._airport_lookup_pending_code = ""
             self._airport_lookup_pending_source = source
+            self._airport_lookup_state = "idle"
+            self._airport_lookup_status_message = ""
+            self._airport_lookup_status_signature = ""
             airport_lookup.setText("")
             airport_lookup.setToolTip("")
             return
@@ -651,6 +660,12 @@ class SafeguardingBuilderDialog(
 
         self._airport_lookup_pending_code = airport_code
         self._airport_lookup_pending_source = source
+        self._airport_lookup_state = "pending"
+        self._airport_lookup_status_message = ""
+        self._airport_lookup_status_signature = self._airport_signature(
+            airport_code if source == "icao" else "",
+            airport_code if source == "iata" else "",
+        )
         airport_lookup.setText("Looking up airport name and location...")
         airport_lookup.setToolTip("Querying OurAirports open data for the airport record.")
         airport_status = getattr(
@@ -712,8 +727,19 @@ class SafeguardingBuilderDialog(
                 self._airport_lookup_cache[icao_code] = result
             if iata_code:
                 self._airport_iata_cache[iata_code] = result
+            self._airport_lookup_state = "resolved"
+            self._airport_lookup_status_message = ""
+            self._airport_lookup_status_signature = self._airport_signature(icao_code, iata_code)
             self._apply_airport_lookup_result(icao_code or airport_code, result)
         else:
+            self._airport_lookup_state = "error" if lookup_error else "not_found"
+            self._airport_lookup_status_signature = self._airport_signature(
+                airport_code if source == "icao" else "",
+                airport_code if source == "iata" else "",
+            )
+            self._airport_lookup_status_message = (
+                f"Lookup unavailable for {airport_code}." if lookup_error else f"No airport match found for {airport_code}."
+            )
             if lookup_error:
                 airport_lookup.setText(f"Lookup unavailable for {airport_code}.")
                 airport_lookup.setToolTip(f"OurAirports lookup failed: {lookup_error}")
@@ -1018,10 +1044,25 @@ class SafeguardingBuilderDialog(
                     "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
-            elif icao or iata:
+            elif (
+                current_signature == self._airport_lookup_status_signature
+                and self._airport_lookup_state == "pending"
+            ):
                 self.label_airport_status.setText("Resolving airport...")
                 self.label_airport_status.setStyleSheet(
                     "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
+                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
+                )
+            elif current_signature == self._airport_lookup_status_signature and self._airport_lookup_state in {"not_found", "error"}:
+                self.label_airport_status.setText(self._airport_lookup_status_message or "Airport lookup failed")
+                self.label_airport_status.setStyleSheet(
+                    "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
+                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
+                )
+            elif icao or iata:
+                self.label_airport_status.setText("Airport code loaded")
+                self.label_airport_status.setStyleSheet(
+                    "QLabel { background: #eaf2ff; color: #1f4f99; border: 1px solid #c7d7f5; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
             else:
