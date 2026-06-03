@@ -1616,18 +1616,20 @@ class PhysicalGeometryMixin:
                 if threshold_params is not None:
                     stripe_count, gap_m = threshold_params
                     stripe_width = 1.8
-                    total_marked_width = stripe_count * stripe_width + (stripe_count - 1) * gap_m
+                    central_gap_m = 2.0 * stripe_width
+                    total_marked_width = stripe_count * stripe_width + (stripe_count - 2) * gap_m + central_gap_m
                     edge_space = (runway_width - total_marked_width) / 2.0
                     if edge_space < gap_m:
                         stripe_width = max(
                             0.1,
-                            (runway_width - (stripe_count + 1) * gap_m) / stripe_count,
+                            (runway_width - stripe_count * gap_m) / (stripe_count + 2),
                         )
+                        central_gap_m = 2.0 * stripe_width
                         edge_space = gap_m
                     left_edge = -runway_width / 2.0 + edge_space
                     piano_start = 1.2 + 6.0
+                    stripe_left = left_edge
                     for stripe_idx in range(stripe_count):
-                        stripe_left = left_edge + stripe_idx * (stripe_width + gap_m)
                         lateral_center = stripe_left + stripe_width / 2.0
                         geom = self._create_runway_marking_rectangle(
                             origin,
@@ -1657,12 +1659,15 @@ class PhysicalGeometryMixin:
                                         mandatory=True,
                                         notes=(
                                             self._surface_trigger_note("MOS 8.17", runway_data)
-                                            + f" Edge space {edge_space:.3f} m; "
+                                            + f" Edge space {edge_space:.3f} m; central gap {central_gap_m:.3f} m; "
                                             "stripe width 1.8 m unless adjusted to keep edge spaces >= a."
                                         ),
                                     ),
                                 )
                             )
+                        stripe_left += stripe_width
+                        if stripe_idx < stripe_count - 1:
+                            stripe_left += central_gap_m if stripe_idx == stripe_count // 2 - 1 else gap_m
                 else:
                     skipped.append(
                         "Threshold piano keys: unsupported runway width " f"{runway_width} m for Table 8.17(2)."

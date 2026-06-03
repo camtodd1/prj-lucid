@@ -180,11 +180,11 @@ existing data:
 | Transverse threshold line length | Full runway width at threshold | m/rule | Extends across runway width at the threshold location. |
 | Number of threshold stripes | Width 18 m: 4; 23 m: 6; 30 m: 8; 45 m: 12; 60 m: 16 | count | From Table 8.17(2). |
 | Stripe length | 30 | m | Measured away from threshold into runway direction, beyond the transverse line. |
-| Stripe width | Derived from runway width, stripe count, stripe-space width, and residual edge space after fitting complete stripes. | m | Edge spaces must be at least `a`; distribute residual distance to edge spaces when needed. |
-| Gap between stripes | Width 18/23/30 m: 1.5; width 45/60 m: 1.7 | m | Table 8.17(2), space denoted as `a` in Figure 8.17(2). |
+| Stripe width | Derived from runway width, stripe count, stripe-space width, residual edge space, and the widened centre gap. | m | Edge spaces must be at least `a`; distribute residual distance to edge spaces when needed. |
+| Gap between stripes | Width 18/23/30 m: 1.5; width 45/60 m: 1.7 | m | Table 8.17(2), space denoted as `a` in Figure 8.17(2). The gap between the two middle stripes is `2 x stripe width`. |
 | Overall marking width | Full threshold marking arrangement across runway width | m/rule | Edge gaps may be greater than `a` depending on residual width after fitting complete stripes. |
 | Longitudinal offset from threshold | Transverse line starts at threshold; piano keys start 6 m after the 1.2 m transverse threshold line. | rule | Offset is measured into runway direction after the transverse line. |
-| Lateral offset / centering rule | Uniformly spaced across runway width. | rule | Edge spaces between outermost stripes and runway edge are equal to or greater than `a`. |
+| Lateral offset / centering rule | Uniformly spaced across runway width, with a widened centre gap between the two middle stripes. | rule | Edge spaces between outermost stripes and runway edge are equal to or greater than `a`; the centre gap is `2 x stripe width`. |
 | Color | White | n/a | Applies to transverse line and piano key stripes. |
 | Orientation | Aligned with runway centreline | rule | Rectangles should be generated in the local runway coordinate system. |
 
