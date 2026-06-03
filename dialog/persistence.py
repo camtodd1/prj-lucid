@@ -228,6 +228,8 @@ class PersistenceMixin:
             "takeoff_available_2",
             "landing_available_1",
             "landing_available_2",
+            "lahso_applied_1",
+            "lahso_applied_2",
         }
         return any(str(value).strip() for key, value in runway_data.items() if key not in default_fields)
 
@@ -426,6 +428,8 @@ class PersistenceMixin:
         runway_data.setdefault("takeoff_available_2", True)
         runway_data.setdefault("landing_available_1", True)
         runway_data.setdefault("landing_available_2", True)
+        runway_data.setdefault("lahso_applied_1", False)
+        runway_data.setdefault("lahso_applied_2", False)
         return runway_data
 
     def _line_edit(self, name: str):

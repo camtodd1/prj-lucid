@@ -778,3 +778,105 @@ Status: implemented as detailed generated polygon geometry.
   chevrons outward into the pre-threshold area.
 - Legacy symbolic pre-threshold area line markings are no longer generated in
   the normal physical geometry pass.
+
+## 9. Runway Holding Position Markings
+
+Status: drafting requirements. MOS 8.39 received; the supplied extract now includes Table 6.56(1) minimum-distance geometry. Note b is disregarded for this builder; note a is recorded for later use but is not yet applied in geometry.
+
+Although these markings are placed on taxiways, they are relevant to runway
+modelling where LAHSO applies or where runway/runway taxi routing introduces a
+runway holding position.
+
+### MOS References
+
+| Reference | Requirement summary | Notes |
+| --- | --- | --- |
+| MOS 8.39(1) | Runway holding position markings must be provided where an asphalt, sealed or concrete taxiway joins or intersects with a runway. | Applies at runway/taxiway interfaces. |
+| MOS 8.39(2) | Subject to subsection (9), runway holding positions must be marked using Pattern A or Pattern B as shown in Figure 8.39(2). | Subsection (9) was not supplied. |
+| MOS 8.39(3) | Pattern A must be used at a taxiway intersection with a non-instrument runway, a non-precision approach runway, a precision approach CAT I runway, a precision approach CAT II/III runway if only one runway holding position is marked, or a runway/runway intersection where one runway is used as part of a standard taxi route. | Captures the non-precision and single-position cases. |
+| MOS 8.39(4) | Pattern A and Pattern B must be used where 2 or 3 runway holding positions are provided at an intersection of a taxiway with a precision approach runway. | Multiple holding positions require both patterns. |
+| MOS 8.39(5)(a) | The runway holding position marking closest to the runway must be Pattern A. | Pattern ordering rule. |
+| MOS 8.39(5)(b) | The other runway holding position marking or markings must be Pattern B. | Pattern ordering rule. |
+| MOS 8.39(6) | Runway holding position markings must extend at least across the full width of the sealed taxiway surface. | Full sealed taxiway width minimum. |
+| MOS 8.39(6) Note | If sealed shoulders are provided beyond the width of the taxiway, CASA recommends marking the full width of the sealed surface beyond the taxiway. | Recommendation, not mandatory from the supplied text. |
+| MOS 8.39(7) | The position of a runway holding position marking must ensure that when the nose of an aircraft reaches the marking, the nose will not infringe the relevant minimum distance specified in section 6.56. | Offset uses Table 6.56(1); note b is disregarded. |
+
+### Applicability
+
+| Condition | Applies? | Notes |
+| --- | --- | --- |
+| Taxiway joins or intersects runway | Yes | Applies when the taxiway surface is asphalt, sealed or concrete. |
+| Non-instrument runway | Yes | Pattern A. |
+| Non-precision approach runway | Yes | Pattern A. |
+| Precision approach CAT I runway | Yes | Pattern A. |
+| Precision approach CAT II/III runway, one holding position | Yes | Pattern A. |
+| Precision approach runway, two or three holding positions | Yes | Pattern A nearest runway, Pattern B for the other position(s). |
+| Runway/runway intersection with standard taxi route | Yes | Pattern A. |
+| Unsealed taxiway | Not specified in supplied text | Needs later confirmation. |
+| LAHSO runway treatment | Yes, where a landing hold-short requirement is modelled | Relevant as a runway-side holding position control. |
+
+### Geometry Parameters
+
+| Parameter | Value / rule | Unit | Notes |
+| --- | --- | --- | --- |
+| Color | Yellow | n/a | Depicted in Figure 8.39(2). |
+| Pattern A line width | 0.3 | m | Figure 8.39(2) shows four 0.3 m lines and three 0.3 m spaces. |
+| Pattern A space width | 0.3 | m | Figure 8.39(2). |
+| Pattern A count | 4 lines / 3 spaces | n/a | Figure 8.39(2). |
+| Pattern A grouped spacing | 0.9 to 1.0 | m | Figure 8.39(2) shows the grouped segments arranged with 0.9-1.0 m spacing between the repeated line groups. |
+| Pattern B line width | 0.3 | m | Figure 8.39(2). |
+| Pattern B separation | 1.5 | m | Figure 8.39(2) depicts 1.5 m separation between the paired lines. |
+| Pattern B overall width | 3.0 | m | Figure 8.39(2) shows 3.0 m between the outer limits of the paired elements. |
+| Orientation | As shown in Figure 8.39(2) | rule | Oriented across the taxiway/runway interface. |
+| Minimum extent | Full sealed taxiway width | rule | Marking must span the taxiway pavement width at minimum. |
+| Offset from runway centreline | Table 6.56(1) minimum distance | rule | Determine by runway code number and runway type; note b is disregarded. |
+
+### Table 6.56(1) Minimum Distance From Runway Centreline
+
+| Runway code number | Non-instrument | Non-precision approach | Precision CAT I | Precision CAT II or CAT III | Take-off |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | 30 m | 40 m | 60 m | n/a | 30 m |
+| 2 | 40 m | 40 m | 60 m | n/a | 40 m |
+| 3 | 75 m | 75 m | 90 m | 90 m | 75 m |
+| 4 | 75 m | 75 m | 90 m | 90 m | 75 m |
+
+### Table 6.56(1) Interpretation
+
+- Use the table distance as the minimum offset from the associated runway
+  centreline.
+- For code numbers 1 and 2, the precision CAT II/CAT III column is not
+  applicable in the supplied table extract.
+- Note a allows the distance to be decreased by 5 m for every metre the holding
+  position is below the threshold elevation, but only when the inner
+  transitional surface is not infringed.
+- Note b is disregarded for this builder.
+
+### Generated Feature Model
+
+| Field | Proposed value |
+| --- | --- |
+| Layer name | `{ICAO} Runway Holding Position Markings` |
+| Geometry type | Polygon |
+| Feature granularity | One polygon per Pattern A bar |
+| Group | Specialised Runway Safeguarding or Physical Geometry |
+| Style | Yellow fill with no outline |
+| Attributes | `rwy`, `end_desig`, `mark_type`, `sub_type`, `side`, `stripe_no`, `len_m`, `wid_m`, `offset_m`, `spacing_m`, `mandatory`, `ref_mos`, `notes` |
+
+### Implementation Notes
+
+- Treat this as an interface-control marking family for LAHSO and runway/taxiway
+  interaction modelling.
+- Pattern selection is driven by the runway type and the number of runway
+  holding positions required at the intersection.
+- Placement uses Table 6.56(1) and the runway code/type pairing; the elevation
+  modifier from note a is deferred for a later pass.
+- The current builder implements Pattern A as four 0.3 m bars with 0.3 m gaps.
+- LAHSO is modelled as a runway-end checkbox in the advanced runway data area.
+- Pattern B remains a future enhancement.
+
+### Open Questions
+
+- Please provide MOS subsection 8.39(9).
+- Confirm whether note a should be applied automatically from elevation data.
+- Confirm whether Pattern B should be added for precision runway intersections
+  in a later pass.

@@ -1974,6 +1974,11 @@ class SafeguardingBuilderDialog(
             "landing_available_2",
         ]:
             validated[field_name] = self._bool_from_input(inputs.get(field_name, True))
+        for field_name in [
+            "lahso_applied_1",
+            "lahso_applied_2",
+        ]:
+            validated[field_name] = self._bool_from_input(inputs.get(field_name, False))
 
         # Optional fields (just copy text)
         validated["ruleset"] = str(inputs.get("ruleset", "MOS139") or "MOS139").strip() or "MOS139"

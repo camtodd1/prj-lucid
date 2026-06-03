@@ -316,6 +316,11 @@ class PhysicalGeometryMixin:
                         "fields": detailed_marking_fields,
                         "group": detailed_marking_group,
                     },
+                    "DetailedRunwayHoldingPositionMarking": {
+                        "name": self.tr("Runway Holding Position Markings"),
+                        "fields": detailed_marking_fields,
+                        "group": detailed_marking_group,
+                    },
                     "DetailedSideStripeMarking": {
                         "name": self.tr("Runway Side-Stripe Markings"),
                         "fields": detailed_marking_fields,
@@ -371,6 +376,7 @@ class PhysicalGeometryMixin:
                     "DetailedTouchdownZoneMarking": "Runway Marking White",
                     "DetailedDisplacedThresholdMarking": "Runway Marking White",
                     "DetailedPreThresholdAreaMarking": "Runway Marking Yellow",
+                    "DetailedRunwayHoldingPositionMarking": "Runway Marking Yellow",
                     "DetailedSideStripeMarking": "Runway Marking White",
                     "DetailedMarkingQA": "Default Point",
                     "Stopway": "Stopways",
@@ -393,6 +399,7 @@ class PhysicalGeometryMixin:
                     "DetailedTouchdownZoneMarking",
                     "DetailedDisplacedThresholdMarking",
                     "DetailedPreThresholdAreaMarking",
+                    "DetailedRunwayHoldingPositionMarking",
                     "DetailedSideStripeMarking",
                     "DetailedMarkingQA",
                     "Stopway",
@@ -443,6 +450,7 @@ class PhysicalGeometryMixin:
                 runway_marking_contexts = {}
                 for rwy_data in processed_runway_data_list:
                     runway_name_log = rwy_data.get("short_name", f"RWY_{rwy_data.get('original_index', '?')}")
+                    rwy_data["_all_runways"] = processed_runway_data_list
                     try:
                         declared_spec = physical_layer_specs.get("DeclaredDistance")
                         if declared_spec is not None:
@@ -1429,6 +1437,117 @@ class PhysicalGeometryMixin:
             return [150.0, 300.0, 450.0, 600.0, 750.0]
         return [150.0, 300.0, 450.0, 600.0, 750.0, 900.0]
 
+    def _line_segment_intersection_point(
+        self,
+        a_start: QgsPointXY,
+        a_end: QgsPointXY,
+        b_start: QgsPointXY,
+        b_end: QgsPointXY,
+    ) -> Optional[QgsPointXY]:
+        """Return the intersection point for two line segments if one exists."""
+        x1, y1 = a_start.x(), a_start.y()
+        x2, y2 = a_end.x(), a_end.y()
+        x3, y3 = b_start.x(), b_start.y()
+        x4, y4 = b_end.x(), b_end.y()
+
+        denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
+        if abs(denom) <= 1e-9:
+            return None
+
+        det_a = x1 * y2 - y1 * x2
+        det_b = x3 * y4 - y3 * x4
+        px = (det_a * (x3 - x4) - (x1 - x2) * det_b) / denom
+        py = (det_a * (y3 - y4) - (y1 - y2) * det_b) / denom
+
+        def within(value: float, bound_1: float, bound_2: float) -> bool:
+            low = min(bound_1, bound_2) - 1e-6
+            high = max(bound_1, bound_2) + 1e-6
+            return low <= value <= high
+
+        if not (
+            within(px, x1, x2)
+            and within(py, y1, y2)
+            and within(px, x3, x4)
+            and within(py, y3, y4)
+        ):
+            return None
+
+        return QgsPointXY(px, py)
+
+    def _runway_holding_position_rule(
+        self, runway_code_num: int, runway_type: str
+    ) -> Optional[Tuple[float, str]]:
+        """Return the minimum holding-position distance from Table 6.56(1)."""
+        type_abbr = ols_dimensions.get_runway_type_abbr(runway_type)
+        table = {
+            1: {"NI": 30.0, "NPA": 40.0, "PA_I": 60.0, "PA_II_III": None},
+            2: {"NI": 40.0, "NPA": 40.0, "PA_I": 60.0, "PA_II_III": None},
+            3: {"NI": 75.0, "NPA": 75.0, "PA_I": 90.0, "PA_II_III": 90.0},
+            4: {"NI": 75.0, "NPA": 75.0, "PA_I": 90.0, "PA_II_III": 90.0},
+        }
+        if runway_code_num not in table or type_abbr not in table[runway_code_num]:
+            return None
+        distance = table[runway_code_num][type_abbr]
+        if distance is None:
+            return None
+        return distance, "MOS 8.39(7); Table 6.56(1)"
+
+    def _build_runway_holding_position_pattern(
+        self,
+        origin: QgsPointXY,
+        runway_azimuth: float,
+        runway_width: float,
+        start_offset_m: float,
+        runway_name: str,
+        end_desig: str,
+        intersecting_runway_name: str,
+        distance_m: float,
+    ) -> List[Tuple[str, QgsGeometry, dict]]:
+        """Build a Pattern A runway holding position marking."""
+        generated: List[Tuple[str, QgsGeometry, dict]] = []
+        line_width = 0.3
+        line_spacing = 0.3
+        bar_count = 4
+
+        for bar_no in range(bar_count):
+            bar_offset = start_offset_m + bar_no * (line_width + line_spacing)
+            geom = self._create_runway_marking_rectangle(
+                origin,
+                runway_azimuth,
+                bar_offset,
+                line_width,
+                0.0,
+                runway_width,
+                f"Runway holding position {runway_name} {end_desig} {bar_no + 1}",
+            )
+            if geom is None:
+                continue
+            generated.append(
+                (
+                    "DetailedRunwayHoldingPositionMarking",
+                    geom,
+                    self._detail_marking_attrs(
+                        runway_name,
+                        end_desig,
+                        "Runway Holding Position",
+                        "Pattern A",
+                        line_width,
+                        runway_width,
+                        "MOS 8.39(2); MOS 8.39(7); Table 6.56(1)",
+                        stripe_no=bar_no + 1,
+                        offset_m=round(start_offset_m, 3),
+                        spacing_m=line_spacing,
+                        mandatory=True,
+                        notes=(
+                            f"Pattern A {bar_count} x {line_width:.1f} m bars with {line_spacing:.1f} m spaces. "
+                            f"Nearest edge offset {distance_m:.1f} m from intersecting runway centreline. "
+                            f"Intersecting runway: {intersecting_runway_name}."
+                        ),
+                    ),
+                )
+            )
+        return generated
+
     def generate_detailed_runway_markings(self, runway_data: dict) -> List[Tuple[str, QgsGeometry, dict]]:
         """Generate MOS139 runway marking polygons in a separate layer group."""
         plugin_tag = PLUGIN_TAG
@@ -1484,6 +1603,7 @@ class PhysicalGeometryMixin:
                 non_negative_number(runway_data.get("thr_pre_area_1"), 0.0),
                 disp_primary,
                 self._bool_from_runway_data(runway_data.get("landing_available_1", True)),
+                self._bool_from_runway_data(runway_data.get("lahso_applied_1", False)),
             ),
             (
                 reciprocal_desig,
@@ -1495,6 +1615,7 @@ class PhysicalGeometryMixin:
                 non_negative_number(runway_data.get("thr_pre_area_2"), 0.0),
                 disp_reciprocal,
                 self._bool_from_runway_data(runway_data.get("landing_available_2", True)),
+                self._bool_from_runway_data(runway_data.get("lahso_applied_2", False)),
             ),
         ]
         default_assumptions = {
@@ -1513,7 +1634,7 @@ class PhysicalGeometryMixin:
                 "assumptions": set(default_assumptions),
                 "skipped": [],
             }
-            for end_desig, origin, _, _, _, _, _, _, _ in end_specs
+            for end_desig, origin, _, _, _, _, _, _, _, _ in end_specs
         }
         for qa in qa_records.values():
             qa["assumptions"].update(
@@ -1539,6 +1660,7 @@ class PhysicalGeometryMixin:
             pre_area_len,
             displaced_len,
             landing_available,
+            lahso_applied,
         ) in end_specs:
             skipped = qa_records[end_desig]["skipped"]
             if displaced_len > 1e-6:
@@ -2075,6 +2197,88 @@ class PhysicalGeometryMixin:
         elif surface_markings_applicable:
             for qa in qa_records.values():
                 qa["skipped"].append("Side-stripe markings: geometry generation failed.")
+
+        if surface_markings_applicable:
+            all_runways = runway_data.get("_all_runways", [])
+            try:
+                runway_code_num = int(float(runway_data.get("arc_num") or 0))
+            except (TypeError, ValueError):
+                runway_code_num = 0
+            for (
+                end_desig,
+                origin,
+                azimuth,
+                runway_type,
+                _pre_area_start,
+                _pre_area_outward_azimuth,
+                _pre_area_len,
+                _displaced_len,
+                landing_available,
+                lahso_applied,
+            ) in end_specs:
+                if not (landing_available and lahso_applied):
+                    continue
+                rule = self._runway_holding_position_rule(runway_code_num, runway_type)
+                if rule is None:
+                    qa_records[end_desig]["skipped"].append(
+                        "Runway holding position markings: no supported Table 6.56(1) distance "
+                        "for this runway code/type combination."
+                    )
+                    continue
+                distance_m, _rule_ref = rule
+                intersecting_count = 0
+                generated_holding_position = False
+                for other_rwy in all_runways:
+                    if other_rwy is runway_data:
+                        continue
+                    other_thr = other_rwy.get("thr_point")
+                    other_rec = other_rwy.get("rec_thr_point")
+                    if other_thr is None or other_rec is None:
+                        continue
+                    crossing_point = self._line_segment_intersection_point(
+                        thr_point if end_desig == primary_desig else rec_thr_point,
+                        rec_thr_point if end_desig == primary_desig else thr_point,
+                        other_thr,
+                        other_rec,
+                    )
+                    if crossing_point is None:
+                        continue
+                    intersecting_count += 1
+                    distance_to_crossing = math.hypot(
+                        crossing_point.x() - origin.x(),
+                        crossing_point.y() - origin.y(),
+                    )
+                    if distance_to_crossing <= distance_m + 1e-6:
+                        qa_records[end_desig]["skipped"].append(
+                            "Runway holding position markings: intersecting runway centreline is "
+                            "inside the minimum Table 6.56(1) distance."
+                        )
+                        continue
+                    start_offset_m = max(0.0, distance_to_crossing - distance_m)
+                    holding_position_features = self._build_runway_holding_position_pattern(
+                        origin,
+                        azimuth,
+                        runway_width,
+                        start_offset_m,
+                        runway_name,
+                        end_desig,
+                        other_rwy.get("short_name", f"RWY_{other_rwy.get('original_index', '?')}"),
+                        distance_m,
+                    )
+                    for element_type, geometry, attributes in holding_position_features:
+                        generated.append((element_type, geometry, attributes))
+                        generated_holding_position = True
+                if generated_holding_position:
+                    whole_runway_mandatory.append("Runway holding position markings")
+                elif intersecting_count:
+                    qa_records[end_desig]["skipped"].append(
+                        "Runway holding position markings: intersecting runway found, but no valid "
+                        "Table 6.56(1) placement could be generated."
+                    )
+                else:
+                    qa_records[end_desig]["skipped"].append(
+                        "Runway holding position markings: no intersecting runway centreline found."
+                    )
 
         self._append_marking_qa_records(
             generated,

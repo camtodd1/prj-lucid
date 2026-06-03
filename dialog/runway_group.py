@@ -602,6 +602,24 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         declared_layout.addWidget(self.landing_available_1_cb, 4, 1)
         declared_layout.addWidget(self.landing_available_2_cb, 4, 2)
 
+        lahso_label = QtWidgets.QLabel("LAHSO applied:")
+        self.lahso_applied_1_cb = QtWidgets.QCheckBox()
+        self.lahso_applied_1_cb.setObjectName(f"checkBox_lahso_applied_1_{self.index}")
+        self.lahso_applied_1_cb.setChecked(False)
+        self.lahso_applied_1_cb.setToolTip(
+            "Indicates that a LAHSO holding position marking is required for the primary runway direction."
+        )
+
+        self.lahso_applied_2_cb = QtWidgets.QCheckBox()
+        self.lahso_applied_2_cb.setObjectName(f"checkBox_lahso_applied_2_{self.index}")
+        self.lahso_applied_2_cb.setChecked(False)
+        self.lahso_applied_2_cb.setToolTip(
+            "Indicates that a LAHSO holding position marking is required for the reciprocal runway direction."
+        )
+        declared_layout.addWidget(lahso_label, 5, 0)
+        declared_layout.addWidget(self.lahso_applied_1_cb, 5, 1)
+        declared_layout.addWidget(self.lahso_applied_2_cb, 5, 2)
+
         parent_layout.addWidget(declared_group)
 
     def _connect_signals(self):
@@ -641,6 +659,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.takeoff_available_2_cb,
             self.landing_available_1_cb,
             self.landing_available_2_cb,
+            self.lahso_applied_1_cb,
+            self.lahso_applied_2_cb,
         ]:
             checkbox.stateChanged.connect(self.inputChanged.emit)
         for combo in [
@@ -697,6 +717,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "takeoff_available_2": self.takeoff_available_2_cb.isChecked(),
             "landing_available_1": self.landing_available_1_cb.isChecked(),
             "landing_available_2": self.landing_available_2_cb.isChecked(),
+            "lahso_applied_1": self.lahso_applied_1_cb.isChecked(),
+            "lahso_applied_2": self.lahso_applied_2_cb.isChecked(),
             "arc_num": self.arc_num_combo.currentData(),
             "arc_let": self.arc_let_combo.currentData(),
             "surface_category": self.surface_category_combo.currentText(),
@@ -735,6 +757,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.takeoff_available_2_cb.setChecked(self._bool_from_saved_value(data.get("takeoff_available_2", True)))
             self.landing_available_1_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_1", True)))
             self.landing_available_2_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_2", True)))
+            self.lahso_applied_1_cb.setChecked(self._bool_from_saved_value(data.get("lahso_applied_1", False)))
+            self.lahso_applied_2_cb.setChecked(self._bool_from_saved_value(data.get("lahso_applied_2", False)))
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
             self._set_combo_text(
@@ -792,6 +816,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.takeoff_available_2_cb,
             self.landing_available_1_cb,
             self.landing_available_2_cb,
+            self.lahso_applied_1_cb,
+            self.lahso_applied_2_cb,
             self.arc_num_combo,
             self.arc_let_combo,
             self.surface_category_combo,

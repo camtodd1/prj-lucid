@@ -108,6 +108,12 @@
   Notes:
   - Pre-threshold area markings still need suitability and starter-extension classification inputs to fully match MOS applicability.
 
+- [ ] Extend runway holding position markings to cover the remaining MOS edge cases.
+
+  Notes:
+  - Pattern B still needs to be added for the multi-holding-position precision runway cases.
+  - Note a from Table 6.56 still needs a geometry-aware elevation adjustment.
+
 - [ ] Confirm touchdown zone marking defaults and runway-length basis.
 
   Open questions:
