@@ -107,8 +107,8 @@ class SafeguardingBuilderDialog(
                     layout = QtWidgets.QVBoxLayout(scroll_content_widget)
                     scroll_content_widget.setLayout(layout)
                 if isinstance(layout, QtWidgets.QVBoxLayout):
-                    layout.setContentsMargins(0, 0, 0, 0)
-                    layout.setSpacing(0)
+                    layout.setContentsMargins(8, 8, 8, 8)
+                    layout.setSpacing(8)
                     layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
                     scroll_content_widget.setContentsMargins(0, 0, 0, 0)
                     self.scroll_area_layout = layout
