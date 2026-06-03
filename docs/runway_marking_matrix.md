@@ -61,8 +61,8 @@ existing data:
 - Generate one centreline stripe set for the entire runway. The reciprocal-end
   final stripe may be truncated to preserve the 12 m offset from the reciprocal
   runway designation marking.
-- Precision approach aiming point ranges use the lower permitted values by
-  default, including 18 m lateral spacing where 18-23 m is permitted.
+- Precision approach aiming point ranges use the higher permitted values by
+  default, including 23 m lateral spacing where 18-23 m is permitted.
 - Non-precision and non-instrument aiming point markings default to the MOS
   8.22(8) alternate standard.
 - Non-precision and non-instrument touchdown zone markings default to the simple
@@ -421,7 +421,7 @@ decisions.
 | Lateral placement | Symmetric about runway centreline | rule | Inner-side spacing controls gap between the two stripes. |
 | Precision stripe length | Table 8.22(3), Row B | m | Use lower bound by default unless increased conspicuity is selected. |
 | Precision stripe width | Table 8.22(3), Row C | m | Selected by LDA. |
-| Precision inner-side spacing | Table 8.22(3), Row D | m | Use lower bound by default for 18-23 m range unless rubber contamination option selected. |
+| Precision inner-side spacing | Table 8.22(3), Row D | m | Use upper bound by default for 18-23 m range unless a lower spacing is selected for rubber contamination control. |
 | Precision location | Table 8.22(3), Row A | m | Beginning of marking not more than listed threshold distance. |
 | NPA/NI alternate stripe length | 45 | m | MOS 8.22(8)(b)(i). |
 | NPA/NI alternate location | 300 | m | Ends nearest threshold at 300 m from threshold line. |
@@ -432,7 +432,7 @@ decisions.
 | --- | --- | --- |
 | Precision stripe length range 30-45 m | 30 m | Confirmed lower-end default. |
 | Precision stripe length range 45-60 m | 45 m | Confirmed lower-end default. |
-| Precision lateral spacing range 18-23 m | 18 m | Confirmed default. |
+| Precision lateral spacing range 18-23 m | 23 m | Confirmed default. |
 | NPA/NI standard choice | Use alternate Table 8.22(8) when runway width is 30 m or at least 45 m; otherwise flag unresolved. | Confirmed default for non-precision and non-instrument runways. |
 
 ### Generated Feature Model

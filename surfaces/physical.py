@@ -1409,8 +1409,8 @@ class PhysicalGeometryMixin:
             if lda_m < 1200.0:
                 return 250.0, 30.0, 6.0, 9.0, "MOS 8.22(3)"
             if lda_m < 2400.0:
-                return 300.0, 45.0, 9.0, 18.0, "MOS 8.22(3)"
-            return 400.0, 45.0, 9.0, 18.0, "MOS 8.22(3)"
+                return 300.0, 45.0, 9.0, 23.0, "MOS 8.22(3)"
+            return 400.0, 45.0, 9.0, 23.0, "MOS 8.22(3)"
 
         if abs(runway_width - 30.0) <= 0.01:
             return 300.0, 45.0, 6.0, 17.0, "MOS 8.22(8)"
