@@ -1507,45 +1507,95 @@ class PhysicalGeometryMixin:
         generated: List[Tuple[str, QgsGeometry, dict]] = []
         line_width = 0.3
         line_spacing = 0.3
+        dashed_segment_len = 0.95
+        dashed_gap_len = 0.95
         bar_count = 4
+
+        def create_transverse_bar(bar_offset: float, dashed: bool, bar_no: int) -> None:
+            if not dashed:
+                geom = self._create_runway_marking_rectangle(
+                    origin,
+                    runway_azimuth,
+                    bar_offset,
+                    line_width,
+                    0.0,
+                    runway_width,
+                    f"Runway holding position {runway_name} {end_desig} {bar_no}",
+                )
+                if geom is None:
+                    return
+                generated.append(
+                    (
+                        "DetailedRunwayHoldingPositionMarking",
+                        geom,
+                        self._detail_marking_attrs(
+                            runway_name,
+                            end_desig,
+                            "Runway Holding Position",
+                            "Pattern A",
+                            line_width,
+                            runway_width,
+                            "MOS 8.39(2); MOS 8.39(7); Table 6.56(1)",
+                            stripe_no=bar_no,
+                            offset_m=round(bar_offset, 3),
+                            spacing_m=line_spacing,
+                            mandatory=True,
+                            notes=(
+                                f"Pattern A solid bar {bar_no} of {bar_count}. "
+                                f"Nearest edge offset {distance_m:.1f} m from intersecting runway centreline. "
+                                f"Intersecting runway: {intersecting_runway_name}."
+                            ),
+                        ),
+                    )
+                )
+                return
+
+            segment_start = 0.0
+            segment_no = 1
+            while segment_start < runway_width - 1e-6:
+                segment_width = min(dashed_segment_len, runway_width - segment_start)
+                lateral_center = -runway_width / 2.0 + segment_start + segment_width / 2.0
+                geom = self._create_runway_marking_rectangle(
+                    origin,
+                    runway_azimuth,
+                    bar_offset,
+                    line_width,
+                    lateral_center,
+                    segment_width,
+                    f"Runway holding position {runway_name} {end_desig} {bar_no} dash {segment_no}",
+                )
+                if geom is not None:
+                    generated.append(
+                        (
+                            "DetailedRunwayHoldingPositionMarking",
+                            geom,
+                            self._detail_marking_attrs(
+                                runway_name,
+                                end_desig,
+                                "Runway Holding Position",
+                                "Pattern A",
+                                line_width,
+                                segment_width,
+                                "MOS 8.39(2); MOS 8.39(7); Table 6.56(1)",
+                                stripe_no=bar_no,
+                                offset_m=round(bar_offset, 3),
+                                spacing_m=dashed_gap_len,
+                                mandatory=True,
+                                notes=(
+                                    f"Pattern A dashed bar {bar_no} of {bar_count}; "
+                                    f"dash/gap length {dashed_segment_len:.2f} m. "
+                                    f"Nearest edge offset {distance_m:.1f} m from intersecting runway centreline. "
+                                    f"Intersecting runway: {intersecting_runway_name}."
+                                ),
+                            ),
+                        )
+                    )
+                segment_start += dashed_segment_len + dashed_gap_len
+                segment_no += 1
 
         for bar_no in range(bar_count):
             bar_offset = start_offset_m + bar_no * (line_width + line_spacing)
-            geom = self._create_runway_marking_rectangle(
-                origin,
-                runway_azimuth,
-                bar_offset,
-                line_width,
-                0.0,
-                runway_width,
-                f"Runway holding position {runway_name} {end_desig} {bar_no + 1}",
-            )
-            if geom is None:
-                continue
-            generated.append(
-                (
-                    "DetailedRunwayHoldingPositionMarking",
-                    geom,
-                    self._detail_marking_attrs(
-                        runway_name,
-                        end_desig,
-                        "Runway Holding Position",
-                        "Pattern A",
-                        line_width,
-                        runway_width,
-                        "MOS 8.39(2); MOS 8.39(7); Table 6.56(1)",
-                        stripe_no=bar_no + 1,
-                        offset_m=round(start_offset_m, 3),
-                        spacing_m=line_spacing,
-                        mandatory=True,
-                        notes=(
-                            f"Pattern A {bar_count} x {line_width:.1f} m bars with {line_spacing:.1f} m spaces. "
-                            f"Nearest edge offset {distance_m:.1f} m from intersecting runway centreline. "
-                            f"Intersecting runway: {intersecting_runway_name}."
-                        ),
-                    ),
-                )
-            )
+            create_transverse_bar(bar_offset, bar_no >= bar_count - 2, bar_no + 1)
         return generated
 
     def generate_detailed_runway_markings(self, runway_data: dict) -> List[Tuple[str, QgsGeometry, dict]]:

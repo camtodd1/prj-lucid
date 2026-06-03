@@ -823,7 +823,8 @@ runway holding position.
 | Pattern A line width | 0.3 | m | Figure 8.39(2) shows four 0.3 m lines and three 0.3 m spaces. |
 | Pattern A space width | 0.3 | m | Figure 8.39(2). |
 | Pattern A count | 4 lines / 3 spaces | n/a | Figure 8.39(2). |
-| Pattern A grouped spacing | 0.9 to 1.0 | m | Figure 8.39(2) shows the grouped segments arranged with 0.9-1.0 m spacing between the repeated line groups. |
+| Pattern A dashed segment length | 0.9 to 1.0 | m | The two lines closest to the intersecting runway use dashed segments of 0.9-1.0 m length. |
+| Pattern A dashed gap length | 0.9 to 1.0 | m | The dashed segments are separated by 0.9-1.0 m gaps. |
 | Pattern B line width | 0.3 | m | Figure 8.39(2). |
 | Pattern B separation | 1.5 | m | Figure 8.39(2) depicts 1.5 m separation between the paired lines. |
 | Pattern B overall width | 3.0 | m | Figure 8.39(2) shows 3.0 m between the outer limits of the paired elements. |
@@ -870,7 +871,9 @@ runway holding position.
   holding positions required at the intersection.
 - Placement uses Table 6.56(1) and the runway code/type pairing; the elevation
   modifier from note a is deferred for a later pass.
-- The current builder implements Pattern A as four 0.3 m bars with 0.3 m gaps.
+- The current builder implements Pattern A as four 0.3 m bars; the two bars
+  closest to the intersecting runway are dashed using 0.9-1.0 m dash and gap
+  lengths.
 - LAHSO is modelled as a runway-end checkbox in the advanced runway data area.
 - Pattern B remains a future enhancement.
 
