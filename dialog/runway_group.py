@@ -40,6 +40,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.distance_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
 
         self.setObjectName(f"groupBox_runway_{self.index}")
+        self.setProperty("runwayCard", True)
         self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
         self.setFrameShadow(QtWidgets.QFrame.Shadow.Plain)
         self.setSizePolicy(
@@ -48,7 +49,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         )
         self.setStyleSheet(
             """
-            QFrame {
+            QFrame[runwayCard="true"] {
                 border: 1px solid #dcdcdc;
                 border-radius: 4px;
                 background: #ffffff;
