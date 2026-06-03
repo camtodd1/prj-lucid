@@ -42,6 +42,7 @@ class PersistenceMixin:
 
         for name in [
             "lineEdit_airport_name",
+            "lineEdit_iata_code",
             "lineEdit_arp_easting",
             "lineEdit_arp_northing",
             "lineEdit_arp_elevation",
@@ -135,6 +136,7 @@ class PersistenceMixin:
     def _build_save_payload(self, icao_code: str):
         data_to_save = {
             "icao_code": icao_code,
+            "iata_code": self._line_text("lineEdit_iata_code").strip().upper(),
             "arp_easting": self._line_text("lineEdit_arp_easting"),
             "arp_northing": self._line_text("lineEdit_arp_northing"),
             "arp_elevation": self._line_text("lineEdit_arp_elevation"),
@@ -190,6 +192,7 @@ class PersistenceMixin:
             self._line_edit(name)
             for name in [
                 "lineEdit_airport_name",
+                "lineEdit_iata_code",
                 "lineEdit_arp_easting",
                 "lineEdit_arp_northing",
                 "lineEdit_arp_elevation",
@@ -231,6 +234,7 @@ class PersistenceMixin:
 
     def _apply_loaded_payload(self, loaded_data) -> None:
         self._set_line_text("lineEdit_airport_name", loaded_data.get("icao_code", ""))
+        self._set_line_text("lineEdit_iata_code", loaded_data.get("iata_code", ""))
         self._set_line_text("lineEdit_arp_easting", loaded_data.get("arp_easting", ""))
         self._set_line_text("lineEdit_arp_northing", loaded_data.get("arp_northing", ""))
         self._set_line_text("lineEdit_arp_elevation", loaded_data.get("arp_elevation", ""))

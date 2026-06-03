@@ -8,6 +8,7 @@ and performs real-time calculations for display.
 CNS coordinates are assumed to be in the current Project CRS.
 """
 
+import csv
 import math
 import os
 import re
@@ -100,7 +101,11 @@ class SafeguardingBuilderDialog(
         self._processing_status_active = False
         self._processing_progress_bar: Optional[QtWidgets.QProgressBar] = None
         self._airport_lookup_cache: Dict[str, Dict[str, str]] = {}
+        self._airport_iata_cache: Dict[str, Dict[str, str]] = {}
+        self._airport_dataset_loaded = False
         self._airport_lookup_pending_code: str = ""
+        self._airport_lookup_pending_source = "icao"
+        self._airport_code_syncing = False
         self._airport_lookup_timer = QtCore.QTimer(self)
         self._airport_lookup_timer.setSingleShot(True)
         self._airport_lookup_timer.timeout.connect(self._resolve_airport_lookup)
@@ -264,12 +269,12 @@ class SafeguardingBuilderDialog(
             "lineEdit_met_elevation": "MET Station Elevation (AMSL, Optional)",
         }
         placeholders = {
-            "lineEdit_arp_easting": "e.g., 455000.00",
-            "lineEdit_arp_northing": "e.g., 5772000.00",
-            "lineEdit_arp_elevation": "e.g., 150.0",
-            "lineEdit_met_easting": "e.g., 455100.00",
-            "lineEdit_met_northing": "e.g., 5772100.00",
-            "lineEdit_met_elevation": "e.g., 150.0",
+            "lineEdit_arp_easting": "455000.00",
+            "lineEdit_arp_northing": "5772000.00",
+            "lineEdit_arp_elevation": "150.0",
+            "lineEdit_met_easting": "455100.00",
+            "lineEdit_met_northing": "5772100.00",
+            "lineEdit_met_elevation": "150.0",
         }
         for name, validator in widgets_to_validate:
             widget = getattr(self, name, self.findChild(QtWidgets.QLineEdit, name))
@@ -292,6 +297,16 @@ class SafeguardingBuilderDialog(
         )
         if airport_name:
             airport_name.setMaximumWidth(220)
+            airport_name.setMaxLength(4)
+
+        iata_code = getattr(
+            self,
+            "lineEdit_iata_code",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"),
+        )
+        if iata_code:
+            iata_code.setMaximumWidth(120)
+            iata_code.setMaxLength(3)
 
     def _style_airport_tab(self) -> None:
         """Apply card-like styling and clearer hierarchy to the opening airport tab."""
@@ -307,10 +322,19 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_name"),
         )
         if airport_name_label:
-            base_text = airport_name_label.text().replace(" *", "")
-            airport_name_label.setText(f"{base_text} *")
-            airport_name_label.setToolTip("Required for runway generation.")
+            airport_name_label.setText("ICAO *")
+            airport_name_label.setToolTip("Required for runway generation. Enter ICAO or use IATA to look it up.")
             airport_name_label.setStyleSheet("font-weight: 600;")
+
+        iata_label = getattr(
+            self,
+            "label_iata_code",
+            self.findChild(QtWidgets.QLabel, "label_iata_code"),
+        )
+        if iata_label:
+            iata_label.setText("IATA")
+            iata_label.setToolTip("Optional. Entering IATA can populate ICAO when a match is found.")
+            iata_label.setStyleSheet("font-weight: 600; color: #555555;")
 
         airport_name_input = getattr(
             self,
@@ -320,7 +344,19 @@ class SafeguardingBuilderDialog(
         if airport_name_input:
             airport_name_input.setToolTip("Enter the ICAO airport code.")
             airport_name_input.setPlaceholderText("e.g., YPAD")
-            airport_name_input.setMaximumWidth(220)
+            airport_name_input.setMaximumWidth(150)
+            airport_name_input.setMinimumWidth(110)
+
+        iata_input = getattr(
+            self,
+            "lineEdit_iata_code",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"),
+        )
+        if iata_input:
+            iata_input.setToolTip("Enter an IATA airport code to look up and populate ICAO.")
+            iata_input.setPlaceholderText("e.g., ADL")
+            iata_input.setMaximumWidth(120)
+            iata_input.setMinimumWidth(90)
 
         airport_status = getattr(
             self,
@@ -422,6 +458,14 @@ class SafeguardingBuilderDialog(
                     QtWidgets.QSizePolicy.Policy.Expanding,
                     QtWidgets.QSizePolicy.Policy.Fixed,
                 )
+        for name in ["label_arp_status", "label_met_status"]:
+            label = getattr(self, name, self.findChild(QtWidgets.QLabel, name))
+            if label:
+                label.setMinimumHeight(24)
+                label.setStyleSheet(
+                    "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; "
+                    "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
+                )
 
     def _style_dialog_header(self) -> None:
         """Tighten the top utility header into a compact visual band."""
@@ -447,9 +491,34 @@ class SafeguardingBuilderDialog(
         for button_name in ["pushButton_load_data", "pushButton_save_data", "pushButton_clear_all"]:
             button = getattr(self, button_name, self.findChild(QtWidgets.QPushButton, button_name))
             if button:
-                button.setMinimumHeight(34)
-                button.setMaximumHeight(34)
-                button.setMinimumWidth(118)
+                button.setMinimumHeight(30)
+                button.setMaximumHeight(30)
+                button.setMinimumWidth(100)
+
+        tab_widget = getattr(self, "tabWidget_workflow", self.findChild(QtWidgets.QTabWidget, "tabWidget_workflow"))
+        if tab_widget:
+            tab_widget.setStyleSheet(
+                """
+                QTabWidget::pane {
+                    border: 1px solid #bcbcbc;
+                    top: -1px;
+                }
+                QTabBar::tab {
+                    min-width: 82px;
+                    padding: 5px 10px;
+                    margin-right: 1px;
+                    background: #eeeeee;
+                    border: 1px solid #bcbcbc;
+                    border-bottom: none;
+                    border-top-left-radius: 3px;
+                    border-top-right-radius: 3px;
+                }
+                QTabBar::tab:selected {
+                    background: #ffffff;
+                    font-weight: 600;
+                }
+                """
+            )
 
 
     def _connect_global_controls(self):
@@ -458,6 +527,11 @@ class SafeguardingBuilderDialog(
             self,
             "lineEdit_airport_name",
             self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_name"),
+        )
+        iata_code_le = getattr(
+            self,
+            "lineEdit_iata_code",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"),
         )
         add_runway_button = getattr(
             self,
@@ -468,13 +542,16 @@ class SafeguardingBuilderDialog(
         if airport_name_le:
             airport_name_le.textChanged.connect(self.update_all_runway_calculations)
             airport_name_le.textChanged.connect(self.update_dialog_status)
-            airport_name_le.textChanged.connect(self._queue_airport_lookup)
+            airport_name_le.textChanged.connect(self._handle_icao_changed)
         else:
             QgsMessageLog.logMessage(
                 "Warning: 'lineEdit_airport_name' not found.",
                 DIALOG_LOG_TAG,
                 level=Qgis.Warning,
             )
+
+        if iata_code_le:
+            iata_code_le.textChanged.connect(self._handle_iata_changed)
 
         if add_runway_button and self.scroll_area_layout is not None:
             add_runway_button.clicked.connect(self.add_runway_group)
@@ -491,7 +568,43 @@ class SafeguardingBuilderDialog(
                 level=Qgis.Warning,
             )
 
-    def _queue_airport_lookup(self, icao: Optional[str] = None) -> None:
+    def _handle_icao_changed(self, text: str) -> None:
+        """Normalize ICAO input and queue a metadata lookup."""
+        if self._airport_code_syncing:
+            return
+        icao_input = getattr(
+            self,
+            "lineEdit_airport_name",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_name"),
+        )
+        normalized = text.strip().upper()[:4]
+        if icao_input and text != normalized:
+            cursor_pos = min(icao_input.cursorPosition(), len(normalized))
+            blocker = QtCore.QSignalBlocker(icao_input)
+            icao_input.setText(normalized)
+            icao_input.setCursorPosition(cursor_pos)
+            del blocker
+        self._queue_airport_lookup(normalized, source="icao")
+
+    def _handle_iata_changed(self, text: str) -> None:
+        """Normalize IATA input and queue a reverse lookup."""
+        if self._airport_code_syncing:
+            return
+        iata_input = getattr(
+            self,
+            "lineEdit_iata_code",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"),
+        )
+        normalized = text.strip().upper()[:3]
+        if iata_input and text != normalized:
+            cursor_pos = min(iata_input.cursorPosition(), len(normalized))
+            blocker = QtCore.QSignalBlocker(iata_input)
+            iata_input.setText(normalized)
+            iata_input.setCursorPosition(cursor_pos)
+            del blocker
+        self._queue_airport_lookup(normalized, source="iata")
+
+    def _queue_airport_lookup(self, code: Optional[str] = None, source: str = "icao") -> None:
         """Debounce airport metadata lookup so typing does not spam network calls."""
         airport_lookup = getattr(
             self,
@@ -501,21 +614,34 @@ class SafeguardingBuilderDialog(
         if airport_lookup is None:
             return
 
-        icao_code = (icao if icao is not None else self.lineEdit_airport_name.text()).strip().upper()
-        if len(icao_code) != 4 or not icao_code.isalnum():
+        source = "iata" if source == "iata" else "icao"
+        if source == "iata":
+            raw_code = code if code is not None else self.lineEdit_iata_code.text()
+            expected_length = 3
+        else:
+            raw_code = code if code is not None else self.lineEdit_airport_name.text()
+            expected_length = 4
+        airport_code = raw_code.strip().upper()
+        if len(airport_code) != expected_length or not airport_code.isalnum():
             self._airport_lookup_timer.stop()
             self._airport_lookup_pending_code = ""
+            self._airport_lookup_pending_source = source
             airport_lookup.setText("")
             airport_lookup.setToolTip("")
             return
 
-        cached = self._airport_lookup_cache.get(icao_code)
+        cached = (
+            self._airport_iata_cache.get(airport_code)
+            if source == "iata"
+            else self._airport_lookup_cache.get(airport_code)
+        )
         if cached:
-            self._apply_airport_lookup_result(icao_code, cached)
+            self._apply_airport_lookup_result(cached.get("icao", airport_code), cached)
             return
 
-        self._airport_lookup_pending_code = icao_code
-        airport_lookup.setText("Looking up airport name and location…")
+        self._airport_lookup_pending_code = airport_code
+        self._airport_lookup_pending_source = source
+        airport_lookup.setText("Looking up airport name and location...")
         airport_lookup.setToolTip("Querying OurAirports open data for the airport record.")
         airport_status = getattr(
             self,
@@ -530,25 +656,35 @@ class SafeguardingBuilderDialog(
         self._airport_lookup_timer.start(350)
 
     def _resolve_airport_lookup(self) -> None:
-        """Fetch airport metadata for the current ICAO code if available."""
-        icao_code = self._airport_lookup_pending_code
-        if len(icao_code) != 4:
+        """Fetch airport metadata for the current airport code if available."""
+        airport_code = self._airport_lookup_pending_code
+        source = self._airport_lookup_pending_source
+        expected_length = 3 if source == "iata" else 4
+        if len(airport_code) != expected_length:
             return
 
         lookup_error = ""
         try:
-            result = self._fetch_airport_metadata(icao_code)
+            result = (
+                self._fetch_airport_metadata_by_iata(airport_code)
+                if source == "iata"
+                else self._fetch_airport_metadata(airport_code)
+            )
         except Exception as exc:  # pragma: no cover - network is best-effort
             lookup_error = str(exc)
             QgsMessageLog.logMessage(
-                f"Airport lookup failed for {icao_code}: {exc}",
+                f"Airport lookup failed for {airport_code}: {exc}",
                 DIALOG_LOG_TAG,
                 level=Qgis.Info,
             )
             result = None
 
-        current_code = self.lineEdit_airport_name.text().strip().upper()
-        if current_code != icao_code:
+        current_code = (
+            self.lineEdit_iata_code.text().strip().upper()
+            if source == "iata"
+            else self.lineEdit_airport_name.text().strip().upper()
+        )
+        if current_code != airport_code:
             return
 
         airport_lookup = getattr(
@@ -560,28 +696,58 @@ class SafeguardingBuilderDialog(
             return
 
         if result:
-            self._airport_lookup_cache[icao_code] = result
-            self._apply_airport_lookup_result(icao_code, result)
+            icao_code = result.get("icao", "").strip().upper()
+            iata_code = result.get("iata", "").strip().upper()
+            if icao_code:
+                self._airport_lookup_cache[icao_code] = result
+            if iata_code:
+                self._airport_iata_cache[iata_code] = result
+            self._apply_airport_lookup_result(icao_code or airport_code, result)
         else:
             if lookup_error:
-                airport_lookup.setText(f"Lookup unavailable for {icao_code}.")
+                airport_lookup.setText(f"Lookup unavailable for {airport_code}.")
                 airport_lookup.setToolTip(f"OurAirports lookup failed: {lookup_error}")
             else:
-                airport_lookup.setText(f"No airport match found for {icao_code}.")
-                airport_lookup.setToolTip("No OurAirports record was found for the entered ICAO code.")
+                airport_lookup.setText(f"No airport match found for {airport_code}.")
+                airport_lookup.setToolTip("No OurAirports record was found for the entered airport code.")
             airport_status = getattr(
                 self,
                 "label_airport_status",
                 self.findChild(QtWidgets.QLabel, "label_airport_status"),
             )
             if airport_status:
+                airport_status.setText("Airport not found")
                 airport_status.setStyleSheet(
                     "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
 
+    def _fetch_airport_metadata_by_iata(self, iata_code: str) -> Optional[Dict[str, str]]:
+        """Fetch airport details by IATA code from the OurAirports open-data CSV."""
+        cached = self._airport_iata_cache.get(iata_code)
+        if cached:
+            return cached
+        self._load_airport_dataset()
+        return self._airport_iata_cache.get(iata_code)
+
     def _fetch_airport_metadata(self, icao_code: str) -> Optional[Dict[str, str]]:
-        """Fetch airport name/location details from the OurAirports airport page."""
+        """Fetch airport name/location details, preferring the OurAirports open-data CSV."""
+        cached = self._airport_lookup_cache.get(icao_code)
+        if cached:
+            return cached
+
+        try:
+            self._load_airport_dataset()
+            cached = self._airport_lookup_cache.get(icao_code)
+            if cached:
+                return cached
+        except Exception as exc:  # pragma: no cover - network is best-effort
+            QgsMessageLog.logMessage(
+                f"Airport CSV lookup failed for {icao_code}, trying page fallback: {exc}",
+                DIALOG_LOG_TAG,
+                level=Qgis.Info,
+            )
+
         url = f"https://ourairports.com/airports/{icao_code.lower()}/"
         request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
         with urlopen(request, timeout=3) as response:
@@ -605,11 +771,84 @@ class SafeguardingBuilderDialog(
         if coords_match:
             coordinates = f"{coords_match.group(1).strip()}, {coords_match.group(2).strip()}"
 
+        iata_match = re.search(r"IATA code\s+([A-Z0-9]{3})", text, flags=re.I)
+        iata = iata_match.group(1).strip().upper() if iata_match else ""
+
         return {
+            "icao": icao_code,
+            "iata": iata,
             "name": name,
             "location": location,
             "coordinates": coordinates,
         }
+
+    def _load_airport_dataset(self) -> None:
+        """Load airport metadata into ICAO and IATA lookup caches."""
+        if self._airport_dataset_loaded:
+            return
+
+        url = "https://davidmegginson.github.io/ourairports-data/airports.csv"
+        request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request, timeout=5) as response:
+            csv_text = response.read().decode("utf-8-sig", errors="replace")
+
+        for row in csv.DictReader(csv_text.splitlines()):
+            record = self._airport_record_from_csv_row(row)
+            if not record:
+                continue
+            icao = record.get("icao", "")
+            iata = record.get("iata", "")
+            if icao and icao not in self._airport_lookup_cache:
+                self._airport_lookup_cache[icao] = record
+            if iata and iata not in self._airport_iata_cache:
+                self._airport_iata_cache[iata] = record
+        self._airport_dataset_loaded = True
+
+    def _airport_record_from_csv_row(self, row: Dict[str, str]) -> Optional[Dict[str, str]]:
+        """Convert an OurAirports CSV row into the compact metadata record used by the dialog."""
+        ident = row.get("ident", "").strip().upper()
+        gps_code = row.get("gps_code", "").strip().upper()
+        iata = row.get("iata_code", "").strip().upper()
+        icao = gps_code or (ident if len(ident) == 4 else "")
+        if not icao and not iata:
+            return None
+
+        municipality = row.get("municipality", "").strip()
+        iso_region = row.get("iso_region", "").strip()
+        iso_country = row.get("iso_country", "").strip()
+        region = self._format_airport_region(iso_region)
+        location_parts = [part for part in [municipality, region, iso_country] if part]
+        coordinates = ""
+        latitude = row.get("latitude_deg", "").strip()
+        longitude = row.get("longitude_deg", "").strip()
+        if latitude and longitude:
+            coordinates = f"{latitude}, {longitude}"
+
+        return {
+            "icao": icao,
+            "iata": iata,
+            "name": row.get("name", "").strip(),
+            "location": ", ".join(location_parts),
+            "coordinates": coordinates,
+        }
+
+    def _format_airport_region(self, iso_region: str) -> str:
+        """Return a readable region name for common Australian airport records."""
+        australian_regions = {
+            "AU-ACT": "Australian Capital Territory",
+            "AU-NSW": "New South Wales",
+            "AU-NT": "Northern Territory",
+            "AU-QLD": "Queensland",
+            "AU-SA": "South Australia",
+            "AU-TAS": "Tasmania",
+            "AU-VIC": "Victoria",
+            "AU-WA": "Western Australia",
+        }
+        if iso_region in australian_regions:
+            return australian_regions[iso_region]
+        if "-" in iso_region:
+            return iso_region.split("-", 1)[1]
+        return iso_region
 
     def _apply_airport_lookup_result(self, icao_code: str, result: Dict[str, str]) -> None:
         """Update the airport lookup label with fetched airport identity metadata."""
@@ -621,12 +860,21 @@ class SafeguardingBuilderDialog(
         if airport_lookup is None:
             return
 
+        icao = result.get("icao", icao_code).strip().upper()
+        iata = result.get("iata", "").strip().upper()
+        self._sync_airport_code_fields(icao, iata)
+
         name = result.get("name", "").strip()
         location = result.get("location", "").strip()
         coordinates = result.get("coordinates", "").strip()
-        summary = " · ".join(part for part in [name, location] if part)
+        code_summary = " / ".join(part for part in [icao, iata] if part)
+        summary = " - ".join(part for part in [code_summary, name, location] if part)
         airport_lookup.setText(summary)
-        tooltip_parts = [f"ICAO: {icao_code}"]
+        tooltip_parts = []
+        if icao:
+            tooltip_parts.append(f"ICAO: {icao}")
+        if iata:
+            tooltip_parts.append(f"IATA: {iata}")
         if name:
             tooltip_parts.append(f"Name: {name}")
         if location:
@@ -640,13 +888,34 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_status"),
         )
         if airport_status:
-            airport_status.setText(f"ICAO: {icao_code}")
+            airport_status.setText("Airport resolved")
             airport_status.setStyleSheet(
                 "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; "
                 "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
             )
             airport_status.setToolTip(" | ".join(tooltip_parts))
         self._resize_airport_identity_card()
+
+    def _sync_airport_code_fields(self, icao_code: str, iata_code: str) -> None:
+        """Populate paired airport code fields without triggering another lookup loop."""
+        self._airport_code_syncing = True
+        try:
+            icao_input = getattr(
+                self,
+                "lineEdit_airport_name",
+                self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_name"),
+            )
+            iata_input = getattr(
+                self,
+                "lineEdit_iata_code",
+                self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"),
+            )
+            if icao_input and icao_code and icao_input.text().strip().upper() != icao_code:
+                icao_input.setText(icao_code)
+            if iata_input and iata_code and iata_input.text().strip().upper() != iata_code:
+                iata_input.setText(iata_code)
+        finally:
+            self._airport_code_syncing = False
 
     def _resize_airport_identity_card(self) -> None:
         """Keep the airport identity card tight to its content."""
@@ -700,24 +969,70 @@ class SafeguardingBuilderDialog(
             elif hasattr(widget, "fileChanged"):
                 widget.fileChanged.connect(self.update_dialog_status)
 
+    def _set_small_status_chip(self, label_name: str, text: str, state: str) -> None:
+        """Apply a compact status-chip style to section-level labels."""
+        label = getattr(self, label_name, self.findChild(QtWidgets.QLabel, label_name))
+        if not label:
+            return
+        colors = {
+            "ready": ("#eaf6ed", "#1f6b32", "#c7e7cf"),
+            "warning": ("#fff5e6", "#9a5b00", "#f0d6a8"),
+            "neutral": ("#f4f4f4", "#555555", "#d6d6d6"),
+        }
+        background, foreground, border = colors.get(state, colors["neutral"])
+        label.setText(text)
+        label.setStyleSheet(
+            f"QLabel {{ background: {background}; color: {foreground}; border: 1px solid {border}; "
+            "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }}"
+        )
+
     def update_dialog_status(self):
         """Updates compact workflow status labels."""
         icao = self.lineEdit_airport_name.text().strip().upper()
+        iata_widget = getattr(self, "lineEdit_iata_code", self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"))
+        iata = iata_widget.text().strip().upper() if iata_widget else ""
         if hasattr(self, "label_airport_status"):
             if icao:
-                self.label_airport_status.setText(f"ICAO: {icao}")
+                self.label_airport_status.setText(f"Airport code entered: {icao}")
                 self.label_airport_status.setStyleSheet(
                     "QLabel { background: #eaf2ff; color: #1f4f99; border: 1px solid #c7d7f5; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
+            elif iata:
+                self.label_airport_status.setText(f"Resolving IATA: {iata}")
+                self.label_airport_status.setStyleSheet(
+                    "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
+                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
+                )
             else:
-                self.label_airport_status.setText("ICAO required")
+                self.label_airport_status.setText("ICAO or IATA required")
                 self.label_airport_status.setStyleSheet(
                     "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
         self._resize_airport_identity_card()
-        self._queue_airport_lookup(icao)
+
+        arp_values = [
+            self.lineEdit_arp_easting.text().strip() if hasattr(self, "lineEdit_arp_easting") else "",
+            self.lineEdit_arp_northing.text().strip() if hasattr(self, "lineEdit_arp_northing") else "",
+            self.lineEdit_arp_elevation.text().strip() if hasattr(self, "lineEdit_arp_elevation") else "",
+        ]
+        self._set_small_status_chip(
+            "label_arp_status",
+            "ARP located" if all(arp_values[:2]) else "ARP incomplete" if any(arp_values) else "ARP not set",
+            "ready" if all(arp_values[:2]) else "warning" if any(arp_values) else "neutral",
+        )
+
+        met_values = [
+            self.lineEdit_met_easting.text().strip() if hasattr(self, "lineEdit_met_easting") else "",
+            self.lineEdit_met_northing.text().strip() if hasattr(self, "lineEdit_met_northing") else "",
+            self.lineEdit_met_elevation.text().strip() if hasattr(self, "lineEdit_met_elevation") else "",
+        ]
+        self._set_small_status_chip(
+            "label_met_status",
+            "MET located" if all(met_values[:2]) else "MET incomplete" if any(met_values) else "MET not used",
+            "ready" if all(met_values[:2]) else "warning" if any(met_values) else "neutral",
+        )
 
         runway_count = len(self._runway_groups)
         incomplete = 0

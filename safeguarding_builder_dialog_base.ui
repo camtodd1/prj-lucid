@@ -161,6 +161,9 @@
           </property>
           <item>
            <layout class="QHBoxLayout" name="horizontalLayout_airportName">
+            <property name="spacing">
+             <number>8</number>
+            </property>
             <item>
              <widget class="QLabel" name="label_airport_name">
               <property name="font">
@@ -170,7 +173,34 @@
                </font>
               </property>
               <property name="text">
-               <string>Airport Name (ICAO)</string>
+               <string>ICAO</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="lineEdit_airport_name">
+              <property name="maxLength">
+               <number>4</number>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_iata_code">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>IATA</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="lineEdit_iata_code">
+              <property name="maxLength">
+               <number>3</number>
               </property>
              </widget>
             </item>
@@ -186,9 +216,6 @@
                </size>
               </property>
              </spacer>
-            </item>
-            <item>
-             <widget class="QLineEdit" name="lineEdit_airport_name"/>
             </item>
            </layout>
           </item>
@@ -229,11 +256,35 @@
          </property>
          <layout class="QGridLayout" name="gridLayout_arp">
          <item row="0" column="0" colspan="6">
-          <widget class="QLabel" name="label_arp_description">
-           <property name="text">
-             <string>Primary reference location for airport-wide safeguarding surfaces.</string>
-            </property>
-          </widget>
+          <layout class="QHBoxLayout" name="horizontalLayout_arpIntro">
+           <item>
+            <widget class="QLabel" name="label_arp_description">
+             <property name="text">
+              <string>Primary reference location for airport-wide safeguarding surfaces.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_arpIntro">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_arp_status">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_easting_ARP">
@@ -275,11 +326,35 @@
          </property>
          <layout class="QGridLayout" name="gridLayout_met">
          <item row="0" column="0" colspan="6">
-          <widget class="QLabel" name="label_met_description">
-           <property name="text">
-             <string>Optional. Leave blank if MET safeguarding surfaces are not required.</string>
-            </property>
-          </widget>
+          <layout class="QHBoxLayout" name="horizontalLayout_metIntro">
+           <item>
+            <widget class="QLabel" name="label_met_description">
+             <property name="text">
+              <string>Optional. Leave blank if MET safeguarding surfaces are not required.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_metIntro">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_met_status">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_easting_MET">
@@ -603,6 +678,7 @@
  </customwidgets>
  <tabstops>
   <tabstop>lineEdit_airport_name</tabstop>
+  <tabstop>lineEdit_iata_code</tabstop>
   <tabstop>lineEdit_arp_easting</tabstop>
   <tabstop>lineEdit_arp_northing</tabstop>
   <tabstop>lineEdit_arp_elevation</tabstop>
