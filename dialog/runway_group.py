@@ -13,7 +13,7 @@ from .dialog_constants import (
 )
 
 
-class RunwayWidgetGroup(QtWidgets.QGroupBox):
+class RunwayWidgetGroup(QtWidgets.QFrame):
     """
     Manages the UI elements and layout for a single runway group.
 
@@ -30,7 +30,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         coord_validator: QtGui.QValidator,
         parent: QtWidgets.QWidget = None,
     ):
-        super().__init__("", parent)
+        super().__init__(parent)
 
         self.index = index
         self.numeric_validator = QtGui.QDoubleValidator()
@@ -40,16 +40,18 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.distance_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
 
         self.setObjectName(f"groupBox_runway_{self.index}")
-        self.setFlat(True)
+        self.setFrameShape(QtWidgets.QFrame.Shape.StyledPanel)
+        self.setFrameShadow(QtWidgets.QFrame.Shadow.Plain)
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred,
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
         self.setStyleSheet(
             """
-            QGroupBox {
-                margin-top: 0px;
-                padding-top: 0px;
+            QFrame {
+                border: 1px solid #dcdcdc;
+                border-radius: 4px;
+                background: #ffffff;
             }
             QLineEdit, QComboBox {
                 min-height: 28px;
