@@ -13,6 +13,16 @@ from .dialog_constants import (
 )
 
 
+class NoWheelComboBox(QtWidgets.QComboBox):
+    """Combo box that ignores mouse-wheel changes unless the popup is open."""
+
+    def wheelEvent(self, event: QtGui.QWheelEvent) -> None:
+        if self.view().isVisible():
+            super().wheelEvent(event)
+            return
+        event.ignore()
+
+
 class RunwayWidgetGroup(QtWidgets.QFrame):
     """
     Manages the UI elements and layout for a single runway group.
@@ -195,7 +205,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.desig_le.setToolTip("Enter 2-digit primary designation (01-36).")
         self.desig_le.setValidator(QtGui.QIntValidator(1, 36, self))
         self.desig_le.setMinimumWidth(96)
-        self.suffix_combo = QtWidgets.QComboBox()
+        self.suffix_combo = NoWheelComboBox()
         self.suffix_combo.setObjectName(f"comboBox_rwy_suffix_{self.index}")
         self.suffix_combo.addItems(["", "L", "C", "R"])
         self.suffix_combo.setToolTip("Runway suffix (Leave blank if none)")
@@ -427,7 +437,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _add_arc_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
         label_arc_num = QtWidgets.QLabel("ARC Number:")
         label_arc_num.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.arc_num_combo = QtWidgets.QComboBox()
+        self.arc_num_combo = NoWheelComboBox()
         self.arc_num_combo.setObjectName(f"comboBox_arc_num_{self.index}")
         for label, value in [
             ("", ""),
@@ -445,7 +455,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         label_arc_let = QtWidgets.QLabel("ARC Letter:")
         label_arc_let.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.arc_let_combo = QtWidgets.QComboBox()
+        self.arc_let_combo = NoWheelComboBox()
         self.arc_let_combo.setObjectName(f"comboBox_arc_let_{self.index}")
         for label, value in [
             ("", ""),
@@ -465,7 +475,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         label_surface_category = QtWidgets.QLabel("Surface Category:")
         label_surface_category.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.surface_category_combo = QtWidgets.QComboBox()
+        self.surface_category_combo = NoWheelComboBox()
         self.surface_category_combo.setObjectName(f"comboBox_surface_category_{self.index}")
         self.surface_category_combo.addItems([""] + list(RUNWAY_SURFACE_MATERIALS))
         self.surface_category_combo.setToolTip("Select runway surface category.")
@@ -476,7 +486,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         label_surface_material = QtWidgets.QLabel("Surface Material:")
         label_surface_material.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.surface_material_combo = QtWidgets.QComboBox()
+        self.surface_material_combo = NoWheelComboBox()
         self.surface_material_combo.setObjectName(f"comboBox_surface_material_{self.index}")
         self.surface_material_combo.setToolTip("Select runway surface material for the chosen category.")
         self.surface_material_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
@@ -496,7 +506,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.type1_lbl = QtWidgets.QLabel("(Primary End) Type:")
         self.type1_lbl.setObjectName(f"label_type_desig1_{self.index}")
         self.type1_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.type1_combo = QtWidgets.QComboBox()
+        self.type1_combo = NoWheelComboBox()
         self.type1_combo.setObjectName(f"comboBox_type_desig1_{self.index}")
         self.type1_combo.addItems(runway_types)
         self.type1_combo.setToolTip("Select type for primary end.")
@@ -508,7 +518,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.type2_lbl = QtWidgets.QLabel("(Reciprocal End) Type:")
         self.type2_lbl.setObjectName(f"label_type_desig2_{self.index}")
         self.type2_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.type2_combo = QtWidgets.QComboBox()
+        self.type2_combo = NoWheelComboBox()
         self.type2_combo.setObjectName(f"comboBox_type_desig2_{self.index}")
         self.type2_combo.addItems(runway_types)
         self.type2_combo.setToolTip("Select type for reciprocal end.")
