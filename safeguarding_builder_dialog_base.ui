@@ -82,50 +82,90 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_airportTab">
        <item>
-        <layout class="QHBoxLayout" name="horizontalLayout_airportName">
-         <item>
-          <widget class="QLabel" name="label_airport_name">
-           <property name="font">
-            <font>
-             <weight>75</weight>
-             <bold>true</bold>
-            </font>
-           </property>
-           <property name="text">
-            <string>Airport Name (ICAO)</string>
-           </property>
-          </widget>
-         </item>
-         <item>
-          <widget class="QLineEdit" name="lineEdit_airport_name"/>
-         </item>
-        </layout>
-       </item>
-       <item>
-        <widget class="QLabel" name="coord_info">
-         <property name="text">
-          <string>Use project CRS Easting/Northing. Need Lat/Long conversion? See &lt;a href=&quot;https://geodesyapps.ga.gov.au/geographic-to-grid&quot;&gt;this link&lt;/a&gt;.</string>
+        <widget class="QFrame" name="frame_airport_identity">
+         <property name="frameShape">
+          <enum>QFrame::StyledPanel</enum>
          </property>
-         <property name="wordWrap">
-          <bool>true</bool>
+         <property name="frameShadow">
+          <enum>QFrame::Plain</enum>
          </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="label_airport_status">
-         <property name="text">
-          <string/>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QLabel" name="label_airport_lookup">
-         <property name="text">
-          <string/>
-         </property>
-         <property name="wordWrap">
-          <bool>true</bool>
-         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_airportIdentity">
+          <property name="leftMargin">
+           <number>12</number>
+          </property>
+          <property name="topMargin">
+           <number>10</number>
+          </property>
+          <property name="rightMargin">
+           <number>12</number>
+          </property>
+          <property name="bottomMargin">
+           <number>10</number>
+          </property>
+          <property name="spacing">
+           <number>6</number>
+          </property>
+          <item>
+           <layout class="QHBoxLayout" name="horizontalLayout_airportName">
+            <item>
+             <widget class="QLabel" name="label_airport_name">
+              <property name="font">
+               <font>
+                <weight>75</weight>
+                <bold>true</bold>
+               </font>
+              </property>
+              <property name="text">
+               <string>Airport Name (ICAO)</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_airportName">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QLineEdit" name="lineEdit_airport_name"/>
+            </item>
+           </layout>
+          </item>
+          <item>
+           <widget class="QLabel" name="coord_info">
+            <property name="text">
+             <string>Use project CRS Easting/Northing. Need Lat/Long conversion? See &lt;a href=&quot;https://geodesyapps.ga.gov.au/geographic-to-grid&quot;&gt;this link&lt;/a&gt;.</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_airport_status">
+            <property name="text">
+             <string/>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QLabel" name="label_airport_lookup">
+            <property name="text">
+             <string/>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>

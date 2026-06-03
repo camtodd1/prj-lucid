@@ -352,13 +352,12 @@ class SafeguardingBuilderDialog(
         if coord_info:
             coord_info.setStyleSheet("color: #444444; font-size: 11px;")
 
-        if isinstance(airport_layout, QtWidgets.QVBoxLayout):
-            airport_identity_frame = QtWidgets.QFrame(self.tab_airport)
-            airport_identity_frame.setObjectName("frame_airport_identity")
-            airport_identity_frame.setSizePolicy(
-                QtWidgets.QSizePolicy.Policy.Expanding,
-                QtWidgets.QSizePolicy.Policy.Fixed,
-            )
+        airport_identity_frame = getattr(
+            self,
+            "frame_airport_identity",
+            self.findChild(QtWidgets.QFrame, "frame_airport_identity"),
+        )
+        if airport_identity_frame:
             airport_identity_frame.setStyleSheet(
                 """
                 QFrame#frame_airport_identity {
@@ -368,29 +367,11 @@ class SafeguardingBuilderDialog(
                 }
                 """
             )
-            identity_layout = QtWidgets.QVBoxLayout(airport_identity_frame)
-            identity_layout.setContentsMargins(12, 10, 12, 10)
-            identity_layout.setSpacing(6)
-            identity_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-
-            airport_name_row = QtWidgets.QHBoxLayout()
-            airport_name_row.setContentsMargins(0, 0, 0, 0)
-            airport_name_row.setSpacing(12)
-            airport_name_row.addWidget(airport_name_label)
-            airport_name_row.addStretch(1)
-            airport_name_row.addWidget(airport_name_input)
-            identity_layout.addLayout(airport_name_row)
-
-            if coord_info:
-                identity_layout.addWidget(coord_info)
-            if airport_status:
-                identity_layout.addWidget(airport_status)
-            if airport_lookup:
-                identity_layout.addWidget(airport_lookup)
-
-            for _ in range(min(4, airport_layout.count())):
-                airport_layout.takeAt(0)
-            airport_layout.insertWidget(0, airport_identity_frame)
+            airport_identity_frame.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            airport_identity_frame.setMaximumHeight(16777215)
             airport_identity_frame.adjustSize()
             airport_identity_frame.setMaximumHeight(airport_identity_frame.sizeHint().height())
 
