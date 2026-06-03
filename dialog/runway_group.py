@@ -362,6 +362,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         threshold_group = QtWidgets.QGroupBox("Threshold / Elevation Details")
         threshold_group.setObjectName(f"groupBox_threshold_details_{self.index}")
+        self._style_section_groupbox(threshold_group)
         threshold_layout = QtWidgets.QGridLayout(threshold_group)
         threshold_layout.setColumnStretch(0, 2)
         threshold_layout.setColumnStretch(1, 1)
@@ -392,6 +393,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         dimensions_group = QtWidgets.QGroupBox("Dimensions")
         dimensions_group.setObjectName(f"groupBox_dimensions_{self.index}")
+        self._style_section_groupbox(dimensions_group)
         dimensions_layout = QtWidgets.QGridLayout(dimensions_group)
         dimensions_layout.setColumnStretch(0, 2)
         dimensions_layout.setColumnStretch(1, 1)
@@ -411,6 +413,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         classification_group = QtWidgets.QGroupBox("Classification / Approach")
         classification_group.setObjectName(f"groupBox_classification_{self.index}")
+        self._style_section_groupbox(classification_group)
         classification_layout = QtWidgets.QGridLayout(classification_group)
         classification_layout.setColumnStretch(0, 2)
         classification_layout.setColumnStretch(1, 1)
@@ -530,6 +533,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _add_declared_distance_controls(self, parent_layout: QtWidgets.QVBoxLayout):
         declared_group = QtWidgets.QGroupBox("Declared Distances")
         declared_group.setObjectName(f"groupBox_declared_distances_{self.index}")
+        self._style_section_groupbox(declared_group)
         declared_layout = QtWidgets.QGridLayout(declared_group)
         declared_layout.setColumnStretch(0, 2)
         declared_layout.setColumnStretch(1, 1)
@@ -829,6 +833,28 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _handle_surface_category_changed(self):
         self._refresh_surface_material_options(self.surface_category_combo.currentText())
         self.inputChanged.emit()
+
+    def _style_section_groupbox(self, groupbox: QtWidgets.QGroupBox) -> None:
+        """Style runway sub-panels so their titles sit on the border line."""
+        if groupbox is None:
+            return
+        groupbox.setStyleSheet(
+            """
+            QGroupBox {
+                border: 1px solid #dcdcdc;
+                border-radius: 4px;
+                margin-top: 12px;
+                padding: 8px;
+                background: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
+                font-weight: 600;
+            }
+            """
+        )
 
     def _set_advanced_visible(self, visible: bool) -> None:
         self._advanced_visible = visible
