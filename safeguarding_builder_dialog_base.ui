@@ -617,14 +617,26 @@
        <string>OLS</string>
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_olsTab">
+       <property name="alignment">
+        <set>Qt::AlignTop</set>
+       </property>
        <item>
-        <widget class="QCheckBox" name="checkBox_generateControllingOls">
-         <property name="text">
-          <string>Generate controlling OLS surfaces</string>
+        <widget class="QGroupBox" name="groupBox_controllingOls">
+         <property name="title">
+          <string>Controlling (most-limiting) Surface</string>
          </property>
-         <property name="checked">
-          <bool>true</bool>
-         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_controllingOls">
+          <item>
+           <widget class="QCheckBox" name="checkBox_generateControllingOls">
+            <property name="text">
+             <string>Generate controlling OLS surfaces</string>
+            </property>
+            <property name="checked">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+         </layout>
         </widget>
        </item>
        <item>
@@ -634,6 +646,19 @@
          </property>
          <layout class="QGridLayout" name="gridLayout_contourIntervals"/>
         </widget>
+       </item>
+       <item>
+        <spacer name="verticalSpacer_ols">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
        </item>
       </layout>
      </widget>

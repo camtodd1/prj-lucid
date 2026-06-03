@@ -69,7 +69,7 @@ class OutputOptionsMixin:
     def _setup_controlling_ols_control(self):
         """Add the development controlling OLS output toggle to the Output tab."""
         checkbox = getattr(self, "checkBox_generateControllingOls", None)
-        parent_layout = getattr(self, "verticalLayout_olsTab", getattr(self, "verticalLayout_5", None))
+        parent_layout = getattr(self, "verticalLayout_controllingOls", getattr(self, "verticalLayout_olsTab", getattr(self, "verticalLayout_5", None)))
         if parent_layout is None:
             QgsMessageLog.logMessage(
                 "Controlling OLS output control setup skipped: output options layout missing.",
@@ -81,7 +81,7 @@ class OutputOptionsMixin:
         if checkbox is None:
             checkbox = QtWidgets.QCheckBox(self.tr("Generate controlling OLS surfaces"))
             checkbox.setObjectName("checkBox_generateControllingOls")
-            parent_layout.insertWidget(0, checkbox)
+            parent_layout.addWidget(checkbox)
             self.checkBox_generateControllingOls = checkbox
         checkbox.setChecked(True)
         checkbox.setToolTip(self.tr("Include the development controlling OLS lower-envelope output layers."))
