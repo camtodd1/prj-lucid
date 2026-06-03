@@ -209,6 +209,17 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.rec_desig_hdr_lbl.setToolTip("Calculated reciprocal designation")
         self.rec_desig_hdr_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
+        label_runway_width = QtWidgets.QLabel("Runway Width (m):")
+        label_runway_width.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self._mark_required_label(label_runway_width)
+        self.width_le = QtWidgets.QLineEdit()
+        self.width_le.setObjectName(f"lineEdit_runway_width_{self.index}")
+        self.width_le.setToolTip("Enter actual runway width (meters).")
+        width_validator = QtGui.QDoubleValidator(0.01, 9999.99, 2, self)
+        width_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
+        self.width_le.setValidator(width_validator)
+        self.width_le.setMinimumWidth(190)
+
         self.thr_east_le = QtWidgets.QLineEdit()
         self.thr_east_le.setObjectName(f"lineEdit_thr_easting_{self.index}")
         self.thr_east_le.setPlaceholderText("e.g., 456789.12")
@@ -308,6 +319,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         gridLayout_Coords.addLayout(h_layout_desig_inputs, current_coord_row, 1)
         gridLayout_Coords.addWidget(self.rec_desig_hdr_lbl, current_coord_row, 2)
         current_coord_row += 1
+        gridLayout_Coords.addWidget(label_runway_width, current_coord_row, 0)
+        gridLayout_Coords.addWidget(self.width_le, current_coord_row, 1, 1, 2)
+        current_coord_row += 1
         gridLayout_Coords.addWidget(label_easting_row, current_coord_row, 0)
         gridLayout_Coords.addWidget(self.thr_east_le, current_coord_row, 1)
         gridLayout_Coords.addWidget(self.rec_east_le, current_coord_row, 2)
@@ -315,22 +329,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         gridLayout_Coords.addWidget(label_northing_row, current_coord_row, 0)
         gridLayout_Coords.addWidget(self.thr_north_le, current_coord_row, 1)
         gridLayout_Coords.addWidget(self.rec_north_le, current_coord_row, 2)
-        current_coord_row += 1
-        gridLayout_Coords.addWidget(label_runway_end_elevation_row, current_coord_row, 0)
-        gridLayout_Coords.addWidget(self.runway_end_elev_1_le, current_coord_row, 1)
-        gridLayout_Coords.addWidget(self.runway_end_elev_2_le, current_coord_row, 2)
-        current_coord_row += 1
-        gridLayout_Coords.addWidget(label_threshold_elevation_row, current_coord_row, 0)
-        gridLayout_Coords.addWidget(self.threshold_elev_1_le, current_coord_row, 1)
-        gridLayout_Coords.addWidget(self.threshold_elev_2_le, current_coord_row, 2)
-        current_coord_row += 1
-        gridLayout_Coords.addWidget(label_displaced_row, current_coord_row, 0)
-        gridLayout_Coords.addWidget(self.thr_displaced_1_le, current_coord_row, 1)
-        gridLayout_Coords.addWidget(self.thr_displaced_2_le, current_coord_row, 2)
-        current_coord_row += 1
-        gridLayout_Coords.addWidget(label_pre_threshold_area_row, current_coord_row, 0)
-        gridLayout_Coords.addWidget(self.thr_pre_area_1_le, current_coord_row, 1)
-        gridLayout_Coords.addWidget(self.thr_pre_area_2_le, current_coord_row, 2)
 
         core_widget.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
@@ -351,6 +349,28 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         advanced_body_layout = QtWidgets.QVBoxLayout(advanced_body)
         advanced_body_layout.setContentsMargins(0, 0, 0, 0)
         advanced_body_layout.setSpacing(8)
+
+        threshold_group = QtWidgets.QGroupBox("Threshold / Elevation Details")
+        threshold_group.setObjectName(f"groupBox_threshold_details_{self.index}")
+        threshold_layout = QtWidgets.QGridLayout(threshold_group)
+        threshold_layout.setColumnStretch(0, 2)
+        threshold_layout.setColumnStretch(1, 1)
+        threshold_layout.setColumnStretch(2, 1)
+
+        threshold_layout.addWidget(label_runway_end_elevation_row, 0, 0)
+        threshold_layout.addWidget(self.runway_end_elev_1_le, 0, 1)
+        threshold_layout.addWidget(self.runway_end_elev_2_le, 0, 2)
+        threshold_layout.addWidget(label_threshold_elevation_row, 1, 0)
+        threshold_layout.addWidget(self.threshold_elev_1_le, 1, 1)
+        threshold_layout.addWidget(self.threshold_elev_2_le, 1, 2)
+        threshold_layout.addWidget(label_displaced_row, 2, 0)
+        threshold_layout.addWidget(self.thr_displaced_1_le, 2, 1)
+        threshold_layout.addWidget(self.thr_displaced_2_le, 2, 2)
+        threshold_layout.addWidget(label_pre_threshold_area_row, 3, 0)
+        threshold_layout.addWidget(self.thr_pre_area_1_le, 3, 1)
+        threshold_layout.addWidget(self.thr_pre_area_2_le, 3, 2)
+
+        advanced_body_layout.addWidget(threshold_group)
         self._add_declared_distance_controls(advanced_body_layout)
 
         detailsLayout = QtWidgets.QGridLayout()
@@ -373,20 +393,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.azim_lbl.setObjectName(f"label_rwy_azimuth_{self.index}")
         detailsLayout.addWidget(label_rwy_azim_text, current_details_row, 0)
         detailsLayout.addWidget(self.azim_lbl, current_details_row, 1)
-        current_details_row += 1
-
-        label_runway_width = QtWidgets.QLabel("Runway Width (m):")
-        label_runway_width.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self._mark_required_label(label_runway_width)
-        self.width_le = QtWidgets.QLineEdit()
-        self.width_le.setObjectName(f"lineEdit_runway_width_{self.index}")
-        self.width_le.setToolTip("Enter actual runway width (meters).")
-        width_validator = QtGui.QDoubleValidator(0.01, 9999.99, 2, self)
-        width_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
-        self.width_le.setValidator(width_validator)
-        self.width_le.setMinimumWidth(190)
-        detailsLayout.addWidget(label_runway_width, current_details_row, 0)
-        detailsLayout.addWidget(self.width_le, current_details_row, 1)
         current_details_row += 1
 
         label_runway_shoulder = QtWidgets.QLabel("Runway Shoulder (m):")
