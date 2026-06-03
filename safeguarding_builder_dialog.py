@@ -580,7 +580,6 @@ class SafeguardingBuilderDialog(
 
         new_group.inputChanged.connect(lambda idx=runway_index: self.update_runway_calculations(idx))
         new_group.removeRequested.connect(self.remove_runway_group)
-        new_group.duplicateRequested.connect(self.duplicate_runway_group)
 
         # Add to the end of the layout
         self.scroll_area_layout.addWidget(new_group)
@@ -588,46 +587,6 @@ class SafeguardingBuilderDialog(
         self._runway_groups[runway_index] = new_group
         self._update_dialog_height()
         self.update_runway_calculations(runway_index)  # Update placeholders
-        self.update_dialog_status()
-        self._focus_runway_group(new_group)
-
-    def duplicate_runway_group(self, runway_index_to_duplicate: int) -> None:
-        """Create a new runway group populated from an existing group."""
-        source_group = self._runway_groups.get(runway_index_to_duplicate)
-        if source_group is None:
-            QgsMessageLog.logMessage(
-                f"Cannot duplicate: Index {runway_index_to_duplicate} not found.",
-                DIALOG_LOG_TAG,
-                level=Qgis.Warning,
-            )
-            return
-
-        if self.scroll_area_layout is None:
-            QMessageBox.critical(self, "Layout Error", "Scroll area layout missing.")
-            return
-
-        runway_index = self._get_next_runway_id()
-        scroll_content_widget = self.findChild(QtWidgets.QScrollArea, "scrollArea_runways").widget()
-        if not scroll_content_widget:
-            QMessageBox.critical(self, "Layout Error", "Scroll area content widget missing.")
-            return
-
-        new_group = RunwayWidgetGroup(runway_index, self.coord_validator, scroll_content_widget)
-        new_group.inputChanged.connect(lambda idx=runway_index: self.update_runway_calculations(idx))
-        new_group.removeRequested.connect(self.remove_runway_group)
-        new_group.duplicateRequested.connect(self.duplicate_runway_group)
-
-        insert_at = self.scroll_area_layout.indexOf(source_group)
-        if insert_at >= 0:
-            self.scroll_area_layout.insertWidget(insert_at + 1, new_group)
-        else:
-            self.scroll_area_layout.addWidget(new_group)
-
-        self._runway_groups[runway_index] = new_group
-        new_group.set_input_data(source_group.get_input_data())
-        new_group._set_advanced_visible(source_group.expand_button.isChecked())
-        self._update_dialog_height()
-        self.update_runway_calculations(runway_index)
         self.update_dialog_status()
         self._focus_runway_group(new_group)
 

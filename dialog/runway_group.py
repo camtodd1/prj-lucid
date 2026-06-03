@@ -23,7 +23,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
     inputChanged = QtCore.pyqtSignal()
     removeRequested = QtCore.pyqtSignal(int)
-    duplicateRequested = QtCore.pyqtSignal(int)
 
     def __init__(
         self,
@@ -131,16 +130,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         )
         self.expand_button.toggled.connect(self._set_advanced_visible)
         header_layout.addWidget(self.expand_button)
-
-        self.duplicate_button = QtWidgets.QPushButton("Duplicate")
-        self.duplicate_button.setObjectName(f"pushButton_duplicate_runway_{self.index}")
-        self.duplicate_button.setToolTip("Create a copy of this runway")
-        self.duplicate_button.setMaximumWidth(100)
-        self.duplicate_button.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Fixed,
-            QtWidgets.QSizePolicy.Policy.Fixed,
-        )
-        header_layout.addWidget(self.duplicate_button)
 
         self.remove_button = QtWidgets.QPushButton("Remove")
         self.remove_button.setObjectName(f"pushButton_remove_runway_{self.index}")
@@ -420,6 +409,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             (label_runway_width, self.width_le),
         ]
         self._set_advanced_visible(False)
+        self._freeze_compact_height(core_widget)
         self._update_status_chip()
         self._update_required_field_indicators()
 
@@ -644,7 +634,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.suffix_combo.currentIndexChanged.connect(self._update_required_field_indicators)
         self.surface_category_combo.currentIndexChanged.connect(self._handle_surface_category_changed)
         self.remove_button.clicked.connect(self._emit_remove_request)
-        self.duplicate_button.clicked.connect(self._emit_duplicate_request)
         self.expand_button.toggled.connect(self._update_expand_button_icon)
 
     def _arc_number_for_length(self, length_m: float) -> Optional[str]:
@@ -658,9 +647,6 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
     def _emit_remove_request(self):
         self.removeRequested.emit(self.index)
-
-    def _emit_duplicate_request(self):
-        self.duplicateRequested.emit(self.index)
 
     def get_input_data(self) -> Dict[str, str]:
         return {
@@ -800,6 +786,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self._advanced_visible = visible
         if hasattr(self, "advanced_widget"):
             self.advanced_widget.setVisible(visible)
+            self.advanced_widget.setMaximumHeight(16777215 if visible else 0)
         self._update_expand_button_icon(visible)
 
     def _update_expand_button_icon(self, visible: Optional[bool] = None) -> None:
@@ -875,6 +862,11 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             widget.update()
+
+    def _freeze_compact_height(self, core_widget: QtWidgets.QWidget) -> None:
+        """Keep the compact runway body tight to its content."""
+        core_widget.adjustSize()
+        core_widget.setMaximumHeight(core_widget.sizeHint().height())
 
     def _refresh_surface_material_options(self, category: str, selected_material: str = "") -> None:
         current_material = selected_material or self.surface_material_combo.currentText()
