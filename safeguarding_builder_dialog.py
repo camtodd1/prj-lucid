@@ -152,6 +152,7 @@ class SafeguardingBuilderDialog(
         self.numeric_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
 
         self._setup_arp_validators(self.coord_validator, self.numeric_validator)
+        self._style_airport_tab()
         self._connect_global_controls()
         self._setup_dialog_status_connections()
 
@@ -282,6 +283,76 @@ class SafeguardingBuilderDialog(
         if airport_name:
             airport_name.setMaximumWidth(220)
 
+    def _style_airport_tab(self) -> None:
+        """Apply card-like styling and clearer hierarchy to the opening airport tab."""
+        airport_layout = getattr(self, "verticalLayout_airportTab", None)
+        if isinstance(airport_layout, QtWidgets.QVBoxLayout):
+            airport_layout.setContentsMargins(8, 8, 8, 8)
+            airport_layout.setSpacing(8)
+            airport_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+
+        airport_name_label = getattr(
+            self,
+            "label_airport_name",
+            self.findChild(QtWidgets.QLabel, "label_airport_name"),
+        )
+        if airport_name_label:
+            base_text = airport_name_label.text().replace(" *", "")
+            airport_name_label.setText(f"{base_text} *")
+            airport_name_label.setToolTip("Required for runway generation.")
+            airport_name_label.setStyleSheet("font-weight: 600;")
+
+        airport_name_input = getattr(
+            self,
+            "lineEdit_airport_name",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_name"),
+        )
+        if airport_name_input:
+            airport_name_input.setToolTip("Enter the ICAO airport code.")
+            airport_name_input.setPlaceholderText("e.g., YPAD")
+
+        airport_status = getattr(
+            self,
+            "label_airport_status",
+            self.findChild(QtWidgets.QLabel, "label_airport_status"),
+        )
+        if airport_status:
+            airport_status.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+            airport_status.setMinimumHeight(26)
+            airport_status.setStyleSheet(
+                "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
+                "border-radius: 10px; padding: 4px 10px; }"
+            )
+
+        coord_info = getattr(
+            self,
+            "coord_info",
+            self.findChild(QtWidgets.QLabel, "coord_info"),
+        )
+        if coord_info:
+            coord_info.setStyleSheet("color: #444444;")
+
+        airport_card_style = """
+        QGroupBox {
+            border: 1px solid #dcdcdc;
+            border-radius: 4px;
+            margin-top: 12px;
+            background: #ffffff;
+        }
+        QGroupBox::title {
+            subcontrol-origin: margin;
+            left: 8px;
+            padding: 0 4px;
+            font-weight: 600;
+        }
+        """
+        for name in ["groupBox_ARP", "groupBox_MET"]:
+            group = getattr(self, name, self.findChild(QtWidgets.QGroupBox, name))
+            if group:
+                group.setFlat(True)
+                group.setStyleSheet(airport_card_style)
+
+
     def _connect_global_controls(self):
         """Connects signals for global widgets."""
         airport_name_le = getattr(
@@ -364,7 +435,18 @@ class SafeguardingBuilderDialog(
         """Updates compact workflow status labels."""
         icao = self.lineEdit_airport_name.text().strip().upper()
         if hasattr(self, "label_airport_status"):
-            self.label_airport_status.setText(f"Airport: {icao}" if icao else "Airport: ICAO required")
+            if icao:
+                self.label_airport_status.setText(f"Airport: {icao}")
+                self.label_airport_status.setStyleSheet(
+                    "QLabel { background: #eaf2ff; color: #1f4f99; border: 1px solid #c7d7f5; "
+                    "border-radius: 10px; padding: 4px 10px; }"
+                )
+            else:
+                self.label_airport_status.setText("Airport: ICAO required")
+                self.label_airport_status.setStyleSheet(
+                    "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
+                    "border-radius: 10px; padding: 4px 10px; }"
+                )
 
         runway_count = len(self._runway_groups)
         incomplete = 0
