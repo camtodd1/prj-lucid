@@ -23,6 +23,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
     inputChanged = QtCore.pyqtSignal()
     removeRequested = QtCore.pyqtSignal(int)
+    duplicateRequested = QtCore.pyqtSignal(int)
 
     def __init__(
         self,
@@ -30,8 +31,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         coord_validator: QtGui.QValidator,
         parent: QtWidgets.QWidget = None,
     ):
-        title = f"Runway {index}"
-        super().__init__(title, parent)
+        super().__init__("", parent)
 
         self.index = index
         self.numeric_validator = QtGui.QDoubleValidator()
@@ -46,13 +46,81 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             QtWidgets.QSizePolicy.Policy.MinimumExpanding,
         )
 
+        self._advanced_visible = False
         self._setup_ui()
         self._connect_signals()
 
     def _setup_ui(self):
         groupBox_layout = QtWidgets.QVBoxLayout(self)
+        groupBox_layout.setContentsMargins(10, 10, 10, 10)
+        groupBox_layout.setSpacing(8)
 
-        gridLayout_Coords = QtWidgets.QGridLayout()
+        header_widget = QtWidgets.QWidget(self)
+        header_layout = QtWidgets.QHBoxLayout(header_widget)
+        header_layout.setContentsMargins(0, 0, 0, 0)
+        header_layout.setSpacing(8)
+
+        title_stack = QtWidgets.QVBoxLayout()
+        title_stack.setContentsMargins(0, 0, 0, 0)
+        title_stack.setSpacing(2)
+
+        self.rwy_name_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
+        self.rwy_name_lbl.setObjectName(f"label_rwy_name_{self.index}")
+        self.rwy_name_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        title_font = self.rwy_name_lbl.font()
+        title_font.setBold(True)
+        title_font.setPointSize(title_font.pointSize() + 1)
+        self.rwy_name_lbl.setFont(title_font)
+        title_stack.addWidget(self.rwy_name_lbl)
+
+        self.header_summary_lbl = QtWidgets.QLabel("Length: -- | Azimuth: --")
+        self.header_summary_lbl.setObjectName(f"label_rwy_summary_{self.index}")
+        self.header_summary_lbl.setStyleSheet("color: #666666;")
+        title_stack.addWidget(self.header_summary_lbl)
+
+        header_layout.addLayout(title_stack)
+
+        header_layout.addStretch(1)
+
+        self.status_chip_lbl = QtWidgets.QLabel("Incomplete")
+        self.status_chip_lbl.setObjectName(f"label_rwy_status_{self.index}")
+        self.status_chip_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.status_chip_lbl.setMinimumWidth(90)
+        self.status_chip_lbl.setStyleSheet(
+            "QLabel { background: #f2f2f2; color: #444; border: 1px solid #d2d2d2; border-radius: 10px; padding: 4px 10px; }"
+        )
+        header_layout.addWidget(self.status_chip_lbl)
+
+        self.expand_button = QtWidgets.QToolButton()
+        self.expand_button.setObjectName(f"toolButton_expand_runway_{self.index}")
+        self.expand_button.setCheckable(True)
+        self.expand_button.setChecked(False)
+        self.expand_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        self.expand_button.setToolTip("Show or hide advanced runway details")
+        self.expand_button.toggled.connect(self._set_advanced_visible)
+        header_layout.addWidget(self.expand_button)
+
+        self.duplicate_button = QtWidgets.QPushButton("Duplicate")
+        self.duplicate_button.setObjectName(f"pushButton_duplicate_runway_{self.index}")
+        self.duplicate_button.setToolTip("Create a copy of this runway")
+        self.duplicate_button.setMaximumWidth(100)
+        header_layout.addWidget(self.duplicate_button)
+
+        self.remove_button = QtWidgets.QPushButton("Remove")
+        self.remove_button.setObjectName(f"pushButton_remove_runway_{self.index}")
+        self.remove_button.setToolTip("Remove this runway")
+        self.remove_button.setMaximumWidth(90)
+        header_layout.addWidget(self.remove_button)
+
+        groupBox_layout.addWidget(header_widget)
+
+        core_widget = QtWidgets.QWidget(self)
+        core_layout = QtWidgets.QGridLayout(core_widget)
+        core_layout.setContentsMargins(0, 0, 0, 0)
+        core_layout.setHorizontalSpacing(10)
+        core_layout.setVerticalSpacing(8)
+
+        gridLayout_Coords = core_layout
         gridLayout_Coords.setObjectName(f"gridLayout_Coords_{self.index}")
         gridLayout_Coords.setColumnStretch(0, 2)
         gridLayout_Coords.setColumnStretch(1, 1)
@@ -209,17 +277,18 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         gridLayout_Coords.addWidget(self.thr_pre_area_1_le, current_coord_row, 1)
         gridLayout_Coords.addWidget(self.thr_pre_area_2_le, current_coord_row, 2)
 
-        groupBox_layout.addLayout(gridLayout_Coords)
-        self._add_declared_distance_controls(groupBox_layout)
+        groupBox_layout.addWidget(core_widget)
 
-        self.rwy_name_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
-        self.rwy_name_lbl.setObjectName(f"label_rwy_name_{self.index}")
-        self.rwy_name_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        font = self.rwy_name_lbl.font()
-        font.setBold(True)
-        self.rwy_name_lbl.setFont(font)
-        self.rwy_name_lbl.setContentsMargins(0, 5, 0, 5)
-        groupBox_layout.addWidget(self.rwy_name_lbl)
+        self.advanced_widget = QtWidgets.QWidget(self)
+        advanced_layout = QtWidgets.QVBoxLayout(self.advanced_widget)
+        advanced_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_layout.setSpacing(8)
+
+        advanced_body = QtWidgets.QWidget(self.advanced_widget)
+        advanced_body_layout = QtWidgets.QVBoxLayout(advanced_body)
+        advanced_body_layout.setContentsMargins(0, 0, 0, 0)
+        advanced_body_layout.setSpacing(8)
+        self._add_declared_distance_controls(advanced_body_layout)
 
         detailsLayout = QtWidgets.QGridLayout()
         detailsLayout.setObjectName(f"detailsLayout_{self.index}")
@@ -269,18 +338,12 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         current_details_row += 4
         self._add_runway_type_controls(detailsLayout, current_details_row)
 
-        groupBox_layout.addLayout(detailsLayout)
+        advanced_body_layout.addLayout(detailsLayout)
+        advanced_layout.addWidget(advanced_body)
+        groupBox_layout.addWidget(self.advanced_widget)
 
-        line_separator = QtWidgets.QFrame()
-        line_separator.setObjectName(f"line_runway_group_{self.index}")
-        line_separator.setFrameShape(QtWidgets.QFrame.Shape.HLine)
-        line_separator.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        groupBox_layout.addWidget(line_separator)
-
-        self.remove_button = QtWidgets.QPushButton("Remove This Runway")
-        self.remove_button.setObjectName(f"pushButton_remove_runway_{self.index}")
-        self.remove_button.setToolTip("Remove this runway")
-        groupBox_layout.addWidget(self.remove_button)
+        self._set_advanced_visible(False)
+        self._update_status_chip()
 
     def _add_arc_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
         label_arc_num = QtWidgets.QLabel("ARC Number:")
@@ -487,6 +550,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             combo.currentIndexChanged.connect(self.inputChanged.emit)
         self.surface_category_combo.currentIndexChanged.connect(self._handle_surface_category_changed)
         self.remove_button.clicked.connect(self._emit_remove_request)
+        self.duplicate_button.clicked.connect(self._emit_duplicate_request)
+        self.expand_button.toggled.connect(self._update_expand_button_icon)
 
     def _arc_number_for_length(self, length_m: float) -> Optional[str]:
         if length_m < 800:
@@ -499,6 +564,9 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
     def _emit_remove_request(self):
         self.removeRequested.emit(self.index)
+
+    def _emit_duplicate_request(self):
+        self.duplicateRequested.emit(self.index)
 
     def get_input_data(self) -> Dict[str, str]:
         return {
@@ -590,6 +658,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.azim_lbl.setText(results.get("azimuth", WIDGET_MISSING_MSG))
         self.type1_lbl.setText(results.get("type1_label_text", "(Primary End) Type:"))
         self.type2_lbl.setText(results.get("type2_label_text", "(Reciprocal End) Type:"))
+        self.header_summary_lbl.setText(
+            f"Length: {self.dist_lbl.text()} | Azimuth: {self.azim_lbl.text()}"
+        )
+        self._update_status_chip()
 
     def _input_widgets(self):
         return [
@@ -628,6 +700,59 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
     def _handle_surface_category_changed(self):
         self._refresh_surface_material_options(self.surface_category_combo.currentText())
         self.inputChanged.emit()
+
+    def _set_advanced_visible(self, visible: bool) -> None:
+        self._advanced_visible = visible
+        if hasattr(self, "advanced_widget"):
+            self.advanced_widget.setVisible(visible)
+        self._update_expand_button_icon(visible)
+
+    def _update_expand_button_icon(self, visible: Optional[bool] = None) -> None:
+        if visible is None:
+            visible = self._advanced_visible
+        arrow = QtCore.Qt.ArrowType.DownArrow if visible else QtCore.Qt.ArrowType.RightArrow
+        if hasattr(self, "expand_button") and self.expand_button.isChecked() != visible:
+            self.expand_button.blockSignals(True)
+            self.expand_button.setChecked(visible)
+            self.expand_button.blockSignals(False)
+        if hasattr(self, "expand_button"):
+            self.expand_button.setArrowType(arrow)
+
+    def _update_status_chip(self) -> None:
+        if not hasattr(self, "status_chip_lbl"):
+            return
+        data = self.get_input_data()
+        required_values = [
+            data.get("designator_str", ""),
+            data.get("thr_easting", ""),
+            data.get("thr_northing", ""),
+            data.get("rec_easting", ""),
+            data.get("rec_northing", ""),
+            data.get("width", ""),
+        ]
+        if not all(str(value).strip() for value in required_values):
+            status = "Incomplete"
+        elif any(text in {CALC_PLACEHOLDER, WIDGET_MISSING_MSG, NA_PLACEHOLDER} for text in [
+            self.rwy_name_lbl.text(),
+            self.dist_lbl.text(),
+            self.azim_lbl.text(),
+        ]):
+            status = "Needs attention"
+        else:
+            status = "Ready"
+        self.status_chip_lbl.setText(status)
+        if status == "Ready":
+            self.status_chip_lbl.setStyleSheet(
+                "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; border-radius: 10px; padding: 4px 10px; }"
+            )
+        elif status == "Needs attention":
+            self.status_chip_lbl.setStyleSheet(
+                "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; border-radius: 10px; padding: 4px 10px; }"
+            )
+        else:
+            self.status_chip_lbl.setStyleSheet(
+                "QLabel { background: #f2f2f2; color: #444; border: 1px solid #d2d2d2; border-radius: 10px; padding: 4px 10px; }"
+            )
 
     def _refresh_surface_material_options(self, category: str, selected_material: str = "") -> None:
         current_material = selected_material or self.surface_material_combo.currentText()
