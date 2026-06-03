@@ -355,6 +355,10 @@ class SafeguardingBuilderDialog(
         if isinstance(airport_layout, QtWidgets.QVBoxLayout):
             airport_identity_frame = QtWidgets.QFrame(self.tab_airport)
             airport_identity_frame.setObjectName("frame_airport_identity")
+            airport_identity_frame.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
             airport_identity_frame.setStyleSheet(
                 """
                 QFrame#frame_airport_identity {
@@ -369,13 +373,13 @@ class SafeguardingBuilderDialog(
             identity_layout.setSpacing(6)
             identity_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
-            airport_name_row = getattr(
-                self,
-                "horizontalLayout_airportName",
-                None,
-            )
-            if isinstance(airport_name_row, QtWidgets.QLayout):
-                identity_layout.addLayout(airport_name_row)
+            airport_name_row = QtWidgets.QHBoxLayout()
+            airport_name_row.setContentsMargins(0, 0, 0, 0)
+            airport_name_row.setSpacing(12)
+            airport_name_row.addWidget(airport_name_label)
+            airport_name_row.addStretch(1)
+            airport_name_row.addWidget(airport_name_input)
+            identity_layout.addLayout(airport_name_row)
 
             if coord_info:
                 identity_layout.addWidget(coord_info)
@@ -387,6 +391,8 @@ class SafeguardingBuilderDialog(
             for _ in range(min(4, airport_layout.count())):
                 airport_layout.takeAt(0)
             airport_layout.insertWidget(0, airport_identity_frame)
+            airport_identity_frame.adjustSize()
+            airport_identity_frame.setMaximumHeight(airport_identity_frame.sizeHint().height())
 
         airport_card_style = """
         QGroupBox {
@@ -408,10 +414,10 @@ class SafeguardingBuilderDialog(
             if group:
                 group.setFlat(True)
                 if name == "groupBox_ARP":
-                    group.setTitle("Step 2: Aerodrome Reference Point (ARP)")
+                    group.setTitle("Aerodrome Reference Point (ARP)")
                     group.setStyleSheet(airport_card_style)
                 else:
-                    group.setTitle("Step 3: Meteorological Instrument Station (optional)")
+                    group.setTitle("Meteorological Instrument Station (optional)")
                     group.setStyleSheet(
                         """
                         QGroupBox {
@@ -430,6 +436,10 @@ class SafeguardingBuilderDialog(
                         }
                         """
                     )
+                group.setSizePolicy(
+                    QtWidgets.QSizePolicy.Policy.Expanding,
+                    QtWidgets.QSizePolicy.Policy.Fixed,
+                )
 
 
     def _connect_global_controls(self):
@@ -626,6 +636,19 @@ class SafeguardingBuilderDialog(
                 "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
             )
             airport_status.setToolTip(" | ".join(tooltip_parts))
+        self._resize_airport_identity_card()
+
+    def _resize_airport_identity_card(self) -> None:
+        """Keep the airport identity card tight to its content."""
+        frame = getattr(
+            self,
+            "frame_airport_identity",
+            self.findChild(QtWidgets.QFrame, "frame_airport_identity"),
+        )
+        if frame is None:
+            return
+        frame.adjustSize()
+        frame.setMaximumHeight(frame.sizeHint().height())
 
     def _setup_dialog_status_connections(self):
         """Connect lightweight status labels to high-level input changes."""
@@ -683,6 +706,7 @@ class SafeguardingBuilderDialog(
                     "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
+        self._resize_airport_identity_card()
         self._queue_airport_lookup(icao)
 
         runway_count = len(self._runway_groups)
