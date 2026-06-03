@@ -104,6 +104,7 @@ class SafeguardingBuilderDialog(
         self._airport_lookup_timer = QtCore.QTimer(self)
         self._airport_lookup_timer.setSingleShot(True)
         self._airport_lookup_timer.timeout.connect(self._resolve_airport_lookup)
+        self._style_dialog_header()
 
         # --- Scroll Area Setup ---
         scroll_area = self.findChild(QtWidgets.QScrollArea, "scrollArea_runways")
@@ -421,6 +422,34 @@ class SafeguardingBuilderDialog(
                     QtWidgets.QSizePolicy.Policy.Expanding,
                     QtWidgets.QSizePolicy.Policy.Fixed,
                 )
+
+    def _style_dialog_header(self) -> None:
+        """Tighten the top utility header into a compact visual band."""
+        header_frame = getattr(
+            self,
+            "frame_dialog_header",
+            self.findChild(QtWidgets.QFrame, "frame_dialog_header"),
+        )
+        if header_frame:
+            header_frame.setStyleSheet(
+                "QFrame#frame_dialog_header { background: #fcfcfc; border-bottom: 1px solid #dedede; }"
+            )
+
+        header_layout = getattr(
+            self,
+            "horizontalLayout_dialogHeader",
+            None,
+        )
+        if isinstance(header_layout, QtWidgets.QHBoxLayout):
+            header_layout.setContentsMargins(0, 2, 0, 6)
+            header_layout.setSpacing(8)
+
+        for button_name in ["pushButton_load_data", "pushButton_save_data", "pushButton_clear_all"]:
+            button = getattr(self, button_name, self.findChild(QtWidgets.QPushButton, button_name))
+            if button:
+                button.setMinimumHeight(34)
+                button.setMaximumHeight(34)
+                button.setMinimumWidth(118)
 
 
     def _connect_global_controls(self):

@@ -19,57 +19,111 @@
   <property name="windowTitle">
    <string>AeroSense - Airport Safeguarding Analysis Tool</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout">
+ <layout class="QVBoxLayout" name="verticalLayout">
+   <property name="leftMargin">
+    <number>6</number>
+   </property>
+   <property name="topMargin">
+    <number>6</number>
+   </property>
+   <property name="rightMargin">
+    <number>6</number>
+   </property>
+   <property name="bottomMargin">
+    <number>6</number>
+   </property>
+   <property name="spacing">
+    <number>4</number>
+   </property>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_dialogHeader">
-     <item>
-      <widget class="QLabel" name="label_dialog_heading">
-       <property name="font">
-        <font>
-         <weight>75</weight>
-         <bold>true</bold>
-        </font>
-       </property>
-       <property name="text">
-        <string>Safeguarding Builder</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <spacer name="horizontalSpacer_dialogHeader">
-       <property name="orientation">
-        <enum>Qt::Horizontal</enum>
-       </property>
-       <property name="sizeHint" stdset="0">
-        <size>
-         <width>40</width>
-         <height>20</height>
-        </size>
-       </property>
-      </spacer>
-     </item>
-     <item>
-      <widget class="QPushButton" name="pushButton_load_data">
-       <property name="text">
-        <string>Load</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="pushButton_save_data">
-       <property name="text">
-        <string>Save</string>
-       </property>
-      </widget>
-     </item>
-     <item>
-      <widget class="QPushButton" name="pushButton_clear_all">
-       <property name="text">
-        <string>Clear</string>
-       </property>
-      </widget>
-     </item>
-    </layout>
+    <widget class="QFrame" name="frame_dialog_header">
+     <property name="styleSheet">
+      <string notr="true">QFrame#frame_dialog_header { background: #fcfcfc; border-bottom: 1px solid #dedede; }</string>
+     </property>
+     <layout class="QHBoxLayout" name="horizontalLayout_dialogHeader">
+      <property name="leftMargin">
+       <number>0</number>
+      </property>
+      <property name="topMargin">
+       <number>2</number>
+      </property>
+      <property name="rightMargin">
+       <number>0</number>
+      </property>
+      <property name="bottomMargin">
+       <number>6</number>
+      </property>
+      <property name="spacing">
+       <number>8</number>
+      </property>
+      <item>
+       <widget class="QLabel" name="label_dialog_heading">
+        <property name="font">
+         <font>
+          <pointsize>14</pointsize>
+          <weight>60</weight>
+          <bold>false</bold>
+         </font>
+        </property>
+        <property name="text">
+         <string>Safeguarding Builder</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <spacer name="horizontalSpacer_dialogHeader">
+        <property name="orientation">
+         <enum>Qt::Horizontal</enum>
+        </property>
+        <property name="sizeHint" stdset="0">
+         <size>
+          <width>40</width>
+          <height>20</height>
+         </size>
+        </property>
+       </spacer>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_load_data">
+        <property name="minimumSize">
+         <size>
+          <width>118</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Load</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_save_data">
+        <property name="minimumSize">
+         <size>
+          <width>118</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Save</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="pushButton_clear_all">
+        <property name="minimumSize">
+         <size>
+          <width>118</width>
+          <height>34</height>
+         </size>
+        </property>
+        <property name="text">
+         <string>Clear</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
    </item>
    <item>
     <widget class="QTabWidget" name="tabWidget_workflow">
