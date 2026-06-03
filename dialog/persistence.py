@@ -126,6 +126,8 @@ class PersistenceMixin:
             self.clear_all_inputs(confirm=False)
             self._apply_loaded_payload(loaded_data)
             self._update_dialog_height()
+            if hasattr(self, "queue_current_airport_lookup"):
+                self.queue_current_airport_lookup()
             if hasattr(self, "update_dialog_status"):
                 self.update_dialog_status()
         except (IOError, json.JSONDecodeError, ValueError) as e:

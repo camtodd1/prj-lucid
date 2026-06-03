@@ -674,11 +674,24 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_status"),
         )
         if airport_status:
+            airport_status.setText("Resolving airport...")
             airport_status.setStyleSheet(
                 "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
                 "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
             )
         self._airport_lookup_timer.start(350)
+
+    def queue_current_airport_lookup(self) -> None:
+        """Queue lookup for the currently loaded airport code pair."""
+        icao = self.lineEdit_airport_name.text().strip().upper() if hasattr(self, "lineEdit_airport_name") else ""
+        iata_widget = getattr(self, "lineEdit_iata_code", self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"))
+        iata = iata_widget.text().strip().upper() if iata_widget else ""
+        if len(iata) == 3 and iata.isalnum():
+            self._queue_airport_lookup(iata, source="iata")
+        elif len(icao) == 4 and icao.isalnum():
+            self._queue_airport_lookup(icao, source="icao")
+        else:
+            self.update_dialog_status()
 
     def _resolve_airport_lookup(self) -> None:
         """Fetch airport metadata for the current airport code if available."""
