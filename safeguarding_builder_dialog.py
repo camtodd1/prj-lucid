@@ -319,6 +319,7 @@ class SafeguardingBuilderDialog(
         if airport_name_input:
             airport_name_input.setToolTip("Enter the ICAO airport code.")
             airport_name_input.setPlaceholderText("e.g., YPAD")
+            airport_name_input.setMaximumWidth(220)
 
         airport_status = getattr(
             self,
@@ -328,6 +329,7 @@ class SafeguardingBuilderDialog(
         if airport_status:
             airport_status.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
             airport_status.setMinimumHeight(26)
+            airport_status.setMaximumHeight(28)
             airport_status.setStyleSheet(
                 "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
                 "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
@@ -339,7 +341,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_lookup"),
         )
         if airport_lookup:
-            airport_lookup.setStyleSheet("color: #666666;")
+            airport_lookup.setStyleSheet("color: #666666; font-size: 11px;")
             airport_lookup.setText("")
 
         coord_info = getattr(
@@ -348,7 +350,43 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "coord_info"),
         )
         if coord_info:
-            coord_info.setStyleSheet("color: #444444;")
+            coord_info.setStyleSheet("color: #444444; font-size: 11px;")
+
+        if isinstance(airport_layout, QtWidgets.QVBoxLayout):
+            airport_identity_frame = QtWidgets.QFrame(self.tab_airport)
+            airport_identity_frame.setObjectName("frame_airport_identity")
+            airport_identity_frame.setStyleSheet(
+                """
+                QFrame#frame_airport_identity {
+                    border: 1px solid #dcdcdc;
+                    border-radius: 4px;
+                    background: #ffffff;
+                }
+                """
+            )
+            identity_layout = QtWidgets.QVBoxLayout(airport_identity_frame)
+            identity_layout.setContentsMargins(12, 10, 12, 10)
+            identity_layout.setSpacing(6)
+            identity_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+
+            airport_name_row = getattr(
+                self,
+                "horizontalLayout_airportName",
+                None,
+            )
+            if isinstance(airport_name_row, QtWidgets.QLayout):
+                identity_layout.addLayout(airport_name_row)
+
+            if coord_info:
+                identity_layout.addWidget(coord_info)
+            if airport_status:
+                identity_layout.addWidget(airport_status)
+            if airport_lookup:
+                identity_layout.addWidget(airport_lookup)
+
+            for _ in range(min(4, airport_layout.count())):
+                airport_layout.takeAt(0)
+            airport_layout.insertWidget(0, airport_identity_frame)
 
         airport_card_style = """
         QGroupBox {
@@ -369,7 +407,29 @@ class SafeguardingBuilderDialog(
             group = getattr(self, name, self.findChild(QtWidgets.QGroupBox, name))
             if group:
                 group.setFlat(True)
-                group.setStyleSheet(airport_card_style)
+                if name == "groupBox_ARP":
+                    group.setTitle("Step 2: Aerodrome Reference Point (ARP)")
+                    group.setStyleSheet(airport_card_style)
+                else:
+                    group.setTitle("Step 3: Meteorological Instrument Station (optional)")
+                    group.setStyleSheet(
+                        """
+                        QGroupBox {
+                            border: 1px solid #e5e5e5;
+                            border-radius: 4px;
+                            margin-top: 12px;
+                            padding: 8px;
+                            background: #fafafa;
+                        }
+                        QGroupBox::title {
+                            subcontrol-origin: margin;
+                            left: 8px;
+                            padding: 0 4px;
+                            font-weight: 500;
+                            color: #666666;
+                        }
+                        """
+                    )
 
 
     def _connect_global_controls(self):
