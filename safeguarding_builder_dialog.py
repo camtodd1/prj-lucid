@@ -502,9 +502,17 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "coord_info"),
         )
         if header_info:
+            header_info.setWordWrap(False)
+            header_info.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextBrowserInteraction)
             header_info.setStyleSheet(
                 "QLabel { color: #4b4b4b; font-size: 11px; margin-left: 10px; }"
             )
+            header_info.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            header_info.setMaximumHeight(header_info.sizeHint().height())
+            header_info.setMinimumHeight(header_info.sizeHint().height())
 
         crs_prefix = getattr(
             self,
@@ -512,7 +520,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_crs_prefix"),
         )
         if crs_prefix:
-            crs_prefix.setStyleSheet("QLabel { color: #1677ff; font-size: 15px; font-weight: 700; }")
+            crs_prefix.setStyleSheet("QLabel { color: #333333; font-size: 14px; font-weight: 700; }")
 
         crs_field = getattr(
             self,
@@ -524,10 +532,12 @@ class SafeguardingBuilderDialog(
             crs_field.setClearButtonEnabled(False)
             crs_field.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
             crs_field.setPlaceholderText("")
+            crs_field.setMaximumWidth(172)
+            crs_field.setMinimumWidth(172)
             crs_field.setStyleSheet(
-                "QLineEdit { background: #0b84ff; color: white; border: 1px solid #0b84ff; "
-                "border-radius: 8px; padding: 4px 10px; font-size: 14px; font-weight: 700; }"
-                "QLineEdit:read-only { background: #0b84ff; color: white; }"
+                "QLineEdit { background: #ffffff; color: #333333; border: 1px solid #c8c8c8; "
+                "border-radius: 8px; padding: 4px 10px; font-size: 13px; font-weight: 600; }"
+                "QLineEdit:read-only { background: #ffffff; color: #333333; }"
             )
             crs_field.setText("")
             crs_field.setToolTip("Suggested projected CRS derived from the airport latitude/longitude.")
