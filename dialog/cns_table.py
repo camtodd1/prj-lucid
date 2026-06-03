@@ -122,7 +122,6 @@ class CnsTableMixin:
         add_button.setMinimumWidth(150)
         remove_button.setMinimumWidth(170)
         self.CNS_FACILITY_TYPES = CNS_FACILITY_TYPES
-        self._ensure_cns_empty_state_label()
         self._update_cns_view_state()
 
     def _style_cns_panel(self):
@@ -215,26 +214,9 @@ class CnsTableMixin:
                 """
             )
 
-    def _ensure_cns_empty_state_label(self):
-        if hasattr(self, "label_cns_empty_state"):
-            return
-        parent_layout = getattr(self, "verticalLayout_cnsTab", None)
-        if parent_layout is None:
-            return
-        empty_label = QtWidgets.QLabel("No CNS facilities added yet. Use Add Facility to begin.")
-        empty_label.setObjectName("label_cns_empty_state")
-        empty_label.setWordWrap(True)
-        empty_label.setStyleSheet(
-            "QLabel { background: #f8f8f8; color: #666666; border: 1px dashed #d7d7d7; "
-            "border-radius: 10px; padding: 10px 12px; }"
-        )
-        parent_layout.insertWidget(2, empty_label)
-        self.label_cns_empty_state = empty_label
-
     def _update_cns_view_state(self):
         cns_table = getattr(self, "table_cns_facility", self.findChild(QtWidgets.QTableWidget, "table_cns_facility"))
         status_label = getattr(self, "label_cns_status", self.findChild(QtWidgets.QLabel, "label_cns_status"))
-        empty_label = getattr(self, "label_cns_empty_state", None)
         remove_button = getattr(self, "pushButton_remove_CNS", self.findChild(QtWidgets.QPushButton, "pushButton_remove_CNS"))
         if cns_table is None:
             return
@@ -250,9 +232,6 @@ class CnsTableMixin:
             )
         elif status_label:
             status_label.setText(f"CNS facilities: {row_count}" if row_count else "CNS facilities: none")
-
-        if empty_label is not None:
-            empty_label.setVisible(row_count == 0)
 
         if remove_button is not None:
             remove_button.setEnabled(bool(selected_rows))
