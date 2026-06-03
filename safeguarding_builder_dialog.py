@@ -1307,6 +1307,8 @@ class SafeguardingBuilderDialog(
         cns_count = self.table_cns_facility.rowCount() if hasattr(self, "table_cns_facility") else 0
         if hasattr(self, "label_cns_status"):
             self.label_cns_status.setText(f"CNS facilities: {cns_count}" if cns_count else "CNS facilities: none")
+        if hasattr(self, "_update_cns_view_state"):
+            self._update_cns_view_state()
 
         agl_enabled = bool(hasattr(self, "checkBox_agl_enabled") and self.checkBox_agl_enabled.isChecked())
         agl_rows = self.table_agl_approach.rowCount() if hasattr(self, "table_agl_approach") else 0

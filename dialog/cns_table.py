@@ -9,7 +9,7 @@ from qgis.core import (  # type: ignore
     QgsProject,
     Qgis,
 )
-from qgis.PyQt import QtWidgets  # type: ignore
+from qgis.PyQt import QtCore, QtWidgets  # type: ignore
 from qgis.PyQt.QtWidgets import (  # type: ignore
     QAbstractItemView,
     QComboBox,
@@ -75,6 +75,8 @@ class CnsTableMixin:
             )
             return
 
+        self._style_cns_panel()
+
         cns_table.setColumnCount(4)
         cns_table.setHorizontalHeaderLabels(["Facility Type", "Easting/X", "Northing/Y", "Elev (AMSL)"])
         cns_table.setAlternatingRowColors(True)
@@ -92,11 +94,173 @@ class CnsTableMixin:
             header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
             header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Stretch)
             header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+
+        cns_table.setMinimumHeight(220)
+        cns_table.setMaximumHeight(240)
+        cns_table.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+
+        selection_model = cns_table.selectionModel()
+        if selection_model is not None:
+            selection_model.selectionChanged.connect(lambda *_: self._update_cns_view_state())
+        cns_table.itemSelectionChanged.connect(self._update_cns_view_state)
+        if cns_table.model() is not None:
+            cns_table.model().rowsInserted.connect(lambda *_: self._update_cns_view_state())
+            cns_table.model().rowsRemoved.connect(lambda *_: self._update_cns_view_state())
+
         add_button.clicked.connect(self.add_cns_row)
         remove_button.clicked.connect(self.remove_cns_rows)
         add_button.setToolTip("Add a new row to enter a CNS facility manually.")
         remove_button.setToolTip("Remove the selected CNS facility row(s).")
+        add_button.setAutoDefault(True)
+        add_button.setDefault(True)
+        add_button.setMinimumWidth(150)
+        remove_button.setMinimumWidth(170)
         self.CNS_FACILITY_TYPES = CNS_FACILITY_TYPES
+        self._ensure_cns_empty_state_label()
+        self._update_cns_view_state()
+
+    def _style_cns_panel(self):
+        group = getattr(self, "groupBox_CNS", self.findChild(QtWidgets.QGroupBox, "groupBox_CNS"))
+        if group:
+            group.setStyleSheet(
+                """
+                QGroupBox {
+                    border: 1px solid #dcdcdc;
+                    border-radius: 4px;
+                    margin-top: 12px;
+                    padding: 8px;
+                    background: #ffffff;
+                }
+                QGroupBox::title {
+                    subcontrol-origin: margin;
+                    left: 8px;
+                    padding: 0 4px;
+                    font-weight: 600;
+                }
+                """
+            )
+
+        description = getattr(self, "label_CNS_description", self.findChild(QtWidgets.QLabel, "label_CNS_description"))
+        if description:
+            description.setStyleSheet("color: #444444;")
+
+        status = getattr(self, "label_cns_status", self.findChild(QtWidgets.QLabel, "label_cns_status"))
+        if status:
+            status.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+            status.setStyleSheet(
+                "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d2d2d2; "
+                "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
+            )
+
+        table = getattr(self, "table_cns_facility", self.findChild(QtWidgets.QTableWidget, "table_cns_facility"))
+        if table:
+            table.setStyleSheet(
+                """
+                QTableWidget {
+                    border: 1px solid #e2e2e2;
+                    border-radius: 4px;
+                    gridline-color: #ececec;
+                    background: #ffffff;
+                }
+                QHeaderView::section {
+                    background: #fafafa;
+                    padding: 5px 8px;
+                    border: 0px;
+                    border-bottom: 1px solid #d5d5d5;
+                    font-weight: 600;
+                }
+                """
+            )
+
+        add_button = getattr(self, "pushButton_add_CNS", self.findChild(QtWidgets.QPushButton, "pushButton_add_CNS"))
+        if add_button:
+            add_button.setStyleSheet(
+                """
+                QPushButton {
+                    background: #eaf2ff;
+                    border: 1px solid #6aa8ff;
+                    color: #1f4f99;
+                    border-radius: 4px;
+                    padding: 8px 14px;
+                    font-weight: 600;
+                }
+                QPushButton:hover { background: #dfeaff; }
+                QPushButton:pressed { background: #d2e2ff; }
+                """
+            )
+
+        remove_button = getattr(self, "pushButton_remove_CNS", self.findChild(QtWidgets.QPushButton, "pushButton_remove_CNS"))
+        if remove_button:
+            remove_button.setStyleSheet(
+                """
+                QPushButton {
+                    background: #ffffff;
+                    border: 1px solid #cfcfcf;
+                    color: #333333;
+                    border-radius: 4px;
+                    padding: 8px 14px;
+                }
+                QPushButton:disabled {
+                    color: #9a9a9a;
+                    background: #f5f5f5;
+                }
+                """
+            )
+
+    def _ensure_cns_empty_state_label(self):
+        if hasattr(self, "label_cns_empty_state"):
+            return
+        parent_layout = getattr(self, "verticalLayout_cnsTab", None)
+        if parent_layout is None:
+            return
+        empty_label = QtWidgets.QLabel("No CNS facilities added yet. Use Add Facility to begin.")
+        empty_label.setObjectName("label_cns_empty_state")
+        empty_label.setWordWrap(True)
+        empty_label.setStyleSheet(
+            "QLabel { background: #f8f8f8; color: #666666; border: 1px dashed #d7d7d7; "
+            "border-radius: 10px; padding: 10px 12px; }"
+        )
+        parent_layout.insertWidget(2, empty_label)
+        self.label_cns_empty_state = empty_label
+
+    def _update_cns_view_state(self):
+        cns_table = getattr(self, "table_cns_facility", self.findChild(QtWidgets.QTableWidget, "table_cns_facility"))
+        status_label = getattr(self, "label_cns_status", self.findChild(QtWidgets.QLabel, "label_cns_status"))
+        empty_label = getattr(self, "label_cns_empty_state", None)
+        remove_button = getattr(self, "pushButton_remove_CNS", self.findChild(QtWidgets.QPushButton, "pushButton_remove_CNS"))
+        if cns_table is None:
+            return
+
+        row_count = cns_table.rowCount()
+        selected_rows = cns_table.selectionModel().selectedRows() if cns_table.selectionModel() else []
+        status_helper = getattr(self, "_set_small_status_chip", None)
+        if callable(status_helper):
+            status_helper(
+                "label_cns_status",
+                f"CNS facilities: {row_count}" if row_count else "CNS facilities: none",
+                "ready" if row_count else "neutral",
+            )
+        elif status_label:
+            status_label.setText(f"CNS facilities: {row_count}" if row_count else "CNS facilities: none")
+
+        if empty_label is not None:
+            empty_label.setVisible(row_count == 0)
+
+        if remove_button is not None:
+            remove_button.setEnabled(bool(selected_rows))
+
+        header_height = cns_table.horizontalHeader().height() if cns_table.horizontalHeader() else 28
+        row_heights = sum(cns_table.rowHeight(row) for row in range(row_count))
+        target_height = header_height + row_heights + 56
+        if row_count == 0:
+            target_height = 220
+        else:
+            target_height = min(max(target_height, 240), 360)
+        cns_table.setMinimumHeight(min(target_height, 240))
+        cns_table.setMaximumHeight(target_height)
 
     def add_cns_row(self):
         cns_table = self._get_cns_table("Add CNS Row Error")
@@ -141,6 +305,7 @@ class CnsTableMixin:
 
             cns_table.scrollToItem(item_x, QAbstractItemView.ScrollHint.EnsureVisible)
             combo_type.setFocus()
+            self._update_cns_view_state()
             self._update_dialog_height()
             if hasattr(self, "update_dialog_status"):
                 self.update_dialog_status()
@@ -181,6 +346,7 @@ class CnsTableMixin:
             try:
                 for row_index in selected_rows:
                     cns_table.removeRow(row_index)
+                self._update_cns_view_state()
                 self._update_dialog_height()
                 if hasattr(self, "update_dialog_status"):
                     self.update_dialog_status()
