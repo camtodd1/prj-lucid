@@ -393,7 +393,7 @@ class SafeguardingBuilderDialog(
         )
         if coord_info:
             coord_info.setStyleSheet(
-                "QLabel { color: #4b4b4b; font-size: 11px; margin-left: 10px; margin-bottom: 2px; }"
+                "QLabel { color: #4b4b4b; font-size: 11px; margin-left: 10px; }"
             )
 
         airport_identity_frame = getattr(
