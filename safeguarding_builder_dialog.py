@@ -1920,6 +1920,7 @@ class SafeguardingBuilderDialog(
             validated[field_name] = self._bool_from_input(inputs.get(field_name, True))
 
         # Optional fields (just copy text)
+        validated["ruleset"] = str(inputs.get("ruleset", "MOS139") or "MOS139").strip() or "MOS139"
         validated["arc_num"] = inputs.get("arc_num")
         validated["arc_let"] = inputs.get("arc_let")
         surface_category = str(inputs.get("surface_category", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_CATEGORY

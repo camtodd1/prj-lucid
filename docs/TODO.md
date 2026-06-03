@@ -97,6 +97,12 @@
 
 ## Runway Markings
 
+- [ ] Add ruleset selection and alternate marking rule sets, such as Annex 14.
+
+  Notes:
+  - Add a ruleset selection method to the dialog UI so the active runway-marking standard can be chosen explicitly.
+  - Keep the current MOS139 ruleset as the default until additional rulesets are implemented.
+
 - [ ] Add runway suitability inputs where marking applicability depends on unavailable pre-threshold areas.
 
   Notes:
