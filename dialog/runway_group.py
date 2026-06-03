@@ -45,6 +45,20 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             QtWidgets.QSizePolicy.Policy.Preferred,
             QtWidgets.QSizePolicy.Policy.Preferred,
         )
+        self.setStyleSheet(
+            """
+            QLineEdit, QComboBox {
+                min-height: 28px;
+                max-height: 28px;
+                padding-left: 6px;
+                padding-right: 6px;
+            }
+            QLineEdit[requiredEmpty="true"] {
+                background: #fffbe6;
+                border: 1px solid #e0b000;
+            }
+            """
+        )
 
         self._advanced_visible = False
         self._setup_ui()
@@ -52,8 +66,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
     def _setup_ui(self):
         groupBox_layout = QtWidgets.QVBoxLayout(self)
-        groupBox_layout.setContentsMargins(10, 10, 10, 10)
-        groupBox_layout.setSpacing(8)
+        groupBox_layout.setContentsMargins(8, 8, 8, 8)
+        groupBox_layout.setSpacing(6)
 
         header_widget = QtWidgets.QWidget(self)
         header_widget.setSizePolicy(
@@ -62,12 +76,12 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         )
         header_layout = QtWidgets.QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
-        header_layout.setSpacing(8)
+        header_layout.setSpacing(6)
         header_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         title_stack = QtWidgets.QVBoxLayout()
         title_stack.setContentsMargins(0, 0, 0, 0)
-        title_stack.setSpacing(2)
+        title_stack.setSpacing(0)
 
         self.rwy_name_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.rwy_name_lbl.setObjectName(f"label_rwy_name_{self.index}")
@@ -82,6 +96,11 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.header_summary_lbl.setObjectName(f"label_rwy_summary_{self.index}")
         self.header_summary_lbl.setStyleSheet("color: #666666;")
         title_stack.addWidget(self.header_summary_lbl)
+
+        self.required_legend_lbl = QtWidgets.QLabel("* required for Ready")
+        self.required_legend_lbl.setObjectName(f"label_rwy_required_legend_{self.index}")
+        self.required_legend_lbl.setStyleSheet("color: #777777; font-size: 11px;")
+        title_stack.addWidget(self.required_legend_lbl)
 
         header_layout.addLayout(title_stack)
 
@@ -133,7 +152,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         )
         header_layout.addWidget(self.remove_button)
 
-        groupBox_layout.addWidget(header_widget)
+        groupBox_layout.addWidget(header_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
         core_widget = QtWidgets.QWidget(self)
         core_layout = QtWidgets.QGridLayout(core_widget)
@@ -178,11 +197,13 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.desig_le.setMaxLength(2)
         self.desig_le.setToolTip("Enter 2-digit primary designation (01-36).")
         self.desig_le.setValidator(QtGui.QIntValidator(1, 36, self))
+        self.desig_le.setMinimumWidth(96)
         self.suffix_combo = QtWidgets.QComboBox()
         self.suffix_combo.setObjectName(f"comboBox_rwy_suffix_{self.index}")
         self.suffix_combo.addItems(["", "L", "C", "R"])
         self.suffix_combo.setToolTip("Runway suffix (Leave blank if none)")
         self.suffix_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.suffix_combo.setMinimumWidth(70)
         h_layout_desig_inputs.addWidget(self.desig_le)
         h_layout_desig_inputs.addWidget(self.suffix_combo)
 
@@ -196,36 +217,42 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.thr_east_le.setPlaceholderText("e.g., 456789.12")
         self.thr_east_le.setToolTip("Easting coordinate of primary threshold")
         self.thr_east_le.setValidator(self.coord_validator)
+        self.thr_east_le.setMinimumWidth(190)
 
         self.thr_north_le = QtWidgets.QLineEdit()
         self.thr_north_le.setObjectName(f"lineEdit_thr_northing_{self.index}")
         self.thr_north_le.setPlaceholderText("e.g., 123456.78")
         self.thr_north_le.setToolTip("Northing coordinate of primary threshold")
         self.thr_north_le.setValidator(self.coord_validator)
+        self.thr_north_le.setMinimumWidth(190)
 
         self.rec_east_le = QtWidgets.QLineEdit()
         self.rec_east_le.setObjectName(f"lineEdit_reciprocal_thr_easting_{self.index}")
         self.rec_east_le.setPlaceholderText("e.g., 457890.34")
         self.rec_east_le.setToolTip("Easting coordinate of reciprocal threshold")
         self.rec_east_le.setValidator(self.coord_validator)
+        self.rec_east_le.setMinimumWidth(190)
 
         self.rec_north_le = QtWidgets.QLineEdit()
         self.rec_north_le.setObjectName(f"lineEdit_reciprocal_thr_northing_{self.index}")
         self.rec_north_le.setPlaceholderText("e.g., 124567.90")
         self.rec_north_le.setToolTip("Northing coordinate of reciprocal threshold")
         self.rec_north_le.setValidator(self.coord_validator)
+        self.rec_north_le.setMinimumWidth(190)
 
         self.runway_end_elev_1_le = QtWidgets.QLineEdit()
         self.runway_end_elev_1_le.setObjectName(f"lineEdit_runway_end_elev_1_{self.index}")
         self.runway_end_elev_1_le.setPlaceholderText("e.g., 150.5")
         self.runway_end_elev_1_le.setToolTip("Elevation (AMSL) at the physical primary runway end. Used for RED.")
         self.runway_end_elev_1_le.setValidator(self.numeric_validator)
+        self.runway_end_elev_1_le.setMinimumWidth(190)
 
         self.runway_end_elev_2_le = QtWidgets.QLineEdit()
         self.runway_end_elev_2_le.setObjectName(f"lineEdit_runway_end_elev_2_{self.index}")
         self.runway_end_elev_2_le.setPlaceholderText("e.g., 149.8")
         self.runway_end_elev_2_le.setToolTip("Elevation (AMSL) at the physical reciprocal runway end. Used for RED.")
         self.runway_end_elev_2_le.setValidator(self.numeric_validator)
+        self.runway_end_elev_2_le.setMinimumWidth(190)
 
         self.threshold_elev_1_le = QtWidgets.QLineEdit()
         self.threshold_elev_1_le.setObjectName(f"lineEdit_threshold_elev_1_{self.index}")
@@ -234,6 +261,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "Elevation (AMSL) of the primary landing threshold. Leave blank to use the runway-end elevation."
         )
         self.threshold_elev_1_le.setValidator(self.numeric_validator)
+        self.threshold_elev_1_le.setMinimumWidth(190)
 
         self.threshold_elev_2_le = QtWidgets.QLineEdit()
         self.threshold_elev_2_le.setObjectName(f"lineEdit_threshold_elev_2_{self.index}")
@@ -242,6 +270,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "Elevation (AMSL) of the reciprocal landing threshold. Leave blank to use the runway-end elevation."
         )
         self.threshold_elev_2_le.setValidator(self.numeric_validator)
+        self.threshold_elev_2_le.setMinimumWidth(190)
 
         self.thr_displaced_1_le = QtWidgets.QLineEdit()
         self.thr_displaced_1_le.setObjectName(f"lineEdit_thr_displaced_1_{self.index}")
@@ -250,6 +279,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "Displaced threshold distance for primary end (meters). Leave blank if none."
         )
         self.thr_displaced_1_le.setValidator(self.distance_validator)
+        self.thr_displaced_1_le.setMinimumWidth(190)
 
         self.thr_displaced_2_le = QtWidgets.QLineEdit()
         self.thr_displaced_2_le.setObjectName(f"lineEdit_thr_displaced_2_{self.index}")
@@ -258,12 +288,14 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "Displaced threshold distance for reciprocal end (meters). Leave blank if none."
         )
         self.thr_displaced_2_le.setValidator(self.distance_validator)
+        self.thr_displaced_2_le.setMinimumWidth(190)
 
         self.thr_pre_area_1_le = QtWidgets.QLineEdit()
         self.thr_pre_area_1_le.setObjectName(f"lineEdit_thr_pre_area_1_{self.index}")
         self.thr_pre_area_1_le.setPlaceholderText("e.g., 60")
         self.thr_pre_area_1_le.setToolTip("Length of pre-threshold area for primary end (meters). Leave blank if none.")
         self.thr_pre_area_1_le.setValidator(self.distance_validator)
+        self.thr_pre_area_1_le.setMinimumWidth(190)
 
         self.thr_pre_area_2_le = QtWidgets.QLineEdit()
         self.thr_pre_area_2_le.setObjectName(f"lineEdit_thr_pre_area_2_{self.index}")
@@ -272,6 +304,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             "Length of pre-threshold area for reciprocal end (meters). Leave blank if none."
         )
         self.thr_pre_area_2_le.setValidator(self.distance_validator)
+        self.thr_pre_area_2_le.setMinimumWidth(190)
 
         current_coord_row = 0
         gridLayout_Coords.addWidget(label_designation_row, current_coord_row, 0)
@@ -302,12 +335,20 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         gridLayout_Coords.addWidget(self.thr_pre_area_1_le, current_coord_row, 1)
         gridLayout_Coords.addWidget(self.thr_pre_area_2_le, current_coord_row, 2)
 
-        groupBox_layout.addWidget(core_widget)
+        core_widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        groupBox_layout.addWidget(core_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
         self.advanced_widget = QtWidgets.QWidget(self)
         advanced_layout = QtWidgets.QVBoxLayout(self.advanced_widget)
         advanced_layout.setContentsMargins(0, 0, 0, 0)
         advanced_layout.setSpacing(8)
+        self.advanced_widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
 
         advanced_body = QtWidgets.QWidget(self.advanced_widget)
         advanced_body_layout = QtWidgets.QVBoxLayout(advanced_body)
@@ -346,6 +387,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         width_validator = QtGui.QDoubleValidator(0.01, 9999.99, 2, self)
         width_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
         self.width_le.setValidator(width_validator)
+        self.width_le.setMinimumWidth(190)
         detailsLayout.addWidget(label_runway_width, current_details_row, 0)
         detailsLayout.addWidget(self.width_le, current_details_row, 1)
         current_details_row += 1
@@ -356,6 +398,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.shoulder_le.setObjectName(f"lineEdit_rwy_shoulder_{self.index}")
         self.shoulder_le.setToolTip("Enter width of runway shoulder (each side, if applicable).")
         self.shoulder_le.setValidator(self.distance_validator)
+        self.shoulder_le.setMinimumWidth(190)
         detailsLayout.addWidget(label_runway_shoulder, current_details_row, 0)
         detailsLayout.addWidget(self.shoulder_le, current_details_row, 1)
         current_details_row += 1
@@ -366,7 +409,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
         advanced_body_layout.addLayout(detailsLayout)
         advanced_layout.addWidget(advanced_body)
-        groupBox_layout.addWidget(self.advanced_widget)
+        groupBox_layout.addWidget(self.advanced_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
         self._required_field_pairs = [
             (label_designation_row, self.desig_le),
@@ -395,6 +438,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.arc_num_combo.addItem(label, userData=value)
         self.arc_num_combo.setToolTip("Select Aerodrome Reference Code Number")
         self.arc_num_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.arc_num_combo.setMinimumWidth(190)
         layout.addWidget(label_arc_num, row, 0)
         layout.addWidget(self.arc_num_combo, row, 1)
 
@@ -414,6 +458,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.arc_let_combo.addItem(label, userData=value)
         self.arc_let_combo.setToolTip("Select Aerodrome Reference Code Letter")
         self.arc_let_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.arc_let_combo.setMinimumWidth(190)
         layout.addWidget(label_arc_let, row + 1, 0)
         layout.addWidget(self.arc_let_combo, row + 1, 1)
 
@@ -424,6 +469,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.surface_category_combo.addItems([""] + list(RUNWAY_SURFACE_MATERIALS))
         self.surface_category_combo.setToolTip("Select runway surface category.")
         self.surface_category_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.surface_category_combo.setMinimumWidth(190)
         layout.addWidget(label_surface_category, row + 2, 0)
         layout.addWidget(self.surface_category_combo, row + 2, 1)
 
@@ -433,6 +479,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.surface_material_combo.setObjectName(f"comboBox_surface_material_{self.index}")
         self.surface_material_combo.setToolTip("Select runway surface material for the chosen category.")
         self.surface_material_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.surface_material_combo.setMinimumWidth(190)
         self._refresh_surface_material_options("")
         layout.addWidget(label_surface_material, row + 3, 0)
         layout.addWidget(self.surface_material_combo, row + 3, 1)
@@ -453,6 +500,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.type1_combo.addItems(runway_types)
         self.type1_combo.setToolTip("Select type for primary end.")
         self.type1_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.type1_combo.setMinimumWidth(190)
         layout.addWidget(self.type1_lbl, row, 0)
         layout.addWidget(self.type1_combo, row, 1)
 
@@ -464,6 +512,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.type2_combo.addItems(runway_types)
         self.type2_combo.setToolTip("Select type for reciprocal end.")
         self.type2_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.type2_combo.setMinimumWidth(190)
         layout.addWidget(self.type2_lbl, row + 1, 0)
         layout.addWidget(self.type2_combo, row + 1, 1)
 
@@ -567,6 +616,15 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.stopway2_len_le,
         ]:
             widget.textChanged.connect(self.inputChanged.emit)
+            if widget in [
+                self.desig_le,
+                self.thr_east_le,
+                self.thr_north_le,
+                self.rec_east_le,
+                self.rec_north_le,
+                self.width_le,
+            ]:
+                widget.textChanged.connect(self._update_required_field_indicators)
         for checkbox in [
             self.takeoff_available_1_cb,
             self.takeoff_available_2_cb,
@@ -583,6 +641,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.type2_combo,
         ]:
             combo.currentIndexChanged.connect(self.inputChanged.emit)
+        self.suffix_combo.currentIndexChanged.connect(self._update_required_field_indicators)
         self.surface_category_combo.currentIndexChanged.connect(self._handle_surface_category_changed)
         self.remove_button.clicked.connect(self._emit_remove_request)
         self.duplicate_button.clicked.connect(self._emit_duplicate_request)
@@ -812,12 +871,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             widget = getattr(self, widget_name, None)
             if not widget:
                 continue
-            if value:
-                widget.setStyleSheet("")
-            else:
-                widget.setStyleSheet(
-                    "QLineEdit { background: #fffbe6; border: 1px solid #e0b000; }"
-                )
+            widget.setProperty("requiredEmpty", not bool(value))
+            widget.style().unpolish(widget)
+            widget.style().polish(widget)
+            widget.update()
 
     def _refresh_surface_material_options(self, category: str, selected_material: str = "") -> None:
         current_material = selected_material or self.surface_material_combo.currentText()
