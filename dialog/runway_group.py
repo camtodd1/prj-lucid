@@ -409,7 +409,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             (label_runway_width, self.width_le),
         ]
         self._set_advanced_visible(False)
-        self._freeze_compact_height(core_widget)
+        self._sync_height_constraint()
         self._update_status_chip()
         self._update_required_field_indicators()
 
@@ -743,6 +743,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         )
         self._update_status_chip()
         self._update_required_field_indicators()
+        self._sync_height_constraint()
 
     def _input_widgets(self):
         return [
@@ -787,6 +788,8 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         if hasattr(self, "advanced_widget"):
             self.advanced_widget.setVisible(visible)
             self.advanced_widget.setMaximumHeight(16777215 if visible else 0)
+            self.advanced_widget.setMinimumHeight(0)
+        self._sync_height_constraint()
         self._update_expand_button_icon(visible)
 
     def _update_expand_button_icon(self, visible: Optional[bool] = None) -> None:
@@ -863,10 +866,16 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             widget.style().polish(widget)
             widget.update()
 
-    def _freeze_compact_height(self, core_widget: QtWidgets.QWidget) -> None:
-        """Keep the compact runway body tight to its content."""
-        core_widget.adjustSize()
-        core_widget.setMaximumHeight(core_widget.sizeHint().height())
+    def _sync_height_constraint(self) -> None:
+        """Clamp the card height in compact mode so it does not float with extra whitespace."""
+        if self._advanced_visible:
+            self.setMaximumHeight(16777215)
+            self.setMinimumHeight(0)
+        else:
+            self.adjustSize()
+            compact_height = self.sizeHint().height()
+            self.setMinimumHeight(compact_height)
+            self.setMaximumHeight(compact_height)
 
     def _refresh_surface_material_options(self, category: str, selected_material: str = "") -> None:
         current_material = selected_material or self.surface_material_combo.currentText()
