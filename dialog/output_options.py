@@ -68,10 +68,8 @@ class OutputOptionsMixin:
 
     def _setup_controlling_ols_control(self):
         """Add the development controlling OLS output toggle to the Output tab."""
-        if hasattr(self, "checkBox_generateControllingOls"):
-            return
-
-        parent_layout = getattr(self, "verticalLayout_5", None)
+        checkbox = getattr(self, "checkBox_generateControllingOls", None)
+        parent_layout = getattr(self, "verticalLayout_olsTab", getattr(self, "verticalLayout_5", None))
         if parent_layout is None:
             QgsMessageLog.logMessage(
                 "Controlling OLS output control setup skipped: output options layout missing.",
@@ -80,21 +78,17 @@ class OutputOptionsMixin:
             )
             return
 
-        checkbox = QtWidgets.QCheckBox(self.tr("Generate controlling OLS surfaces"))
-        checkbox.setObjectName("checkBox_generateControllingOls")
+        if checkbox is None:
+            checkbox = QtWidgets.QCheckBox(self.tr("Generate controlling OLS surfaces"))
+            checkbox.setObjectName("checkBox_generateControllingOls")
+            parent_layout.insertWidget(0, checkbox)
+            self.checkBox_generateControllingOls = checkbox
         checkbox.setChecked(True)
-        checkbox.setToolTip(
-            self.tr("Include the development controlling OLS lower-envelope output layers.")
-        )
-        parent_layout.addWidget(checkbox)
-        self.checkBox_generateControllingOls = checkbox
+        checkbox.setToolTip(self.tr("Include the development controlling OLS lower-envelope output layers."))
 
     def _setup_contour_interval_controls(self):
         """Add contour interval controls to the Output tab."""
-        if hasattr(self, "groupBox_contourIntervals"):
-            return
-
-        parent_layout = getattr(self, "verticalLayout_5", None)
+        parent_layout = getattr(self, "verticalLayout_olsTab", getattr(self, "verticalLayout_5", None))
         if parent_layout is None:
             QgsMessageLog.logMessage(
                 "Contour interval UI setup skipped: output options layout missing.",
@@ -102,32 +96,47 @@ class OutputOptionsMixin:
                 level=Qgis.Warning,
             )
             return
+        group = getattr(self, "groupBox_contourIntervals", None)
+        if group is None:
+            group = QtWidgets.QGroupBox(self.tr("OLS Contour Intervals"))
+            group.setObjectName("groupBox_contourIntervals")
+            parent_layout.addWidget(group)
 
-        group = QtWidgets.QGroupBox(self.tr("OLS Contour Intervals"))
-        group.setObjectName("groupBox_contourIntervals")
-        grid = QtWidgets.QGridLayout(group)
-        grid.setObjectName("gridLayout_contourIntervals")
-
-        default_label = QtWidgets.QLabel(self.tr("Default contour interval"))
-        default_label.setObjectName("labelContourDefault")
-        self.doubleSpinBoxContourDefault = self._create_contour_interval_spinbox("doubleSpinBoxContourDefault")
-        grid.addWidget(default_label, 0, 0)
-        grid.addWidget(self.doubleSpinBoxContourDefault, 0, 1)
+        grid = group.layout()
+        if grid is None:
+            grid = QtWidgets.QGridLayout(group)
+            grid.setObjectName("gridLayout_contourIntervals")
 
         self._contour_interval_spinboxes = {}
+        default_label = getattr(self, "labelContourDefault", None)
+        if default_label is None:
+            default_label = QtWidgets.QLabel(self.tr("Default contour interval"))
+            default_label.setObjectName("labelContourDefault")
+            grid.addWidget(default_label, 0, 0)
+        self.doubleSpinBoxContourDefault = getattr(
+            self,
+            "doubleSpinBoxContourDefault",
+            None,
+        ) or self._create_contour_interval_spinbox("doubleSpinBoxContourDefault")
+        grid.addWidget(self.doubleSpinBoxContourDefault, 0, 1)
+
         for row, key in enumerate(CONTOUR_INTERVAL_KEYS, start=1):
-            label = QtWidgets.QLabel(self.tr(CONTOUR_INTERVAL_LABELS[key]))
-            label.setObjectName(f"labelContour{key.title()}")
-            spinbox = self._create_contour_interval_spinbox(f"doubleSpinBoxContour{key.title()}")
+            label_name = f"labelContour{key.title()}"
+            spin_name = f"doubleSpinBoxContour{key.title()}"
+            label = getattr(self, label_name, None)
+            if label is None:
+                label = QtWidgets.QLabel(self.tr(CONTOUR_INTERVAL_LABELS[key]))
+                label.setObjectName(label_name)
+                grid.addWidget(label, row, 0)
+            spinbox = getattr(self, spin_name, None)
+            if spinbox is None:
+                spinbox = self._create_contour_interval_spinbox(spin_name)
             self._contour_interval_spinboxes[key] = spinbox
-            grid.addWidget(label, row, 0)
             grid.addWidget(spinbox, row, 1)
 
         self.doubleSpinBoxContourDefault.valueChanged.connect(self._apply_default_contour_interval)
         for spinbox in self._contour_interval_spinboxes.values():
             spinbox.valueChanged.connect(self._on_contour_interval_changed)
-
-        parent_layout.addWidget(group)
 
     def _create_contour_interval_spinbox(self, object_name: str):
         spinbox = QtWidgets.QDoubleSpinBox()

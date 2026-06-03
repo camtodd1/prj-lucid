@@ -608,6 +608,31 @@
            </layout>
           </item>
          </layout>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+     <widget class="QWidget" name="tab_ols">
+      <attribute name="title">
+       <string>OLS</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="verticalLayout_olsTab">
+       <item>
+        <widget class="QCheckBox" name="checkBox_generateControllingOls">
+         <property name="text">
+          <string>Generate controlling OLS surfaces</string>
+         </property>
+         <property name="checked">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_contourIntervals">
+         <property name="title">
+          <string>OLS Contour Intervals</string>
+         </property>
+         <layout class="QGridLayout" name="gridLayout_contourIntervals"/>
         </widget>
        </item>
       </layout>
