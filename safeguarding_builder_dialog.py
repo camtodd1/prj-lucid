@@ -106,6 +106,8 @@ class SafeguardingBuilderDialog(
         self._airport_lookup_pending_code: str = ""
         self._airport_lookup_pending_source = "icao"
         self._airport_code_syncing = False
+        self._airport_resolved_signature = ""
+        self._airport_resolved_summary = ""
         self._airport_lookup_timer = QtCore.QTimer(self)
         self._airport_lookup_timer.setSingleShot(True)
         self._airport_lookup_timer.timeout.connect(self._resolve_airport_lookup)
@@ -540,9 +542,9 @@ class SafeguardingBuilderDialog(
         )
 
         if airport_name_le:
+            airport_name_le.textChanged.connect(self._handle_icao_changed)
             airport_name_le.textChanged.connect(self.update_all_runway_calculations)
             airport_name_le.textChanged.connect(self.update_dialog_status)
-            airport_name_le.textChanged.connect(self._handle_icao_changed)
         else:
             QgsMessageLog.logMessage(
                 "Warning: 'lineEdit_airport_name' not found.",
@@ -552,6 +554,7 @@ class SafeguardingBuilderDialog(
 
         if iata_code_le:
             iata_code_le.textChanged.connect(self._handle_iata_changed)
+            iata_code_le.textChanged.connect(self.update_dialog_status)
 
         if add_runway_button and self.scroll_area_layout is not None:
             add_runway_button.clicked.connect(self.add_runway_group)
@@ -572,6 +575,7 @@ class SafeguardingBuilderDialog(
         """Normalize ICAO input and queue a metadata lookup."""
         if self._airport_code_syncing:
             return
+        self._invalidate_airport_resolution()
         icao_input = getattr(
             self,
             "lineEdit_airport_name",
@@ -590,6 +594,7 @@ class SafeguardingBuilderDialog(
         """Normalize IATA input and queue a reverse lookup."""
         if self._airport_code_syncing:
             return
+        self._invalidate_airport_resolution()
         iata_input = getattr(
             self,
             "lineEdit_iata_code",
@@ -603,6 +608,11 @@ class SafeguardingBuilderDialog(
             iata_input.setCursorPosition(cursor_pos)
             del blocker
         self._queue_airport_lookup(normalized, source="iata")
+
+    def _invalidate_airport_resolution(self) -> None:
+        """Clear resolved airport state when the user edits either code."""
+        self._airport_resolved_signature = ""
+        self._airport_resolved_summary = ""
 
     def _queue_airport_lookup(self, code: Optional[str] = None, source: str = "icao") -> None:
         """Debounce airport metadata lookup so typing does not spam network calls."""
@@ -869,7 +879,9 @@ class SafeguardingBuilderDialog(
         coordinates = result.get("coordinates", "").strip()
         code_summary = " / ".join(part for part in [icao, iata] if part)
         summary = " - ".join(part for part in [code_summary, name, location] if part)
-        airport_lookup.setText(summary)
+        self._airport_resolved_signature = self._airport_signature(icao, iata)
+        self._airport_resolved_summary = summary
+        airport_lookup.setText(location or name or summary)
         tooltip_parts = []
         if icao:
             tooltip_parts.append(f"ICAO: {icao}")
@@ -888,13 +900,14 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_status"),
         )
         if airport_status:
-            airport_status.setText("Airport resolved")
+            airport_status.setText(summary)
             airport_status.setStyleSheet(
                 "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; "
                 "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
             )
             airport_status.setToolTip(" | ".join(tooltip_parts))
         self._resize_airport_identity_card()
+        self.update_dialog_status()
 
     def _sync_airport_code_fields(self, icao_code: str, iata_code: str) -> None:
         """Populate paired airport code fields without triggering another lookup loop."""
@@ -911,11 +924,17 @@ class SafeguardingBuilderDialog(
                 self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"),
             )
             if icao_input and icao_code and icao_input.text().strip().upper() != icao_code:
-                icao_input.setText(icao_code)
+                with QtCore.QSignalBlocker(icao_input):
+                    icao_input.setText(icao_code)
             if iata_input and iata_code and iata_input.text().strip().upper() != iata_code:
-                iata_input.setText(iata_code)
+                with QtCore.QSignalBlocker(iata_input):
+                    iata_input.setText(iata_code)
         finally:
             self._airport_code_syncing = False
+
+    def _airport_signature(self, icao_code: str, iata_code: str) -> str:
+        """Build a stable signature for the current airport codes."""
+        return f"{icao_code.strip().upper()}|{iata_code.strip().upper()}"
 
     def _resize_airport_identity_card(self) -> None:
         """Keep the airport identity card tight to its content."""
@@ -992,14 +1011,15 @@ class SafeguardingBuilderDialog(
         iata_widget = getattr(self, "lineEdit_iata_code", self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"))
         iata = iata_widget.text().strip().upper() if iata_widget else ""
         if hasattr(self, "label_airport_status"):
-            if icao:
-                self.label_airport_status.setText(f"Airport code entered: {icao}")
+            current_signature = self._airport_signature(icao, iata)
+            if current_signature == self._airport_resolved_signature and self._airport_resolved_summary:
+                self.label_airport_status.setText(self._airport_resolved_summary)
                 self.label_airport_status.setStyleSheet(
-                    "QLabel { background: #eaf2ff; color: #1f4f99; border: 1px solid #c7d7f5; "
+                    "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
-            elif iata:
-                self.label_airport_status.setText(f"Resolving IATA: {iata}")
+            elif icao or iata:
+                self.label_airport_status.setText("Resolving airport...")
                 self.label_airport_status.setStyleSheet(
                     "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
