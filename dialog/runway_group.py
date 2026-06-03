@@ -407,28 +407,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         dimensions_layout.addWidget(self.shoulder_le, 0, 1)
 
         advanced_body_layout.addWidget(dimensions_group)
-        ruleset_group = QtWidgets.QGroupBox("Ruleset / Marking Standard")
-        ruleset_group.setObjectName(f"groupBox_ruleset_{self.index}")
-        ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
-        ruleset_layout.setColumnStretch(0, 2)
-        ruleset_layout.setColumnStretch(1, 1)
-
-        ruleset_label = QtWidgets.QLabel("Ruleset:")
-        ruleset_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self.ruleset_combo = NoWheelComboBox()
-        self.ruleset_combo.setObjectName(f"comboBox_ruleset_{self.index}")
-        self.ruleset_combo.addItem("MOS139 (current)", userData="MOS139")
-        self.ruleset_combo.addItem("Annex 14 (placeholder)", userData="ANNEX14")
-        self.ruleset_combo.setCurrentIndex(0)
-        self.ruleset_combo.setToolTip(
-            "Placeholder ruleset selector. The current implementation uses MOS139 regardless of selection."
-        )
-        self.ruleset_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self.ruleset_combo.setMinimumWidth(190)
-        ruleset_layout.addWidget(ruleset_label, 0, 0)
-        ruleset_layout.addWidget(self.ruleset_combo, 0, 1)
-
-        advanced_body_layout.addWidget(ruleset_group)
         self._add_declared_distance_controls(advanced_body_layout)
 
         classification_group = QtWidgets.QGroupBox("Classification / Approach")
@@ -647,21 +625,17 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.clearway2_len_le,
             self.stopway1_len_le,
             self.stopway2_len_le,
-            self.ruleset_combo,
         ]:
-            if isinstance(widget, QtWidgets.QComboBox):
-                widget.currentIndexChanged.connect(self.inputChanged.emit)
-            else:
-                widget.textChanged.connect(self.inputChanged.emit)
-                if widget in [
-                    self.desig_le,
-                    self.thr_east_le,
-                    self.thr_north_le,
-                    self.rec_east_le,
-                    self.rec_north_le,
-                    self.width_le,
-                ]:
-                    widget.textChanged.connect(self._update_required_field_indicators)
+            widget.textChanged.connect(self.inputChanged.emit)
+            if widget in [
+                self.desig_le,
+                self.thr_east_le,
+                self.thr_north_le,
+                self.rec_east_le,
+                self.rec_north_le,
+                self.width_le,
+            ]:
+                widget.textChanged.connect(self._update_required_field_indicators)
         for checkbox in [
             self.takeoff_available_1_cb,
             self.takeoff_available_2_cb,
@@ -723,7 +697,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "takeoff_available_2": self.takeoff_available_2_cb.isChecked(),
             "landing_available_1": self.landing_available_1_cb.isChecked(),
             "landing_available_2": self.landing_available_2_cb.isChecked(),
-            "ruleset": self.ruleset_combo.currentData() or self.ruleset_combo.currentText(),
             "arc_num": self.arc_num_combo.currentData(),
             "arc_let": self.arc_let_combo.currentData(),
             "surface_category": self.surface_category_combo.currentText(),
@@ -762,7 +735,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.takeoff_available_2_cb.setChecked(self._bool_from_saved_value(data.get("takeoff_available_2", True)))
             self.landing_available_1_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_1", True)))
             self.landing_available_2_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_2", True)))
-            self._set_combo_data(self.ruleset_combo, data.get("ruleset", "MOS139"))
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
             self._set_combo_text(
@@ -820,7 +792,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.takeoff_available_2_cb,
             self.landing_available_1_cb,
             self.landing_available_2_cb,
-            self.ruleset_combo,
             self.arc_num_combo,
             self.arc_let_combo,
             self.surface_category_combo,

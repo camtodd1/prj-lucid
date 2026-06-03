@@ -173,6 +173,7 @@ class SafeguardingBuilderDialog(
 
         self._setup_arp_validators(self.coord_validator, self.numeric_validator)
         self._style_airport_tab()
+        self._setup_ruleset_selector_ui()
         self._connect_global_controls()
         self._setup_dialog_status_connections()
 
@@ -473,6 +474,60 @@ class SafeguardingBuilderDialog(
                     "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; "
                     "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
                 )
+
+    def _setup_ruleset_selector_ui(self) -> None:
+        """Add a top-level ruleset selector placeholder to the airport tab."""
+        airport_layout = getattr(self, "verticalLayout_airportTab", None)
+        if not isinstance(airport_layout, QtWidgets.QVBoxLayout):
+            QgsMessageLog.logMessage(
+                "Warning: 'verticalLayout_airportTab' not found; ruleset selector not added.",
+                DIALOG_LOG_TAG,
+                level=Qgis.Warning,
+            )
+            return
+
+        self.ruleset_combo = QtWidgets.QComboBox()
+        self.ruleset_combo.setObjectName("comboBox_ruleset")
+        self.ruleset_combo.addItem("MOS139 (current)", userData="MOS139")
+        self.ruleset_combo.addItem("Annex 14 (placeholder)", userData="ANNEX14")
+        self.ruleset_combo.setCurrentIndex(0)
+        self.ruleset_combo.setToolTip(
+            "Placeholder ruleset selector. The current implementation uses MOS139 regardless of selection."
+        )
+        self.ruleset_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.ruleset_combo.setMinimumWidth(190)
+
+        ruleset_group = QtWidgets.QGroupBox("Ruleset / Marking Standard")
+        ruleset_group.setObjectName("groupBox_ruleset")
+        ruleset_group.setStyleSheet(
+            """
+            QGroupBox {
+                border: 1px solid #dcdcdc;
+                border-radius: 4px;
+                margin-top: 12px;
+                padding: 8px;
+                background: #ffffff;
+            }
+            QGroupBox::title {
+                subcontrol-origin: margin;
+                left: 8px;
+                padding: 0 4px;
+                font-weight: 600;
+            }
+            """
+        )
+        ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
+        ruleset_layout.setColumnStretch(0, 2)
+        ruleset_layout.setColumnStretch(1, 1)
+
+        ruleset_label = QtWidgets.QLabel("Ruleset:")
+        ruleset_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        ruleset_layout.addWidget(ruleset_label, 0, 0)
+        ruleset_layout.addWidget(self.ruleset_combo, 0, 1)
+
+        insert_at = 1 if airport_layout.count() > 0 else airport_layout.count()
+        airport_layout.insertWidget(insert_at, ruleset_group)
+        self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
 
     def _style_dialog_header(self) -> None:
         """Tighten the top utility header into a compact visual band."""
@@ -1582,6 +1637,7 @@ class SafeguardingBuilderDialog(
                 "arp_elevation": arp_elev,
                 "met_point": met_pt,
                 "met_elevation": met_elev,
+                "ruleset": self.ruleset_combo.currentData() if hasattr(self, "ruleset_combo") else "MOS139",
             }
         )
 

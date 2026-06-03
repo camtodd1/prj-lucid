@@ -54,6 +54,11 @@ class PersistenceMixin:
             if widget:
                 widget.clear()
 
+        ruleset_combo = getattr(self, "ruleset_combo", None)
+        if isinstance(ruleset_combo, QComboBox):
+            idx = ruleset_combo.findData("MOS139")
+            ruleset_combo.setCurrentIndex(idx if idx >= 0 else 0)
+
         for index in list(self._runway_groups.keys()):
             self._remove_runway_group_internal(index)
         self._runway_groups.clear()
@@ -145,6 +150,7 @@ class PersistenceMixin:
             "met_easting": self._line_text("lineEdit_met_easting"),
             "met_northing": self._line_text("lineEdit_met_northing"),
             "met_elevation": self._line_text("lineEdit_met_elevation"),
+            "ruleset": self.ruleset_combo.currentData() if hasattr(self, "ruleset_combo") else "MOS139",
             "runways": [self._runway_groups[idx].get_input_data() for idx in sorted(self._runway_groups.keys())],
             "cns_facilities": self._get_cns_save_rows(),
         }
@@ -204,6 +210,9 @@ class PersistenceMixin:
         ]
         if any(widget and widget.text() for widget in global_widgets):
             return True
+        ruleset_combo = getattr(self, "ruleset_combo", None)
+        if isinstance(ruleset_combo, QComboBox) and ruleset_combo.currentData() not in {None, "MOS139"}:
+            return True
         if any(self._runway_has_existing_input(group.get_input_data()) for group in self._runway_groups.values()):
             return True
         cns_table = self._table("table_cns_facility")
@@ -242,6 +251,10 @@ class PersistenceMixin:
         self._set_line_text("lineEdit_met_easting", loaded_data.get("met_easting", ""))
         self._set_line_text("lineEdit_met_northing", loaded_data.get("met_northing", ""))
         self._set_line_text("lineEdit_met_elevation", loaded_data.get("met_elevation", ""))
+        ruleset_combo = getattr(self, "ruleset_combo", None)
+        if isinstance(ruleset_combo, QComboBox):
+            idx = ruleset_combo.findData(loaded_data.get("ruleset", "MOS139"))
+            ruleset_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._load_runway_rows(loaded_data.get("runways", []))
         if hasattr(self, "_load_agl_options"):
             self._load_agl_options(loaded_data.get("agl_options", {}))
