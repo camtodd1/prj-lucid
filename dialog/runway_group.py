@@ -56,9 +56,14 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         groupBox_layout.setSpacing(8)
 
         header_widget = QtWidgets.QWidget(self)
+        header_widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         header_layout = QtWidgets.QHBoxLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 0, 0)
         header_layout.setSpacing(8)
+        header_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         title_stack = QtWidgets.QVBoxLayout()
         title_stack.setContentsMargins(0, 0, 0, 0)
@@ -86,6 +91,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.status_chip_lbl.setObjectName(f"label_rwy_status_{self.index}")
         self.status_chip_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.status_chip_lbl.setMinimumWidth(90)
+        self.status_chip_lbl.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         self.status_chip_lbl.setStyleSheet(
             "QLabel { background: #f2f2f2; color: #444; border: 1px solid #d2d2d2; border-radius: 10px; padding: 4px 10px; }"
         )
@@ -97,6 +106,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.expand_button.setChecked(False)
         self.expand_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
         self.expand_button.setToolTip("Show or hide advanced runway details")
+        self.expand_button.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         self.expand_button.toggled.connect(self._set_advanced_visible)
         header_layout.addWidget(self.expand_button)
 
@@ -104,12 +117,20 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.duplicate_button.setObjectName(f"pushButton_duplicate_runway_{self.index}")
         self.duplicate_button.setToolTip("Create a copy of this runway")
         self.duplicate_button.setMaximumWidth(100)
+        self.duplicate_button.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         header_layout.addWidget(self.duplicate_button)
 
         self.remove_button = QtWidgets.QPushButton("Remove")
         self.remove_button.setObjectName(f"pushButton_remove_runway_{self.index}")
         self.remove_button.setToolTip("Remove this runway")
         self.remove_button.setMaximumWidth(90)
+        self.remove_button.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Fixed,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         header_layout.addWidget(self.remove_button)
 
         groupBox_layout.addWidget(header_widget)
