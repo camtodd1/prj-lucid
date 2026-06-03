@@ -496,6 +496,42 @@ class SafeguardingBuilderDialog(
                 "QLabel { color: #232323; font-size: 20px; font-weight: 700; padding-bottom: 2px; }"
             )
 
+        header_info = getattr(
+            self,
+            "coord_info",
+            self.findChild(QtWidgets.QLabel, "coord_info"),
+        )
+        if header_info:
+            header_info.setStyleSheet(
+                "QLabel { color: #4b4b4b; font-size: 11px; margin-left: 10px; }"
+            )
+
+        crs_prefix = getattr(
+            self,
+            "label_crs_prefix",
+            self.findChild(QtWidgets.QLabel, "label_crs_prefix"),
+        )
+        if crs_prefix:
+            crs_prefix.setStyleSheet("QLabel { color: #1677ff; font-size: 15px; font-weight: 700; }")
+
+        crs_field = getattr(
+            self,
+            "lineEdit_airport_crs",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_crs"),
+        )
+        if crs_field:
+            crs_field.setReadOnly(True)
+            crs_field.setClearButtonEnabled(False)
+            crs_field.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+            crs_field.setPlaceholderText("")
+            crs_field.setStyleSheet(
+                "QLineEdit { background: #0b84ff; color: white; border: 1px solid #0b84ff; "
+                "border-radius: 8px; padding: 4px 10px; font-size: 14px; font-weight: 700; }"
+                "QLineEdit:read-only { background: #0b84ff; color: white; }"
+            )
+            crs_field.setText("")
+            crs_field.setToolTip("Suggested projected CRS derived from the airport latitude/longitude.")
+
         header_layout = getattr(
             self,
             "horizontalLayout_dialogHeader",
@@ -631,6 +667,7 @@ class SafeguardingBuilderDialog(
         self._airport_lookup_state = "idle"
         self._airport_lookup_status_message = ""
         self._airport_lookup_status_signature = ""
+        self._update_airport_crs_display(None)
 
     def _queue_airport_lookup(self, code: Optional[str] = None, source: str = "icao") -> None:
         """Debounce airport metadata lookup so typing does not spam network calls."""
@@ -659,6 +696,7 @@ class SafeguardingBuilderDialog(
             self._airport_lookup_status_signature = ""
             airport_lookup.setText("")
             airport_lookup.setToolTip("")
+            self._update_airport_crs_display(None)
             return
 
         cached = (
@@ -782,6 +820,7 @@ class SafeguardingBuilderDialog(
                     "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
+            self._update_airport_crs_display(None)
 
     def _fetch_airport_metadata_by_iata(self, iata_code: str) -> Optional[Dict[str, str]]:
         """Fetch airport details by IATA code from the OurAirports open-data CSV."""
@@ -829,8 +868,12 @@ class SafeguardingBuilderDialog(
 
         coords_match = re.search(r"Coordinates\s+([-\d.]+),\s*([-\d.]+)", text, flags=re.I)
         coordinates = ""
+        latitude = ""
+        longitude = ""
         if coords_match:
-            coordinates = f"{coords_match.group(1).strip()}, {coords_match.group(2).strip()}"
+            latitude = coords_match.group(1).strip()
+            longitude = coords_match.group(2).strip()
+            coordinates = f"{latitude}, {longitude}"
 
         iata_match = re.search(r"IATA code\s+([A-Z0-9]{3})", text, flags=re.I)
         iata = iata_match.group(1).strip().upper() if iata_match else ""
@@ -841,6 +884,8 @@ class SafeguardingBuilderDialog(
             "name": name,
             "location": location,
             "coordinates": coordinates,
+            "latitude": latitude,
+            "longitude": longitude,
         }
 
     def _load_airport_dataset(self) -> None:
@@ -891,6 +936,8 @@ class SafeguardingBuilderDialog(
             "name": row.get("name", "").strip(),
             "location": ", ".join(location_parts),
             "coordinates": coordinates,
+            "latitude": latitude,
+            "longitude": longitude,
         }
 
     def _format_airport_region(self, iso_region: str) -> str:
@@ -929,10 +976,10 @@ class SafeguardingBuilderDialog(
         location = result.get("location", "").strip()
         coordinates = result.get("coordinates", "").strip()
         code_summary = " / ".join(part for part in [icao, iata] if part)
-        summary = " - ".join(part for part in [code_summary, name, location] if part)
+        summary = " - ".join(part for part in [code_summary, name] if part)
         self._airport_resolved_signature = self._airport_signature(icao, iata)
         self._airport_resolved_summary = summary
-        airport_lookup.setText(location or name or summary)
+        airport_lookup.setText(location)
         tooltip_parts = []
         if icao:
             tooltip_parts.append(f"ICAO: {icao}")
@@ -945,6 +992,7 @@ class SafeguardingBuilderDialog(
         if coordinates:
             tooltip_parts.append(f"Coordinates: {coordinates}")
         airport_lookup.setToolTip(" | ".join(tooltip_parts))
+        self._update_airport_crs_display(result)
         airport_status = getattr(
             self,
             "label_airport_status",
@@ -987,6 +1035,58 @@ class SafeguardingBuilderDialog(
         """Build a stable signature for the current airport codes."""
         return f"{icao_code.strip().upper()}|{iata_code.strip().upper()}"
 
+    def _update_airport_crs_display(self, result: Optional[Dict[str, str]] = None) -> None:
+        """Suggest a projected EPSG CRS for the airport location."""
+        crs_field = getattr(
+            self,
+            "lineEdit_airport_crs",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_crs"),
+        )
+        if crs_field is None:
+            return
+
+        latitude = None
+        longitude = None
+        if result:
+            lat_raw = result.get("latitude", "").strip()
+            lon_raw = result.get("longitude", "").strip()
+            if lat_raw and lon_raw:
+                try:
+                    latitude = float(lat_raw)
+                    longitude = float(lon_raw)
+                except ValueError:
+                    latitude = None
+                    longitude = None
+            elif result.get("coordinates", "").strip():
+                coords = result.get("coordinates", "").split(",")
+                if len(coords) == 2:
+                    try:
+                        latitude = float(coords[0].strip())
+                        longitude = float(coords[1].strip())
+                    except ValueError:
+                        latitude = None
+                        longitude = None
+
+        authid = self._projected_crs_authid_from_latlon(latitude, longitude)
+        with QtCore.QSignalBlocker(crs_field):
+            crs_field.setText(authid or "")
+
+    def _projected_crs_authid_from_latlon(self, latitude: Optional[float], longitude: Optional[float]) -> str:
+        """Return a projected EPSG authid inferred from a latitude/longitude pair."""
+        if latitude is None or longitude is None:
+            return ""
+
+        if latitude >= 84:
+            return "EPSG:3413"
+        if latitude <= -80:
+            return "EPSG:3031"
+
+        zone = int((longitude + 180.0) // 6.0) + 1
+        zone = max(1, min(zone, 60))
+        epsg = 32600 + zone if latitude >= 0 else 32700 + zone
+        crs = QgsCoordinateReferenceSystem(f"EPSG:{epsg}")
+        return crs.authid() if crs.isValid() else ""
+
     def _resize_airport_identity_card(self) -> None:
         """Keep the airport identity card tight to its content."""
         frame = getattr(
@@ -1026,7 +1126,6 @@ class SafeguardingBuilderDialog(
             "radioFileOutput",
             "comboOutputFormat",
             "fileWidgetOutputPath",
-            "checkBox_dissolveLayers",
             "checkBox_generateControllingOls",
         ]:
             widget = getattr(self, name, None)
@@ -1576,11 +1675,6 @@ class SafeguardingBuilderDialog(
             )
             return None
 
-        # Add dissolve option
-        if hasattr(self, "checkBox_dissolveLayers") and self.checkBox_dissolveLayers:
-            final_data["dissolve_output"] = self.checkBox_dissolveLayers.isChecked()
-        else:
-            final_data["dissolve_output"] = False
         if hasattr(self, "get_contour_interval_options"):
             final_data["contour_intervals"] = self.get_contour_interval_options()
         else:
