@@ -43,7 +43,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         self.setObjectName(f"groupBox_runway_{self.index}")
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred,
-            QtWidgets.QSizePolicy.Policy.MinimumExpanding,
+            QtWidgets.QSizePolicy.Policy.Preferred,
         )
 
         self._advanced_visible = False
@@ -167,6 +167,10 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         label_pre_threshold_area_row.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
+        self._required_field_pairs = []
+        self._mark_required_label(label_designation_row)
+        self._mark_required_label(label_easting_row)
+        self._mark_required_label(label_northing_row)
 
         h_layout_desig_inputs = QtWidgets.QHBoxLayout()
         self.desig_le = QtWidgets.QLineEdit()
@@ -335,6 +339,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
 
         label_runway_width = QtWidgets.QLabel("Runway Width (m):")
         label_runway_width.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self._mark_required_label(label_runway_width)
         self.width_le = QtWidgets.QLineEdit()
         self.width_le.setObjectName(f"lineEdit_runway_width_{self.index}")
         self.width_le.setToolTip("Enter actual runway width (meters).")
@@ -363,8 +368,17 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
         advanced_layout.addWidget(advanced_body)
         groupBox_layout.addWidget(self.advanced_widget)
 
+        self._required_field_pairs = [
+            (label_designation_row, self.desig_le),
+            (label_easting_row, self.thr_east_le),
+            (label_northing_row, self.thr_north_le),
+            (label_easting_row, self.rec_east_le),
+            (label_northing_row, self.rec_north_le),
+            (label_runway_width, self.width_le),
+        ]
         self._set_advanced_visible(False)
         self._update_status_chip()
+        self._update_required_field_indicators()
 
     def _add_arc_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
         label_arc_num = QtWidgets.QLabel("ARC Number:")
@@ -683,6 +697,7 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             f"Length: {self.dist_lbl.text()} | Azimuth: {self.azim_lbl.text()}"
         )
         self._update_status_chip()
+        self._update_required_field_indicators()
 
     def _input_widgets(self):
         return [
@@ -774,6 +789,35 @@ class RunwayWidgetGroup(QtWidgets.QGroupBox):
             self.status_chip_lbl.setStyleSheet(
                 "QLabel { background: #f2f2f2; color: #444; border: 1px solid #d2d2d2; border-radius: 10px; padding: 4px 10px; }"
             )
+
+    def _mark_required_label(self, label: QtWidgets.QLabel) -> None:
+        """Annotate a label so required runway fields are visually obvious."""
+        base_text = label.text()
+        if "*" not in base_text:
+            label.setText(f"{base_text} *")
+        label.setToolTip("Required for Ready status")
+        label.setStyleSheet("font-weight: 600;")
+
+    def _update_required_field_indicators(self) -> None:
+        """Highlight the fields that must be completed for a runway to be ready."""
+        required_texts = {
+            "desig_le": self.desig_le.text().strip(),
+            "thr_east_le": self.thr_east_le.text().strip(),
+            "thr_north_le": self.thr_north_le.text().strip(),
+            "rec_east_le": self.rec_east_le.text().strip(),
+            "rec_north_le": self.rec_north_le.text().strip(),
+            "width_le": self.width_le.text().strip(),
+        }
+        for widget_name, value in required_texts.items():
+            widget = getattr(self, widget_name, None)
+            if not widget:
+                continue
+            if value:
+                widget.setStyleSheet("")
+            else:
+                widget.setStyleSheet(
+                    "QLineEdit { background: #fffbe6; border: 1px solid #e0b000; }"
+                )
 
     def _refresh_surface_material_options(self, category: str, selected_material: str = "") -> None:
         current_material = selected_material or self.surface_material_combo.currentText()
