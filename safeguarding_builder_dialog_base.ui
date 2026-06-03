@@ -237,7 +237,7 @@
          <property name="frameShadow">
           <enum>QFrame::Plain</enum>
          </property>
-         <layout class="QVBoxLayout" name="verticalLayout_airportIdentity">
+          <layout class="QGridLayout" name="gridLayout_airportIdentity">
           <property name="leftMargin">
            <number>12</number>
           </property>
@@ -251,76 +251,56 @@
            <number>10</number>
           </property>
           <property name="spacing">
-           <number>10</number>
+           <number>8</number>
           </property>
-          <item>
-           <layout class="QHBoxLayout" name="horizontalLayout_airportName">
-            <property name="spacing">
-             <number>8</number>
+          <item row="0" column="0">
+           <widget class="QLabel" name="label_airport_name">
+            <property name="font">
+             <font>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
             </property>
-            <item>
-             <widget class="QLabel" name="label_airport_name">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>ICAO</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLineEdit" name="lineEdit_airport_name">
-              <property name="maxLength">
-               <number>4</number>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_iata_code">
-              <property name="font">
-               <font>
-                <weight>75</weight>
-                <bold>true</bold>
-               </font>
-              </property>
-              <property name="text">
-               <string>IATA</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QLineEdit" name="lineEdit_iata_code">
-              <property name="maxLength">
-               <number>3</number>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <spacer name="horizontalSpacer_airportName">
-              <property name="orientation">
-               <enum>Qt::Horizontal</enum>
-              </property>
-              <property name="sizeHint" stdset="0">
-               <size>
-                <width>40</width>
-                <height>20</height>
-               </size>
-              </property>
-             </spacer>
-            </item>
-           </layout>
+            <property name="text">
+             <string>ICAO</string>
+            </property>
+           </widget>
           </item>
-          <item>
+          <item row="0" column="1">
+            <widget class="QLineEdit" name="lineEdit_airport_name">
+            <property name="maxLength">
+             <number>4</number>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="2">
+            <widget class="QLabel" name="label_iata_code">
+            <property name="font">
+             <font>
+              <weight>75</weight>
+              <bold>true</bold>
+             </font>
+            </property>
+            <property name="text">
+             <string>IATA</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="3">
+            <widget class="QLineEdit" name="lineEdit_iata_code">
+            <property name="maxLength">
+             <number>3</number>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0" colspan="4">
            <widget class="QLabel" name="label_airport_status">
             <property name="text">
              <string/>
             </property>
            </widget>
           </item>
-          <item>
+          <item row="2" column="0" colspan="4">
            <widget class="QLabel" name="label_airport_lookup">
             <property name="text">
              <string/>
