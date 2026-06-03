@@ -10,7 +10,11 @@ CNS coordinates are assumed to be in the current Project CRS.
 
 import math
 import os
+import re
 from typing import List, Optional, Dict, Any, Tuple
+from html import unescape
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 # --- QGIS Imports ---
 from qgis.core import (  # type: ignore
@@ -95,6 +99,11 @@ class SafeguardingBuilderDialog(
         self.scroll_area_layout: Optional[QtWidgets.QVBoxLayout] = None
         self._processing_status_active = False
         self._processing_progress_bar: Optional[QtWidgets.QProgressBar] = None
+        self._airport_lookup_cache: Dict[str, Dict[str, str]] = {}
+        self._airport_lookup_pending_code: str = ""
+        self._airport_lookup_timer = QtCore.QTimer(self)
+        self._airport_lookup_timer.setSingleShot(True)
+        self._airport_lookup_timer.timeout.connect(self._resolve_airport_lookup)
 
         # --- Scroll Area Setup ---
         scroll_area = self.findChild(QtWidgets.QScrollArea, "scrollArea_runways")
@@ -324,6 +333,15 @@ class SafeguardingBuilderDialog(
                 "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
             )
 
+        airport_lookup = getattr(
+            self,
+            "label_airport_lookup",
+            self.findChild(QtWidgets.QLabel, "label_airport_lookup"),
+        )
+        if airport_lookup:
+            airport_lookup.setStyleSheet("color: #666666;")
+            airport_lookup.setText("")
+
         coord_info = getattr(
             self,
             "coord_info",
@@ -370,6 +388,7 @@ class SafeguardingBuilderDialog(
         if airport_name_le:
             airport_name_le.textChanged.connect(self.update_all_runway_calculations)
             airport_name_le.textChanged.connect(self.update_dialog_status)
+            airport_name_le.textChanged.connect(self._queue_airport_lookup)
         else:
             QgsMessageLog.logMessage(
                 "Warning: 'lineEdit_airport_name' not found.",
@@ -391,6 +410,162 @@ class SafeguardingBuilderDialog(
                 DIALOG_LOG_TAG,
                 level=Qgis.Warning,
             )
+
+    def _queue_airport_lookup(self, icao: Optional[str] = None) -> None:
+        """Debounce airport metadata lookup so typing does not spam network calls."""
+        airport_lookup = getattr(
+            self,
+            "label_airport_lookup",
+            self.findChild(QtWidgets.QLabel, "label_airport_lookup"),
+        )
+        if airport_lookup is None:
+            return
+
+        icao_code = (icao if icao is not None else self.lineEdit_airport_name.text()).strip().upper()
+        if len(icao_code) != 4 or not icao_code.isalnum():
+            self._airport_lookup_timer.stop()
+            self._airport_lookup_pending_code = ""
+            airport_lookup.setText("")
+            airport_lookup.setToolTip("")
+            return
+
+        cached = self._airport_lookup_cache.get(icao_code)
+        if cached:
+            self._apply_airport_lookup_result(icao_code, cached)
+            return
+
+        self._airport_lookup_pending_code = icao_code
+        airport_lookup.setText("Looking up airport name and location…")
+        airport_lookup.setToolTip("Querying OurAirports open data for the airport record.")
+        airport_status = getattr(
+            self,
+            "label_airport_status",
+            self.findChild(QtWidgets.QLabel, "label_airport_status"),
+        )
+        if airport_status:
+            airport_status.setStyleSheet(
+                "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
+                "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
+            )
+        self._airport_lookup_timer.start(350)
+
+    def _resolve_airport_lookup(self) -> None:
+        """Fetch airport metadata for the current ICAO code if available."""
+        icao_code = self._airport_lookup_pending_code
+        if len(icao_code) != 4:
+            return
+
+        lookup_error = ""
+        try:
+            result = self._fetch_airport_metadata(icao_code)
+        except Exception as exc:  # pragma: no cover - network is best-effort
+            lookup_error = str(exc)
+            QgsMessageLog.logMessage(
+                f"Airport lookup failed for {icao_code}: {exc}",
+                DIALOG_LOG_TAG,
+                level=Qgis.Info,
+            )
+            result = None
+
+        current_code = self.lineEdit_airport_name.text().strip().upper()
+        if current_code != icao_code:
+            return
+
+        airport_lookup = getattr(
+            self,
+            "label_airport_lookup",
+            self.findChild(QtWidgets.QLabel, "label_airport_lookup"),
+        )
+        if airport_lookup is None:
+            return
+
+        if result:
+            self._airport_lookup_cache[icao_code] = result
+            self._apply_airport_lookup_result(icao_code, result)
+        else:
+            if lookup_error:
+                airport_lookup.setText(f"Lookup unavailable for {icao_code}.")
+                airport_lookup.setToolTip(f"OurAirports lookup failed: {lookup_error}")
+            else:
+                airport_lookup.setText(f"No airport match found for {icao_code}.")
+                airport_lookup.setToolTip("No OurAirports record was found for the entered ICAO code.")
+            airport_status = getattr(
+                self,
+                "label_airport_status",
+                self.findChild(QtWidgets.QLabel, "label_airport_status"),
+            )
+            if airport_status:
+                airport_status.setStyleSheet(
+                    "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
+                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
+                )
+
+    def _fetch_airport_metadata(self, icao_code: str) -> Optional[Dict[str, str]]:
+        """Fetch airport name/location details from the OurAirports airport page."""
+        url = f"https://ourairports.com/airports/{icao_code.lower()}/"
+        request = Request(url, headers={"User-Agent": "Mozilla/5.0"})
+        with urlopen(request, timeout=3) as response:
+            raw_html = response.read().decode("utf-8", errors="replace")
+
+        text = unescape(re.sub(r"<script.*?</script>|<style.*?</style>", " ", raw_html, flags=re.S | re.I))
+        text = re.sub(r"<[^>]+>", " ", text)
+        text = re.sub(r"\s+", " ", text).strip()
+
+        name_match = re.search(r"Name\s+(.+?)\s+Location\s+(.+?)\s+IATA code", text, flags=re.I)
+        if not name_match:
+            return None
+
+        name = name_match.group(1).strip()
+        location = name_match.group(2).strip()
+        location = re.sub(r"\s+,", ",", location)
+        location = re.sub(r",\s+", ", ", location)
+
+        coords_match = re.search(r"Coordinates\s+([-\d.]+),\s*([-\d.]+)", text, flags=re.I)
+        coordinates = ""
+        if coords_match:
+            coordinates = f"{coords_match.group(1).strip()}, {coords_match.group(2).strip()}"
+
+        return {
+            "name": name,
+            "location": location,
+            "coordinates": coordinates,
+        }
+
+    def _apply_airport_lookup_result(self, icao_code: str, result: Dict[str, str]) -> None:
+        """Update the airport lookup label with fetched airport identity metadata."""
+        airport_lookup = getattr(
+            self,
+            "label_airport_lookup",
+            self.findChild(QtWidgets.QLabel, "label_airport_lookup"),
+        )
+        if airport_lookup is None:
+            return
+
+        name = result.get("name", "").strip()
+        location = result.get("location", "").strip()
+        coordinates = result.get("coordinates", "").strip()
+        summary = " · ".join(part for part in [name, location] if part)
+        airport_lookup.setText(summary)
+        tooltip_parts = [f"ICAO: {icao_code}"]
+        if name:
+            tooltip_parts.append(f"Name: {name}")
+        if location:
+            tooltip_parts.append(f"Location: {location}")
+        if coordinates:
+            tooltip_parts.append(f"Coordinates: {coordinates}")
+        airport_lookup.setToolTip(" | ".join(tooltip_parts))
+        airport_status = getattr(
+            self,
+            "label_airport_status",
+            self.findChild(QtWidgets.QLabel, "label_airport_status"),
+        )
+        if airport_status:
+            airport_status.setText(f"ICAO: {icao_code}")
+            airport_status.setStyleSheet(
+                "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; "
+                "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
+            )
+            airport_status.setToolTip(" | ".join(tooltip_parts))
 
     def _setup_dialog_status_connections(self):
         """Connect lightweight status labels to high-level input changes."""
@@ -448,6 +623,7 @@ class SafeguardingBuilderDialog(
                     "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
                     "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
+        self._queue_airport_lookup(icao)
 
         runway_count = len(self._runway_groups)
         incomplete = 0

@@ -119,6 +119,16 @@
         </widget>
        </item>
        <item>
+        <widget class="QLabel" name="label_airport_lookup">
+         <property name="text">
+          <string/>
+         </property>
+         <property name="wordWrap">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
        <widget class="QGroupBox" name="groupBox_ARP">
          <property name="title">
           <string>Aerodrome Reference Point (ARP)</string>
