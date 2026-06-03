@@ -302,7 +302,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_name"),
         )
         if airport_name:
-            airport_name.setMaximumWidth(220)
+            airport_name.setFixedWidth(152)
             airport_name.setMaxLength(4)
 
         iata_code = getattr(
@@ -311,7 +311,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"),
         )
         if iata_code:
-            iata_code.setMaximumWidth(120)
+            iata_code.setFixedWidth(152)
             iata_code.setMaxLength(3)
 
     def _style_airport_tab(self) -> None:
@@ -350,8 +350,7 @@ class SafeguardingBuilderDialog(
         if airport_name_input:
             airport_name_input.setToolTip("Enter the ICAO airport code.")
             airport_name_input.setPlaceholderText("e.g., YPAD")
-            airport_name_input.setMaximumWidth(150)
-            airport_name_input.setMinimumWidth(110)
+            airport_name_input.setFixedWidth(152)
 
         iata_input = getattr(
             self,
@@ -361,8 +360,7 @@ class SafeguardingBuilderDialog(
         if iata_input:
             iata_input.setToolTip("Enter an IATA airport code to look up and populate ICAO.")
             iata_input.setPlaceholderText("e.g., ADL")
-            iata_input.setMaximumWidth(120)
-            iata_input.setMinimumWidth(90)
+            iata_input.setFixedWidth(152)
 
         airport_status = getattr(
             self,
