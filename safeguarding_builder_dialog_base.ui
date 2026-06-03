@@ -104,7 +104,7 @@
        <item>
         <widget class="QLabel" name="coord_info">
          <property name="text">
-          <string>Coordinates must be Cartesian (Easting/Northing) in the project CRS. To convert from geographic coordinates (Lat/Long), see &lt;a href=&quot;https://geodesyapps.ga.gov.au/geographic-to-grid&quot;&gt;this link&lt;/a&gt;.</string>
+          <string>Use project CRS Easting/Northing. Need Lat/Long conversion? See &lt;a href=&quot;https://geodesyapps.ga.gov.au/geographic-to-grid&quot;&gt;this link&lt;/a&gt;.</string>
          </property>
          <property name="wordWrap">
           <bool>true</bool>
@@ -124,13 +124,13 @@
           <string>Aerodrome Reference Point (ARP)</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_arp">
-          <item row="0" column="0" colspan="6">
-           <widget class="QLabel" name="label_arp_description">
-            <property name="text">
-             <string>Reference location for airport-wide safeguarding surfaces.</string>
+         <item row="0" column="0" colspan="6">
+          <widget class="QLabel" name="label_arp_description">
+           <property name="text">
+             <string>Primary reference location for airport-wide safeguarding surfaces.</string>
             </property>
-           </widget>
-          </item>
+          </widget>
+         </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_easting_ARP">
             <property name="text">
@@ -170,13 +170,13 @@
           <string>Meteorological Instrument Station (optional)</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_met">
-          <item row="0" column="0" colspan="6">
-           <widget class="QLabel" name="label_met_description">
-            <property name="text">
-             <string>Leave blank where MET station safeguarding surfaces are not required.</string>
+         <item row="0" column="0" colspan="6">
+          <widget class="QLabel" name="label_met_description">
+           <property name="text">
+             <string>Optional. Leave blank if MET safeguarding surfaces are not required.</string>
             </property>
-           </widget>
-          </item>
+          </widget>
+         </item>
           <item row="1" column="0">
            <widget class="QLabel" name="label_easting_MET">
             <property name="text">

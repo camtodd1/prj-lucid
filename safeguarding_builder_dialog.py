@@ -321,7 +321,7 @@ class SafeguardingBuilderDialog(
             airport_status.setMinimumHeight(26)
             airport_status.setStyleSheet(
                 "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
-                "border-radius: 10px; padding: 4px 10px; }"
+                "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
             )
 
         coord_info = getattr(
@@ -337,6 +337,7 @@ class SafeguardingBuilderDialog(
             border: 1px solid #dcdcdc;
             border-radius: 4px;
             margin-top: 12px;
+            padding: 8px;
             background: #ffffff;
         }
         QGroupBox::title {
@@ -436,16 +437,16 @@ class SafeguardingBuilderDialog(
         icao = self.lineEdit_airport_name.text().strip().upper()
         if hasattr(self, "label_airport_status"):
             if icao:
-                self.label_airport_status.setText(f"Airport: {icao}")
+                self.label_airport_status.setText(f"ICAO: {icao}")
                 self.label_airport_status.setStyleSheet(
                     "QLabel { background: #eaf2ff; color: #1f4f99; border: 1px solid #c7d7f5; "
-                    "border-radius: 10px; padding: 4px 10px; }"
+                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
             else:
-                self.label_airport_status.setText("Airport: ICAO required")
+                self.label_airport_status.setText("ICAO required")
                 self.label_airport_status.setStyleSheet(
                     "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
-                    "border-radius: 10px; padding: 4px 10px; }"
+                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
                 )
 
         runway_count = len(self._runway_groups)
