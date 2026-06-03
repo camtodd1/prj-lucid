@@ -1483,6 +1483,7 @@ class PhysicalGeometryMixin:
                 rwy_params["azimuth_r_p"],
                 non_negative_number(runway_data.get("thr_pre_area_1"), 0.0),
                 disp_primary,
+                self._bool_from_runway_data(runway_data.get("landing_available_1", True)),
             ),
             (
                 reciprocal_desig,
@@ -1493,6 +1494,7 @@ class PhysicalGeometryMixin:
                 rwy_params["azimuth_p_r"],
                 non_negative_number(runway_data.get("thr_pre_area_2"), 0.0),
                 disp_reciprocal,
+                self._bool_from_runway_data(runway_data.get("landing_available_2", True)),
             ),
         ]
         default_assumptions = {
@@ -1511,7 +1513,7 @@ class PhysicalGeometryMixin:
                 "assumptions": set(default_assumptions),
                 "skipped": [],
             }
-            for end_desig, origin, _, _, _, _, _, _ in end_specs
+            for end_desig, origin, _, _, _, _, _, _, _ in end_specs
         }
         for qa in qa_records.values():
             qa["assumptions"].update(
@@ -1536,6 +1538,7 @@ class PhysicalGeometryMixin:
             pre_area_outward_azimuth,
             pre_area_len,
             displaced_len,
+            landing_available,
         ) in end_specs:
             skipped = qa_records[end_desig]["skipped"]
             if displaced_len > 1e-6:
@@ -1719,13 +1722,15 @@ class PhysicalGeometryMixin:
                     )
                 )
 
-            lda_m = self._declared_lda_for_end(runway_data, end_desig, runway_length)
-            aiming_rule = self._aiming_point_rule(runway_width, lda_m, runway_type)
+            if not landing_available:
+                skipped.append("Aiming point and touchdown zone markings: landing not available for this runway end.")
+            lda_m = self._declared_lda_for_end(runway_data, end_desig, runway_length) if landing_available else None
+            aiming_rule = self._aiming_point_rule(runway_width, lda_m, runway_type) if landing_available else None
             if not surface_markings_applicable:
                 skipped.append(
                     "Aiming point and touchdown zone markings: MOS 8.22/8.23 " "sealed-surface triggers not met."
                 )
-            elif aiming_rule is not None:
+            elif landing_available and aiming_rule is not None:
                 aim_offset, aim_len, aim_width, aim_spacing, aim_ref = aiming_rule
                 for side_name, sign in (("L", -1.0), ("R", 1.0)):
                     lateral_center = sign * (aim_spacing / 2.0 + aim_width / 2.0)
@@ -1874,10 +1879,11 @@ class PhysicalGeometryMixin:
                                     )
                                 )
             else:
-                skipped.append(
-                    "Aiming point and dependent touchdown zone markings: no "
-                    "current rule for this runway width/type combination."
-                )
+                if landing_available:
+                    skipped.append(
+                        "Aiming point and dependent touchdown zone markings: no "
+                        "current rule for this runway width/type combination."
+                    )
 
             if pre_area_len > 60.0:
                 qa_records[end_desig]["assumptions"].add(

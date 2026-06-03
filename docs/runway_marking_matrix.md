@@ -392,6 +392,7 @@ decisions.
 | Non-precision approach runway | Yes | May use relevant precision approach standard or alternate Table 8.22(8) standard. |
 | Non-instrument runway | Yes | May use relevant precision approach standard or alternate Table 8.22(8) standard. |
 | LDA dependency | Yes | Precision standard depends on landing distance available. |
+| Landing available unchecked | No | Do not generate aiming point markings for that runway end. |
 | Runway width dependency | Yes for alternate NPA/NI standard. | Table 8.22(8) covers 30 m and 45 m or more. |
 | VASIS dependency | Possibly | Table 8.22(3) Row A note references subsection 8.22(7), not yet supplied. |
 
@@ -456,6 +457,8 @@ decisions.
   - use the alternate Table 8.22(8) rule; or
   - optionally use the relevant precision approach standard if a user override
     requests that.
+- If landing is not available for a runway end, skip aiming point markings for
+  that end entirely.
 - The phrase "not more than" in MOS 8.22(4) allows a marking closer than the
   Row A value; default should use the listed Row A value unless another section
   or VASIS rule requires otherwise.
@@ -500,6 +503,7 @@ open interpretation questions remain before implementation.
 | Precision approach runway | Mandatory pattern: ICAO `A` basic pattern | Details in MOS 8.24. |
 | Non-precision/non-instrument/other runway | Default simple pattern | ICAO `A` basic pattern can be retained as an override if required. |
 | ICAO `A` basic pattern | Pairs by Table 8.24(3) | Uses LDA or distance between thresholds when displayed at both ends. |
+| Landing available unchecked | No | Do not generate touchdown zone markings for that runway end. |
 | Unsealed runway | Not specified in supplied MOS 8.23 text | Needs later confirmation if in scope. |
 
 ### Pattern Selection
@@ -578,6 +582,8 @@ open interpretation questions remain before implementation.
   applicability checks.
 - Use approach type per runway end to choose ICAO `A` basic for precision
   approach runways and simple pattern for non-precision/non-instrument runways.
+- If landing is not available for a runway end, skip touchdown zone markings for
+  that end entirely.
 
 ### Open Questions
 
