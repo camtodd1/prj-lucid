@@ -76,9 +76,12 @@ class CnsTableMixin:
             return
 
         self._style_cns_panel()
+        cns_tab_layout = getattr(self, "verticalLayout_cnsTab", None)
+        if isinstance(cns_tab_layout, QtWidgets.QVBoxLayout):
+            cns_tab_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         cns_table.setColumnCount(4)
-        cns_table.setHorizontalHeaderLabels(["Facility Type", "Easting/X", "Northing/Y", "Elev (AMSL)"])
+        cns_table.setHorizontalHeaderLabels(["Facility Type", "Easting", "Northing", "Elev (AMSL)"])
         cns_table.setAlternatingRowColors(True)
         cns_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         cns_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -95,8 +98,8 @@ class CnsTableMixin:
             header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Stretch)
             header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
 
-        cns_table.setMinimumHeight(220)
-        cns_table.setMaximumHeight(240)
+        cns_table.setMinimumHeight(168)
+        cns_table.setMaximumHeight(168)
         cns_table.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Fixed,
@@ -150,6 +153,8 @@ class CnsTableMixin:
         status = getattr(self, "label_cns_status", self.findChild(QtWidgets.QLabel, "label_cns_status"))
         if status:
             status.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+            status.setMinimumHeight(28)
+            status.setMaximumHeight(28)
             status.setStyleSheet(
                 "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d2d2d2; "
                 "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
@@ -254,12 +259,12 @@ class CnsTableMixin:
 
         header_height = cns_table.horizontalHeader().height() if cns_table.horizontalHeader() else 28
         row_heights = sum(cns_table.rowHeight(row) for row in range(row_count))
-        target_height = header_height + row_heights + 56
+        target_height = header_height + row_heights + 10
         if row_count == 0:
-            target_height = 220
+            target_height = 168
         else:
-            target_height = min(max(target_height, 240), 360)
-        cns_table.setMinimumHeight(min(target_height, 240))
+            target_height = min(max(target_height, 168), 320)
+        cns_table.setMinimumHeight(target_height)
         cns_table.setMaximumHeight(target_height)
 
     def add_cns_row(self):
