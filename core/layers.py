@@ -474,7 +474,7 @@ class LayerMixin:
             settings = QgsPalLayerSettings()
             settings.fieldName = 'format_number("elev_m", 0)'
             settings.isExpression = True
-            settings.placement = QgsPalLayerSettings.OverPoint
+            settings.placement = QgsPalLayerSettings.AroundPoint
             settings.centroidInside = True
             settings.centroidWhole = True
             settings.fitInPolygonOnly = True
