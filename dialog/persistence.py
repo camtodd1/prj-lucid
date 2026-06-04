@@ -24,6 +24,23 @@ from .dialog_constants import (
 class PersistenceMixin:
     """Mixin for clearing, saving, and loading dialog state."""
 
+    def _ruleset_combo_widget(self):
+        combo = getattr(self, "ruleset_combo", None)
+        try:
+            if isinstance(combo, QComboBox):
+                _ = combo.currentIndex()
+                return combo
+        except RuntimeError:
+            pass
+        combo = self.findChild(QComboBox, "comboBox_ruleset") if hasattr(self, "findChild") else None
+        if isinstance(combo, QComboBox):
+            try:
+                _ = combo.currentIndex()
+                return combo
+            except RuntimeError:
+                return None
+        return None
+
     def clear_all_inputs(self, confirm: bool = True) -> None:
         if confirm:
             reply = QMessageBox.question(
@@ -54,7 +71,7 @@ class PersistenceMixin:
             if widget:
                 widget.clear()
 
-        ruleset_combo = getattr(self, "ruleset_combo", None)
+        ruleset_combo = self._ruleset_combo_widget()
         if isinstance(ruleset_combo, QComboBox):
             idx = ruleset_combo.findData("MOS139")
             ruleset_combo.setCurrentIndex(idx if idx >= 0 else 0)
@@ -141,6 +158,7 @@ class PersistenceMixin:
             self._handle_load_error(file_path, e, unexpected=True)
 
     def _build_save_payload(self, icao_code: str):
+        ruleset_combo = self._ruleset_combo_widget()
         data_to_save = {
             "icao_code": icao_code,
             "iata_code": self._line_text("lineEdit_iata_code").strip().upper(),
@@ -150,7 +168,7 @@ class PersistenceMixin:
             "met_easting": self._line_text("lineEdit_met_easting"),
             "met_northing": self._line_text("lineEdit_met_northing"),
             "met_elevation": self._line_text("lineEdit_met_elevation"),
-            "ruleset": self.ruleset_combo.currentData() if hasattr(self, "ruleset_combo") else "MOS139",
+            "ruleset": ruleset_combo.currentData() if ruleset_combo else "MOS139",
             "runways": [self._runway_groups[idx].get_input_data() for idx in sorted(self._runway_groups.keys())],
             "cns_facilities": self._get_cns_save_rows(),
         }
@@ -210,7 +228,7 @@ class PersistenceMixin:
         ]
         if any(widget and widget.text() for widget in global_widgets):
             return True
-        ruleset_combo = getattr(self, "ruleset_combo", None)
+        ruleset_combo = self._ruleset_combo_widget()
         if isinstance(ruleset_combo, QComboBox) and ruleset_combo.currentData() not in {None, "MOS139"}:
             return True
         if any(self._runway_has_existing_input(group.get_input_data()) for group in self._runway_groups.values()):
@@ -253,7 +271,7 @@ class PersistenceMixin:
         self._set_line_text("lineEdit_met_easting", loaded_data.get("met_easting", ""))
         self._set_line_text("lineEdit_met_northing", loaded_data.get("met_northing", ""))
         self._set_line_text("lineEdit_met_elevation", loaded_data.get("met_elevation", ""))
-        ruleset_combo = getattr(self, "ruleset_combo", None)
+        ruleset_combo = self._ruleset_combo_widget()
         if isinstance(ruleset_combo, QComboBox):
             idx = ruleset_combo.findData(loaded_data.get("ruleset", "MOS139"))
             ruleset_combo.setCurrentIndex(idx if idx >= 0 else 0)

@@ -541,6 +541,7 @@ class SafeguardingBuilderDialog(
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
             right_column.addWidget(ruleset_group)
+            self.groupBox_ruleset = ruleset_group
 
     def _setup_ruleset_selector_ui(self) -> None:
         """Create the global safeguarding standard selector."""
@@ -564,6 +565,7 @@ class SafeguardingBuilderDialog(
         ruleset_layout.addWidget(ruleset_label, 0, 0)
         ruleset_layout.addWidget(self.ruleset_combo, 0, 1)
 
+        self.groupBox_ruleset = ruleset_group
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
 
     def _style_dialog_header(self) -> None:
@@ -1835,7 +1837,7 @@ class SafeguardingBuilderDialog(
                 "arp_elevation": arp_elev,
                 "met_point": met_pt,
                 "met_elevation": met_elev,
-                "ruleset": self.ruleset_combo.currentData() if hasattr(self, "ruleset_combo") else "MOS139",
+                "ruleset": self._ruleset_combo_widget().currentData() if self._ruleset_combo_widget() else "MOS139",
             }
         )
 
