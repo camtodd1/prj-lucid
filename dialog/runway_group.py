@@ -109,7 +109,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.rwy_name_lbl.setFont(title_font)
         title_stack.addWidget(self.rwy_name_lbl)
 
-        self.header_summary_lbl = QtWidgets.QLabel("Length: -- | Azimuth: --")
+        self.header_summary_lbl = QtWidgets.QLabel("Code: -- | Length: -- | Azimuth: --")
         self.header_summary_lbl.setObjectName(f"label_rwy_summary_{self.index}")
         self.header_summary_lbl.setStyleSheet("color: #666666;")
         title_stack.addWidget(self.header_summary_lbl)
@@ -787,8 +787,11 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.azim_lbl.setText(results.get("azimuth", WIDGET_MISSING_MSG))
         self.type1_lbl.setText(results.get("type1_label_text", "(Primary End) Type:"))
         self.type2_lbl.setText(results.get("type2_label_text", "(Reciprocal End) Type:"))
+        arc_number = (self.arc_num_combo.currentData() or "").strip()
+        arc_letter = (self.arc_let_combo.currentData() or "").strip()
+        arc_code = f"{arc_number}{arc_letter}" if (arc_number or arc_letter) else "--"
         self.header_summary_lbl.setText(
-            f"Length: {self.dist_lbl.text()} | Azimuth: {self.azim_lbl.text()}"
+            f"Code: {arc_code} | Length: {self.dist_lbl.text()} | Azimuth: {self.azim_lbl.text()}"
         )
         self._update_status_chip()
         self._update_required_field_indicators()
