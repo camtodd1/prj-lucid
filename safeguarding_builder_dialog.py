@@ -193,6 +193,7 @@ class SafeguardingBuilderDialog(
 
         self._setup_output_options_ui_connections()
         self._setup_agl_options_ui_connections()
+        self._setup_global_context_block()
         self._style_workflow_panels()
 
         if self.scroll_area_layout is not None:
@@ -316,7 +317,7 @@ class SafeguardingBuilderDialog(
             iata_code.setMaxLength(3)
 
     def _style_airport_tab(self) -> None:
-        """Apply card-like styling and clearer hierarchy to the opening airport tab."""
+        """Apply card-like styling and clearer hierarchy to the Airport tab."""
         airport_layout = getattr(self, "verticalLayout_airportTab", None)
         if isinstance(airport_layout, QtWidgets.QVBoxLayout):
             airport_layout.setContentsMargins(8, 8, 8, 8)
@@ -390,29 +391,6 @@ class SafeguardingBuilderDialog(
                 "QLabel { color: #4b4b4b; font-size: 11px; margin-left: 10px; }"
             )
 
-        airport_identity_frame = getattr(
-            self,
-            "frame_airport_identity",
-            self.findChild(QtWidgets.QFrame, "frame_airport_identity"),
-        )
-        if airport_identity_frame:
-            airport_identity_frame.setStyleSheet(
-                """
-                QFrame#frame_airport_identity {
-                    border: 1px solid #dcdcdc;
-                    border-radius: 4px;
-                    background: #ffffff;
-                }
-                """
-            )
-            airport_identity_frame.setSizePolicy(
-                QtWidgets.QSizePolicy.Policy.Expanding,
-                QtWidgets.QSizePolicy.Policy.Fixed,
-            )
-            airport_identity_frame.setMaximumHeight(16777215)
-            airport_identity_frame.adjustSize()
-            airport_identity_frame.setMaximumHeight(airport_identity_frame.sizeHint().height())
-
         airport_card_style = """
         QGroupBox {
             border: 1px solid #dcdcdc;
@@ -472,17 +450,100 @@ class SafeguardingBuilderDialog(
             if label:
                 label.setStyleSheet("color: #666666; font-size: 11px;")
 
-    def _setup_ruleset_selector_ui(self) -> None:
-        """Show the active safeguarding standard without offering unsupported choices."""
-        airport_layout = getattr(self, "verticalLayout_airportTab", None)
-        if not isinstance(airport_layout, QtWidgets.QVBoxLayout):
-            QgsMessageLog.logMessage(
-                "Warning: 'verticalLayout_airportTab' not found; ruleset selector not added.",
-                DIALOG_LOG_TAG,
-                level=Qgis.Warning,
-            )
+    def _setup_global_context_block(self) -> None:
+        """Move airport identity and ruleset into the persistent title block."""
+        header_layout = getattr(
+            self,
+            "verticalLayout_dialogHeaderContainer",
+            self.findChild(QtWidgets.QVBoxLayout, "verticalLayout_dialogHeaderContainer"),
+        )
+        if not isinstance(header_layout, QtWidgets.QVBoxLayout):
             return
 
+        airport_identity_frame = getattr(
+            self,
+            "frame_airport_identity",
+            self.findChild(QtWidgets.QFrame, "frame_airport_identity"),
+        )
+        ruleset_group = getattr(
+            self,
+            "groupBox_ruleset",
+            self.findChild(QtWidgets.QGroupBox, "groupBox_ruleset"),
+        )
+        if airport_identity_frame is None and ruleset_group is None:
+            return
+
+        airport_tab_layout = getattr(self, "verticalLayout_airportTab", None)
+        if isinstance(airport_tab_layout, QtWidgets.QVBoxLayout):
+            if airport_identity_frame is not None:
+                airport_tab_layout.removeWidget(airport_identity_frame)
+            if ruleset_group is not None:
+                airport_tab_layout.removeWidget(ruleset_group)
+
+        global_frame = getattr(self, "frame_global_context", None)
+        if global_frame is None:
+            global_frame = QtWidgets.QFrame(self)
+            global_frame.setObjectName("frame_global_context")
+            global_frame.setStyleSheet(
+                """
+                QFrame#frame_global_context {
+                    background: transparent;
+                    border: none;
+                }
+                """
+            )
+            global_layout = QtWidgets.QHBoxLayout(global_frame)
+            global_layout.setContentsMargins(0, 0, 0, 0)
+            global_layout.setSpacing(12)
+
+            left_column = QtWidgets.QVBoxLayout()
+            left_column.setContentsMargins(0, 0, 0, 0)
+            left_column.setSpacing(8)
+            global_layout.addLayout(left_column, 1)
+
+            right_column = QtWidgets.QVBoxLayout()
+            right_column.setContentsMargins(0, 0, 0, 0)
+            right_column.setSpacing(8)
+            global_layout.addLayout(right_column, 0)
+
+            self.frame_global_context = global_frame
+            self._global_context_left_layout = left_column
+            self._global_context_right_layout = right_column
+            header_layout.insertWidget(2, global_frame)
+        else:
+            left_column = getattr(self, "_global_context_left_layout", None)
+            right_column = getattr(self, "_global_context_right_layout", None)
+            if left_column is None or right_column is None:
+                return
+
+        if airport_identity_frame is not None and airport_identity_frame.parent() is not global_frame:
+            airport_identity_frame.setStyleSheet(
+                """
+                QFrame#frame_airport_identity {
+                    border: 1px solid #dcdcdc;
+                    border-radius: 4px;
+                    background: #ffffff;
+                }
+                """
+            )
+            airport_identity_frame.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            airport_identity_frame.adjustSize()
+            airport_identity_frame.setMaximumHeight(airport_identity_frame.sizeHint().height())
+            left_column.addWidget(airport_identity_frame)
+
+        if ruleset_group is not None and ruleset_group.parent() is not global_frame:
+            ruleset_group.setFlat(True)
+            ruleset_group.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            right_column.addWidget(ruleset_group)
+
+    def _setup_ruleset_selector_ui(self) -> None:
+        """Create the global safeguarding standard selector."""
         self.ruleset_combo = QtWidgets.QComboBox()
         self.ruleset_combo.setObjectName("comboBox_ruleset")
         self.ruleset_combo.addItem("MOS139 (current)", userData="MOS139")
@@ -503,8 +564,6 @@ class SafeguardingBuilderDialog(
         ruleset_layout.addWidget(ruleset_label, 0, 0)
         ruleset_layout.addWidget(self.ruleset_combo, 0, 1)
 
-        insert_at = 1 if airport_layout.count() > 0 else airport_layout.count()
-        airport_layout.insertWidget(insert_at, ruleset_group)
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
 
     def _style_dialog_header(self) -> None:
