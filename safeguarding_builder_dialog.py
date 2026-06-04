@@ -530,8 +530,17 @@ class SafeguardingBuilderDialog(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
+            airport_identity_layout = airport_identity_frame.layout()
+            if isinstance(airport_identity_layout, QtWidgets.QVBoxLayout):
+                existing_title = airport_identity_frame.findChild(QtWidgets.QLabel, "label_airport_identity_title")
+                if existing_title is None:
+                    title_label = QtWidgets.QLabel("Airport Identity", airport_identity_frame)
+                    title_label.setObjectName("label_airport_identity_title")
+                    title_label.setStyleSheet(
+                        "QLabel { color: #232323; font-size: 13px; font-weight: 700; padding-bottom: 2px; }"
+                    )
+                    airport_identity_layout.insertWidget(0, title_label)
             airport_identity_frame.adjustSize()
-            airport_identity_frame.setMaximumHeight(airport_identity_frame.sizeHint().height())
             left_column.addWidget(airport_identity_frame)
 
         if ruleset_group is not None and ruleset_group.parent() is not global_frame:
@@ -542,6 +551,15 @@ class SafeguardingBuilderDialog(
             )
             right_column.addWidget(ruleset_group)
             self.groupBox_ruleset = ruleset_group
+
+        if airport_identity_frame is not None and ruleset_group is not None:
+            airport_hint = airport_identity_frame.sizeHint().height()
+            ruleset_hint = ruleset_group.sizeHint().height()
+            target_height = max(airport_hint, ruleset_hint)
+            airport_identity_frame.setMinimumHeight(target_height)
+            airport_identity_frame.setMaximumHeight(target_height)
+            ruleset_group.setMinimumHeight(target_height)
+            ruleset_group.setMaximumHeight(target_height)
 
     def _setup_ruleset_selector_ui(self) -> None:
         """Create the global safeguarding standard selector."""
