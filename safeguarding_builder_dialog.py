@@ -500,11 +500,13 @@ class SafeguardingBuilderDialog(
             left_column.setContentsMargins(0, 0, 0, 0)
             left_column.setSpacing(8)
             global_layout.addLayout(left_column, 1)
+            global_layout.setAlignment(left_column, QtCore.Qt.AlignmentFlag.AlignTop)
 
             right_column = QtWidgets.QVBoxLayout()
             right_column.setContentsMargins(0, 0, 0, 0)
             right_column.setSpacing(8)
             global_layout.addLayout(right_column, 0)
+            global_layout.setAlignment(right_column, QtCore.Qt.AlignmentFlag.AlignTop)
 
             self.frame_global_context = global_frame
             self._global_context_left_layout = left_column
@@ -578,6 +580,7 @@ class SafeguardingBuilderDialog(
         ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
         ruleset_layout.setColumnStretch(0, 2)
         ruleset_layout.setColumnStretch(1, 1)
+        ruleset_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         ruleset_label = QtWidgets.QLabel("Ruleset:")
         ruleset_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
