@@ -474,10 +474,14 @@ class LayerMixin:
             settings = QgsPalLayerSettings()
             settings.fieldName = 'format_number("elev_m", 0)'
             settings.isExpression = True
-            settings.placement = QgsPalLayerSettings.AroundPoint
+            settings.placement = QgsPalLayerSettings.Horizontal
             settings.centroidInside = True
-            settings.centroidWhole = True
+            settings.centroidWhole = False
             settings.fitInPolygonOnly = True
+            try:
+                settings.setPolygonPlacementFlags(Qgis.LabelPolygonPlacementFlag.AllowPlacementInsideOfPolygon)
+            except Exception:
+                pass
             settings.priority = 5
             settings.obstacle = False
 
