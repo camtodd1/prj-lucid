@@ -205,7 +205,7 @@ class SafeguardingBuilderDialog(
                 level=Qgis.Warning,
             )
 
-        QtCore.QTimer.singleShot(0, self._update_dialog_height)
+        QtCore.QTimer.singleShot(0, lambda: self._update_dialog_height(initial=True))
         QtCore.QTimer.singleShot(0, self.update_dialog_status)
 
     def _setup_processing_status_widgets(self) -> None:
@@ -1796,9 +1796,15 @@ class SafeguardingBuilderDialog(
                 level=Qgis.Critical,
             )
 
-    def _update_dialog_height(self):
+    def _update_dialog_height(self, initial: bool = False):
         """Adjusts the dialog height to fit its contents."""
-        QtCore.QTimer.singleShot(0, self.adjustSize)
+        def _apply_size():
+            self.adjustSize()
+            if initial:
+                target_width = 721
+                target_height = self.height()
+                self.resize(target_width, target_height)
+        QtCore.QTimer.singleShot(0, _apply_size)
 
     def _focus_runway_group(self, group_widget: RunwayWidgetGroup) -> None:
         """Scroll to and focus the first runway field in a group."""
