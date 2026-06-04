@@ -41,6 +41,21 @@ class PersistenceMixin:
                 return None
         return None
 
+    def _pick_json_file(self, title: str, accept_mode: QFileDialog.AcceptMode, initial_path: str = "") -> str:
+        """Use a Qt file dialog that behaves reliably inside the plugin shell."""
+        dialog = QFileDialog(self, title)
+        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
+        dialog.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
+        dialog.setFileMode(QFileDialog.FileMode.ExistingFile if accept_mode == QFileDialog.AcceptMode.AcceptOpen else QFileDialog.FileMode.AnyFile)
+        dialog.setAcceptMode(accept_mode)
+        dialog.setNameFilter(self.tr("JSON Files (*.json)"))
+        if initial_path:
+            dialog.selectFile(initial_path)
+        if dialog.exec() != QFileDialog.DialogCode.Accepted:
+            return ""
+        selected_files = dialog.selectedFiles()
+        return selected_files[0] if selected_files else ""
+
     def clear_all_inputs(self, confirm: bool = True) -> None:
         if confirm:
             reply = QMessageBox.question(
@@ -100,12 +115,7 @@ class PersistenceMixin:
     def save_input_data(self):
         icao_code = self._line_text("lineEdit_airport_name").strip().upper()
         suggested_filename = f"{icao_code}_safeguarding_inputs.json" if icao_code else "safeguarding_inputs.json"
-        file_path, _ = QFileDialog.getSaveFileName(
-            self,
-            self.tr("Save Inputs"),
-            suggested_filename,
-            self.tr("JSON Files (*.json)"),
-        )
+        file_path = self._pick_json_file(self.tr("Save Inputs"), QFileDialog.AcceptMode.AcceptSave, suggested_filename)
         if not file_path:
             return
         if not file_path.lower().endswith(".json"):
@@ -137,7 +147,7 @@ class PersistenceMixin:
             if reply == QtWidgets.QMessageBox.StandardButton.No:
                 return
 
-        file_path, _ = QFileDialog.getOpenFileName(self, self.tr("Load Inputs"), "", self.tr("JSON Files (*.json)"))
+        file_path = self._pick_json_file(self.tr("Load Inputs"), QFileDialog.AcceptMode.AcceptOpen)
         if not file_path:
             return
 

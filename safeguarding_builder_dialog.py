@@ -195,6 +195,7 @@ class SafeguardingBuilderDialog(
         self._setup_agl_options_ui_connections()
         self._setup_global_context_block()
         self._style_workflow_panels()
+        self._initial_dialog_geometry_applied = False
 
         if self.scroll_area_layout is not None:
             self.add_runway_group()  # Add the first group
@@ -205,7 +206,7 @@ class SafeguardingBuilderDialog(
                 level=Qgis.Warning,
             )
 
-        QtCore.QTimer.singleShot(0, self._update_dialog_height)
+        QtCore.QTimer.singleShot(0, lambda: self._update_dialog_height(initial=True))
         QtCore.QTimer.singleShot(0, self.update_dialog_status)
 
     def _setup_processing_status_widgets(self) -> None:
@@ -1774,9 +1775,36 @@ class SafeguardingBuilderDialog(
                 level=Qgis.Critical,
             )
 
-    def _update_dialog_height(self):
-        """Adjusts the dialog height to fit its contents."""
-        QtCore.QTimer.singleShot(0, self.adjustSize)
+    def _update_dialog_height(self, initial: bool = False):
+        """Adjust the dialog height while keeping the first open compact."""
+        QtCore.QTimer.singleShot(0, lambda: self._apply_dialog_geometry(initial=initial))
+
+    def _apply_dialog_geometry(self, initial: bool = False) -> None:
+        """Resize the dialog to its content without letting it grow too tall."""
+        self.adjustSize()
+
+        screen = None
+        window_handle = self.windowHandle()
+        if window_handle is not None:
+            screen = window_handle.screen()
+        if screen is None:
+            screen = QtWidgets.QApplication.primaryScreen()
+
+        available = screen.availableGeometry() if screen is not None else QtCore.QRect(0, 0, 1280, 900)
+        max_height = min(860, max(560, available.height() - 120))
+        max_width = max(860, available.width() - 80)
+
+        desired_size = self.sizeHint()
+        target_width = min(desired_size.width(), max_width, max(1, available.width() - 40))
+        target_height = min(desired_size.height(), max_height, max(1, available.height() - 40))
+
+        if initial or not self._initial_dialog_geometry_applied:
+            self.resize(target_width, target_height)
+            self._initial_dialog_geometry_applied = True
+            return
+
+        current_width = max(self.width(), target_width)
+        self.resize(current_width, target_height)
 
     def _focus_runway_group(self, group_widget: RunwayWidgetGroup) -> None:
         """Scroll to and focus the first runway field in a group."""
