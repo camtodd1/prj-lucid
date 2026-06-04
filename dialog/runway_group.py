@@ -121,7 +121,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.status_chip_lbl = QtWidgets.QLabel("Incomplete")
         self.status_chip_lbl.setObjectName(f"label_rwy_status_{self.index}")
         self.status_chip_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.status_chip_lbl.setMinimumWidth(90)
         self.status_chip_lbl.setMaximumHeight(24)
         self.status_chip_lbl.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Fixed,
@@ -131,6 +130,11 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; "
             "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
         )
+        status_width = max(
+            self.status_chip_lbl.fontMetrics().horizontalAdvance(text)
+            for text in ["Incomplete", "Needs attention", "Ready"]
+        )
+        self.status_chip_lbl.setFixedWidth(status_width + 24)
         header_layout.addWidget(self.status_chip_lbl)
 
         self.expand_button = QtWidgets.QToolButton()
@@ -429,10 +433,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             (label_northing_row, self.rec_north_le),
             (label_runway_width, self.width_le),
         ]
-        self._set_advanced_visible(False)
-        self._sync_height_constraint()
         self._update_status_chip()
         self._update_required_field_indicators()
+        self._set_advanced_visible(False)
 
     def _add_arc_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
         label_arc_num = QtWidgets.QLabel("ARC Number:")
@@ -789,7 +792,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         )
         self._update_status_chip()
         self._update_required_field_indicators()
-        self._sync_height_constraint()
 
     def _input_widgets(self):
         return [
@@ -895,6 +897,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             status = "Needs attention"
         else:
             status = "Ready"
+        if getattr(self, "_last_status_chip_text", None) == status:
+            return
+        self._last_status_chip_text = status
         self.status_chip_lbl.setText(status)
         if status == "Ready":
             self.status_chip_lbl.setStyleSheet(
@@ -931,7 +936,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             widget = getattr(self, widget_name, None)
             if not widget:
                 continue
-            widget.setProperty("requiredEmpty", not bool(value))
+            required_empty = not bool(value)
+            if bool(widget.property("requiredEmpty")) == required_empty:
+                continue
+            widget.setProperty("requiredEmpty", required_empty)
             widget.style().unpolish(widget)
             widget.style().polish(widget)
             widget.update()
@@ -942,8 +950,11 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.setMaximumHeight(16777215)
             self.setMinimumHeight(0)
         else:
-            self.adjustSize()
-            compact_height = self.sizeHint().height()
+            layout = self.layout()
+            if layout is None:
+                return
+            layout.activate()
+            compact_height = layout.sizeHint().height()
             self.setMinimumHeight(compact_height)
             self.setMaximumHeight(compact_height)
 

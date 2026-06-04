@@ -756,8 +756,12 @@ class SafeguardingBuilderDialog(
         text: str,
         state: str,
         prominent: bool = False,
-    ) -> None:
+    ) -> bool:
         """Style a content-sized state summary without turning it into a banner."""
+        signature = (text, state, prominent)
+        if getattr(label, "_status_chip_signature", None) == signature:
+            return False
+        label._status_chip_signature = signature
         colors = {
             "ready": ("#eaf6ed", "#1f6b32", "#c7e7cf"),
             "warning": ("#fff5e6", "#8a5200", "#f0d6a8"),
@@ -783,7 +787,8 @@ class SafeguardingBuilderDialog(
             f"border-radius: {radius}px; padding: {vertical_padding}px {horizontal_padding}px; "
             f"font-size: {font_size}px; font-weight: 600; }}"
         )
-        label.adjustSize()
+        label.updateGeometry()
+        return True
 
     def _connect_global_controls(self):
         """Connects signals for global widgets."""
@@ -1369,13 +1374,14 @@ class SafeguardingBuilderDialog(
             else:
                 airport_status_text = "ICAO or IATA required"
                 airport_status_state = "neutral"
-            self._apply_status_chip(
+            airport_status_changed = self._apply_status_chip(
                 self.label_airport_status,
                 airport_status_text,
                 airport_status_state,
                 prominent=True,
             )
-        self._resize_airport_identity_card()
+            if airport_status_changed:
+                self._resize_airport_identity_card()
 
         arp_values = [
             self.lineEdit_arp_easting.text().strip() if hasattr(self, "lineEdit_arp_easting") else "",
@@ -1465,7 +1471,9 @@ class SafeguardingBuilderDialog(
             if agl_enabled:
                 footer_parts.append("AGL")
             footer_parts.append(output_text)
-            self.label_footer_status.setText(" | ".join(footer_parts))
+            footer_text = " | ".join(footer_parts)
+            if self.label_footer_status.text() != footer_text:
+                self.label_footer_status.setText(footer_text)
 
     # --- Runway Group Management ---
     def _get_next_runway_id(self) -> int:
