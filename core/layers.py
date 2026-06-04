@@ -6,6 +6,7 @@ import re
 import traceback
 from typing import Dict, List, Optional
 
+from qgis.PyQt.QtGui import QColor, QFont  # type: ignore
 from qgis.core import (  # type: ignore
     Qgis,
     QgsCategorizedSymbolRenderer,
@@ -17,9 +18,14 @@ from qgis.core import (  # type: ignore
     QgsLayerTreeNode,
     QgsLineSymbol,
     QgsMessageLog,
+    QgsPalLayerSettings,
     QgsProject,
     QgsRendererCategory,
+    QgsRuleBasedLabeling,
     QgsSingleSymbolRenderer,
+    QgsTextBufferSettings,
+    QgsTextFormat,
+    QgsVectorLayerSimpleLabeling,
     QgsVectorFileWriter,
     QgsVectorLayer,
     QgsWkbTypes,
@@ -368,6 +374,13 @@ class LayerMixin:
                         self._apply_controlling_region_style(layer)
                     if str(style_key) == "OLS Controlling Contour":
                         self._apply_controlling_contour_style(layer)
+                    if str(style_key) in {"OLS IHS", "OLS OHS"}:
+                        self._apply_horizontal_surface_labels(layer)
+                    if str(style_key) == "OLS Approach":
+                        self._apply_horizontal_surface_labels(
+                            layer,
+                            filter_expression='"section_desc" = \'Horizontal\'',
+                        )
                     if str(style_key) in {"OLS Transitional Contour", "OLS Controlling Contour"}:
                         layer.setLabelsEnabled(True)
                     layer.triggerRepaint()
@@ -442,6 +455,57 @@ class LayerMixin:
         except Exception as exc:
             QgsMessageLog.logMessage(
                 f"Warning: failed to apply controlling contour line style: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
+    def _apply_horizontal_surface_labels(
+        self,
+        layer: QgsVectorLayer,
+        filter_expression: Optional[str] = None,
+    ) -> None:
+        """Label a horizontal polygon surface at its centroid with elevation."""
+        if layer is None or not layer.isValid():
+            return
+        if layer.fields().indexFromName("elev_m") < 0:
+            return
+
+        try:
+            settings = QgsPalLayerSettings()
+            settings.fieldName = 'format_number("elev_m", 0)'
+            settings.isExpression = True
+            settings.placement = QgsPalLayerSettings.OverPoint
+            settings.centroidInside = True
+            settings.centroidWhole = True
+            settings.fitInPolygonOnly = True
+            settings.priority = 5
+            settings.obstacle = False
+
+            text_format = QgsTextFormat()
+            text_format.setFont(QFont("Lato", 10))
+            text_format.setSize(10)
+            text_format.setColor(QColor(50, 50, 50))
+
+            buffer = QgsTextBufferSettings()
+            buffer.setEnabled(True)
+            buffer.setSize(1)
+            buffer.setColor(QColor(250, 250, 250))
+            text_format.setBuffer(buffer)
+
+            settings.setFormat(text_format)
+
+            if filter_expression:
+                root = QgsRuleBasedLabeling.Rule(None)
+                rule = QgsRuleBasedLabeling.Rule(settings)
+                rule.setFilterExpression(filter_expression)
+                root.appendChild(rule)
+                layer.setLabeling(QgsRuleBasedLabeling(root))
+            else:
+                layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+            layer.setLabelsEnabled(True)
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Warning: failed to apply horizontal surface labels for '{layer.name()}': {exc}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
