@@ -83,8 +83,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
     def _setup_ui(self):
         groupBox_layout = QtWidgets.QVBoxLayout(self)
-        groupBox_layout.setContentsMargins(8, 8, 8, 8)
-        groupBox_layout.setSpacing(6)
+        groupBox_layout.setContentsMargins(10, 10, 10, 10)
+        groupBox_layout.setSpacing(8)
 
         header_widget = QtWidgets.QWidget(self)
         header_widget.setSizePolicy(
@@ -114,11 +114,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.header_summary_lbl.setStyleSheet("color: #666666;")
         title_stack.addWidget(self.header_summary_lbl)
 
-        self.required_legend_lbl = QtWidgets.QLabel("* required for Ready")
-        self.required_legend_lbl.setObjectName(f"label_rwy_required_legend_{self.index}")
-        self.required_legend_lbl.setStyleSheet("color: #777777; font-size: 11px;")
-        title_stack.addWidget(self.required_legend_lbl)
-
         header_layout.addLayout(title_stack)
 
         header_layout.addStretch(1)
@@ -127,12 +122,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.status_chip_lbl.setObjectName(f"label_rwy_status_{self.index}")
         self.status_chip_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.status_chip_lbl.setMinimumWidth(90)
+        self.status_chip_lbl.setMaximumHeight(24)
         self.status_chip_lbl.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Fixed,
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
         self.status_chip_lbl.setStyleSheet(
-            "QLabel { background: #f2f2f2; color: #444; border: 1px solid #d2d2d2; border-radius: 10px; padding: 4px 10px; }"
+            "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; "
+            "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
         )
         header_layout.addWidget(self.status_chip_lbl)
 
@@ -141,7 +138,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.expand_button.setCheckable(True)
         self.expand_button.setChecked(False)
         self.expand_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
-        self.expand_button.setToolTip("Show or hide advanced runway details")
+        self.expand_button.setToolTip("Show advanced runway details")
         self.expand_button.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Fixed,
             QtWidgets.QSizePolicy.Policy.Fixed,
@@ -901,15 +898,15 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.status_chip_lbl.setText(status)
         if status == "Ready":
             self.status_chip_lbl.setStyleSheet(
-                "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; border-radius: 10px; padding: 4px 10px; }"
+                "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
             )
         elif status == "Needs attention":
             self.status_chip_lbl.setStyleSheet(
-                "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; border-radius: 10px; padding: 4px 10px; }"
+                "QLabel { background: #fff5e6; color: #8a5200; border: 1px solid #f0d6a8; border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
             )
         else:
             self.status_chip_lbl.setStyleSheet(
-                "QLabel { background: #f2f2f2; color: #444; border: 1px solid #d2d2d2; border-radius: 10px; padding: 4px 10px; }"
+                "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
             )
 
     def _mark_required_label(self, label: QtWidgets.QLabel) -> None:

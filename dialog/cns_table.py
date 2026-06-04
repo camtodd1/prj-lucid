@@ -93,10 +93,13 @@ class CnsTableMixin:
         header = cns_table.horizontalHeader()
         if header:
             header.setStretchLastSection(False)
-            header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
-            header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Stretch)
-            header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Stretch)
-            header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents)
+            header.setSectionResizeMode(0, QtWidgets.QHeaderView.ResizeMode.Stretch)
+            header.setSectionResizeMode(1, QtWidgets.QHeaderView.ResizeMode.Interactive)
+            header.setSectionResizeMode(2, QtWidgets.QHeaderView.ResizeMode.Interactive)
+            header.setSectionResizeMode(3, QtWidgets.QHeaderView.ResizeMode.Interactive)
+            cns_table.setColumnWidth(1, 140)
+            cns_table.setColumnWidth(2, 140)
+            cns_table.setColumnWidth(3, 110)
 
         cns_table.setMinimumHeight(168)
         cns_table.setMaximumHeight(168)
@@ -117,47 +120,22 @@ class CnsTableMixin:
         remove_button.clicked.connect(self.remove_cns_rows)
         add_button.setToolTip("Add a new row to enter a CNS facility manually.")
         remove_button.setToolTip("Remove the selected CNS facility row(s).")
-        add_button.setAutoDefault(True)
-        add_button.setDefault(True)
-        add_button.setMinimumWidth(150)
-        remove_button.setMinimumWidth(170)
+        add_button.setAutoDefault(False)
+        add_button.setDefault(False)
+        add_button.setMinimumWidth(130)
+        add_button.setMaximumWidth(170)
+        remove_button.setMinimumWidth(140)
+        remove_button.setMaximumWidth(180)
+        button_layout = getattr(self, "horizontalLayout_cnsButtons", None)
+        if isinstance(button_layout, QtWidgets.QHBoxLayout):
+            button_layout.insertStretch(0, 1)
         self.CNS_FACILITY_TYPES = CNS_FACILITY_TYPES
         self._update_cns_view_state()
 
     def _style_cns_panel(self):
-        group = getattr(self, "groupBox_CNS", self.findChild(QtWidgets.QGroupBox, "groupBox_CNS"))
-        if group:
-            group.setStyleSheet(
-                """
-                QGroupBox {
-                    border: 1px solid #dcdcdc;
-                    border-radius: 4px;
-                    margin-top: 12px;
-                    padding: 8px;
-                    background: #ffffff;
-                }
-                QGroupBox::title {
-                    subcontrol-origin: margin;
-                    left: 8px;
-                    padding: 0 4px;
-                    font-weight: 600;
-                }
-                """
-            )
-
         description = getattr(self, "label_CNS_description", self.findChild(QtWidgets.QLabel, "label_CNS_description"))
         if description:
-            description.setStyleSheet("color: #444444;")
-
-        status = getattr(self, "label_cns_status", self.findChild(QtWidgets.QLabel, "label_cns_status"))
-        if status:
-            status.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-            status.setMinimumHeight(28)
-            status.setMaximumHeight(28)
-            status.setStyleSheet(
-                "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d2d2d2; "
-                "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-            )
+            description.setStyleSheet("color: #666666; font-size: 11px;")
 
         table = getattr(self, "table_cns_facility", self.findChild(QtWidgets.QTableWidget, "table_cns_facility"))
         if table:
@@ -175,41 +153,6 @@ class CnsTableMixin:
                     border: 0px;
                     border-bottom: 1px solid #d5d5d5;
                     font-weight: 600;
-                }
-                """
-            )
-
-        add_button = getattr(self, "pushButton_add_CNS", self.findChild(QtWidgets.QPushButton, "pushButton_add_CNS"))
-        if add_button:
-            add_button.setStyleSheet(
-                """
-                QPushButton {
-                    background: #eaf2ff;
-                    border: 1px solid #6aa8ff;
-                    color: #1f4f99;
-                    border-radius: 4px;
-                    padding: 8px 14px;
-                    font-weight: 600;
-                }
-                QPushButton:hover { background: #dfeaff; }
-                QPushButton:pressed { background: #d2e2ff; }
-                """
-            )
-
-        remove_button = getattr(self, "pushButton_remove_CNS", self.findChild(QtWidgets.QPushButton, "pushButton_remove_CNS"))
-        if remove_button:
-            remove_button.setStyleSheet(
-                """
-                QPushButton {
-                    background: #ffffff;
-                    border: 1px solid #cfcfcf;
-                    color: #333333;
-                    border-radius: 4px;
-                    padding: 8px 14px;
-                }
-                QPushButton:disabled {
-                    color: #9a9a9a;
-                    background: #f5f5f5;
                 }
                 """
             )

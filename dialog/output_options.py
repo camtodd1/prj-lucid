@@ -41,6 +41,14 @@ class OutputOptionsMixin:
         self.comboOutputFormat.clear()
         for display_name in OUTPUT_FORMATS.keys():
             self.comboOutputFormat.addItem(display_name)
+        self.comboOutputFormat.setToolTip(self.tr("File format used for permanent output."))
+        self.fileWidgetOutputPath.setToolTip(self.tr("Directory used for permanent output files."))
+        output_fields = getattr(self, "gridLayout_outputFields", None)
+        if isinstance(output_fields, QtWidgets.QGridLayout):
+            output_fields.setHorizontalSpacing(12)
+            output_fields.setVerticalSpacing(8)
+            output_fields.setColumnStretch(0, 0)
+            output_fields.setColumnStretch(1, 1)
 
         if DEFAULT_OUTPUT_FORMAT in OUTPUT_FORMATS:
             self.comboOutputFormat.setCurrentText(DEFAULT_OUTPUT_FORMAT)
@@ -106,6 +114,11 @@ class OutputOptionsMixin:
         if grid is None:
             grid = QtWidgets.QGridLayout(group)
             grid.setObjectName("gridLayout_contourIntervals")
+        if isinstance(grid, QtWidgets.QGridLayout):
+            grid.setHorizontalSpacing(12)
+            grid.setVerticalSpacing(6)
+            grid.setColumnStretch(0, 1)
+            grid.setColumnStretch(1, 0)
 
         self._contour_interval_spinboxes = {}
         default_label = getattr(self, "labelContourDefault", None)

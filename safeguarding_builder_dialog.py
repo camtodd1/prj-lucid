@@ -193,6 +193,7 @@ class SafeguardingBuilderDialog(
 
         self._setup_output_options_ui_connections()
         self._setup_agl_options_ui_connections()
+        self._style_workflow_panels()
 
         if self.scroll_area_layout is not None:
             self.add_runway_group()  # Add the first group
@@ -368,13 +369,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_status"),
         )
         if airport_status:
-            airport_status.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-            airport_status.setMinimumHeight(26)
-            airport_status.setMaximumHeight(28)
-            airport_status.setStyleSheet(
-                "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
-                "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-            )
+            self._apply_status_chip(airport_status, "ICAO or IATA required", "neutral", prominent=True)
 
         airport_lookup = getattr(
             self,
@@ -472,9 +467,13 @@ class SafeguardingBuilderDialog(
                     "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; "
                     "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
                 )
+        for name in ["label_arp_description", "label_met_description"]:
+            label = getattr(self, name, self.findChild(QtWidgets.QLabel, name))
+            if label:
+                label.setStyleSheet("color: #666666; font-size: 11px;")
 
     def _setup_ruleset_selector_ui(self) -> None:
-        """Add a top-level ruleset selector placeholder to the airport tab."""
+        """Show the active safeguarding standard without offering unsupported choices."""
         airport_layout = getattr(self, "verticalLayout_airportTab", None)
         if not isinstance(airport_layout, QtWidgets.QVBoxLayout):
             QgsMessageLog.logMessage(
@@ -487,33 +486,14 @@ class SafeguardingBuilderDialog(
         self.ruleset_combo = QtWidgets.QComboBox()
         self.ruleset_combo.setObjectName("comboBox_ruleset")
         self.ruleset_combo.addItem("MOS139 (current)", userData="MOS139")
-        self.ruleset_combo.addItem("Annex 14 (placeholder)", userData="ANNEX14")
         self.ruleset_combo.setCurrentIndex(0)
-        self.ruleset_combo.setToolTip(
-            "Placeholder ruleset selector. The current implementation uses MOS139 regardless of selection."
-        )
-        self.ruleset_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.ruleset_combo.setEnabled(False)
+        self.ruleset_combo.setToolTip("MOS139 is the only standard currently implemented.")
+        self.ruleset_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.ruleset_combo.setMinimumWidth(190)
 
-        ruleset_group = QtWidgets.QGroupBox("Ruleset / Marking Standard")
+        ruleset_group = QtWidgets.QGroupBox("Safeguarding Standard")
         ruleset_group.setObjectName("groupBox_ruleset")
-        ruleset_group.setStyleSheet(
-            """
-            QGroupBox {
-                border: 1px solid #dcdcdc;
-                border-radius: 4px;
-                margin-top: 12px;
-                padding: 8px;
-                background: #ffffff;
-            }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 8px;
-                padding: 0 4px;
-                font-weight: 600;
-            }
-            """
-        )
         ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
         ruleset_layout.setColumnStretch(0, 2)
         ruleset_layout.setColumnStretch(1, 1)
@@ -557,8 +537,9 @@ class SafeguardingBuilderDialog(
         if header_info:
             header_info.setWordWrap(False)
             header_info.setTextInteractionFlags(QtCore.Qt.TextInteractionFlag.TextBrowserInteraction)
+            header_info.setOpenExternalLinks(True)
             header_info.setStyleSheet(
-                "QLabel { color: #4b4b4b; font-size: 11px; margin-left: 10px; }"
+                "QLabel { color: #555555; font-size: 11px; }"
             )
             header_info.setSizePolicy(
                 QtWidgets.QSizePolicy.Policy.Expanding,
@@ -609,7 +590,8 @@ class SafeguardingBuilderDialog(
             if button:
                 button.setMinimumHeight(30)
                 button.setMaximumHeight(30)
-                button.setMinimumWidth(100)
+                button.setMinimumWidth(86)
+                button.setMaximumWidth(96)
 
         tab_widget = getattr(self, "tabWidget_workflow", self.findChild(QtWidgets.QTabWidget, "tabWidget_workflow"))
         if tab_widget:
@@ -636,6 +618,172 @@ class SafeguardingBuilderDialog(
                 """
             )
 
+    def _style_workflow_panels(self) -> None:
+        """Apply one spacing and hierarchy system across the workflow tabs."""
+        for layout_name in [
+            "verticalLayout_airportTab",
+            "verticalLayout_runwaysTab",
+            "verticalLayout_cnsTab",
+            "verticalLayout_olsTab",
+            "verticalLayout_outputTab",
+        ]:
+            layout = getattr(self, layout_name, None)
+            if isinstance(layout, QtWidgets.QVBoxLayout):
+                layout.setContentsMargins(8, 8, 8, 8)
+                layout.setSpacing(8)
+
+        panel_names = [
+            "groupBox_ruleset",
+            "groupBox_CNS",
+            "groupBox_controllingOls",
+            "groupBox_contourIntervals",
+            "groupBox_outputOptions",
+            "groupBox_agl_options",
+            "groupBox_agl_generated",
+            "groupBox_agl_elements",
+            "groupBox_agl_approach",
+        ]
+        for name in panel_names:
+            group = getattr(self, name, self.findChild(QtWidgets.QGroupBox, name))
+            if not group:
+                continue
+            group.setStyleSheet(
+                f"""
+                QGroupBox#{name} {{
+                    border: 1px solid #dcdcdc;
+                    border-radius: 4px;
+                    margin-top: 12px;
+                    background: #ffffff;
+                }}
+                QGroupBox#{name}::title {{
+                    subcontrol-origin: margin;
+                    left: 8px;
+                    padding: 0 4px;
+                    font-weight: 600;
+                }}
+                """
+            )
+            group_layout = group.layout()
+            if group_layout:
+                group_layout.setContentsMargins(10, 12, 10, 10)
+                group_layout.setSpacing(8)
+
+        for name in ["pushButton_add_runway", "pushButton_add_CNS", "pushButton_add_agl_approach"]:
+            button = getattr(self, name, self.findChild(QtWidgets.QPushButton, name))
+            if button:
+                button.setStyleSheet(
+                    """
+                    QPushButton {
+                        background: #f4f8ff;
+                        border: 1px solid #8eb7ed;
+                        color: #245b9e;
+                        border-radius: 4px;
+                        padding: 6px 12px;
+                        font-weight: 600;
+                    }
+                    QPushButton:hover { background: #e9f2ff; }
+                    QPushButton:pressed { background: #dceaff; }
+                    QPushButton:focus { border: 2px solid #4c88ce; }
+                    """
+                )
+
+        for name in ["pushButton_remove_CNS", "pushButton_remove_agl_approach"]:
+            button = getattr(self, name, self.findChild(QtWidgets.QPushButton, name))
+            if button:
+                button.setStyleSheet(
+                    """
+                    QPushButton {
+                        background: #ffffff;
+                        border: 1px solid #cfcfcf;
+                        color: #333333;
+                        border-radius: 4px;
+                        padding: 6px 12px;
+                    }
+                    QPushButton:hover { background: #f6f6f6; }
+                    QPushButton:disabled { color: #999999; background: #f5f5f5; }
+                    QPushButton:focus { border: 2px solid #7b9fc9; }
+                    """
+                )
+
+        add_runway = getattr(self, "pushButton_add_runway", None)
+        if add_runway:
+            add_runway.setText("Add Runway")
+            add_runway.setToolTip("Add another runway definition.")
+
+        generate_button = getattr(self, "pushButton_Generate", None)
+        if generate_button:
+            generate_button.setStyleSheet(
+                """
+                QPushButton {
+                    background: #2f6fbd;
+                    border: 1px solid #285f9f;
+                    border-radius: 4px;
+                    color: #ffffff;
+                    padding: 8px 16px;
+                    font-weight: 600;
+                }
+                QPushButton:hover { background: #2865ae; }
+                QPushButton:pressed { background: #245a9a; }
+                QPushButton:disabled { background: #b8c8da; border-color: #aab9c9; }
+                QPushButton:focus { border: 2px solid #163f70; }
+                """
+            )
+
+        for button_name, tooltip in [
+            ("pushButton_load_data", "Load a saved safeguarding definition."),
+            ("pushButton_save_data", "Save the current safeguarding definition."),
+            ("pushButton_clear_all", "Clear all current inputs."),
+        ]:
+            button = getattr(self, button_name, None)
+            if button:
+                button.setToolTip(tooltip)
+
+        footer_layout = getattr(self, "horizontalLayout_dialogFooter", None)
+        if isinstance(footer_layout, QtWidgets.QHBoxLayout):
+            footer_layout.setSpacing(10)
+        footer_status = getattr(self, "label_footer_status", None)
+        if footer_status:
+            footer_status.setStyleSheet("color: #555555; font-size: 11px;")
+
+        for spinbox in getattr(self, "_contour_interval_spinboxes", {}).values():
+            spinbox.setMaximumWidth(160)
+        if hasattr(self, "doubleSpinBoxContourDefault"):
+            self.doubleSpinBoxContourDefault.setMaximumWidth(160)
+
+    def _apply_status_chip(
+        self,
+        label: QtWidgets.QLabel,
+        text: str,
+        state: str,
+        prominent: bool = False,
+    ) -> None:
+        """Style a content-sized state summary without turning it into a banner."""
+        colors = {
+            "ready": ("#eaf6ed", "#1f6b32", "#c7e7cf"),
+            "warning": ("#fff5e6", "#8a5200", "#f0d6a8"),
+            "info": ("#eaf2ff", "#1f4f99", "#c7d7f5"),
+            "neutral": ("#f4f4f4", "#555555", "#d6d6d6"),
+        }
+        background, foreground, border = colors.get(state, colors["neutral"])
+        radius = 10 if prominent else 9
+        vertical_padding = 4 if prominent else 3
+        horizontal_padding = 10 if prominent else 9
+        font_size = 11 if prominent else 10
+        label.setText(text)
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        label.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Maximum,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        chip_height = 28 if prominent else 24
+        label.setMinimumHeight(chip_height)
+        label.setMaximumHeight(chip_height)
+        label.setStyleSheet(
+            f"QLabel {{ background: {background}; color: {foreground}; border: 1px solid {border}; "
+            f"border-radius: {radius}px; padding: {vertical_padding}px {horizontal_padding}px; "
+            f"font-size: {font_size}px; font-weight: 600; }}"
+        )
+        label.adjustSize()
 
     def _connect_global_controls(self):
         """Connects signals for global widgets."""
@@ -787,11 +935,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_status"),
         )
         if airport_status:
-            airport_status.setText("Resolving airport...")
-            airport_status.setStyleSheet(
-                "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
-                "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-            )
+            self._apply_status_chip(airport_status, "Resolving airport...", "warning", prominent=True)
         self._airport_lookup_timer.start(350)
 
     def queue_current_airport_lookup(self) -> None:
@@ -878,11 +1022,7 @@ class SafeguardingBuilderDialog(
                 self.findChild(QtWidgets.QLabel, "label_airport_status"),
             )
             if airport_status:
-                airport_status.setText("Airport not found")
-                airport_status.setStyleSheet(
-                    "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
-                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-                )
+                self._apply_status_chip(airport_status, "Airport not found", "warning", prominent=True)
             self._update_airport_crs_display(None)
 
     def _fetch_airport_metadata_by_iata(self, iata_code: str) -> Optional[Dict[str, str]]:
@@ -1062,11 +1202,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_status"),
         )
         if airport_status:
-            airport_status.setText(summary)
-            airport_status.setStyleSheet(
-                "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; "
-                "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-            )
+            self._apply_status_chip(airport_status, summary, "ready", prominent=True)
             airport_status.setToolTip(" | ".join(tooltip_parts))
         self._resize_airport_identity_card()
         self.update_dialog_status()
@@ -1206,17 +1342,7 @@ class SafeguardingBuilderDialog(
         label = getattr(self, label_name, self.findChild(QtWidgets.QLabel, label_name))
         if not label:
             return
-        colors = {
-            "ready": ("#eaf6ed", "#1f6b32", "#c7e7cf"),
-            "warning": ("#fff5e6", "#9a5b00", "#f0d6a8"),
-            "neutral": ("#f4f4f4", "#555555", "#d6d6d6"),
-        }
-        background, foreground, border = colors.get(state, colors["neutral"])
-        label.setText(text)
-        label.setStyleSheet(
-            f"QLabel {{ background: {background}; color: {foreground}; border: 1px solid {border}; "
-            "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }}"
-        )
+        self._apply_status_chip(label, text, state)
 
     def update_dialog_status(self):
         """Updates compact workflow status labels."""
@@ -1226,38 +1352,29 @@ class SafeguardingBuilderDialog(
         if hasattr(self, "label_airport_status"):
             current_signature = self._airport_signature(icao, iata)
             if current_signature == self._airport_resolved_signature and self._airport_resolved_summary:
-                self.label_airport_status.setText(self._airport_resolved_summary)
-                self.label_airport_status.setStyleSheet(
-                    "QLabel { background: #eaf6ed; color: #1f6b32; border: 1px solid #c7e7cf; "
-                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-                )
+                airport_status_text = self._airport_resolved_summary
+                airport_status_state = "ready"
             elif (
                 current_signature == self._airport_lookup_status_signature
                 and self._airport_lookup_state == "pending"
             ):
-                self.label_airport_status.setText("Resolving airport...")
-                self.label_airport_status.setStyleSheet(
-                    "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
-                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-                )
+                airport_status_text = "Resolving airport..."
+                airport_status_state = "warning"
             elif current_signature == self._airport_lookup_status_signature and self._airport_lookup_state in {"not_found", "error"}:
-                self.label_airport_status.setText(self._airport_lookup_status_message or "Airport lookup failed")
-                self.label_airport_status.setStyleSheet(
-                    "QLabel { background: #fff5e6; color: #9a5b00; border: 1px solid #f0d6a8; "
-                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-                )
+                airport_status_text = self._airport_lookup_status_message or "Airport lookup failed"
+                airport_status_state = "warning"
             elif icao or iata:
-                self.label_airport_status.setText("Airport code loaded")
-                self.label_airport_status.setStyleSheet(
-                    "QLabel { background: #eaf2ff; color: #1f4f99; border: 1px solid #c7d7f5; "
-                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-                )
+                airport_status_text = "Airport code loaded"
+                airport_status_state = "info"
             else:
-                self.label_airport_status.setText("ICAO or IATA required")
-                self.label_airport_status.setStyleSheet(
-                    "QLabel { background: #f4f4f4; color: #444; border: 1px solid #d2d2d2; "
-                    "border-radius: 10px; padding: 4px 10px; font-weight: 600; }"
-                )
+                airport_status_text = "ICAO or IATA required"
+                airport_status_state = "neutral"
+            self._apply_status_chip(
+                self.label_airport_status,
+                airport_status_text,
+                airport_status_state,
+                prominent=True,
+            )
         self._resize_airport_identity_card()
 
         arp_values = [
@@ -1298,11 +1415,15 @@ class SafeguardingBuilderDialog(
                 incomplete += 1
         if hasattr(self, "label_runway_status"):
             if runway_count == 0:
-                self.label_runway_status.setText("Runways: none defined")
+                runway_status = "Runways: none defined"
+                runway_state = "neutral"
             elif incomplete:
-                self.label_runway_status.setText(f"Runways: {runway_count} defined, {incomplete} incomplete")
+                runway_status = f"Runways: {runway_count} defined, {incomplete} incomplete"
+                runway_state = "warning"
             else:
-                self.label_runway_status.setText(f"Runways: {runway_count} ready")
+                runway_status = f"Runways: {runway_count} ready"
+                runway_state = "ready"
+            self._set_small_status_chip("label_runway_status", runway_status, runway_state)
 
         cns_count = self.table_cns_facility.rowCount() if hasattr(self, "table_cns_facility") else 0
         if hasattr(self, "label_cns_status"):
@@ -1313,19 +1434,29 @@ class SafeguardingBuilderDialog(
         agl_enabled = bool(hasattr(self, "checkBox_agl_enabled") and self.checkBox_agl_enabled.isChecked())
         agl_rows = self.table_agl_approach.rowCount() if hasattr(self, "table_agl_approach") else 0
         if hasattr(self, "label_agl_status"):
-            self.label_agl_status.setText(
-                f"AGL: enabled, {agl_rows} approach row(s)" if agl_enabled else "AGL: disabled"
+            self._set_small_status_chip(
+                "label_agl_status",
+                f"AGL enabled: {agl_rows} approach row(s)" if agl_enabled else "AGL disabled",
+                "ready" if agl_enabled else "neutral",
             )
 
-        output_text = "Output: memory layers"
+        output_text = "Memory layers"
+        output_state = "ready"
+        output_path = ""
         if hasattr(self, "radioFileOutput") and self.radioFileOutput.isChecked():
             output_format = self.comboOutputFormat.currentText()
-            path = self.fileWidgetOutputPath.filePath().strip()
-            output_text = f"Output: {output_format} files" + (f" to {path}" if path else " (directory required)")
+            output_path = self.fileWidgetOutputPath.filePath().strip()
+            output_text = (
+                f"{output_format} files ready"
+                if output_path
+                else f"{output_format} files - directory required"
+            )
+            output_state = "ready" if output_path else "warning"
         if hasattr(self, "label_output_status"):
             if hasattr(self, "checkBox_generateControllingOls") and not self.checkBox_generateControllingOls.isChecked():
-                output_text += " | controlling OLS skipped"
-            self.label_output_status.setText(output_text)
+                output_text += " | controlling OLS off"
+            self._set_small_status_chip("label_output_status", output_text, output_state)
+            self.label_output_status.setToolTip(output_path)
 
         if hasattr(self, "label_footer_status") and not self._processing_status_active:
             footer_parts = []
@@ -1333,7 +1464,7 @@ class SafeguardingBuilderDialog(
             footer_parts.append(f"{runway_count} runway(s)")
             if agl_enabled:
                 footer_parts.append("AGL")
-            footer_parts.append(output_text.replace("Output: ", ""))
+            footer_parts.append(output_text)
             self.label_footer_status.setText(" | ".join(footer_parts))
 
     # --- Runway Group Management ---

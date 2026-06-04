@@ -21,16 +21,16 @@
   </property>
  <layout class="QVBoxLayout" name="verticalLayout">
    <property name="leftMargin">
-    <number>6</number>
+    <number>8</number>
    </property>
    <property name="topMargin">
-    <number>6</number>
+    <number>8</number>
    </property>
    <property name="rightMargin">
-    <number>6</number>
+    <number>8</number>
    </property>
    <property name="bottomMargin">
-    <number>6</number>
+    <number>8</number>
    </property>
    <property name="spacing">
     <number>10</number>
@@ -104,8 +104,8 @@
          <widget class="QPushButton" name="pushButton_load_data">
           <property name="minimumSize">
            <size>
-            <width>118</width>
-            <height>34</height>
+            <width>86</width>
+            <height>30</height>
            </size>
           </property>
           <property name="text">
@@ -117,8 +117,8 @@
          <widget class="QPushButton" name="pushButton_save_data">
           <property name="minimumSize">
            <size>
-            <width>118</width>
-            <height>34</height>
+            <width>86</width>
+            <height>30</height>
            </size>
           </property>
           <property name="text">
@@ -130,8 +130,8 @@
          <widget class="QPushButton" name="pushButton_clear_all">
           <property name="minimumSize">
            <size>
-            <width>118</width>
-            <height>34</height>
+            <width>86</width>
+            <height>30</height>
            </size>
           </property>
           <property name="text">
@@ -161,7 +161,7 @@
         <item>
          <widget class="QLabel" name="coord_info">
           <property name="text">
-           <string>Use project CRS Easting/Northing. Need Lat/Long conversion? See &lt;a href=&quot;https://geodesyapps.ga.gov.au/geographic-to-grid&quot;&gt;this link&lt;/a&gt;.</string>
+           <string>Coordinates use project CRS (Easting/Northing). &lt;a href=&quot;https://geodesyapps.ga.gov.au/geographic-to-grid&quot;&gt;Convert Lat/Long&lt;/a&gt;.</string>
           </property>
           <property name="wordWrap">
            <bool>true</bool>
@@ -199,13 +199,13 @@
          <widget class="QLineEdit" name="lineEdit_airport_crs">
           <property name="minimumSize">
            <size>
-            <width>240</width>
+            <width>172</width>
             <height>28</height>
            </size>
           </property>
           <property name="maximumSize">
            <size>
-            <width>240</width>
+            <width>172</width>
             <height>28</height>
            </size>
           </property>
@@ -341,7 +341,7 @@
            <item>
             <widget class="QLabel" name="label_arp_description">
              <property name="text">
-              <string>Primary reference location for airport-wide safeguarding surfaces.</string>
+              <string>Primary coordinates for airport-wide safeguarding surfaces.</string>
              </property>
             </widget>
            </item>
@@ -411,7 +411,7 @@
            <item>
             <widget class="QLabel" name="label_met_description">
              <property name="text">
-              <string>Optional. Leave blank if MET safeguarding surfaces are not required.</string>
+              <string>Leave blank when MET safeguarding is not required.</string>
              </property>
             </widget>
            </item>
@@ -502,7 +502,7 @@
          <item>
           <widget class="QPushButton" name="pushButton_add_runway">
            <property name="text">
-            <string>Add Another Runway</string>
+            <string>Add Runway</string>
            </property>
           </widget>
          </item>
@@ -540,18 +540,35 @@
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_6">
           <item>
-           <widget class="QLabel" name="label_CNS_description">
-            <property name="text">
-             <string>Define CNS facilities present at the aerodrome.</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLabel" name="label_cns_status">
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
+           <layout class="QHBoxLayout" name="horizontalLayout_cnsIntro">
+            <item>
+             <widget class="QLabel" name="label_CNS_description">
+              <property name="text">
+               <string>Add facilities only where CNS safeguarding is required.</string>
+              </property>
+             </widget>
+            </item>
+            <item>
+             <spacer name="horizontalSpacer_cnsIntro">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QLabel" name="label_cns_status">
+              <property name="text">
+               <string/>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
           <item>
            <widget class="QTableWidget" name="table_cns_facility">
@@ -623,7 +640,7 @@
        <item>
         <widget class="QGroupBox" name="groupBox_controllingOls">
          <property name="title">
-          <string>Controlling (most-limiting) Surface</string>
+          <string>Controlling OLS Surface</string>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_controllingOls">
           <item>
@@ -670,7 +687,7 @@
        <item>
         <widget class="QGroupBox" name="groupBox_outputOptions">
          <property name="title">
-          <string>Output Data Options</string>
+          <string>Output Destination</string>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_5">
           <item>
@@ -683,7 +700,7 @@
           <item>
            <widget class="QRadioButton" name="radioMemoryOutput">
             <property name="text">
-             <string>Output to Memory Layers (temporary)</string>
+             <string>Memory layers (temporary)</string>
             </property>
             <property name="checkable">
              <bool>true</bool>
@@ -696,7 +713,7 @@
           <item>
            <widget class="QRadioButton" name="radioFileOutput">
             <property name="text">
-             <string>Output to Permanent Files</string>
+             <string>Files (permanent)</string>
             </property>
            </widget>
           </item>
@@ -781,7 +798,7 @@
        <property name="minimumSize">
         <size>
          <width>220</width>
-         <height>42</height>
+         <height>38</height>
         </size>
        </property>
        <property name="text">

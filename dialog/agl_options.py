@@ -29,22 +29,41 @@ class AglOptionsMixin:
         self.tab_lighting = QtWidgets.QWidget()
         self.tab_lighting.setObjectName("tab_lighting")
         tab_layout = QtWidgets.QVBoxLayout(self.tab_lighting)
+        tab_layout.setContentsMargins(8, 8, 8, 8)
+        tab_layout.setSpacing(8)
 
         group = QtWidgets.QGroupBox("Airfield Ground Lighting (optional)")
         group.setObjectName("groupBox_agl_options")
+        group.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Maximum,
+        )
         group_layout = QtWidgets.QVBoxLayout(group)
+        group_layout.setContentsMargins(10, 12, 10, 10)
+        group_layout.setSpacing(8)
+
+        control_layout = QtWidgets.QHBoxLayout()
+        control_layout.setContentsMargins(0, 0, 0, 0)
+        control_layout.setSpacing(8)
 
         self.checkBox_agl_enabled = QtWidgets.QCheckBox("Generate Airfield Ground Lighting layers")
         self.checkBox_agl_enabled.setObjectName("checkBox_agl_enabled")
-        group_layout.addWidget(self.checkBox_agl_enabled)
+        self.checkBox_agl_enabled.setToolTip("Generate AGL point layers from the runway definitions.")
+        control_layout.addWidget(self.checkBox_agl_enabled)
+        control_layout.addStretch(1)
 
-        self.label_agl_status = QtWidgets.QLabel("AGL: disabled")
+        self.label_agl_status = QtWidgets.QLabel("AGL disabled")
         self.label_agl_status.setObjectName("label_agl_status")
-        group_layout.addWidget(self.label_agl_status)
+        control_layout.addWidget(self.label_agl_status)
+        group_layout.addLayout(control_layout)
 
         spacing_group = QtWidgets.QGroupBox("Generated runway lighting")
         spacing_group.setObjectName("groupBox_agl_generated")
+        self.groupBox_agl_generated = spacing_group
         spacing_layout = QtWidgets.QGridLayout(spacing_group)
+        spacing_layout.setHorizontalSpacing(12)
+        spacing_layout.setVerticalSpacing(6)
+        spacing_layout.setColumnStretch(0, 1)
 
         self.lineEdit_agl_edge_spacing = self._agl_line_edit("lineEdit_agl_edge_spacing", "60")
         self.lineEdit_agl_threshold_spacing = self._agl_line_edit("lineEdit_agl_threshold_spacing", "3")
@@ -70,7 +89,10 @@ class AglOptionsMixin:
 
         elements_group = QtWidgets.QGroupBox("MOS optional elements")
         elements_group.setObjectName("groupBox_agl_elements")
+        self.groupBox_agl_elements = elements_group
         elements_layout = QtWidgets.QGridLayout(elements_group)
+        elements_layout.setHorizontalSpacing(18)
+        elements_layout.setVerticalSpacing(6)
         self.checkBox_agl_runway_end_lights = QtWidgets.QCheckBox("Runway end lights")
         self.checkBox_agl_runway_end_lights.setObjectName("checkBox_agl_runway_end_lights")
         self.checkBox_agl_runway_end_lights.setChecked(True)
@@ -114,6 +136,7 @@ class AglOptionsMixin:
 
         approach_group = QtWidgets.QGroupBox("Per-end approach lighting")
         approach_group.setObjectName("groupBox_agl_approach")
+        self.groupBox_agl_approach = approach_group
         approach_layout = QtWidgets.QVBoxLayout(approach_group)
 
         self.table_agl_approach = QtWidgets.QTableWidget()
@@ -124,8 +147,11 @@ class AglOptionsMixin:
         )
         self.table_agl_approach.setAlternatingRowColors(True)
         self.table_agl_approach.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_agl_approach.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
         self.table_agl_approach.verticalHeader().setVisible(False)
         self.table_agl_approach.horizontalHeader().setStretchLastSection(True)
+        self.table_agl_approach.setMinimumHeight(120)
+        self.table_agl_approach.setMaximumHeight(180)
         approach_layout.addWidget(self.table_agl_approach)
 
         button_layout = QtWidgets.QHBoxLayout()
@@ -133,6 +159,11 @@ class AglOptionsMixin:
         self.pushButton_add_agl_approach.setObjectName("pushButton_add_agl_approach")
         self.pushButton_remove_agl_approach = QtWidgets.QPushButton("Remove Selected")
         self.pushButton_remove_agl_approach.setObjectName("pushButton_remove_agl_approach")
+        self.pushButton_add_agl_approach.setToolTip("Add per-end approach lighting overrides.")
+        self.pushButton_remove_agl_approach.setToolTip("Remove the selected approach lighting rows.")
+        self.pushButton_add_agl_approach.setMaximumWidth(180)
+        self.pushButton_remove_agl_approach.setMaximumWidth(180)
+        button_layout.addStretch(1)
         button_layout.addWidget(self.pushButton_add_agl_approach)
         button_layout.addWidget(self.pushButton_remove_agl_approach)
         approach_layout.addLayout(button_layout)
@@ -159,6 +190,7 @@ class AglOptionsMixin:
         ]:
             widget.textChanged.connect(self._on_agl_option_changed)
         self.table_agl_approach.itemChanged.connect(self._on_agl_option_changed)
+        self.table_agl_approach.itemSelectionChanged.connect(self._update_agl_view_state)
         for widget in self._agl_checkbox_widgets():
             widget.toggled.connect(self._on_agl_option_changed)
         self.pushButton_add_agl_approach.clicked.connect(self._add_agl_approach_row)
@@ -490,11 +522,32 @@ class AglOptionsMixin:
         combo.setCurrentIndex(idx if idx >= 0 else 0)
 
     def _on_agl_option_changed(self) -> None:
-        if hasattr(self, "label_agl_status"):
-            if self.checkBox_agl_enabled.isChecked():
-                rows = self.table_agl_approach.rowCount() if hasattr(self, "table_agl_approach") else 0
-                self.label_agl_status.setText(f"AGL: enabled, {rows} approach row(s)")
-            else:
-                self.label_agl_status.setText("AGL: disabled")
+        enabled = self.checkBox_agl_enabled.isChecked()
+        for group_name in [
+            "groupBox_agl_generated",
+            "groupBox_agl_elements",
+            "groupBox_agl_approach",
+        ]:
+            group = getattr(self, group_name, None)
+            if group is not None:
+                group.setEnabled(enabled)
+        self._update_agl_view_state()
         if hasattr(self, "update_dialog_status"):
             self.update_dialog_status()
+
+    def _update_agl_view_state(self) -> None:
+        """Keep optional AGL controls and actions visually aligned with their state."""
+        table = getattr(self, "table_agl_approach", None)
+        enabled = bool(getattr(self, "checkBox_agl_enabled", None) and self.checkBox_agl_enabled.isChecked())
+        rows = table.rowCount() if table is not None else 0
+        selected_rows = table.selectionModel().selectedRows() if table is not None and table.selectionModel() else []
+        remove_button = getattr(self, "pushButton_remove_agl_approach", None)
+        if remove_button is not None:
+            remove_button.setEnabled(enabled and bool(selected_rows))
+        status_helper = getattr(self, "_set_small_status_chip", None)
+        if callable(status_helper):
+            status_helper(
+                "label_agl_status",
+                f"AGL enabled: {rows} approach row(s)" if enabled else "AGL disabled",
+                "ready" if enabled else "neutral",
+            )
