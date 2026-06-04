@@ -55,7 +55,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.setFrameShadow(QtWidgets.QFrame.Shadow.Plain)
         self.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Preferred,
-            QtWidgets.QSizePolicy.Policy.Preferred,
+            QtWidgets.QSizePolicy.Policy.Maximum,
         )
         self.setStyleSheet(
             """
@@ -945,18 +945,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             widget.update()
 
     def _sync_height_constraint(self) -> None:
-        """Clamp the card height in compact mode so it does not float with extra whitespace."""
-        if self._advanced_visible:
-            self.setMaximumHeight(16777215)
-            self.setMinimumHeight(0)
-        else:
-            layout = self.layout()
-            if layout is None:
-                return
-            layout.activate()
-            compact_height = layout.sizeHint().height()
-            self.setMinimumHeight(compact_height)
-            self.setMaximumHeight(compact_height)
+        """Let the card hug visible content without clipping styled controls."""
+        self.setMinimumHeight(0)
+        self.setMaximumHeight(16777215)
+        self.updateGeometry()
 
     def _refresh_surface_material_options(self, category: str, selected_material: str = "") -> None:
         current_material = selected_material or self.surface_material_combo.currentText()
