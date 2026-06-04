@@ -29,6 +29,8 @@ CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2 = 0.05
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-10
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
+CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
+CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
@@ -3807,6 +3809,7 @@ class ControllingOlsEngineMixin:
                 continue
             clipped_line_parts: List[List[QgsPointXY]] = []
             seen_part_keys = set()
+            method = "clip_to_controlling_region"
             try:
                 clipped = contour.geometry.intersection(clip_geometry)
             except Exception:
@@ -3819,6 +3822,31 @@ class ControllingOlsEngineMixin:
                     continue
                 seen_part_keys.add(part_key)
                 clipped_line_parts.append(line_points)
+            if not clipped_line_parts and contour.surface_type in {"Conical", "Transitional"}:
+                try:
+                    tolerant_clip_geometry = clip_geometry.buffer(
+                        CONTROLLING_CONTOUR_CLIP_TOLERANCE_M,
+                        CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS,
+                    )
+                except Exception:
+                    tolerant_clip_geometry = None
+                if tolerant_clip_geometry is not None and not tolerant_clip_geometry.isEmpty():
+                    try:
+                        clipped = contour.geometry.intersection(tolerant_clip_geometry)
+                    except Exception:
+                        clipped = None
+                    if clipped is not None and not clipped.isEmpty():
+                        seen_part_keys.clear()
+                        for line_points in engine._line_parts(clipped):
+                            if len(line_points) < 2:
+                                continue
+                            part_key = self._controlling_contour_part_key(line_points)
+                            if part_key in seen_part_keys:
+                                continue
+                            seen_part_keys.add(part_key)
+                            clipped_line_parts.append(line_points)
+                        if clipped_line_parts:
+                            method = "clip_to_controlling_region_tolerant"
             line_geometry = self._controlling_contour_geometry_from_parts(clipped_line_parts)
             if line_geometry is None or line_geometry.isEmpty():
                 continue
@@ -3831,7 +3859,7 @@ class ControllingOlsEngineMixin:
                     contour.surface_type,
                     contour.contour_elevation_m,
                     contour.source_layer,
-                    "clip_to_controlling_region",
+                    method,
                 ]
             )
             features.append(feature)
@@ -3882,7 +3910,7 @@ class ControllingOlsEngineMixin:
             return None
         if surface_type == "Transitional":
             try:
-                buffered = clip_geometry.buffer(0.05, 4)
+                buffered = clip_geometry.buffer(CONTROLLING_CONTOUR_CLIP_TOLERANCE_M, CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS)
                 if buffered is not None and not buffered.isEmpty():
                     return buffered
             except Exception:
