@@ -43,18 +43,23 @@ class PersistenceMixin:
 
     def _pick_json_file(self, title: str, accept_mode: QFileDialog.AcceptMode, initial_path: str = "") -> str:
         """Use a Qt file dialog that behaves reliably inside the plugin shell."""
-        dialog = QFileDialog(self, title)
-        dialog.setOption(QFileDialog.Option.DontUseNativeDialog, True)
-        dialog.setWindowModality(QtCore.Qt.WindowModality.ApplicationModal)
-        dialog.setFileMode(QFileDialog.FileMode.ExistingFile if accept_mode == QFileDialog.AcceptMode.AcceptOpen else QFileDialog.FileMode.AnyFile)
-        dialog.setAcceptMode(accept_mode)
-        dialog.setNameFilter(self.tr("JSON Files (*.json)"))
-        if initial_path:
-            dialog.selectFile(initial_path)
-        if dialog.exec() != QFileDialog.DialogCode.Accepted:
-            return ""
-        selected_files = dialog.selectedFiles()
-        return selected_files[0] if selected_files else ""
+        file_filter = self.tr("JSON Files (*.json)")
+        if accept_mode == QFileDialog.AcceptMode.AcceptOpen:
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                title,
+                "",
+                file_filter,
+            )
+            return file_path
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            title,
+            initial_path,
+            file_filter,
+        )
+        return file_path
 
     def clear_all_inputs(self, confirm: bool = True) -> None:
         if confirm:
