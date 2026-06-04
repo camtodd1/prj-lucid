@@ -1799,11 +1799,14 @@ class SafeguardingBuilderDialog(
     def _update_dialog_height(self, initial: bool = False):
         """Adjusts the dialog height to fit its contents."""
         def _apply_size():
+            current_width = self.width()
             self.adjustSize()
             if initial:
                 target_width = 721
                 target_height = self.height()
                 self.resize(target_width, target_height)
+            else:
+                self.resize(current_width, self.height())
         QtCore.QTimer.singleShot(0, _apply_size)
 
     def _focus_runway_group(self, group_widget: RunwayWidgetGroup) -> None:
