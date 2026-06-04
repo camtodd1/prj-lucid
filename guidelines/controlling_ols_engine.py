@@ -29,7 +29,6 @@ CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2 = 0.05
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-10
 CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
-CONTROLLING_REGION_ZERO_AREA_CONNECTOR_OPEN_M = 0.001
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
@@ -938,9 +937,6 @@ class PlanarControllingOlsEngine:
         """Rebuild solved region polygons without changing solved boundaries."""
         if geometry is None or geometry.isEmpty():
             return []
-        separated_parts = self._separate_zero_area_connected_polygon_parts(geometry)
-        if separated_parts:
-            return separated_parts
         candidates = []
         opened = self._open_boundary_touching_holes_geometry(geometry)
         if opened is not None and not opened.isEmpty():
@@ -967,96 +963,6 @@ class PlanarControllingOlsEngine:
         except Exception:
             pass
         return []
-
-    def _separate_zero_area_connected_polygon_parts(self, geometry: QgsGeometry) -> List[QgsGeometry]:
-        """Split polygon lobes joined only by zero-area boundary paths."""
-        original_parts = self._polygon_parts(geometry)
-        if not original_parts:
-            return []
-        original_part_count = len(original_parts)
-        try:
-            original_area = abs(geometry.area())
-        except Exception:
-            return []
-        source_boundary = self._normalised_boundary_geometry(geometry)
-        strict_area_delta = max(
-            CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2,
-            original_area * CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO,
-        )
-        split_candidates: List[Tuple[QgsGeometry, float]] = []
-
-        try:
-            buffered = geometry.buffer(0.0, CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS)
-            if self._has_polygon_area(buffered):
-                split_candidates.append((buffered, strict_area_delta))
-        except Exception:
-            pass
-
-        try:
-            tolerance = CONTROLLING_REGION_ZERO_AREA_CONNECTOR_OPEN_M
-            opened = geometry.buffer(-tolerance, CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS).buffer(
-                tolerance,
-                CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS,
-            )
-            boundary_length = source_boundary.length() if source_boundary is not None else 0.0
-            connector_area_delta = max(strict_area_delta, boundary_length * tolerance * 2.0)
-            if self._has_polygon_area(opened):
-                split_candidates.append((opened, connector_area_delta))
-        except Exception:
-            pass
-
-        accepted_parts = self._accepted_zero_area_connector_split_parts(
-            split_candidates,
-            original_part_count,
-            original_area,
-            source_boundary,
-        )
-        if accepted_parts:
-            return accepted_parts
-
-        split_candidates = []
-        if hasattr(QgsGeometry, "polygonize"):
-            linework: List[QgsGeometry] = []
-            try:
-                for ring in self._polygon_boundary_parts(geometry):
-                    if len(ring) >= 2:
-                        linework.append(QgsGeometry.fromPolylineXY(ring))
-                if linework:
-                    polygonized = QgsGeometry.polygonize(linework)
-                    if self._has_polygon_area(polygonized):
-                        split_candidates.append((polygonized, strict_area_delta))
-            except Exception:
-                pass
-
-        return self._accepted_zero_area_connector_split_parts(
-            split_candidates,
-            original_part_count,
-            original_area,
-            source_boundary,
-        )
-
-    def _accepted_zero_area_connector_split_parts(
-        self,
-        split_candidates: Sequence[Tuple[QgsGeometry, float]],
-        original_part_count: int,
-        original_area: float,
-        source_boundary: Optional[QgsGeometry],
-    ) -> List[QgsGeometry]:
-        accepted_parts: List[List[QgsGeometry]] = []
-        for split_candidate, allowed_area_delta in split_candidates:
-            parts = self._polygon_parts(split_candidate)
-            if len(parts) <= original_part_count:
-                continue
-            try:
-                split_area = sum(abs(part.area()) for part in parts)
-            except Exception:
-                continue
-            if abs(split_area - original_area) > allowed_area_delta:
-                continue
-            if self._introduces_long_new_boundary_segment(split_candidate, source_boundary):
-                continue
-            accepted_parts.append(parts)
-        return max(accepted_parts, key=len) if accepted_parts else []
 
     def _despiked_polygon_geometry(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
         """Remove zero-width out-and-back ring spikes without buffering corners."""
