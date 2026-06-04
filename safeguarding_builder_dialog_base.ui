@@ -230,19 +230,16 @@
       </attribute>
       <layout class="QVBoxLayout" name="verticalLayout_airportTab">
       <item>
-        <widget class="QFrame" name="frame_airport_identity">
-         <property name="frameShape">
-          <enum>QFrame::StyledPanel</enum>
-         </property>
-         <property name="frameShadow">
-          <enum>QFrame::Plain</enum>
+        <widget class="QGroupBox" name="frame_airport_identity">
+         <property name="title">
+          <string>Airport Identity</string>
          </property>
           <layout class="QVBoxLayout" name="verticalLayout_airportIdentity">
           <property name="leftMargin">
            <number>12</number>
           </property>
           <property name="topMargin">
-           <number>10</number>
+           <number>16</number>
           </property>
           <property name="rightMargin">
            <number>12</number>
@@ -329,7 +326,7 @@
           </item>
          </layout>
         </widget>
-       </item>
+      </item>
        <item>
        <widget class="QGroupBox" name="groupBox_ARP">
          <property name="title">

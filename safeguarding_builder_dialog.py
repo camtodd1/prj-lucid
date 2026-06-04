@@ -519,10 +519,20 @@ class SafeguardingBuilderDialog(
         if airport_identity_frame is not None and airport_identity_frame.parent() is not global_frame:
             airport_identity_frame.setStyleSheet(
                 """
-                QFrame#frame_airport_identity {
+                QGroupBox#frame_airport_identity {
                     border: 1px solid #dcdcdc;
                     border-radius: 4px;
+                    margin-top: 10px;
                     background: #ffffff;
+                }
+                QGroupBox#frame_airport_identity::title {
+                    subcontrol-origin: margin;
+                    subcontrol-position: top left;
+                    left: 12px;
+                    padding: 0 4px;
+                    color: #232323;
+                    font-size: 13px;
+                    font-weight: 700;
                 }
                 """
             )
@@ -530,16 +540,6 @@ class SafeguardingBuilderDialog(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
-            airport_identity_layout = airport_identity_frame.layout()
-            if isinstance(airport_identity_layout, QtWidgets.QVBoxLayout):
-                existing_title = airport_identity_frame.findChild(QtWidgets.QLabel, "label_airport_identity_title")
-                if existing_title is None:
-                    title_label = QtWidgets.QLabel("Airport Identity", airport_identity_frame)
-                    title_label.setObjectName("label_airport_identity_title")
-                    title_label.setStyleSheet(
-                        "QLabel { color: #232323; font-size: 13px; font-weight: 700; padding-bottom: 2px; }"
-                    )
-                    airport_identity_layout.insertWidget(0, title_label)
             airport_identity_frame.adjustSize()
             left_column.addWidget(airport_identity_frame)
 
@@ -549,6 +549,7 @@ class SafeguardingBuilderDialog(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
+            right_column.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
             right_column.addWidget(ruleset_group)
             self.groupBox_ruleset = ruleset_group
 
