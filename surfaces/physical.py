@@ -22,7 +22,6 @@ from qgis.core import (  # type: ignore
     QgsWkbTypes,
 )
 
-from ..dimensions import ols_dimensions
 from ..reports.runway_summary import summarize_generated_elements
 
 PLUGIN_TAG = "SafeguardingBuilder"
@@ -1388,8 +1387,9 @@ class PhysicalGeometryMixin:
 
     def _centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str) -> float:
         widths = []
+        ruleset = self.get_active_ruleset()
         for runway_type in (type_primary, type_reciprocal):
-            type_abbr = ols_dimensions.get_runway_type_abbr(runway_type)
+            type_abbr = ruleset.classify_runway_type(runway_type)
             if type_abbr == "PA_II_III":
                 widths.append(0.9)
             elif type_abbr == "PA_I" or (type_abbr == "NPA" and arc_num in (3, 4)):
@@ -1410,7 +1410,7 @@ class PhysicalGeometryMixin:
     def _aiming_point_rule(
         self, runway_width: float, lda_m: float, runway_type: str
     ) -> Optional[Tuple[float, float, float, float, str]]:
-        type_abbr = ols_dimensions.get_runway_type_abbr(runway_type)
+        type_abbr = self.get_active_ruleset().classify_runway_type(runway_type)
         if type_abbr in {"PA_I", "PA_II_III"}:
             if lda_m < 800.0:
                 return 150.0, 30.0, 4.0, 6.0, "MOS 8.22(3)"
@@ -1478,7 +1478,7 @@ class PhysicalGeometryMixin:
         self, runway_code_num: int, runway_type: str
     ) -> Optional[Tuple[float, str]]:
         """Return the minimum holding-position distance from Table 6.56(1)."""
-        type_abbr = ols_dimensions.get_runway_type_abbr(runway_type)
+        type_abbr = self.get_active_ruleset().classify_runway_type(runway_type)
         table = {
             1: {"NI": 30.0, "NPA": 40.0, "PA_I": 60.0, "PA_II_III": None},
             2: {"NI": 40.0, "NPA": 40.0, "PA_I": 60.0, "PA_II_III": None},
@@ -1938,7 +1938,7 @@ class PhysicalGeometryMixin:
                             )
                         )
 
-                type_abbr = ols_dimensions.get_runway_type_abbr(runway_type)
+                type_abbr = self.get_active_ruleset().classify_runway_type(runway_type)
                 if type_abbr in {"PA_I", "PA_II_III"}:
                     touchdown_offsets = self._touchdown_zone_offsets(lda_m)
                     midpoint_zone_start = runway_length / 2.0 - 275.0
@@ -2447,7 +2447,7 @@ class PhysicalGeometryMixin:
                     )
                     if landing_pavement_geom:
                         landing_length = rwy_params["length"]
-                        physical_refs = ols_dimensions.get_physical_refs()
+                        physical_refs = self.get_active_ruleset().physical_refs()
                         pavement_ref = physical_refs.get("pavement", "MOS 6.2.3")
                         # Use correct field names: 'rwy', 'desc', 'ref_mos'
                         attributes = {
@@ -2500,7 +2500,7 @@ class PhysicalGeometryMixin:
                             f"Pre-Threshold {primary_desig}",
                         )
                         if geom:
-                            physical_refs = ols_dimensions.get_physical_refs()
+                            physical_refs = self.get_active_ruleset().physical_refs()
                             pavement_ref = physical_refs.get("pavement", "MOS 6.04")
                             # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
                             attributes = {
@@ -2539,7 +2539,7 @@ class PhysicalGeometryMixin:
                             f"Pre-Threshold {reciprocal_desig}",
                         )
                         if geom:
-                            physical_refs = ols_dimensions.get_physical_refs()
+                            physical_refs = self.get_active_ruleset().physical_refs()
                             pavement_ref = physical_refs.get("pavement", "MOS 6.04")
                             # Use correct field names: 'rwy', 'desc', 'ref_mos', and add 'end_desig'
                             attributes = {
@@ -2649,7 +2649,7 @@ class PhysicalGeometryMixin:
                 outer_end_l = phys_end_l.project(shoulder_width, rwy_params["azimuth_perp_l"])
                 outer_end_r = phys_end_r.project(shoulder_width, rwy_params["azimuth_perp_r"])
 
-                physical_refs = ols_dimensions.get_physical_refs()
+                physical_refs = self.get_active_ruleset().physical_refs()
                 shoulder_ref = physical_refs.get("shoulder", "MOS 6.2.4")
                 # Use correct field names: 'rwy', 'desc', 'ref_mos'
                 shoulder_attrs = {
@@ -2715,10 +2715,11 @@ class PhysicalGeometryMixin:
         try:
             arc_num_val = runway_data.get("arc_num")
             arc_num = int(arc_num_val) if arc_num_val is not None else 0
-            type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type1"))
+            ruleset = self.get_active_ruleset()
+            type1_abbr = ruleset.classify_runway_type(runway_data.get("type1"))
             runway_width_for_strip = runway_data.get("width")
 
-            strip_dims = ols_dimensions.get_strip_params(arc_num, type1_abbr, runway_width_for_strip)
+            strip_dims = ruleset.strip_parameters(arc_num, type1_abbr, runway_width_for_strip)
             runway_data["calculated_strip_dims"] = strip_dims
 
             if strip_dims is None:
@@ -2892,9 +2893,10 @@ class PhysicalGeometryMixin:
 
         # --- 4. RESAs ---
         try:
-            type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type1"))
-            type2_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type2"))
-            resa_dims = ols_dimensions.get_resa_params(int(runway_data.get("arc_num", 0)), type1_abbr, type2_abbr)
+            ruleset = self.get_active_ruleset()
+            type1_abbr = ruleset.classify_runway_type(runway_data.get("type1"))
+            type2_abbr = ruleset.classify_runway_type(runway_data.get("type2"))
+            resa_dims = ruleset.resa_parameters(int(runway_data.get("arc_num", 0)), type1_abbr, type2_abbr)
 
             if (
                 resa_dims

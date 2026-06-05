@@ -43,8 +43,9 @@ from .guidelines.simple import SimpleGuidelinesMixin
 from .guidelines.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
-from .dimensions import ols_dimensions
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
+from .rulesets.context import RulesetContext
+from .rulesets.registry import get_ruleset_profile
 
 
 try:
@@ -99,6 +100,11 @@ class SafeguardingBuilder(
         self.contour_intervals: Dict[str, float] = {}
         self.generate_controlling_ols: bool = True
         self.debug_logging: bool = False
+        self.ruleset = get_ruleset_profile()
+        self.ruleset_context = RulesetContext(
+            aerodrome_standard=self.ruleset,
+            supplementary_frameworks=("nasf_aus", "cns_bra_aus", "met_station_aus"),
+        )
 
         self._init_locale()
 
@@ -169,6 +175,10 @@ class SafeguardingBuilder(
             return bool(crs.isGeographic())
         except Exception:
             return False
+
+    def get_active_ruleset(self):
+        """Return the active ruleset profile, defaulting to MOS139."""
+        return getattr(self, "ruleset", get_ruleset_profile())
 
     def add_action(
         self,
@@ -555,6 +565,11 @@ class SafeguardingBuilder(
         self.dissolve_output = input_data.get("dissolve_output", False)
         self.contour_intervals = input_data.get("contour_intervals", {})
         self.generate_controlling_ols = bool(input_data.get("generate_controlling_ols", True))
+        self.ruleset = get_ruleset_profile(input_data.get("ruleset"))
+        self.ruleset_context = RulesetContext(
+            aerodrome_standard=self.ruleset,
+            supplementary_frameworks=("nasf_aus", "cns_bra_aus", "met_station_aus"),
+        )
 
         icao_code = input_data.get("icao_code", "UNKNOWN")
         arp_point = input_data.get("arp_point")
@@ -576,7 +591,8 @@ class SafeguardingBuilder(
             f"ARP={'yes' if arp_point is not None else 'no'}, "
             f"MET={'yes' if met_point is not None else 'no'}, "
             f"AGL={'enabled' if agl_options.get('enabled') else 'disabled'}, "
-            f"CNS={len(cns_input_list)}, runways={len(runway_input_list)}."
+            f"CNS={len(cns_input_list)}, runways={len(runway_input_list)}, "
+            f"ruleset={self.ruleset.id}."
         )
 
         if not runway_input_list:
@@ -1154,8 +1170,9 @@ class SafeguardingBuilder(
         except (TypeError, ValueError):
             arc_num = 0
 
-        type1_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type1"))
-        type2_abbr = ols_dimensions.get_runway_type_abbr(runway_data.get("type2"))
+        ruleset = self.get_active_ruleset()
+        type1_abbr = ruleset.classify_runway_type(runway_data.get("type1"))
+        type2_abbr = ruleset.classify_runway_type(runway_data.get("type2"))
         is_instrument_runway = type1_abbr in {"NPA", "PA_I", "PA_II_III"} or type2_abbr in {
             "NPA",
             "PA_I",
@@ -1164,7 +1181,7 @@ class SafeguardingBuilder(
 
         strip_dims = runway_data.get("calculated_strip_dims")
         if not strip_dims:
-            strip_dims = ols_dimensions.get_strip_params(arc_num, type1_abbr, runway_width or None)
+            strip_dims = ruleset.strip_parameters(arc_num, type1_abbr, runway_width or None)
             runway_data["calculated_strip_dims"] = strip_dims
 
         strip_extension = self._non_negative_float((strip_dims or {}).get("extension_length"), 0.0)

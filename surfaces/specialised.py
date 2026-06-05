@@ -15,7 +15,6 @@ from qgis.core import (  # type: ignore
     QgsMessageLog,
 )
 
-from ..dimensions import ols_dimensions
 from ..guidelines.guideline_constants import RAOA_MOS_REF_VAL, MOS_REF_TAXIWAY_SEPARATION
 
 PLUGIN_TAG = "SafeguardingBuilder"
@@ -225,7 +224,7 @@ class SpecialisedSurfacesMixin:
         governing_type_str = type_order[max(idx1, idx2)]
 
         # Get Offset Parameter
-        offset_params = ols_dimensions.get_taxiway_separation_offset(arc_num, arc_let, governing_type_str)
+        offset_params = self.get_active_ruleset().taxiway_separation_offset(arc_num, arc_let, governing_type_str)
         if not offset_params:
             QgsMessageLog.logMessage(
                 f"Skipping Taxiway Sep for {runway_name}: No offset parameters found for classification (ARC={arc_num}, Let='{arc_let}', Type='{governing_type_str}').",
