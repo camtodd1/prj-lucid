@@ -10,6 +10,59 @@ from rulesets.registry import (
     normalize_ruleset_id,
 )
 
+REQUIRED_PROFILE_METHODS = [
+    "classify_runway_type",
+    "precision_type_codes",
+    "physical_refs",
+    "strip_parameters",
+    "resa_parameters",
+    "ihs_base_height",
+    "ols_parameters",
+    "taxiway_separation_offset",
+    "centreline_marking_width",
+    "threshold_marking_params",
+    "aiming_point_rule",
+    "touchdown_zone_offsets",
+    "runway_holding_position_rule",
+    "agl_value",
+    "runway_type_supports_agl",
+    "runway_is_precision",
+    "runway_edge_spacing_for_end",
+    "threshold_light_count_for_end",
+    "runway_end_light_count_for_end",
+    "temp_displaced_threshold_lights_per_side",
+    "runway_centreline_required",
+    "runway_centreline_recommended",
+    "runway_centreline_spacing",
+    "approach_profile_for_end",
+]
+
+REQUIRED_SERVICE_METHODS = {
+    "classification": ["classify_runway_type", "precision_type_codes"],
+    "ols": ["ihs_base_height", "parameters"],
+    "physical": ["refs", "strip_parameters", "resa_parameters", "taxiway_separation_offset"],
+    "markings": [
+        "centreline_marking_width",
+        "threshold_marking_params",
+        "aiming_point_rule",
+        "touchdown_zone_offsets",
+        "runway_holding_position_rule",
+    ],
+    "lighting": [
+        "value",
+        "runway_type_supports_agl",
+        "runway_is_precision",
+        "runway_edge_spacing_for_end",
+        "threshold_light_count_for_end",
+        "runway_end_light_count_for_end",
+        "temp_displaced_threshold_lights_per_side",
+        "runway_centreline_required",
+        "runway_centreline_recommended",
+        "runway_centreline_spacing",
+        "approach_profile_for_end",
+    ],
+}
+
 
 class RulesetRegistryTest(unittest.TestCase):
     def test_default_ruleset_is_mos139_2019(self):
@@ -27,6 +80,21 @@ class RulesetRegistryTest(unittest.TestCase):
         profile = get_ruleset_profile("mos139_2019")
         self.assertTrue(profile.supports("ols.airport_wide"))
         self.assertEqual(profile.capability_status("ols.controlling_lower_envelope"), "experimental")
+
+    def test_registered_profiles_expose_ruleset_contract(self):
+        for profile in iter_ruleset_profiles():
+            with self.subTest(profile=profile.id):
+                for method_name in REQUIRED_PROFILE_METHODS:
+                    self.assertTrue(callable(getattr(profile, method_name, None)), method_name)
+
+    def test_registered_profiles_expose_grouped_services(self):
+        for profile in iter_ruleset_profiles():
+            with self.subTest(profile=profile.id):
+                for service_name, method_names in REQUIRED_SERVICE_METHODS.items():
+                    service = getattr(profile, service_name, None)
+                    self.assertIsNotNone(service, service_name)
+                    for method_name in method_names:
+                        self.assertTrue(callable(getattr(service, method_name, None)), f"{service_name}.{method_name}")
 
     def test_mos139_adapter_matches_ruleset_ols_helpers(self):
         profile = get_ruleset_profile("mos139_2019")
