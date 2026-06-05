@@ -49,6 +49,65 @@ class RulesetRegistryTest(unittest.TestCase):
             ols_dimensions.get_taxiway_separation_offset(3, "C", "Precision Approach CAT I"),
         )
 
+    def test_mos139_threshold_marking_params(self):
+        profile = get_ruleset_profile("mos139_2019")
+        self.assertEqual(profile.threshold_marking_params(30.0), (8, 1.5))
+        self.assertEqual(profile.threshold_marking_params(45.0), (12, 1.7))
+        self.assertEqual(profile.threshold_marking_params(30.005), (8, 1.5))
+        self.assertIsNone(profile.threshold_marking_params(40.0))
+
+    def test_mos139_centreline_marking_width(self):
+        profile = get_ruleset_profile("mos139_2019")
+        self.assertEqual(
+            profile.centreline_marking_width(4, "Non-Precision Approach (NPA)", "Non-Instrument (NI)"),
+            0.45,
+        )
+        self.assertEqual(
+            profile.centreline_marking_width(2, "Non-Precision Approach (NPA)", "Non-Instrument (NI)"),
+            0.3,
+        )
+        self.assertEqual(
+            profile.centreline_marking_width(3, "Precision Approach CAT II/III", "Precision Approach CAT I"),
+            0.9,
+        )
+
+    def test_mos139_aiming_point_rule(self):
+        profile = get_ruleset_profile("mos139_2019")
+        self.assertEqual(
+            profile.aiming_point_rule(45.0, 700.0, "Precision Approach CAT I"),
+            (150.0, 30.0, 4.0, 6.0, "MOS 8.22(3)"),
+        )
+        self.assertEqual(
+            profile.aiming_point_rule(45.0, 2400.0, "Precision Approach CAT I"),
+            (400.0, 45.0, 9.0, 23.0, "MOS 8.22(3)"),
+        )
+        self.assertEqual(
+            profile.aiming_point_rule(30.0, 1800.0, "Non-Instrument (NI)"),
+            (300.0, 45.0, 6.0, 17.0, "MOS 8.22(8)"),
+        )
+        self.assertIsNone(profile.aiming_point_rule(23.0, 1800.0, "Non-Instrument (NI)"))
+
+    def test_mos139_touchdown_zone_offsets(self):
+        profile = get_ruleset_profile("mos139_2019")
+        self.assertEqual(profile.touchdown_zone_offsets(800.0), [300.0])
+        self.assertEqual(profile.touchdown_zone_offsets(1200.0), [150.0, 300.0, 450.0, 600.0])
+        self.assertEqual(
+            profile.touchdown_zone_offsets(2400.0),
+            [150.0, 300.0, 450.0, 600.0, 750.0, 900.0],
+        )
+
+    def test_mos139_runway_holding_position_rule(self):
+        profile = get_ruleset_profile("mos139_2019")
+        self.assertEqual(
+            profile.runway_holding_position_rule(3, "Precision Approach CAT I"),
+            (90.0, "MOS 8.39(7); Table 6.56(1)"),
+        )
+        self.assertEqual(
+            profile.runway_holding_position_rule(1, "Non-Precision Approach (NPA)"),
+            (40.0, "MOS 8.39(7); Table 6.56(1)"),
+        )
+        self.assertIsNone(profile.runway_holding_position_rule(1, "Precision Approach CAT II/III"))
+
     def test_registry_has_ui_profiles(self):
         profiles = list(iter_ruleset_profiles())
         self.assertGreaterEqual(len(profiles), 1)

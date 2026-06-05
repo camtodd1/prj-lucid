@@ -1,6 +1,6 @@
 """CASA Part 139 MOS 2019 profile metadata."""
 
-from typing import Optional
+from typing import List, Optional, Tuple
 
 from ..base import RulesetProfile, capability_map
 
@@ -36,6 +36,78 @@ class Mos139RulesetProfile(RulesetProfile):
 
     def taxiway_separation_offset(self, arc_num: int, arc_let: Optional[str], runway_type: Optional[str]):
         return ols_dimensions.get_taxiway_separation_offset(arc_num, arc_let, runway_type)
+
+    def threshold_marking_params(self, runway_width: float) -> Optional[Tuple[int, float]]:
+        table = {
+            18.0: (4, 1.5),
+            23.0: (6, 1.5),
+            30.0: (8, 1.5),
+            45.0: (12, 1.7),
+            60.0: (16, 1.7),
+        }
+        for width_m, params in table.items():
+            if abs(float(runway_width) - width_m) <= 0.01:
+                return params
+        return None
+
+    def centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str) -> float:
+        widths = []
+        for runway_type in (type_primary, type_reciprocal):
+            type_abbr = self.classify_runway_type(runway_type)
+            if type_abbr == "PA_II_III":
+                widths.append(0.9)
+            elif type_abbr == "PA_I" or (type_abbr == "NPA" and arc_num in (3, 4)):
+                widths.append(0.45)
+            else:
+                widths.append(0.3)
+        return max(widths) if widths else 0.3
+
+    def aiming_point_rule(
+        self, runway_width: float, lda_m: float, runway_type: str
+    ) -> Optional[Tuple[float, float, float, float, str]]:
+        type_abbr = self.classify_runway_type(runway_type)
+        if type_abbr in {"PA_I", "PA_II_III"}:
+            if lda_m < 800.0:
+                return 150.0, 30.0, 4.0, 6.0, "MOS 8.22(3)"
+            if lda_m < 1200.0:
+                return 250.0, 30.0, 6.0, 9.0, "MOS 8.22(3)"
+            if lda_m < 2400.0:
+                return 300.0, 45.0, 9.0, 23.0, "MOS 8.22(3)"
+            return 400.0, 45.0, 9.0, 23.0, "MOS 8.22(3)"
+
+        if abs(runway_width - 30.0) <= 0.01:
+            return 300.0, 45.0, 6.0, 17.0, "MOS 8.22(8)"
+        if runway_width >= 45.0:
+            return 300.0, 45.0, 9.0, 23.0, "MOS 8.22(8)"
+        return None
+
+    def touchdown_zone_offsets(self, lda_m: float) -> List[float]:
+        if lda_m < 900.0:
+            return [300.0]
+        if lda_m < 1200.0:
+            return [150.0, 450.0]
+        if lda_m < 1500.0:
+            return [150.0, 300.0, 450.0, 600.0]
+        if lda_m < 2400.0:
+            return [150.0, 300.0, 450.0, 600.0, 750.0]
+        return [150.0, 300.0, 450.0, 600.0, 750.0, 900.0]
+
+    def runway_holding_position_rule(
+        self, runway_code_num: int, runway_type: str
+    ) -> Optional[Tuple[float, str]]:
+        type_abbr = self.classify_runway_type(runway_type)
+        table = {
+            1: {"NI": 30.0, "NPA": 40.0, "PA_I": 60.0, "PA_II_III": None},
+            2: {"NI": 40.0, "NPA": 40.0, "PA_I": 60.0, "PA_II_III": None},
+            3: {"NI": 75.0, "NPA": 75.0, "PA_I": 90.0, "PA_II_III": 90.0},
+            4: {"NI": 75.0, "NPA": 75.0, "PA_I": 90.0, "PA_II_III": 90.0},
+        }
+        if runway_code_num not in table or type_abbr not in table[runway_code_num]:
+            return None
+        distance = table[runway_code_num][type_abbr]
+        if distance is None:
+            return None
+        return distance, "MOS 8.39(7); Table 6.56(1)"
 
 
 MOS139_PROFILE = Mos139RulesetProfile(
