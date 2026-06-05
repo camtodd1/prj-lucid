@@ -1424,6 +1424,7 @@ class SafeguardingBuilder(
         )
         framework = self.get_active_framework()
         external_group = self._ensure_layer_group(main_group, framework.safeguarding_group_name())
+        debug_group = self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
         if (
             reference_group is None
             or infrastructure_group is None
@@ -1431,6 +1432,7 @@ class SafeguardingBuilder(
             or protected_airspace_group is None
             or ols_surfaces_group is None
             or external_group is None
+            or debug_group is None
         ):
             return
 
@@ -1484,6 +1486,8 @@ class SafeguardingBuilder(
         for group_name in framework.guideline_group_names(include_cns=True):
             self._merge_or_move_direct_group(main_group, self.tr(group_name), external_group)
 
+        self._repair_debug_development_layer_tree(main_group, debug_group)
+
         legacy_guideline_f_name = self.tr("Guideline F - Airspace / OLS")
         self._merge_or_move_direct_group(main_group, legacy_guideline_f_name, ols_surfaces_group)
         legacy_guideline_f_group = self._find_direct_child_group(ols_surfaces_group, legacy_guideline_f_name)
@@ -1505,6 +1509,32 @@ class SafeguardingBuilder(
         for group_name in self.get_active_framework().guideline_f_subgroup_names().values():
             self._merge_or_move_direct_group(main_group, self.tr(group_name), ols_surfaces_group)
         self._repair_guideline_f_layer_tree(ols_surfaces_group, extra_source_groups=[main_group])
+        self._repair_debug_development_layer_tree(main_group, debug_group)
+
+    def _is_development_poc_layer(self, node: QgsLayerTreeLayer) -> bool:
+        """Return True for proof-of-concept output layers."""
+        layer = node.layer()
+        layer_name = layer.name() if layer is not None else node.name()
+        return "POC" in layer_name
+
+    def _repair_debug_development_layer_tree(
+        self,
+        root_group: QgsLayerTreeGroup,
+        debug_group: QgsLayerTreeGroup,
+    ) -> None:
+        """Move proof-of-concept layers into the debug/development group."""
+        if root_group is None or debug_group is None:
+            return
+
+        def visit(group: QgsLayerTreeGroup) -> None:
+            for child in list(group.children()):
+                if isinstance(child, QgsLayerTreeLayer):
+                    if group != debug_group and self._is_development_poc_layer(child):
+                        self._move_layer_tree_node(child, debug_group)
+                elif isinstance(child, QgsLayerTreeGroup) and child != debug_group:
+                    visit(child)
+
+        visit(root_group)
 
     def _repair_guideline_f_layer_tree(
         self,
@@ -1544,6 +1574,8 @@ class SafeguardingBuilder(
         }
 
         def ols_destination_for_node(node: QgsLayerTreeLayer) -> Optional[QgsLayerTreeGroup]:
+            if self._is_development_poc_layer(node):
+                return None
             layer = node.layer()
             layer_name = layer.name() if layer is not None else node.name()
             style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
