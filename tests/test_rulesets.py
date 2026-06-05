@@ -1,6 +1,8 @@
 import unittest
 
-from dimensions import agl_dimensions, ols_dimensions
+from dimensions import agl_dimensions as legacy_agl_dimensions
+from dimensions import ols_dimensions as legacy_ols_dimensions
+from rulesets.mos139 import lighting, ols_dimensions
 from rulesets.registry import (
     DEFAULT_RULESET_ID,
     get_ruleset_profile,
@@ -26,7 +28,7 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertTrue(profile.supports("ols.airport_wide"))
         self.assertEqual(profile.capability_status("ols.controlling_lower_envelope"), "experimental")
 
-    def test_mos139_adapter_matches_legacy_ols_helpers(self):
+    def test_mos139_adapter_matches_ruleset_ols_helpers(self):
         profile = get_ruleset_profile("mos139_2019")
         self.assertEqual(
             profile.classify_runway_type("Precision Approach CAT I"),
@@ -108,7 +110,7 @@ class RulesetRegistryTest(unittest.TestCase):
         )
         self.assertIsNone(profile.runway_holding_position_rule(1, "Precision Approach CAT II/III"))
 
-    def test_mos139_adapter_matches_legacy_agl_helpers(self):
+    def test_mos139_adapter_matches_ruleset_agl_helpers(self):
         profile = get_ruleset_profile("mos139_2019")
         runway_type = "Precision Approach CAT I"
         for constant_name in [
@@ -122,44 +124,58 @@ class RulesetRegistryTest(unittest.TestCase):
             "LIGHT_COLOUR_VARIABLE_WHITE",
             "LIGHT_COLOUR_FLASHING_WHITE",
         ]:
-            self.assertEqual(profile.agl_value(constant_name), getattr(agl_dimensions, constant_name))
+            self.assertEqual(profile.agl_value(constant_name), getattr(lighting, constant_name))
         self.assertEqual(
             profile.runway_type_supports_agl(runway_type),
-            agl_dimensions.runway_type_supports_agl(runway_type),
+            lighting.runway_type_supports_agl(runway_type),
         )
-        self.assertEqual(profile.runway_is_precision(runway_type), agl_dimensions.runway_is_precision(runway_type))
+        self.assertEqual(profile.runway_is_precision(runway_type), lighting.runway_is_precision(runway_type))
         self.assertEqual(
             profile.runway_edge_spacing_for_end("Non-Precision Approach (NPA)"),
-            agl_dimensions.runway_edge_spacing_for_end("Non-Precision Approach (NPA)"),
+            lighting.runway_edge_spacing_for_end("Non-Precision Approach (NPA)"),
         )
         self.assertEqual(
             profile.threshold_light_count_for_end(runway_type, 45.0),
-            agl_dimensions.threshold_light_count_for_end(runway_type, 45.0),
+            lighting.threshold_light_count_for_end(runway_type, 45.0),
         )
         self.assertEqual(
             profile.runway_end_light_count_for_end("Precision Approach CAT II/III", 45.0),
-            agl_dimensions.runway_end_light_count_for_end("Precision Approach CAT II/III", 45.0),
+            lighting.runway_end_light_count_for_end("Precision Approach CAT II/III", 45.0),
         )
         self.assertEqual(
             profile.temp_displaced_threshold_lights_per_side(30.0),
-            agl_dimensions.temp_displaced_threshold_lights_per_side(30.0),
+            lighting.temp_displaced_threshold_lights_per_side(30.0),
         )
         self.assertEqual(
             profile.runway_centreline_required("Non-Instrument (NI)", "Precision Approach CAT II/III", False),
-            agl_dimensions.runway_centreline_required("Non-Instrument (NI)", "Precision Approach CAT II/III", False),
+            lighting.runway_centreline_required("Non-Instrument (NI)", "Precision Approach CAT II/III", False),
         )
         self.assertEqual(
             profile.runway_centreline_recommended("Precision Approach CAT I", "Non-Instrument (NI)", 60.0),
-            agl_dimensions.runway_centreline_recommended("Precision Approach CAT I", "Non-Instrument (NI)", 60.0),
+            lighting.runway_centreline_recommended("Precision Approach CAT I", "Non-Instrument (NI)", 60.0),
         )
-        self.assertEqual(profile.runway_centreline_spacing(True), agl_dimensions.runway_centreline_spacing(True))
+        self.assertEqual(profile.runway_centreline_spacing(True), lighting.runway_centreline_spacing(True))
         self.assertEqual(
             profile.approach_profile_for_end("Precision Approach CAT II/III"),
-            agl_dimensions.approach_profile_for_end("Precision Approach CAT II/III"),
+            lighting.approach_profile_for_end("Precision Approach CAT II/III"),
         )
         self.assertEqual(
             profile.approach_profile_for_end("Non-Instrument (NI)"),
-            agl_dimensions.approach_profile_for_end("Non-Instrument (NI)"),
+            lighting.approach_profile_for_end("Non-Instrument (NI)"),
+        )
+
+    def test_legacy_dimension_shims_forward_to_mos139_sources(self):
+        self.assertEqual(
+            legacy_ols_dimensions.get_runway_type_abbr("Precision Approach CAT I"),
+            ols_dimensions.get_runway_type_abbr("Precision Approach CAT I"),
+        )
+        self.assertEqual(
+            legacy_agl_dimensions.RUNWAY_LIGHTING_MIN_WIDTH_M,
+            lighting.RUNWAY_LIGHTING_MIN_WIDTH_M,
+        )
+        self.assertEqual(
+            legacy_agl_dimensions.approach_profile_for_end("Precision Approach CAT II/III"),
+            lighting.approach_profile_for_end("Precision Approach CAT II/III"),
         )
 
     def test_registry_has_ui_profiles(self):
