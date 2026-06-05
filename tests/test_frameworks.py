@@ -6,9 +6,13 @@ from frameworks.registry import (
     iter_framework_profiles,
     normalize_framework_id,
 )
+from core.constants import LAYER_FEATURE_BATCH_SIZE
+from guidelines import guideline_constants
+from guidelines.ols_constants import CONICAL_CONTOUR_INTERVAL
 from rulesets.registry import get_ruleset_profile
 from rulesets.context import RulesetContext
 from dimensions import cns_dimensions
+from surfaces.constants import RAOA_MOS_REF_VAL
 
 
 class FrameworkRegistryTest(unittest.TestCase):
@@ -125,6 +129,15 @@ class FrameworkRegistryTest(unittest.TestCase):
         framework_specs = get_framework_profile("nasf_aus").cns_spec("VHF Omni-Directional Range (VOR)")
 
         self.assertEqual(legacy_specs, framework_specs)
+
+    def test_legacy_guideline_constants_shim_uses_new_owners(self):
+        self.assertEqual(guideline_constants.LAYER_FEATURE_BATCH_SIZE, LAYER_FEATURE_BATCH_SIZE)
+        self.assertEqual(guideline_constants.RAOA_MOS_REF_VAL, RAOA_MOS_REF_VAL)
+        self.assertEqual(guideline_constants.CONICAL_CONTOUR_INTERVAL, CONICAL_CONTOUR_INTERVAL)
+        self.assertEqual(
+            guideline_constants.GUIDELINE_E_ZONE_PARAMS,
+            get_framework_profile("nasf_aus").lighting_control_parameters()["zones"],
+        )
 
 
 if __name__ == "__main__":

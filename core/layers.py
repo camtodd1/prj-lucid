@@ -31,7 +31,7 @@ from qgis.core import (  # type: ignore
     QgsWkbTypes,
 )
 
-from ..guidelines.guideline_constants import LAYER_FEATURE_BATCH_SIZE
+from .constants import LAYER_FEATURE_BATCH_SIZE
 
 PLUGIN_TAG = "SafeguardingBuilder"
 

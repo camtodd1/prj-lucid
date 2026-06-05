@@ -23,7 +23,7 @@ from qgis.core import (  # type: ignore
     QgsWkbTypes,
 )
 
-from .guideline_constants import (
+from .ols_constants import (
     APPROACH_CONTOUR_INTERVAL,
     CONICAL_CONTOUR_INTERVAL,
     TOCS_CONTOUR_INTERVAL,

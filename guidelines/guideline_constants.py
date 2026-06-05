@@ -1,60 +1,22 @@
 # -*- coding: utf-8 -*-
-"""Shared constants for guideline and safeguarding surface generation.
-
-NASF-owned values are re-exported here for compatibility while callers move to
-framework profile services.
-"""
+"""Deprecated compatibility re-exports for historical guideline constants."""
 
 try:
-    from ..frameworks.nasf.guidelines import (
-        GUIDELINE_B_FAR_EDGE_OFFSET,
-        GUIDELINE_B_ZONE_HALF_WIDTH,
-        GUIDELINE_B_ZONE_LENGTH_BACKWARD,
-        GUIDELINE_C_BUFFER_SEGMENTS,
-        GUIDELINE_C_RADIUS_A_M,
-        GUIDELINE_C_RADIUS_B_M,
-        GUIDELINE_C_RADIUS_C_M,
-        GUIDELINE_D_BUFFER_SEGMENTS,
-        GUIDELINE_D_TURBINE_RADIUS_M,
-        GUIDELINE_E_ZONE_ORDER,
-        GUIDELINE_E_ZONE_PARAMS,
-        GUIDELINE_I_MOS_REF_VAL,
-        GUIDELINE_I_NASF_REF_VAL,
-        GUIDELINE_I_PSA_INNER_WIDTH,
-        GUIDELINE_I_PSA_LENGTH,
-        GUIDELINE_I_PSA_OUTER_WIDTH,
-        MOS_REF_GUIDELINE_E,
-        NASF_REF_GUIDELINE_E,
-    )
+    from ..core import constants as _core_constants
+    from ..frameworks.nasf import guidelines as _nasf_guidelines
+    from ..surfaces import constants as _surface_constants
+    from . import ols_constants as _ols_constants
 except ImportError:
-    from frameworks.nasf.guidelines import (
-        GUIDELINE_B_FAR_EDGE_OFFSET,
-        GUIDELINE_B_ZONE_HALF_WIDTH,
-        GUIDELINE_B_ZONE_LENGTH_BACKWARD,
-        GUIDELINE_C_BUFFER_SEGMENTS,
-        GUIDELINE_C_RADIUS_A_M,
-        GUIDELINE_C_RADIUS_B_M,
-        GUIDELINE_C_RADIUS_C_M,
-        GUIDELINE_D_BUFFER_SEGMENTS,
-        GUIDELINE_D_TURBINE_RADIUS_M,
-        GUIDELINE_E_ZONE_ORDER,
-        GUIDELINE_E_ZONE_PARAMS,
-        GUIDELINE_I_MOS_REF_VAL,
-        GUIDELINE_I_NASF_REF_VAL,
-        GUIDELINE_I_PSA_INNER_WIDTH,
-        GUIDELINE_I_PSA_LENGTH,
-        GUIDELINE_I_PSA_OUTER_WIDTH,
-        MOS_REF_GUIDELINE_E,
-        NASF_REF_GUIDELINE_E,
-    )
+    from core import constants as _core_constants
+    from frameworks.nasf import guidelines as _nasf_guidelines
+    from guidelines import ols_constants as _ols_constants
+    from surfaces import constants as _surface_constants
 
+_OWNER_MODULES = (_core_constants, _nasf_guidelines, _ols_constants, _surface_constants)
+__all__ = sorted({name for module in _OWNER_MODULES for name in getattr(module, "__all__", ())})
 
-LAYER_FEATURE_BATCH_SIZE = 100
+for _module in _OWNER_MODULES:
+    for _name in getattr(_module, "__all__", ()):
+        globals()[_name] = getattr(_module, _name)
 
-RAOA_MOS_REF_VAL = "MOS 6.20"
-MOS_REF_TAXIWAY_SEPARATION = "MOS 6.53"
-
-CONICAL_CONTOUR_INTERVAL = 10.0
-APPROACH_CONTOUR_INTERVAL = 10.0
-TOCS_CONTOUR_INTERVAL = 10.0
-TRANSITIONAL_CONTOUR_INTERVAL = 10.0
+del _core_constants, _module, _name, _nasf_guidelines, _ols_constants, _OWNER_MODULES, _surface_constants
