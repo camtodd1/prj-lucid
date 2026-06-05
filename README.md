@@ -128,10 +128,13 @@ surfaces/airfield_ground_lighting.py
                                  coincident-light resolution.
 surfaces/specialised.py          Specialised surfaces such as RAOA and taxiway
                                  separation offsets.
-dimensions/ols_dimensions.py     CASA MOS-style physical and OLS dimensions.
 dimensions/cns_dimensions.py     CNS building restricted area dimensions.
-dimensions/agl_dimensions.py     MOS-derived AGL dimensions, trigger helpers,
-                                 and approach lighting profiles.
+dimensions/ols_dimensions.py     Legacy compatibility shim for MOS139 OLS
+                                 dimensions.
+dimensions/agl_dimensions.py     Legacy compatibility shim for MOS139 AGL
+                                 dimensions.
+rulesets/mos139/                Current MOS139 metadata, OLS, physical,
+                                 marking, and lighting policy sources.
 docs/                            Planning notes, implementation matrices,
                                  TODOs, and reference mapping files.
 styles/*.qml                     QGIS layer styling files.
@@ -144,7 +147,7 @@ resources.qrc                    Qt resource manifest.
 After editing Python modules, run a syntax check from the plugin directory:
 
 ```bash
-python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols_guideline.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/guideline_constants.py dimensions/*.py
+python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols_guideline.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/guideline_constants.py dimensions/*.py rulesets/*.py rulesets/mos139/*.py
 ```
 
 For AGL rule changes, also review `docs/airfield_ground_lighting_rules.md`.
@@ -165,7 +168,7 @@ QGIS-compatible Qt resource compiler used by your local QGIS/PyQt installation.
 - The plugin expects the QGIS project CRS to be projected and metre-based.
 - Guideline A and Guideline H detailed generation are not fully implemented.
 - Some specialised CNS and OLS cases depend on the available parameter tables in
-  `dimensions/cns_dimensions.py` and `dimensions/ols_dimensions.py`.
+  `dimensions/cns_dimensions.py` and `rulesets/mos139/ols_dimensions.py`.
 - AGL generation models plan-view light locations and display characteristics.
   It does not validate photometric intensity, vertical beam distribution,
   circuiting, power supply, monitoring, serviceability, or obstacle screening.

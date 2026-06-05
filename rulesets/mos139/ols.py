@@ -3,9 +3,9 @@
 from typing import Optional
 
 try:
-    from ...dimensions import ols_dimensions
+    from . import ols_dimensions
 except ImportError:
-    from dimensions import ols_dimensions  # type: ignore
+    from rulesets.mos139 import ols_dimensions  # type: ignore
 
 
 def classify_runway_type(runway_type: Optional[str]) -> str:
