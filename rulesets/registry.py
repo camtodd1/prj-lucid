@@ -3,7 +3,7 @@
 from typing import Dict, Iterable, Mapping, Optional
 
 from .base import RulesetProfile
-from .mos139.profile import MOS139_PROFILE
+from .mos139 import MOS139_PROFILE
 
 DEFAULT_RULESET_ID = MOS139_PROFILE.id
 

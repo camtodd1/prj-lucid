@@ -16,54 +16,6 @@ from qgis.core import (  # type: ignore
     QgsPointXY,
 )
 
-from ..dimensions.agl_dimensions import (
-    CAT_II_III_CROSSBAR_MAX_SPACING_M,
-    CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M,
-    CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M,
-    LIGHT_COLOUR_FLASHING_WHITE,
-    LIGHT_COLOUR_GREEN,
-    LIGHT_COLOUR_RED,
-    LIGHT_COLOUR_VARIABLE_WHITE,
-    LIGHT_COLOUR_WHITE,
-    LIGHT_COLOUR_YELLOW,
-    MOS_REF_DISPLACED_THRESHOLD_EDGE,
-    MOS_REF_RUNWAY_EDGE,
-    MOS_REF_RUNWAY_CENTRELINE,
-    MOS_REF_RUNWAY_END,
-    MOS_REF_RTIL,
-    MOS_REF_STOPWAY,
-    MOS_REF_TDZ,
-    MOS_REF_TEMP_DISPLACED_THRESHOLD,
-    MOS_REF_THRESHOLD_LOCATION,
-    MOS_REF_THRESHOLD_NON_PRECISION,
-    MOS_REF_THRESHOLD_PRECISION,
-    MOS_REF_THRESHOLD_WING_BARS,
-    RUNWAY_LIGHTING_MIN_WIDTH_M,
-    RUNWAY_CENTRELINE_MAX_OFFSET_M,
-    RTIL_DEFAULT_LATERAL_FROM_EDGE_LIGHTS_M,
-    STOPWAY_END_MIN_LIGHTS,
-    TDZ_BARRETTE_LIGHTS,
-    TDZ_BARRETTE_SPACING_M,
-    TDZ_FIRST_ROW_OFFSET_M,
-    TDZ_INNER_OFFSET_M,
-    TDZ_LENGTH_M,
-    TDZ_MARKING_LENGTH_M,
-    TDZ_ROW_SPACING_M,
-    TEMP_DISPLACED_THRESHOLD_SPACING_M,
-    THRESHOLD_WING_BAR_LIGHTS_PER_SIDE,
-    THRESHOLD_WING_BAR_SPACING_M,
-    approach_profile_for_end,
-    runway_centreline_required,
-    runway_centreline_recommended,
-    runway_centreline_spacing,
-    runway_edge_spacing_for_end,
-    runway_is_precision,
-    runway_type_supports_agl,
-    temp_displaced_threshold_lights_per_side,
-    runway_end_light_count_for_end,
-    threshold_light_count_for_end,
-)
-
 PLUGIN_TAG = "SafeguardingBuilder"
 AGL_BEAM_OMNIDIRECTIONAL = "omnidirectional"
 AGL_BEAM_UNIDIRECTIONAL = "unidirectional"
@@ -72,6 +24,9 @@ AGL_BEAM_BIDIRECTIONAL = "bidirectional"
 
 class AirfieldGroundLightingMixin:
     """Generate opt-in AGL point layers from runway geometry and lighting inputs."""
+
+    def _agl_rule_value(self, name: str):
+        return self.get_active_ruleset().agl_value(name)
 
     def process_airfield_ground_lighting(
         self,
@@ -89,7 +44,7 @@ class AirfieldGroundLightingMixin:
         threshold_inset_m = float(agl_options.get("threshold_inset_m") or 0.0)
         centreline_offset_m = min(
             float(agl_options.get("centreline_offset_m") or 0.0),
-            RUNWAY_CENTRELINE_MAX_OFFSET_M,
+            self._agl_rule_value("RUNWAY_CENTRELINE_MAX_OFFSET_M"),
         )
         default_approach_spacing_m = float(agl_options.get("approach_spacing_m") or 30.0)
         approach_rows = self._agl_rows_by_runway_end(agl_options.get("approach_lighting", []))
@@ -158,12 +113,13 @@ class AirfieldGroundLightingMixin:
 
         fields = self._agl_fields()
         features: List[QgsFeature] = []
-        lit_half_width = max(float(runway_width), RUNWAY_LIGHTING_MIN_WIDTH_M) / 2.0
+        ruleset = self.get_active_ruleset()
+        lit_half_width = max(float(runway_width), ruleset.agl_value("RUNWAY_LIGHTING_MIN_WIDTH_M")) / 2.0
         primary_desig, reciprocal_desig = self._agl_end_designators(runway_name)
         primary_type = runway_data.get("type1", "")
         reciprocal_type = runway_data.get("type2", "")
-        primary_type_supported = runway_type_supports_agl(primary_type)
-        reciprocal_type_supported = runway_type_supports_agl(reciprocal_type)
+        primary_type_supported = ruleset.runway_type_supports_agl(primary_type)
+        reciprocal_type_supported = ruleset.runway_type_supports_agl(reciprocal_type)
         supported_runway_types = [
             runway_type
             for runway_type, is_supported in (
@@ -187,17 +143,17 @@ class AirfieldGroundLightingMixin:
             physical_endpoints if physical_endpoints is not None else (thr_point, rec_thr_point, params["length"])
         )
         edge_spacing_m = (
-            min(runway_edge_spacing_for_end(runway_type) for runway_type in supported_runway_types)
+            min(ruleset.runway_edge_spacing_for_end(runway_type) for runway_type in supported_runway_types)
             if supported_runway_types
             else 0.0
         )
-        precision_runway = any(runway_is_precision(runway_type) for runway_type in supported_runway_types)
+        precision_runway = any(ruleset.runway_is_precision(runway_type) for runway_type in supported_runway_types)
         low_visibility_operations = bool(approach_rows.get(("__options__", "centreline_low_visibility")))
         primary_precision_edge_characteristics = primary_type_supported and (
-            runway_is_precision(primary_type) or low_visibility_operations
+            ruleset.runway_is_precision(primary_type) or low_visibility_operations
         )
         reciprocal_precision_edge_characteristics = reciprocal_type_supported and (
-            runway_is_precision(reciprocal_type) or low_visibility_operations
+            ruleset.runway_is_precision(reciprocal_type) or low_visibility_operations
         )
         edge_start_offset_m = edge_spacing_m if precision_runway else 0.0
         edge_end_offset_m = edge_spacing_m if precision_runway else 0.0
@@ -273,7 +229,7 @@ class AirfieldGroundLightingMixin:
                 (primary_desig, primary_type, thr_point, params["azimuth_r_p"]),
                 (reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_p_r"]),
             ]:
-                if runway_type_supports_agl(runway_type) and runway_is_precision(runway_type):
+                if ruleset.runway_type_supports_agl(runway_type) and ruleset.runway_is_precision(runway_type):
                     self._append_threshold_wing_bars(
                         features,
                         fields,
@@ -351,13 +307,13 @@ class AirfieldGroundLightingMixin:
             )
 
         centreline_low_visibility = bool(approach_rows.get(("__options__", "centreline_low_visibility")))
-        centreline_required = bool(supported_runway_types) and runway_centreline_required(
+        centreline_required = bool(supported_runway_types) and ruleset.runway_centreline_required(
             primary_type,
             reciprocal_type,
             centreline_low_visibility,
         )
         centreline_recommended = bool(approach_rows.get(("__options__", "cat_i_centreline_lights"))) and (
-            runway_centreline_recommended(primary_type, reciprocal_type, lit_half_width * 2.0)
+            ruleset.runway_centreline_recommended(primary_type, reciprocal_type, lit_half_width * 2.0)
         )
         if approach_rows.get(("__options__", "centreline_lights")) and (centreline_required or centreline_recommended):
             self._append_runway_centreline_lights(
@@ -368,7 +324,7 @@ class AirfieldGroundLightingMixin:
                 params["azimuth_p_r"],
                 params["azimuth_perp_l"],
                 physical_length,
-                runway_centreline_spacing(centreline_low_visibility),
+                ruleset.runway_centreline_spacing(centreline_low_visibility),
                 centreline_offset_m,
             )
 
@@ -377,7 +333,7 @@ class AirfieldGroundLightingMixin:
                 ("primary", primary_desig, primary_type, thr_point, params["azimuth_p_r"]),
                 ("reciprocal", reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_r_p"]),
             ]:
-                if not runway_type_supports_agl(runway_type):
+                if not ruleset.runway_type_supports_agl(runway_type):
                     continue
                 cat_ii_iii = "Precision Approach CAT II/III" in (runway_type or "")
                 cat_i_optional = "Precision Approach CAT I" in (runway_type or "") and approach_rows.get(
@@ -414,10 +370,10 @@ class AirfieldGroundLightingMixin:
             ("primary", primary_desig, primary_type, thr_point, params["azimuth_r_p"]),
             ("reciprocal", reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_p_r"]),
         ]:
-            if not runway_type_supports_agl(runway_type):
+            if not ruleset.runway_type_supports_agl(runway_type):
                 continue
             row = approach_rows.get((runway_index, end_role))
-            profile = approach_profile_for_end(runway_type)
+            profile = ruleset.approach_profile_for_end(runway_type)
             if not row and not profile.get("length_m"):
                 continue
             length_m = float(row.get("length_m") if row else profile.get("length_m") or 0.0)
@@ -493,9 +449,9 @@ class AirfieldGroundLightingMixin:
             reciprocal_colour = self._runway_edge_display_colour(reciprocal_colour_raw, primary_colour_raw)
             colour = self._combined_light_colour(primary_colour, reciprocal_colour)
             ref_mos = (
-                MOS_REF_DISPLACED_THRESHOLD_EDGE
-                if LIGHT_COLOUR_RED in {primary_colour_raw, reciprocal_colour_raw}
-                else MOS_REF_RUNWAY_EDGE
+                self._agl_rule_value("MOS_REF_DISPLACED_THRESHOLD_EDGE")
+                if self._agl_rule_value("LIGHT_COLOUR_RED") in {primary_colour_raw, reciprocal_colour_raw}
+                else self._agl_rule_value("MOS_REF_RUNWAY_EDGE")
             )
             if left is not None and not self._should_omit_runway_edge_light(
                 left, index, "Left", omission_geometries, omitted_indices_by_side
@@ -646,11 +602,12 @@ class AirfieldGroundLightingMixin:
         usable_half_width = max(0.0, half_width - inset_m)
         if usable_half_width <= 0:
             return
-        light_count = threshold_light_count_for_end(runway_type, half_width * 2.0)
+        ruleset = self.get_active_ruleset()
+        light_count = ruleset.threshold_light_count_for_end(runway_type, half_width * 2.0)
         ref_mos = (
-            f"{MOS_REF_THRESHOLD_LOCATION}; {MOS_REF_THRESHOLD_PRECISION}"
-            if runway_is_precision(runway_type)
-            else f"{MOS_REF_THRESHOLD_LOCATION}; {MOS_REF_THRESHOLD_NON_PRECISION}"
+            f"{ruleset.agl_value('MOS_REF_THRESHOLD_LOCATION')}; {ruleset.agl_value('MOS_REF_THRESHOLD_PRECISION')}"
+            if ruleset.runway_is_precision(runway_type)
+            else f"{ruleset.agl_value('MOS_REF_THRESHOLD_LOCATION')}; {ruleset.agl_value('MOS_REF_THRESHOLD_NON_PRECISION')}"
         )
         spacing_m = (usable_half_width * 2.0) / max(1, light_count - 1)
         positions = self._agl_lateral_offsets_by_count(usable_half_width, light_count)
@@ -669,7 +626,7 @@ class AirfieldGroundLightingMixin:
                         side,
                         spacing_m,
                         abs(lateral_m),
-                        LIGHT_COLOUR_GREEN,
+                        self._agl_rule_value("LIGHT_COLOUR_GREEN"),
                         ref_mos,
                         angle_deg=observable_azimuth,
                         symbol_angle_deg=observable_azimuth,
@@ -720,7 +677,7 @@ class AirfieldGroundLightingMixin:
                         "Centre",
                         spacing_m,
                         offset_m,
-                        LIGHT_COLOUR_WHITE,
+                        self._agl_rule_value("LIGHT_COLOUR_WHITE"),
                         ref_mos,
                         angle_deg=outward_azimuth,
                         symbol_angle_deg=outward_azimuth,
@@ -751,7 +708,7 @@ class AirfieldGroundLightingMixin:
                             "Centre",
                             3.0,
                             crossbar_offset_m,
-                            LIGHT_COLOUR_WHITE,
+                            self._agl_rule_value("LIGHT_COLOUR_WHITE"),
                             ref_mos,
                             angle_deg=outward_azimuth,
                             symbol_angle_deg=outward_azimuth,
@@ -793,7 +750,7 @@ class AirfieldGroundLightingMixin:
                     "Centre",
                     spacing_m,
                     offset_m,
-                    LIGHT_COLOUR_VARIABLE_WHITE,
+                    self._agl_rule_value("LIGHT_COLOUR_VARIABLE_WHITE"),
                     ref_mos,
                     outward_azimuth,
                     [-2.25, -0.75, 0.75, 2.25],
@@ -824,7 +781,7 @@ class AirfieldGroundLightingMixin:
                     "Centre",
                     spacing_m,
                     offset_m,
-                    LIGHT_COLOUR_VARIABLE_WHITE,
+                    self._agl_rule_value("LIGHT_COLOUR_VARIABLE_WHITE"),
                     ref_mos,
                     outward_azimuth,
                     [-0.75, 0.75],
@@ -842,7 +799,7 @@ class AirfieldGroundLightingMixin:
                     "Centre",
                     spacing_m,
                     offset_m,
-                    LIGHT_COLOUR_VARIABLE_WHITE,
+                    self._agl_rule_value("LIGHT_COLOUR_VARIABLE_WHITE"),
                     ref_mos,
                     outward_azimuth,
                     [-1.5, 0.0, 1.5],
@@ -854,13 +811,13 @@ class AirfieldGroundLightingMixin:
                 continue
             if abs(crossbar_offset_m - 150.0) <= 1e-6:
                 ranges = [
-                    (-CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M, -2.25),
-                    (2.25, CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M),
+                    (-self._agl_rule_value("CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M"), -2.25),
+                    (2.25, self._agl_rule_value("CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M")),
                 ]
             elif abs(crossbar_offset_m - 300.0) <= 1e-6:
                 ranges = [
-                    (-CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M, -2.25),
-                    (2.25, CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M),
+                    (-self._agl_rule_value("CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M"), -2.25),
+                    (2.25, self._agl_rule_value("CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M")),
                 ]
             else:
                 half_width = self._cat_ii_iii_additional_crossbar_half_width(crossbar_offset_m)
@@ -907,7 +864,7 @@ class AirfieldGroundLightingMixin:
                 side_name,
                 spacing_m,
                 offset_m,
-                LIGHT_COLOUR_RED,
+                self._agl_rule_value("LIGHT_COLOUR_RED"),
                 ref_mos,
                 observable_azimuth,
                 lateral_offsets,
@@ -974,7 +931,7 @@ class AirfieldGroundLightingMixin:
             for lateral_m in self._agl_lateral_offsets_for_range(
                 start_m,
                 end_m,
-                CAT_II_III_CROSSBAR_MAX_SPACING_M,
+                self._agl_rule_value("CAT_II_III_CROSSBAR_MAX_SPACING_M"),
             ):
                 point = self._agl_lateral_point(crossbar_center, lateral_m, left_azimuth, right_azimuth)
                 if point is None:
@@ -987,9 +944,9 @@ class AirfieldGroundLightingMixin:
                         end_desig,
                         "Approach Crossbar",
                         "Centre",
-                        CAT_II_III_CROSSBAR_MAX_SPACING_M,
+                        self._agl_rule_value("CAT_II_III_CROSSBAR_MAX_SPACING_M"),
                         crossbar_offset_m,
-                        LIGHT_COLOUR_VARIABLE_WHITE,
+                        self._agl_rule_value("LIGHT_COLOUR_VARIABLE_WHITE"),
                         ref_mos,
                         angle_deg=outward_azimuth,
                         symbol_angle_deg=outward_azimuth,
@@ -1035,7 +992,7 @@ class AirfieldGroundLightingMixin:
         observable_azimuth: float,
         half_width: float,
     ) -> None:
-        light_count = runway_end_light_count_for_end(runway_type, half_width * 2.0)
+        light_count = self.get_active_ruleset().runway_end_light_count_for_end(runway_type, half_width * 2.0)
         spacing_m = (half_width * 2.0) / max(1, light_count - 1)
         for lateral_m in self._agl_lateral_offsets_by_count(half_width, light_count):
             side = "Centre" if abs(lateral_m) < 1e-6 else ("Left" if lateral_m < 0 else "Right")
@@ -1052,8 +1009,8 @@ class AirfieldGroundLightingMixin:
                         side,
                         spacing_m,
                         abs(lateral_m),
-                        LIGHT_COLOUR_RED,
-                        MOS_REF_RUNWAY_END,
+                        self._agl_rule_value("LIGHT_COLOUR_RED"),
+                        self._agl_rule_value("MOS_REF_RUNWAY_END"),
                         angle_deg=observable_azimuth,
                         symbol_angle_deg=observable_azimuth,
                         beam_type=AGL_BEAM_UNIDIRECTIONAL,
@@ -1073,8 +1030,8 @@ class AirfieldGroundLightingMixin:
         half_width: float,
     ) -> None:
         for side_name, azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
-            for index in range(THRESHOLD_WING_BAR_LIGHTS_PER_SIDE):
-                lateral_m = half_width + index * THRESHOLD_WING_BAR_SPACING_M
+            for index in range(self._agl_rule_value("THRESHOLD_WING_BAR_LIGHTS_PER_SIDE")):
+                lateral_m = half_width + index * self._agl_rule_value("THRESHOLD_WING_BAR_SPACING_M")
                 point = threshold_point.project(lateral_m, azimuth)
                 if point is not None:
                     features.append(
@@ -1085,10 +1042,10 @@ class AirfieldGroundLightingMixin:
                             end_desig,
                             "Threshold Wing Bar",
                             side_name,
-                            THRESHOLD_WING_BAR_SPACING_M,
+                            self._agl_rule_value("THRESHOLD_WING_BAR_SPACING_M"),
                             lateral_m,
-                            LIGHT_COLOUR_GREEN,
-                            MOS_REF_THRESHOLD_WING_BARS,
+                            self._agl_rule_value("LIGHT_COLOUR_GREEN"),
+                            self._agl_rule_value("MOS_REF_THRESHOLD_WING_BARS"),
                             angle_deg=observable_azimuth,
                             symbol_angle_deg=observable_azimuth,
                             beam_type=AGL_BEAM_UNIDIRECTIONAL,
@@ -1107,7 +1064,7 @@ class AirfieldGroundLightingMixin:
         observable_azimuth: float,
         half_width: float,
     ) -> None:
-        lateral_m = half_width + RTIL_DEFAULT_LATERAL_FROM_EDGE_LIGHTS_M
+        lateral_m = half_width + self._agl_rule_value("RTIL_DEFAULT_LATERAL_FROM_EDGE_LIGHTS_M")
         for side_name, azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
             point = threshold_point.project(lateral_m, azimuth)
             if point is not None:
@@ -1121,8 +1078,8 @@ class AirfieldGroundLightingMixin:
                         side_name,
                         0.0,
                         lateral_m,
-                        LIGHT_COLOUR_FLASHING_WHITE,
-                        MOS_REF_RTIL,
+                        self._agl_rule_value("LIGHT_COLOUR_FLASHING_WHITE"),
+                        self._agl_rule_value("MOS_REF_RTIL"),
                         angle_deg=observable_azimuth,
                         symbol_angle_deg=observable_azimuth,
                         beam_type=AGL_BEAM_UNIDIRECTIONAL,
@@ -1141,10 +1098,10 @@ class AirfieldGroundLightingMixin:
         observable_azimuth: float,
         half_width: float,
     ) -> None:
-        lights_per_side = temp_displaced_threshold_lights_per_side(half_width * 2.0)
+        lights_per_side = self.get_active_ruleset().temp_displaced_threshold_lights_per_side(half_width * 2.0)
         for side_name, azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
             for index in range(lights_per_side):
-                lateral_m = half_width + index * TEMP_DISPLACED_THRESHOLD_SPACING_M
+                lateral_m = half_width + index * self._agl_rule_value("TEMP_DISPLACED_THRESHOLD_SPACING_M")
                 point = threshold_point.project(lateral_m, azimuth)
                 if point is not None:
                     features.append(
@@ -1155,10 +1112,10 @@ class AirfieldGroundLightingMixin:
                             end_desig,
                             "Temporary Displaced Threshold",
                             side_name,
-                            TEMP_DISPLACED_THRESHOLD_SPACING_M,
+                            self._agl_rule_value("TEMP_DISPLACED_THRESHOLD_SPACING_M"),
                             lateral_m,
-                            LIGHT_COLOUR_GREEN,
-                            MOS_REF_TEMP_DISPLACED_THRESHOLD,
+                            self._agl_rule_value("LIGHT_COLOUR_GREEN"),
+                            self._agl_rule_value("MOS_REF_TEMP_DISPLACED_THRESHOLD"),
                             angle_deg=observable_azimuth,
                             symbol_angle_deg=observable_azimuth,
                             beam_type=AGL_BEAM_UNIDIRECTIONAL,
@@ -1200,8 +1157,8 @@ class AirfieldGroundLightingMixin:
                             side_name,
                             spacing_m,
                             longitudinal_m,
-                            LIGHT_COLOUR_RED,
-                            MOS_REF_STOPWAY,
+                            self._agl_rule_value("LIGHT_COLOUR_RED"),
+                            self._agl_rule_value("MOS_REF_STOPWAY"),
                             angle_deg=(outward_azimuth + 180.0) % 360.0,
                             symbol_angle_deg=(outward_azimuth + 180.0) % 360.0,
                             beam_type=AGL_BEAM_UNIDIRECTIONAL,
@@ -1210,7 +1167,7 @@ class AirfieldGroundLightingMixin:
         stopway_end = start_point.project(stopway_length_m, outward_azimuth)
         if stopway_end is None:
             return
-        for lateral_m in self._agl_lateral_offsets_by_count(half_width, STOPWAY_END_MIN_LIGHTS):
+        for lateral_m in self._agl_lateral_offsets_by_count(half_width, self._agl_rule_value("STOPWAY_END_MIN_LIGHTS")):
             azimuth = azimuth_left if lateral_m < 0 else azimuth_right
             point = stopway_end if abs(lateral_m) < 1e-6 else stopway_end.project(abs(lateral_m), azimuth)
             if point is not None:
@@ -1224,8 +1181,8 @@ class AirfieldGroundLightingMixin:
                         "Centre",
                         half_width * 2.0,
                         stopway_length_m,
-                        LIGHT_COLOUR_RED,
-                        MOS_REF_STOPWAY,
+                        self._agl_rule_value("LIGHT_COLOUR_RED"),
+                        self._agl_rule_value("MOS_REF_STOPWAY"),
                         angle_deg=(outward_azimuth + 180.0) % 360.0,
                         symbol_angle_deg=(outward_azimuth + 180.0) % 360.0,
                         beam_type=AGL_BEAM_UNIDIRECTIONAL,
@@ -1272,7 +1229,7 @@ class AirfieldGroundLightingMixin:
                     spacing_m,
                     offset_m,
                     colour,
-                    MOS_REF_RUNWAY_CENTRELINE,
+                    self._agl_rule_value("MOS_REF_RUNWAY_CENTRELINE"),
                     colour_primary=primary_colour,
                     colour_reciprocal=reciprocal_colour,
                     angle_deg=azimuth + 180.0,
@@ -1283,10 +1240,14 @@ class AirfieldGroundLightingMixin:
 
     def _runway_centreline_colour_for_direction(self, distance_to_end: float, sequence_index: int) -> str:
         if distance_to_end <= 300.0:
-            return LIGHT_COLOUR_RED
+            return self._agl_rule_value("LIGHT_COLOUR_RED")
         if distance_to_end <= 900.0:
-            return LIGHT_COLOUR_RED if (sequence_index // 2) % 2 == 0 else LIGHT_COLOUR_WHITE
-        return LIGHT_COLOUR_WHITE
+            return (
+                self._agl_rule_value("LIGHT_COLOUR_RED")
+                if (sequence_index // 2) % 2 == 0
+                else self._agl_rule_value("LIGHT_COLOUR_WHITE")
+            )
+        return self._agl_rule_value("LIGHT_COLOUR_WHITE")
 
     def _combined_light_colour(self, primary_colour: str, reciprocal_colour: str) -> str:
         if primary_colour == reciprocal_colour:
@@ -1330,19 +1291,28 @@ class AirfieldGroundLightingMixin:
         azimuth_right: float,
         length_m: float,
     ) -> None:
-        if length_m < TDZ_FIRST_ROW_OFFSET_M:
+        if length_m < self._agl_rule_value("TDZ_FIRST_ROW_OFFSET_M"):
             return
-        row_count = self._agl_interval_count(length_m - TDZ_FIRST_ROW_OFFSET_M, TDZ_ROW_SPACING_M)
+        row_count = self._agl_interval_count(
+            length_m - self._agl_rule_value("TDZ_FIRST_ROW_OFFSET_M"),
+            self._agl_rule_value("TDZ_ROW_SPACING_M"),
+        )
         for row_index in range(row_count + 1):
-            longitudinal_m = TDZ_FIRST_ROW_OFFSET_M + row_index * TDZ_ROW_SPACING_M
+            longitudinal_m = (
+                self._agl_rule_value("TDZ_FIRST_ROW_OFFSET_M")
+                + row_index * self._agl_rule_value("TDZ_ROW_SPACING_M")
+            )
             if longitudinal_m > length_m:
                 continue
             row_center = threshold_point.project(longitudinal_m, runway_azimuth)
             if row_center is None:
                 continue
             for side_name, side_azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
-                for light_index in range(TDZ_BARRETTE_LIGHTS):
-                    lateral_m = TDZ_INNER_OFFSET_M + light_index * TDZ_BARRETTE_SPACING_M
+                for light_index in range(self._agl_rule_value("TDZ_BARRETTE_LIGHTS")):
+                    lateral_m = (
+                        self._agl_rule_value("TDZ_INNER_OFFSET_M")
+                        + light_index * self._agl_rule_value("TDZ_BARRETTE_SPACING_M")
+                    )
                     point = row_center.project(lateral_m, side_azimuth)
                     if point is not None:
                         features.append(
@@ -1353,10 +1323,10 @@ class AirfieldGroundLightingMixin:
                                 end_desig,
                                 "TDZ Barrette",
                                 side_name,
-                                TDZ_BARRETTE_SPACING_M,
+                                self._agl_rule_value("TDZ_BARRETTE_SPACING_M"),
                                 longitudinal_m,
-                                LIGHT_COLOUR_VARIABLE_WHITE,
-                                MOS_REF_TDZ,
+                                self._agl_rule_value("LIGHT_COLOUR_VARIABLE_WHITE"),
+                                self._agl_rule_value("MOS_REF_TDZ"),
                                 angle_deg=(runway_azimuth + 180.0) % 360.0,
                                 symbol_angle_deg=(runway_azimuth + 180.0) % 360.0,
                                 beam_type=AGL_BEAM_UNIDIRECTIONAL,
@@ -1375,7 +1345,7 @@ class AirfieldGroundLightingMixin:
         rendered_extent = rendered_extents.get(end_desig)
         if rendered_extent is not None:
             try:
-                return min(TDZ_LENGTH_M, float(rendered_extent))
+                return min(self._agl_rule_value("TDZ_LENGTH_M"), float(rendered_extent))
             except (TypeError, ValueError):
                 pass
 
@@ -1396,14 +1366,14 @@ class AirfieldGroundLightingMixin:
             if aim_offset is not None and abs(offset - aim_offset) <= 50.0:
                 continue
             block_start = offset
-            block_end = offset + TDZ_MARKING_LENGTH_M
+            block_end = offset + self._agl_rule_value("TDZ_MARKING_LENGTH_M")
             if block_start < midpoint_zone_end and block_end > midpoint_zone_start:
                 continue
             valid_offsets.append(offset)
 
         if not valid_offsets:
             return 0.0
-        tdz_marking_length_m = max(valid_offsets) + TDZ_MARKING_LENGTH_M
+        tdz_marking_length_m = max(valid_offsets) + self._agl_rule_value("TDZ_MARKING_LENGTH_M")
         QgsMessageLog.logMessage(
             (
                 f"AGL TDZ extent for {runway_data.get('short_name', 'runway')} {end_desig} "
@@ -1412,7 +1382,7 @@ class AirfieldGroundLightingMixin:
             PLUGIN_TAG,
             level=Qgis.Info,
         )
-        return min(TDZ_LENGTH_M, tdz_marking_length_m)
+        return min(self._agl_rule_value("TDZ_LENGTH_M"), tdz_marking_length_m)
 
     def _agl_feature(
         self,
@@ -1525,8 +1495,8 @@ class AirfieldGroundLightingMixin:
             threshold_feature.attribute("offset_m") or runway_end_feature.attribute("offset_m") or 0.0,
             "green/red",
             ref_mos,
-            colour_primary=LIGHT_COLOUR_GREEN,
-            colour_reciprocal=LIGHT_COLOUR_RED,
+            colour_primary=self._agl_rule_value("LIGHT_COLOUR_GREEN"),
+            colour_reciprocal=self._agl_rule_value("LIGHT_COLOUR_RED"),
             angle_deg=float(threshold_feature.attribute("angle_deg") or 0.0),
             symbol_angle_deg=float(
                 threshold_feature.attribute("symbol_ang") or threshold_feature.attribute("angle_deg") or 0.0
@@ -1630,12 +1600,15 @@ class AirfieldGroundLightingMixin:
         distance_from_threshold_m = offset_m if landing_from_primary else max(0.0, runway_length_m - offset_m)
         distance_to_runway_end_m = max(0.0, runway_length_m - offset_m) if landing_from_primary else offset_m
         if available_pre_threshold_m > 0 and distance_from_threshold_m < available_pre_threshold_m:
-            return LIGHT_COLOUR_RED
+            return self._agl_rule_value("LIGHT_COLOUR_RED")
         if precision_edge_characteristics and distance_to_runway_end_m <= 600.0:
-            return LIGHT_COLOUR_YELLOW
-        return LIGHT_COLOUR_VARIABLE_WHITE
+            return self._agl_rule_value("LIGHT_COLOUR_YELLOW")
+        return self._agl_rule_value("LIGHT_COLOUR_VARIABLE_WHITE")
 
     def _runway_edge_display_colour(self, colour: str, other_direction_colour: str) -> str:
-        if colour == LIGHT_COLOUR_VARIABLE_WHITE and other_direction_colour != LIGHT_COLOUR_VARIABLE_WHITE:
-            return LIGHT_COLOUR_WHITE
+        if (
+            colour == self._agl_rule_value("LIGHT_COLOUR_VARIABLE_WHITE")
+            and other_direction_colour != self._agl_rule_value("LIGHT_COLOUR_VARIABLE_WHITE")
+        ):
+            return self._agl_rule_value("LIGHT_COLOUR_WHITE")
         return colour
