@@ -22,7 +22,10 @@ from qgis.core import (  # type: ignore
     QgsWkbTypes,
 )
 
-from ..frameworks.registry import get_framework_profile
+try:
+    from ..core import output_structure
+except ImportError:
+    from core import output_structure
 
 PLUGIN_TAG = "SafeguardingBuilder"
 CONTROLLING_REGION_TOPOLOGY_WELD_M = 0.01
@@ -3534,25 +3537,33 @@ class ControllingOlsEngineMixin:
             return False
 
         output_group = self._controlling_ols_poc_group(layer_group)
+        candidate_group = self._ensure_controlling_ols_child_group(
+            output_group, output_structure.DEBUG_OLS_CANDIDATES
+        )
+        region_group = self._ensure_controlling_ols_child_group(output_group, output_structure.DEBUG_OLS_REGIONS)
+        transition_group = self._ensure_controlling_ols_child_group(
+            output_group, output_structure.DEBUG_OLS_TRANSITIONS
+        )
+        contour_group = self._ensure_controlling_ols_child_group(output_group, output_structure.DEBUG_OLS_CONTOURS)
         engine = PlanarControllingOlsEngine(planar_candidates, exclusion_geometries=exclusion_geometries)
         timing_splits: Dict[str, float] = {}
 
         step_start = time.perf_counter()
-        candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, output_group, planar_candidates)
+        candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, candidate_group, planar_candidates)
         timing_splits["candidates"] = time.perf_counter() - step_start
 
         step_start = time.perf_counter()
-        region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, engine)
+        region_layer_ok = self._create_controlling_region_layer(icao_code, region_group, engine)
         timing_splits["regions"] = time.perf_counter() - step_start
 
         step_start = time.perf_counter()
-        transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, engine)
+        transition_layer_ok = self._create_controlling_transition_layer(icao_code, transition_group, engine)
         timing_splits["transitions"] = time.perf_counter() - step_start
 
         step_start = time.perf_counter()
         contour_layer_ok = self._create_controlling_contour_layer(
             icao_code,
-            output_group,
+            contour_group,
             engine,
             contours,
         )
@@ -3573,7 +3584,7 @@ class ControllingOlsEngineMixin:
         return candidate_layer_ok or region_layer_ok or transition_layer_ok or contour_layer_ok
 
     def _controlling_ols_poc_group(self, layer_group: QgsLayerTreeGroup) -> QgsLayerTreeGroup:
-        group_name = self.tr("Controlling OLS POC")
+        group_name = self.tr(output_structure.DEBUG_DEVELOPMENT)
         if layer_group is not None and layer_group.name() == group_name:
             return layer_group
         return self._ensure_controlling_ols_poc_group(layer_group, group_name) or layer_group
@@ -3583,24 +3594,13 @@ class ControllingOlsEngineMixin:
         parent_group: QgsLayerTreeGroup,
         group_name: str,
     ) -> Optional[QgsLayerTreeGroup]:
-        """Keep the POC group as a top-level generated group after NASF."""
+        """Keep the debug/development group at the end of generated outputs."""
         if parent_group is None:
             return None
 
         existing_group = self._find_direct_child_group(parent_group, group_name)
         children = list(parent_group.children())
-
-        framework_group_name = get_framework_profile().safeguarding_group_name()
-        framework_getter = getattr(self, "get_active_framework", None)
-        if callable(framework_getter):
-            framework_group_name = framework_getter().safeguarding_group_name()
-
-        nasf_group = None
-        for child in children:
-            if isinstance(child, QgsLayerTreeGroup) and child.name() == self.tr(framework_group_name):
-                nasf_group = child
-                break
-        target_index = children.index(nasf_group) + 1 if nasf_group is not None else len(children)
+        target_index = len(children)
 
         if existing_group is None:
             try:
@@ -3622,6 +3622,14 @@ class ControllingOlsEngineMixin:
         parent_group.insertChildNode(target_index, cloned_group)
         parent_group.removeChildNode(existing_group)
         return cloned_group
+
+    def _ensure_controlling_ols_child_group(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        group_name: str,
+    ) -> QgsLayerTreeGroup:
+        group = self._ensure_layer_group(parent_group, group_name)
+        return group or parent_group
 
     def _create_controlling_candidate_layer(
         self,

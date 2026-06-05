@@ -1,39 +1,42 @@
 # -*- coding: utf-8 -*-
 """NASF layer tree labels and grouping metadata."""
 
-SAFEGUARDING_GROUP_NAME = "04 NASF Safeguarding Guidelines"
-SUMMARY_SECTION_NAME = "NASF Safeguarding Guidelines"
-GENERATION_STATUS_MESSAGE = "Generating NASF guideline layers..."
+try:
+    from ...core import output_structure
+except ImportError:
+    from core import output_structure
+
+SAFEGUARDING_GROUP_NAME = output_structure.EXTERNAL_SAFEGUARDING
+SUMMARY_SECTION_NAME = output_structure.EXTERNAL_SAFEGUARDING
+GENERATION_STATUS_MESSAGE = "Generating external safeguarding layers..."
 
 GUIDELINE_GROUPS = {
-    "B": "Guideline B - Windshear",
-    "C": "Guideline C - Wildlife",
-    "D": "Guideline D - Wind Turbine",
-    "E": "Guideline E - Lighting Control",
-    "F": "Guideline F - Airspace / OLS",
-    "G": "Guideline G - CNS",
-    "I": "Guideline I - Public Safety Areas",
+    "B": "Building-Induced Windshear / Turbulence",
+    "C": "Wildlife Hazard Management",
+    "D": "Wind Turbines and Renewable Energy",
+    "E": "Lighting and Glare Control",
+    "G": "CNS / Technical Safeguarding",
+    "I": "Public Safety Areas",
 }
 
 GUIDELINE_F_SUBGROUPS = {
-    "airport_wide": "Airport-wide OLS",
-    "runway": "Runway Approach And Take-off",
-    "ofz": "Obstacle Free Zone",
+    "airport_wide": output_structure.AIRPORT_WIDE_OLS,
+    "runway": output_structure.RUNWAY_APPROACH_AND_TAKE_OFF,
+    "ofz": output_structure.OBSTACLE_FREE_ZONE,
 }
 
 GUIDELINE_F_CHECKLIST_LABELS = {
-    "airport_wide": "Guideline F - Airport-wide OLS",
-    "runway": "Guideline F - Runway Approach And Take-off",
-    "ofz": "Guideline F - Obstacle Free Zone",
+    "airport_wide": "Airport-wide OLS",
+    "runway": "Runway Approach And Take-off OLS",
+    "ofz": "Obstacle Free Zone",
 }
 
 EMPTY_GROUP_REASONS = {
-    SAFEGUARDING_GROUP_NAME: "no NASF guideline layers generated; check prerequisite ARP, runway, and CNS inputs",
+    SAFEGUARDING_GROUP_NAME: "no external safeguarding layers generated; check prerequisite ARP, runway, and CNS inputs",
     GUIDELINE_GROUPS["B"]: "no windshear layers generated; check runway inputs and preceding warnings",
     GUIDELINE_GROUPS["C"]: "ARP missing or wildlife zone generation failed; check preceding Wildlife warnings",
     GUIDELINE_GROUPS["D"]: "ARP missing or wind turbine zone generation failed",
     GUIDELINE_GROUPS["E"]: "no lighting layers generated; check runway inputs and preceding warnings",
-    GUIDELINE_GROUPS["F"]: "no airspace/OLS layers generated; check runway, approach, and RED inputs",
     GUIDELINE_GROUPS["G"]: "no CNS layers generated, or CNS input was not provided",
     GUIDELINE_GROUPS["I"]: "no public safety area layers generated; check runway inputs and preceding warnings",
 }

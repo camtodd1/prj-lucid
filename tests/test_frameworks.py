@@ -7,6 +7,7 @@ from frameworks.registry import (
     iter_framework_profiles,
     normalize_framework_id,
 )
+from core import output_structure
 from core.constants import LAYER_FEATURE_BATCH_SIZE
 from guidelines import guideline_constants
 from guidelines.ols_constants import CONICAL_CONTOUR_INTERVAL
@@ -99,14 +100,14 @@ class FrameworkRegistryTest(unittest.TestCase):
     def test_nasf_profile_exposes_layer_tree_metadata(self):
         profile = get_framework_profile("nasf_aus")
 
-        self.assertEqual(profile.safeguarding_group_name(), "04 NASF Safeguarding Guidelines")
-        self.assertEqual(profile.safeguarding_summary_section(), "NASF Safeguarding Guidelines")
-        self.assertEqual(profile.generation_status_message(), "Generating NASF guideline layers...")
+        self.assertEqual(profile.safeguarding_group_name(), "05 External Safeguarding")
+        self.assertEqual(profile.safeguarding_summary_section(), "05 External Safeguarding")
+        self.assertEqual(profile.generation_status_message(), "Generating external safeguarding layers...")
 
         guideline_groups = profile.guideline_group_definitions()
-        self.assertEqual(guideline_groups["B"], "Guideline B - Windshear")
-        self.assertEqual(guideline_groups["F"], "Guideline F - Airspace / OLS")
-        self.assertEqual(guideline_groups["G"], "Guideline G - CNS")
+        self.assertEqual(guideline_groups["B"], "Building-Induced Windshear / Turbulence")
+        self.assertNotIn("F", guideline_groups)
+        self.assertEqual(guideline_groups["G"], "CNS / Technical Safeguarding")
         self.assertNotIn("G", profile.guideline_group_definitions(include_cns=False))
 
         guideline_f_subgroups = profile.guideline_f_subgroup_names()
@@ -115,14 +116,25 @@ class FrameworkRegistryTest(unittest.TestCase):
         self.assertEqual(guideline_f_subgroups["ofz"], "Obstacle Free Zone")
 
         guideline_f_labels = profile.guideline_f_checklist_labels()
-        self.assertEqual(guideline_f_labels["airport_wide"], "Guideline F - Airport-wide OLS")
+        self.assertEqual(guideline_f_labels["airport_wide"], "Airport-wide OLS")
+
+    def test_output_structure_separates_protected_airspace_from_external_safeguarding(self):
+        self.assertEqual(output_structure.PROTECTED_AIRSPACE, "04 Protected Airspace")
+        self.assertEqual(output_structure.EXTERNAL_SAFEGUARDING, "05 External Safeguarding")
+        self.assertEqual(output_structure.OLS_SURFACES, "OLS Surfaces")
+        self.assertEqual(output_structure.DEBUG_DEVELOPMENT, "99 Debug / Development")
+        self.assertIn(output_structure.PROTECTED_AIRSPACE, output_structure.SECTION_ORDER)
+        self.assertLess(
+            output_structure.SECTION_ORDER.index(output_structure.PROTECTED_AIRSPACE),
+            output_structure.SECTION_ORDER.index(output_structure.EXTERNAL_SAFEGUARDING),
+        )
 
     def test_nasf_profile_exposes_empty_group_reasons(self):
         profile = get_framework_profile("nasf_aus")
 
-        self.assertIn("NASF guideline layers", profile.empty_group_reason("04 NASF Safeguarding Guidelines"))
-        self.assertIn("windshear", profile.empty_group_reason("Guideline B - Windshear"))
-        self.assertIn("CNS", profile.empty_group_reason("Guideline G - CNS"))
+        self.assertIn("external safeguarding layers", profile.empty_group_reason("05 External Safeguarding"))
+        self.assertIn("windshear", profile.empty_group_reason("Building-Induced Windshear / Turbulence"))
+        self.assertIn("CNS", profile.empty_group_reason("CNS / Technical Safeguarding"))
         self.assertEqual(profile.empty_group_reason("Unrelated Group"), "")
 
     def test_legacy_cns_dimensions_shim_uses_nasf_data(self):

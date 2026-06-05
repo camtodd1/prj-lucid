@@ -34,6 +34,7 @@ from qgis.core import (  # type: ignore
 
 # --- Local Imports ---
 from .core.layers import LayerMixin
+from .core import output_structure
 from .core.styles import DEFAULT_STYLE_MAP
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
@@ -631,7 +632,9 @@ class SafeguardingBuilder(
 
             output_groups = self._create_output_layer_groups(main_group, bool(agl_options.get("enabled")))
             reference_group = output_groups.get("reference_data") or main_group
-            nasf_guidelines_group = output_groups.get("nasf_guidelines") or main_group
+            external_safeguarding_group = output_groups.get("external_safeguarding") or main_group
+            ols_surfaces_group = output_groups.get("ols_surfaces") or main_group
+            debug_group = output_groups.get("debug_development") or main_group
 
             arp_layer_created = False
             if arp_point is not None:
@@ -656,12 +659,12 @@ class SafeguardingBuilder(
                         )
 
             runway_centreline_group = (
-                self._ensure_layer_group(reference_group, "Runway Centrelines") or reference_group
+                self._ensure_layer_group(reference_group, output_structure.RUNWAY_CENTRE_LINES) or reference_group
             )
 
             met_layers_created_ok = False
             if met_point is not None:
-                met_group = reference_group.addGroup(self.tr("Meteorological Instrument Station"))
+                met_group = reference_group.addGroup(self.tr(output_structure.METEOROLOGICAL_STATION))
                 if met_group is not None:
                     self._stage_layer_tree_node(met_group)
                     met_layers_created_ok, _ = self.process_met_station_surfaces(
@@ -669,7 +672,7 @@ class SafeguardingBuilder(
                     )
                 else:
                     QgsMessageLog.logMessage(
-                        "Failed to create 'Meteorological Instrument Station' subgroup.",
+                        f"Failed to create '{output_structure.METEOROLOGICAL_STATION}' subgroup.",
                         plugin_tag,
                         level=Qgis.Warning,
                     )
@@ -677,7 +680,7 @@ class SafeguardingBuilder(
                 self._log("MET skipped: no MET coordinates provided; MET station surfaces not generated.")
 
             if cns_input_list:
-                cns_source_group = reference_group.addGroup(self.tr("CNS Facilities / Source Facilities"))
+                cns_source_group = reference_group.addGroup(self.tr(output_structure.CNS_TECHNICAL_FACILITIES))
                 if cns_source_group is not None:
                     self._stage_layer_tree_node(cns_source_group)
                     self.create_cns_source_facility_layer(cns_input_list, icao_code, cns_source_group)
@@ -733,7 +736,8 @@ class SafeguardingBuilder(
                 self._log("Airfield Ground Lighting skipped: option not enabled.")
 
             self._set_processing_status(self.tr(self.get_active_framework().generation_status_message()))
-            guideline_groups = self._create_guideline_groups(nasf_guidelines_group, bool(cns_input_list))
+            guideline_groups = self._create_guideline_groups(external_safeguarding_group, bool(cns_input_list))
+            guideline_groups["F"] = ols_surfaces_group
             self._reset_controlling_ols_engine()
 
             airport_wide_ols_group = None
@@ -800,7 +804,7 @@ class SafeguardingBuilder(
                 self._set_processing_status(self.tr("Solving controlling OLS lower envelope..."))
                 controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
                     icao_code,
-                    main_group,
+                    debug_group,
                 )
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
             elif guideline_groups.get("F") is not None:
@@ -1298,32 +1302,60 @@ class SafeguardingBuilder(
     ) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Create the main generated layer tree sections in display order."""
         groups: Dict[str, Optional[QgsLayerTreeGroup]] = {}
-        groups["reference_data"] = self._ensure_layer_group(main_group, "01 Reference Data")
-        groups["runway_infrastructure"] = self._ensure_layer_group(main_group, "02 Runway Infrastructure")
-        groups["runway_protection_and_separation"] = self._ensure_layer_group(
-            main_group, "03 Runway Protection And Separation"
+        groups["reference_data"] = self._ensure_layer_group(main_group, output_structure.REFERENCE_DATA)
+        groups["aerodrome_infrastructure"] = self._ensure_layer_group(
+            main_group, output_structure.AERODROME_INFRASTRUCTURE
         )
-        groups["nasf_guidelines"] = self._ensure_layer_group(
+        groups["runway_protection_and_separation"] = self._ensure_layer_group(
+            main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION
+        )
+        groups["protected_airspace"] = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
+        groups["external_safeguarding"] = self._ensure_layer_group(
             main_group, self.get_active_framework().safeguarding_group_name()
         )
+        groups["nasf_guidelines"] = groups["external_safeguarding"]
+        groups["debug_development"] = self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
 
-        infrastructure_group = groups["runway_infrastructure"]
+        infrastructure_group = groups["aerodrome_infrastructure"]
         if infrastructure_group is not None:
             if agl_enabled:
                 groups["airfield_ground_lighting"] = self._ensure_layer_group(
-                    infrastructure_group, "Airfield Ground Lighting (AGL)"
+                    infrastructure_group, output_structure.AIRFIELD_GROUND_LIGHTING
                 )
-            groups["markings"] = self._ensure_layer_group(infrastructure_group, "Markings")
-            groups["physical_geometry"] = self._ensure_layer_group(infrastructure_group, "Physical Geometry")
+            groups["markings"] = self._ensure_layer_group(infrastructure_group, output_structure.MARKINGS)
+            groups["physical_geometry"] = self._ensure_layer_group(
+                infrastructure_group, output_structure.PHYSICAL_GEOMETRY
+            )
 
         protection_group = groups["runway_protection_and_separation"]
         if protection_group is not None:
             groups["runway_protection_areas"] = self._ensure_layer_group(
-                protection_group, "Runway Protection Areas"
+                protection_group, output_structure.RUNWAY_PROTECTION_AREAS
             )
             groups["specialised_safeguarding"] = self._ensure_layer_group(
-                protection_group, "Specialised Runway Safeguarding"
+                protection_group, output_structure.SPECIALISED_RUNWAY_SAFEGUARDING
             )
+        protected_airspace_group = groups["protected_airspace"]
+        if protected_airspace_group is not None:
+            groups["ols_surfaces"] = self._ensure_layer_group(
+                protected_airspace_group, output_structure.OLS_SURFACES
+            )
+            groups["controlling_ols_surfaces"] = self._ensure_layer_group(
+                protected_airspace_group, output_structure.CONTROLLING_OLS_SURFACES
+            )
+            groups["controlling_contours"] = self._ensure_layer_group(
+                protected_airspace_group, output_structure.CONTROLLING_CONTOURS
+            )
+        debug_group = groups["debug_development"]
+        if debug_group is not None:
+            groups["debug_ols_candidates"] = self._ensure_layer_group(
+                debug_group, output_structure.DEBUG_OLS_CANDIDATES
+            )
+            groups["debug_ols_regions"] = self._ensure_layer_group(debug_group, output_structure.DEBUG_OLS_REGIONS)
+            groups["debug_ols_transitions"] = self._ensure_layer_group(
+                debug_group, output_structure.DEBUG_OLS_TRANSITIONS
+            )
+            groups["debug_ols_contours"] = self._ensure_layer_group(debug_group, output_structure.DEBUG_OLS_CONTOURS)
         return groups
 
     def _move_layer_tree_node(
@@ -1391,18 +1423,33 @@ class SafeguardingBuilder(
         if main_group is None:
             return
 
-        reference_group = self._ensure_layer_group(main_group, "01 Reference Data")
-        infrastructure_group = self._ensure_layer_group(main_group, "02 Runway Infrastructure")
-        protection_group = self._ensure_layer_group(main_group, "03 Runway Protection And Separation")
+        reference_group = self._ensure_layer_group(main_group, output_structure.REFERENCE_DATA)
+        infrastructure_group = self._ensure_layer_group(main_group, output_structure.AERODROME_INFRASTRUCTURE)
+        protection_group = self._ensure_layer_group(main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION)
+        protected_airspace_group = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
+        ols_surfaces_group = (
+            self._ensure_layer_group(protected_airspace_group, output_structure.OLS_SURFACES)
+            if protected_airspace_group is not None
+            else None
+        )
         framework = self.get_active_framework()
-        nasf_group = self._ensure_layer_group(main_group, framework.safeguarding_group_name())
-        if reference_group is None or infrastructure_group is None or protection_group is None or nasf_group is None:
+        external_group = self._ensure_layer_group(main_group, framework.safeguarding_group_name())
+        if (
+            reference_group is None
+            or infrastructure_group is None
+            or protection_group is None
+            or protected_airspace_group is None
+            or ols_surfaces_group is None
+            or external_group is None
+        ):
             return
 
-        runway_centreline_group = self._ensure_layer_group(reference_group, "Runway Centrelines")
+        runway_centreline_group = self._ensure_layer_group(reference_group, output_structure.RUNWAY_CENTRE_LINES)
         self._merge_or_move_direct_group(main_group, self.tr("Runway Centrelines"), reference_group)
-        self._merge_or_move_direct_group(main_group, self.tr("Meteorological Instrument Station"), reference_group)
+        self._merge_or_move_direct_group(main_group, self.tr(output_structure.RUNWAY_CENTRE_LINES), reference_group)
+        self._merge_or_move_direct_group(main_group, self.tr(output_structure.METEOROLOGICAL_STATION), reference_group)
         self._merge_or_move_direct_group(main_group, self.tr("CNS Facilities / Source Facilities"), reference_group)
+        self._merge_or_move_direct_group(main_group, self.tr(output_structure.CNS_TECHNICAL_FACILITIES), reference_group)
 
         for child in list(main_group.children()):
             if not isinstance(child, QgsLayerTreeLayer):
@@ -1417,13 +1464,14 @@ class SafeguardingBuilder(
 
         for group_name in [
             "Airfield Ground Lighting (AGL)",
-            "Markings",
-            "Physical Geometry",
+            output_structure.AIRFIELD_GROUND_LIGHTING,
+            output_structure.MARKINGS,
+            output_structure.PHYSICAL_GEOMETRY,
         ]:
             self._merge_or_move_direct_group(main_group, self.tr(group_name), infrastructure_group)
 
         physical_geometry_group = self._find_group_by_path(
-            main_group, ["02 Runway Infrastructure", "Physical Geometry"]
+            main_group, [output_structure.AERODROME_INFRASTRUCTURE, output_structure.PHYSICAL_GEOMETRY]
         )
         if physical_geometry_group is not None and runway_centreline_group is not None:
             for child in list(physical_geometry_group.children()):
@@ -1438,21 +1486,20 @@ class SafeguardingBuilder(
                     self._move_layer_tree_node(child, runway_centreline_group)
 
         for group_name in [
-            "Runway Protection Areas",
-            "Specialised Runway Safeguarding",
+            output_structure.RUNWAY_PROTECTION_AREAS,
+            output_structure.SPECIALISED_RUNWAY_SAFEGUARDING,
         ]:
             self._merge_or_move_direct_group(main_group, self.tr(group_name), protection_group)
 
         for group_name in framework.guideline_group_names(include_cns=True):
-            self._merge_or_move_direct_group(main_group, self.tr(group_name), nasf_group)
+            self._merge_or_move_direct_group(main_group, self.tr(group_name), external_group)
 
-        self._repair_guideline_f_layer_tree(nasf_group)
+        self._merge_or_move_direct_group(main_group, self.tr("Guideline F - Airspace / OLS"), ols_surfaces_group)
+        self._repair_guideline_f_layer_tree(ols_surfaces_group)
 
-    def _repair_guideline_f_layer_tree(self, nasf_group: QgsLayerTreeGroup) -> None:
-        """Move direct Guideline F OLS layers into their reviewed OLS subfolders."""
-        guideline_f_group = self._find_direct_child_group(
-            nasf_group, self.tr(self.get_active_framework().guideline_group_name("F"))
-        )
+    def _repair_guideline_f_layer_tree(self, ols_surfaces_group: QgsLayerTreeGroup) -> None:
+        """Move direct OLS layers into their reviewed OLS subfolders."""
+        guideline_f_group = ols_surfaces_group
         if guideline_f_group is None:
             return
 
@@ -1705,9 +1752,10 @@ class SafeguardingBuilder(
             return
 
         removable_names = {
-            self.tr("Meteorological Instrument Station"),
-            self.tr("CNS Facilities / Source Facilities"),
+            self.tr(output_structure.METEOROLOGICAL_STATION),
+            self.tr(output_structure.CNS_TECHNICAL_FACILITIES),
             self.tr("Airfield Ground Lighting (AGL)"),
+            self.tr(output_structure.AIRFIELD_GROUND_LIGHTING),
             self.tr(self.get_active_framework().guideline_group_name("G")),
         }
 
@@ -1731,26 +1779,32 @@ class SafeguardingBuilder(
 
     def _empty_group_reason(self, group_name: str, met_ok: bool) -> str:
         """Return a concise explanation for expected empty top-level groups."""
-        if group_name == self.tr("01 Reference Data"):
+        if group_name == self.tr(output_structure.REFERENCE_DATA):
             return "no reference layers generated; check ARP, runway, MET, and CNS inputs"
-        if group_name == self.tr("02 Runway Infrastructure"):
-            return "no runway infrastructure layers generated; check runway dimensions and coordinates"
-        if group_name == self.tr("03 Runway Protection And Separation"):
+        if group_name == self.tr(output_structure.AERODROME_INFRASTRUCTURE):
+            return "no aerodrome infrastructure layers generated; check runway dimensions and coordinates"
+        if group_name == self.tr(output_structure.RUNWAY_PROTECTION_AND_SEPARATION):
             return "no protection or separation layers generated; check runway inputs and preceding warnings"
+        if group_name == self.tr(output_structure.PROTECTED_AIRSPACE):
+            return "no protected airspace layers generated; check runway, approach, and RED inputs"
+        if group_name == self.tr(output_structure.OLS_SURFACES):
+            return "no OLS layers generated; check runway, approach, and RED inputs"
+        if group_name == self.tr(output_structure.DEBUG_DEVELOPMENT):
+            return "no debug or development layers generated; enable debug outputs or controlling OLS"
         framework_reason = self.get_active_framework().empty_group_reason(group_name)
         if framework_reason:
             return framework_reason
-        if group_name == self.tr("Airfield Ground Lighting (AGL)"):
+        if group_name in {self.tr("Airfield Ground Lighting (AGL)"), self.tr(output_structure.AIRFIELD_GROUND_LIGHTING)}:
             return "AGL was enabled, but no lighting points were generated; check Lighting tab inputs"
-        if group_name == self.tr("Markings"):
+        if group_name == self.tr(output_structure.MARKINGS):
             return "no runway markings generated; check runway dimensions and marking prerequisites"
-        if group_name == self.tr("Physical Geometry"):
+        if group_name == self.tr(output_structure.PHYSICAL_GEOMETRY):
             return "no physical geometry generated; check runway dimensions and coordinates"
-        if group_name == self.tr("Runway Protection Areas"):
+        if group_name == self.tr(output_structure.RUNWAY_PROTECTION_AREAS):
             return "no protection areas generated; check runway inputs and preceding warnings"
-        if group_name == self.tr("Specialised Runway Safeguarding"):
+        if group_name == self.tr(output_structure.SPECIALISED_RUNWAY_SAFEGUARDING):
             return "no specialised safeguarding layers generated; check runway inputs and preceding warnings"
-        if group_name == self.tr("Meteorological Instrument Station") and not met_ok:
+        if group_name == self.tr(output_structure.METEOROLOGICAL_STATION) and not met_ok:
             return "MET coordinates not provided"
         return "no populated layers generated; check preceding warnings for skipped prerequisites"
 
@@ -1940,12 +1994,13 @@ class SafeguardingBuilder(
         guideline_groups = framework.guideline_group_definitions(include_cns=True)
         guideline_f_subgroups = framework.guideline_f_subgroup_names()
         guideline_f_checklist_labels = framework.guideline_f_checklist_labels()
+        protected_airspace_path = [output_structure.PROTECTED_AIRSPACE, output_structure.OLS_SURFACES]
 
         items = [
             self._format_checklist_layer_item(
                 main_group,
                 "ARP",
-                ["01 Reference Data"],
+                [output_structure.REFERENCE_DATA],
                 style_keys={"ARP"},
                 name_contains=[f" {self.tr('ARP')}"],
                 missing_reason=arp_missing_reason,
@@ -1954,28 +2009,28 @@ class SafeguardingBuilder(
             self._format_checklist_item(
                 main_group,
                 "Runway centrelines",
-                ["01 Reference Data", "Runway Centrelines"],
+                [output_structure.REFERENCE_DATA, output_structure.RUNWAY_CENTRE_LINES],
                 missing_reason=no_runway_reason,
                 failed_reason="runway centreline layer failed to create",
             ),
             self._format_checklist_item(
                 main_group,
-                "Meteorological Instrument Station",
-                ["01 Reference Data", "Meteorological Instrument Station"],
+                output_structure.METEOROLOGICAL_STATION,
+                [output_structure.REFERENCE_DATA, output_structure.METEOROLOGICAL_STATION],
                 missing_reason=None if met_input_provided else "MET coordinates not provided",
                 failed_reason="MET station surfaces failed to generate",
             ),
             self._format_checklist_item(
                 main_group,
-                "CNS Facilities / Source Facilities",
-                ["01 Reference Data", "CNS Facilities / Source Facilities"],
+                output_structure.CNS_TECHNICAL_FACILITIES,
+                [output_structure.REFERENCE_DATA, output_structure.CNS_TECHNICAL_FACILITIES],
                 missing_reason=cns_missing_reason,
                 failed_reason="CNS source facility layer failed to create",
             ),
             self._format_checklist_item(
                 main_group,
-                "Airfield Ground Lighting",
-                ["02 Runway Infrastructure", "Airfield Ground Lighting (AGL)"],
+                output_structure.AIRFIELD_GROUND_LIGHTING,
+                [output_structure.AERODROME_INFRASTRUCTURE, output_structure.AIRFIELD_GROUND_LIGHTING],
                 missing_reason=no_runway_reason,
                 not_applicable_reason=None if agl_enabled else "AGL option is disabled",
                 failed_reason="AGL was enabled but no lighting features were generated",
@@ -1983,28 +2038,31 @@ class SafeguardingBuilder(
             self._format_checklist_item(
                 main_group,
                 "Runway markings",
-                ["02 Runway Infrastructure", "Markings"],
+                [output_structure.AERODROME_INFRASTRUCTURE, output_structure.MARKINGS],
                 missing_reason=no_runway_reason,
                 failed_reason="marking prerequisites were not met or generation failed",
             ),
             self._format_checklist_item(
                 main_group,
                 "Physical geometry",
-                ["02 Runway Infrastructure", "Physical Geometry"],
+                [output_structure.AERODROME_INFRASTRUCTURE, output_structure.PHYSICAL_GEOMETRY],
                 missing_reason=no_runway_reason,
                 failed_reason="physical geometry prerequisites were not met or generation failed",
             ),
             self._format_checklist_item(
                 main_group,
                 "Runway protection areas",
-                ["03 Runway Protection And Separation", "Runway Protection Areas"],
+                [output_structure.RUNWAY_PROTECTION_AND_SEPARATION, output_structure.RUNWAY_PROTECTION_AREAS],
                 missing_reason=no_runway_reason,
                 failed_reason="runway protection areas failed to generate",
             ),
             self._format_checklist_item(
                 main_group,
                 "Specialised runway safeguarding",
-                ["03 Runway Protection And Separation", "Specialised Runway Safeguarding"],
+                [
+                    output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
+                    output_structure.SPECIALISED_RUNWAY_SAFEGUARDING,
+                ],
                 missing_reason=no_runway_reason,
                 failed_reason="specialised safeguarding failed to generate",
             ),
@@ -2039,21 +2097,21 @@ class SafeguardingBuilder(
             self._format_checklist_item(
                 main_group,
                 guideline_f_checklist_labels["airport_wide"],
-                [safeguarding_group_name, guideline_groups["F"], guideline_f_subgroups["airport_wide"]],
+                [*protected_airspace_path, guideline_f_subgroups["airport_wide"]],
                 missing_reason=no_runway_reason or red_missing_reason,
                 failed_reason="airport-wide OLS failed; check RED, runway strip dimensions, ARP, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
                 guideline_f_checklist_labels["runway"],
-                [safeguarding_group_name, guideline_groups["F"], guideline_f_subgroups["runway"]],
+                [*protected_airspace_path, guideline_f_subgroups["runway"]],
                 missing_reason=no_runway_reason,
                 failed_reason="approach or TOCS generation failed; check runway type, elevations, clearway, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
                 guideline_f_checklist_labels["ofz"],
-                [safeguarding_group_name, guideline_groups["F"], guideline_f_subgroups["ofz"]],
+                [*protected_airspace_path, guideline_f_subgroups["ofz"]],
                 missing_reason=no_runway_reason,
                 not_applicable_reason=None if pa_runways_exist else "no precision approach runway was entered",
                 failed_reason="OFZ generation failed; check precision approach type, elevations, IHS/RED, and preceding warnings",
@@ -2084,29 +2142,24 @@ class SafeguardingBuilder(
         safeguarding_section = self.get_active_framework().safeguarding_summary_section()
         guideline_groups = self.get_active_framework().guideline_group_definitions(include_cns=True)
         guideline_f_checklist_labels = self.get_active_framework().guideline_f_checklist_labels()
-        section_order = [
-            "Reference Data",
-            "Runway Infrastructure",
-            "Runway Protection And Separation",
-            safeguarding_section,
-        ]
+        section_order = list(output_structure.SECTION_ORDER)
         section_map = {
-            "ARP": "Reference Data",
-            "Runway centrelines": "Reference Data",
-            "Meteorological Instrument Station": "Reference Data",
-            "CNS Facilities / Source Facilities": "Reference Data",
-            "Airfield Ground Lighting": "Runway Infrastructure",
-            "Runway markings": "Runway Infrastructure",
-            "Physical geometry": "Runway Infrastructure",
-            "Runway protection areas": "Runway Protection And Separation",
-            "Specialised runway safeguarding": "Runway Protection And Separation",
+            "ARP": output_structure.REFERENCE_DATA,
+            "Runway centrelines": output_structure.REFERENCE_DATA,
+            output_structure.METEOROLOGICAL_STATION: output_structure.REFERENCE_DATA,
+            output_structure.CNS_TECHNICAL_FACILITIES: output_structure.REFERENCE_DATA,
+            output_structure.AIRFIELD_GROUND_LIGHTING: output_structure.AERODROME_INFRASTRUCTURE,
+            "Runway markings": output_structure.AERODROME_INFRASTRUCTURE,
+            "Physical geometry": output_structure.AERODROME_INFRASTRUCTURE,
+            "Runway protection areas": output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
+            "Specialised runway safeguarding": output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
+            guideline_f_checklist_labels["airport_wide"]: output_structure.PROTECTED_AIRSPACE,
+            guideline_f_checklist_labels["runway"]: output_structure.PROTECTED_AIRSPACE,
+            guideline_f_checklist_labels["ofz"]: output_structure.PROTECTED_AIRSPACE,
             guideline_groups["B"]: safeguarding_section,
             guideline_groups["C"]: safeguarding_section,
             guideline_groups["D"]: safeguarding_section,
             guideline_groups["E"]: safeguarding_section,
-            guideline_f_checklist_labels["airport_wide"]: safeguarding_section,
-            guideline_f_checklist_labels["runway"]: safeguarding_section,
-            guideline_f_checklist_labels["ofz"]: safeguarding_section,
             guideline_groups["G"]: safeguarding_section,
             guideline_groups["I"]: safeguarding_section,
         }
@@ -2122,7 +2175,7 @@ class SafeguardingBuilder(
 
             if detail.startswith("generated - "):
                 stats = detail.replace("generated - ", "", 1)
-                section = section_map.get(label, safeguarding_section)
+                section = section_map.get(label, output_structure.EXTERNAL_SAFEGUARDING)
                 generated_by_section.setdefault(section, []).append(f"  - {label}: {stats}")
             elif detail.startswith("input not provided - "):
                 reason = detail.replace("input not provided - ", "", 1)
