@@ -21,8 +21,10 @@ from .dialog_constants import (
 )
 
 try:
+    from ..frameworks.registry import DEFAULT_FRAMEWORK_ID, normalize_framework_id
     from ..rulesets.registry import DEFAULT_RULESET_ID, normalize_ruleset_id
 except ImportError:
+    from frameworks.registry import DEFAULT_FRAMEWORK_ID, normalize_framework_id  # type: ignore
     from rulesets.registry import DEFAULT_RULESET_ID, normalize_ruleset_id  # type: ignore
 
 
@@ -38,6 +40,23 @@ class PersistenceMixin:
         except RuntimeError:
             pass
         combo = self.findChild(QComboBox, "comboBox_ruleset") if hasattr(self, "findChild") else None
+        if isinstance(combo, QComboBox):
+            try:
+                _ = combo.currentIndex()
+                return combo
+            except RuntimeError:
+                return None
+        return None
+
+    def _framework_combo_widget(self):
+        combo = getattr(self, "framework_combo", None)
+        try:
+            if isinstance(combo, QComboBox):
+                _ = combo.currentIndex()
+                return combo
+        except RuntimeError:
+            pass
+        combo = self.findChild(QComboBox, "comboBox_safeguarding_framework") if hasattr(self, "findChild") else None
         if isinstance(combo, QComboBox):
             try:
                 _ = combo.currentIndex()
@@ -100,6 +119,10 @@ class PersistenceMixin:
         if isinstance(ruleset_combo, QComboBox):
             idx = ruleset_combo.findData(DEFAULT_RULESET_ID)
             ruleset_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        framework_combo = self._framework_combo_widget()
+        if isinstance(framework_combo, QComboBox):
+            idx = framework_combo.findData(DEFAULT_FRAMEWORK_ID)
+            framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
 
         for index in list(self._runway_groups.keys()):
             self._remove_runway_group_internal(index)
@@ -179,6 +202,8 @@ class PersistenceMixin:
 
     def _build_save_payload(self, icao_code: str):
         ruleset_combo = self._ruleset_combo_widget()
+        framework_combo = self._framework_combo_widget()
+        design_standard = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
         data_to_save = {
             "icao_code": icao_code,
             "iata_code": self._line_text("lineEdit_iata_code").strip().upper(),
@@ -188,7 +213,9 @@ class PersistenceMixin:
             "met_easting": self._line_text("lineEdit_met_easting"),
             "met_northing": self._line_text("lineEdit_met_northing"),
             "met_elevation": self._line_text("lineEdit_met_elevation"),
-            "ruleset": ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID,
+            "design_standard": design_standard,
+            "ruleset": design_standard,
+            "safeguarding_framework": framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID,
             "runways": [self._runway_groups[idx].get_input_data() for idx in sorted(self._runway_groups.keys())],
             "cns_facilities": self._get_cns_save_rows(),
         }
@@ -251,6 +278,9 @@ class PersistenceMixin:
         ruleset_combo = self._ruleset_combo_widget()
         if isinstance(ruleset_combo, QComboBox) and ruleset_combo.currentData() not in {None, DEFAULT_RULESET_ID}:
             return True
+        framework_combo = self._framework_combo_widget()
+        if isinstance(framework_combo, QComboBox) and framework_combo.currentData() not in {None, DEFAULT_FRAMEWORK_ID}:
+            return True
         if any(self._runway_has_existing_input(group.get_input_data()) for group in self._runway_groups.values()):
             return True
         cns_table = self._table("table_cns_facility")
@@ -293,9 +323,16 @@ class PersistenceMixin:
         self._set_line_text("lineEdit_met_elevation", loaded_data.get("met_elevation", ""))
         ruleset_combo = self._ruleset_combo_widget()
         if isinstance(ruleset_combo, QComboBox):
-            ruleset_id = normalize_ruleset_id(loaded_data.get("ruleset", DEFAULT_RULESET_ID))
+            ruleset_id = normalize_ruleset_id(
+                loaded_data.get("design_standard", loaded_data.get("ruleset", DEFAULT_RULESET_ID))
+            )
             idx = ruleset_combo.findData(ruleset_id)
             ruleset_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        framework_combo = self._framework_combo_widget()
+        if isinstance(framework_combo, QComboBox):
+            framework_id = normalize_framework_id(loaded_data.get("safeguarding_framework", DEFAULT_FRAMEWORK_ID))
+            idx = framework_combo.findData(framework_id)
+            framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._load_runway_rows(loaded_data.get("runways", []))
         if hasattr(self, "_load_agl_options"):
             self._load_agl_options(loaded_data.get("agl_options", {}))

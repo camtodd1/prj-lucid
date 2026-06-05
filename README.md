@@ -143,6 +143,8 @@ rulesets/mos139/physical_data.py
                                  policy.
 rulesets/mos139/taxiway.py      MOS139 taxiway separation policy.
 rulesets/mos139/ols_surfaces.py MOS139 OLS surface dimensions and lookups.
+frameworks/nasf/                Australian NASF safeguarding framework profile
+                                 and capability metadata.
 docs/                            Planning notes, implementation matrices,
                                  TODOs, and reference mapping files.
 styles/*.qml                     QGIS layer styling files.
@@ -155,7 +157,7 @@ resources.qrc                    Qt resource manifest.
 After editing Python modules, run a syntax check from the plugin directory:
 
 ```bash
-python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols_guideline.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/guideline_constants.py dimensions/*.py rulesets/*.py rulesets/mos139/*.py
+python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols_guideline.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/guideline_constants.py dimensions/*.py rulesets/*.py rulesets/mos139/*.py frameworks/*.py frameworks/nasf/*.py
 ```
 
 For AGL rule changes, also review `docs/airfield_ground_lighting_rules.md`.

@@ -51,6 +51,7 @@ try:
     from .dialog.cns_table import CnsTableMixin
     from .dialog.agl_options import AglOptionsMixin
     from .dialog.persistence import PersistenceMixin
+    from .frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles
     from .rulesets.registry import DEFAULT_RULESET_ID, iter_ruleset_profiles
 except ImportError:
     from dialog.dialog_constants import (  # type: ignore
@@ -73,6 +74,7 @@ except ImportError:
     from dialog.cns_table import CnsTableMixin  # type: ignore
     from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
+    from frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles  # type: ignore
     from rulesets.registry import DEFAULT_RULESET_ID, iter_ruleset_profiles  # type: ignore
 
 # Load the UI class from the .ui file
@@ -567,7 +569,7 @@ class SafeguardingBuilderDialog(
             ruleset_group.setMaximumHeight(target_height)
 
     def _setup_ruleset_selector_ui(self) -> None:
-        """Create the global safeguarding standard selector."""
+        """Create global policy selectors."""
         self.ruleset_combo = QtWidgets.QComboBox()
         self.ruleset_combo.setObjectName("comboBox_ruleset")
         for profile in iter_ruleset_profiles():
@@ -575,24 +577,42 @@ class SafeguardingBuilderDialog(
         default_index = self.ruleset_combo.findData(DEFAULT_RULESET_ID)
         self.ruleset_combo.setCurrentIndex(default_index if default_index >= 0 else 0)
         self.ruleset_combo.setEnabled(False)
-        self.ruleset_combo.setToolTip("Ruleset registry is active. MOS139 remains the only selectable standard.")
+        self.ruleset_combo.setToolTip("Aerodrome design standard. MOS139 is currently the only selectable standard.")
         self.ruleset_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.ruleset_combo.setMinimumWidth(190)
 
-        ruleset_group = QtWidgets.QGroupBox("Safeguarding Standard")
+        self.framework_combo = QtWidgets.QComboBox()
+        self.framework_combo.setObjectName("comboBox_safeguarding_framework")
+        for profile in iter_framework_profiles():
+            self.framework_combo.addItem(profile.display_name, userData=profile.id)
+        default_framework_index = self.framework_combo.findData(DEFAULT_FRAMEWORK_ID)
+        self.framework_combo.setCurrentIndex(default_framework_index if default_framework_index >= 0 else 0)
+        self.framework_combo.setEnabled(False)
+        self.framework_combo.setToolTip(
+            "Planning and safeguarding framework. NASF is currently the only selectable framework."
+        )
+        self.framework_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self.framework_combo.setMinimumWidth(190)
+
+        ruleset_group = QtWidgets.QGroupBox("Policy Settings")
         ruleset_group.setObjectName("groupBox_ruleset")
         ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
         ruleset_layout.setColumnStretch(0, 2)
         ruleset_layout.setColumnStretch(1, 1)
         ruleset_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
-        ruleset_label = QtWidgets.QLabel("Ruleset:")
+        ruleset_label = QtWidgets.QLabel("Design Standard:")
         ruleset_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         ruleset_layout.addWidget(ruleset_label, 0, 0)
         ruleset_layout.addWidget(self.ruleset_combo, 0, 1)
+        framework_label = QtWidgets.QLabel("Safeguarding Framework:")
+        framework_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        ruleset_layout.addWidget(framework_label, 1, 0)
+        ruleset_layout.addWidget(self.framework_combo, 1, 1)
 
         self.groupBox_ruleset = ruleset_group
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
+        self.framework_combo.currentIndexChanged.connect(self.update_dialog_status)
 
     def _style_dialog_header(self) -> None:
         """Tighten the top utility header into a compact visual band."""
@@ -1863,6 +1883,10 @@ class SafeguardingBuilderDialog(
         if icao is None:  # Critical failure
             return None
 
+        ruleset_combo = self._ruleset_combo_widget()
+        framework_combo = self._framework_combo_widget()
+        design_standard = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
+        safeguarding_framework = framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID
         final_data.update(
             {
                 "icao_code": icao,
@@ -1872,9 +1896,9 @@ class SafeguardingBuilderDialog(
                 "arp_elevation": arp_elev,
                 "met_point": met_pt,
                 "met_elevation": met_elev,
-                "ruleset": self._ruleset_combo_widget().currentData()
-                if self._ruleset_combo_widget()
-                else DEFAULT_RULESET_ID,
+                "design_standard": design_standard,
+                "ruleset": design_standard,
+                "safeguarding_framework": safeguarding_framework,
             }
         )
 

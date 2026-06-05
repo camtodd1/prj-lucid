@@ -21,7 +21,7 @@ for _profile in _PROFILES.values():
 def _ruleset_id_from_payload(value) -> str:
     """Extract a ruleset id from legacy strings or future structured payloads."""
     if isinstance(value, Mapping):
-        raw_id = value.get("id") or value.get("ruleset") or value.get("aerodrome_standard")
+        raw_id = value.get("id") or value.get("design_standard") or value.get("ruleset") or value.get("aerodrome_standard")
     else:
         raw_id = value
     return str(raw_id or DEFAULT_RULESET_ID).strip()

@@ -75,6 +75,8 @@ class RulesetRegistryTest(unittest.TestCase):
 
     def test_structured_payload_normalizes_to_canonical_id(self):
         self.assertEqual(normalize_ruleset_id({"id": "MOS139"}), "mos139_2019")
+        self.assertEqual(normalize_ruleset_id({"design_standard": "MOS139"}), "mos139_2019")
+        self.assertEqual(normalize_ruleset_id({"ruleset": "MOS139"}), "mos139_2019")
 
     def test_profiles_expose_capabilities(self):
         profile = get_ruleset_profile("mos139_2019")

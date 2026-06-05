@@ -44,6 +44,7 @@ from .guidelines.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
+from .frameworks.registry import get_framework_profile
 from .rulesets.context import RulesetContext
 from .rulesets.registry import get_ruleset_profile
 
@@ -101,9 +102,10 @@ class SafeguardingBuilder(
         self.generate_controlling_ols: bool = True
         self.debug_logging: bool = False
         self.ruleset = get_ruleset_profile()
+        self.framework = get_framework_profile()
         self.ruleset_context = RulesetContext(
-            aerodrome_standard=self.ruleset,
-            supplementary_frameworks=("nasf_aus", "cns_bra_aus", "met_station_aus"),
+            design_standard=self.ruleset,
+            safeguarding_framework=self.framework,
         )
 
         self._init_locale()
@@ -179,6 +181,10 @@ class SafeguardingBuilder(
     def get_active_ruleset(self):
         """Return the active ruleset profile, defaulting to MOS139."""
         return getattr(self, "ruleset", get_ruleset_profile())
+
+    def get_active_framework(self):
+        """Return the active safeguarding framework profile, defaulting to NASF."""
+        return getattr(self, "framework", get_framework_profile())
 
     def add_action(
         self,
@@ -565,10 +571,11 @@ class SafeguardingBuilder(
         self.dissolve_output = input_data.get("dissolve_output", False)
         self.contour_intervals = input_data.get("contour_intervals", {})
         self.generate_controlling_ols = bool(input_data.get("generate_controlling_ols", True))
-        self.ruleset = get_ruleset_profile(input_data.get("ruleset"))
+        self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
+        self.framework = get_framework_profile(input_data.get("safeguarding_framework"))
         self.ruleset_context = RulesetContext(
-            aerodrome_standard=self.ruleset,
-            supplementary_frameworks=("nasf_aus", "cns_bra_aus", "met_station_aus"),
+            design_standard=self.ruleset,
+            safeguarding_framework=self.framework,
         )
 
         icao_code = input_data.get("icao_code", "UNKNOWN")
@@ -592,7 +599,7 @@ class SafeguardingBuilder(
             f"MET={'yes' if met_point is not None else 'no'}, "
             f"AGL={'enabled' if agl_options.get('enabled') else 'disabled'}, "
             f"CNS={len(cns_input_list)}, runways={len(runway_input_list)}, "
-            f"ruleset={self.ruleset.id}."
+            f"design_standard={self.ruleset.id}, safeguarding_framework={self.framework.id}."
         )
 
         if not runway_input_list:
