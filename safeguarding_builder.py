@@ -1494,10 +1494,33 @@ class SafeguardingBuilder(
         for group_name in framework.guideline_group_names(include_cns=True):
             self._merge_or_move_direct_group(main_group, self.tr(group_name), external_group)
 
-        self._merge_or_move_direct_group(main_group, self.tr("Guideline F - Airspace / OLS"), ols_surfaces_group)
-        self._repair_guideline_f_layer_tree(ols_surfaces_group)
+        legacy_guideline_f_name = self.tr("Guideline F - Airspace / OLS")
+        self._merge_or_move_direct_group(main_group, legacy_guideline_f_name, ols_surfaces_group)
+        legacy_guideline_f_group = self._find_direct_child_group(ols_surfaces_group, legacy_guideline_f_name)
+        if legacy_guideline_f_group is not None:
+            for child in list(legacy_guideline_f_group.children()):
+                if isinstance(child, QgsLayerTreeGroup):
+                    self._merge_or_move_direct_group(legacy_guideline_f_group, child.name(), ols_surfaces_group)
+                else:
+                    self._move_layer_tree_node(child, ols_surfaces_group)
+            try:
+                if not legacy_guideline_f_group.children():
+                    ols_surfaces_group.removeChildNode(legacy_guideline_f_group)
+            except Exception as e:
+                QgsMessageLog.logMessage(
+                    f"Warning: Failed to remove legacy OLS group '{legacy_guideline_f_name}': {e}",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
+        for group_name in self.get_active_framework().guideline_f_subgroup_names().values():
+            self._merge_or_move_direct_group(main_group, self.tr(group_name), ols_surfaces_group)
+        self._repair_guideline_f_layer_tree(ols_surfaces_group, extra_source_groups=[main_group])
 
-    def _repair_guideline_f_layer_tree(self, ols_surfaces_group: QgsLayerTreeGroup) -> None:
+    def _repair_guideline_f_layer_tree(
+        self,
+        ols_surfaces_group: QgsLayerTreeGroup,
+        extra_source_groups: Optional[List[QgsLayerTreeGroup]] = None,
+    ) -> None:
         """Move direct OLS layers into their reviewed OLS subfolders."""
         guideline_f_group = ols_surfaces_group
         if guideline_f_group is None:
@@ -1564,7 +1587,9 @@ class SafeguardingBuilder(
                 return runway_group
             return None
 
-        for group in [guideline_f_group, runway_group, ofz_group, airport_wide_group]:
+        source_groups = [guideline_f_group, runway_group, ofz_group, airport_wide_group]
+        source_groups.extend(group for group in (extra_source_groups or []) if group is not None)
+        for group in source_groups:
             for child in list(group.children()):
                 if not isinstance(child, QgsLayerTreeLayer):
                     continue
