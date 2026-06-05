@@ -15,18 +15,18 @@ from qgis.core import (  # type: ignore
     QgsMessageLog,
 )
 
-from .guideline_constants import (
-    GUIDELINE_C_BUFFER_SEGMENTS,
-    GUIDELINE_E_ZONE_ORDER,
-    GUIDELINE_E_ZONE_PARAMS,
-    MOS_REF_GUIDELINE_E,
-    NASF_REF_GUIDELINE_E,
-)
+from ..frameworks.registry import get_framework_profile
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class LightingGuidelineMixin:
+    def _active_safeguarding_framework(self):
+        getter = getattr(self, "get_active_framework", None)
+        if callable(getter):
+            return getter()
+        return get_framework_profile()
+
     def process_guideline_e(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Processes Guideline E: Lighting Control Zone and LCZ Area circle."""
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
@@ -51,13 +51,16 @@ class LightingGuidelineMixin:
         full_geoms: Dict[str, Optional[QgsGeometry]] = {}
         final_geoms: Dict[str, Optional[QgsGeometry]] = {}
         overall_success = False
+        lighting = self._active_safeguarding_framework().lighting_control_parameters()
+        zone_params = lighting["zones"]
+        zone_order = lighting["zone_order"]
 
         try:
 
             def create_lcz_layer(zone_letter: str, geom: Optional[QgsGeometry]) -> bool:
                 if not geom:
                     return False
-                params = GUIDELINE_E_ZONE_PARAMS[zone_letter]
+                params = zone_params[zone_letter]
                 display_name = f"{self.tr('LCZ')} {zone_letter} {runway_name}"
                 internal_name = f"LCZ_{zone_letter}_{runway_name.replace('/', '_')}"
                 fields = QgsFields(
@@ -75,10 +78,10 @@ class LightingGuidelineMixin:
                 )
 
                 inner_extent_val = 0.0
-                zone_index = GUIDELINE_E_ZONE_ORDER.index(zone_letter)
+                zone_index = zone_order.index(zone_letter)
                 if zone_index > 0:
-                    previous_zone_id = GUIDELINE_E_ZONE_ORDER[zone_index - 1]
-                    inner_extent_val = GUIDELINE_E_ZONE_PARAMS[previous_zone_id]["ext"]
+                    previous_zone_id = zone_order[zone_index - 1]
+                    inner_extent_val = zone_params[previous_zone_id]["ext"]
 
                 feature = QgsFeature(fields)
                 feature.setGeometry(geom)
@@ -91,8 +94,8 @@ class LightingGuidelineMixin:
                         params["ext"],
                         params["half_w"] * 2,
                         params["max_intensity"],
-                        MOS_REF_GUIDELINE_E,
-                        NASF_REF_GUIDELINE_E,
+                        lighting["mos_ref"],
+                        lighting["nasf_ref"],
                     ]
                 )
                 layer = self._create_and_add_layer(
@@ -106,8 +109,8 @@ class LightingGuidelineMixin:
                 )
                 return layer is not None
 
-            for zone_id_geom_gen in GUIDELINE_E_ZONE_ORDER:
-                params_geom = GUIDELINE_E_ZONE_PARAMS[zone_id_geom_gen]
+            for zone_id_geom_gen in zone_order:
+                params_geom = zone_params[zone_id_geom_gen]
                 geom_full = self._create_runway_aligned_rectangle(
                     thr_point,
                     rec_thr_point,
@@ -121,9 +124,9 @@ class LightingGuidelineMixin:
 
             final_geoms["A"] = full_geoms.get("A")
 
-            for i, zone_id_diff in enumerate(GUIDELINE_E_ZONE_ORDER[1:]):
+            for i, zone_id_diff in enumerate(zone_order[1:]):
                 geom_curr_for_diff = full_geoms.get(zone_id_diff)
-                prev_zone_id_for_diff = GUIDELINE_E_ZONE_ORDER[i]
+                prev_zone_id_for_diff = zone_order[i]
                 geom_prev_valid_for_diff = full_geoms.get(prev_zone_id_for_diff)
 
                 if geom_curr_for_diff and geom_prev_valid_for_diff:
@@ -136,7 +139,7 @@ class LightingGuidelineMixin:
                 else:
                     final_geoms[zone_id_diff] = None
 
-            for zone_id_create in GUIDELINE_E_ZONE_ORDER:
+            for zone_id_create in zone_order:
                 if final_geoms.get(zone_id_create):
                     if create_lcz_layer(zone_id_create, final_geoms[zone_id_create]):
                         overall_success = True
@@ -152,8 +155,8 @@ class LightingGuidelineMixin:
             if midpoint:
                 midpoint_geom = QgsGeometry.fromPointXY(midpoint)
                 if not midpoint_geom.isNull():
-                    radius_m = 6000.0
-                    lcz_area_circle_geom = midpoint_geom.buffer(radius_m, GUIDELINE_C_BUFFER_SEGMENTS)
+                    radius_m = lighting["area_radius_m"]
+                    lcz_area_circle_geom = midpoint_geom.buffer(radius_m, lighting["buffer_segments"])
 
                     if lcz_area_circle_geom and not lcz_area_circle_geom.isEmpty():
                         valid_lcz_area_geom = lcz_area_circle_geom.makeValid()
@@ -201,8 +204,8 @@ class LightingGuidelineMixin:
                                     runway_name,
                                     "Lighting Control Area (6km Radius)",
                                     radius_m,
-                                    "MOS 9.144(2)",
-                                    NASF_REF_GUIDELINE_E,
+                                    lighting["mos_ref"],
+                                    lighting["nasf_ref"],
                                 ]
                             )
 

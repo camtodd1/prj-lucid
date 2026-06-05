@@ -18,28 +18,18 @@ from qgis.core import (  # type: ignore
     QgsPointXY,
 )
 
-from ..dimensions import cns_dimensions
-from .guideline_constants import (
-    GUIDELINE_B_FAR_EDGE_OFFSET,
-    GUIDELINE_B_ZONE_HALF_WIDTH,
-    GUIDELINE_B_ZONE_LENGTH_BACKWARD,
-    GUIDELINE_C_BUFFER_SEGMENTS,
-    GUIDELINE_C_RADIUS_A_M,
-    GUIDELINE_C_RADIUS_B_M,
-    GUIDELINE_C_RADIUS_C_M,
-    GUIDELINE_D_BUFFER_SEGMENTS,
-    GUIDELINE_D_TURBINE_RADIUS_M,
-    GUIDELINE_I_MOS_REF_VAL,
-    GUIDELINE_I_NASF_REF_VAL,
-    GUIDELINE_I_PSA_INNER_WIDTH,
-    GUIDELINE_I_PSA_LENGTH,
-    GUIDELINE_I_PSA_OUTER_WIDTH,
-)
+from ..frameworks.registry import get_framework_profile
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class SimpleGuidelinesMixin:
+    def _active_safeguarding_framework(self):
+        getter = getattr(self, "get_active_framework", None)
+        if callable(getter):
+            return getter()
+        return get_framework_profile()
+
     def process_guideline_a(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Placeholder for Guideline A: Aircraft Noise processing."""
         QgsMessageLog.logMessage("Guideline A processing not implemented.", PLUGIN_TAG, level=Qgis.Info)
@@ -55,6 +45,8 @@ class SimpleGuidelinesMixin:
         params = self._get_runway_parameters(thr_point, rec_thr_point)
         if params is None:
             return False
+        framework = self._active_safeguarding_framework()
+        windshear = framework.windshear_parameters()
 
         fields = QgsFields(
             [
@@ -70,9 +62,9 @@ class SimpleGuidelinesMixin:
             geom_p = self._create_offset_rectangle(
                 thr_point,
                 params["azimuth_p_r"],
-                GUIDELINE_B_FAR_EDGE_OFFSET,
-                GUIDELINE_B_ZONE_LENGTH_BACKWARD,
-                GUIDELINE_B_ZONE_HALF_WIDTH,
+                windshear["far_edge_offset"],
+                windshear["zone_length_backward"],
+                windshear["zone_half_width"],
                 f"WSZ {primary_desig}",
             )
             if geom_p:
@@ -83,7 +75,7 @@ class SimpleGuidelinesMixin:
                         runway_name,
                         "Windshear Assessment Zone",
                         primary_desig,
-                        "NASF Guideline B",
+                        windshear["ref_nasf"],
                     ]
                 )
                 features_to_add.append(feat)
@@ -93,9 +85,9 @@ class SimpleGuidelinesMixin:
             geom_r = self._create_offset_rectangle(
                 rec_thr_point,
                 params["azimuth_r_p"],
-                GUIDELINE_B_FAR_EDGE_OFFSET,
-                GUIDELINE_B_ZONE_LENGTH_BACKWARD,
-                GUIDELINE_B_ZONE_HALF_WIDTH,
+                windshear["far_edge_offset"],
+                windshear["zone_length_backward"],
+                windshear["zone_half_width"],
                 f"WSZ {reciprocal_desig}",
             )
             if geom_r:
@@ -106,7 +98,7 @@ class SimpleGuidelinesMixin:
                         runway_name,
                         "Windshear Assessment Zone",
                         reciprocal_desig,
-                        "NASF Guideline B",
+                        windshear["ref_nasf"],
                     ]
                 )
                 features_to_add.append(feat)
@@ -139,6 +131,12 @@ class SimpleGuidelinesMixin:
         if arp_point is None or not icao_code or target_crs is None or not target_crs.isValid() or layer_group is None:
             return False
         overall_success = False
+        framework = self._active_safeguarding_framework()
+        wildlife = framework.wildlife_parameters()
+        radius_a_m = wildlife["radius_a_m"]
+        radius_b_m = wildlife["radius_b_m"]
+        radius_c_m = wildlife["radius_c_m"]
+        buffer_segments = wildlife["buffer_segments"]
         try:
             arp_geom = QgsGeometry.fromPointXY(arp_point)
             if arp_geom.isNull():
@@ -186,8 +184,8 @@ class SimpleGuidelinesMixin:
                         desc,
                         r_in,
                         r_out,
-                        "MOS 17.01(2)",
-                        "NASF Guideline C",
+                        wildlife["ref_mos"],
+                        wildlife["ref_nasf"],
                     ]
                 )
                 layer = self._create_and_add_layer(
@@ -211,7 +209,7 @@ class SimpleGuidelinesMixin:
                 return True
 
             def circular_ring_points(radius_m: float, clockwise: bool = False) -> List[QgsPointXY]:
-                segment_count = max(8, GUIDELINE_C_BUFFER_SEGMENTS)
+                segment_count = max(8, buffer_segments)
                 angle_step = 2.0 * math.pi / segment_count
                 points = []
                 for i in range(segment_count):
@@ -238,32 +236,32 @@ class SimpleGuidelinesMixin:
                     return None
                 return geom.makeValid() if not geom.isGeosValid() else geom
 
-            geom_a = create_wzm_geometry(GUIDELINE_C_RADIUS_A_M)
-            geom_b = create_wzm_geometry(GUIDELINE_C_RADIUS_B_M, GUIDELINE_C_RADIUS_A_M)
-            geom_c = create_wzm_geometry(GUIDELINE_C_RADIUS_C_M, GUIDELINE_C_RADIUS_B_M)
+            geom_a = create_wzm_geometry(radius_a_m)
+            geom_b = create_wzm_geometry(radius_b_m, radius_a_m)
+            geom_c = create_wzm_geometry(radius_c_m, radius_b_m)
 
             if create_wzm_layer(
                 "A",
                 geom_a,
                 self.tr("Wildlife Management Zone A (0-3km)"),
                 0.0,
-                GUIDELINE_C_RADIUS_A_M / 1000.0,
+                radius_a_m / 1000.0,
             ):
                 overall_success = True
             if create_wzm_layer(
                 "B",
                 geom_b,
                 self.tr("Wildlife Management Zone B (3-8km)"),
-                GUIDELINE_C_RADIUS_A_M / 1000.0,
-                GUIDELINE_C_RADIUS_B_M / 1000.0,
+                radius_a_m / 1000.0,
+                radius_b_m / 1000.0,
             ):
                 overall_success = True
             if create_wzm_layer(
                 "C",
                 geom_c,
                 self.tr("Wildlife Management Zone C (8-13km)"),
-                GUIDELINE_C_RADIUS_B_M / 1000.0,
-                GUIDELINE_C_RADIUS_C_M / 1000.0,
+                radius_b_m / 1000.0,
+                radius_c_m / 1000.0,
             ):
                 overall_success = True
             if created_zones:
@@ -312,7 +310,10 @@ class SimpleGuidelinesMixin:
                 )
                 return False
 
-            turbine_zone_geom = arp_geom.buffer(GUIDELINE_D_TURBINE_RADIUS_M, GUIDELINE_D_BUFFER_SEGMENTS)
+            framework = self._active_safeguarding_framework()
+            wind_turbine = framework.wind_turbine_parameters()
+            turbine_radius_m = wind_turbine["radius_m"]
+            turbine_zone_geom = arp_geom.buffer(turbine_radius_m, wind_turbine["buffer_segments"])
             if not turbine_zone_geom or turbine_zone_geom.isEmpty():
                 QgsMessageLog.logMessage(
                     "Guideline D: Failed to create turbine zone buffer.",
@@ -345,8 +346,8 @@ class SimpleGuidelinesMixin:
                 [
                     icao_code,
                     self.tr("Wind Turbine Assessment Zone (30km Radius)"),
-                    GUIDELINE_D_TURBINE_RADIUS_M / 1000.0,
-                    self.tr("NASF Guideline D"),
+                    turbine_radius_m / 1000.0,
+                    self.tr(wind_turbine["ref_nasf"]),
                 ]
             )
 
@@ -409,7 +410,7 @@ class SimpleGuidelinesMixin:
             facility_elev = facility_data.get("elevation")
             if not facility_geom or not facility_geom.isGeosValid():
                 continue
-            bra_specs_list = cns_dimensions.get_cns_spec(facility_type)
+            bra_specs_list = self._active_safeguarding_framework().cns_spec(facility_type)
             if not bra_specs_list:
                 continue
 
@@ -625,8 +626,13 @@ class SimpleGuidelinesMixin:
         params = self._get_runway_parameters(thr_point, rec_thr_point)
         if params is None:
             return False
-        psa_inner_half_w = GUIDELINE_I_PSA_INNER_WIDTH / 2.0
-        psa_outer_half_w = GUIDELINE_I_PSA_OUTER_WIDTH / 2.0
+        framework = self._active_safeguarding_framework()
+        psa = framework.public_safety_area_parameters()
+        psa_length = psa["length"]
+        psa_inner_width = psa["inner_width"]
+        psa_outer_width = psa["outer_width"]
+        psa_inner_half_w = psa_inner_width / 2.0
+        psa_outer_half_w = psa_outer_width / 2.0
         if psa_inner_half_w < 0 or psa_outer_half_w < 0:
             return False
 
@@ -648,7 +654,7 @@ class SimpleGuidelinesMixin:
             geom_p = self._create_trapezoid(
                 thr_point,
                 params["azimuth_r_p"],
-                GUIDELINE_I_PSA_LENGTH,
+                psa_length,
                 psa_inner_half_w,
                 psa_outer_half_w,
                 f"PSA {primary_desig}",
@@ -661,11 +667,11 @@ class SimpleGuidelinesMixin:
                         runway_name,
                         f"Public Safety Area {primary_desig}",
                         primary_desig,
-                        GUIDELINE_I_PSA_LENGTH,
-                        GUIDELINE_I_PSA_INNER_WIDTH,
-                        GUIDELINE_I_PSA_OUTER_WIDTH,
-                        GUIDELINE_I_MOS_REF_VAL,
-                        GUIDELINE_I_NASF_REF_VAL,
+                        psa_length,
+                        psa_inner_width,
+                        psa_outer_width,
+                        psa["mos_ref"],
+                        psa["nasf_ref"],
                     ]
                 )
                 features_to_add.append(feat)
@@ -675,7 +681,7 @@ class SimpleGuidelinesMixin:
             geom_r = self._create_trapezoid(
                 rec_thr_point,
                 params["azimuth_p_r"],
-                GUIDELINE_I_PSA_LENGTH,
+                psa_length,
                 psa_inner_half_w,
                 psa_outer_half_w,
                 f"PSA {reciprocal_desig}",
@@ -688,11 +694,11 @@ class SimpleGuidelinesMixin:
                         runway_name,
                         f"Public Safety Area {reciprocal_desig}",
                         reciprocal_desig,
-                        GUIDELINE_I_PSA_LENGTH,
-                        GUIDELINE_I_PSA_INNER_WIDTH,
-                        GUIDELINE_I_PSA_OUTER_WIDTH,
-                        GUIDELINE_I_MOS_REF_VAL,
-                        GUIDELINE_I_NASF_REF_VAL,
+                        psa_length,
+                        psa_inner_width,
+                        psa_outer_width,
+                        psa["mos_ref"],
+                        psa["nasf_ref"],
                     ]
                 )
                 features_to_add.append(feat)

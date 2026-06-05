@@ -8,6 +8,7 @@ from frameworks.registry import (
 )
 from rulesets.registry import get_ruleset_profile
 from rulesets.context import RulesetContext
+from dimensions import cns_dimensions
 
 
 class FrameworkRegistryTest(unittest.TestCase):
@@ -47,6 +48,54 @@ class FrameworkRegistryTest(unittest.TestCase):
         self.assertEqual(context.ruleset_id, "mos139_2019")
         self.assertEqual(context.framework_id, "nasf_aus")
         self.assertEqual(context.aerodrome_standard.id, "mos139_2019")
+
+    def test_nasf_profile_exposes_guideline_parameters(self):
+        profile = get_framework_profile("nasf_aus")
+
+        windshear = profile.windshear_parameters()
+        self.assertEqual(windshear["far_edge_offset"], 500.0)
+        self.assertEqual(windshear["zone_length_backward"], 1400.0)
+        self.assertEqual(windshear["zone_half_width"], 1200.0)
+        self.assertEqual(windshear["ref_nasf"], "NASF Guideline B")
+
+        wildlife = profile.wildlife_parameters()
+        self.assertEqual(wildlife["radius_a_m"], 3000.0)
+        self.assertEqual(wildlife["radius_b_m"], 8000.0)
+        self.assertEqual(wildlife["radius_c_m"], 13000.0)
+        self.assertEqual(wildlife["buffer_segments"], 144)
+
+        wind_turbine = profile.wind_turbine_parameters()
+        self.assertEqual(wind_turbine["radius_m"], 30000.0)
+        self.assertEqual(wind_turbine["ref_nasf"], "NASF Guideline D")
+
+    def test_nasf_profile_exposes_lighting_and_psa_parameters(self):
+        profile = get_framework_profile("nasf_aus")
+
+        lighting = profile.lighting_control_parameters()
+        self.assertEqual(lighting["zone_order"], ["A", "B", "C", "D"])
+        self.assertEqual(lighting["zones"]["D"]["max_intensity"], "450cd")
+        self.assertEqual(lighting["area_radius_m"], 6000.0)
+        self.assertEqual(lighting["nasf_ref"], "NASF Guideline E")
+
+        psa = profile.public_safety_area_parameters()
+        self.assertEqual(psa["length"], 1000.0)
+        self.assertEqual(psa["inner_width"], 350.0)
+        self.assertEqual(psa["outer_width"], 250.0)
+        self.assertEqual(psa["nasf_ref"], "NASF Guideline I")
+
+    def test_nasf_profile_exposes_cns_bra_specs(self):
+        profile = get_framework_profile("nasf_aus")
+        specs = profile.cns_spec("VHF Omni-Directional Range (VOR)")
+
+        self.assertIsNotNone(specs)
+        self.assertEqual(specs[0]["SurfaceName"], "Zone A")
+        self.assertEqual(specs[0]["OuterRadius_m"], 100)
+
+    def test_legacy_cns_dimensions_shim_uses_nasf_data(self):
+        legacy_specs = cns_dimensions.get_cns_spec("VHF Omni-Directional Range (VOR)")
+        framework_specs = get_framework_profile("nasf_aus").cns_spec("VHF Omni-Directional Range (VOR)")
+
+        self.assertEqual(legacy_specs, framework_specs)
 
 
 if __name__ == "__main__":
