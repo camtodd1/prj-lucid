@@ -111,6 +111,18 @@ class RulesetRegistryTest(unittest.TestCase):
     def test_mos139_adapter_matches_legacy_agl_helpers(self):
         profile = get_ruleset_profile("mos139_2019")
         runway_type = "Precision Approach CAT I"
+        for constant_name in [
+            "MOS_REF_RUNWAY_EDGE",
+            "RUNWAY_EDGE_INSTRUMENT_SPACING_M",
+            "RUNWAY_LIGHTING_MIN_WIDTH_M",
+            "PRECISION_THRESHOLD_MAX_SPACING_M",
+            "RUNWAY_CENTRELINE_MAX_OFFSET_M",
+            "TDZ_LENGTH_M",
+            "TDZ_MARKING_LENGTH_M",
+            "LIGHT_COLOUR_VARIABLE_WHITE",
+            "LIGHT_COLOUR_FLASHING_WHITE",
+        ]:
+            self.assertEqual(profile.agl_value(constant_name), getattr(agl_dimensions, constant_name))
         self.assertEqual(
             profile.runway_type_supports_agl(runway_type),
             agl_dimensions.runway_type_supports_agl(runway_type),
@@ -145,7 +157,10 @@ class RulesetRegistryTest(unittest.TestCase):
             profile.approach_profile_for_end("Precision Approach CAT II/III"),
             agl_dimensions.approach_profile_for_end("Precision Approach CAT II/III"),
         )
-        self.assertEqual(profile.agl_value("RUNWAY_LIGHTING_MIN_WIDTH_M"), agl_dimensions.RUNWAY_LIGHTING_MIN_WIDTH_M)
+        self.assertEqual(
+            profile.approach_profile_for_end("Non-Instrument (NI)"),
+            agl_dimensions.approach_profile_for_end("Non-Instrument (NI)"),
+        )
 
     def test_registry_has_ui_profiles(self):
         profiles = list(iter_ruleset_profiles())

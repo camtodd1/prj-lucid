@@ -6,9 +6,9 @@ from qgis.PyQt import QtGui, QtWidgets  # type: ignore
 from qgis.PyQt.QtWidgets import QComboBox, QTableWidgetItem  # type: ignore
 
 try:
-    from ..dimensions.agl_dimensions import approach_profile_for_end
+    from ..rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile
 except ImportError:
-    from dimensions.agl_dimensions import approach_profile_for_end  # type: ignore
+    from rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile  # type: ignore
 
 
 class AglOptionsMixin:
@@ -20,6 +20,11 @@ class AglOptionsMixin:
         "threshold_inset_m": "0",
         "approach_spacing_m": "30",
     }
+
+    def _agl_ruleset(self):
+        ruleset_combo = getattr(self, "_ruleset_combo_widget", lambda: None)()
+        ruleset_id = ruleset_combo.currentData() if ruleset_combo is not None else DEFAULT_RULESET_ID
+        return get_ruleset_profile(ruleset_id)
 
     def _setup_agl_options_ui(self) -> None:
         tab_widget = getattr(self, "tabWidget_workflow", None)
@@ -271,8 +276,12 @@ class AglOptionsMixin:
         options["centreline_offset_m"] = self._agl_float(
             "lineEdit_agl_centreline_offset", "AGL centreline light offset", errors, minimum=0.0
         )
-        if options["centreline_offset_m"] > 0.6:
-            self._agl_error(errors, "AGL centreline light offset must not exceed 0.6 m.")
+        centreline_max_offset_m = self._agl_ruleset().agl_value("RUNWAY_CENTRELINE_MAX_OFFSET_M")
+        if options["centreline_offset_m"] > centreline_max_offset_m:
+            self._agl_error(
+                errors,
+                f"AGL centreline light offset must not exceed {centreline_max_offset_m:g} m.",
+            )
         options["approach_lighting"] = self._get_agl_approach_rows(errors)
         options.update(self._get_agl_element_options())
         return options
@@ -409,7 +418,7 @@ class AglOptionsMixin:
                 self._agl_error(errors, f"AGL approach row {row + 1}: selected runway no longer exists.")
                 continue
             runway_type = self._agl_runway_end_type(runway_index_int, str(end_role))
-            profile = approach_profile_for_end(runway_type)
+            profile = self._agl_ruleset().approach_profile_for_end(runway_type)
             length_m = (
                 self._parse_agl_number(length_text, minimum=0.01)
                 if length_text
