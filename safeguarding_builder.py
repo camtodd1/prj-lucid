@@ -98,7 +98,6 @@ class SafeguardingBuilder(
         self.output_path: Optional[str] = None
         self.output_format_driver: Optional[str] = None
         self.output_format_extension: Optional[str] = None
-        self.dissolve_output: bool = False
         self.contour_intervals: Dict[str, float] = {}
         self.generate_controlling_ols: bool = True
         self.debug_logging: bool = False
@@ -489,7 +488,6 @@ class SafeguardingBuilder(
         self.output_path = None
         self.output_format_driver = None
         self.output_format_extension = None
-        self.dissolve_output = False
         self.contour_intervals = {}
         self.generate_controlling_ols = True
 
@@ -569,7 +567,6 @@ class SafeguardingBuilder(
         self.output_path = input_data.get("output_path")
         self.output_format_driver = input_data.get("output_format_driver")
         self.output_format_extension = input_data.get("output_format_extension")
-        self.dissolve_output = input_data.get("dissolve_output", False)
         self.contour_intervals = input_data.get("contour_intervals", {})
         self.generate_controlling_ols = bool(input_data.get("generate_controlling_ols", True))
         self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
