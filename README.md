@@ -135,6 +135,13 @@ dimensions/agl_dimensions.py     Legacy compatibility shim for MOS139 AGL
                                  dimensions.
 rulesets/mos139/                Current MOS139 metadata, OLS, physical,
                                  marking, and lighting policy sources.
+rulesets/mos139/classification.py
+                                 MOS139 runway type mapping.
+rulesets/mos139/physical_data.py
+                                 MOS139 strip, RESA, pavement, and shoulder
+                                 policy.
+rulesets/mos139/taxiway.py      MOS139 taxiway separation policy.
+rulesets/mos139/ols_surfaces.py MOS139 OLS surface dimensions and lookups.
 docs/                            Planning notes, implementation matrices,
                                  TODOs, and reference mapping files.
 styles/*.qml                     QGIS layer styling files.

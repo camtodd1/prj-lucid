@@ -3,25 +3,27 @@
 from typing import Optional
 
 try:
-    from . import ols_dimensions
+    from . import physical_data
+    from . import taxiway
 except ImportError:
-    from rulesets.mos139 import ols_dimensions  # type: ignore
+    from rulesets.mos139 import physical_data  # type: ignore
+    from rulesets.mos139 import taxiway  # type: ignore
 
 
 def physical_refs() -> dict:
-    return ols_dimensions.get_physical_refs()
+    return physical_data.get_physical_refs()
 
 
 def strip_parameters(arc_num: int, type_abbr: str, runway_width: Optional[float]):
-    return ols_dimensions.get_strip_params(arc_num, type_abbr, runway_width)
+    return physical_data.get_strip_params(arc_num, type_abbr, runway_width)
 
 
 def resa_parameters(arc_num: int, type1_abbr: str, type2_abbr: str):
-    return ols_dimensions.get_resa_params(arc_num, type1_abbr, type2_abbr)
+    return physical_data.get_resa_params(arc_num, type1_abbr, type2_abbr)
 
 
 def taxiway_separation_offset(arc_num: int, arc_let: Optional[str], runway_type: Optional[str]):
-    return ols_dimensions.get_taxiway_separation_offset(arc_num, arc_let, runway_type)
+    return taxiway.get_taxiway_separation_offset(arc_num, arc_let, runway_type)
 
 
 __all__ = [

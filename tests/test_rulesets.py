@@ -2,7 +2,7 @@ import unittest
 
 from dimensions import agl_dimensions as legacy_agl_dimensions
 from dimensions import ols_dimensions as legacy_ols_dimensions
-from rulesets.mos139 import lighting, ols_dimensions
+from rulesets.mos139 import classification, lighting, ols_surfaces, physical_data, taxiway
 from rulesets.registry import (
     DEFAULT_RULESET_ID,
     get_ruleset_profile,
@@ -32,23 +32,23 @@ class RulesetRegistryTest(unittest.TestCase):
         profile = get_ruleset_profile("mos139_2019")
         self.assertEqual(
             profile.classify_runway_type("Precision Approach CAT I"),
-            ols_dimensions.get_runway_type_abbr("Precision Approach CAT I"),
+            classification.get_runway_type_abbr("Precision Approach CAT I"),
         )
         self.assertEqual(
             profile.strip_parameters(3, "PA_I", 45.0),
-            ols_dimensions.get_strip_params(3, "PA_I", 45.0),
+            physical_data.get_strip_params(3, "PA_I", 45.0),
         )
         self.assertEqual(
             profile.resa_parameters(3, "PA_I", "NI"),
-            ols_dimensions.get_resa_params(3, "PA_I", "NI"),
+            physical_data.get_resa_params(3, "PA_I", "NI"),
         )
         self.assertEqual(
             profile.ols_parameters(3, "Precision Approach CAT I", "APPROACH"),
-            ols_dimensions.get_ols_params(3, "Precision Approach CAT I", "APPROACH"),
+            ols_surfaces.get_ols_params(3, "Precision Approach CAT I", "APPROACH"),
         )
         self.assertEqual(
             profile.taxiway_separation_offset(3, "C", "Precision Approach CAT I"),
-            ols_dimensions.get_taxiway_separation_offset(3, "C", "Precision Approach CAT I"),
+            taxiway.get_taxiway_separation_offset(3, "C", "Precision Approach CAT I"),
         )
 
     def test_mos139_threshold_marking_params(self):
@@ -167,7 +167,7 @@ class RulesetRegistryTest(unittest.TestCase):
     def test_legacy_dimension_shims_forward_to_mos139_sources(self):
         self.assertEqual(
             legacy_ols_dimensions.get_runway_type_abbr("Precision Approach CAT I"),
-            ols_dimensions.get_runway_type_abbr("Precision Approach CAT I"),
+            classification.get_runway_type_abbr("Precision Approach CAT I"),
         )
         self.assertEqual(
             legacy_agl_dimensions.RUNWAY_LIGHTING_MIN_WIDTH_M,
