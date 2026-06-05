@@ -51,6 +51,7 @@ try:
     from .dialog.cns_table import CnsTableMixin
     from .dialog.agl_options import AglOptionsMixin
     from .dialog.persistence import PersistenceMixin
+    from .rulesets.registry import DEFAULT_RULESET_ID, iter_ruleset_profiles
 except ImportError:
     from dialog.dialog_constants import (  # type: ignore
         CALC_PLACEHOLDER,
@@ -72,6 +73,7 @@ except ImportError:
     from dialog.cns_table import CnsTableMixin  # type: ignore
     from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
+    from rulesets.registry import DEFAULT_RULESET_ID, iter_ruleset_profiles  # type: ignore
 
 # Load the UI class from the .ui file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), "safeguarding_builder_dialog_base.ui"))
@@ -568,10 +570,12 @@ class SafeguardingBuilderDialog(
         """Create the global safeguarding standard selector."""
         self.ruleset_combo = QtWidgets.QComboBox()
         self.ruleset_combo.setObjectName("comboBox_ruleset")
-        self.ruleset_combo.addItem("MOS139 (current)", userData="MOS139")
-        self.ruleset_combo.setCurrentIndex(0)
+        for profile in iter_ruleset_profiles():
+            self.ruleset_combo.addItem(profile.display_name, userData=profile.id)
+        default_index = self.ruleset_combo.findData(DEFAULT_RULESET_ID)
+        self.ruleset_combo.setCurrentIndex(default_index if default_index >= 0 else 0)
         self.ruleset_combo.setEnabled(False)
-        self.ruleset_combo.setToolTip("MOS139 is the only standard currently implemented.")
+        self.ruleset_combo.setToolTip("Ruleset registry is active. MOS139 remains the only selectable standard.")
         self.ruleset_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.ruleset_combo.setMinimumWidth(190)
 
@@ -1868,7 +1872,9 @@ class SafeguardingBuilderDialog(
                 "arp_elevation": arp_elev,
                 "met_point": met_pt,
                 "met_elevation": met_elev,
-                "ruleset": self._ruleset_combo_widget().currentData() if self._ruleset_combo_widget() else "MOS139",
+                "ruleset": self._ruleset_combo_widget().currentData()
+                if self._ruleset_combo_widget()
+                else DEFAULT_RULESET_ID,
             }
         )
 
@@ -2212,7 +2218,7 @@ class SafeguardingBuilderDialog(
             validated[field_name] = self._bool_from_input(inputs.get(field_name, False))
 
         # Optional fields (just copy text)
-        validated["ruleset"] = str(inputs.get("ruleset", "MOS139") or "MOS139").strip() or "MOS139"
+        validated["ruleset"] = str(inputs.get("ruleset", DEFAULT_RULESET_ID) or DEFAULT_RULESET_ID).strip()
         validated["arc_num"] = inputs.get("arc_num")
         validated["arc_let"] = inputs.get("arc_let")
         surface_category = str(inputs.get("surface_category", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_CATEGORY
