@@ -3533,37 +3533,29 @@ class ControllingOlsEngineMixin:
                 "Controlling OLS planar POC skipped: no planar candidate surfaces were registered.",
                 PLUGIN_TAG,
                 Qgis.Info,
-            )
+        )
             return False
 
         output_group = self._controlling_ols_poc_group(layer_group)
-        candidate_group = self._ensure_controlling_ols_child_group(
-            output_group, output_structure.DEBUG_OLS_CANDIDATES
-        )
-        region_group = self._ensure_controlling_ols_child_group(output_group, output_structure.DEBUG_OLS_REGIONS)
-        transition_group = self._ensure_controlling_ols_child_group(
-            output_group, output_structure.DEBUG_OLS_TRANSITIONS
-        )
-        contour_group = self._ensure_controlling_ols_child_group(output_group, output_structure.DEBUG_OLS_CONTOURS)
         engine = PlanarControllingOlsEngine(planar_candidates, exclusion_geometries=exclusion_geometries)
         timing_splits: Dict[str, float] = {}
 
         step_start = time.perf_counter()
-        candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, candidate_group, planar_candidates)
+        candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, output_group, planar_candidates)
         timing_splits["candidates"] = time.perf_counter() - step_start
 
         step_start = time.perf_counter()
-        region_layer_ok = self._create_controlling_region_layer(icao_code, region_group, engine)
+        region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, engine)
         timing_splits["regions"] = time.perf_counter() - step_start
 
         step_start = time.perf_counter()
-        transition_layer_ok = self._create_controlling_transition_layer(icao_code, transition_group, engine)
+        transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, engine)
         timing_splits["transitions"] = time.perf_counter() - step_start
 
         step_start = time.perf_counter()
         contour_layer_ok = self._create_controlling_contour_layer(
             icao_code,
-            contour_group,
+            output_group,
             engine,
             contours,
         )
@@ -3622,14 +3614,6 @@ class ControllingOlsEngineMixin:
         parent_group.insertChildNode(target_index, cloned_group)
         parent_group.removeChildNode(existing_group)
         return cloned_group
-
-    def _ensure_controlling_ols_child_group(
-        self,
-        parent_group: QgsLayerTreeGroup,
-        group_name: str,
-    ) -> QgsLayerTreeGroup:
-        group = self._ensure_layer_group(parent_group, group_name)
-        return group or parent_group
 
     def _create_controlling_candidate_layer(
         self,

@@ -1346,16 +1346,6 @@ class SafeguardingBuilder(
             groups["controlling_contours"] = self._ensure_layer_group(
                 protected_airspace_group, output_structure.CONTROLLING_CONTOURS
             )
-        debug_group = groups["debug_development"]
-        if debug_group is not None:
-            groups["debug_ols_candidates"] = self._ensure_layer_group(
-                debug_group, output_structure.DEBUG_OLS_CANDIDATES
-            )
-            groups["debug_ols_regions"] = self._ensure_layer_group(debug_group, output_structure.DEBUG_OLS_REGIONS)
-            groups["debug_ols_transitions"] = self._ensure_layer_group(
-                debug_group, output_structure.DEBUG_OLS_TRANSITIONS
-            )
-            groups["debug_ols_contours"] = self._ensure_layer_group(debug_group, output_structure.DEBUG_OLS_CONTOURS)
         return groups
 
     def _move_layer_tree_node(
