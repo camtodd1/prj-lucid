@@ -8,7 +8,7 @@ PROTECTED_AIRSPACE = "04 Protected Airspace"
 EXTERNAL_SAFEGUARDING = "05 External Safeguarding"
 DEBUG_DEVELOPMENT = "99 Debug / Development"
 
-RUNWAY_CENTRE_LINES = "Runway Centre Lines"
+RUNWAY_CENTRE_LINES = "Runway Centrelines"
 CNS_TECHNICAL_FACILITIES = "CNS / Technical Facilities"
 METEOROLOGICAL_STATION = "Meteorological Instrument Station"
 
