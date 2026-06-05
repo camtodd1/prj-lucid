@@ -40,7 +40,7 @@ from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
 from .surfaces.specialised import SpecialisedSurfacesMixin
 from .surfaces.met import MetSurfacesMixin
 from .guidelines.simple import SimpleGuidelinesMixin
-from .guidelines.lighting import LightingGuidelineMixin
+from .frameworks.nasf.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
@@ -732,7 +732,7 @@ class SafeguardingBuilder(
             else:
                 self._log("Airfield Ground Lighting skipped: option not enabled.")
 
-            self._set_processing_status(self.tr("Generating NASF guideline layers..."))
+            self._set_processing_status(self.tr(self.get_active_framework().generation_status_message()))
             guideline_groups = self._create_guideline_groups(nasf_guidelines_group, bool(cns_input_list))
             self._reset_controlling_ols_engine()
 
@@ -740,11 +740,12 @@ class SafeguardingBuilder(
             runway_ols_group = None
             ofz_group = None
             if guideline_groups.get("F") is not None:
-                airport_wide_ols_group = guideline_groups["F"].addGroup(self.tr("Airport-wide OLS"))
+                guideline_f_subgroups = self.get_active_framework().guideline_f_subgroup_names()
+                airport_wide_ols_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["airport_wide"]))
                 self._stage_layer_tree_node(airport_wide_ols_group)
-                runway_ols_group = guideline_groups["F"].addGroup(self.tr("Runway Approach And Take-off"))
+                runway_ols_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["runway"]))
                 self._stage_layer_tree_node(runway_ols_group)
-                ofz_group = guideline_groups["F"].addGroup(self.tr("Obstacle Free Zone"))
+                ofz_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["ofz"]))
                 self._stage_layer_tree_node(ofz_group)
 
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
@@ -1302,7 +1303,9 @@ class SafeguardingBuilder(
         groups["runway_protection_and_separation"] = self._ensure_layer_group(
             main_group, "03 Runway Protection And Separation"
         )
-        groups["nasf_guidelines"] = self._ensure_layer_group(main_group, "04 NASF Safeguarding Guidelines")
+        groups["nasf_guidelines"] = self._ensure_layer_group(
+            main_group, self.get_active_framework().safeguarding_group_name()
+        )
 
         infrastructure_group = groups["runway_infrastructure"]
         if infrastructure_group is not None:
@@ -1391,7 +1394,8 @@ class SafeguardingBuilder(
         reference_group = self._ensure_layer_group(main_group, "01 Reference Data")
         infrastructure_group = self._ensure_layer_group(main_group, "02 Runway Infrastructure")
         protection_group = self._ensure_layer_group(main_group, "03 Runway Protection And Separation")
-        nasf_group = self._ensure_layer_group(main_group, "04 NASF Safeguarding Guidelines")
+        framework = self.get_active_framework()
+        nasf_group = self._ensure_layer_group(main_group, framework.safeguarding_group_name())
         if reference_group is None or infrastructure_group is None or protection_group is None or nasf_group is None:
             return
 
@@ -1439,28 +1443,23 @@ class SafeguardingBuilder(
         ]:
             self._merge_or_move_direct_group(main_group, self.tr(group_name), protection_group)
 
-        for group_name in [
-            "Guideline B - Windshear",
-            "Guideline C - Wildlife",
-            "Guideline D - Wind Turbine",
-            "Guideline E - Lighting Control",
-            "Guideline F - Airspace / OLS",
-            "Guideline G - CNS",
-            "Guideline I - Public Safety Areas",
-        ]:
+        for group_name in framework.guideline_group_names(include_cns=True):
             self._merge_or_move_direct_group(main_group, self.tr(group_name), nasf_group)
 
         self._repair_guideline_f_layer_tree(nasf_group)
 
     def _repair_guideline_f_layer_tree(self, nasf_group: QgsLayerTreeGroup) -> None:
         """Move direct Guideline F OLS layers into their reviewed OLS subfolders."""
-        guideline_f_group = self._find_direct_child_group(nasf_group, self.tr("Guideline F - Airspace / OLS"))
+        guideline_f_group = self._find_direct_child_group(
+            nasf_group, self.tr(self.get_active_framework().guideline_group_name("F"))
+        )
         if guideline_f_group is None:
             return
 
-        airport_wide_group = self._ensure_layer_group(guideline_f_group, "Airport-wide OLS")
-        runway_group = self._ensure_layer_group(guideline_f_group, "Runway Approach And Take-off")
-        ofz_group = self._ensure_layer_group(guideline_f_group, "Obstacle Free Zone")
+        guideline_f_subgroups = self.get_active_framework().guideline_f_subgroup_names()
+        airport_wide_group = self._ensure_layer_group(guideline_f_group, guideline_f_subgroups["airport_wide"])
+        runway_group = self._ensure_layer_group(guideline_f_group, guideline_f_subgroups["runway"])
+        ofz_group = self._ensure_layer_group(guideline_f_group, guideline_f_subgroups["ofz"])
         if airport_wide_group is None or runway_group is None or ofz_group is None:
             return
 
@@ -1532,24 +1531,15 @@ class SafeguardingBuilder(
         include_cns: bool = True,
     ) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Creates the top-level groups for each guideline."""
-        guideline_defs = {
-            "B": "Guideline B - Windshear",
-            "C": "Guideline C - Wildlife",
-            "D": "Guideline D - Wind Turbine",
-            "E": "Guideline E - Lighting Control",
-            "F": "Guideline F - Airspace / OLS",
-            "G": "Guideline G - CNS",
-            "I": "Guideline I - Public Safety Areas",
-        }
+        guideline_defs = self.get_active_framework().guideline_group_definitions(include_cns=include_cns)
         guideline_groups: Dict[str, Optional[QgsLayerTreeGroup]] = {}
         for key, name in guideline_defs.items():
-            if key == "G" and not include_cns:
-                guideline_groups[key] = None
-                continue
             grp = self._ensure_layer_group(main_group, name)
             guideline_groups[key] = grp
             if grp is None:
                 QgsMessageLog.logMessage(f"Failed create group: {name}", PLUGIN_TAG, level=Qgis.Warning)
+        if not include_cns:
+            guideline_groups["G"] = None
         return guideline_groups
 
     def _ensure_valid_geometry(self, geom: Optional[QgsGeometry], description: str) -> Optional[QgsGeometry]:
@@ -1718,7 +1708,7 @@ class SafeguardingBuilder(
             self.tr("Meteorological Instrument Station"),
             self.tr("CNS Facilities / Source Facilities"),
             self.tr("Airfield Ground Lighting (AGL)"),
-            self.tr("Guideline G - CNS"),
+            self.tr(self.get_active_framework().guideline_group_name("G")),
         }
 
         def prune(group: QgsLayerTreeGroup) -> bool:
@@ -1747,22 +1737,9 @@ class SafeguardingBuilder(
             return "no runway infrastructure layers generated; check runway dimensions and coordinates"
         if group_name == self.tr("03 Runway Protection And Separation"):
             return "no protection or separation layers generated; check runway inputs and preceding warnings"
-        if group_name == self.tr("04 NASF Safeguarding Guidelines"):
-            return "no NASF guideline layers generated; check prerequisite ARP, runway, and CNS inputs"
-        if group_name.startswith(self.tr("Guideline B -")):
-            return "no windshear layers generated; check runway inputs and preceding warnings"
-        if group_name.startswith(self.tr("Guideline C -")):
-            return "ARP missing or wildlife zone generation failed; check preceding Wildlife warnings"
-        if group_name.startswith(self.tr("Guideline D -")):
-            return "ARP missing or wind turbine zone generation failed"
-        if group_name.startswith(self.tr("Guideline E -")):
-            return "no lighting layers generated; check runway inputs and preceding warnings"
-        if group_name.startswith(self.tr("Guideline F -")):
-            return "no airspace/OLS layers generated; check runway, approach, and RED inputs"
-        if group_name.startswith(self.tr("Guideline G -")):
-            return "no CNS layers generated, or CNS input was not provided"
-        if group_name.startswith(self.tr("Guideline I -")):
-            return "no public safety area layers generated; check runway inputs and preceding warnings"
+        framework_reason = self.get_active_framework().empty_group_reason(group_name)
+        if framework_reason:
+            return framework_reason
         if group_name == self.tr("Airfield Ground Lighting (AGL)"):
             return "AGL was enabled, but no lighting points were generated; check Lighting tab inputs"
         if group_name == self.tr("Markings"):
@@ -1958,6 +1935,11 @@ class SafeguardingBuilder(
         arp_missing_reason = None if arp_input_provided else "ARP coordinates not provided"
         red_missing_reason = None if red_ok else "RED unavailable; provide ARP elevation and runway-end elevations"
         cns_missing_reason = None if cns_count else "no CNS facilities were entered"
+        framework = self.get_active_framework()
+        safeguarding_group_name = framework.safeguarding_group_name()
+        guideline_groups = framework.guideline_group_definitions(include_cns=True)
+        guideline_f_subgroups = framework.guideline_f_subgroup_names()
+        guideline_f_checklist_labels = framework.guideline_f_checklist_labels()
 
         items = [
             self._format_checklist_layer_item(
@@ -2028,65 +2010,65 @@ class SafeguardingBuilder(
             ),
             self._format_checklist_item(
                 main_group,
-                "Guideline B - Windshear",
-                ["04 NASF Safeguarding Guidelines", "Guideline B - Windshear"],
+                guideline_groups["B"],
+                [safeguarding_group_name, guideline_groups["B"]],
                 missing_reason=no_runway_reason,
                 failed_reason="windshear zone generation failed",
             ),
             self._format_checklist_item(
                 main_group,
-                "Guideline C - Wildlife",
-                ["04 NASF Safeguarding Guidelines", "Guideline C - Wildlife"],
+                guideline_groups["C"],
+                [safeguarding_group_name, guideline_groups["C"]],
                 missing_reason=arp_missing_reason,
                 failed_reason="wildlife zone generation failed",
             ),
             self._format_checklist_item(
                 main_group,
-                "Guideline D - Wind Turbine",
-                ["04 NASF Safeguarding Guidelines", "Guideline D - Wind Turbine"],
+                guideline_groups["D"],
+                [safeguarding_group_name, guideline_groups["D"]],
                 missing_reason=arp_missing_reason,
                 failed_reason="wind turbine zone generation failed",
             ),
             self._format_checklist_item(
                 main_group,
-                "Guideline E - Lighting Control",
-                ["04 NASF Safeguarding Guidelines", "Guideline E - Lighting Control"],
+                guideline_groups["E"],
+                [safeguarding_group_name, guideline_groups["E"]],
                 missing_reason=no_runway_reason,
                 failed_reason="lighting control surface generation failed",
             ),
             self._format_checklist_item(
                 main_group,
-                "Guideline F - Airport-wide OLS",
-                ["04 NASF Safeguarding Guidelines", "Guideline F - Airspace / OLS", "Airport-wide OLS"],
+                guideline_f_checklist_labels["airport_wide"],
+                [safeguarding_group_name, guideline_groups["F"], guideline_f_subgroups["airport_wide"]],
                 missing_reason=no_runway_reason or red_missing_reason,
                 failed_reason="airport-wide OLS failed; check RED, runway strip dimensions, ARP, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
-                "Guideline F - Runway Approach And Take-off",
-                ["04 NASF Safeguarding Guidelines", "Guideline F - Airspace / OLS", "Runway Approach And Take-off"],
+                guideline_f_checklist_labels["runway"],
+                [safeguarding_group_name, guideline_groups["F"], guideline_f_subgroups["runway"]],
                 missing_reason=no_runway_reason,
                 failed_reason="approach or TOCS generation failed; check runway type, elevations, clearway, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
-                "Guideline F - Obstacle Free Zone",
-                ["04 NASF Safeguarding Guidelines", "Guideline F - Airspace / OLS", "Obstacle Free Zone"],
+                guideline_f_checklist_labels["ofz"],
+                [safeguarding_group_name, guideline_groups["F"], guideline_f_subgroups["ofz"]],
                 missing_reason=no_runway_reason,
                 not_applicable_reason=None if pa_runways_exist else "no precision approach runway was entered",
                 failed_reason="OFZ generation failed; check precision approach type, elevations, IHS/RED, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
-                "Guideline G - CNS",
-                ["04 NASF Safeguarding Guidelines", "Guideline G - CNS"],
+                guideline_groups["G"],
+                [safeguarding_group_name, guideline_groups["G"]],
                 missing_reason=cns_missing_reason,
                 failed_reason="CNS safeguarding generation failed",
             ),
             self._format_checklist_item(
                 main_group,
-                "Guideline I - Public Safety Areas",
-                ["04 NASF Safeguarding Guidelines", "Guideline I - Public Safety Areas"],
+                guideline_groups["I"],
+                [safeguarding_group_name, guideline_groups["I"]],
                 missing_reason=no_runway_reason,
                 failed_reason="public safety area generation failed",
             ),
@@ -2099,11 +2081,14 @@ class SafeguardingBuilder(
 
     def _render_generation_summary(self, checklist_items: List[str]) -> List[str]:
         """Render checklist items as a compact grouped final summary."""
+        safeguarding_section = self.get_active_framework().safeguarding_summary_section()
+        guideline_groups = self.get_active_framework().guideline_group_definitions(include_cns=True)
+        guideline_f_checklist_labels = self.get_active_framework().guideline_f_checklist_labels()
         section_order = [
             "Reference Data",
             "Runway Infrastructure",
             "Runway Protection And Separation",
-            "NASF Safeguarding Guidelines",
+            safeguarding_section,
         ]
         section_map = {
             "ARP": "Reference Data",
@@ -2115,15 +2100,15 @@ class SafeguardingBuilder(
             "Physical geometry": "Runway Infrastructure",
             "Runway protection areas": "Runway Protection And Separation",
             "Specialised runway safeguarding": "Runway Protection And Separation",
-            "Guideline B - Windshear": "NASF Safeguarding Guidelines",
-            "Guideline C - Wildlife": "NASF Safeguarding Guidelines",
-            "Guideline D - Wind Turbine": "NASF Safeguarding Guidelines",
-            "Guideline E - Lighting Control": "NASF Safeguarding Guidelines",
-            "Guideline F - Airport-wide OLS": "NASF Safeguarding Guidelines",
-            "Guideline F - Runway Approach And Take-off": "NASF Safeguarding Guidelines",
-            "Guideline F - Obstacle Free Zone": "NASF Safeguarding Guidelines",
-            "Guideline G - CNS": "NASF Safeguarding Guidelines",
-            "Guideline I - Public Safety Areas": "NASF Safeguarding Guidelines",
+            guideline_groups["B"]: safeguarding_section,
+            guideline_groups["C"]: safeguarding_section,
+            guideline_groups["D"]: safeguarding_section,
+            guideline_groups["E"]: safeguarding_section,
+            guideline_f_checklist_labels["airport_wide"]: safeguarding_section,
+            guideline_f_checklist_labels["runway"]: safeguarding_section,
+            guideline_f_checklist_labels["ofz"]: safeguarding_section,
+            guideline_groups["G"]: safeguarding_section,
+            guideline_groups["I"]: safeguarding_section,
         }
         generated_by_section: Dict[str, List[str]] = {section: [] for section in section_order}
         skipped: List[str] = []
@@ -2137,7 +2122,7 @@ class SafeguardingBuilder(
 
             if detail.startswith("generated - "):
                 stats = detail.replace("generated - ", "", 1)
-                section = section_map.get(label, "NASF Safeguarding Guidelines")
+                section = section_map.get(label, safeguarding_section)
                 generated_by_section.setdefault(section, []).append(f"  - {label}: {stats}")
             elif detail.startswith("input not provided - "):
                 reason = detail.replace("input not provided - ", "", 1)

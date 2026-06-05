@@ -22,6 +22,8 @@ from qgis.core import (  # type: ignore
     QgsWkbTypes,
 )
 
+from ..frameworks.registry import get_framework_profile
+
 PLUGIN_TAG = "SafeguardingBuilder"
 CONTROLLING_REGION_TOPOLOGY_WELD_M = 0.01
 CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS = 8
@@ -3588,9 +3590,14 @@ class ControllingOlsEngineMixin:
         existing_group = self._find_direct_child_group(parent_group, group_name)
         children = list(parent_group.children())
 
+        framework_group_name = get_framework_profile().safeguarding_group_name()
+        framework_getter = getattr(self, "get_active_framework", None)
+        if callable(framework_getter):
+            framework_group_name = framework_getter().safeguarding_group_name()
+
         nasf_group = None
         for child in children:
-            if isinstance(child, QgsLayerTreeGroup) and child.name() == self.tr("04 NASF Safeguarding Guidelines"):
+            if isinstance(child, QgsLayerTreeGroup) and child.name() == self.tr(framework_group_name):
                 nasf_group = child
                 break
         target_index = children.index(nasf_group) + 1 if nasf_group is not None else len(children)

@@ -91,6 +91,35 @@ class FrameworkRegistryTest(unittest.TestCase):
         self.assertEqual(specs[0]["SurfaceName"], "Zone A")
         self.assertEqual(specs[0]["OuterRadius_m"], 100)
 
+    def test_nasf_profile_exposes_layer_tree_metadata(self):
+        profile = get_framework_profile("nasf_aus")
+
+        self.assertEqual(profile.safeguarding_group_name(), "04 NASF Safeguarding Guidelines")
+        self.assertEqual(profile.safeguarding_summary_section(), "NASF Safeguarding Guidelines")
+        self.assertEqual(profile.generation_status_message(), "Generating NASF guideline layers...")
+
+        guideline_groups = profile.guideline_group_definitions()
+        self.assertEqual(guideline_groups["B"], "Guideline B - Windshear")
+        self.assertEqual(guideline_groups["F"], "Guideline F - Airspace / OLS")
+        self.assertEqual(guideline_groups["G"], "Guideline G - CNS")
+        self.assertNotIn("G", profile.guideline_group_definitions(include_cns=False))
+
+        guideline_f_subgroups = profile.guideline_f_subgroup_names()
+        self.assertEqual(guideline_f_subgroups["airport_wide"], "Airport-wide OLS")
+        self.assertEqual(guideline_f_subgroups["runway"], "Runway Approach And Take-off")
+        self.assertEqual(guideline_f_subgroups["ofz"], "Obstacle Free Zone")
+
+        guideline_f_labels = profile.guideline_f_checklist_labels()
+        self.assertEqual(guideline_f_labels["airport_wide"], "Guideline F - Airport-wide OLS")
+
+    def test_nasf_profile_exposes_empty_group_reasons(self):
+        profile = get_framework_profile("nasf_aus")
+
+        self.assertIn("NASF guideline layers", profile.empty_group_reason("04 NASF Safeguarding Guidelines"))
+        self.assertIn("windshear", profile.empty_group_reason("Guideline B - Windshear"))
+        self.assertIn("CNS", profile.empty_group_reason("Guideline G - CNS"))
+        self.assertEqual(profile.empty_group_reason("Unrelated Group"), "")
+
     def test_legacy_cns_dimensions_shim_uses_nasf_data(self):
         legacy_specs = cns_dimensions.get_cns_spec("VHF Omni-Directional Range (VOR)")
         framework_specs = get_framework_profile("nasf_aus").cns_spec("VHF Omni-Directional Range (VOR)")
