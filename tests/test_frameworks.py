@@ -1,4 +1,5 @@
 import unittest
+import importlib
 
 from frameworks.registry import (
     DEFAULT_FRAMEWORK_ID,
@@ -138,6 +139,23 @@ class FrameworkRegistryTest(unittest.TestCase):
             guideline_constants.GUIDELINE_E_ZONE_PARAMS,
             get_framework_profile("nasf_aus").lighting_control_parameters()["zones"],
         )
+
+    def test_legacy_simple_guidelines_shim_uses_nasf_processors(self):
+        try:
+            simple_module = importlib.import_module("guidelines.simple")
+            processors_module = importlib.import_module("frameworks.nasf.processors")
+        except ModuleNotFoundError as exc:
+            if exc.name == "qgis":
+                self.skipTest("QGIS runtime is not available")
+            raise
+
+        SimpleGuidelinesMixin = simple_module.SimpleGuidelinesMixin
+        NasfGuidelinesMixin = processors_module.NasfGuidelinesMixin
+        self.assertIs(SimpleGuidelinesMixin, NasfGuidelinesMixin)
+        self.assertTrue(hasattr(NasfGuidelinesMixin, "process_guideline_b"))
+        self.assertTrue(hasattr(NasfGuidelinesMixin, "process_guideline_c"))
+        self.assertTrue(hasattr(NasfGuidelinesMixin, "process_guideline_g"))
+        self.assertTrue(hasattr(NasfGuidelinesMixin, "process_guideline_i"))
 
 
 if __name__ == "__main__":

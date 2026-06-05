@@ -39,7 +39,7 @@ from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
 from .surfaces.specialised import SpecialisedSurfacesMixin
 from .surfaces.met import MetSurfacesMixin
-from .guidelines.simple import SimpleGuidelinesMixin
+from .frameworks.nasf.processors import NasfGuidelinesMixin
 from .frameworks.nasf.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
@@ -68,7 +68,7 @@ PLUGIN_TAG = "SafeguardingBuilder"
 # Main Plugin Class - SafeguardingBuilder
 # ============================================================
 class SafeguardingBuilder(
-    SimpleGuidelinesMixin,
+    NasfGuidelinesMixin,
     LightingGuidelineMixin,
     ControllingOlsEngineMixin,
     OlsGuidelineMixin,
