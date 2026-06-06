@@ -16,6 +16,7 @@ CAPABILITY_STATUS_BY_KEY = {
     "physical.clearway": "supported",
     "physical.stopway": "partial",
     "physical.taxiway_separation": "partial",
+    "physical.parallel_runway_separation": "unsupported",
     "ols.airport_wide": "supported",
     "ols.runway_approach": "supported",
     "ols.takeoff_climb": "supported",

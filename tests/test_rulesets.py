@@ -19,6 +19,11 @@ REQUIRED_PROFILE_METHODS = [
     "ihs_base_height",
     "ols_parameters",
     "taxiway_separation_offset",
+    "taxiway_to_taxiway_separation",
+    "taxiway_object_separation",
+    "stand_taxilane_to_stand_taxilane_separation",
+    "stand_taxilane_object_separation",
+    "parallel_runway_separation",
     "centreline_marking_width",
     "threshold_marking_params",
     "aiming_point_rule",
@@ -40,7 +45,17 @@ REQUIRED_PROFILE_METHODS = [
 REQUIRED_SERVICE_METHODS = {
     "classification": ["classify_runway_type", "precision_type_codes"],
     "ols": ["ihs_base_height", "parameters"],
-    "physical": ["refs", "strip_parameters", "resa_parameters", "taxiway_separation_offset"],
+    "physical": [
+        "refs",
+        "strip_parameters",
+        "resa_parameters",
+        "taxiway_separation_offset",
+        "taxiway_to_taxiway_separation",
+        "taxiway_object_separation",
+        "stand_taxilane_to_stand_taxilane_separation",
+        "stand_taxilane_object_separation",
+        "parallel_runway_separation",
+    ],
     "markings": [
         "centreline_marking_width",
         "threshold_marking_params",
@@ -197,6 +212,16 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(profile.ols_parameters(3, "Precision Approach CAT I", "APPROACH")[0]["start_width"], 280.0)
         self.assertEqual(profile.ols_parameters(3, "Precision Approach CAT I", "Inner Approach")["width"], 120.0)
         self.assertEqual(profile.ols_parameters(3, None, "Take-off climb")["final_width"], 1200.0)
+        self.assertEqual(
+            profile.taxiway_separation_offset(3, "C", "Precision Approach CAT I")["offset_m"],
+            158.0,
+        )
+        self.assertEqual(profile.taxiway_separation_offset(2, "A", "Non-Instrument (NI)")["offset_m"], 47.5)
+        self.assertEqual(profile.taxiway_to_taxiway_separation("F")["offset_m"], 91.0)
+        self.assertEqual(profile.taxiway_object_separation("D")["offset_m"], 37.0)
+        self.assertEqual(profile.stand_taxilane_to_stand_taxilane_separation("B")["offset_m"], 28.5)
+        self.assertEqual(profile.stand_taxilane_object_separation("E")["offset_m"], 40.0)
+        self.assertIsNone(profile.parallel_runway_separation())
 
     def test_mos139_adapter_matches_ruleset_agl_helpers(self):
         profile = get_ruleset_profile("mos139_2019")

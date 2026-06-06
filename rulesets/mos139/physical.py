@@ -26,9 +26,46 @@ def taxiway_separation_offset(arc_num: int, arc_let: Optional[str], runway_type:
     return taxiway.get_taxiway_separation_offset(arc_num, arc_let, runway_type)
 
 
+def taxiway_to_taxiway_separation(arc_let: Optional[str]):
+    return taxiway.get_taxiway_to_taxiway_separation(arc_let)
+
+
+def taxiway_object_separation(arc_let: Optional[str]):
+    return taxiway.get_taxiway_object_separation(arc_let)
+
+
+def stand_taxilane_to_stand_taxilane_separation(arc_let: Optional[str]):
+    return taxiway.get_stand_taxilane_to_stand_taxilane_separation(arc_let)
+
+
+def stand_taxilane_object_separation(arc_let: Optional[str]):
+    return taxiway.get_stand_taxilane_object_separation(arc_let)
+
+
+def parallel_runway_separation(
+    arc_num_1: Optional[int] = None,
+    arc_num_2: Optional[int] = None,
+    runway_type_1: Optional[str] = None,
+    runway_type_2: Optional[str] = None,
+    operation_type: Optional[str] = None,
+):
+    return taxiway.get_parallel_runway_separation(
+        arc_num_1=arc_num_1,
+        arc_num_2=arc_num_2,
+        runway_type_1=runway_type_1,
+        runway_type_2=runway_type_2,
+        operation_type=operation_type,
+    )
+
+
 __all__ = [
     "physical_refs",
     "strip_parameters",
     "resa_parameters",
     "taxiway_separation_offset",
+    "taxiway_to_taxiway_separation",
+    "taxiway_object_separation",
+    "stand_taxilane_to_stand_taxilane_separation",
+    "stand_taxilane_object_separation",
+    "parallel_runway_separation",
 ]

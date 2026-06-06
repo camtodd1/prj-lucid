@@ -74,6 +74,12 @@ TAXIWAY_SEPARATION_PARAMS: Dict[Tuple[int, str, str], Dict[str, Any]] = {
     (4, "F", "NI"): {"offset_m": 115.0, "ref": "MOS T9.1 (Verify 4F-NI)"},
 }
 
+PARALLEL_RUNWAY_SEPARATION_PARAMS: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
+TAXIWAY_TO_TAXIWAY_SEPARATION_PARAMS: Dict[str, Dict[str, Any]] = {}
+TAXIWAY_OBJECT_SEPARATION_PARAMS: Dict[str, Dict[str, Any]] = {}
+STAND_TAXILANE_TO_STAND_TAXILANE_SEPARATION_PARAMS: Dict[str, Dict[str, Any]] = {}
+STAND_TAXILANE_OBJECT_SEPARATION_PARAMS: Dict[str, Dict[str, Any]] = {}
+
 
 def get_taxiway_separation_offset(
     arc_num: int, arc_let: Optional[str], runway_type_str: Optional[str]
@@ -98,7 +104,44 @@ def get_taxiway_separation_offset(
     return params.copy() if params else None
 
 
+def get_parallel_runway_separation(
+    arc_num_1: Optional[int] = None,
+    arc_num_2: Optional[int] = None,
+    runway_type_1: Optional[str] = None,
+    runway_type_2: Optional[str] = None,
+    operation_type: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Placeholder for minimum parallel runway separation rules."""
+    return None
+
+
+def get_taxiway_to_taxiway_separation(arc_let: Optional[str]) -> Optional[Dict[str, Any]]:
+    return None
+
+
+def get_taxiway_object_separation(arc_let: Optional[str]) -> Optional[Dict[str, Any]]:
+    return None
+
+
+def get_stand_taxilane_to_stand_taxilane_separation(arc_let: Optional[str]) -> Optional[Dict[str, Any]]:
+    return None
+
+
+def get_stand_taxilane_object_separation(arc_let: Optional[str]) -> Optional[Dict[str, Any]]:
+    return None
+
+
 __all__ = [
     "TAXIWAY_SEPARATION_PARAMS",
+    "PARALLEL_RUNWAY_SEPARATION_PARAMS",
+    "TAXIWAY_TO_TAXIWAY_SEPARATION_PARAMS",
+    "TAXIWAY_OBJECT_SEPARATION_PARAMS",
+    "STAND_TAXILANE_TO_STAND_TAXILANE_SEPARATION_PARAMS",
+    "STAND_TAXILANE_OBJECT_SEPARATION_PARAMS",
     "get_taxiway_separation_offset",
+    "get_parallel_runway_separation",
+    "get_taxiway_to_taxiway_separation",
+    "get_taxiway_object_separation",
+    "get_stand_taxilane_to_stand_taxilane_separation",
+    "get_stand_taxilane_object_separation",
 ]

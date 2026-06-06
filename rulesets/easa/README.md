@@ -6,9 +6,9 @@ can resolve the active ruleset through `rulesets.registry.get_ruleset_profile()`
 and use the shared ruleset contract.
 
 Current implemented policy data covers physical runway dimensions, OLS surface
-parameters, runway markings, and airfield ground lighting. Declared distances,
-clearway, stopway, and taxiway separation are registered explicitly as
-unsupported until their EASA policy tables are added.
+parameters, runway markings, airfield ground lighting, and taxiway separation.
+Declared distances, clearway, stopway, and parallel runway separation are
+registered explicitly as unsupported until their EASA policy tables are added.
 
 ## Modules
 
@@ -31,5 +31,5 @@ lighting.
 
 `ols.py`, `taxiway.py`
 : Compatibility wrappers that satisfy the ruleset contract. `ols.py` delegates
-to `ols_surfaces.py`; `taxiway.py` returns `None` until EASA taxiway separation
-policy is added.
+to `ols_surfaces.py`; `taxiway.py` stores CS ADR-DSN.D.260 Table D-1 separation
+lookups plus an empty parallel runway separation scaffold.
