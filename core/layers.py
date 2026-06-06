@@ -374,8 +374,8 @@ class LayerMixin:
                         self._apply_controlling_region_style(layer)
                     if str(style_key) == "OLS Controlling Contour":
                         self._apply_controlling_contour_style(layer)
-                    if str(style_key) == "Runway Separation Assessment Line":
-                        self._apply_runway_separation_assessment_style(layer)
+                    if str(style_key) == "Parallel Runway Standards Line":
+                        self._apply_parallel_runway_standards_style(layer)
                     if str(style_key) in {"OLS IHS", "OLS OHS"}:
                         self._apply_horizontal_surface_labels(layer)
                     if str(style_key) == "OLS Approach":
@@ -461,33 +461,50 @@ class LayerMixin:
                 level=Qgis.Warning,
             )
 
-    def _apply_runway_separation_assessment_style(self, layer: QgsVectorLayer):
-        """Apply solid/dashed styling and on-line labels for runway separation guides."""
+    def _apply_parallel_runway_standards_style(self, layer: QgsVectorLayer):
+        """Apply operation categories and centred on-line labels for runway separation guides."""
         if layer is None or not layer.isValid():
             return
         try:
-            solid_symbol = QgsLineSymbol.createSimple(
-                {
-                    "line_color": "38,122,181,230",
-                    "line_width": "0.32",
-                    "line_width_unit": "MM",
-                    "line_style": "solid",
-                }
-            )
-            dashed_symbol = QgsLineSymbol.createSimple(
-                {
-                    "line_color": "38,122,181,230",
-                    "line_width": "0.32",
-                    "line_width_unit": "MM",
-                    "line_style": "dash",
-                }
-            )
+            def line_symbol(color: str, line_style: str = "solid") -> QgsLineSymbol:
+                return QgsLineSymbol.createSimple(
+                    {
+                        "line_color": color,
+                        "line_width": "0.32",
+                        "line_width_unit": "MM",
+                        "line_style": line_style,
+                    }
+                )
+
             layer.setRenderer(
                 QgsCategorizedSymbolRenderer(
-                    "line_style",
+                    "op_cat",
                     [
-                        QgsRendererCategory("solid", solid_symbol, "Solid"),
-                        QgsRendererCategory("dashed", dashed_symbol, "Dashed"),
+                        QgsRendererCategory(
+                            "Simultaneous use",
+                            line_symbol("227,187,50,230"),
+                            "Simultaneous use",
+                        ),
+                        QgsRendererCategory(
+                            "Independent approaches",
+                            line_symbol("38,122,181,230"),
+                            "Independent approaches",
+                        ),
+                        QgsRendererCategory(
+                            "Dependent approaches",
+                            line_symbol("74,145,204,230"),
+                            "Dependent approaches",
+                        ),
+                        QgsRendererCategory(
+                            "Independent departures",
+                            line_symbol("38,122,181,230"),
+                            "Independent departures",
+                        ),
+                        QgsRendererCategory(
+                            "Segregated operations",
+                            line_symbol("38,122,181,230", "dash"),
+                            "Segregated operations",
+                        ),
                     ],
                 )
             )
@@ -496,12 +513,37 @@ class LayerMixin:
                 settings = QgsPalLayerSettings()
                 settings.fieldName = "label_txt"
                 settings.placement = QgsPalLayerSettings.Line
+                for distance_attr in ("dist", "xOffset", "yOffset"):
+                    if hasattr(settings, distance_attr):
+                        setattr(settings, distance_attr, 0)
                 try:
                     line_settings = settings.lineSettings()
-                    placement_flag_owner = getattr(__import__("qgis.core").core, "QgsLabelLineSettings", None)
-                    on_line = getattr(placement_flag_owner, "OnLine", None) if placement_flag_owner else None
-                    if on_line is not None and hasattr(line_settings, "setPlacementFlags"):
-                        line_settings.setPlacementFlags(on_line)
+                    qgis_core = __import__("qgis.core").core
+                    placement_flag_owner = getattr(qgis_core, "QgsLabelLineSettings", None)
+                    on_line = None
+                    if placement_flag_owner is not None:
+                        on_line = getattr(placement_flag_owner, "OnLine", None)
+                        if on_line is None and hasattr(placement_flag_owner, "LinePlacementFlag"):
+                            on_line = getattr(placement_flag_owner.LinePlacementFlag, "OnLine", None)
+                    if on_line is None:
+                        on_line = getattr(QgsPalLayerSettings, "OnLine", None)
+                    if on_line is not None:
+                        if hasattr(line_settings, "setPlacementFlags"):
+                            line_settings.setPlacementFlags(on_line)
+                        elif hasattr(settings, "placementFlags"):
+                            settings.placementFlags = on_line
+                    if hasattr(line_settings, "setAnchorPercent"):
+                        line_settings.setAnchorPercent(0.5)
+                    if hasattr(line_settings, "setAnchorType"):
+                        anchor_type = None
+                        if placement_flag_owner is not None and hasattr(placement_flag_owner, "AnchorType"):
+                            anchor_type = getattr(placement_flag_owner.AnchorType, "Strict", None)
+                        if anchor_type is not None:
+                            line_settings.setAnchorType(anchor_type)
+                    if hasattr(line_settings, "setMergeLines"):
+                        line_settings.setMergeLines(True)
+                    if hasattr(settings, "labelPerPart"):
+                        settings.labelPerPart = False
                 except Exception:
                     pass
                 settings.priority = 6
@@ -523,7 +565,7 @@ class LayerMixin:
                 layer.setLabelsEnabled(True)
         except Exception as exc:
             QgsMessageLog.logMessage(
-                f"Warning: failed to apply runway separation assessment style: {exc}",
+                f"Warning: failed to apply parallel runway standards style: {exc}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )

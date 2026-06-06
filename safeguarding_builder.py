@@ -1765,7 +1765,7 @@ class SafeguardingBuilder(
                     any_guideline_processed_ok = True
             except Exception as e_parallel_sep:
                 QgsMessageLog.logMessage(
-                    f"Error processing runway separation assessment layer: {e_parallel_sep}",
+                    f"Error processing parallel runway standards layer: {e_parallel_sep}",
                     PLUGIN_TAG,
                     level=Qgis.Critical,
                 )

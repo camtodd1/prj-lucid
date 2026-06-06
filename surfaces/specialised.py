@@ -164,11 +164,12 @@ class SpecialisedSurfacesMixin:
         return fields
 
     def _get_runway_separation_assessment_fields(self) -> QgsFields:
-        """Returns the QgsFields definition for the Runway Separation Assessment layer."""
+        """Returns the QgsFields definition for the Parallel Runway Standards layer."""
         fields = QgsFields(
             [
                 QgsField("rwy", QVariant.String, self.tr("Runway"), 50),
                 QgsField("operation", QVariant.String, self.tr("Operation"), 50),
+                QgsField("op_cat", QVariant.String, self.tr("Operation Category"), 50),
                 QgsField("label_txt", QVariant.String, self.tr("Label"), 80),
                 QgsField("distance_m", QVariant.Double, self.tr("Distance (m)"), 10, 2),
                 QgsField("base_dist_m", QVariant.Double, self.tr("Base Distance (m)"), 10, 2),
@@ -196,6 +197,7 @@ class SpecialisedSurfacesMixin:
                 {
                     "operation_type": "simultaneous",
                     "label_prefix": "Simultaneous",
+                    "category_label": "Simultaneous use",
                     "arrival": None,
                     "dashed": False,
                     "stagger_m": None,
@@ -206,6 +208,7 @@ class SpecialisedSurfacesMixin:
             {
                 "operation_type": "independent_parallel_approaches",
                 "label_prefix": "Independent approaches",
+                "category_label": "Independent approaches",
                 "arrival": None,
                 "dashed": False,
                 "stagger_m": None,
@@ -213,6 +216,7 @@ class SpecialisedSurfacesMixin:
             {
                 "operation_type": "dependent_parallel_approaches",
                 "label_prefix": "Dependent approaches",
+                "category_label": "Dependent approaches",
                 "arrival": None,
                 "dashed": False,
                 "stagger_m": None,
@@ -220,6 +224,7 @@ class SpecialisedSurfacesMixin:
             {
                 "operation_type": "independent_parallel_departures",
                 "label_prefix": "Independent departures",
+                "category_label": "Independent departures",
                 "arrival": None,
                 "dashed": False,
                 "stagger_m": None,
@@ -230,6 +235,7 @@ class SpecialisedSurfacesMixin:
             {
                 "operation_type": "segregated_parallel_operations",
                 "label_prefix": "Segregated ops",
+                "category_label": "Segregated operations",
                 "arrival": runway_data,
                 "dashed": True,
                 "stagger_m": stagger_m,
@@ -317,6 +323,7 @@ class SpecialisedSurfacesMixin:
                     attr_map = {
                         "rwy": runway_name,
                         "operation": spec["operation_type"],
+                        "op_cat": spec["category_label"],
                         "label_txt": label_txt,
                         "distance_m": distance_m,
                         "base_dist_m": sep.get("base_distance_m", distance_m),
@@ -334,7 +341,7 @@ class SpecialisedSurfacesMixin:
 
         if not features_to_add:
             QgsMessageLog.logMessage(
-                "Runway separation assessment layer skipped: no applicable runway data.",
+                "Parallel runway standards layer skipped: no applicable runway data.",
                 plugin_tag,
                 level=Qgis.Info,
             )
@@ -342,12 +349,12 @@ class SpecialisedSurfacesMixin:
 
         layer_created = self._create_and_add_layer(
             "LineString",
-            "RunwaySeparationAssessment",
-            "Runway Separation Assessment",
+            "ParallelRunwayStandards",
+            "Parallel Runway Standards",
             fields,
             features_to_add,
             layer_group,
-            "Runway Separation Assessment Line",
+            "Parallel Runway Standards Line",
         )
         return layer_created is not None
 
