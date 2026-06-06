@@ -11,6 +11,6 @@ Use this matrix to track source capture before promoting capabilities from
 | Taxiway and separations | `taxiway.py` | pending | Include taxiway and parallel runway separation standards. |
 | OFS | `ols_surfaces.py` | captured | Chapter 4 obstacle free surfaces captured: approach, transitional, inner approach, inner transitional, and balked landing. Geometry construction pending. |
 | OLS | `ols_surfaces.py` | partial | Annex 14 OFS captured; remaining non-OFS Chapter 4 surfaces pending. |
-| OES | `oes.py` | pending | Define evaluation surfaces and ADG-derived variants where applicable. |
+| OES | `oes.py` | partial | Horizontal surface Table 4-10, straight-in instrument approach surface Table 4-11, precision approach surface Table 4-12, and instrument departure surface Table 4-13 captured; remaining OES surfaces pending. |
 | Markings | `markings.py` | pending | Runway marking dimensions, offsets, and applicability. |
 | Lighting | `lighting.py` | pending | Runway, threshold, end, centreline, approach, and displaced threshold lighting. |

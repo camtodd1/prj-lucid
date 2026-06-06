@@ -17,6 +17,11 @@ Implemented now:
 - Inner transitional surface lookups from Tables 4-6, 4-7, and 4-8.
 - Balked landing surface lookup from Table 4-9.
 - Coordinated obstacle free surfaces package for Chapter 4 OFS data.
+- Horizontal obstacle evaluation surface lookup from Table 4-10.
+- Straight-in instrument approach obstacle evaluation surface lookup from
+  Table 4-11.
+- Precision approach obstacle evaluation surface lookup from Table 4-12.
+- Instrument departure obstacle evaluation surface lookup from Table 4-13.
 - Empty physical, taxiway, markings, and lighting policy modules.
 - An OES service placeholder for future obstacle evaluation surface workflows.
 

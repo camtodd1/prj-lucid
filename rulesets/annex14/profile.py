@@ -152,6 +152,21 @@ class Annex14RulesetProfile(RulesetProfile):
             surface_type=surface_type,
         )
 
+    def horizontal_surface_parameters(self, design_group: Optional[str]):
+        return self.oes.horizontal_surface_parameters(design_group)
+
+    def horizontal_surfaces(self, design_groups):
+        return self.oes.horizontal_surfaces(design_groups)
+
+    def straight_in_instrument_approach_surface_parameters(self):
+        return self.oes.straight_in_instrument_approach_surface_parameters()
+
+    def precision_approach_surface_parameters(self):
+        return self.oes.precision_approach_surface_parameters()
+
+    def instrument_departure_surface_parameters(self):
+        return self.oes.instrument_departure_surface_parameters()
+
     def taxiway_separation_offset(self, arc_num: int, arc_let: Optional[str], runway_type: Optional[str]):
         return self.physical.taxiway_separation_offset(arc_num, arc_let, runway_type)
 

@@ -124,6 +124,21 @@ class OesService:
     def surface_families(self) -> tuple:
         return oes.surface_families()
 
+    def horizontal_surface_parameters(self, design_group: Optional[str]):
+        return oes.horizontal_surface_parameters(design_group)
+
+    def horizontal_surfaces(self, design_groups):
+        return oes.horizontal_surfaces(design_groups)
+
+    def straight_in_instrument_approach_surface_parameters(self):
+        return oes.straight_in_instrument_approach_surface_parameters()
+
+    def precision_approach_surface_parameters(self):
+        return oes.precision_approach_surface_parameters()
+
+    def instrument_departure_surface_parameters(self):
+        return oes.instrument_departure_surface_parameters()
+
     def parameters(
         self,
         design_group: Optional[str] = None,
