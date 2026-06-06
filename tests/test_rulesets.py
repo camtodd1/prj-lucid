@@ -92,6 +92,10 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(normalize_ruleset_id("EASA"), "easa_cs_adr_dsn_issue_6")
         self.assertEqual(get_ruleset_profile("CS-ADR-DSN").id, "easa_cs_adr_dsn_issue_6")
 
+    def test_annex14_alias_normalizes_to_canonical_id(self):
+        self.assertEqual(normalize_ruleset_id("Annex 14"), "icao_annex14_vol1")
+        self.assertEqual(get_ruleset_profile("ICAO Annex 14").id, "icao_annex14_vol1")
+
     def test_structured_payload_normalizes_to_canonical_id(self):
         self.assertEqual(normalize_ruleset_id({"id": "MOS139"}), "mos139_2019")
         self.assertEqual(normalize_ruleset_id({"design_standard": "MOS139"}), "mos139_2019")
@@ -384,6 +388,20 @@ class RulesetRegistryTest(unittest.TestCase):
             )["distance_m"],
             300.0,
         )
+
+    def test_annex14_profile_scaffold_smoke_checks(self):
+        profile = get_ruleset_profile("icao_annex14_vol1")
+        self.assertEqual(profile.status, "scaffold")
+        self.assertEqual(profile.capability_status("classification.design_group"), "scaffold")
+        self.assertEqual(profile.capability_status("oes.airport_wide"), "scaffold")
+        self.assertEqual(profile.classify_runway_type("Precision Approach CAT I"), "PA_I")
+        self.assertEqual(profile.precision_type_codes(), {"PA_I", "PA_II_III"})
+        self.assertIsNone(profile.design_group(wingspan_m=36.0))
+        self.assertIsNone(profile.oes_parameters(design_group="ADG_III", surface_type="approach"))
+        self.assertIsNone(profile.ols_parameters(3, "Precision Approach CAT I", "APPROACH"))
+        self.assertIsNone(profile.strip_parameters(3, "PA_I", 45.0))
+        self.assertIsNone(profile.parallel_runway_separation(3, 4, "Precision Approach CAT I", "Precision Approach CAT I"))
+        self.assertFalse(profile.runway_type_supports_agl("Precision Approach CAT I"))
 
     def test_mos139_adapter_matches_ruleset_agl_helpers(self):
         profile = get_ruleset_profile("mos139_2019")

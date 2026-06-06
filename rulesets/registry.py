@@ -3,6 +3,7 @@
 from typing import Dict, Iterable, Mapping, Optional
 
 from .base import RulesetProfile
+from .annex14 import ANNEX14_PROFILE
 from .easa import EASA_PROFILE
 from .mos139 import MOS139_PROFILE
 
@@ -11,6 +12,7 @@ DEFAULT_RULESET_ID = MOS139_PROFILE.id
 _PROFILES: Dict[str, RulesetProfile] = {
     MOS139_PROFILE.id: MOS139_PROFILE,
     EASA_PROFILE.id: EASA_PROFILE,
+    ANNEX14_PROFILE.id: ANNEX14_PROFILE,
 }
 
 _ALIASES: Dict[str, str] = {}
