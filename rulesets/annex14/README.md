@@ -13,6 +13,10 @@ Implemented now:
   21 November 2030.
 - Approach surface lookups from Tables 4-1 and 4-2.
 - Transitional surface lookup from 4.2.2.
+- Inner approach surface lookups from Tables 4-3, 4-4, and 4-5.
+- Inner transitional surface lookups from Tables 4-6, 4-7, and 4-8.
+- Balked landing surface lookup from Table 4-9.
+- Coordinated obstacle free surfaces package for Chapter 4 OFS data.
 - Empty physical, taxiway, markings, and lighting policy modules.
 - An OES service placeholder for future obstacle evaluation surface workflows.
 
@@ -20,6 +24,6 @@ Pending source input:
 
 - Physical characteristics: runway, strip, RESA, shoulder, taxiway, and separation
   tables.
-- OLS dimensions and surface families.
+- OLS construction/generation from captured OFS dimensions.
 - OES rules and any ADG-derived evaluation surfaces.
 - Runway markings and aeronautical ground lighting parameters.

@@ -489,6 +489,120 @@ class RulesetRegistryTest(unittest.TestCase):
             60.0,
         )
         self.assertEqual(profile.ols_parameters(3, "Precision Approach CAT I", "transitional")["ref"], "Annex 14 Vol I 4.2.2")
+        self.assertEqual(
+            profile.inner_approach_surface_parameters("I", "Non-Instrument (NI)")["inner_edge_length_m"],
+            60.0,
+        )
+        self.assertEqual(
+            profile.inner_approach_surface_parameters("IIA", "Non-Instrument (NI)")["length_m"],
+            1125.0,
+        )
+        self.assertEqual(
+            profile.inner_approach_surface_parameters("I", "Non-Precision Approach (NPA)")["inner_edge_length_m"],
+            80.0,
+        )
+        self.assertEqual(
+            profile.inner_approach_surface_parameters("I", "Precision Approach CAT I")["inner_edge_length_m"],
+            90.0,
+        )
+        self.assertEqual(
+            profile.inner_approach_surface_parameters(
+                "V",
+                "Precision Approach CAT I",
+                code_letter_f_without_digital_avionics=True,
+            )["inner_edge_length_m"],
+            140.0,
+        )
+        self.assertAlmostEqual(
+            profile.inner_approach_surface_parameters(
+                "I",
+                "Non-Instrument (NI)",
+                approach_surface_slope=0.025,
+            )["length_m"],
+            1800.0,
+        )
+        self.assertEqual(
+            profile.inner_transitional_surface_parameters("I", "Non-Instrument (NI)")["configuration"],
+            "vertical_then_inclined",
+        )
+        self.assertEqual(
+            profile.inner_transitional_surface_parameters("I", "Non-Instrument (NI)")["vertical_section_height_m"],
+            6.0,
+        )
+        self.assertEqual(
+            profile.inner_transitional_surface_parameters("I", "Non-Instrument (NI)")["length_rule"],
+            "to_end_of_strip",
+        )
+        self.assertEqual(
+            profile.inner_transitional_surface_parameters("IIC", "Non-Instrument (NI)")["vertical_section_height_m"],
+            8.4,
+        )
+        self.assertEqual(
+            profile.inner_transitional_surface_parameters("IIC", "Non-Precision Approach (NPA)")["vertical_section_height_m"],
+            5.0,
+        )
+        self.assertEqual(
+            profile.inner_transitional_surface_parameters("III", "Non-Precision Approach (NPA)")["length_m"],
+            1800.0,
+        )
+        self.assertEqual(
+            profile.inner_transitional_surface_parameters("V", "Precision Approach CAT I")["configuration"],
+            "precision_single_section",
+        )
+        self.assertEqual(
+            profile.inner_transitional_surface_parameters("V", "Precision Approach CAT I")["slope"],
+            0.333,
+        )
+        self.assertEqual(
+            profile.inner_transitional_surface_parameters("V", "Precision Approach CAT I")["length_rule"],
+            "per_4_2_4_3",
+        )
+        self.assertEqual(
+            profile.balked_landing_surface_parameters("I")["distance_rule"],
+            "end_of_strip",
+        )
+        self.assertEqual(
+            profile.balked_landing_surface_parameters("I")["inner_edge_length_m"],
+            90.0,
+        )
+        self.assertEqual(
+            profile.balked_landing_surface_parameters("III")["distance_from_threshold_m"],
+            1800.0,
+        )
+        self.assertEqual(
+            profile.balked_landing_surface_parameters("III")["distance_rule"],
+            "1800_m_or_end_of_runway_whichever_is_less",
+        )
+        self.assertEqual(
+            profile.balked_landing_surface_parameters("III")["slope"],
+            0.0333,
+        )
+        self.assertEqual(
+            profile.balked_landing_surface_parameters(
+                "V",
+                code_letter_f_without_digital_avionics=True,
+            )["inner_edge_length_m"],
+            140.0,
+        )
+        self.assertEqual(profile.capability_status("ols.obstacle_free_surfaces"), "supported")
+        npa_ofs = profile.obstacle_free_surfaces("IV", "Non-Precision Approach (NPA)")
+        self.assertEqual(npa_ofs["status"], "data_capture_complete")
+        self.assertEqual([surface["surface"] for surface in npa_ofs["groups"]["general"]], ["approach", "transitional"])
+        self.assertEqual(
+            [surface["surface"] for surface in npa_ofs["groups"]["inner"]],
+            ["inner_approach", "inner_transitional"],
+        )
+        precision_ofs = profile.obstacle_free_surfaces(
+            "V",
+            "Precision Approach CAT I",
+            code_letter_f_without_digital_avionics=True,
+        )
+        self.assertEqual(
+            [surface["surface"] for surface in precision_ofs["groups"]["inner"]],
+            ["inner_approach", "inner_transitional", "balked_landing"],
+        )
+        self.assertEqual(precision_ofs["groups"]["inner"][0]["inner_edge_length_m"], 140.0)
+        self.assertEqual(precision_ofs["groups"]["inner"][2]["inner_edge_length_m"], 140.0)
         self.assertIsNone(profile.strip_parameters(3, "PA_I", 45.0))
         self.assertIsNone(profile.parallel_runway_separation(3, 4, "Precision Approach CAT I", "Precision Approach CAT I"))
         self.assertFalse(profile.runway_type_supports_agl("Precision Approach CAT I"))

@@ -67,6 +67,58 @@ class OlsService:
     def transitional_surface_parameters(self):
         return ols.transitional_surface_parameters()
 
+    def inner_approach_surface_parameters(
+        self,
+        design_group: Optional[str],
+        runway_type: Optional[str],
+        approach_surface_slope: Optional[float] = None,
+        code_letter_f_without_digital_avionics: bool = False,
+    ):
+        return ols.inner_approach_surface_parameters(
+            design_group=design_group,
+            runway_type=runway_type,
+            approach_surface_slope=approach_surface_slope,
+            code_letter_f_without_digital_avionics=code_letter_f_without_digital_avionics,
+        )
+
+    def inner_transitional_surface_parameters(
+        self,
+        design_group: Optional[str],
+        runway_type: Optional[str],
+    ):
+        return ols.inner_transitional_surface_parameters(
+            design_group=design_group,
+            runway_type=runway_type,
+        )
+
+    def balked_landing_surface_parameters(
+        self,
+        design_group: Optional[str],
+        code_letter_f_without_digital_avionics: bool = False,
+    ):
+        return ols.balked_landing_surface_parameters(
+            design_group=design_group,
+            code_letter_f_without_digital_avionics=code_letter_f_without_digital_avionics,
+        )
+
+    def obstacle_free_surfaces(
+        self,
+        design_group: Optional[str],
+        runway_type: Optional[str],
+        runway_width_m: Optional[float] = None,
+        approach_surface_slope: Optional[float] = None,
+        obstacle_clearance_height_m: Optional[float] = None,
+        code_letter_f_without_digital_avionics: bool = False,
+    ):
+        return ols.obstacle_free_surfaces(
+            design_group=design_group,
+            runway_type=runway_type,
+            runway_width_m=runway_width_m,
+            approach_surface_slope=approach_surface_slope,
+            obstacle_clearance_height_m=obstacle_clearance_height_m,
+            code_letter_f_without_digital_avionics=code_letter_f_without_digital_avionics,
+        )
+
 
 class OesService:
     def surface_families(self) -> tuple:

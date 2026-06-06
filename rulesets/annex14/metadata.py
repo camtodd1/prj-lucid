@@ -27,6 +27,7 @@ CAPABILITY_STATUS_BY_KEY = {
     "physical.taxiway_separation": "unsupported",
     "physical.parallel_runway_separation": "scaffold",
     "ols.airport_wide": "scaffold",
+    "ols.obstacle_free_surfaces": "supported",
     "ols.runway_approach": "partial",
     "ols.takeoff_climb": "scaffold",
     "ols.ofz": "scaffold",
