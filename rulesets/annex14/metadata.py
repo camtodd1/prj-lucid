@@ -39,6 +39,8 @@ CAPABILITY_STATUS_BY_KEY = {
     "oes.precision_approach": "supported",
     "oes.instrument_departure": "supported",
     "oes.take_off_climb": "supported",
+    "obstacle_limitation.requirements": "supported",
+    "obstacle_limitation.surface_establishment": "supported",
     "markings.runway": "unsupported",
     "lighting.runway": "unsupported",
     "lighting.approach": "unsupported",

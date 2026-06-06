@@ -8,6 +8,7 @@ from .services import (
     ClassificationService,
     LightingService,
     MarkingService,
+    ObstacleLimitationService,
     OesService,
     OlsService,
     PhysicalService,
@@ -20,6 +21,7 @@ class Annex14RulesetProfile(RulesetProfile):
     classification = ClassificationService()
     ols = OlsService()
     oes = OesService()
+    obstacle_limitation = ObstacleLimitationService()
     physical = PhysicalService()
     markings = MarkingService()
     lighting = LightingService()
@@ -178,6 +180,24 @@ class Annex14RulesetProfile(RulesetProfile):
             max_certificated_takeoff_mass_kg=max_certificated_takeoff_mass_kg,
             slope=slope,
         )
+
+    def obstacle_free_surface_requirements(self):
+        return self.obstacle_limitation.obstacle_free_surface_requirements()
+
+    def obstacle_evaluation_surface_requirements(self):
+        return self.obstacle_limitation.obstacle_evaluation_surface_requirements()
+
+    def obstacle_limitation_requirements(self, family: Optional[str] = None):
+        return self.obstacle_limitation.requirements(family)
+
+    def obstacle_free_surface_establishment(self, runway_type_abbr: Optional[str] = None):
+        return self.obstacle_limitation.obstacle_free_surface_establishment(runway_type_abbr)
+
+    def obstacle_evaluation_surface_establishment(self, operation: Optional[str] = None):
+        return self.obstacle_limitation.obstacle_evaluation_surface_establishment(operation)
+
+    def surface_establishment_requirements(self):
+        return self.obstacle_limitation.surface_establishment_requirements()
 
     def taxiway_separation_offset(self, arc_num: int, arc_let: Optional[str], runway_type: Optional[str]):
         return self.physical.taxiway_separation_offset(arc_num, arc_let, runway_type)

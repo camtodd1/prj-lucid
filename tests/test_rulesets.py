@@ -400,6 +400,8 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(profile.capability_status("oes.precision_approach"), "supported")
         self.assertEqual(profile.capability_status("oes.instrument_departure"), "supported")
         self.assertEqual(profile.capability_status("oes.take_off_climb"), "supported")
+        self.assertEqual(profile.capability_status("obstacle_limitation.requirements"), "supported")
+        self.assertEqual(profile.capability_status("obstacle_limitation.surface_establishment"), "supported")
         self.assertEqual(profile.classify_runway_type("Precision Approach CAT I"), "PA_I")
         self.assertEqual(profile.precision_type_codes(), {"PA_I", "PA_II_III"})
         self.assertEqual(profile.code_number(799.9)["code_number"], 1)
@@ -679,6 +681,48 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertAlmostEqual(reduced_slope_takeoff["length_m"], 12500.0)
         self.assertEqual(reduced_slope_takeoff["length_adjustment_ref"], "Annex 14 Vol I 4.3.6.9")
         self.assertEqual(profile.oes_parameters(design_group="I", surface_type="take off climb")["surface"], "take_off_climb")
+        ofs_requirements = profile.obstacle_free_surface_requirements()
+        self.assertEqual(
+            ofs_requirements["inner_surfaces"]["fixed_objects"]["rule"],
+            "not_permitted_above_surface",
+        )
+        self.assertIn(
+            "frangible",
+            ofs_requirements["general_surfaces"]["permitted_objects"]["requirements"],
+        )
+        self.assertEqual(
+            ofs_requirements["general_surfaces"]["existing_obstacles"]["retention_rule"],
+            "permitted_only_after_aeronautical_study",
+        )
+        oes_requirements = profile.obstacle_evaluation_surface_requirements()
+        self.assertEqual(
+            oes_requirements["penetrating_obstacles"]["rule"],
+            "permitted_only_after_aeronautical_study",
+        )
+        self.assertEqual(
+            profile.obstacle_limitation_requirements("OES")["family"],
+            "obstacle_evaluation_surfaces",
+        )
+        self.assertEqual(
+            profile.obstacle_free_surface_establishment("NPA")["surfaces"],
+            ["approach", "transitional", "inner_approach", "inner_transitional"],
+        )
+        self.assertEqual(
+            profile.obstacle_free_surface_establishment("PA_I")["surfaces"],
+            ["approach", "transitional", "inner_approach", "inner_transitional", "balked_landing"],
+        )
+        self.assertEqual(
+            profile.obstacle_evaluation_surface_establishment("precision_approach")["surfaces"],
+            ["precision_approach", "specific_oes"],
+        )
+        self.assertEqual(
+            profile.obstacle_evaluation_surface_establishment("take off operations")["surfaces"],
+            ["take_off_climb", "specific_oes"],
+        )
+        self.assertEqual(
+            profile.surface_establishment_requirements()["obstacle_evaluation_surfaces"]["overlap_rule"],
+            "each_individual_oes_must_be_considered_when_surfaces_overlap",
+        )
         self.assertIsNone(profile.strip_parameters(3, "PA_I", 45.0))
         self.assertIsNone(profile.parallel_runway_separation(3, 4, "Precision Approach CAT I", "Precision Approach CAT I"))
         self.assertFalse(profile.runway_type_supports_agl("Precision Approach CAT I"))

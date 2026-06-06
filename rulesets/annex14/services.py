@@ -5,6 +5,7 @@ from typing import Optional
 from . import classification as classification_policy
 from . import lighting as lighting_policy
 from . import markings as marking_policy
+from . import obstacle_requirements
 from . import oes
 from . import ols
 from . import physical_data
@@ -166,6 +167,26 @@ class OesService:
         )
 
 
+class ObstacleLimitationService:
+    def obstacle_free_surface_requirements(self):
+        return obstacle_requirements.obstacle_free_surface_requirements()
+
+    def obstacle_evaluation_surface_requirements(self):
+        return obstacle_requirements.obstacle_evaluation_surface_requirements()
+
+    def requirements(self, family: Optional[str] = None):
+        return obstacle_requirements.obstacle_limitation_requirements(family)
+
+    def obstacle_free_surface_establishment(self, runway_type_abbr: Optional[str] = None):
+        return obstacle_requirements.obstacle_free_surface_establishment(runway_type_abbr)
+
+    def obstacle_evaluation_surface_establishment(self, operation: Optional[str] = None):
+        return obstacle_requirements.obstacle_evaluation_surface_establishment(operation)
+
+    def surface_establishment_requirements(self):
+        return obstacle_requirements.surface_establishment_requirements()
+
+
 class PhysicalService:
     def refs(self) -> dict:
         return physical_data.get_physical_refs()
@@ -270,6 +291,7 @@ __all__ = [
     "ClassificationService",
     "OlsService",
     "OesService",
+    "ObstacleLimitationService",
     "PhysicalService",
     "MarkingService",
     "LightingService",
