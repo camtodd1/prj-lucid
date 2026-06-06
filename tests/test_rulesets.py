@@ -199,6 +199,78 @@ class RulesetRegistryTest(unittest.TestCase):
         )
         self.assertIsNone(profile.runway_holding_position_rule(1, "Precision Approach CAT II/III"))
 
+    def test_mos139_parallel_runway_separation(self):
+        profile = get_ruleset_profile("mos139_2019")
+        self.assertEqual(profile.capability_status("physical.parallel_runway_separation"), "supported")
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                1,
+                4,
+                "Non-Instrument (NI)",
+                "Non-Instrument (NI)",
+                "simultaneous",
+            )["distance_m"],
+            210.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                1,
+                2,
+                "Non-Instrument (NI)",
+                "Non-Instrument (NI)",
+            )["distance_m"],
+            150.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "independent_parallel_approaches",
+            )["distance_m"],
+            1035.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "dependent_parallel_approaches",
+            )["distance_m"],
+            915.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "independent_parallel_departures",
+            )["distance_m"],
+            760.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "segregated_parallel_operations",
+                arrival_threshold_stagger_m=300.0,
+            )["distance_m"],
+            760.0,
+        )
+        self.assertIsNone(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Instrument (NI)",
+            )
+        )
+
     def test_easa_profile_smoke_checks(self):
         profile = get_ruleset_profile("easa_cs_adr_dsn_issue_6")
         self.assertEqual(profile.status, "draft")

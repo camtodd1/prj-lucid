@@ -54,7 +54,8 @@ codes.
 : Pavement/shoulder references, strip dimensions, and RESA policy.
 
 `taxiway.py`
-: Taxiway minimum separation offsets and lookup behaviour.
+: Taxiway minimum separation offsets, parallel runway separation distances,
+and lookup behaviour.
 
 `ols_surfaces.py`
 : OLS surface dimensions and lookup behaviour, including approach, take-off
