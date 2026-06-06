@@ -576,9 +576,8 @@ class SafeguardingBuilderDialog(
             self.ruleset_combo.addItem(profile.display_name, userData=profile.id)
         default_index = self.ruleset_combo.findData(DEFAULT_RULESET_ID)
         self.ruleset_combo.setCurrentIndex(default_index if default_index >= 0 else 0)
-        self.ruleset_combo.setEnabled(False)
-        self.ruleset_combo.setToolTip("Aerodrome design standard. MOS139 is currently the only selectable standard.")
-        self.ruleset_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
+        self.ruleset_combo.setEnabled(True)
+        self.ruleset_combo.setToolTip("Aerodrome design standard. Select EASA for current development testing.")
         self.ruleset_combo.setMinimumWidth(190)
 
         self.framework_combo = QtWidgets.QComboBox()
