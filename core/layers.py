@@ -374,6 +374,8 @@ class LayerMixin:
                         self._apply_controlling_region_style(layer)
                     if str(style_key) == "OLS Controlling Contour":
                         self._apply_controlling_contour_style(layer)
+                    if str(style_key) == "Parallel Runway Separation Line":
+                        self._apply_parallel_runway_separation_style(layer)
                     if str(style_key) in {"OLS IHS", "OLS OHS"}:
                         self._apply_horizontal_surface_labels(layer)
                     if str(style_key) == "OLS Approach":
@@ -455,6 +457,65 @@ class LayerMixin:
         except Exception as exc:
             QgsMessageLog.logMessage(
                 f"Warning: failed to apply controlling contour line style: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
+    def _apply_parallel_runway_separation_style(self, layer: QgsVectorLayer):
+        """Apply solid/dashed styling and short labels for parallel runway separation guides."""
+        if layer is None or not layer.isValid():
+            return
+        try:
+            solid_symbol = QgsLineSymbol.createSimple(
+                {
+                    "line_color": "38,122,181,230",
+                    "line_width": "0.32",
+                    "line_width_unit": "MM",
+                    "line_style": "solid",
+                }
+            )
+            dashed_symbol = QgsLineSymbol.createSimple(
+                {
+                    "line_color": "38,122,181,230",
+                    "line_width": "0.32",
+                    "line_width_unit": "MM",
+                    "line_style": "dash",
+                }
+            )
+            layer.setRenderer(
+                QgsCategorizedSymbolRenderer(
+                    "line_style",
+                    [
+                        QgsRendererCategory("solid", solid_symbol, "Solid"),
+                        QgsRendererCategory("dashed", dashed_symbol, "Dashed"),
+                    ],
+                )
+            )
+
+            if layer.fields().indexFromName("label_txt") >= 0:
+                settings = QgsPalLayerSettings()
+                settings.fieldName = "label_txt"
+                settings.placement = QgsPalLayerSettings.Line
+                settings.priority = 6
+                settings.obstacle = False
+
+                text_format = QgsTextFormat()
+                text_format.setFont(QFont("Lato", 9))
+                text_format.setSize(9)
+                text_format.setColor(QColor(35, 70, 100))
+
+                buffer = QgsTextBufferSettings()
+                buffer.setEnabled(True)
+                buffer.setSize(0.9)
+                buffer.setColor(QColor(255, 255, 255))
+                text_format.setBuffer(buffer)
+
+                settings.setFormat(text_format)
+                layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+                layer.setLabelsEnabled(True)
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Warning: failed to apply parallel runway separation style: {exc}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )

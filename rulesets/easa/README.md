@@ -32,4 +32,6 @@ lighting.
 `ols.py`, `taxiway.py`
 : Compatibility wrappers that satisfy the ruleset contract. `ols.py` delegates
 to `ols_surfaces.py`; `taxiway.py` stores CS ADR-DSN.D.260 Table D-1 separation
-lookups plus an empty parallel runway separation scaffold.
+lookups plus the CS ADR-DSN.B.050 and B.055 parallel runway separation rules.
+Segregated parallel operations accept an arrival-threshold stagger value where
+positive values reduce the minimum distance and negative values increase it.

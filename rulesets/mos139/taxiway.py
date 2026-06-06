@@ -110,6 +110,7 @@ def get_parallel_runway_separation(
     runway_type_1: Optional[str] = None,
     runway_type_2: Optional[str] = None,
     operation_type: Optional[str] = None,
+    arrival_threshold_stagger_m: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
     """Placeholder for minimum parallel runway separation rules."""
     return None

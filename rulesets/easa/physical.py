@@ -44,6 +44,7 @@ def parallel_runway_separation(
     runway_type_1: Optional[str] = None,
     runway_type_2: Optional[str] = None,
     operation_type: Optional[str] = None,
+    arrival_threshold_stagger_m: Optional[float] = None,
 ):
     return taxiway.get_parallel_runway_separation(
         arc_num_1=arc_num_1,
@@ -51,6 +52,7 @@ def parallel_runway_separation(
         runway_type_1=runway_type_1,
         runway_type_2=runway_type_2,
         operation_type=operation_type,
+        arrival_threshold_stagger_m=arrival_threshold_stagger_m,
     )
 
 

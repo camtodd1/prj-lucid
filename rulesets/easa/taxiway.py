@@ -8,6 +8,8 @@ from .classification import get_runway_type_abbr
 LOGGER = logging.getLogger(__name__)
 
 EASA_TAXIWAY_SEPARATION_REF = "CS ADR-DSN.D.260 Table D-1"
+EASA_PARALLEL_NON_INSTRUMENT_RUNWAY_REF = "CS ADR-DSN.B.050"
+EASA_PARALLEL_INSTRUMENT_RUNWAY_REF = "CS ADR-DSN.B.055"
 
 TAXIWAY_RUNWAY_SEPARATION_PARAMS: Dict[Tuple[int, str, str], Dict[str, Any]] = {
     (1, "A", "INSTR"): {"offset_m": 77.5, "ref": EASA_TAXIWAY_SEPARATION_REF},
@@ -78,7 +80,48 @@ STAND_TAXILANE_OBJECT_SEPARATION_PARAMS: Dict[str, Dict[str, Any]] = {
     "F": {"offset_m": 47.5, "ref": EASA_TAXIWAY_SEPARATION_REF},
 }
 
-PARALLEL_RUNWAY_SEPARATION_PARAMS: Dict[Tuple[Any, ...], Dict[str, Any]] = {}
+PARALLEL_RUNWAY_SEPARATION_PARAMS: Dict[Tuple[str, int], Dict[str, Any]] = {
+    ("NI_SIMULTANEOUS", 1): {
+        "distance_m": 120.0,
+        "ref": EASA_PARALLEL_NON_INSTRUMENT_RUNWAY_REF,
+        "condition": "Parallel non-instrument runways intended for simultaneous use; higher code number is 1.",
+    },
+    ("NI_SIMULTANEOUS", 2): {
+        "distance_m": 150.0,
+        "ref": EASA_PARALLEL_NON_INSTRUMENT_RUNWAY_REF,
+        "condition": "Parallel non-instrument runways intended for simultaneous use; higher code number is 2.",
+    },
+    ("NI_SIMULTANEOUS", 3): {
+        "distance_m": 210.0,
+        "ref": EASA_PARALLEL_NON_INSTRUMENT_RUNWAY_REF,
+        "condition": "Parallel non-instrument runways intended for simultaneous use; higher code number is 3 or 4.",
+    },
+    ("NI_SIMULTANEOUS", 4): {
+        "distance_m": 210.0,
+        "ref": EASA_PARALLEL_NON_INSTRUMENT_RUNWAY_REF,
+        "condition": "Parallel non-instrument runways intended for simultaneous use; higher code number is 3 or 4.",
+    },
+    ("INSTR_INDEPENDENT_APPROACHES", 0): {
+        "distance_m": 1035.0,
+        "ref": EASA_PARALLEL_INSTRUMENT_RUNWAY_REF,
+        "condition": "Parallel instrument runways intended for independent parallel approaches.",
+    },
+    ("INSTR_DEPENDENT_APPROACHES", 0): {
+        "distance_m": 915.0,
+        "ref": EASA_PARALLEL_INSTRUMENT_RUNWAY_REF,
+        "condition": "Parallel instrument runways intended for dependent parallel approaches.",
+    },
+    ("INSTR_INDEPENDENT_DEPARTURES", 0): {
+        "distance_m": 760.0,
+        "ref": EASA_PARALLEL_INSTRUMENT_RUNWAY_REF,
+        "condition": "Parallel instrument runways intended for independent parallel departures.",
+    },
+    ("INSTR_SEGREGATED", 0): {
+        "distance_m": 760.0,
+        "ref": EASA_PARALLEL_INSTRUMENT_RUNWAY_REF,
+        "condition": "Parallel instrument runways intended for segregated parallel operations.",
+    },
+}
 
 
 def _arc_letter(arc_let: Optional[str]) -> str:
@@ -87,6 +130,56 @@ def _arc_letter(arc_let: Optional[str]) -> str:
 
 def _runway_instrument_group(runway_type_str: Optional[str]) -> str:
     return "NI" if get_runway_type_abbr(runway_type_str) == "NI" else "INSTR"
+
+
+def _operation_key(operation_type: Optional[str]) -> str:
+    value = (operation_type or "simultaneous").strip().lower().replace("-", "_").replace(" ", "_")
+    if value in {"simultaneous", "simultaneous_use", "simultaneous_operations"}:
+        return "NI_SIMULTANEOUS"
+    if value in {"independent_parallel_approaches", "independent_approaches", "independent_parallel_approach"}:
+        return "INSTR_INDEPENDENT_APPROACHES"
+    if value in {"dependent_parallel_approaches", "dependent_approaches", "dependent_parallel_approach"}:
+        return "INSTR_DEPENDENT_APPROACHES"
+    if value in {"independent_parallel_departures", "independent_departures", "independent_parallel_departure"}:
+        return "INSTR_INDEPENDENT_DEPARTURES"
+    if value in {"segregated_parallel_operations", "segregated_operations", "segregated"}:
+        return "INSTR_SEGREGATED"
+    return value.upper()
+
+
+def _segregated_parallel_distance(base_distance_m: float, arrival_threshold_stagger_m: Optional[float]) -> Dict[str, Any]:
+    """Apply B.055 segregated-operations stagger adjustment.
+
+    Positive stagger means the arrival runway threshold is staggered toward
+    the arriving aircraft. Negative stagger means it is staggered away.
+    """
+    if arrival_threshold_stagger_m is None:
+        return {
+            "distance_m": base_distance_m,
+            "base_distance_m": base_distance_m,
+            "threshold_stagger_m": None,
+            "stagger_adjustment_m": 0.0,
+        }
+
+    stagger_m = float(arrival_threshold_stagger_m)
+    adjustment_steps = int(abs(stagger_m) // 150.0)
+    adjustment_m = adjustment_steps * 30.0
+    if stagger_m > 0:
+        distance_m = max(300.0, base_distance_m - adjustment_m)
+        signed_adjustment_m = -adjustment_m
+    elif stagger_m < 0:
+        distance_m = base_distance_m + adjustment_m
+        signed_adjustment_m = adjustment_m
+    else:
+        distance_m = base_distance_m
+        signed_adjustment_m = 0.0
+
+    return {
+        "distance_m": distance_m,
+        "base_distance_m": base_distance_m,
+        "threshold_stagger_m": stagger_m,
+        "stagger_adjustment_m": signed_adjustment_m,
+    }
 
 
 def _copy_by_letter(params_by_letter: Dict[str, Dict[str, Any]], arc_let: Optional[str]) -> Optional[Dict[str, Any]]:
@@ -134,13 +227,60 @@ def get_parallel_runway_separation(
     runway_type_1: Optional[str] = None,
     runway_type_2: Optional[str] = None,
     operation_type: Optional[str] = None,
+    arrival_threshold_stagger_m: Optional[float] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Placeholder for minimum parallel runway separation rules."""
-    return None
+    """Return minimum centre line separation for parallel runways."""
+    if not isinstance(arc_num_1, int) or not isinstance(arc_num_2, int):
+        return None
+    if arc_num_1 not in [1, 2, 3, 4] or arc_num_2 not in [1, 2, 3, 4]:
+        LOGGER.warning(
+            "Invalid ARC Numbers %r/%r for EASA parallel runway separation lookup.",
+            arc_num_1,
+            arc_num_2,
+        )
+        return None
+
+    runway_1_is_ni = _runway_instrument_group(runway_type_1) == "NI"
+    runway_2_is_ni = _runway_instrument_group(runway_type_2) == "NI"
+    operation_key = _operation_key(operation_type)
+
+    if runway_1_is_ni and runway_2_is_ni:
+        higher_code = max(arc_num_1, arc_num_2)
+        params = PARALLEL_RUNWAY_SEPARATION_PARAMS.get((operation_key, higher_code))
+    elif not runway_1_is_ni and not runway_2_is_ni:
+        higher_code = max(arc_num_1, arc_num_2)
+        params = PARALLEL_RUNWAY_SEPARATION_PARAMS.get((operation_key, 0))
+    else:
+        return None
+
+    if not params:
+        return None
+
+    result = params.copy()
+    result["higher_code_number"] = higher_code
+    result["operation_type"] = operation_type or "simultaneous"
+    if operation_key == "INSTR_SEGREGATED":
+        result.update(_segregated_parallel_distance(float(params["distance_m"]), arrival_threshold_stagger_m))
+
+    if runway_1_is_ni and runway_2_is_ni:
+        result["notes"] = (
+            "Independent parallel approach combinations may use other minimum distances and associated "
+            "conditions when determined not to adversely affect safety. Wake turbulence categorisation and "
+            "separation minima are addressed in PANS-ATM Doc 4444, Chapter 4.9 and Chapter 5.8."
+        )
+    else:
+        result["notes"] = (
+            "Other combinations of minimum distances should account for ATM and operational aspects. "
+            "Guidance on procedures and facilities for simultaneous operations is in ICAO PANS-ATM "
+            "Doc 4444 Chapter 6, PANS-OPS Doc 8168, and ICAO Doc 9643 SOIR."
+        )
+    return result
 
 
 __all__ = [
     "EASA_TAXIWAY_SEPARATION_REF",
+    "EASA_PARALLEL_NON_INSTRUMENT_RUNWAY_REF",
+    "EASA_PARALLEL_INSTRUMENT_RUNWAY_REF",
     "TAXIWAY_RUNWAY_SEPARATION_PARAMS",
     "TAXIWAY_TO_TAXIWAY_SEPARATION_PARAMS",
     "TAXIWAY_OBJECT_SEPARATION_PARAMS",

@@ -222,6 +222,96 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(profile.stand_taxilane_to_stand_taxilane_separation("B")["offset_m"], 28.5)
         self.assertEqual(profile.stand_taxilane_object_separation("E")["offset_m"], 40.0)
         self.assertIsNone(profile.parallel_runway_separation())
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                1,
+                4,
+                "Non-Instrument (NI)",
+                "Non-Instrument (NI)",
+                "simultaneous",
+            )["distance_m"],
+            210.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                1,
+                2,
+                "Non-Instrument (NI)",
+                "Non-Instrument (NI)",
+            )["distance_m"],
+            150.0,
+        )
+        self.assertIsNone(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Instrument (NI)",
+            )
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "independent_parallel_approaches",
+            )["distance_m"],
+            1035.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "dependent_parallel_approaches",
+            )["distance_m"],
+            915.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "independent_parallel_departures",
+            )["distance_m"],
+            760.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "segregated_parallel_operations",
+                arrival_threshold_stagger_m=300.0,
+            )["distance_m"],
+            700.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "segregated_parallel_operations",
+                arrival_threshold_stagger_m=-150.0,
+            )["distance_m"],
+            790.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "segregated_parallel_operations",
+                arrival_threshold_stagger_m=3000.0,
+            )["distance_m"],
+            300.0,
+        )
 
     def test_mos139_adapter_matches_ruleset_agl_helpers(self):
         profile = get_ruleset_profile("mos139_2019")

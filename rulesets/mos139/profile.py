@@ -59,6 +59,7 @@ class Mos139RulesetProfile(RulesetProfile):
         runway_type_1: Optional[str] = None,
         runway_type_2: Optional[str] = None,
         operation_type: Optional[str] = None,
+        arrival_threshold_stagger_m: Optional[float] = None,
     ):
         return self.physical.parallel_runway_separation(
             arc_num_1=arc_num_1,
@@ -66,6 +67,7 @@ class Mos139RulesetProfile(RulesetProfile):
             runway_type_1=runway_type_1,
             runway_type_2=runway_type_2,
             operation_type=operation_type,
+            arrival_threshold_stagger_m=arrival_threshold_stagger_m,
         )
 
     def centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str) -> float:

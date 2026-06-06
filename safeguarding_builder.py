@@ -1759,6 +1759,16 @@ class SafeguardingBuilder(
                     PLUGIN_TAG,
                     level=Qgis.Critical,
                 )
+        if specialised_group_node is not None:
+            try:
+                if self.process_parallel_runway_separation(processed_runway_data_list, specialised_group_node):
+                    any_guideline_processed_ok = True
+            except Exception as e_parallel_sep:
+                QgsMessageLog.logMessage(
+                    f"Error processing parallel runway separation layer: {e_parallel_sep}",
+                    PLUGIN_TAG,
+                    level=Qgis.Critical,
+                )
         return any_guideline_processed_ok
 
     def _count_layer_tree_contents(self, node: QgsLayerTreeNode) -> Tuple[int, int, List[str]]:

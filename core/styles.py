@@ -24,6 +24,7 @@ DEFAULT_STYLE_MAP = {
     "Clearways": "default_zone_polygon.qml",
     "RAOA": "default_zone_polygon.qml",
     "Taxiway Separation Line": "twy_separation_line.qml",
+    "Parallel Runway Separation Line": "default_ols_line.qml",
     "WSZ Runway": "guideline_b_wsz.qml",
     "WMZ A": "default_zone_polygon.qml",
     "WMZ B": "default_zone_polygon.qml",
