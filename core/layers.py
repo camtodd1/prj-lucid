@@ -374,8 +374,8 @@ class LayerMixin:
                         self._apply_controlling_region_style(layer)
                     if str(style_key) == "OLS Controlling Contour":
                         self._apply_controlling_contour_style(layer)
-                    if str(style_key) == "Parallel Runway Separation Line":
-                        self._apply_parallel_runway_separation_style(layer)
+                    if str(style_key) == "Runway Separation Assessment Line":
+                        self._apply_runway_separation_assessment_style(layer)
                     if str(style_key) in {"OLS IHS", "OLS OHS"}:
                         self._apply_horizontal_surface_labels(layer)
                     if str(style_key) == "OLS Approach":
@@ -461,8 +461,8 @@ class LayerMixin:
                 level=Qgis.Warning,
             )
 
-    def _apply_parallel_runway_separation_style(self, layer: QgsVectorLayer):
-        """Apply solid/dashed styling and short labels for parallel runway separation guides."""
+    def _apply_runway_separation_assessment_style(self, layer: QgsVectorLayer):
+        """Apply solid/dashed styling and on-line labels for runway separation guides."""
         if layer is None or not layer.isValid():
             return
         try:
@@ -496,6 +496,14 @@ class LayerMixin:
                 settings = QgsPalLayerSettings()
                 settings.fieldName = "label_txt"
                 settings.placement = QgsPalLayerSettings.Line
+                try:
+                    line_settings = settings.lineSettings()
+                    placement_flag_owner = getattr(__import__("qgis.core").core, "QgsLabelLineSettings", None)
+                    on_line = getattr(placement_flag_owner, "OnLine", None) if placement_flag_owner else None
+                    if on_line is not None and hasattr(line_settings, "setPlacementFlags"):
+                        line_settings.setPlacementFlags(on_line)
+                except Exception:
+                    pass
                 settings.priority = 6
                 settings.obstacle = False
 
@@ -515,7 +523,7 @@ class LayerMixin:
                 layer.setLabelsEnabled(True)
         except Exception as exc:
             QgsMessageLog.logMessage(
-                f"Warning: failed to apply parallel runway separation style: {exc}",
+                f"Warning: failed to apply runway separation assessment style: {exc}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )

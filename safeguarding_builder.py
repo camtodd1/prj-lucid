@@ -1761,11 +1761,11 @@ class SafeguardingBuilder(
                 )
         if specialised_group_node is not None:
             try:
-                if self.process_parallel_runway_separation(processed_runway_data_list, specialised_group_node):
+                if self.process_runway_separation_assessment(processed_runway_data_list, specialised_group_node):
                     any_guideline_processed_ok = True
             except Exception as e_parallel_sep:
                 QgsMessageLog.logMessage(
-                    f"Error processing parallel runway separation layer: {e_parallel_sep}",
+                    f"Error processing runway separation assessment layer: {e_parallel_sep}",
                     PLUGIN_TAG,
                     level=Qgis.Critical,
                 )
