@@ -73,6 +73,10 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(normalize_ruleset_id("MOS139"), "mos139_2019")
         self.assertEqual(get_ruleset_profile("MOS139").id, "mos139_2019")
 
+    def test_easa_alias_normalizes_to_canonical_id(self):
+        self.assertEqual(normalize_ruleset_id("EASA"), "easa_cs_adr_dsn_issue_6")
+        self.assertEqual(get_ruleset_profile("CS-ADR-DSN").id, "easa_cs_adr_dsn_issue_6")
+
     def test_structured_payload_normalizes_to_canonical_id(self):
         self.assertEqual(normalize_ruleset_id({"id": "MOS139"}), "mos139_2019")
         self.assertEqual(normalize_ruleset_id({"design_standard": "MOS139"}), "mos139_2019")
@@ -179,6 +183,17 @@ class RulesetRegistryTest(unittest.TestCase):
             (40.0, "MOS 8.39(7); Table 6.56(1)"),
         )
         self.assertIsNone(profile.runway_holding_position_rule(1, "Precision Approach CAT II/III"))
+
+    def test_easa_profile_smoke_checks(self):
+        profile = get_ruleset_profile("easa_cs_adr_dsn_issue_6")
+        self.assertEqual(profile.status, "draft")
+        self.assertEqual(profile.capability_status("ols.airport_wide"), "unsupported")
+        self.assertEqual(profile.classify_runway_type("Precision Approach CAT I"), "PA_I")
+        self.assertEqual(profile.strip_parameters(3, "PA_I", 45.0)["overall_width"], 280.0)
+        self.assertEqual(profile.resa_parameters(3, "PA_I", "NI")["length"], 240.0)
+        self.assertEqual(profile.threshold_marking_params(45.0), (12, 1.8))
+        self.assertEqual(profile.runway_edge_spacing_for_end("Non-Precision Approach (NPA)"), 60.0)
+        self.assertIsNone(profile.ols_parameters(3, "Precision Approach CAT I", "APPROACH"))
 
     def test_mos139_adapter_matches_ruleset_agl_helpers(self):
         profile = get_ruleset_profile("mos139_2019")

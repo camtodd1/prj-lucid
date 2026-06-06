@@ -19,7 +19,7 @@ Key highlights from the specifications include:
   extend laterally from the centre line of the runway by at least
   140 m for code numbers 3 and 4 and 70 m for code numbers 1 and 2.
   For non‑instrument runways the lateral distances are 75 m (codes 3/4),
-  40 m (code 2) and 30 m (code 1)【817748896063692†L1288-L1320】.  These
+  40 m (code 2) and 30 m (code 1).  These
   lateral distances are doubled in the tables below to yield the
   overall strip width.
 
@@ -27,31 +27,31 @@ Key highlights from the specifications include:
   area on each side of the runway to at least 75 m for code numbers 3/4
   and 40 m for code numbers 1/2 on instrument runways, and 75 m
   (codes 3/4), 40 m (code 2) and 30 m (code 1) on non‑instrument
-  runways【817748896063692†L1427-L1456】.  These distances are doubled in
+  runways.  These distances are doubled in
   the ``graded_width`` entries.
 
 * **Runway strip extensions:**  CS ADR‑DSN.B.155 states that a runway
   strip should extend before the threshold and beyond the end of the
   runway for at least 60 m for code numbers 2, 3 and 4, and also for
   code 1 instrument runways, but only 30 m for code 1 non‑instrument
-  runways【817748896063692†L1269-L1277】.
+  runways.
 
 * **Runway shoulders:**  CS ADR‑DSN.B.125 and CS ADR‑DSN.B.135 describe
   the provision and width of runway shoulders.  Shoulders are required
   for runways with code letters D, E or F and the overall width of the
   runway including shoulders should not be less than 60 m for code
   letters D or E and 75 m for code letter F with four or more
-  engines【817748896063692†L1084-L1093】.  These references are stored in
+  engines.  These references are stored in
   ``SHOULDER_EASA_REF``.
 
 * **Runway end safety areas (RESA):**  Chapter C of the CS‑ADR‑DSN sets
   out the requirements for RESA.  A RESA must be provided at each
   runway end for code numbers 3/4 and for code numbers 1/2 when the
-  runway is an instrument runway【494340330858501†L8-L17】.  CS ADR‑DSN.C.215
+  runway is an instrument runway.  CS ADR‑DSN.C.215
   further specifies that the RESA should extend from the end of the
   runway strip for at least 90 m and, where practicable, to
   240 m for code numbers 3/4 or 120 m for code numbers 1/2 instrument
-  runways, with a width at least twice the runway width【494340330858501†L34-L50】.
+  runways, with a width at least twice the runway width.
 
 The tables and functions below translate these specifications into
 Python constants and helper routines.
@@ -61,8 +61,8 @@ from typing import Optional
 
 # References for pavement and shoulder requirements.  These strings
 # identify the CS‑ADR‑DSN paragraphs containing the relevant text.
-PAVEMENT_EASA_REF = "CS ADR‑DSN.B.090"  # Surface of runways【817748896063692†L815-L830】
-SHOULDER_EASA_REF = "CS ADR‑DSN.B.125/B.135"  # Runway shoulders【817748896063692†L1016-L1039】【817748896063692†L1084-L1093】
+PAVEMENT_EASA_REF = "CS ADR‑DSN.B.090"  # Surface of runways
+SHOULDER_EASA_REF = "CS ADR‑DSN.B.125/B.135"  # Runway shoulders
 
 # Width and grading parameters for runway strips by code number.  Each
 # entry contains separate values for instrument (includes non‑precision
@@ -72,129 +72,129 @@ STRIP_WIDTH_PARAMS = {
     1: {
         # Graded width (total) for code 1 instrument and non‑instrument runways
         "graded_widths": {
-            "NI": 60.0,  # 2 × 30 m【817748896063692†L1310-L1320】【817748896063692†L1427-L1456】
-            "NPA": 80.0,  # 2 × 40 m【817748896063692†L1427-L1456】
-            "PA_I": 80.0,  # 2 × 40 m【817748896063692†L1427-L1456】
-            "PA_II_III": 80.0,  # 2 × 40 m【817748896063692†L1427-L1456】
+            "NI": 60.0,  # 2 × 30 m
+            "NPA": 80.0,  # 2 × 40 m
+            "PA_I": 80.0,  # 2 × 40 m
+            "PA_II_III": 80.0,  # 2 × 40 m
         },
         # Overall strip width (total) for code 1 instrument and non‑instrument runways
         "overall_widths": {
-            "NI": 60.0,  # 2 × 30 m【817748896063692†L1310-L1320】
-            "NPA": 140.0,  # 2 × 70 m【817748896063692†L1288-L1307】
-            "PA_I": 140.0,  # 2 × 70 m【817748896063692†L1288-L1307】
-            "PA_II_III": 140.0,  # 2 × 70 m【817748896063692†L1288-L1307】
+            "NI": 60.0,  # 2 × 30 m
+            "NPA": 140.0,  # 2 × 70 m
+            "PA_I": 140.0,  # 2 × 70 m
+            "PA_II_III": 140.0,  # 2 × 70 m
         },
         # References for graded and overall widths
         "ref_graded": {
-            "NI": "CS ADR‑DSN.B.175(b)(3) Code 1 non‑instrument"【817748896063692†L1427-L1456】,
-            "INSTR": "CS ADR‑DSN.B.175(a)(2) Code 1 instrument"【817748896063692†L1427-L1456】,
+            "NI": "CS ADR‑DSN.B.175(b)(3) Code 1 non‑instrument",
+            "INSTR": "CS ADR‑DSN.B.175(a)(2) Code 1 instrument",
         },
         "ref_overall": {
-            "NI": "CS ADR‑DSN.B.160(c)(3) Code 1 non‑instrument"【817748896063692†L1310-L1320】,
-            "INSTR": "CS ADR‑DSN.B.160(a)(2) Code 1 instrument"【817748896063692†L1288-L1307】,
+            "NI": "CS ADR‑DSN.B.160(c)(3) Code 1 non‑instrument",
+            "INSTR": "CS ADR‑DSN.B.160(a)(2) Code 1 instrument",
         },
     },
     2: {
         "graded_widths": {
-            "NI": 80.0,  # 2 × 40 m【817748896063692†L1310-L1320】【817748896063692†L1427-L1456】
-            "NPA": 80.0,  # 2 × 40 m【817748896063692†L1427-L1456】
-            "PA_I": 80.0,  # 2 × 40 m【817748896063692†L1427-L1456】
-            "PA_II_III": 80.0,  # 2 × 40 m【817748896063692†L1427-L1456】
+            "NI": 80.0,  # 2 × 40 m
+            "NPA": 80.0,  # 2 × 40 m
+            "PA_I": 80.0,  # 2 × 40 m
+            "PA_II_III": 80.0,  # 2 × 40 m
         },
         "overall_widths": {
-            "NI": 80.0,  # 2 × 40 m【817748896063692†L1310-L1319】
-            "NPA": 140.0,  # 2 × 70 m【817748896063692†L1288-L1307】
-            "PA_I": 140.0,  # 2 × 70 m【817748896063692†L1288-L1307】
-            "PA_II_III": 140.0,  # 2 × 70 m【817748896063692†L1288-L1307】
+            "NI": 80.0,  # 2 × 40 m
+            "NPA": 140.0,  # 2 × 70 m
+            "PA_I": 140.0,  # 2 × 70 m
+            "PA_II_III": 140.0,  # 2 × 70 m
         },
         "ref_graded": {
-            "NI": "CS ADR‑DSN.B.175(b)(2) Code 2 non‑instrument"【817748896063692†L1427-L1456】,
-            "INSTR": "CS ADR‑DSN.B.175(a)(2) Code 2 instrument"【817748896063692†L1427-L1456】,
+            "NI": "CS ADR‑DSN.B.175(b)(2) Code 2 non‑instrument",
+            "INSTR": "CS ADR‑DSN.B.175(a)(2) Code 2 instrument",
         },
         "ref_overall": {
-            "NI": "CS ADR‑DSN.B.160(c)(2) Code 2 non‑instrument"【817748896063692†L1310-L1319】,
-            "INSTR": "CS ADR‑DSN.B.160(a)(2) Code 2 instrument"【817748896063692†L1288-L1307】,
+            "NI": "CS ADR‑DSN.B.160(c)(2) Code 2 non‑instrument",
+            "INSTR": "CS ADR‑DSN.B.160(a)(2) Code 2 instrument",
         },
     },
     3: {
         "graded_widths": {
-            "NI": 150.0,  # 2 × 75 m【817748896063692†L1315-L1317】【817748896063692†L1427-L1456】
-            "NPA": 150.0,  # 2 × 75 m【817748896063692†L1288-L1307】【817748896063692†L1427-L1456】
-            "PA_I": 150.0,  # 2 × 75 m【817748896063692†L1288-L1307】【817748896063692†L1427-L1456】
-            "PA_II_III": 150.0,  # 2 × 75 m【817748896063692†L1288-L1307】【817748896063692†L1427-L1456】
+            "NI": 150.0,  # 2 × 75 m
+            "NPA": 150.0,  # 2 × 75 m
+            "PA_I": 150.0,  # 2 × 75 m
+            "PA_II_III": 150.0,  # 2 × 75 m
         },
         "overall_widths": {
-            "NI": 150.0,  # 2 × 75 m【817748896063692†L1315-L1317】
-            "NPA": 280.0,  # 2 × 140 m【817748896063692†L1288-L1307】
-            "PA_I": 280.0,  # 2 × 140 m【817748896063692†L1288-L1307】
-            "PA_II_III": 280.0,  # 2 × 140 m【817748896063692†L1288-L1307】
+            "NI": 150.0,  # 2 × 75 m
+            "NPA": 280.0,  # 2 × 140 m
+            "PA_I": 280.0,  # 2 × 140 m
+            "PA_II_III": 280.0,  # 2 × 140 m
         },
         "ref_graded": {
-            "NI": "CS ADR‑DSN.B.175(b)(1) Code 3 non‑instrument"【817748896063692†L1427-L1456】,
-            "INSTR": "CS ADR‑DSN.B.175(a)(1) Code 3 instrument"【817748896063692†L1427-L1456】,
+            "NI": "CS ADR‑DSN.B.175(b)(1) Code 3 non‑instrument",
+            "INSTR": "CS ADR‑DSN.B.175(a)(1) Code 3 instrument",
         },
         "ref_overall": {
-            "NI": "CS ADR‑DSN.B.160(c)(1) Code 3 non‑instrument"【817748896063692†L1315-L1317】,
-            "INSTR": "CS ADR‑DSN.B.160(a)(1) Code 3 instrument"【817748896063692†L1288-L1307】,
+            "NI": "CS ADR‑DSN.B.160(c)(1) Code 3 non‑instrument",
+            "INSTR": "CS ADR‑DSN.B.160(a)(1) Code 3 instrument",
         },
     },
     4: {
         "graded_widths": {
-            "NI": 150.0,  # 2 × 75 m【817748896063692†L1315-L1317】【817748896063692†L1427-L1456】
-            "NPA": 150.0,  # 2 × 75 m【817748896063692†L1288-L1307】【817748896063692†L1427-L1456】
-            "PA_I": 150.0,  # 2 × 75 m【817748896063692†L1288-L1307】【817748896063692†L1427-L1456】
-            "PA_II_III": 150.0,  # 2 × 75 m【817748896063692†L1288-L1307】【817748896063692†L1427-L1456】
+            "NI": 150.0,  # 2 × 75 m
+            "NPA": 150.0,  # 2 × 75 m
+            "PA_I": 150.0,  # 2 × 75 m
+            "PA_II_III": 150.0,  # 2 × 75 m
         },
         "overall_widths": {
-            "NI": 150.0,  # 2 × 75 m【817748896063692†L1315-L1317】
-            "NPA": 280.0,  # 2 × 140 m【817748896063692†L1288-L1307】
-            "PA_I": 280.0,  # 2 × 140 m【817748896063692†L1288-L1307】
-            "PA_II_III": 280.0,  # 2 × 140 m【817748896063692†L1288-L1307】
+            "NI": 150.0,  # 2 × 75 m
+            "NPA": 280.0,  # 2 × 140 m
+            "PA_I": 280.0,  # 2 × 140 m
+            "PA_II_III": 280.0,  # 2 × 140 m
         },
         "ref_graded": {
-            "NI": "CS ADR‑DSN.B.175(b)(1) Code 4 non‑instrument"【817748896063692†L1427-L1456】,
-            "INSTR": "CS ADR‑DSN.B.175(a)(1) Code 4 instrument"【817748896063692†L1427-L1456】,
+            "NI": "CS ADR‑DSN.B.175(b)(1) Code 4 non‑instrument",
+            "INSTR": "CS ADR‑DSN.B.175(a)(1) Code 4 instrument",
         },
         "ref_overall": {
-            "NI": "CS ADR‑DSN.B.160(c)(1) Code 4 non‑instrument"【817748896063692†L1315-L1317】,
-            "INSTR": "CS ADR‑DSN.B.160(a)(1) Code 4 instrument"【817748896063692†L1288-L1307】,
+            "NI": "CS ADR‑DSN.B.160(c)(1) Code 4 non‑instrument",
+            "INSTR": "CS ADR‑DSN.B.160(a)(1) Code 4 instrument",
         },
     },
 }
 
 # Extension lengths for runway strips based on code number and runway type.
 # For code 1 non‑instrument runways the strip extension is 30 m; for all
-# other cases the extension is 60 m【817748896063692†L1269-L1277】.
+# other cases the extension is 60 m.
 STRIP_EXTENSION_PARAMS = {
-    "1_NI": {"length": 30.0, "ref": "CS ADR‑DSN.B.155(a)(3)"【817748896063692†L1269-L1277】},
-    "DEFAULT": {"length": 60.0, "ref": "CS ADR‑DSN.B.155(a)(1)-(2)"【817748896063692†L1269-L1277】},
+    "1_NI": {"length": 30.0, "ref": "CS ADR‑DSN.B.155(a)(3)"},
+    "DEFAULT": {"length": 60.0, "ref": "CS ADR‑DSN.B.155(a)(1)-(2)"},
 }
 
 # Runway end safety area (RESA) parameters.  The RESA is required for
 # code numbers 3/4 and for code numbers 1/2 when the runway is an
-# instrument runway【494340330858501†L8-L17】.  The recommended lengths are
+# instrument runway.  The recommended lengths are
 # 240 m for code numbers 3/4 and 120 m for code numbers 1/2 instrument
-# runways, with a minimum of 90 m【494340330858501†L34-L50】.  The width
+# runways, with a minimum of 90 m.  The width
 # should be at least twice the width of the runway or, where practicable,
-# equal to the graded portion of the runway strip【494340330858501†L34-L50】.
+# equal to the graded portion of the runway strip.
 RESA_PARAMS = {
-    "width_ref": "CS ADR‑DSN.C.215(c) (Width of RESA)"【494340330858501†L46-L50】,
+    "width_ref": "CS ADR‑DSN.C.215(c) (Width of RESA)",
     "length_rules": {
         "1_2": {
             "length": 120.0,
-            "ref": "CS ADR‑DSN.C.215(a)(2) (Recommended length for code 1/2 instrument)"【494340330858501†L34-L41】,
+            "ref": "CS ADR‑DSN.C.215(a)(2) (Recommended length for code 1/2 instrument)",
         },
         "3_4": {
             "length": 240.0,
-            "ref": "CS ADR‑DSN.C.215(a)(1) (Recommended length for code 3/4)"【494340330858501†L34-L40】,
+            "ref": "CS ADR‑DSN.C.215(a)(1) (Recommended length for code 3/4)",
         },
     },
     "minimum_length": 90.0,
-    "minimum_length_ref": "CS ADR‑DSN.C.215(a) (Minimum 90 m)"【494340330858501†L34-L41】,
+    "minimum_length_ref": "CS ADR‑DSN.C.215(a) (Minimum 90 m)",
     "applicability_refs": {
-        "required_3_4": "CS ADR‑DSN.C.210(b)(1) (RESA required for code 3/4)"【494340330858501†L8-L17】,
-        "required_1_2_instr": "CS ADR‑DSN.C.210(b)(2) (RESA required for code 1/2 instrument)"【494340330858501†L8-L17】,
-        "not_required": "CS ADR‑DSN.C.210(b) (Not required for code 1/2 non‑instrument)"【494340330858501†L8-L17】,
+        "required_3_4": "CS ADR‑DSN.C.210(b)(1) (RESA required for code 3/4)",
+        "required_1_2_instr": "CS ADR‑DSN.C.210(b)(2) (RESA required for code 1/2 instrument)",
+        "not_required": "CS ADR‑DSN.C.210(b) (Not required for code 1/2 non‑instrument)",
     },
 }
 
@@ -312,7 +312,7 @@ def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str) -> dict:
 
         RESA is required at both runway ends when the code number is 3 or 4, or
         when the code number is 1 or 2 and at least one runway direction is an
-        instrument runway【494340330858501†L8-L17】.
+        instrument runway.
     """
     results = {
         "required": False,

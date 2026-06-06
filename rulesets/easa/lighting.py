@@ -271,7 +271,9 @@ def runway_type_supports_agl(runway_type: str) -> bool:
     """
     value = runway_type or ""
     return (
-        "Non‑Instrument" in value
+        "Non-Instrument" in value
+        or "Non‑Instrument" in value
+        or "Non-Precision" in value
         or "Non‑Precision" in value
         or runway_is_precision(value)
     )
@@ -284,7 +286,7 @@ def runway_is_instrument(runway_type: str) -> bool:
     instrument runways for the purpose of edge light spacing.
     """
     value = runway_type or ""
-    return "Non‑Precision" in value or runway_is_precision(value)
+    return "Non-Precision" in value or "Non‑Precision" in value or runway_is_precision(value)
 
 
 def runway_edge_spacing_for_end(runway_type: str) -> float:
@@ -335,7 +337,8 @@ def runway_end_light_count_for_end(runway_type: str, runway_width_m: float) -> i
     runways require at least six end lights【734774195983807†L2467-L2470】.
     """
     lit_width_m = max(float(runway_width_m), RUNWAY_LIGHTING_MIN_WIDTH_M)
-    if "CAT III" in (runway_type or ""):
+    runway_type = runway_type or ""
+    if "CAT III" in runway_type or "CAT II/III" in runway_type:
         return int(lit_width_m // CAT_III_RUNWAY_END_MAX_SPACING_M) + 1
     return RUNWAY_END_MIN_LIGHTS
 
@@ -370,6 +373,18 @@ def runway_centreline_required(runway_type_1: str, runway_type_2: str, rvr_below
     return runway_is_precision(runway_type_1) or runway_is_precision(runway_type_2)
 
 
+def runway_centreline_recommended(runway_type_1: str, runway_type_2: str, edge_light_width_m: float) -> bool:
+    """Return True if runway centre line lights are recommended."""
+    return runway_is_precision(runway_type_1) or runway_is_precision(runway_type_2) or float(edge_light_width_m) > 50.0
+
+
+def runway_centreline_spacing(rvr_below_350: bool) -> float:
+    """Return the runway centre line light spacing in metres."""
+    if rvr_below_350:
+        return RUNWAY_CENTRELINE_DEFAULT_SPACING_M
+    return RUNWAY_CENTRELINE_LOW_VIS_SPACING_M
+
+
 def approach_profile_for_runway(runway_type: str) -> Dict:
     """Return the approach lighting profile applicable to the given runway type.
 
@@ -382,6 +397,29 @@ def approach_profile_for_runway(runway_type: str) -> Dict:
         if key in value:
             return profile
     # Non‑precision runways should fall back to simple SALS.
-    if "Non‑Precision" in value or "Non‑Instrument" in value:
+    if "Non-Precision" in value or "Non‑Precision" in value or "Non-Instrument" in value or "Non‑Instrument" in value:
         return APPROACH_PROFILES[2][1]  # Simple approach
     return APPROACH_PROFILE_NONE
+
+
+def approach_profile_for_end(runway_type: str) -> Dict:
+    """Return the approach lighting profile applicable to a runway end."""
+    return approach_profile_for_runway(runway_type)
+
+
+__all__ = [
+    "agl_value",
+    "runway_is_precision",
+    "runway_type_supports_agl",
+    "runway_is_instrument",
+    "runway_edge_spacing_for_end",
+    "runway_edge_start_offset_for_end",
+    "threshold_light_count_for_end",
+    "runway_end_light_count_for_end",
+    "temp_displaced_threshold_lights_per_side",
+    "runway_centreline_required",
+    "runway_centreline_recommended",
+    "runway_centreline_spacing",
+    "approach_profile_for_runway",
+    "approach_profile_for_end",
+]
