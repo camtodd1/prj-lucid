@@ -139,6 +139,18 @@ class OesService:
     def instrument_departure_surface_parameters(self):
         return oes.instrument_departure_surface_parameters()
 
+    def take_off_climb_surface_parameters(
+        self,
+        design_group: Optional[str],
+        max_certificated_takeoff_mass_kg: Optional[float] = None,
+        slope: Optional[float] = None,
+    ):
+        return oes.take_off_climb_surface_parameters(
+            design_group=design_group,
+            max_certificated_takeoff_mass_kg=max_certificated_takeoff_mass_kg,
+            slope=slope,
+        )
+
     def parameters(
         self,
         design_group: Optional[str] = None,

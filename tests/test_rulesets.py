@@ -399,6 +399,7 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(profile.capability_status("oes.straight_in_instrument_approach"), "supported")
         self.assertEqual(profile.capability_status("oes.precision_approach"), "supported")
         self.assertEqual(profile.capability_status("oes.instrument_departure"), "supported")
+        self.assertEqual(profile.capability_status("oes.take_off_climb"), "supported")
         self.assertEqual(profile.classify_runway_type("Precision Approach CAT I"), "PA_I")
         self.assertEqual(profile.precision_type_codes(), {"PA_I", "PA_II_III"})
         self.assertEqual(profile.code_number(799.9)["code_number"], 1)
@@ -609,7 +610,13 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(precision_ofs["groups"]["inner"][2]["inner_edge_length_m"], 140.0)
         self.assertEqual(
             profile.oes.surface_families(),
-            ("horizontal", "straight_in_instrument_approach", "precision_approach", "instrument_departure"),
+            (
+                "horizontal",
+                "straight_in_instrument_approach",
+                "precision_approach",
+                "instrument_departure",
+                "take_off_climb",
+            ),
         )
         self.assertEqual(profile.horizontal_surface_parameters("I")["radius_m"], 3350.0)
         self.assertEqual(profile.horizontal_surface_parameters("IIA")["height_above_aerodrome_elevation_m"], 45.0)
@@ -645,6 +652,33 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(instrument_departure["sections"][1]["length_m"], 8300.0)
         self.assertEqual(instrument_departure["sections"][1]["divergence"], 0.578)
         self.assertEqual(profile.oes_parameters(surface_type="instrument departure")["surface"], "instrument_departure")
+        light_takeoff = profile.take_off_climb_surface_parameters(
+            "IIA",
+            max_certificated_takeoff_mass_kg=5700.0,
+        )
+        self.assertEqual(light_takeoff["mass_category"], "up_to_5700_kg")
+        self.assertEqual(light_takeoff["distance_from_runway_end_m"], 60.0)
+        self.assertEqual(light_takeoff["final_width_m"], 580.0)
+        self.assertEqual(light_takeoff["slope"], 0.04)
+        self.assertIsNone(
+            profile.take_off_climb_surface_parameters(
+                "IIC",
+                max_certificated_takeoff_mass_kg=5700.0,
+            )
+        )
+        heavy_takeoff = profile.take_off_climb_surface_parameters("IV", max_certificated_takeoff_mass_kg=5700.1)
+        self.assertEqual(heavy_takeoff["mass_category"], "above_5700_kg")
+        self.assertEqual(heavy_takeoff["inner_edge_length_m"], 180.0)
+        self.assertEqual(heavy_takeoff["final_width_m"], 1800.0)
+        self.assertEqual(heavy_takeoff["slope"], 0.02)
+        reduced_slope_takeoff = profile.take_off_climb_surface_parameters(
+            "V",
+            max_certificated_takeoff_mass_kg=5700.1,
+            slope=0.016,
+        )
+        self.assertAlmostEqual(reduced_slope_takeoff["length_m"], 12500.0)
+        self.assertEqual(reduced_slope_takeoff["length_adjustment_ref"], "Annex 14 Vol I 4.3.6.9")
+        self.assertEqual(profile.oes_parameters(design_group="I", surface_type="take off climb")["surface"], "take_off_climb")
         self.assertIsNone(profile.strip_parameters(3, "PA_I", 45.0))
         self.assertIsNone(profile.parallel_runway_separation(3, 4, "Precision Approach CAT I", "Precision Approach CAT I"))
         self.assertFalse(profile.runway_type_supports_agl("Precision Approach CAT I"))

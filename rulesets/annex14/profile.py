@@ -167,6 +167,18 @@ class Annex14RulesetProfile(RulesetProfile):
     def instrument_departure_surface_parameters(self):
         return self.oes.instrument_departure_surface_parameters()
 
+    def take_off_climb_surface_parameters(
+        self,
+        design_group: Optional[str],
+        max_certificated_takeoff_mass_kg: Optional[float] = None,
+        slope: Optional[float] = None,
+    ):
+        return self.oes.take_off_climb_surface_parameters(
+            design_group=design_group,
+            max_certificated_takeoff_mass_kg=max_certificated_takeoff_mass_kg,
+            slope=slope,
+        )
+
     def taxiway_separation_offset(self, arc_num: int, arc_let: Optional[str], runway_type: Optional[str]):
         return self.physical.taxiway_separation_offset(arc_num, arc_let, runway_type)
 

@@ -13,6 +13,9 @@ PRECISION_APPROACH_REF = "Annex 14 Vol I 4.3.4"
 PRECISION_APPROACH_TABLE_REF = "Annex 14 Vol I Table 4-12"
 INSTRUMENT_DEPARTURE_REF = "Annex 14 Vol I 4.3.5"
 INSTRUMENT_DEPARTURE_TABLE_REF = "Annex 14 Vol I Table 4-13"
+TAKE_OFF_CLIMB_REF = "Annex 14 Vol I 4.3.6"
+TAKE_OFF_CLIMB_LIGHT_TABLE_REF = "Annex 14 Vol I Table 4-14"
+TAKE_OFF_CLIMB_HEAVY_TABLE_REF = "Annex 14 Vol I Table 4-15"
 
 HORIZONTAL_SURFACE = {
     "I-IIA": {
@@ -154,6 +157,84 @@ INSTRUMENT_DEPARTURE_SURFACE = {
     ],
 }
 
+TAKE_OFF_CLIMB_LIGHT_SURFACE = {
+    "I": {
+        "distance_from_runway_end_m": 30.0,
+        "inner_edge_length_m": 60.0,
+        "divergence": 0.10,
+        "final_width_m": 380.0,
+        "length_m": 1600.0,
+        "slope": 0.05,
+        "ref": TAKE_OFF_CLIMB_LIGHT_TABLE_REF,
+    },
+    "IIA-IIB": {
+        "distance_from_runway_end_m": 60.0,
+        "inner_edge_length_m": 80.0,
+        "divergence": 0.10,
+        "final_width_m": 580.0,
+        "length_m": 2500.0,
+        "slope": 0.04,
+        "ref": TAKE_OFF_CLIMB_LIGHT_TABLE_REF,
+    },
+}
+
+TAKE_OFF_CLIMB_HEAVY_SURFACE = {
+    "I": {
+        "distance_from_toda_m": None,
+        "inner_edge_length_m": 144.0,
+        "divergence": 0.125,
+        "final_width_m": 1800.0,
+        "length_m": 10000.0,
+        "slope": 0.05,
+        "ref": TAKE_OFF_CLIMB_HEAVY_TABLE_REF,
+    },
+    "IIA-IIB": {
+        "distance_from_toda_m": None,
+        "inner_edge_length_m": 156.0,
+        "divergence": 0.125,
+        "final_width_m": 1800.0,
+        "length_m": 10000.0,
+        "slope": 0.04,
+        "ref": TAKE_OFF_CLIMB_HEAVY_TABLE_REF,
+    },
+    "IIC": {
+        "distance_from_toda_m": None,
+        "inner_edge_length_m": 156.0,
+        "divergence": 0.125,
+        "final_width_m": 1800.0,
+        "length_m": 10000.0,
+        "slope": 0.02,
+        "ref": TAKE_OFF_CLIMB_HEAVY_TABLE_REF,
+    },
+    "III": {
+        "distance_from_toda_m": None,
+        "inner_edge_length_m": 172.0,
+        "divergence": 0.125,
+        "final_width_m": 1800.0,
+        "length_m": 10000.0,
+        "slope": 0.02,
+        "ref": TAKE_OFF_CLIMB_HEAVY_TABLE_REF,
+    },
+    "IV": {
+        "distance_from_toda_m": None,
+        "inner_edge_length_m": 180.0,
+        "divergence": 0.125,
+        "final_width_m": 1800.0,
+        "length_m": 10000.0,
+        "slope": 0.02,
+        "ref": TAKE_OFF_CLIMB_HEAVY_TABLE_REF,
+    },
+    "V": {
+        "distance_from_toda_m": None,
+        "inner_edge_length_m": 180.0,
+        "divergence": 0.125,
+        "final_width_m": 1800.0,
+        "length_m": 10000.0,
+        "slope": 0.02,
+        "ref": TAKE_OFF_CLIMB_HEAVY_TABLE_REF,
+    },
+}
+
 
 def _normalize_surface_type(surface_type: Optional[str]) -> str:
     return (surface_type or "").strip().replace("_", " ").replace("-", " ").lower()
@@ -168,12 +249,22 @@ def _normalize_design_group(design_group: Optional[str]):
     return value or None
 
 
+def _normalize_takeoff_design_group(design_group: Optional[str]):
+    if design_group is None:
+        return None
+    value = str(design_group).strip().upper().replace("ADG", "").replace("_", "").replace(" ", "")
+    if value in {"IIA", "IIB"}:
+        return "IIA-IIB"
+    return value or None
+
+
 def surface_families() -> tuple:
     return (
         "horizontal",
         "straight_in_instrument_approach",
         "precision_approach",
         "instrument_departure",
+        "take_off_climb",
     )
 
 
@@ -235,6 +326,52 @@ def instrument_departure_surface_parameters():
     return deepcopy(INSTRUMENT_DEPARTURE_SURFACE)
 
 
+def take_off_climb_surface_parameters(
+    design_group: Optional[str],
+    max_certificated_takeoff_mass_kg: Optional[float] = None,
+    slope: Optional[float] = None,
+):
+    """Return Annex 14 take-off climb surface parameters from Tables 4-14 and 4-15."""
+    normalized_design_group = _normalize_takeoff_design_group(design_group)
+    if normalized_design_group is None:
+        return None
+
+    is_light = max_certificated_takeoff_mass_kg is not None and max_certificated_takeoff_mass_kg <= 5700.0
+    table = TAKE_OFF_CLIMB_LIGHT_SURFACE if is_light else TAKE_OFF_CLIMB_HEAVY_SURFACE
+    base_params = table.get(normalized_design_group)
+    if base_params is None:
+        return None
+
+    params = deepcopy(base_params)
+    params["surface"] = "take_off_climb"
+    params["family"] = "obstacle_evaluation_surfaces"
+    params["section_ref"] = TAKE_OFF_CLIMB_REF
+    params["design_group"] = normalized_design_group
+    params["mass_category"] = "up_to_5700_kg" if is_light else "above_5700_kg"
+    params["inner_edge_elevation"] = "highest_point_on_extended_runway_centreline_between_tora_end_and_inner_edge"
+    params["slope_measurement"] = "takeoff_ground_track_vertical_plane"
+    params["turning_track_rule"] = "sides_follow_takeoff_ground_track_for_turning_departures"
+    params["procedural_length_reduction_allowed_ref"] = "Annex 14 Vol I 4.3.6.6 and 4.3.6.7"
+    params["higher_slope_operational_exception_ref"] = "Annex 14 Vol I 4.3.6.6 and 4.3.6.7"
+
+    if is_light:
+        params["start_rule"] = "distance_from_runway_end_or_clearway_end_if_clearway_exceeds_specified_distance"
+        params["start_rule_ref"] = f"{TAKE_OFF_CLIMB_LIGHT_TABLE_REF} note b"
+    else:
+        params["start_rule"] = "at_end_of_takeoff_distance_available"
+        params["final_width_reduction_ref"] = f"{TAKE_OFF_CLIMB_HEAVY_TABLE_REF} note a"
+
+    if slope is not None:
+        base_length = params["length_m"]
+        base_slope = params["slope"]
+        params["slope"] = slope
+        if slope > 0 and slope < base_slope:
+            params["length_m"] = max(base_length, (base_length * base_slope) / slope)
+            params["length_adjustment_ref"] = "Annex 14 Vol I 4.3.6.9"
+
+    return params
+
+
 def parameters(
     design_group: Optional[str] = None,
     runway_type: Optional[str] = None,
@@ -263,6 +400,17 @@ def parameters(
         "instrument departure surface",
     }:
         return instrument_departure_surface_parameters()
+    if normalized_surface_type in {
+        "take off climb",
+        "takeoff climb",
+        "take off",
+        "takeoff",
+        "take off climb surface",
+    }:
+        return take_off_climb_surface_parameters(
+            design_group=design_group,
+            max_certificated_takeoff_mass_kg=None,
+        )
     return None
 
 
@@ -276,15 +424,21 @@ __all__ = [
     "PRECISION_APPROACH_TABLE_REF",
     "INSTRUMENT_DEPARTURE_REF",
     "INSTRUMENT_DEPARTURE_TABLE_REF",
+    "TAKE_OFF_CLIMB_REF",
+    "TAKE_OFF_CLIMB_LIGHT_TABLE_REF",
+    "TAKE_OFF_CLIMB_HEAVY_TABLE_REF",
     "HORIZONTAL_SURFACE",
     "STRAIGHT_IN_INSTRUMENT_SURFACE",
     "PRECISION_APPROACH_SURFACE",
     "INSTRUMENT_DEPARTURE_SURFACE",
+    "TAKE_OFF_CLIMB_LIGHT_SURFACE",
+    "TAKE_OFF_CLIMB_HEAVY_SURFACE",
     "surface_families",
     "horizontal_surface_parameters",
     "horizontal_surfaces",
     "straight_in_instrument_approach_surface_parameters",
     "precision_approach_surface_parameters",
     "instrument_departure_surface_parameters",
+    "take_off_climb_surface_parameters",
     "parameters",
 ]

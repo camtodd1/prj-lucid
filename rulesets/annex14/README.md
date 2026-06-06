@@ -22,6 +22,7 @@ Implemented now:
   Table 4-11.
 - Precision approach obstacle evaluation surface lookup from Table 4-12.
 - Instrument departure obstacle evaluation surface lookup from Table 4-13.
+- Take-off climb obstacle evaluation surface lookup from Tables 4-14 and 4-15.
 - Empty physical, taxiway, markings, and lighting policy modules.
 - An OES service placeholder for future obstacle evaluation surface workflows.
 
