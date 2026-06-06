@@ -48,6 +48,25 @@ class OlsService:
     def parameters(self, arc_num: int, runway_type: Optional[str], surface_type: str):
         return ols.ols_parameters(arc_num, runway_type, surface_type)
 
+    def approach_surface_parameters(
+        self,
+        design_group: Optional[str],
+        runway_type: Optional[str],
+        runway_width_m: Optional[float] = None,
+        slope: Optional[float] = None,
+        obstacle_clearance_height_m: Optional[float] = None,
+    ):
+        return ols.approach_surface_parameters(
+            design_group=design_group,
+            runway_type=runway_type,
+            runway_width_m=runway_width_m,
+            slope=slope,
+            obstacle_clearance_height_m=obstacle_clearance_height_m,
+        )
+
+    def transitional_surface_parameters(self):
+        return ols.transitional_surface_parameters()
+
 
 class OesService:
     def surface_families(self) -> tuple:

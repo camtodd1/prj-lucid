@@ -11,7 +11,9 @@ Implemented now:
 - Aerodrome reference code number/letter classification from Table 1-1.
 - Aeroplane Design Group classification from Table 1-2, applicable from
   21 November 2030.
-- Empty physical, taxiway, OLS, markings, and lighting policy modules.
+- Approach surface lookups from Tables 4-1 and 4-2.
+- Transitional surface lookup from 4.2.2.
+- Empty physical, taxiway, markings, and lighting policy modules.
 - An OES service placeholder for future obstacle evaluation surface workflows.
 
 Pending source input:

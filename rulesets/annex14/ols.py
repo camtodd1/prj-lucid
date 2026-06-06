@@ -13,4 +13,29 @@ def ols_parameters(arc_num: int, runway_type: Optional[str], surface_type: str):
     return ols_surfaces.get_ols_params(arc_num, runway_type, surface_type)
 
 
-__all__ = ["ihs_base_height", "ols_parameters"]
+def approach_surface_parameters(
+    design_group: Optional[str],
+    runway_type: Optional[str],
+    runway_width_m: Optional[float] = None,
+    slope: Optional[float] = None,
+    obstacle_clearance_height_m: Optional[float] = None,
+):
+    return ols_surfaces.get_approach_surface_params(
+        design_group=design_group,
+        runway_type=runway_type,
+        runway_width_m=runway_width_m,
+        slope=slope,
+        obstacle_clearance_height_m=obstacle_clearance_height_m,
+    )
+
+
+def transitional_surface_parameters():
+    return ols_surfaces.get_transitional_surface_params()
+
+
+__all__ = [
+    "ihs_base_height",
+    "ols_parameters",
+    "approach_surface_parameters",
+    "transitional_surface_parameters",
+]

@@ -419,6 +419,76 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(adg_example["applicable_from"], "2030-11-21")
         self.assertIsNone(profile.oes_parameters(design_group="ADG_III", surface_type="approach"))
         self.assertIsNone(profile.ols_parameters(3, "Precision Approach CAT I", "APPROACH"))
+        self.assertEqual(profile.capability_status("ols.runway_approach"), "partial")
+        self.assertEqual(
+            profile.approach_surface_parameters(
+                "I",
+                "Non-Instrument (NI)",
+                runway_width_m=30.0,
+            )["inner_edge_length_m"],
+            80.0,
+        )
+        self.assertEqual(
+            profile.approach_surface_parameters(
+                "I",
+                "Non-Instrument (NI)",
+                runway_width_m=30.1,
+            )["inner_edge_length_m"],
+            100.0,
+        )
+        self.assertEqual(
+            profile.approach_surface_parameters(
+                "IIA",
+                "Non-Instrument (NI)",
+                runway_width_m=45.0,
+            )["inner_edge_length_m"],
+            100.0,
+        )
+        self.assertEqual(
+            profile.approach_surface_parameters(
+                "IIA",
+                "Non-Instrument (NI)",
+                runway_width_m=45.1,
+            )["inner_edge_length_m"],
+            110.0,
+        )
+        self.assertEqual(
+            profile.approach_surface_parameters(
+                "IIC",
+                "Precision Approach CAT I",
+                runway_width_m=30.0,
+            )["inner_edge_length_m"],
+            140.0,
+        )
+        self.assertEqual(
+            profile.approach_surface_parameters(
+                "V",
+                "Precision Approach CAT I",
+            )["length_m"],
+            4500.0,
+        )
+        self.assertAlmostEqual(
+            profile.approach_surface_parameters(
+                "I",
+                "Non-Instrument (NI)",
+                slope=0.04,
+            )["length_m"],
+            2000.0,
+        )
+        self.assertAlmostEqual(
+            profile.approach_surface_parameters(
+                "III",
+                "Precision Approach CAT I",
+                obstacle_clearance_height_m=180.0,
+            )["length_m"],
+            180.0 / 0.0333,
+        )
+        self.assertEqual(profile.transitional_surface_parameters()["slope"], 0.20)
+        self.assertEqual(
+            profile.transitional_surface_parameters()["upper_edge_height_above_highest_threshold_m"],
+            60.0,
+        )
+        self.assertEqual(profile.ols_parameters(3, "Precision Approach CAT I", "transitional")["ref"], "Annex 14 Vol I 4.2.2")
         self.assertIsNone(profile.strip_parameters(3, "PA_I", 45.0))
         self.assertIsNone(profile.parallel_runway_separation(3, 4, "Precision Approach CAT I", "Precision Approach CAT I"))
         self.assertFalse(profile.runway_type_supports_agl("Precision Approach CAT I"))
