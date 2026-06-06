@@ -18,14 +18,24 @@ class ClassificationService:
     def precision_type_codes(self) -> set[str]:
         return set(classification_policy.PRECISION_APPROACH_TYPES)
 
+    def code_number(self, aeroplane_reference_field_length_m: Optional[float]):
+        return classification_policy.classify_code_number(aeroplane_reference_field_length_m)
+
+    def code_letter(self, wingspan_m: Optional[float]):
+        return classification_policy.classify_code_letter(wingspan_m)
+
     def design_group(
         self,
         wingspan_m: Optional[float] = None,
+        indicated_airspeed_at_threshold_kmh: Optional[float] = None,
+        indicated_airspeed_at_threshold_kt: Optional[float] = None,
         outer_main_gear_wheel_span_m: Optional[float] = None,
         tail_height_m: Optional[float] = None,
     ):
         return classification_policy.classify_design_group(
             wingspan_m=wingspan_m,
+            indicated_airspeed_at_threshold_kmh=indicated_airspeed_at_threshold_kmh,
+            indicated_airspeed_at_threshold_kt=indicated_airspeed_at_threshold_kt,
             outer_main_gear_wheel_span_m=outer_main_gear_wheel_span_m,
             tail_height_m=tail_height_m,
         )

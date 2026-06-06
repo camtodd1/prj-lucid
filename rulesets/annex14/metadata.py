@@ -16,7 +16,8 @@ ALIASES = (
 
 CAPABILITY_STATUS_BY_KEY = {
     "classification.runway_type_mapping": "supported",
-    "classification.design_group": "scaffold",
+    "classification.reference_code": "partial",
+    "classification.design_group": "partial",
     "physical.pavement": "unsupported",
     "physical.shoulder": "unsupported",
     "physical.strip": "unsupported",

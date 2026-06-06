@@ -392,11 +392,31 @@ class RulesetRegistryTest(unittest.TestCase):
     def test_annex14_profile_scaffold_smoke_checks(self):
         profile = get_ruleset_profile("icao_annex14_vol1")
         self.assertEqual(profile.status, "scaffold")
-        self.assertEqual(profile.capability_status("classification.design_group"), "scaffold")
+        self.assertEqual(profile.capability_status("classification.reference_code"), "partial")
+        self.assertEqual(profile.capability_status("classification.design_group"), "partial")
         self.assertEqual(profile.capability_status("oes.airport_wide"), "scaffold")
         self.assertEqual(profile.classify_runway_type("Precision Approach CAT I"), "PA_I")
         self.assertEqual(profile.precision_type_codes(), {"PA_I", "PA_II_III"})
-        self.assertIsNone(profile.design_group(wingspan_m=36.0))
+        self.assertEqual(profile.code_number(799.9)["code_number"], 1)
+        self.assertEqual(profile.code_number(800.0)["code_number"], 2)
+        self.assertEqual(profile.code_number(1800.0)["code_number"], 4)
+        self.assertEqual(profile.code_letter(14.9)["code_letter"], "A")
+        self.assertEqual(profile.code_letter(15.0)["code_letter"], "B")
+        self.assertEqual(profile.code_letter(65.0)["code_letter"], "F")
+        self.assertIsNone(profile.code_letter(80.0))
+        self.assertEqual(
+            profile.design_group(
+                wingspan_m=20.0,
+                indicated_airspeed_at_threshold_kmh=161.0,
+            )["design_group"],
+            "I",
+        )
+        adg_example = profile.design_group(
+            wingspan_m=52.0,
+            indicated_airspeed_at_threshold_kmh=224.0,
+        )
+        self.assertEqual(adg_example["design_group"], "IV")
+        self.assertEqual(adg_example["applicable_from"], "2030-11-21")
         self.assertIsNone(profile.oes_parameters(design_group="ADG_III", surface_type="approach"))
         self.assertIsNone(profile.ols_parameters(3, "Precision Approach CAT I", "APPROACH"))
         self.assertIsNone(profile.strip_parameters(3, "PA_I", 45.0))
