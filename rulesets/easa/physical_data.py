@@ -1,56 +1,56 @@
-"""EASA CS-ADR‑DSN Chapter B physical runway dimension policy.
+"""EASA CS-ADR-DSN Chapter B physical runway dimension policy.
 
 This module defines constants and helper functions that encapsulate the
 physical dimensions for runways, runway strips, shoulders and runway end
 safety areas (RESA) as defined in European Union Aviation Safety Agency
-(EASA) CS‑ADR‑DSN Issue 6, Chapter B (Runways) and Chapter C (RESA).
+(EASA) CS-ADR-DSN Issue 6, Chapter B (Runways) and Chapter C (RESA).
 
-The structure and function signatures mirror those in the MOS‑based
+The structure and function signatures mirror those in the MOS-based
 ``physical_data.py`` so that existing code can seamlessly switch
 between Australian MOS139 rules and EASA rules. Where EASA guidance
 differs from MOS, the constants and logic in this file reflect the
-EASA requirements. Citations below reference the relevant CS‑ADR‑DSN
+EASA requirements. Citations below reference the relevant CS-ADR-DSN
 paragraphs.
 
 Key highlights from the specifications include:
 
-* **Runway strip widths:**  CS ADR‑DSN.B.160 specifies that a runway
-  strip including a precision or non‑precision approach runway must
+* **Runway strip widths:**  CS ADR-DSN.B.160 specifies that a runway
+  strip including a precision or non-precision approach runway must
   extend laterally from the centre line of the runway by at least
-  140 m for code numbers 3 and 4 and 70 m for code numbers 1 and 2.
-  For non‑instrument runways the lateral distances are 75 m (codes 3/4),
-  40 m (code 2) and 30 m (code 1).  These
+  140 m for code numbers 3 and 4 and 70 m for code numbers 1 and 2.
+  For non-instrument runways the lateral distances are 75 m (codes 3/4),
+  40 m (code 2) and 30 m (code 1).  These
   lateral distances are doubled in the tables below to yield the
   overall strip width.
 
-* **Graded portion of runway strip:**  CS ADR‑DSN.B.175 requires a graded
-  area on each side of the runway to at least 75 m for code numbers 3/4
-  and 40 m for code numbers 1/2 on instrument runways, and 75 m
-  (codes 3/4), 40 m (code 2) and 30 m (code 1) on non‑instrument
+* **Graded portion of runway strip:**  CS ADR-DSN.B.175 requires a graded
+  area on each side of the runway to at least 75 m for code numbers 3/4
+  and 40 m for code numbers 1/2 on instrument runways, and 75 m
+  (codes 3/4), 40 m (code 2) and 30 m (code 1) on non-instrument
   runways.  These distances are doubled in
   the ``graded_width`` entries.
 
-* **Runway strip extensions:**  CS ADR‑DSN.B.155 states that a runway
+* **Runway strip extensions:**  CS ADR-DSN.B.155 states that a runway
   strip should extend before the threshold and beyond the end of the
-  runway for at least 60 m for code numbers 2, 3 and 4, and also for
-  code 1 instrument runways, but only 30 m for code 1 non‑instrument
+  runway for at least 60 m for code numbers 2, 3 and 4, and also for
+  code 1 instrument runways, but only 30 m for code 1 non-instrument
   runways.
 
-* **Runway shoulders:**  CS ADR‑DSN.B.125 and CS ADR‑DSN.B.135 describe
+* **Runway shoulders:**  CS ADR-DSN.B.125 and CS ADR-DSN.B.135 describe
   the provision and width of runway shoulders.  Shoulders are required
-  for runways with code letters D, E or F and the overall width of the
-  runway including shoulders should not be less than 60 m for code
-  letters D or E and 75 m for code letter F with four or more
+  for runways with code letters D, E or F and the overall width of the
+  runway including shoulders should not be less than 60 m for code
+  letters D or E and 75 m for code letter F with four or more
   engines.  These references are stored in
   ``SHOULDER_EASA_REF``.
 
-* **Runway end safety areas (RESA):**  Chapter C of the CS‑ADR‑DSN sets
+* **Runway end safety areas (RESA):**  Chapter C of the CS-ADR-DSN sets
   out the requirements for RESA.  A RESA must be provided at each
-  runway end for code numbers 3/4 and for code numbers 1/2 when the
-  runway is an instrument runway.  CS ADR‑DSN.C.215
+  runway end for code numbers 3/4 and for code numbers 1/2 when the
+  runway is an instrument runway.  CS ADR-DSN.C.215
   further specifies that the RESA should extend from the end of the
-  runway strip for at least 90 m and, where practicable, to
-  240 m for code numbers 3/4 or 120 m for code numbers 1/2 instrument
+  runway strip for at least 90 m and, where practicable, to
+  240 m for code numbers 3/4 or 120 m for code numbers 1/2 instrument
   runways, with a width at least twice the runway width.
 
 The tables and functions below translate these specifications into
@@ -60,141 +60,141 @@ Python constants and helper routines.
 from typing import Optional
 
 # References for pavement and shoulder requirements.  These strings
-# identify the CS‑ADR‑DSN paragraphs containing the relevant text.
-PAVEMENT_EASA_REF = "CS ADR‑DSN.B.090"  # Surface of runways
-SHOULDER_EASA_REF = "CS ADR‑DSN.B.125/B.135"  # Runway shoulders
+# identify the CS-ADR-DSN paragraphs containing the relevant text.
+PAVEMENT_EASA_REF = "CS ADR-DSN.B.090"  # Surface of runways
+SHOULDER_EASA_REF = "CS ADR-DSN.B.125/B.135"  # Runway shoulders
 
 # Width and grading parameters for runway strips by code number.  Each
-# entry contains separate values for instrument (includes non‑precision
-# and precision approach) and non‑instrument runways.  The numeric
+# entry contains separate values for instrument (includes non-precision
+# and precision approach) and non-instrument runways.  The numeric
 # values are overall widths and graded widths in metres.
 STRIP_WIDTH_PARAMS = {
     1: {
-        # Graded width (total) for code 1 instrument and non‑instrument runways
+        # Graded width (total) for code 1 instrument and non-instrument runways
         "graded_widths": {
-            "NI": 60.0,  # 2 × 30 m
-            "NPA": 80.0,  # 2 × 40 m
-            "PA_I": 80.0,  # 2 × 40 m
-            "PA_II_III": 80.0,  # 2 × 40 m
+            "NI": 60.0,  # 2 x 30 m
+            "NPA": 80.0,  # 2 x 40 m
+            "PA_I": 80.0,  # 2 x 40 m
+            "PA_II_III": 80.0,  # 2 x 40 m
         },
-        # Overall strip width (total) for code 1 instrument and non‑instrument runways
+        # Overall strip width (total) for code 1 instrument and non-instrument runways
         "overall_widths": {
-            "NI": 60.0,  # 2 × 30 m
-            "NPA": 140.0,  # 2 × 70 m
-            "PA_I": 140.0,  # 2 × 70 m
-            "PA_II_III": 140.0,  # 2 × 70 m
+            "NI": 60.0,  # 2 x 30 m
+            "NPA": 140.0,  # 2 x 70 m
+            "PA_I": 140.0,  # 2 x 70 m
+            "PA_II_III": 140.0,  # 2 x 70 m
         },
         # References for graded and overall widths
         "ref_graded": {
-            "NI": "CS ADR‑DSN.B.175(b)(3) Code 1 non‑instrument",
-            "INSTR": "CS ADR‑DSN.B.175(a)(2) Code 1 instrument",
+            "NI": "CS ADR-DSN.B.175(b)(3) Code 1 non-instrument",
+            "INSTR": "CS ADR-DSN.B.175(a)(2) Code 1 instrument",
         },
         "ref_overall": {
-            "NI": "CS ADR‑DSN.B.160(c)(3) Code 1 non‑instrument",
-            "INSTR": "CS ADR‑DSN.B.160(a)(2) Code 1 instrument",
+            "NI": "CS ADR-DSN.B.160(c)(3) Code 1 non-instrument",
+            "INSTR": "CS ADR-DSN.B.160(a)(2) Code 1 instrument",
         },
     },
     2: {
         "graded_widths": {
-            "NI": 80.0,  # 2 × 40 m
-            "NPA": 80.0,  # 2 × 40 m
-            "PA_I": 80.0,  # 2 × 40 m
-            "PA_II_III": 80.0,  # 2 × 40 m
+            "NI": 80.0,  # 2 x 40 m
+            "NPA": 80.0,  # 2 x 40 m
+            "PA_I": 80.0,  # 2 x 40 m
+            "PA_II_III": 80.0,  # 2 x 40 m
         },
         "overall_widths": {
-            "NI": 80.0,  # 2 × 40 m
-            "NPA": 140.0,  # 2 × 70 m
-            "PA_I": 140.0,  # 2 × 70 m
-            "PA_II_III": 140.0,  # 2 × 70 m
+            "NI": 80.0,  # 2 x 40 m
+            "NPA": 140.0,  # 2 x 70 m
+            "PA_I": 140.0,  # 2 x 70 m
+            "PA_II_III": 140.0,  # 2 x 70 m
         },
         "ref_graded": {
-            "NI": "CS ADR‑DSN.B.175(b)(2) Code 2 non‑instrument",
-            "INSTR": "CS ADR‑DSN.B.175(a)(2) Code 2 instrument",
+            "NI": "CS ADR-DSN.B.175(b)(2) Code 2 non-instrument",
+            "INSTR": "CS ADR-DSN.B.175(a)(2) Code 2 instrument",
         },
         "ref_overall": {
-            "NI": "CS ADR‑DSN.B.160(c)(2) Code 2 non‑instrument",
-            "INSTR": "CS ADR‑DSN.B.160(a)(2) Code 2 instrument",
+            "NI": "CS ADR-DSN.B.160(c)(2) Code 2 non-instrument",
+            "INSTR": "CS ADR-DSN.B.160(a)(2) Code 2 instrument",
         },
     },
     3: {
         "graded_widths": {
-            "NI": 150.0,  # 2 × 75 m
-            "NPA": 150.0,  # 2 × 75 m
-            "PA_I": 150.0,  # 2 × 75 m
-            "PA_II_III": 150.0,  # 2 × 75 m
+            "NI": 150.0,  # 2 x 75 m
+            "NPA": 150.0,  # 2 x 75 m
+            "PA_I": 150.0,  # 2 x 75 m
+            "PA_II_III": 150.0,  # 2 x 75 m
         },
         "overall_widths": {
-            "NI": 150.0,  # 2 × 75 m
-            "NPA": 280.0,  # 2 × 140 m
-            "PA_I": 280.0,  # 2 × 140 m
-            "PA_II_III": 280.0,  # 2 × 140 m
+            "NI": 150.0,  # 2 x 75 m
+            "NPA": 280.0,  # 2 x 140 m
+            "PA_I": 280.0,  # 2 x 140 m
+            "PA_II_III": 280.0,  # 2 x 140 m
         },
         "ref_graded": {
-            "NI": "CS ADR‑DSN.B.175(b)(1) Code 3 non‑instrument",
-            "INSTR": "CS ADR‑DSN.B.175(a)(1) Code 3 instrument",
+            "NI": "CS ADR-DSN.B.175(b)(1) Code 3 non-instrument",
+            "INSTR": "CS ADR-DSN.B.175(a)(1) Code 3 instrument",
         },
         "ref_overall": {
-            "NI": "CS ADR‑DSN.B.160(c)(1) Code 3 non‑instrument",
-            "INSTR": "CS ADR‑DSN.B.160(a)(1) Code 3 instrument",
+            "NI": "CS ADR-DSN.B.160(c)(1) Code 3 non-instrument",
+            "INSTR": "CS ADR-DSN.B.160(a)(1) Code 3 instrument",
         },
     },
     4: {
         "graded_widths": {
-            "NI": 150.0,  # 2 × 75 m
-            "NPA": 150.0,  # 2 × 75 m
-            "PA_I": 150.0,  # 2 × 75 m
-            "PA_II_III": 150.0,  # 2 × 75 m
+            "NI": 150.0,  # 2 x 75 m
+            "NPA": 150.0,  # 2 x 75 m
+            "PA_I": 150.0,  # 2 x 75 m
+            "PA_II_III": 150.0,  # 2 x 75 m
         },
         "overall_widths": {
-            "NI": 150.0,  # 2 × 75 m
-            "NPA": 280.0,  # 2 × 140 m
-            "PA_I": 280.0,  # 2 × 140 m
-            "PA_II_III": 280.0,  # 2 × 140 m
+            "NI": 150.0,  # 2 x 75 m
+            "NPA": 280.0,  # 2 x 140 m
+            "PA_I": 280.0,  # 2 x 140 m
+            "PA_II_III": 280.0,  # 2 x 140 m
         },
         "ref_graded": {
-            "NI": "CS ADR‑DSN.B.175(b)(1) Code 4 non‑instrument",
-            "INSTR": "CS ADR‑DSN.B.175(a)(1) Code 4 instrument",
+            "NI": "CS ADR-DSN.B.175(b)(1) Code 4 non-instrument",
+            "INSTR": "CS ADR-DSN.B.175(a)(1) Code 4 instrument",
         },
         "ref_overall": {
-            "NI": "CS ADR‑DSN.B.160(c)(1) Code 4 non‑instrument",
-            "INSTR": "CS ADR‑DSN.B.160(a)(1) Code 4 instrument",
+            "NI": "CS ADR-DSN.B.160(c)(1) Code 4 non-instrument",
+            "INSTR": "CS ADR-DSN.B.160(a)(1) Code 4 instrument",
         },
     },
 }
 
 # Extension lengths for runway strips based on code number and runway type.
-# For code 1 non‑instrument runways the strip extension is 30 m; for all
-# other cases the extension is 60 m.
+# For code 1 non-instrument runways the strip extension is 30 m; for all
+# other cases the extension is 60 m.
 STRIP_EXTENSION_PARAMS = {
-    "1_NI": {"length": 30.0, "ref": "CS ADR‑DSN.B.155(a)(3)"},
-    "DEFAULT": {"length": 60.0, "ref": "CS ADR‑DSN.B.155(a)(1)-(2)"},
+    "1_NI": {"length": 30.0, "ref": "CS ADR-DSN.B.155(a)(3)"},
+    "DEFAULT": {"length": 60.0, "ref": "CS ADR-DSN.B.155(a)(1)-(2)"},
 }
 
 # Runway end safety area (RESA) parameters.  The RESA is required for
-# code numbers 3/4 and for code numbers 1/2 when the runway is an
+# code numbers 3/4 and for code numbers 1/2 when the runway is an
 # instrument runway.  The recommended lengths are
-# 240 m for code numbers 3/4 and 120 m for code numbers 1/2 instrument
-# runways, with a minimum of 90 m.  The width
+# 240 m for code numbers 3/4 and 120 m for code numbers 1/2 instrument
+# runways, with a minimum of 90 m.  The width
 # should be at least twice the width of the runway or, where practicable,
 # equal to the graded portion of the runway strip.
 RESA_PARAMS = {
-    "width_ref": "CS ADR‑DSN.C.215(c) (Width of RESA)",
+    "width_ref": "CS ADR-DSN.C.215(c) (Width of RESA)",
     "length_rules": {
         "1_2": {
             "length": 120.0,
-            "ref": "CS ADR‑DSN.C.215(a)(2) (Recommended length for code 1/2 instrument)",
+            "ref": "CS ADR-DSN.C.215(a)(2) (Recommended length for code 1/2 instrument)",
         },
         "3_4": {
             "length": 240.0,
-            "ref": "CS ADR‑DSN.C.215(a)(1) (Recommended length for code 3/4)",
+            "ref": "CS ADR-DSN.C.215(a)(1) (Recommended length for code 3/4)",
         },
     },
     "minimum_length": 90.0,
-    "minimum_length_ref": "CS ADR‑DSN.C.215(a) (Minimum 90 m)",
+    "minimum_length_ref": "CS ADR-DSN.C.215(a) (Minimum 90 m)",
     "applicability_refs": {
-        "required_3_4": "CS ADR‑DSN.C.210(b)(1) (RESA required for code 3/4)",
-        "required_1_2_instr": "CS ADR‑DSN.C.210(b)(2) (RESA required for code 1/2 instrument)",
-        "not_required": "CS ADR‑DSN.C.210(b) (Not required for code 1/2 non‑instrument)",
+        "required_3_4": "CS ADR-DSN.C.210(b)(1) (RESA required for code 3/4)",
+        "required_1_2_instr": "CS ADR-DSN.C.210(b)(2) (RESA required for code 1/2 instrument)",
+        "not_required": "CS ADR-DSN.C.210(b) (Not required for code 1/2 non-instrument)",
     },
 }
 
@@ -204,7 +204,7 @@ def get_physical_refs() -> dict:
 
     Returns:
         A dictionary with keys ``pavement`` and ``shoulder`` whose values
-        are reference strings to the CS‑ADR‑DSN paragraphs covering
+        are reference strings to the CS-ADR-DSN paragraphs covering
         pavement surface and shoulder provision.
     """
     return {"pavement": PAVEMENT_EASA_REF, "shoulder": SHOULDER_EASA_REF}
@@ -214,11 +214,11 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
     """Return strip width and extension parameters for a given runway code and type.
 
     Arguments:
-        arc_num: The ICAO code number (1–4) of the runway.
+        arc_num: The ICAO code number (1-4) of the runway.
         type_abbr: An abbreviation of the runway type.  ``NI`` denotes
-            non‑instrument; ``NPA`` denotes non‑precision approach;
-            ``PA_I`` denotes precision approach Category I; and
-            ``PA_II_III`` denotes precision approach Categories II/III.
+            non-instrument; ``NPA`` denotes non-precision approach;
+            ``PA_I`` denotes precision approach Category I; and
+            ``PA_II_III`` denotes precision approach Categories II/III.
         runway_width: The physical runway width in metres (unused in the
             EASA rules but accepted for compatibility with the MOS function).
 
@@ -229,11 +229,11 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
                 runway strip in metres;
             ``extension_length`` (float): the strip extension length beyond
                 the threshold in metres;
-            ``easa_overall_width_ref`` (str): the CS‑ADR‑DSN reference for the
+            ``easa_overall_width_ref`` (str): the CS-ADR-DSN reference for the
                 overall width;
-            ``easa_graded_width_ref`` (str): the CS‑ADR‑DSN reference for the
+            ``easa_graded_width_ref`` (str): the CS-ADR-DSN reference for the
                 graded width;
-            ``easa_extension_length_ref`` (str): the CS‑ADR‑DSN reference for
+            ``easa_extension_length_ref`` (str): the CS-ADR-DSN reference for
                 the strip extension.
 
         Unknown or invalid ``arc_num`` values will result in ``None`` values
@@ -254,7 +254,7 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
         return results
 
     type_abbr = (type_abbr or "").upper()
-    # Determine if the runway is non‑instrument or instrument
+    # Determine if the runway is non-instrument or instrument
     is_ni = type_abbr == "NI"
     is_instrument = not is_ni  # includes NPA, PA_I, PA_II_III
 
@@ -298,7 +298,7 @@ def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str) -> dict:
     """Return RESA requirement and dimensions for a runway end.
 
     Arguments:
-        arc_num: The ICAO code number (1–4) of the runway.
+        arc_num: The ICAO code number (1-4) of the runway.
         type1_abbr: The type of runway for the primary direction (e.g. "NI", "NPA", "PA_I", "PA_II_III").
         type2_abbr: The type of runway for the opposite direction.
 
@@ -306,9 +306,9 @@ def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str) -> dict:
         A dictionary with keys:
             ``required`` (bool): whether a RESA is required;
             ``length`` (float or None): recommended RESA length in metres if required;
-            ``easa_applicability_ref`` (str): CS‑ADR‑DSN reference for the applicability;
-            ``easa_length_ref`` (str): CS‑ADR‑DSN reference for the length;
-            ``easa_width_ref`` (str): CS‑ADR‑DSN reference for the width.
+            ``easa_applicability_ref`` (str): CS-ADR-DSN reference for the applicability;
+            ``easa_length_ref`` (str): CS-ADR-DSN reference for the length;
+            ``easa_width_ref`` (str): CS-ADR-DSN reference for the width.
 
         RESA is required at both runway ends when the code number is 3 or 4, or
         when the code number is 1 or 2 and at least one runway direction is an

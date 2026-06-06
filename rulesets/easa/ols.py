@@ -3,6 +3,7 @@
 from typing import Optional
 
 from . import classification
+from . import ols_surfaces
 
 
 def classify_runway_type(runway_type: Optional[str]) -> str:
@@ -14,11 +15,11 @@ def precision_type_codes() -> set[str]:
 
 
 def ihs_base_height():
-    return None
+    return ols_surfaces.get_ihs_base_height()
 
 
 def ols_parameters(arc_num: int, runway_type: Optional[str], surface_type: str):
-    return None
+    return ols_surfaces.get_ols_params(arc_num, runway_type, surface_type)
 
 
 __all__ = [

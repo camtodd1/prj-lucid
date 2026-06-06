@@ -187,13 +187,16 @@ class RulesetRegistryTest(unittest.TestCase):
     def test_easa_profile_smoke_checks(self):
         profile = get_ruleset_profile("easa_cs_adr_dsn_issue_6")
         self.assertEqual(profile.status, "draft")
-        self.assertEqual(profile.capability_status("ols.airport_wide"), "unsupported")
+        self.assertEqual(profile.capability_status("ols.airport_wide"), "partial")
         self.assertEqual(profile.classify_runway_type("Precision Approach CAT I"), "PA_I")
         self.assertEqual(profile.strip_parameters(3, "PA_I", 45.0)["overall_width"], 280.0)
         self.assertEqual(profile.resa_parameters(3, "PA_I", "NI")["length"], 240.0)
         self.assertEqual(profile.threshold_marking_params(45.0), (12, 1.8))
         self.assertEqual(profile.runway_edge_spacing_for_end("Non-Precision Approach (NPA)"), 60.0)
-        self.assertIsNone(profile.ols_parameters(3, "Precision Approach CAT I", "APPROACH"))
+        self.assertEqual(profile.ihs_base_height(), 45.0)
+        self.assertEqual(profile.ols_parameters(3, "Precision Approach CAT I", "APPROACH")[0]["start_width"], 280.0)
+        self.assertEqual(profile.ols_parameters(3, "Precision Approach CAT I", "Inner Approach")["width"], 120.0)
+        self.assertEqual(profile.ols_parameters(3, None, "Take-off climb")["final_width"], 1200.0)
 
     def test_mos139_adapter_matches_ruleset_agl_helpers(self):
         profile = get_ruleset_profile("mos139_2019")

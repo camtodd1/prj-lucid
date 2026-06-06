@@ -5,10 +5,10 @@ It follows the same profile/service structure as `rulesets.mos139` so callers
 can resolve the active ruleset through `rulesets.registry.get_ruleset_profile()`
 and use the shared ruleset contract.
 
-Current implemented policy data covers physical runway dimensions, runway
-markings, and airfield ground lighting. OLS, declared distances, clearway,
-stopway, and taxiway separation are registered explicitly as unsupported until
-their EASA policy tables are added.
+Current implemented policy data covers physical runway dimensions, OLS surface
+parameters, runway markings, and airfield ground lighting. Declared distances,
+clearway, stopway, and taxiway separation are registered explicitly as
+unsupported until their EASA policy tables are added.
 
 ## Modules
 
@@ -26,9 +26,10 @@ lighting.
 `classification.py`
 : Runway type mapping from UI strings to ruleset abbreviations.
 
-`physical_data.py`, `markings.py`, `lighting.py`
+`ols_surfaces.py`, `physical_data.py`, `markings.py`, `lighting.py`
 : EASA policy sources for implemented families.
 
 `ols.py`, `taxiway.py`
-: Framework placeholders that satisfy the ruleset contract while returning
-`None` for unsupported EASA lookups.
+: Compatibility wrappers that satisfy the ruleset contract. `ols.py` delegates
+to `ols_surfaces.py`; `taxiway.py` returns `None` until EASA taxiway separation
+policy is added.
