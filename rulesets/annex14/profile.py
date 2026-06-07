@@ -283,14 +283,33 @@ class Annex14RulesetProfile(RulesetProfile):
         return self.lighting.approach_profile_for_end(runway_type)
 
 
-ANNEX14_PROFILE = Annex14RulesetProfile(
-    id=metadata.RULESET_ID,
-    display_name=metadata.DISPLAY_NAME,
-    edition=metadata.EDITION,
-    status=metadata.STATUS,
-    description=metadata.DESCRIPTION,
-    aliases=metadata.ALIASES,
-    capabilities=capability_map(metadata.CAPABILITY_STATUS_BY_KEY),
+ANNEX14_CURRENT_OLS_PROFILE = Annex14RulesetProfile(
+    id=metadata.CURRENT_RULESET_ID,
+    display_name=metadata.CURRENT_DISPLAY_NAME,
+    edition=metadata.CURRENT_EDITION,
+    status=metadata.CURRENT_STATUS,
+    description=metadata.CURRENT_DESCRIPTION,
+    aliases=metadata.CURRENT_ALIASES,
+    capabilities=capability_map(metadata.CURRENT_CAPABILITY_STATUS_BY_KEY),
+    protected_airspace_model="annex14_current_ols",
 )
 
-__all__ = ["ANNEX14_PROFILE", "Annex14RulesetProfile"]
+ANNEX14_MODERNISED_OFS_OES_PROFILE = Annex14RulesetProfile(
+    id=metadata.MODERNISED_RULESET_ID,
+    display_name=metadata.MODERNISED_DISPLAY_NAME,
+    edition=metadata.MODERNISED_EDITION,
+    status=metadata.MODERNISED_STATUS,
+    description=metadata.MODERNISED_DESCRIPTION,
+    aliases=metadata.MODERNISED_ALIASES,
+    capabilities=capability_map(metadata.MODERNISED_CAPABILITY_STATUS_BY_KEY),
+    protected_airspace_model="annex14_modernised_ofs_oes",
+)
+
+ANNEX14_PROFILE = ANNEX14_MODERNISED_OFS_OES_PROFILE
+
+__all__ = [
+    "ANNEX14_CURRENT_OLS_PROFILE",
+    "ANNEX14_MODERNISED_OFS_OES_PROFILE",
+    "ANNEX14_PROFILE",
+    "Annex14RulesetProfile",
+]

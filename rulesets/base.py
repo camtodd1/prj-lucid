@@ -31,6 +31,7 @@ class RulesetProfile:
     description: str = ""
     aliases: tuple[str, ...] = field(default_factory=tuple)
     capabilities: Mapping[str, RulesetCapability] = field(default_factory=dict)
+    protected_airspace_model: str = "ols_current"
 
     def capability_status(self, key: str) -> Optional[CapabilityStatus]:
         capability = self.capabilities.get(key)

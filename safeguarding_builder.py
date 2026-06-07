@@ -1732,7 +1732,10 @@ class SafeguardingBuilder(
                 if guideline_groups.get("E") is not None:
                     run_success_flags.append(self.process_guideline_e(runway_data, guideline_groups["E"]))
                 if guideline_groups.get("F") is not None:
-                    if getattr(self.get_active_ruleset(), "id", "") == "icao_annex14_vol1":
+                    if (
+                        getattr(self.get_active_ruleset(), "protected_airspace_model", "")
+                        == "annex14_modernised_ofs_oes"
+                    ):
                         run_success_flags.append(
                             self.process_annex14_geometry(
                                 runway_data,
