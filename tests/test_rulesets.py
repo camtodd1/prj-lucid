@@ -93,8 +93,13 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(get_ruleset_profile("CS-ADR-DSN").id, "easa_cs_adr_dsn_issue_6")
 
     def test_annex14_alias_normalizes_to_canonical_id(self):
-        self.assertEqual(normalize_ruleset_id("Annex 14"), "icao_annex14_vol1")
-        self.assertEqual(get_ruleset_profile("ICAO Annex 14").id, "icao_annex14_vol1")
+        self.assertEqual(normalize_ruleset_id("Annex 14"), "icao_annex14_vol1_current_ols")
+        self.assertEqual(get_ruleset_profile("ICAO Annex 14").id, "icao_annex14_vol1_current_ols")
+        self.assertEqual(normalize_ruleset_id("Annex 14 OFS/OES"), "icao_annex14_vol1_modernised_ofs_oes")
+        self.assertEqual(
+            get_ruleset_profile("ICAO Annex 14 Modernised").id,
+            "icao_annex14_vol1_modernised_ofs_oes",
+        )
 
     def test_structured_payload_normalizes_to_canonical_id(self):
         self.assertEqual(normalize_ruleset_id({"id": "MOS139"}), "mos139_2019")
@@ -390,8 +395,14 @@ class RulesetRegistryTest(unittest.TestCase):
         )
 
     def test_annex14_profile_scaffold_smoke_checks(self):
-        profile = get_ruleset_profile("icao_annex14_vol1")
-        self.assertEqual(profile.status, "scaffold")
+        current_profile = get_ruleset_profile("icao_annex14_vol1_current_ols")
+        self.assertEqual(current_profile.protected_airspace_model, "annex14_current_ols")
+        self.assertEqual(current_profile.capability_status("ols.obstacle_free_surfaces"), "unsupported")
+        self.assertEqual(current_profile.capability_status("oes.horizontal"), "unsupported")
+
+        profile = get_ruleset_profile("icao_annex14_vol1_modernised_ofs_oes")
+        self.assertEqual(profile.status, "draft")
+        self.assertEqual(profile.protected_airspace_model, "annex14_modernised_ofs_oes")
         self.assertEqual(profile.capability_status("classification.reference_code"), "partial")
         self.assertEqual(profile.capability_status("classification.design_group"), "partial")
         self.assertEqual(profile.capability_status("oes.airport_wide"), "partial")

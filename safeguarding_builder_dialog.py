@@ -593,6 +593,19 @@ class SafeguardingBuilderDialog(
         self.framework_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.framework_combo.setMinimumWidth(190)
 
+        self.protected_airspace_policy_combo = QtWidgets.QComboBox()
+        self.protected_airspace_policy_combo.setObjectName("comboBox_protected_airspace_policy")
+        self.protected_airspace_policy_combo.addItem("Ruleset aligned", userData="ruleset_aligned")
+        self.protected_airspace_policy_combo.addItem(
+            "Future Annex 14 OFS/OES",
+            userData="future_annex14_ofs_oes",
+        )
+        self.protected_airspace_policy_combo.setToolTip(
+            "Protected airspace/OLS policy. Use Ruleset aligned for the selected design standard, "
+            "or overlay the future Annex 14 OFS/OES model."
+        )
+        self.protected_airspace_policy_combo.setMinimumWidth(190)
+
         ruleset_group = QtWidgets.QGroupBox("Policy Settings")
         ruleset_group.setObjectName("groupBox_ruleset")
         ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
@@ -608,9 +621,14 @@ class SafeguardingBuilderDialog(
         framework_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         ruleset_layout.addWidget(framework_label, 1, 0)
         ruleset_layout.addWidget(self.framework_combo, 1, 1)
+        protected_airspace_label = QtWidgets.QLabel("OLS / Airspace:")
+        protected_airspace_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        ruleset_layout.addWidget(protected_airspace_label, 2, 0)
+        ruleset_layout.addWidget(self.protected_airspace_policy_combo, 2, 1)
 
         self.groupBox_ruleset = ruleset_group
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
+        self.protected_airspace_policy_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.framework_combo.currentIndexChanged.connect(self.update_dialog_status)
 
     def _style_dialog_header(self) -> None:
@@ -1515,6 +1533,10 @@ class SafeguardingBuilderDialog(
         incomplete = 0
         ruleset_combo = self._ruleset_combo_widget()
         active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
+        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
+        protected_airspace_policy = (
+            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+        )
         for group in self._runway_groups.values():
             data = group.get_input_data()
             required_values = [
@@ -1525,7 +1547,10 @@ class SafeguardingBuilderDialog(
                 data.get("rec_northing", ""),
                 data.get("width", ""),
             ]
-            if active_ruleset_id == "icao_annex14_vol1":
+            if (
+                active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
+                or protected_airspace_policy == "future_annex14_ofs_oes"
+            ):
                 required_values.append(data.get("adg", data.get("design_group", "")))
             if not all(str(value).strip() for value in required_values):
                 incomplete += 1
@@ -1888,8 +1913,12 @@ class SafeguardingBuilderDialog(
 
         ruleset_combo = self._ruleset_combo_widget()
         framework_combo = self._framework_combo_widget()
+        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
         design_standard = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
         safeguarding_framework = framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID
+        protected_airspace_policy = (
+            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+        )
         final_data.update(
             {
                 "icao_code": icao,
@@ -1902,6 +1931,7 @@ class SafeguardingBuilderDialog(
                 "design_standard": design_standard,
                 "ruleset": design_standard,
                 "safeguarding_framework": safeguarding_framework,
+                "protected_airspace_policy": protected_airspace_policy,
             }
         )
 
@@ -2255,7 +2285,14 @@ class SafeguardingBuilderDialog(
             adg = ""
         ruleset_combo = self._ruleset_combo_widget()
         active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
-        if active_ruleset_id == "icao_annex14_vol1" and not adg:
+        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
+        protected_airspace_policy = (
+            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+        )
+        if (
+            active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
+            or protected_airspace_policy == "future_annex14_ofs_oes"
+        ) and not adg:
             errors.append(f"Rwy {index}: ADG is required for Annex 14 OFS/OES generation.")
             current_errors += 1
         validated["adg"] = adg

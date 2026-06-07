@@ -218,7 +218,7 @@ class Annex14GeometryMixin:
         ]
 
     def process_annex14_geometry(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
-        ruleset = self.get_active_ruleset()
+        ruleset = self.get_active_protected_airspace_ruleset()
         if getattr(ruleset, "protected_airspace_model", "") != "annex14_modernised_ofs_oes":
             return False
         if layer_group is None:

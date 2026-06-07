@@ -104,6 +104,7 @@ class SafeguardingBuilder(
         self.generate_controlling_ols: bool = True
         self.debug_logging: bool = False
         self.ruleset = get_ruleset_profile()
+        self.protected_airspace_ruleset = self.ruleset
         self.framework = get_framework_profile()
         self.ruleset_context = RulesetContext(
             design_standard=self.ruleset,
@@ -183,6 +184,10 @@ class SafeguardingBuilder(
     def get_active_ruleset(self):
         """Return the active ruleset profile, defaulting to MOS139."""
         return getattr(self, "ruleset", get_ruleset_profile())
+
+    def get_active_protected_airspace_ruleset(self):
+        """Return the ruleset profile used for protected airspace/OLS generation."""
+        return getattr(self, "protected_airspace_ruleset", self.get_active_ruleset())
 
     def get_active_framework(self):
         """Return the active safeguarding framework profile, defaulting to NASF."""
@@ -572,6 +577,11 @@ class SafeguardingBuilder(
         self.contour_intervals = input_data.get("contour_intervals", {})
         self.generate_controlling_ols = bool(input_data.get("generate_controlling_ols", True))
         self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
+        protected_airspace_policy = input_data.get("protected_airspace_policy", "ruleset_aligned")
+        if protected_airspace_policy == "future_annex14_ofs_oes":
+            self.protected_airspace_ruleset = get_ruleset_profile("icao_annex14_vol1_modernised_ofs_oes")
+        else:
+            self.protected_airspace_ruleset = self.ruleset
         self.framework = get_framework_profile(input_data.get("safeguarding_framework"))
         self.ruleset_context = RulesetContext(
             design_standard=self.ruleset,
@@ -599,7 +609,9 @@ class SafeguardingBuilder(
             f"MET={'yes' if met_point is not None else 'no'}, "
             f"AGL={'enabled' if agl_options.get('enabled') else 'disabled'}, "
             f"CNS={len(cns_input_list)}, runways={len(runway_input_list)}, "
-            f"design_standard={self.ruleset.id}, safeguarding_framework={self.framework.id}."
+            f"design_standard={self.ruleset.id}, "
+            f"protected_airspace={self.protected_airspace_ruleset.id}, "
+            f"safeguarding_framework={self.framework.id}."
         )
 
         if not runway_input_list:
@@ -917,6 +929,12 @@ class SafeguardingBuilder(
     ) -> bool:
         plugin_tag = PLUGIN_TAG
         airport_wide_ols_processed = False
+        if (
+            getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
+            == "annex14_modernised_ofs_oes"
+        ):
+            self._log("Airport-wide current OLS skipped: protected airspace policy is future Annex 14 OFS/OES.")
+            return False
         if guideline_groups.get("F") is not None and processed_runway_data_list:
             if self.reference_elevation_datum is not None:
                 try:
@@ -1733,7 +1751,7 @@ class SafeguardingBuilder(
                     run_success_flags.append(self.process_guideline_e(runway_data, guideline_groups["E"]))
                 if guideline_groups.get("F") is not None:
                     if (
-                        getattr(self.get_active_ruleset(), "protected_airspace_model", "")
+                        getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
                         == "annex14_modernised_ofs_oes"
                     ):
                         run_success_flags.append(

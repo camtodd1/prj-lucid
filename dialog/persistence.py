@@ -65,6 +65,23 @@ class PersistenceMixin:
                 return None
         return None
 
+    def _protected_airspace_policy_combo_widget(self):
+        combo = getattr(self, "protected_airspace_policy_combo", None)
+        try:
+            if isinstance(combo, QComboBox):
+                _ = combo.currentIndex()
+                return combo
+        except RuntimeError:
+            pass
+        combo = self.findChild(QComboBox, "comboBox_protected_airspace_policy") if hasattr(self, "findChild") else None
+        if isinstance(combo, QComboBox):
+            try:
+                _ = combo.currentIndex()
+                return combo
+            except RuntimeError:
+                return None
+        return None
+
     def _pick_json_file(self, title: str, accept_mode: QFileDialog.AcceptMode, initial_path: str = "") -> str:
         """Use a Qt file dialog that behaves reliably inside the plugin shell."""
         file_filter = self.tr("JSON Files (*.json)")
@@ -123,6 +140,10 @@ class PersistenceMixin:
         if isinstance(framework_combo, QComboBox):
             idx = framework_combo.findData(DEFAULT_FRAMEWORK_ID)
             framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
+        if isinstance(protected_airspace_combo, QComboBox):
+            idx = protected_airspace_combo.findData("ruleset_aligned")
+            protected_airspace_combo.setCurrentIndex(idx if idx >= 0 else 0)
 
         for index in list(self._runway_groups.keys()):
             self._remove_runway_group_internal(index)
@@ -203,7 +224,11 @@ class PersistenceMixin:
     def _build_save_payload(self, icao_code: str):
         ruleset_combo = self._ruleset_combo_widget()
         framework_combo = self._framework_combo_widget()
+        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
         design_standard = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
+        protected_airspace_policy = (
+            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+        )
         data_to_save = {
             "icao_code": icao_code,
             "iata_code": self._line_text("lineEdit_iata_code").strip().upper(),
@@ -216,6 +241,7 @@ class PersistenceMixin:
             "design_standard": design_standard,
             "ruleset": design_standard,
             "safeguarding_framework": framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID,
+            "protected_airspace_policy": protected_airspace_policy,
             "runways": [self._runway_groups[idx].get_input_data() for idx in sorted(self._runway_groups.keys())],
             "cns_facilities": self._get_cns_save_rows(),
         }
@@ -281,6 +307,12 @@ class PersistenceMixin:
         framework_combo = self._framework_combo_widget()
         if isinstance(framework_combo, QComboBox) and framework_combo.currentData() not in {None, DEFAULT_FRAMEWORK_ID}:
             return True
+        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
+        if (
+            isinstance(protected_airspace_combo, QComboBox)
+            and protected_airspace_combo.currentData() not in {None, "ruleset_aligned"}
+        ):
+            return True
         if any(self._runway_has_existing_input(group.get_input_data()) for group in self._runway_groups.values()):
             return True
         cns_table = self._table("table_cns_facility")
@@ -333,6 +365,11 @@ class PersistenceMixin:
             framework_id = normalize_framework_id(loaded_data.get("safeguarding_framework", DEFAULT_FRAMEWORK_ID))
             idx = framework_combo.findData(framework_id)
             framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
+        if isinstance(protected_airspace_combo, QComboBox):
+            policy_id = loaded_data.get("protected_airspace_policy", "ruleset_aligned")
+            idx = protected_airspace_combo.findData(policy_id)
+            protected_airspace_combo.setCurrentIndex(idx if idx >= 0 else 0)
         self._load_runway_rows(loaded_data.get("runways", []))
         if hasattr(self, "_load_agl_options"):
             self._load_agl_options(loaded_data.get("agl_options", {}))

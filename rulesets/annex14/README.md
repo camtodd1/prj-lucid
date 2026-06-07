@@ -1,8 +1,14 @@
 # ICAO Annex 14 Vol I Ruleset Scaffold
 
-This package is a source-capture scaffold for an ICAO Annex 14 Volume I ruleset.
-It is registered with the ruleset selector and exposes the same grouped service
-contract as the MOS139 and EASA rulesets.
+This package is a source-capture scaffold for ICAO Annex 14 Volume I rulesets.
+It exposes two protected-airspace profiles through the ruleset selector:
+
+- `ICAO Annex 14 Vol I - Current OLS`
+- `ICAO Annex 14 Vol I - Modernised OFS/OES (from 21 Nov 2030)`
+
+The current OLS profile is the landing pad for the enforceable Annex 14 OLS
+surfaces. The modernised OFS/OES profile holds the future protected-airspace
+model that is not enforceable until 21 November 2030.
 
 Implemented now:
 
@@ -11,8 +17,10 @@ Implemented now:
 - Aerodrome reference code number/letter classification from Table 1-1.
 - Aeroplane Design Group classification from Table 1-2, applicable from
   21 November 2030.
-- Per-runway ADG input in the main dialog for Annex 14 OFS/OES generation,
-  alongside the existing ARC inputs used by other design standards.
+- Current OLS profile scaffold for enforceable Annex 14 protected airspace.
+- Per-runway ADG input in the main dialog for modernised Annex 14 OFS/OES
+  generation, alongside the existing ARC inputs used by current OLS and other
+  design standards.
 - Approach surface lookups from Tables 4-1 and 4-2.
 - Transitional surface lookup from 4.2.2.
 - Inner approach surface lookups from Tables 4-3, 4-4, and 4-5.
@@ -37,6 +45,7 @@ Pending source input:
 
 - Physical characteristics: runway, strip, RESA, shoulder, taxiway, and separation
   tables.
+- Current Annex 14 OLS surface dimension tables and geometry generation.
 - Full complex transitional and inner transitional geometry construction.
 - TODA/clearway-aware departure and take-off climb start positions.
 - Runway markings and aeronautical ground lighting parameters.
