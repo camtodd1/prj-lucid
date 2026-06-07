@@ -498,6 +498,8 @@ class PersistenceMixin:
         runway_data.setdefault("clearway2_len", "")
         runway_data.setdefault("stopway1_len", "")
         runway_data.setdefault("stopway2_len", "")
+        runway_data.setdefault("adg", runway_data.get("design_group", ""))
+        runway_data.setdefault("design_group", runway_data.get("adg", ""))
         runway_data.setdefault("surface_category", "")
         runway_data.setdefault("surface_material", "")
         runway_data.setdefault("takeoff_available_1", True)

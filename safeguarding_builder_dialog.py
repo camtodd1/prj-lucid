@@ -1513,6 +1513,8 @@ class SafeguardingBuilderDialog(
 
         runway_count = len(self._runway_groups)
         incomplete = 0
+        ruleset_combo = self._ruleset_combo_widget()
+        active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
         for group in self._runway_groups.values():
             data = group.get_input_data()
             required_values = [
@@ -1523,6 +1525,8 @@ class SafeguardingBuilderDialog(
                 data.get("rec_northing", ""),
                 data.get("width", ""),
             ]
+            if active_ruleset_id == "icao_annex14_vol1":
+                required_values.append(data.get("adg", data.get("design_group", "")))
             if not all(str(value).strip() for value in required_values):
                 incomplete += 1
         if hasattr(self, "label_runway_status"):
@@ -2244,6 +2248,18 @@ class SafeguardingBuilderDialog(
         validated["ruleset"] = str(inputs.get("ruleset", DEFAULT_RULESET_ID) or DEFAULT_RULESET_ID).strip()
         validated["arc_num"] = inputs.get("arc_num")
         validated["arc_let"] = inputs.get("arc_let")
+        adg = str(inputs.get("adg", inputs.get("design_group", "")) or "").strip().upper()
+        if adg and adg not in {"I", "IIA", "IIB", "IIC", "III", "IV", "V"}:
+            errors.append(f"Rwy {index}: Invalid Aeroplane Design Group '{adg}'.")
+            current_errors += 1
+            adg = ""
+        ruleset_combo = self._ruleset_combo_widget()
+        active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
+        if active_ruleset_id == "icao_annex14_vol1" and not adg:
+            errors.append(f"Rwy {index}: ADG is required for Annex 14 OFS/OES generation.")
+            current_errors += 1
+        validated["adg"] = adg
+        validated["design_group"] = adg
         surface_category = str(inputs.get("surface_category", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_CATEGORY
         surface_material = str(inputs.get("surface_material", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_MATERIAL
         if surface_category and surface_category not in RUNWAY_SURFACE_MATERIALS:

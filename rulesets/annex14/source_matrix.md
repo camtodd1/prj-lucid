@@ -6,12 +6,12 @@ Use this matrix to track source capture before promoting capabilities from
 | Area | Module | Status | Notes |
 | --- | --- | --- | --- |
 | Runway type mapping | `classification.py` | scaffolded | Existing app type labels map to NI/NPA/PA codes. |
-| Reference code / design group | `classification.py` | partial | Table 1-1 and Table 1-2 captured; broader integration with runway data and OES still pending. |
+| Reference code / design group | `classification.py` | partial | Table 1-1 and Table 1-2 captured; geometry builder can use explicit ADG, critical aircraft data, or a code-letter proxy. |
 | Physical characteristics | `physical_data.py` | pending | Runway, strip, RESA, shoulder, taxiway, and declared-area tables. |
 | Taxiway and separations | `taxiway.py` | pending | Include taxiway and parallel runway separation standards. |
-| OFS | `ols_surfaces.py` | captured | Chapter 4 obstacle free surfaces captured: approach, transitional, inner approach, inner transitional, and balked landing. Geometry construction pending. |
-| OLS | `ols_surfaces.py` | partial | Annex 14 OFS captured; remaining non-OFS Chapter 4 surfaces pending. |
-| OES | `oes.py` | partial | Horizontal surface Table 4-10, straight-in instrument approach surface Table 4-11, precision approach surface Table 4-12, instrument departure surface Table 4-13, and take-off climb surface Tables 4-14/4-15 captured; remaining OES surfaces pending. |
+| OFS | `ols_surfaces.py`, `surfaces/annex14_geometry.py` | partial | Chapter 4 OFS captured. First-pass geometry covers approach, inner approach, and balked landing; transitional and inner transitional construction still pending. |
+| OLS | `ols_surfaces.py`, `surfaces/annex14_geometry.py` | partial | Annex 14 OFS captured and partly generated; remaining complex OFS construction pending. |
+| OES | `oes.py`, `surfaces/annex14_geometry.py` | partial | Horizontal, straight-in instrument, precision approach, instrument departure, and take-off climb parameters captured and first-pass plan geometry generated. TODA/clearway refinements pending. |
 | Obstacle limitation requirements | `obstacle_requirements.py` | captured | Section 4.4 captured as penetration/exception/aeronautical-study policy; no geometry parameters. |
 | Surface establishment requirements | `obstacle_requirements.py` | captured | Section 4.5 captured as OFS by runway use and OES by operation; no geometry parameters. |
 | Markings | `markings.py` | pending | Runway marking dimensions, offsets, and applicability. |

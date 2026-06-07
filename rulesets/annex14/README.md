@@ -11,6 +11,8 @@ Implemented now:
 - Aerodrome reference code number/letter classification from Table 1-1.
 - Aeroplane Design Group classification from Table 1-2, applicable from
   21 November 2030.
+- Per-runway ADG input in the main dialog for Annex 14 OFS/OES generation,
+  alongside the existing ARC inputs used by other design standards.
 - Approach surface lookups from Tables 4-1 and 4-2.
 - Transitional surface lookup from 4.2.2.
 - Inner approach surface lookups from Tables 4-3, 4-4, and 4-5.
@@ -25,6 +27,9 @@ Implemented now:
 - Take-off climb obstacle evaluation surface lookup from Tables 4-14 and 4-15.
 - Obstacle limitation requirement policy from 4.4.
 - Obstacle surface establishment policy from 4.5.
+- First-pass Annex 14 OFS/OES plan-view geometry builder for approach,
+  inner approach, balked landing, horizontal, straight-in instrument,
+  precision approach, instrument departure, and take-off climb surfaces.
 - Empty physical, taxiway, markings, and lighting policy modules.
 - An OES service placeholder for future obstacle evaluation surface workflows.
 
@@ -32,6 +37,6 @@ Pending source input:
 
 - Physical characteristics: runway, strip, RESA, shoulder, taxiway, and separation
   tables.
-- OLS construction/generation from captured OFS dimensions.
-- OES rules and any ADG-derived evaluation surfaces.
+- Full complex transitional and inner transitional geometry construction.
+- TODA/clearway-aware departure and take-off climb start positions.
 - Runway markings and aeronautical ground lighting parameters.

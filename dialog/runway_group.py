@@ -109,7 +109,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.rwy_name_lbl.setFont(title_font)
         title_stack.addWidget(self.rwy_name_lbl)
 
-        self.header_summary_lbl = QtWidgets.QLabel("Code: -- | Length: -- | Azimuth: --")
+        self.header_summary_lbl = QtWidgets.QLabel("ARC: -- | ADG: -- | Length: -- | Azimuth: --")
         self.header_summary_lbl.setObjectName(f"label_rwy_summary_{self.index}")
         self.header_summary_lbl.setStyleSheet("color: #666666;")
         title_stack.addWidget(self.header_summary_lbl)
@@ -419,7 +419,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         classification_layout.setColumnStretch(0, 2)
         classification_layout.setColumnStretch(1, 1)
         self._add_arc_controls(classification_layout, 0)
-        self._add_runway_type_controls(classification_layout, 4)
+        self._add_adg_controls(classification_layout, 4)
+        self._add_runway_type_controls(classification_layout, 5)
 
         advanced_body_layout.addWidget(classification_group)
         advanced_layout.addWidget(advanced_body)
@@ -497,6 +498,28 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._refresh_surface_material_options("")
         layout.addWidget(label_surface_material, row + 3, 0)
         layout.addWidget(self.surface_material_combo, row + 3, 1)
+
+    def _add_adg_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
+        label_adg = QtWidgets.QLabel("ADG:")
+        label_adg.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.adg_combo = NoWheelComboBox()
+        self.adg_combo.setObjectName(f"comboBox_adg_{self.index}")
+        for label, value in [
+            ("", ""),
+            ("I", "I"),
+            ("IIA", "IIA"),
+            ("IIB", "IIB"),
+            ("IIC", "IIC"),
+            ("III", "III"),
+            ("IV", "IV"),
+            ("V", "V"),
+        ]:
+            self.adg_combo.addItem(label, userData=value)
+        self.adg_combo.setToolTip("Select Annex 14 Aeroplane Design Group for OFS/OES generation.")
+        self.adg_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
+        self.adg_combo.setMinimumWidth(190)
+        layout.addWidget(label_adg, row, 0)
+        layout.addWidget(self.adg_combo, row, 1)
 
     def _add_runway_type_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
         runway_types = [
@@ -671,6 +694,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.suffix_combo,
             self.arc_num_combo,
             self.arc_let_combo,
+            self.adg_combo,
             self.surface_material_combo,
             self.type1_combo,
             self.type2_combo,
@@ -725,6 +749,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "lahso_applied_2": self.lahso_applied_2_cb.isChecked(),
             "arc_num": self.arc_num_combo.currentData(),
             "arc_let": self.arc_let_combo.currentData(),
+            "adg": self.adg_combo.currentData(),
+            "design_group": self.adg_combo.currentData(),
             "surface_category": self.surface_category_combo.currentText(),
             "surface_material": self.surface_material_combo.currentText(),
             "type1": self.type1_combo.currentText(),
@@ -765,6 +791,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.lahso_applied_2_cb.setChecked(self._bool_from_saved_value(data.get("lahso_applied_2", False)))
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
+            self._set_combo_data(self.adg_combo, data.get("adg", data.get("design_group", "")))
             self._set_combo_text(
                 self.surface_category_combo,
                 data.get("surface_category", ""),
@@ -790,8 +817,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         arc_number = (self.arc_num_combo.currentData() or "").strip()
         arc_letter = (self.arc_let_combo.currentData() or "").strip()
         arc_code = f"{arc_number}{arc_letter}" if (arc_number or arc_letter) else "--"
+        adg = (self.adg_combo.currentData() or "").strip() or "--"
         self.header_summary_lbl.setText(
-            f"Code: {arc_code} | Length: {self.dist_lbl.text()} | Azimuth: {self.azim_lbl.text()}"
+            f"ARC: {arc_code} | ADG: {adg} | Length: {self.dist_lbl.text()} | Azimuth: {self.azim_lbl.text()}"
         )
         self._update_status_chip()
         self._update_required_field_indicators()
@@ -826,6 +854,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.lahso_applied_2_cb,
             self.arc_num_combo,
             self.arc_let_combo,
+            self.adg_combo,
             self.surface_category_combo,
             self.surface_material_combo,
             self.type1_combo,

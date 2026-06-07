@@ -37,6 +37,7 @@ from .core.layers import LayerMixin
 from .core import output_structure
 from .core.styles import DEFAULT_STYLE_MAP
 from .surfaces.physical import PhysicalGeometryMixin
+from .surfaces.annex14_geometry import Annex14GeometryMixin
 from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
 from .surfaces.specialised import SpecialisedSurfacesMixin
 from .surfaces.met import MetSurfacesMixin
@@ -74,6 +75,7 @@ class SafeguardingBuilder(
     ControllingOlsEngineMixin,
     OlsGuidelineMixin,
     PhysicalGeometryMixin,
+    Annex14GeometryMixin,
     AirfieldGroundLightingMixin,
     SpecialisedSurfacesMixin,
     MetSurfacesMixin,
@@ -1016,6 +1018,7 @@ class SafeguardingBuilder(
                     main_group,
                     arc_num_val,
                     arc_let_val,
+                    runway_data.get("design_group") or runway_data.get("adg"),
                     runway_data.get("declared_distances"),
                 )
 
@@ -1729,13 +1732,21 @@ class SafeguardingBuilder(
                 if guideline_groups.get("E") is not None:
                     run_success_flags.append(self.process_guideline_e(runway_data, guideline_groups["E"]))
                 if guideline_groups.get("F") is not None:
-                    run_success_flags.append(
-                        self.process_guideline_f(
-                            runway_data,
-                            runway_ols_group or guideline_groups["F"],
-                            ofz_group,
+                    if getattr(self.get_active_ruleset(), "id", "") == "icao_annex14_vol1":
+                        run_success_flags.append(
+                            self.process_annex14_geometry(
+                                runway_data,
+                                runway_ols_group or guideline_groups["F"],
+                            )
                         )
-                    )  # F = OLS App/TOCS
+                    else:
+                        run_success_flags.append(
+                            self.process_guideline_f(
+                                runway_data,
+                                runway_ols_group or guideline_groups["F"],
+                                ofz_group,
+                            )
+                        )  # F = OLS App/TOCS
                 if guideline_groups.get("I") is not None:
                     run_success_flags.append(self.process_guideline_i(runway_data, guideline_groups["I"]))
                 # Add calls for other guidelines (A, F, H) here if implemented
@@ -2536,6 +2547,7 @@ class SafeguardingBuilder(
         layer_group: QgsLayerTreeGroup,
         arc_num_val: Optional[str] = None,
         arc_let_val: Optional[str] = None,
+        design_group_val: Optional[str] = None,
         declared_distances: Optional[List[Dict[str, Any]]] = None,
     ) -> Optional[QgsVectorLayer]:
         """Creates the runway centreline layer using the helper."""
@@ -2577,6 +2589,7 @@ class SafeguardingBuilder(
                     QgsField("asda", QVariant.String),
                     QgsField("arc_num", QVariant.String, "arc_num", 5),
                     QgsField("arc_let", QVariant.String, "arc_let", 5),
+                    QgsField("adg", QVariant.String, "adg", 10),
                 ]
             )
 
@@ -2629,6 +2642,7 @@ class SafeguardingBuilder(
                     declared_distance_attrs["asda"],
                     arc_num_val,
                     arc_let_val,
+                    design_group_val,
                 ]
             )
 
