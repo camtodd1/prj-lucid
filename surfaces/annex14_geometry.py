@@ -2,7 +2,7 @@
 """Annex 14 OFS/OES plan-view geometry generation."""
 
 import traceback
-from typing import Iterable, List, Optional
+from typing import Dict, Iterable, List, Optional
 
 from qgis.PyQt.QtCore import QVariant  # type: ignore
 from qgis.core import (  # type: ignore
@@ -239,6 +239,16 @@ class Annex14GeometryMixin:
             for feature in features
             if not str(self._annex14_feature_attribute(feature, "end_desig") or "")
         ]
+
+    def _annex14_features_by_surface(self, features: List[QgsFeature]) -> Dict[str, List[QgsFeature]]:
+        grouped: Dict[str, List[QgsFeature]] = {}
+        for feature in features:
+            surface = str(self._annex14_feature_attribute(feature, "surface") or "surface").strip() or "surface"
+            grouped.setdefault(surface, []).append(feature)
+        return grouped
+
+    def _annex14_surface_label(self, surface: str) -> str:
+        return str(surface or "surface").replace("_", " ").title()
 
     def _annex14_runway_group(self, parent_group: QgsLayerTreeGroup, runway_label: str) -> QgsLayerTreeGroup:
         return self._ensure_layer_group(parent_group, f"RWY {runway_label}")
@@ -540,29 +550,35 @@ class Annex14GeometryMixin:
 
                 if end_ofs_features:
                     ofs_group = self._annex14_surface_group(layer_group, end_desig, "Obstacle Free Surfaces")
-                    layer = self._create_and_add_layer(
-                        "Polygon",
-                        f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}",
-                        f"Annex 14 OFS RWY {end_desig}",
-                        fields,
-                        end_ofs_features,
-                        ofs_group,
-                        "OLS Approach",
-                    )
-                    created = created or layer is not None
+                    for surface, surface_features in self._annex14_features_by_surface(end_ofs_features).items():
+                        safe_surface = self._sanitize_filename(surface)
+                        surface_label = self._annex14_surface_label(surface)
+                        layer = self._create_and_add_layer(
+                            "Polygon",
+                            f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
+                            f"Annex 14 OFS {surface_label} RWY {end_desig}",
+                            fields,
+                            surface_features,
+                            ofs_group,
+                            "OLS Approach",
+                        )
+                        created = created or layer is not None
 
                 if end_oes_features:
                     oes_group = self._annex14_surface_group(layer_group, end_desig, "Obstacle Evaluation Surfaces")
-                    layer = self._create_and_add_layer(
-                        "Polygon",
-                        f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}",
-                        f"Annex 14 OES RWY {end_desig}",
-                        fields,
-                        end_oes_features,
-                        oes_group,
-                        "OLS TOCS",
-                    )
-                    created = created or layer is not None
+                    for surface, surface_features in self._annex14_features_by_surface(end_oes_features).items():
+                        safe_surface = self._sanitize_filename(surface)
+                        surface_label = self._annex14_surface_label(surface)
+                        layer = self._create_and_add_layer(
+                            "Polygon",
+                            f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
+                            f"Annex 14 OES {surface_label} RWY {end_desig}",
+                            fields,
+                            surface_features,
+                            oes_group,
+                            "OLS TOCS",
+                        )
+                        created = created or layer is not None
 
             runway_wide_oes_features = self._annex14_runway_wide_features(oes_features)
             if runway_wide_oes_features:
@@ -571,16 +587,19 @@ class Annex14GeometryMixin:
                     runway_name,
                     "Obstacle Evaluation Surfaces",
                 )
-                layer = self._create_and_add_layer(
-                    "Polygon",
-                    f"Annex14_OES_{runway_name.replace('/', '_')}",
-                    f"Annex 14 OES RWY {runway_name}",
-                    fields,
-                    runway_wide_oes_features,
-                    runway_wide_group,
-                    "OLS TOCS",
-                )
-                created = created or layer is not None
+                for surface, surface_features in self._annex14_features_by_surface(runway_wide_oes_features).items():
+                    safe_surface = self._sanitize_filename(surface)
+                    surface_label = self._annex14_surface_label(surface)
+                    layer = self._create_and_add_layer(
+                        "Polygon",
+                        f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_surface}",
+                        f"Annex 14 OES {surface_label} RWY {runway_name}",
+                        fields,
+                        surface_features,
+                        runway_wide_group,
+                        "OLS TOCS",
+                    )
+                    created = created or layer is not None
         except Exception as exc:
             QgsMessageLog.logMessage(
                 f"Annex 14 geometry failed for {runway_name}: {exc}\n{traceback.format_exc()}",
