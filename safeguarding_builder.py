@@ -1764,7 +1764,7 @@ class SafeguardingBuilder(
                         run_success_flags.append(
                             self.process_guideline_f(
                                 runway_data,
-                                runway_ols_group or guideline_groups["F"],
+                                guideline_groups["F"],
                                 ofz_group,
                             )
                         )  # F = OLS App/TOCS
@@ -1844,6 +1844,13 @@ class SafeguardingBuilder(
             self.tr(output_structure.AIRFIELD_GROUND_LIGHTING),
             self.tr(self.get_active_framework().guideline_group_name("G")),
         }
+        guideline_f_subgroups = self.get_active_framework().guideline_f_subgroup_names()
+        removable_names.update(
+            {
+                self.tr(guideline_f_subgroups["runway"]),
+                self.tr(guideline_f_subgroups["ofz"]),
+            }
+        )
 
         def prune(group: QgsLayerTreeGroup) -> bool:
             for child in list(group.children()):

@@ -3,7 +3,7 @@
 
 import math
 import traceback
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from qgis.PyQt.QtCore import QVariant  # type: ignore
 from qgis.core import (  # type: ignore
@@ -907,50 +907,68 @@ class OlsGuidelineMixin:
                         IHS_ELEVATION_AMSL,
                         target_crs,
                     )
-                    if transitional_features:
-                        transitional_fields = self._get_ols_fields("Transitional")
-                        poly_layer = self._create_and_add_layer(
-                            "Polygon",
-                            f"OLS_Transitional_{icao_code}",
-                            f"{self.tr('OLS')} Transitional {icao_code}",
-                            transitional_fields,
-                            transitional_features,
-                            ols_layer_group,
-                            "OLS Transitional",
-                        )
-                        if poly_layer is not None:
-                            overall_success = True
-                            # QgsMessageLog.logMessage(
-                            #     f"Created Transitional Polygon Layer: {poly_layer.name()} ({len(transitional_features)} features)",
-                            #     PLUGIN_TAG,
-                            #     level=Qgis.Info,
-                            # )
+                    runway_direction_parent_group = ols_layer_group
+                    parent_node = ols_layer_group.parent()
+                    if isinstance(parent_node, QgsLayerTreeGroup):
+                        runway_direction_parent_group = parent_node
 
-                    # --- Create Transitional Contour Line Layer ---
-                    if transitional_contour_features:
-                        contour_fields = self._get_transitional_contour_fields()
-                        contour_layer = self._create_and_add_layer(
-                            "LineString",
-                            f"OLS_Transitional_Contours_{icao_code}",
-                            f"{self.tr('OLS')} Transitional Contours {icao_code}",
-                            contour_fields,
-                            transitional_contour_features,
-                            ols_layer_group,
-                            "OLS Transitional Contour",
+                    runway_end_pairs = []
+                    for runway_data in processed_runway_data_list:
+                        runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
+                        primary_desig, reciprocal_desig = (
+                            runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
                         )
-                        if contour_layer is not None:
-                            overall_success = True
-                            # QgsMessageLog.logMessage(
-                            #     f"Created Transitional Contour Layer: {contour_layer.name()} ({len(transitional_contour_features)} features)",
-                            #     PLUGIN_TAG,
+                        runway_end_pairs.extend([(runway_name, primary_desig), (runway_name, reciprocal_desig)])
+
+                    for runway_name, end_desig in runway_end_pairs:
+                        safe_runway_name = runway_name.replace("/", "_")
+                        safe_end_desig = str(end_desig).replace("/", "_")
+                        end_transitional_features = [
+                            feature
+                            for feature in transitional_features
+                            if self._ols_feature_end_designator(feature) == end_desig
+                            and str(self._ols_feature_attribute(feature, "rwy_name") or "") == runway_name
+                        ]
+                        end_transitional_contour_features = [
+                            feature
+                            for feature in transitional_contour_features
+                            if self._ols_feature_end_designator(feature) == end_desig
+                            and str(self._ols_feature_attribute(feature, "rwy_name") or "") == runway_name
+                        ]
+                        if not end_transitional_features and not end_transitional_contour_features:
+                            continue
+                        runway_groups = self._ols_runway_direction_groups(runway_direction_parent_group, end_desig)
+                        transitional_group = runway_groups["transitional"]
+
+                        if end_transitional_features:
+                            transitional_fields = self._get_ols_fields("Transitional")
+                            poly_layer = self._create_and_add_layer(
+                                "Polygon",
+                                f"OLS_Transitional_{safe_runway_name}_{safe_end_desig}",
+                                f"{self.tr('OLS')} Transitional Surface RWY {end_desig}",
+                                transitional_fields,
+                                end_transitional_features,
+                                transitional_group,
+                                "OLS Transitional",
+                            )
+                            if poly_layer is not None:
+                                overall_success = True
+
+                        if end_transitional_contour_features:
+                            contour_fields = self._get_transitional_contour_fields()
+                            contour_layer = self._create_and_add_layer(
+                                "LineString",
+                                f"OLS_Transitional_Contours_{safe_runway_name}_{safe_end_desig}",
+                                f"{self.tr('OLS')} Transitional Contours RWY {end_desig}",
+                                contour_fields,
+                                end_transitional_contour_features,
+                                transitional_group,
+                                "OLS Transitional Contour",
+                            )
+                            if contour_layer is not None:
+                                overall_success = True
                             #     level=Qgis.Info,
                             # )
-                    else:
-                        QgsMessageLog.logMessage(
-                            f"No Transitional Contour features created for {icao_code}.",
-                            PLUGIN_TAG,
-                            level=Qgis.Warning,
-                        )
                 else:
                     QgsMessageLog.logMessage(
                         "Skipping Transitional: Invalid Project CRS.",
@@ -2570,6 +2588,49 @@ class OlsGuidelineMixin:
         )
         return fields
 
+    def _ols_child_group(self, parent_group: QgsLayerTreeGroup, name: str) -> QgsLayerTreeGroup:
+        existing = self._find_direct_child_group(parent_group, self.tr(name))
+        if existing is not None:
+            return existing
+        group = parent_group.addGroup(self.tr(name))
+        self._stage_layer_tree_node(group)
+        return group
+
+    def _ols_runway_direction_groups(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        end_desig: str,
+    ) -> Dict[str, QgsLayerTreeGroup]:
+        runway_group = self._ols_child_group(parent_group, f"RWY {end_desig}")
+        return {
+            "root": runway_group,
+            "approach": self._ols_child_group(runway_group, "Approach"),
+            "takeoff": self._ols_child_group(runway_group, "Take-off Climb"),
+            "transitional": self._ols_child_group(runway_group, "Transitional"),
+            "ofz": self._ols_child_group(runway_group, "Obstacle Free Zone"),
+        }
+
+    def _ols_feature_end_designator(self, feature: QgsFeature) -> str:
+        try:
+            idx = feature.fields().indexFromName("end_desig")
+            if idx != -1:
+                return str(feature.attribute(idx) or "").strip()
+        except Exception:
+            pass
+        return ""
+
+    def _ols_feature_attribute(self, feature: QgsFeature, field_name: str):
+        try:
+            idx = feature.fields().indexFromName(field_name)
+            if idx != -1:
+                return feature.attribute(idx)
+        except Exception:
+            pass
+        return None
+
+    def _ols_features_for_end(self, features: List[QgsFeature], end_desig: str) -> List[QgsFeature]:
+        return [feature for feature in features if self._ols_feature_end_designator(feature) == end_desig]
+
     def _get_tocs_contour_fields(self) -> QgsFields:
         return QgsFields(
             [
@@ -4029,38 +4090,120 @@ class OlsGuidelineMixin:
         )
 
         # --- Layer Creation ---
-        target_ofz_group = ofz_group if ofz_group is not None else layer_group
         had_ofz_inner_trans_features = bool(ofz_inner_trans_features)
+        safe_runway_name = runway_name.replace("/", "_")
+        end_groups = {
+            config["current_desig"]: self._ols_runway_direction_groups(layer_group, config["current_desig"])
+            for config in runway_end_configurations
+        }
 
-        # Inner Approach Layer
-        if inner_approach_features:
-            fields = self._get_ols_fields("InnerApproach")
-            descriptive_style_key = "OLS Inner Approach"  # Use the descriptive key
-            if self._create_and_add_layer(
-                "Polygon",
-                f"OLS_InnerApproach_{runway_name.replace('/', '_')}",
-                f"{self.tr('OLS')} Inner Approach {runway_name}",
-                fields,
-                inner_approach_features,
-                target_ofz_group,
-                descriptive_style_key,  # Pass the descriptive key
-            ):
-                overall_success = True
+        for current_desig, groups in end_groups.items():
+            safe_end_desig = str(current_desig).replace("/", "_")
+            end_inner_approach_features = self._ols_features_for_end(inner_approach_features, current_desig)
+            end_inner_trans_features = self._ols_features_for_end(ofz_inner_trans_features, current_desig)
+            end_bls_features = self._ols_features_for_end(ofz_bls_features, current_desig)
+            end_approach_features = self._ols_features_for_end(approach_poly_features, current_desig)
+            end_approach_contour_features = self._ols_features_for_end(approach_contour_features, current_desig)
+            end_tocs_features = self._ols_features_for_end(tocs_poly_features, current_desig)
+            end_tocs_contour_features = self._ols_features_for_end(tocs_contour_features, current_desig)
 
-        # Inner Transitional Layer
-        if ofz_inner_trans_features:
-            fields = self._get_ols_fields("InnerTransitional")
-            descriptive_style_key = "OLS Inner Transitional"  # Use the descriptive key
-            if self._create_and_add_layer(
-                "Polygon",
-                f"OLS_InnerTransitional_{runway_name.replace('/', '_')}",
-                f"{self.tr('OLS')} Inner Transitional {runway_name}",
-                fields,
-                ofz_inner_trans_features,
-                target_ofz_group,
-                descriptive_style_key,  # Pass the descriptive key
-            ):
-                overall_success = True
+            if end_approach_features:
+                fields = self._get_ols_fields("Approach")
+                if self._create_and_add_layer(
+                    "Polygon",
+                    f"OLS_Approach_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} Approach Surface RWY {current_desig}",
+                    fields,
+                    end_approach_features,
+                    groups["approach"],
+                    "OLS Approach",
+                ):
+                    overall_success = True
+
+            if end_approach_contour_features:
+                fields = self._get_approach_contour_fields()
+                if self._create_and_add_layer(
+                    "LineString",
+                    f"OLS_ApproachContours_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} Approach Contours RWY {current_desig}",
+                    fields,
+                    end_approach_contour_features,
+                    groups["approach"],
+                    "OLS Approach Contour",
+                ):
+                    overall_success = True
+
+            if end_tocs_features:
+                fields = self._get_ols_fields("TOCS")
+                if self._create_and_add_layer(
+                    "Polygon",
+                    f"OLS_TOCS_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} TOCS RWY {current_desig}",
+                    fields,
+                    end_tocs_features,
+                    groups["takeoff"],
+                    "OLS TOCS",
+                ):
+                    overall_success = True
+
+            if end_tocs_contour_features:
+                fields = self._get_tocs_contour_fields()
+                if self._create_and_add_layer(
+                    "LineString",
+                    f"OLS_TOCS_Contours_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} TOCS Contours RWY {current_desig}",
+                    fields,
+                    end_tocs_contour_features,
+                    groups["takeoff"],
+                    "OLS TOCS Contour",
+                ):
+                    overall_success = True
+
+            if end_inner_trans_features:
+                fields = self._get_ols_fields("InnerTransitional")
+                if self._create_and_add_layer(
+                    "Polygon",
+                    f"OLS_InnerTransitional_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} Inner Transitional RWY {current_desig}",
+                    fields,
+                    end_inner_trans_features,
+                    groups["ofz"],
+                    "OLS Inner Transitional",
+                ):
+                    overall_success = True
+
+            if end_inner_approach_features:
+                fields = self._get_ols_fields("InnerApproach")
+                if self._create_and_add_layer(
+                    "Polygon",
+                    f"OLS_InnerApproach_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} Inner Approach RWY {current_desig}",
+                    fields,
+                    end_inner_approach_features,
+                    groups["ofz"],
+                    "OLS Inner Approach",
+                ):
+                    overall_success = True
+
+            if end_bls_features:
+                fields = self._get_ols_fields("BaulkedLanding")
+                bls_layer = self._create_and_add_layer(
+                    "Polygon",
+                    f"OLS_BaulkedLanding_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} Baulked Landing RWY {current_desig}",
+                    fields,
+                    end_bls_features,
+                    groups["ofz"],
+                    "OLS Baulked Landing",
+                )
+                if bls_layer is not None:
+                    overall_success = True
+                else:
+                    QgsMessageLog.logMessage(
+                        f"BLS layer for RWY {current_desig} failed: generated features could not be added to a layer.",
+                        plugin_tag,
+                        Qgis.Warning,
+                    )
 
         # Logging for empty ITS on Precision Approach runways
         is_precision_runway = False
@@ -4084,89 +4227,6 @@ class OlsGuidelineMixin:
                 plugin_tag,
                 Qgis.Info,
             )
-
-        if ofz_bls_features:
-            fields = self._get_ols_fields("BaulkedLanding")
-            descriptive_style_key = "OLS Baulked Landing"
-            bls_layer = self._create_and_add_layer(
-                "Polygon",
-                f"OLS_BaulkedLanding_{runway_name.replace('/', '_')}",
-                f"{self.tr('OLS')} Baulked Landing {runway_name}",
-                fields,
-                ofz_bls_features,
-                target_ofz_group,
-                descriptive_style_key,
-            )
-            if bls_layer is not None:
-                overall_success = True
-            else:
-                QgsMessageLog.logMessage(
-                    f"BLS layer for {runway_name} failed: generated features could not be added to a layer.",
-                    plugin_tag,
-                    Qgis.Warning,
-                )
-        else:
-            self._log_debug(f"BLS layer for {runway_name} skipped: no features generated.")
-
-        # Approach Sections Layer
-        if approach_poly_features:
-            fields = self._get_ols_fields("Approach")
-            descriptive_style_key = "OLS Approach"
-            if self._create_and_add_layer(
-                "Polygon",
-                f"OLS_Approach_{runway_name.replace('/', '_')}",
-                f"{self.tr('OLS')} Approach Sections {runway_name}",
-                fields,
-                approach_poly_features,
-                layer_group,  # Main Approach usually goes in the general OLS group
-                descriptive_style_key,
-            ):
-                overall_success = True
-
-        # Approach Contours Layer
-        if approach_contour_features:
-            fields = self._get_approach_contour_fields()
-            descriptive_style_key = "OLS Approach Contour"
-            if self._create_and_add_layer(
-                "LineString",
-                f"OLS_ApproachContours_{runway_name.replace('/', '_')}",
-                f"{self.tr('OLS')} Approach Contours {runway_name}",
-                fields,
-                approach_contour_features,
-                layer_group,
-                descriptive_style_key,
-            ):
-                overall_success = True
-
-        # TOCS Polygons Layer
-        if tocs_poly_features:
-            fields = self._get_ols_fields("TOCS")
-            descriptive_style_key = "OLS TOCS"
-            if self._create_and_add_layer(
-                "Polygon",
-                f"OLS_TOCS_{runway_name.replace('/', '_')}",
-                f"{self.tr('OLS')} TOCS {runway_name}",
-                fields,
-                tocs_poly_features,
-                layer_group,
-                descriptive_style_key,
-            ):
-                overall_success = True
-
-        # TOCS Contours Layer
-        if tocs_contour_features:
-            fields = self._get_tocs_contour_fields()
-            descriptive_style_key = "OLS TOCS Contour"
-            if self._create_and_add_layer(
-                "LineString",
-                f"OLS_TOCS_Contours_{runway_name.replace('/', '_')}",
-                f"{self.tr('OLS')} TOCS Contours {runway_name}",
-                fields,
-                tocs_contour_features,
-                layer_group,
-                descriptive_style_key,
-            ):
-                overall_success = True
 
         ols_feature_counts = [
             f"BLS={len(ofz_bls_features)}",
