@@ -56,6 +56,7 @@ class OlsGuidelineMixin:
         ols_layer_group: QgsLayerTreeGroup,
         reference_elevation_datum: float,
         icao_code: str,
+        runway_direction_parent_group: Optional[QgsLayerTreeGroup] = None,
     ) -> bool:
         """
         Generates airport-wide OLS: IHS, Conical (with contours), OHS, Transitional.
@@ -907,10 +908,8 @@ class OlsGuidelineMixin:
                         IHS_ELEVATION_AMSL,
                         target_crs,
                     )
-                    runway_direction_parent_group = ols_layer_group
-                    parent_node = ols_layer_group.parent()
-                    if isinstance(parent_node, QgsLayerTreeGroup):
-                        runway_direction_parent_group = parent_node
+                    if runway_direction_parent_group is None:
+                        runway_direction_parent_group = ols_layer_group
 
                     runway_end_pairs = []
                     for runway_data in processed_runway_data_list:

@@ -944,6 +944,7 @@ class SafeguardingBuilder(
                         airport_wide_ols_group or guideline_groups["F"],
                         self.reference_elevation_datum,
                         icao_code,
+                        guideline_groups["F"],
                     )
                     if airport_wide_ols_processed:
                         any_guideline_processed_ok = True
