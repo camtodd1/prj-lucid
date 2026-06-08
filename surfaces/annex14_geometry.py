@@ -203,6 +203,84 @@ class Annex14GeometryMixin:
         )
         contour_features.append(feature)
 
+    def _annex14_add_quad_contour_feature(
+        self,
+        contour_features: List[QgsFeature],
+        contour_fields: QgsFields,
+        corners: List[tuple],
+        runway_name: str,
+        family: str,
+        surface: str,
+        component: str,
+        end_desig: str,
+        design_group: str,
+        contour_elev_am: float,
+        ref: str,
+    ) -> None:
+        if len(corners) < 4:
+            return
+
+        points: List[QgsPointXY] = []
+
+        def add_point(point: QgsPointXY) -> None:
+            for existing in points:
+                if abs(existing.x() - point.x()) < 1e-6 and abs(existing.y() - point.y()) < 1e-6:
+                    return
+            points.append(point)
+
+        for index, (p1, z1) in enumerate(corners):
+            p2, z2 = corners[(index + 1) % len(corners)]
+            z1 = float(z1)
+            z2 = float(z2)
+            target_z = float(contour_elev_am)
+            if abs(z1 - target_z) < 1e-6 and abs(z2 - target_z) < 1e-6:
+                add_point(p1)
+                add_point(p2)
+                continue
+            if abs(z1 - z2) < 1e-6:
+                continue
+            if target_z < min(z1, z2) - 1e-6 or target_z > max(z1, z2) + 1e-6:
+                continue
+            t = max(0.0, min(1.0, (target_z - z1) / (z2 - z1)))
+            add_point(
+                QgsPointXY(
+                    p1.x() + ((p2.x() - p1.x()) * t),
+                    p1.y() + ((p2.y() - p1.y()) * t),
+                )
+            )
+
+        if len(points) < 2:
+            return
+        if len(points) > 2:
+            best_pair = None
+            best_dist = -1.0
+            for idx, point in enumerate(points):
+                for other in points[idx + 1 :]:
+                    distance = point.distance(other)
+                    if distance > best_dist:
+                        best_dist = distance
+                        best_pair = (point, other)
+            if best_pair is None:
+                return
+            start_point, end_point = best_pair
+        else:
+            start_point, end_point = points
+
+        self._annex14_add_contour_feature(
+            contour_features,
+            contour_fields,
+            start_point,
+            end_point,
+            runway_name,
+            family,
+            surface,
+            component,
+            end_desig,
+            design_group,
+            contour_elev_am,
+            ref,
+        )
+
     def _annex14_add_trapezoid_contours(
         self,
         contour_features: List[QgsFeature],
@@ -524,32 +602,21 @@ class Annex14GeometryMixin:
         if contour_features is not None and contour_fields is not None and contour_interval is not None:
             if None in (lower_start_z, lower_end_z, upper_start_z, upper_end_z):
                 return
+            corners = [
+                (lower_start, float(lower_start_z)),
+                (lower_end, float(lower_end_z)),
+                (upper_end, float(upper_end_z)),
+                (upper_start, float(upper_start_z)),
+            ]
             for contour_z in self._annex14_contour_elevations(
                 min(float(lower_start_z), float(lower_end_z)),
                 max(float(upper_start_z), float(upper_end_z)),
                 contour_interval,
             ):
-                def interp(lower_point, upper_point, lower_z, upper_z):
-                    if abs(float(upper_z) - float(lower_z)) < 1e-6:
-                        return None
-                    t = (float(contour_z) - float(lower_z)) / (float(upper_z) - float(lower_z))
-                    if t < -1e-6 or t > 1 + 1e-6:
-                        return None
-                    t = max(0.0, min(1.0, t))
-                    return QgsPointXY(
-                        lower_point.x() + ((upper_point.x() - lower_point.x()) * t),
-                        lower_point.y() + ((upper_point.y() - lower_point.y()) * t),
-                    )
-
-                contour_start = interp(lower_start, upper_start, lower_start_z, upper_start_z)
-                contour_end = interp(lower_end, upper_end, lower_end_z, upper_end_z)
-                if contour_start is None or contour_end is None:
-                    continue
-                self._annex14_add_contour_feature(
+                self._annex14_add_quad_contour_feature(
                     contour_features,
                     contour_fields,
-                    contour_start,
-                    contour_end,
+                    corners,
                     runway_name,
                     family,
                     surface,
