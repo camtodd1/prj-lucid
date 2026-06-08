@@ -119,7 +119,7 @@ class FrameworkRegistryTest(unittest.TestCase):
         self.assertEqual(guideline_f_labels["airport_wide"], "Airport-wide OLS")
 
     def test_output_structure_separates_protected_airspace_from_external_safeguarding(self):
-        self.assertEqual(output_structure.PROTECTED_AIRSPACE, "04 Protected Airspace")
+        self.assertEqual(output_structure.PROTECTED_AIRSPACE, "04 Obstacle Limitation Surfaces")
         self.assertEqual(output_structure.EXTERNAL_SAFEGUARDING, "05 External Safeguarding")
         self.assertEqual(output_structure.OLS_SURFACES, "OLS Surfaces")
         self.assertEqual(output_structure.DEBUG_DEVELOPMENT, "99 Debug / Development")

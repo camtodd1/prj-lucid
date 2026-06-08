@@ -4,7 +4,7 @@
 REFERENCE_DATA = "01 Reference Data"
 AERODROME_INFRASTRUCTURE = "02 Aerodrome Infrastructure"
 RUNWAY_PROTECTION_AND_SEPARATION = "03 Runway Protection and Separation"
-PROTECTED_AIRSPACE = "04 Protected Airspace"
+PROTECTED_AIRSPACE = "04 Obstacle Limitation Surfaces"
 EXTERNAL_SAFEGUARDING = "05 External Safeguarding"
 DEBUG_DEVELOPMENT = "99 Debug / Development"
 
