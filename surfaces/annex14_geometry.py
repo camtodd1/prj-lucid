@@ -147,6 +147,123 @@ class Annex14GeometryMixin:
             description,
         )
 
+    def _annex14_trapezoid_side_edges(
+        self,
+        start_point: QgsPointXY,
+        azimuth: float,
+        length_m: float,
+        inner_width_m: float,
+        outer_width_m: float,
+    ) -> Dict[str, Optional[tuple]]:
+        end_point = start_point.project(length_m, azimuth)
+        if end_point is None:
+            return {"left": None, "right": None}
+        az_perp_left = (azimuth - 90.0 + 360.0) % 360.0
+        az_perp_right = (azimuth + 90.0) % 360.0
+        inner_left = start_point.project(inner_width_m / 2.0, az_perp_left)
+        outer_left = end_point.project(outer_width_m / 2.0, az_perp_left)
+        inner_right = start_point.project(inner_width_m / 2.0, az_perp_right)
+        outer_right = end_point.project(outer_width_m / 2.0, az_perp_right)
+        return {
+            "left": (inner_left, outer_left, az_perp_left) if inner_left and outer_left else None,
+            "right": (inner_right, outer_right, az_perp_right) if inner_right and outer_right else None,
+        }
+
+    def _annex14_add_side_panel_feature(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        lower_start: QgsPointXY,
+        lower_end: QgsPointXY,
+        outward_azimuth: float,
+        horizontal_extent_m: float,
+        runway_name: str,
+        family: str,
+        surface: str,
+        component: str,
+        end_desig: str,
+        design_group: str,
+        slope: Optional[float],
+        ref: str,
+        notes: str = "",
+    ) -> None:
+        if horizontal_extent_m <= 0:
+            return
+        upper_start = lower_start.project(horizontal_extent_m, outward_azimuth)
+        upper_end = lower_end.project(horizontal_extent_m, outward_azimuth)
+        if upper_start is None or upper_end is None:
+            return
+        geom = self._create_polygon_from_corners(
+            [lower_start, lower_end, upper_end, upper_start],
+            f"Annex 14 {surface} {component}",
+        )
+        self._annex14_add_polygon_feature(
+            features,
+            fields,
+            geom,
+            runway_name,
+            family,
+            surface,
+            component,
+            end_desig,
+            design_group,
+            lower_start.distance(lower_end),
+            0.0,
+            horizontal_extent_m,
+            slope,
+            0.0,
+            ref,
+            notes,
+        )
+
+    def _annex14_add_side_panels_for_trapezoid(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        start_point: QgsPointXY,
+        azimuth: float,
+        length_m: float,
+        inner_width_m: float,
+        outer_width_m: float,
+        horizontal_extent_m: float,
+        runway_name: str,
+        family: str,
+        surface: str,
+        component_prefix: str,
+        end_desig: str,
+        design_group: str,
+        slope: Optional[float],
+        ref: str,
+        notes: str = "",
+    ) -> None:
+        for side, edge in self._annex14_trapezoid_side_edges(
+            start_point,
+            azimuth,
+            length_m,
+            inner_width_m,
+            outer_width_m,
+        ).items():
+            if edge is None:
+                continue
+            lower_start, lower_end, outward_azimuth = edge
+            self._annex14_add_side_panel_feature(
+                features,
+                fields,
+                lower_start,
+                lower_end,
+                outward_azimuth,
+                horizontal_extent_m,
+                runway_name,
+                family,
+                surface,
+                f"{component_prefix}_{side}",
+                end_desig,
+                design_group,
+                slope,
+                ref,
+                notes,
+            )
+
     def _annex14_append_approach_like_sections(
         self,
         features: List[QgsFeature],
@@ -195,6 +312,58 @@ class Annex14GeometryMixin:
                 section.get("slope"),
                 divergence,
                 ref,
+            )
+            next_start = current_start.project(length_m, azimuth)
+            if next_start is None:
+                break
+            current_start = next_start
+            current_width = outer_width
+
+    def _annex14_append_side_panels_for_approach_like_sections(
+        self,
+        features: List[QgsFeature],
+        fields: QgsFields,
+        runway_name: str,
+        family: str,
+        surface: str,
+        component_prefix: str,
+        end_desig: str,
+        design_group: str,
+        start_point: QgsPointXY,
+        azimuth: float,
+        inner_width_m: float,
+        sections: Iterable[dict],
+        horizontal_extent_m: float,
+        side_slope: Optional[float],
+        ref: str,
+        notes: str = "",
+    ) -> None:
+        current_start = start_point
+        current_width = inner_width_m
+        for section in sections:
+            length_m = float(section.get("length_m") or 0.0)
+            divergence = float(section.get("divergence") or 0.0)
+            if length_m <= 0:
+                continue
+            outer_width = current_width + (2.0 * divergence * length_m)
+            self._annex14_add_side_panels_for_trapezoid(
+                features,
+                fields,
+                current_start,
+                azimuth,
+                length_m,
+                current_width,
+                outer_width,
+                horizontal_extent_m,
+                runway_name,
+                family,
+                surface,
+                f"{component_prefix}_{section.get('section')}",
+                end_desig,
+                design_group,
+                side_slope,
+                ref,
+                notes,
             )
             next_start = current_start.project(length_m, azimuth)
             if next_start is None:
@@ -307,6 +476,10 @@ class Annex14GeometryMixin:
                 code_letter_f_without_digital_avionics=code_f_no_digital,
             )
             approach = next((s for s in ofs["groups"]["general"] if s.get("surface") == "approach"), None)
+            approach_start = None
+            approach_length_m = None
+            approach_inner_width = None
+            approach_outer_width = None
             if approach:
                 start = threshold.project(float(approach["distance_from_threshold_m"]), approach_az)
                 if start is not None:
@@ -339,17 +512,51 @@ class Annex14GeometryMixin:
                         divergence,
                         approach.get("ref", ""),
                     )
+                    approach_start = start
+                    approach_length_m = length_m
+                    approach_inner_width = inner_width
+                    approach_outer_width = outer_width
+
+            transitional = next((s for s in ofs["groups"]["general"] if s.get("surface") == "transitional"), None)
+            if transitional and approach_start is not None and approach_length_m is not None:
+                trans_slope = float(transitional.get("slope") or 0.0)
+                upper_height = float(transitional.get("upper_edge_height_above_highest_threshold_m") or 60.0)
+                horizontal_extent = upper_height / trans_slope if trans_slope > 0 else 0.0
+                self._annex14_add_side_panels_for_trapezoid(
+                    ofs_features,
+                    fields,
+                    approach_start,
+                    approach_az,
+                    approach_length_m,
+                    approach_inner_width,
+                    approach_outer_width,
+                    horizontal_extent,
+                    runway_name,
+                    "OFS",
+                    "transitional",
+                    "approach_side",
+                    end_desig,
+                    design_group,
+                    trans_slope,
+                    transitional.get("ref", ""),
+                    "Plan-view side panels from approach surface lower edges to 60 m upper edge.",
+                )
 
             inner_approach = next((s for s in ofs["groups"]["inner"] if s.get("surface") == "inner_approach"), None)
+            inner_approach_start = None
+            inner_approach_length_m = None
+            inner_approach_width = None
             if inner_approach and approach:
                 start = threshold.project(float(approach["distance_from_threshold_m"]), approach_az)
                 if start is not None:
+                    inner_approach_length_m = float(inner_approach["length_m"])
+                    inner_approach_width = float(inner_approach["inner_edge_length_m"])
                     geom = self._annex14_trapezoid_from_widths(
                         start,
                         approach_az,
-                        float(inner_approach["length_m"]),
-                        float(inner_approach["inner_edge_length_m"]),
-                        float(inner_approach["inner_edge_length_m"]),
+                        inner_approach_length_m,
+                        inner_approach_width,
+                        inner_approach_width,
                         f"Annex 14 OFS Inner Approach {end_desig}",
                     )
                     self._annex14_add_polygon_feature(
@@ -369,8 +576,13 @@ class Annex14GeometryMixin:
                         0.0,
                         inner_approach.get("ref", ""),
                     )
+                    inner_approach_start = start
 
             balked = next((s for s in ofs["groups"]["inner"] if s.get("surface") == "balked_landing"), None)
+            balked_start = None
+            balked_length_m = None
+            balked_inner_width = None
+            balked_outer_width = None
             if balked:
                 distance = balked.get("distance_from_threshold_m")
                 if distance is not None:
@@ -406,6 +618,89 @@ class Annex14GeometryMixin:
                             balked.get("ref", ""),
                             balked.get("distance_rule", ""),
                         )
+                        balked_start = start
+                        balked_length_m = length_m
+                        balked_inner_width = inner_width
+                        balked_outer_width = outer_width
+
+            inner_transitional = next(
+                (s for s in ofs["groups"]["inner"] if s.get("surface") == "inner_transitional"),
+                None,
+            )
+            if inner_transitional and inner_approach_start is not None and inner_approach_width is not None:
+                inner_trans_slope = float(
+                    inner_transitional.get("slope")
+                    or inner_transitional.get("inclined_section_slope")
+                    or 0.0
+                )
+                upper_height = float(inner_transitional.get("upper_edge_height_above_highest_threshold_m") or 60.0)
+                vertical_height = float(inner_transitional.get("vertical_section_height_m") or 0.0)
+                horizontal_extent = max(0.0, upper_height - vertical_height) / inner_trans_slope if inner_trans_slope > 0 else 0.0
+                self._annex14_add_side_panels_for_trapezoid(
+                    ofs_features,
+                    fields,
+                    inner_approach_start,
+                    approach_az,
+                    inner_approach_length_m,
+                    inner_approach_width,
+                    inner_approach_width,
+                    horizontal_extent,
+                    runway_name,
+                    "OFS",
+                    "inner_transitional",
+                    "inner_approach_side",
+                    end_desig,
+                    design_group,
+                    inner_trans_slope,
+                    inner_transitional.get("ref", ""),
+                    f"Plan-view inner transitional side panels; vertical section height {vertical_height:g} m.",
+                )
+                if balked_start is not None and balked_inner_width is not None:
+                    half_width = max(inner_approach_width, balked_inner_width) / 2.0
+                    for side, outward_azimuth in {
+                        "left": (takeoff_az + 90.0) % 360.0,
+                        "right": (takeoff_az - 90.0 + 360.0) % 360.0,
+                    }.items():
+                        lower_start = inner_approach_start.project(half_width, outward_azimuth)
+                        lower_end = balked_start.project(half_width, outward_azimuth)
+                        if lower_start is None or lower_end is None:
+                            continue
+                        self._annex14_add_side_panel_feature(
+                            ofs_features,
+                            fields,
+                            lower_start,
+                            lower_end,
+                            outward_azimuth,
+                            horizontal_extent,
+                            runway_name,
+                            "OFS",
+                            "inner_transitional",
+                            f"runway_side_{side}",
+                            end_desig,
+                            design_group,
+                            inner_trans_slope,
+                            inner_transitional.get("ref", ""),
+                            "Precision runway inner transitional panel between inner approach and balked landing.",
+                        )
+                    self._annex14_add_side_panels_for_trapezoid(
+                        ofs_features,
+                        fields,
+                        balked_start,
+                        takeoff_az,
+                        balked_length_m,
+                        balked_inner_width,
+                        balked_outer_width,
+                        horizontal_extent,
+                        runway_name,
+                        "OFS",
+                        "inner_transitional",
+                        "balked_landing_side",
+                        end_desig,
+                        design_group,
+                        inner_trans_slope,
+                        inner_transitional.get("ref", ""),
+                        "Precision runway inner transitional panels along balked landing surface.",
+                    )
 
             precision = ruleset.precision_approach_surface_parameters()
             approach_component = precision["components"]["approach"]
@@ -443,6 +738,105 @@ class Annex14GeometryMixin:
                     float(missed["inner_edge_length_m"]),
                     missed["sections"],
                     precision.get("ref", ""),
+                )
+            transitional_component = precision["components"].get("transitional", {})
+            transitional_slope = float(transitional_component.get("slope") or 0.0)
+            transitional_upper_height = float(transitional_component.get("upper_edge_height_above_threshold_m") or 300.0)
+            transitional_extent = (
+                transitional_upper_height / transitional_slope if transitional_slope > 0 else 0.0
+            )
+            if pa_start is not None and missed_start is not None:
+                lower_length = pa_start.distance(missed_start)
+                lower_width = float(approach_component["inner_edge_length_m"])
+                lower_component_geom = self._create_rectangle_from_start(
+                    pa_start,
+                    takeoff_az,
+                    lower_length,
+                    lower_width / 2.0,
+                    f"Annex 14 OES Precision Lower Component {end_desig}",
+                )
+                self._annex14_add_polygon_feature(
+                    oes_features,
+                    fields,
+                    lower_component_geom,
+                    runway_name,
+                    "OES",
+                    "precision_approach",
+                    "lower_component",
+                    end_desig,
+                    design_group,
+                    lower_length,
+                    lower_width,
+                    lower_width,
+                    None,
+                    0.0,
+                    precision.get("ref", ""),
+                    "Lower component between approach and missed approach inner edges.",
+                )
+                if transitional_extent > 0:
+                    half_width = lower_width / 2.0
+                    for side, outward_azimuth in {
+                        "left": (takeoff_az + 90.0) % 360.0,
+                        "right": (takeoff_az - 90.0 + 360.0) % 360.0,
+                    }.items():
+                        lower_start = pa_start.project(half_width, outward_azimuth)
+                        lower_end = missed_start.project(half_width, outward_azimuth)
+                        if lower_start is None or lower_end is None:
+                            continue
+                        self._annex14_add_side_panel_feature(
+                            oes_features,
+                            fields,
+                            lower_start,
+                            lower_end,
+                            outward_azimuth,
+                            transitional_extent,
+                            runway_name,
+                            "OES",
+                            "precision_approach",
+                            f"transitional_lower_component_{side}",
+                            end_desig,
+                            design_group,
+                            transitional_slope,
+                            precision.get("ref", ""),
+                            "Transitional component along precision lower component.",
+                        )
+            if pa_start is not None and transitional_extent > 0:
+                self._annex14_append_side_panels_for_approach_like_sections(
+                    oes_features,
+                    fields,
+                    runway_name,
+                    "OES",
+                    "precision_approach",
+                    "transitional_approach",
+                    end_desig,
+                    design_group,
+                    pa_start,
+                    approach_az,
+                    float(approach_component["inner_edge_length_m"]),
+                    approach_component["sections"],
+                    transitional_extent,
+                    transitional_slope,
+                    precision.get("ref", ""),
+                    "Transitional component along precision approach component.",
+                )
+            if missed_start is not None and transitional_extent > 0:
+                self._annex14_append_side_panels_for_approach_like_sections(
+                    oes_features,
+                    fields,
+                    runway_name,
+                    "OES",
+                    "precision_approach",
+                    "transitional_missed_approach",
+                    end_desig,
+                    design_group,
+                    missed_start,
+                    takeoff_az,
+                    float(missed["inner_edge_length_m"]),
+                    missed["sections"],
+                    transitional_extent,
+                    transitional_slope,
+                    precision.get("ref", ""),
+                    "Transitional component along precision missed approach component.",
                 )
 
             departure = ruleset.instrument_departure_surface_parameters()
@@ -487,6 +881,28 @@ class Annex14GeometryMixin:
                 )
 
         straight_in = ruleset.straight_in_instrument_approach_surface_parameters()
+        lower_horizontal = ruleset.horizontal_surface_parameters("I")
+        if lower_horizontal:
+            runway_axis = QgsGeometry.fromPolylineXY([thr_point, rec_thr_point])
+            geom = runway_axis.buffer(float(lower_horizontal["radius_m"]), 72)
+            self._annex14_add_polygon_feature(
+                oes_features,
+                fields,
+                geom,
+                runway_name,
+                "OES",
+                "straight_in_instrument_approach",
+                "lower_section",
+                "",
+                design_group,
+                None,
+                lower_horizontal["radius_m"] * 2.0,
+                lower_horizontal["radius_m"] * 2.0,
+                None,
+                None,
+                straight_in.get("ref", ""),
+                "Lower section corresponding to horizontal OES as per ADG I.",
+            )
         upper = straight_in["upper_section"]
         upper_extension = float(upper["longer_side_length_from_threshold_or_thresholds_m"])
         rect_start = thr_point.project(upper_extension, rwy_params["azimuth_r_p"])
