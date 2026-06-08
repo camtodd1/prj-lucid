@@ -3,6 +3,7 @@
 
 import os.path
 import math
+import re
 import traceback
 
 # import functools # Not used directly
@@ -1526,6 +1527,9 @@ class SafeguardingBuilder(
                 )
         for group_name in self.get_active_framework().guideline_f_subgroup_names().values():
             self._merge_or_move_direct_group(main_group, self.tr(group_name), ols_surfaces_group)
+        for child in list(main_group.children()):
+            if isinstance(child, QgsLayerTreeGroup) and re.fullmatch(r"RWY\s+\S+", child.name() or ""):
+                self._merge_or_move_direct_group(main_group, child.name(), ols_surfaces_group)
         self._repair_guideline_f_layer_tree(ols_surfaces_group, extra_source_groups=[main_group])
         self._repair_debug_development_layer_tree(main_group, debug_group)
 

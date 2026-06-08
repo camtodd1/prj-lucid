@@ -923,22 +923,25 @@ class OlsGuidelineMixin:
                     for runway_name, end_desig in runway_end_pairs:
                         safe_runway_name = runway_name.replace("/", "_")
                         safe_end_desig = str(end_desig).replace("/", "_")
-                        end_transitional_features = [
-                            feature
-                            for feature in transitional_features
-                            if self._ols_feature_end_designator(feature) == end_desig
-                            and str(self._ols_feature_attribute(feature, "rwy_name") or "") == runway_name
-                        ]
-                        end_transitional_contour_features = [
-                            feature
-                            for feature in transitional_contour_features
-                            if self._ols_feature_end_designator(feature) == end_desig
-                            and str(self._ols_feature_attribute(feature, "rwy_name") or "") == runway_name
-                        ]
+                        end_transitional_features = self._ols_features_for_runway_end(
+                            transitional_features,
+                            runway_name,
+                            end_desig,
+                            include_runway_wide=True,
+                        )
+                        end_transitional_contour_features = self._ols_features_for_runway_end(
+                            transitional_contour_features,
+                            runway_name,
+                            end_desig,
+                            include_runway_wide=True,
+                        )
                         if not end_transitional_features and not end_transitional_contour_features:
                             continue
-                        runway_groups = self._ols_runway_direction_groups(runway_direction_parent_group, end_desig)
-                        transitional_group = runway_groups["transitional"]
+                        transitional_group = self._ols_runway_surface_group(
+                            runway_direction_parent_group,
+                            end_desig,
+                            "Transitional",
+                        )
 
                         if end_transitional_features:
                             transitional_fields = self._get_ols_fields("Transitional")
@@ -2610,6 +2613,15 @@ class OlsGuidelineMixin:
             "ofz": self._ols_child_group(runway_group, "Obstacle Free Zone"),
         }
 
+    def _ols_runway_surface_group(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        end_desig: str,
+        surface_group_name: str,
+    ) -> QgsLayerTreeGroup:
+        runway_group = self._ols_child_group(parent_group, f"RWY {end_desig}")
+        return self._ols_child_group(runway_group, surface_group_name)
+
     def _ols_feature_end_designator(self, feature: QgsFeature) -> str:
         try:
             idx = feature.fields().indexFromName("end_desig")
@@ -2630,6 +2642,22 @@ class OlsGuidelineMixin:
 
     def _ols_features_for_end(self, features: List[QgsFeature], end_desig: str) -> List[QgsFeature]:
         return [feature for feature in features if self._ols_feature_end_designator(feature) == end_desig]
+
+    def _ols_features_for_runway_end(
+        self,
+        features: List[QgsFeature],
+        runway_name: str,
+        end_desig: str,
+        include_runway_wide: bool = False,
+    ) -> List[QgsFeature]:
+        matching_features = []
+        for feature in features:
+            if str(self._ols_feature_attribute(feature, "rwy_name") or "") != runway_name:
+                continue
+            feature_end_desig = self._ols_feature_end_designator(feature)
+            if feature_end_desig == end_desig or (include_runway_wide and not feature_end_desig):
+                matching_features.append(feature)
+        return matching_features
 
     def _get_tocs_contour_fields(self) -> QgsFields:
         return QgsFields(
@@ -4092,12 +4120,9 @@ class OlsGuidelineMixin:
         # --- Layer Creation ---
         had_ofz_inner_trans_features = bool(ofz_inner_trans_features)
         safe_runway_name = runway_name.replace("/", "_")
-        end_groups = {
-            config["current_desig"]: self._ols_runway_direction_groups(layer_group, config["current_desig"])
-            for config in runway_end_configurations
-        }
 
-        for current_desig, groups in end_groups.items():
+        for config in runway_end_configurations:
+            current_desig = config["current_desig"]
             safe_end_desig = str(current_desig).replace("/", "_")
             end_inner_approach_features = self._ols_features_for_end(inner_approach_features, current_desig)
             end_inner_trans_features = self._ols_features_for_end(ofz_inner_trans_features, current_desig)
@@ -4108,6 +4133,7 @@ class OlsGuidelineMixin:
             end_tocs_contour_features = self._ols_features_for_end(tocs_contour_features, current_desig)
 
             if end_approach_features:
+                approach_group = self._ols_runway_surface_group(layer_group, current_desig, "Approach")
                 fields = self._get_ols_fields("Approach")
                 if self._create_and_add_layer(
                     "Polygon",
@@ -4115,12 +4141,13 @@ class OlsGuidelineMixin:
                     f"{self.tr('OLS')} Approach Surface RWY {current_desig}",
                     fields,
                     end_approach_features,
-                    groups["approach"],
+                    approach_group,
                     "OLS Approach",
                 ):
                     overall_success = True
 
             if end_approach_contour_features:
+                approach_group = self._ols_runway_surface_group(layer_group, current_desig, "Approach")
                 fields = self._get_approach_contour_fields()
                 if self._create_and_add_layer(
                     "LineString",
@@ -4128,12 +4155,13 @@ class OlsGuidelineMixin:
                     f"{self.tr('OLS')} Approach Contours RWY {current_desig}",
                     fields,
                     end_approach_contour_features,
-                    groups["approach"],
+                    approach_group,
                     "OLS Approach Contour",
                 ):
                     overall_success = True
 
             if end_tocs_features:
+                takeoff_group = self._ols_runway_surface_group(layer_group, current_desig, "Take-off Climb")
                 fields = self._get_ols_fields("TOCS")
                 if self._create_and_add_layer(
                     "Polygon",
@@ -4141,12 +4169,13 @@ class OlsGuidelineMixin:
                     f"{self.tr('OLS')} TOCS RWY {current_desig}",
                     fields,
                     end_tocs_features,
-                    groups["takeoff"],
+                    takeoff_group,
                     "OLS TOCS",
                 ):
                     overall_success = True
 
             if end_tocs_contour_features:
+                takeoff_group = self._ols_runway_surface_group(layer_group, current_desig, "Take-off Climb")
                 fields = self._get_tocs_contour_fields()
                 if self._create_and_add_layer(
                     "LineString",
@@ -4154,12 +4183,13 @@ class OlsGuidelineMixin:
                     f"{self.tr('OLS')} TOCS Contours RWY {current_desig}",
                     fields,
                     end_tocs_contour_features,
-                    groups["takeoff"],
+                    takeoff_group,
                     "OLS TOCS Contour",
                 ):
                     overall_success = True
 
             if end_inner_trans_features:
+                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
                 fields = self._get_ols_fields("InnerTransitional")
                 if self._create_and_add_layer(
                     "Polygon",
@@ -4167,12 +4197,13 @@ class OlsGuidelineMixin:
                     f"{self.tr('OLS')} Inner Transitional RWY {current_desig}",
                     fields,
                     end_inner_trans_features,
-                    groups["ofz"],
+                    ofz_direction_group,
                     "OLS Inner Transitional",
                 ):
                     overall_success = True
 
             if end_inner_approach_features:
+                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
                 fields = self._get_ols_fields("InnerApproach")
                 if self._create_and_add_layer(
                     "Polygon",
@@ -4180,12 +4211,13 @@ class OlsGuidelineMixin:
                     f"{self.tr('OLS')} Inner Approach RWY {current_desig}",
                     fields,
                     end_inner_approach_features,
-                    groups["ofz"],
+                    ofz_direction_group,
                     "OLS Inner Approach",
                 ):
                     overall_success = True
 
             if end_bls_features:
+                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
                 fields = self._get_ols_fields("BaulkedLanding")
                 bls_layer = self._create_and_add_layer(
                     "Polygon",
@@ -4193,7 +4225,7 @@ class OlsGuidelineMixin:
                     f"{self.tr('OLS')} Baulked Landing RWY {current_desig}",
                     fields,
                     end_bls_features,
-                    groups["ofz"],
+                    ofz_direction_group,
                     "OLS Baulked Landing",
                 )
                 if bls_layer is not None:
