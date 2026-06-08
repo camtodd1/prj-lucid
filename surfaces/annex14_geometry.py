@@ -217,6 +217,41 @@ class Annex14GeometryMixin:
             {"section": "constant_width", "length_m": length_m - distance_to_final, "divergence": 0.0, "slope": params.get("slope")},
         ]
 
+    def _annex14_feature_attribute(self, feature: QgsFeature, field_name: str):
+        try:
+            idx = feature.fields().indexFromName(field_name)
+            if idx != -1:
+                return feature.attribute(idx)
+        except Exception:
+            pass
+        return None
+
+    def _annex14_features_for_end(self, features: List[QgsFeature], end_desig: str) -> List[QgsFeature]:
+        return [
+            feature
+            for feature in features
+            if str(self._annex14_feature_attribute(feature, "end_desig") or "") == end_desig
+        ]
+
+    def _annex14_runway_wide_features(self, features: List[QgsFeature]) -> List[QgsFeature]:
+        return [
+            feature
+            for feature in features
+            if not str(self._annex14_feature_attribute(feature, "end_desig") or "")
+        ]
+
+    def _annex14_runway_group(self, parent_group: QgsLayerTreeGroup, runway_label: str) -> QgsLayerTreeGroup:
+        return self._ensure_layer_group(parent_group, f"RWY {runway_label}")
+
+    def _annex14_surface_group(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        runway_label: str,
+        family_label: str,
+    ) -> QgsLayerTreeGroup:
+        runway_group = self._annex14_runway_group(parent_group, runway_label)
+        return self._ensure_layer_group(runway_group, family_label)
+
     def process_annex14_geometry(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         ruleset = self.get_active_protected_airspace_ruleset()
         if getattr(ruleset, "protected_airspace_model", "") != "annex14_modernised_ofs_oes":
@@ -497,29 +532,52 @@ class Annex14GeometryMixin:
 
         created = False
         try:
-            ofs_group = layer_group.addGroup(self.tr("Obstacle Free Surfaces"))
-            self._stage_layer_tree_node(ofs_group)
-            oes_group = layer_group.addGroup(self.tr("Obstacle Evaluation Surfaces"))
-            self._stage_layer_tree_node(oes_group)
-            if ofs_features:
-                layer = self._create_and_add_layer(
-                    "Polygon",
-                    f"Annex14_OFS_{runway_name.replace('/', '_')}",
-                    f"Annex 14 OFS {runway_name}",
-                    fields,
-                    ofs_features,
-                    ofs_group,
-                    "OLS Approach",
+            for end_config in self._annex14_runway_end_configs(runway_data, rwy_params):
+                end_desig = end_config["end_desig"]
+                safe_end_desig = str(end_desig).replace("/", "_")
+                end_ofs_features = self._annex14_features_for_end(ofs_features, end_desig)
+                end_oes_features = self._annex14_features_for_end(oes_features, end_desig)
+
+                if end_ofs_features:
+                    ofs_group = self._annex14_surface_group(layer_group, end_desig, "Obstacle Free Surfaces")
+                    layer = self._create_and_add_layer(
+                        "Polygon",
+                        f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}",
+                        f"Annex 14 OFS RWY {end_desig}",
+                        fields,
+                        end_ofs_features,
+                        ofs_group,
+                        "OLS Approach",
+                    )
+                    created = created or layer is not None
+
+                if end_oes_features:
+                    oes_group = self._annex14_surface_group(layer_group, end_desig, "Obstacle Evaluation Surfaces")
+                    layer = self._create_and_add_layer(
+                        "Polygon",
+                        f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}",
+                        f"Annex 14 OES RWY {end_desig}",
+                        fields,
+                        end_oes_features,
+                        oes_group,
+                        "OLS TOCS",
+                    )
+                    created = created or layer is not None
+
+            runway_wide_oes_features = self._annex14_runway_wide_features(oes_features)
+            if runway_wide_oes_features:
+                runway_wide_group = self._annex14_surface_group(
+                    layer_group,
+                    runway_name,
+                    "Obstacle Evaluation Surfaces",
                 )
-                created = created or layer is not None
-            if oes_features:
                 layer = self._create_and_add_layer(
                     "Polygon",
                     f"Annex14_OES_{runway_name.replace('/', '_')}",
-                    f"Annex 14 OES {runway_name}",
+                    f"Annex 14 OES RWY {runway_name}",
                     fields,
-                    oes_features,
-                    oes_group,
+                    runway_wide_oes_features,
+                    runway_wide_group,
                     "OLS TOCS",
                 )
                 created = created or layer is not None

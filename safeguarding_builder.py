@@ -756,13 +756,22 @@ class SafeguardingBuilder(
             runway_ols_group = None
             ofz_group = None
             if guideline_groups.get("F") is not None:
-                guideline_f_subgroups = self.get_active_framework().guideline_f_subgroup_names()
-                airport_wide_ols_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["airport_wide"]))
-                self._stage_layer_tree_node(airport_wide_ols_group)
-                runway_ols_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["runway"]))
-                self._stage_layer_tree_node(runway_ols_group)
-                ofz_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["ofz"]))
-                self._stage_layer_tree_node(ofz_group)
+                if (
+                    getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
+                    == "annex14_modernised_ofs_oes"
+                ):
+                    runway_ols_group = guideline_groups["F"].addGroup(self.tr("Future Annex 14 OLS Surfaces"))
+                    self._stage_layer_tree_node(runway_ols_group)
+                else:
+                    guideline_f_subgroups = self.get_active_framework().guideline_f_subgroup_names()
+                    airport_wide_ols_group = guideline_groups["F"].addGroup(
+                        self.tr(guideline_f_subgroups["airport_wide"])
+                    )
+                    self._stage_layer_tree_node(airport_wide_ols_group)
+                    runway_ols_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["runway"]))
+                    self._stage_layer_tree_node(runway_ols_group)
+                    ofz_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["ofz"]))
+                    self._stage_layer_tree_node(ofz_group)
 
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl, runway_input_list
