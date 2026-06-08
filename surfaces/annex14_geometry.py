@@ -1331,12 +1331,7 @@ class Annex14GeometryMixin:
                 )
             missed = precision["components"]["missed_approach"]
             missed_start = threshold.project(float(missed["distance_after_threshold_m"]), takeoff_az)
-            missed_start_z = self._annex14_runway_axis_z(
-                threshold_z,
-                opposite_threshold_z,
-                float(missed["distance_after_threshold_m"]),
-                runway_length_m,
-            )
+            missed_start_z = threshold_z
             if missed_start is not None:
                 self._annex14_append_approach_like_sections(
                     oes_features,
@@ -1393,15 +1388,16 @@ class Annex14GeometryMixin:
                     "Lower component between approach and missed approach inner edges.",
                 )
                 if transitional_extent > 0:
-                    half_width = lower_width / 2.0
-                    for side, outward_azimuth in {
-                        "left": (takeoff_az + 90.0) % 360.0,
-                        "right": (takeoff_az - 90.0 + 360.0) % 360.0,
-                    }.items():
-                        lower_start = pa_start.project(half_width, outward_azimuth)
-                        lower_end = missed_start.project(half_width, outward_azimuth)
-                        if lower_start is None or lower_end is None:
+                    for side, edge in self._annex14_trapezoid_side_edges(
+                        pa_start,
+                        takeoff_az,
+                        lower_length,
+                        lower_width,
+                        lower_width,
+                    ).items():
+                        if edge is None:
                             continue
+                        lower_start, lower_end, outward_azimuth = edge
                         self._annex14_add_side_panel_feature(
                             oes_features,
                             fields,
