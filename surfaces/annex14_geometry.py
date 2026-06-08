@@ -11,9 +11,13 @@ from qgis.core import (  # type: ignore
     QgsField,
     QgsFields,
     QgsGeometry,
+    QgsLineString,
     QgsLayerTreeGroup,
     QgsMessageLog,
+    QgsPoint,
     QgsPointXY,
+    QgsPolygon,
+    QgsWkbTypes,
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
@@ -38,6 +42,93 @@ class Annex14GeometryMixin:
                 QgsField("notes", QVariant.String, self.tr("Notes"), 254),
             ]
         )
+
+    def _annex14_float_or_none(self, value) -> Optional[float]:
+        try:
+            if value in (None, ""):
+                return None
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _annex14_runway_end_elevations(self, runway_data: dict) -> tuple:
+        primary = (
+            self._annex14_float_or_none(runway_data.get("threshold_elev_1"))
+            or self._annex14_float_or_none(runway_data.get("thr_elev_1"))
+            or self._annex14_float_or_none(runway_data.get("runway_end_elev_1"))
+        )
+        reciprocal = (
+            self._annex14_float_or_none(runway_data.get("threshold_elev_2"))
+            or self._annex14_float_or_none(runway_data.get("thr_elev_2"))
+            or self._annex14_float_or_none(runway_data.get("runway_end_elev_2"))
+        )
+        if primary is None and reciprocal is not None:
+            primary = reciprocal
+        if reciprocal is None and primary is not None:
+            reciprocal = primary
+        return primary, reciprocal
+
+    def _annex14_polygon_z_from_corners(
+        self,
+        corners: List[tuple],
+        description: str,
+    ) -> Optional[QgsGeometry]:
+        if not corners or len(corners) < 3:
+            return None
+        try:
+            points = [QgsPoint(point.x(), point.y(), float(z)) for point, z in corners]
+            if abs(points[0].x() - points[-1].x()) > 1e-6 or abs(points[0].y() - points[-1].y()) > 1e-6:
+                points.append(QgsPoint(points[0].x(), points[0].y(), points[0].z()))
+            ring = QgsLineString(points)
+            polygon = QgsPolygon(ring)
+            geom = QgsGeometry(polygon)
+            if geom.isNull() or geom.isEmpty():
+                return None
+            if not geom.isGeosValid():
+                fixed = geom.makeValid()
+                if fixed is not None and not fixed.isNull() and not fixed.isEmpty():
+                    geom = fixed
+            return geom
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Annex 14 3D polygon failed for {description}: {exc}",
+                PLUGIN_TAG,
+                Qgis.Warning,
+            )
+            return None
+
+    def _annex14_flat_z_polygon(self, geom: Optional[QgsGeometry], z: Optional[float]) -> Optional[QgsGeometry]:
+        if geom is None or geom.isNull() or geom.isEmpty() or z is None:
+            return geom
+        try:
+            polygon = geom.asPolygon()
+            if not polygon or not polygon[0]:
+                return geom
+            return self._annex14_polygon_z_from_corners(
+                [(point, z) for point in polygon[0]],
+                "Annex 14 flat Z polygon",
+            ) or geom
+        except Exception:
+            return geom
+
+    def _annex14_surface_z(self, base_z: Optional[float], distance_m: float, slope: Optional[float]) -> Optional[float]:
+        if base_z is None:
+            return None
+        return float(base_z) + (float(distance_m or 0.0) * float(slope or 0.0))
+
+    def _annex14_runway_axis_z(
+        self,
+        start_z: Optional[float],
+        end_z: Optional[float],
+        distance_from_start_m: float,
+        runway_length_m: float,
+    ) -> Optional[float]:
+        if start_z is None:
+            return None
+        if end_z is None or runway_length_m <= 0:
+            return start_z
+        fraction = max(0.0, min(1.0, float(distance_from_start_m or 0.0) / float(runway_length_m)))
+        return float(start_z) + ((float(end_z) - float(start_z)) * fraction)
 
     def _annex14_design_group_for_runway(self, runway_data: dict) -> Optional[str]:
         for key in ("adg", "design_group", "aeroplane_design_group", "airplane_design_group"):
@@ -64,14 +155,21 @@ class Annex14GeometryMixin:
     def _annex14_runway_end_configs(self, runway_data: dict, rwy_params: dict) -> List[dict]:
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         primary_desig, reciprocal_desig = runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
+        primary_elev, reciprocal_elev = self._annex14_runway_end_elevations(runway_data)
         return [
             {
                 "end_desig": primary_desig,
                 "threshold": runway_data.get("thr_point"),
                 "opposite_threshold": runway_data.get("rec_thr_point"),
+                "threshold_elev": primary_elev,
+                "opposite_threshold_elev": reciprocal_elev,
+                "highest_threshold_elev": max(e for e in [primary_elev, reciprocal_elev] if e is not None)
+                if primary_elev is not None or reciprocal_elev is not None
+                else None,
                 "approach_azimuth": rwy_params["azimuth_r_p"],
                 "takeoff_azimuth": rwy_params["azimuth_p_r"],
                 "takeoff_start": runway_data.get("rec_thr_point"),
+                "takeoff_start_elev": reciprocal_elev,
                 "runway_type": runway_data.get("type1", ""),
                 "takeoff_mass_kg": runway_data.get("takeoff_mass_1_kg") or runway_data.get("max_takeoff_mass_kg"),
             },
@@ -79,9 +177,15 @@ class Annex14GeometryMixin:
                 "end_desig": reciprocal_desig,
                 "threshold": runway_data.get("rec_thr_point"),
                 "opposite_threshold": runway_data.get("thr_point"),
+                "threshold_elev": reciprocal_elev,
+                "opposite_threshold_elev": primary_elev,
+                "highest_threshold_elev": max(e for e in [primary_elev, reciprocal_elev] if e is not None)
+                if primary_elev is not None or reciprocal_elev is not None
+                else None,
                 "approach_azimuth": rwy_params["azimuth_p_r"],
                 "takeoff_azimuth": rwy_params["azimuth_r_p"],
                 "takeoff_start": runway_data.get("thr_point"),
+                "takeoff_start_elev": primary_elev,
                 "runway_type": runway_data.get("type2", ""),
                 "takeoff_mass_kg": runway_data.get("takeoff_mass_2_kg") or runway_data.get("max_takeoff_mass_kg"),
             },
@@ -137,7 +241,30 @@ class Annex14GeometryMixin:
         inner_width_m: float,
         outer_width_m: float,
         description: str,
+        start_z: Optional[float] = None,
+        end_z: Optional[float] = None,
     ) -> Optional[QgsGeometry]:
+        if start_z is not None and end_z is not None:
+            end_point = start_point.project(length_m, azimuth)
+            if end_point is None:
+                return None
+            az_perp_left = (azimuth - 90.0 + 360.0) % 360.0
+            az_perp_right = (azimuth + 90.0) % 360.0
+            inner_left = start_point.project(inner_width_m / 2.0, az_perp_left)
+            inner_right = start_point.project(inner_width_m / 2.0, az_perp_right)
+            outer_left = end_point.project(outer_width_m / 2.0, az_perp_left)
+            outer_right = end_point.project(outer_width_m / 2.0, az_perp_right)
+            if not all(point is not None for point in [inner_left, inner_right, outer_right, outer_left]):
+                return None
+            return self._annex14_polygon_z_from_corners(
+                [
+                    (inner_left, start_z),
+                    (inner_right, start_z),
+                    (outer_right, end_z),
+                    (outer_left, end_z),
+                ],
+                description,
+            )
         return self._create_trapezoid(
             start_point,
             azimuth,
@@ -145,6 +272,26 @@ class Annex14GeometryMixin:
             inner_width_m / 2.0,
             outer_width_m / 2.0,
             description,
+        )
+
+    def _annex14_rectangle_z_from_start(
+        self,
+        start_point: QgsPointXY,
+        azimuth: float,
+        length_m: float,
+        width_m: float,
+        z: Optional[float],
+        description: str,
+    ) -> Optional[QgsGeometry]:
+        return self._annex14_trapezoid_from_widths(
+            start_point,
+            azimuth,
+            length_m,
+            width_m,
+            width_m,
+            description,
+            start_z=z,
+            end_z=z,
         )
 
     def _annex14_trapezoid_side_edges(
@@ -186,17 +333,48 @@ class Annex14GeometryMixin:
         slope: Optional[float],
         ref: str,
         notes: str = "",
+        lower_start_z: Optional[float] = None,
+        lower_end_z: Optional[float] = None,
+        upper_start_z: Optional[float] = None,
+        upper_end_z: Optional[float] = None,
     ) -> None:
-        if horizontal_extent_m <= 0:
+        if horizontal_extent_m <= 0 and (upper_start_z is None or slope in (None, 0)):
             return
-        upper_start = lower_start.project(horizontal_extent_m, outward_azimuth)
-        upper_end = lower_end.project(horizontal_extent_m, outward_azimuth)
+        if (
+            lower_start_z is not None
+            and lower_end_z is not None
+            and upper_start_z is not None
+            and upper_end_z is not None
+            and slope not in (None, 0)
+        ):
+            start_extent = max(0.0, (float(upper_start_z) - float(lower_start_z)) / float(slope))
+            end_extent = max(0.0, (float(upper_end_z) - float(lower_end_z)) / float(slope))
+        else:
+            start_extent = horizontal_extent_m
+            end_extent = horizontal_extent_m
+            if lower_start_z is not None and slope is not None:
+                upper_start_z = float(lower_start_z) + (float(start_extent) * float(slope))
+            if lower_end_z is not None and slope is not None:
+                upper_end_z = float(lower_end_z) + (float(end_extent) * float(slope))
+        upper_start = lower_start.project(start_extent, outward_azimuth)
+        upper_end = lower_end.project(end_extent, outward_azimuth)
         if upper_start is None or upper_end is None:
             return
-        geom = self._create_polygon_from_corners(
-            [lower_start, lower_end, upper_end, upper_start],
-            f"Annex 14 {surface} {component}",
-        )
+        if None not in (lower_start_z, lower_end_z, upper_start_z, upper_end_z):
+            geom = self._annex14_polygon_z_from_corners(
+                [
+                    (lower_start, lower_start_z),
+                    (lower_end, lower_end_z),
+                    (upper_end, upper_end_z),
+                    (upper_start, upper_start_z),
+                ],
+                f"Annex 14 {surface} {component}",
+            )
+        else:
+            geom = self._create_polygon_from_corners(
+                [lower_start, lower_end, upper_end, upper_start],
+                f"Annex 14 {surface} {component}",
+            )
         self._annex14_add_polygon_feature(
             features,
             fields,
@@ -209,7 +387,7 @@ class Annex14GeometryMixin:
             design_group,
             lower_start.distance(lower_end),
             0.0,
-            horizontal_extent_m,
+            max(start_extent, end_extent),
             slope,
             0.0,
             ref,
@@ -235,6 +413,10 @@ class Annex14GeometryMixin:
         slope: Optional[float],
         ref: str,
         notes: str = "",
+        lower_start_z: Optional[float] = None,
+        lower_end_z: Optional[float] = None,
+        upper_start_z: Optional[float] = None,
+        upper_end_z: Optional[float] = None,
     ) -> None:
         for side, edge in self._annex14_trapezoid_side_edges(
             start_point,
@@ -262,6 +444,10 @@ class Annex14GeometryMixin:
                 slope,
                 ref,
                 notes,
+                lower_start_z=lower_start_z,
+                lower_end_z=lower_end_z,
+                upper_start_z=upper_start_z,
+                upper_end_z=upper_end_z,
             )
 
     def _annex14_append_approach_like_sections(
@@ -279,15 +465,18 @@ class Annex14GeometryMixin:
         inner_width_m: float,
         sections: Iterable[dict],
         ref: str,
+        start_z: Optional[float] = None,
     ) -> None:
         current_start = start_point
         current_width = inner_width_m
+        current_z = start_z
         for section in sections:
             length_m = float(section.get("length_m") or 0.0)
             divergence = float(section.get("divergence") or 0.0)
             if length_m <= 0:
                 continue
             outer_width = current_width + (2.0 * divergence * length_m)
+            end_z = self._annex14_surface_z(current_z, length_m, section.get("slope"))
             geom = self._annex14_trapezoid_from_widths(
                 current_start,
                 azimuth,
@@ -295,6 +484,8 @@ class Annex14GeometryMixin:
                 current_width,
                 outer_width,
                 f"{surface} {component} {section.get('section')}",
+                start_z=current_z,
+                end_z=end_z,
             )
             self._annex14_add_polygon_feature(
                 features,
@@ -318,6 +509,7 @@ class Annex14GeometryMixin:
                 break
             current_start = next_start
             current_width = outer_width
+            current_z = end_z
 
     def _annex14_append_side_panels_for_approach_like_sections(
         self,
@@ -337,15 +529,19 @@ class Annex14GeometryMixin:
         side_slope: Optional[float],
         ref: str,
         notes: str = "",
+        start_z: Optional[float] = None,
+        upper_edge_z: Optional[float] = None,
     ) -> None:
         current_start = start_point
         current_width = inner_width_m
+        current_z = start_z
         for section in sections:
             length_m = float(section.get("length_m") or 0.0)
             divergence = float(section.get("divergence") or 0.0)
             if length_m <= 0:
                 continue
             outer_width = current_width + (2.0 * divergence * length_m)
+            end_z = self._annex14_surface_z(current_z, length_m, section.get("slope"))
             self._annex14_add_side_panels_for_trapezoid(
                 features,
                 fields,
@@ -364,12 +560,17 @@ class Annex14GeometryMixin:
                 side_slope,
                 ref,
                 notes,
+                lower_start_z=current_z,
+                lower_end_z=end_z,
+                upper_start_z=upper_edge_z,
+                upper_end_z=upper_edge_z,
             )
             next_start = current_start.project(length_m, azimuth)
             if next_start is None:
                 break
             current_start = next_start
             current_width = outer_width
+            current_z = end_z
 
     def _annex14_takeoff_climb_sections(self, params: dict) -> List[dict]:
         length_m = float(params.get("length_m") or 0.0)
@@ -418,6 +619,11 @@ class Annex14GeometryMixin:
 
     def _annex14_surface_label(self, surface: str) -> str:
         return str(surface or "surface").replace("_", " ").title()
+
+    def _annex14_polygon_layer_type(self, features: List[QgsFeature]) -> str:
+        if features and all(QgsWkbTypes.hasZ(feature.geometry().wkbType()) for feature in features):
+            return "PolygonZ"
+        return "Polygon"
 
     def _annex14_runway_group(self, parent_group: QgsLayerTreeGroup, runway_label: str) -> QgsLayerTreeGroup:
         return self._ensure_layer_group(parent_group, f"RWY {runway_label}")
@@ -468,6 +674,11 @@ class Annex14GeometryMixin:
             runway_type = end_config["runway_type"]
             approach_az = end_config["approach_azimuth"]
             takeoff_az = end_config["takeoff_azimuth"]
+            threshold_z = end_config.get("threshold_elev")
+            opposite_threshold_z = end_config.get("opposite_threshold_elev")
+            highest_threshold_z = end_config.get("highest_threshold_elev")
+            takeoff_start_z = end_config.get("takeoff_start_elev")
+            runway_length_m = float(rwy_params.get("length") or 0.0)
 
             ofs = ruleset.obstacle_free_surfaces(
                 design_group=design_group,
@@ -494,6 +705,8 @@ class Annex14GeometryMixin:
                         inner_width,
                         outer_width,
                         f"Annex 14 OFS Approach {end_desig}",
+                        start_z=threshold_z,
+                        end_z=self._annex14_surface_z(threshold_z, length_m, approach.get("slope")),
                     )
                     self._annex14_add_polygon_feature(
                         ofs_features,
@@ -522,6 +735,7 @@ class Annex14GeometryMixin:
                 trans_slope = float(transitional.get("slope") or 0.0)
                 upper_height = float(transitional.get("upper_edge_height_above_highest_threshold_m") or 60.0)
                 horizontal_extent = upper_height / trans_slope if trans_slope > 0 else 0.0
+                upper_edge_z = (highest_threshold_z + upper_height) if highest_threshold_z is not None else None
                 self._annex14_add_side_panels_for_trapezoid(
                     ofs_features,
                     fields,
@@ -540,17 +754,27 @@ class Annex14GeometryMixin:
                     trans_slope,
                     transitional.get("ref", ""),
                     "Plan-view side panels from approach surface lower edges to 60 m upper edge.",
+                    lower_start_z=threshold_z,
+                    lower_end_z=self._annex14_surface_z(threshold_z, approach_length_m, approach.get("slope")),
+                    upper_start_z=upper_edge_z,
+                    upper_end_z=upper_edge_z,
                 )
 
             inner_approach = next((s for s in ofs["groups"]["inner"] if s.get("surface") == "inner_approach"), None)
             inner_approach_start = None
             inner_approach_length_m = None
             inner_approach_width = None
+            inner_approach_end_z = None
             if inner_approach and approach:
                 start = threshold.project(float(approach["distance_from_threshold_m"]), approach_az)
                 if start is not None:
                     inner_approach_length_m = float(inner_approach["length_m"])
                     inner_approach_width = float(inner_approach["inner_edge_length_m"])
+                    inner_approach_end_z = self._annex14_surface_z(
+                        threshold_z,
+                        inner_approach_length_m,
+                        approach.get("slope"),
+                    )
                     geom = self._annex14_trapezoid_from_widths(
                         start,
                         approach_az,
@@ -558,6 +782,8 @@ class Annex14GeometryMixin:
                         inner_approach_width,
                         inner_approach_width,
                         f"Annex 14 OFS Inner Approach {end_desig}",
+                        start_z=threshold_z,
+                        end_z=inner_approach_end_z,
                     )
                     self._annex14_add_polygon_feature(
                         ofs_features,
@@ -583,15 +809,24 @@ class Annex14GeometryMixin:
             balked_length_m = None
             balked_inner_width = None
             balked_outer_width = None
+            balked_start_z = None
+            balked_end_z = None
             if balked:
                 distance = balked.get("distance_from_threshold_m")
                 if distance is not None:
                     start = threshold.project(float(distance), takeoff_az)
                     if start is not None:
+                        balked_start_z = self._annex14_runway_axis_z(
+                            threshold_z,
+                            opposite_threshold_z,
+                            float(distance),
+                            runway_length_m,
+                        )
                         length_m = 60.0 / float(balked.get("slope") or 1.0)
                         inner_width = float(balked["inner_edge_length_m"])
                         divergence = float(balked["divergence"])
                         outer_width = inner_width + 2.0 * divergence * length_m
+                        balked_end_z = self._annex14_surface_z(balked_start_z, length_m, balked.get("slope"))
                         geom = self._annex14_trapezoid_from_widths(
                             start,
                             takeoff_az,
@@ -599,6 +834,8 @@ class Annex14GeometryMixin:
                             inner_width,
                             outer_width,
                             f"Annex 14 OFS Balked Landing {end_desig}",
+                            start_z=balked_start_z,
+                            end_z=balked_end_z,
                         )
                         self._annex14_add_polygon_feature(
                             ofs_features,
@@ -636,6 +873,7 @@ class Annex14GeometryMixin:
                 upper_height = float(inner_transitional.get("upper_edge_height_above_highest_threshold_m") or 60.0)
                 vertical_height = float(inner_transitional.get("vertical_section_height_m") or 0.0)
                 horizontal_extent = max(0.0, upper_height - vertical_height) / inner_trans_slope if inner_trans_slope > 0 else 0.0
+                upper_edge_z = (highest_threshold_z + upper_height) if highest_threshold_z is not None else None
                 self._annex14_add_side_panels_for_trapezoid(
                     ofs_features,
                     fields,
@@ -654,6 +892,10 @@ class Annex14GeometryMixin:
                     inner_trans_slope,
                     inner_transitional.get("ref", ""),
                     f"Plan-view inner transitional side panels; vertical section height {vertical_height:g} m.",
+                    lower_start_z=threshold_z,
+                    lower_end_z=inner_approach_end_z,
+                    upper_start_z=upper_edge_z,
+                    upper_end_z=upper_edge_z,
                 )
                 if balked_start is not None and balked_inner_width is not None:
                     half_width = max(inner_approach_width, balked_inner_width) / 2.0
@@ -681,6 +923,10 @@ class Annex14GeometryMixin:
                             inner_trans_slope,
                             inner_transitional.get("ref", ""),
                             "Precision runway inner transitional panel between inner approach and balked landing.",
+                            lower_start_z=threshold_z,
+                            lower_end_z=balked_start_z,
+                            upper_start_z=upper_edge_z,
+                            upper_end_z=upper_edge_z,
                         )
                     self._annex14_add_side_panels_for_trapezoid(
                         ofs_features,
@@ -700,6 +946,10 @@ class Annex14GeometryMixin:
                         inner_trans_slope,
                         inner_transitional.get("ref", ""),
                         "Precision runway inner transitional panels along balked landing surface.",
+                        lower_start_z=balked_start_z,
+                        lower_end_z=balked_end_z,
+                        upper_start_z=upper_edge_z,
+                        upper_end_z=upper_edge_z,
                     )
 
             precision = ruleset.precision_approach_surface_parameters()
@@ -720,9 +970,16 @@ class Annex14GeometryMixin:
                     float(approach_component["inner_edge_length_m"]),
                     approach_component["sections"],
                     precision.get("ref", ""),
+                    start_z=threshold_z,
                 )
             missed = precision["components"]["missed_approach"]
             missed_start = threshold.project(float(missed["distance_after_threshold_m"]), takeoff_az)
+            missed_start_z = self._annex14_runway_axis_z(
+                threshold_z,
+                opposite_threshold_z,
+                float(missed["distance_after_threshold_m"]),
+                runway_length_m,
+            )
             if missed_start is not None:
                 self._annex14_append_approach_like_sections(
                     oes_features,
@@ -738,6 +995,7 @@ class Annex14GeometryMixin:
                     float(missed["inner_edge_length_m"]),
                     missed["sections"],
                     precision.get("ref", ""),
+                    start_z=missed_start_z,
                 )
             transitional_component = precision["components"].get("transitional", {})
             transitional_slope = float(transitional_component.get("slope") or 0.0)
@@ -748,11 +1006,12 @@ class Annex14GeometryMixin:
             if pa_start is not None and missed_start is not None:
                 lower_length = pa_start.distance(missed_start)
                 lower_width = float(approach_component["inner_edge_length_m"])
-                lower_component_geom = self._create_rectangle_from_start(
+                lower_component_geom = self._annex14_rectangle_z_from_start(
                     pa_start,
                     takeoff_az,
                     lower_length,
-                    lower_width / 2.0,
+                    lower_width,
+                    threshold_z,
                     f"Annex 14 OES Precision Lower Component {end_desig}",
                 )
                 self._annex14_add_polygon_feature(
@@ -799,6 +1058,10 @@ class Annex14GeometryMixin:
                             transitional_slope,
                             precision.get("ref", ""),
                             "Transitional component along precision lower component.",
+                            lower_start_z=threshold_z,
+                            lower_end_z=threshold_z,
+                            upper_start_z=self._annex14_surface_z(threshold_z, transitional_upper_height, 1.0),
+                            upper_end_z=self._annex14_surface_z(threshold_z, transitional_upper_height, 1.0),
                         )
             if pa_start is not None and transitional_extent > 0:
                 self._annex14_append_side_panels_for_approach_like_sections(
@@ -818,6 +1081,8 @@ class Annex14GeometryMixin:
                     transitional_slope,
                     precision.get("ref", ""),
                     "Transitional component along precision approach component.",
+                    start_z=threshold_z,
+                    upper_edge_z=self._annex14_surface_z(threshold_z, transitional_upper_height, 1.0),
                 )
             if missed_start is not None and transitional_extent > 0:
                 self._annex14_append_side_panels_for_approach_like_sections(
@@ -837,6 +1102,8 @@ class Annex14GeometryMixin:
                     transitional_slope,
                     precision.get("ref", ""),
                     "Transitional component along precision missed approach component.",
+                    start_z=missed_start_z,
+                    upper_edge_z=self._annex14_surface_z(threshold_z, transitional_upper_height, 1.0),
                 )
 
             departure = ruleset.instrument_departure_surface_parameters()
@@ -856,6 +1123,7 @@ class Annex14GeometryMixin:
                     float(departure["inner_edge_length_m"]),
                     departure["sections"],
                     departure.get("ref", ""),
+                    start_z=self._annex14_surface_z(takeoff_start_z, 5.0, 1.0),
                 )
 
             mass = end_config.get("takeoff_mass_kg")
@@ -878,17 +1146,24 @@ class Annex14GeometryMixin:
                     float(takeoff["inner_edge_length_m"]),
                     self._annex14_takeoff_climb_sections(takeoff),
                     takeoff.get("ref", ""),
+                    start_z=takeoff_start_z,
                 )
 
         straight_in = ruleset.straight_in_instrument_approach_surface_parameters()
+        aerodrome_elev = self._annex14_float_or_none(getattr(self, "arp_elevation_amsl", None))
         lower_horizontal = ruleset.horizontal_surface_parameters("I")
         if lower_horizontal:
             runway_axis = QgsGeometry.fromPolylineXY([thr_point, rec_thr_point])
             geom = runway_axis.buffer(float(lower_horizontal["radius_m"]), 72)
+            lower_z = (
+                aerodrome_elev + float(straight_in["lower_section"]["height_above_aerodrome_elevation_m"])
+                if aerodrome_elev is not None
+                else None
+            )
             self._annex14_add_polygon_feature(
                 oes_features,
                 fields,
-                geom,
+                self._annex14_flat_z_polygon(geom, lower_z),
                 runway_name,
                 "OES",
                 "straight_in_instrument_approach",
@@ -908,11 +1183,17 @@ class Annex14GeometryMixin:
         rect_start = thr_point.project(upper_extension, rwy_params["azimuth_r_p"])
         if rect_start is not None:
             total_len = upper_extension * 2.0 + float(rwy_params["length"])
-            geom = self._create_rectangle_from_start(
+            upper_z = (
+                aerodrome_elev + float(upper["height_above_aerodrome_elevation_m"])
+                if aerodrome_elev is not None
+                else None
+            )
+            geom = self._annex14_rectangle_z_from_start(
                 rect_start,
                 rwy_params["azimuth_p_r"],
                 total_len,
-                float(upper["shorter_side_length_m"]) / 2.0,
+                float(upper["shorter_side_length_m"]),
+                upper_z,
                 f"Annex 14 OES Straight-in {runway_name}",
             )
             self._annex14_add_polygon_feature(
@@ -937,10 +1218,15 @@ class Annex14GeometryMixin:
         if horizontal:
             runway_axis = QgsGeometry.fromPolylineXY([thr_point, rec_thr_point])
             geom = runway_axis.buffer(float(horizontal["radius_m"]), 72)
+            horizontal_z = (
+                aerodrome_elev + float(horizontal["height_above_aerodrome_elevation_m"])
+                if aerodrome_elev is not None
+                else None
+            )
             self._annex14_add_polygon_feature(
                 oes_features,
                 fields,
-                geom,
+                self._annex14_flat_z_polygon(geom, horizontal_z),
                 runway_name,
                 "OES",
                 "horizontal",
@@ -970,7 +1256,7 @@ class Annex14GeometryMixin:
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
                         layer = self._create_and_add_layer(
-                            "Polygon",
+                            self._annex14_polygon_layer_type(surface_features),
                             f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
                             f"Annex 14 OFS {surface_label} RWY {end_desig}",
                             fields,
@@ -986,7 +1272,7 @@ class Annex14GeometryMixin:
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
                         layer = self._create_and_add_layer(
-                            "Polygon",
+                            self._annex14_polygon_layer_type(surface_features),
                             f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
                             f"Annex 14 OES {surface_label} RWY {end_desig}",
                             fields,
@@ -1007,7 +1293,7 @@ class Annex14GeometryMixin:
                     safe_surface = self._sanitize_filename(surface)
                     surface_label = self._annex14_surface_label(surface)
                     layer = self._create_and_add_layer(
-                        "Polygon",
+                        self._annex14_polygon_layer_type(surface_features),
                         f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_surface}",
                         f"Annex 14 OES {surface_label} RWY {runway_name}",
                         fields,
