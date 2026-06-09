@@ -546,6 +546,35 @@ class Annex14GeometryMixin:
     ) -> None:
         if horizontal_extent_m <= 0 and (upper_start_z is None or slope in (None, 0)):
             return
+        if None not in (lower_start_z, lower_end_z, upper_start_z, upper_end_z):
+            lower_start_z = float(lower_start_z)
+            lower_end_z = float(lower_end_z)
+            upper_start_z = float(upper_start_z)
+            upper_end_z = float(upper_end_z)
+            start_delta = lower_start_z - upper_start_z
+            end_delta = lower_end_z - upper_end_z
+            if start_delta >= -1e-6 and end_delta >= -1e-6 and (start_delta > 1e-6 or end_delta > 1e-6):
+                return
+            if start_delta > 1e-6 and end_delta > 1e-6:
+                return
+            if start_delta * end_delta < -1e-12:
+                denom = (lower_end_z - lower_start_z) - (upper_end_z - upper_start_z)
+                if abs(denom) > 1e-12:
+                    t = (upper_start_z - lower_start_z) / denom
+                    if 0.0 <= t <= 1.0:
+                        intercept = QgsPointXY(
+                            lower_start.x() + ((lower_end.x() - lower_start.x()) * t),
+                            lower_start.y() + ((lower_end.y() - lower_start.y()) * t),
+                        )
+                        intercept_z = lower_start_z + ((lower_end_z - lower_start_z) * t)
+                        if start_delta > 1e-6:
+                            lower_start = intercept
+                            lower_start_z = intercept_z
+                            upper_start_z = intercept_z
+                        elif end_delta > 1e-6:
+                            lower_end = intercept
+                            lower_end_z = intercept_z
+                            upper_end_z = intercept_z
         if (
             lower_start_z is not None
             and lower_end_z is not None
