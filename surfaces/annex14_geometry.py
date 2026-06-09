@@ -918,6 +918,23 @@ class Annex14GeometryMixin:
             return {"overall_width": width, "extension_length": extension}
         return None
 
+    def _annex14_runway_type_abbr(self, ruleset, runway_type: Optional[str]) -> str:
+        try:
+            return str(ruleset.classify_runway_type(runway_type) or "NI")
+        except Exception:
+            runway_type_text = str(runway_type or "").upper()
+            if "PRECISION" in runway_type_text and "NON" not in runway_type_text:
+                return "PA_I"
+            if "NPA" in runway_type_text or "NON-PRECISION" in runway_type_text or "NON PRECISION" in runway_type_text:
+                return "NPA"
+            return "NI"
+
+    def _annex14_is_precision_runway_type(self, runway_type_abbr: str) -> bool:
+        return str(runway_type_abbr or "").upper() in {"PA_I", "PA_II_III"}
+
+    def _annex14_is_instrument_runway_type(self, runway_type_abbr: str) -> bool:
+        return str(runway_type_abbr or "").upper() in {"NPA", "PA_I", "PA_II_III"}
+
     def _annex14_feature_attribute(self, feature: QgsFeature, field_name: str):
         try:
             idx = feature.fields().indexFromName(field_name)
@@ -1162,6 +1179,7 @@ class Annex14GeometryMixin:
                 continue
             end_desig = end_config["end_desig"]
             runway_type = end_config["runway_type"]
+            runway_type_abbr = self._annex14_runway_type_abbr(ruleset, runway_type)
             approach_az = end_config["approach_azimuth"]
             takeoff_az = end_config["takeoff_azimuth"]
             threshold_z = end_config.get("threshold_elev")
@@ -1558,7 +1576,12 @@ class Annex14GeometryMixin:
 
             precision = ruleset.precision_approach_surface_parameters()
             approach_component = precision["components"]["approach"]
-            pa_start = threshold.project(float(approach_component["distance_from_threshold_m"]), approach_az)
+            precision_applicable = self._annex14_is_precision_runway_type(runway_type_abbr)
+            pa_start = (
+                threshold.project(float(approach_component["distance_from_threshold_m"]), approach_az)
+                if precision_applicable
+                else None
+            )
             if pa_start is not None:
                 self._annex14_append_approach_like_sections(
                     oes_features,
@@ -1580,7 +1603,11 @@ class Annex14GeometryMixin:
                     contour_interval=approach_contour_interval,
                 )
             missed = precision["components"]["missed_approach"]
-            missed_start = threshold.project(float(missed["distance_after_threshold_m"]), takeoff_az)
+            missed_start = (
+                threshold.project(float(missed["distance_after_threshold_m"]), takeoff_az)
+                if precision_applicable
+                else None
+            )
             missed_start_z = threshold_z
             if missed_start is not None:
                 self._annex14_append_approach_like_sections(
@@ -1724,7 +1751,7 @@ class Annex14GeometryMixin:
 
             departure = ruleset.instrument_departure_surface_parameters()
             dep_start = end_config["takeoff_start"]
-            if dep_start is not None:
+            if dep_start is not None and self._annex14_is_instrument_runway_type(runway_type_abbr):
                 departure_start_z = self._annex14_surface_z(
                     takeoff_start_z or opposite_threshold_z,
                     float(departure.get("inner_edge_elevation_offset_m") or 5.0),
