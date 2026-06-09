@@ -653,6 +653,7 @@ class Annex14GeometryMixin:
         contour_features: Optional[List[QgsFeature]] = None,
         contour_fields: Optional[QgsFields] = None,
         contour_interval: Optional[float] = None,
+        reverse_side_labels: bool = False,
     ) -> None:
         for side, edge in self._annex14_trapezoid_side_edges(
             start_point,
@@ -663,6 +664,7 @@ class Annex14GeometryMixin:
         ).items():
             if edge is None:
                 continue
+            label_side = {"left": "right", "right": "left"}.get(side, side) if reverse_side_labels else side
             lower_start, lower_end, outward_azimuth = edge
             self._annex14_add_side_panel_feature(
                 features,
@@ -674,7 +676,7 @@ class Annex14GeometryMixin:
                 runway_name,
                 family,
                 surface,
-                f"{component_prefix}_{side}",
+                f"{component_prefix}_{label_side}",
                 end_desig,
                 design_group,
                 slope,
@@ -708,6 +710,7 @@ class Annex14GeometryMixin:
         contour_features: Optional[List[QgsFeature]] = None,
         contour_fields: Optional[QgsFields] = None,
         contour_interval: Optional[float] = None,
+        reverse_side_labels: bool = False,
     ) -> None:
         current_start = start_point
         current_width = inner_width_m
@@ -832,6 +835,7 @@ class Annex14GeometryMixin:
                 contour_features=contour_features,
                 contour_fields=contour_fields,
                 contour_interval=contour_interval,
+                reverse_side_labels=reverse_side_labels,
             )
             next_start = current_start.project(length_m, azimuth)
             if next_start is None:
@@ -854,6 +858,15 @@ class Annex14GeometryMixin:
             {"section": "divergent", "length_m": distance_to_final, "divergence": divergence, "slope": params.get("slope")},
             {"section": "constant_width", "length_m": length_m - distance_to_final, "divergence": 0.0, "slope": params.get("slope")},
         ]
+
+    def _annex14_sections_with_default_slope(self, params: dict) -> List[dict]:
+        slope = params.get("slope")
+        sections = []
+        for section in params.get("sections", []):
+            section_params = dict(section)
+            section_params.setdefault("slope", slope)
+            sections.append(section_params)
+        return sections
 
     def _annex14_feature_attribute(self, feature: QgsFeature, field_name: str):
         try:
@@ -1065,6 +1078,7 @@ class Annex14GeometryMixin:
                     contour_features=ofs_contour_features,
                     contour_fields=contour_fields,
                     contour_interval=transitional_contour_interval,
+                    reverse_side_labels=True,
                 )
 
             inner_approach = next((s for s in ofs["groups"]["inner"] if s.get("surface") == "inner_approach"), None)
@@ -1244,12 +1258,13 @@ class Annex14GeometryMixin:
                     contour_features=ofs_contour_features,
                     contour_fields=contour_fields,
                     contour_interval=transitional_contour_interval,
+                    reverse_side_labels=True,
                 )
                 if balked_start is not None and balked_inner_width is not None:
                     half_width = max(inner_approach_width, balked_inner_width) / 2.0
                     for side, outward_azimuth in {
-                        "left": (takeoff_az + 90.0) % 360.0,
-                        "right": (takeoff_az - 90.0 + 360.0) % 360.0,
+                        "left": (takeoff_az - 90.0 + 360.0) % 360.0,
+                        "right": (takeoff_az + 90.0) % 360.0,
                     }.items():
                         lower_start = inner_approach_start.project(half_width, outward_azimuth)
                         lower_end = balked_start.project(half_width, outward_azimuth)
@@ -1445,6 +1460,7 @@ class Annex14GeometryMixin:
                     contour_features=oes_contour_features,
                     contour_fields=contour_fields,
                     contour_interval=transitional_contour_interval,
+                    reverse_side_labels=True,
                 )
             if missed_start is not None and transitional_extent > 0:
                 self._annex14_append_side_panels_for_approach_like_sections(
@@ -1474,6 +1490,11 @@ class Annex14GeometryMixin:
             departure = ruleset.instrument_departure_surface_parameters()
             dep_start = end_config["takeoff_start"]
             if dep_start is not None:
+                departure_start_z = self._annex14_surface_z(
+                    takeoff_start_z or opposite_threshold_z,
+                    float(departure.get("inner_edge_elevation_offset_m") or 5.0),
+                    1.0,
+                )
                 self._annex14_append_approach_like_sections(
                     oes_features,
                     fields,
@@ -1486,9 +1507,9 @@ class Annex14GeometryMixin:
                     dep_start,
                     takeoff_az,
                     float(departure["inner_edge_length_m"]),
-                    departure["sections"],
+                    self._annex14_sections_with_default_slope(departure),
                     departure.get("ref", ""),
-                    start_z=self._annex14_surface_z(takeoff_start_z, 5.0, 1.0),
+                    start_z=departure_start_z,
                     contour_features=oes_contour_features,
                     contour_fields=contour_fields,
                     contour_interval=tocs_contour_interval,
