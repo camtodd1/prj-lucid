@@ -710,7 +710,6 @@ class Annex14GeometryMixin:
         contour_features: Optional[List[QgsFeature]] = None,
         contour_fields: Optional[QgsFields] = None,
         contour_interval: Optional[float] = None,
-        reverse_side_labels: bool = False,
     ) -> None:
         current_start = start_point
         current_width = inner_width_m
@@ -799,6 +798,7 @@ class Annex14GeometryMixin:
         contour_features: Optional[List[QgsFeature]] = None,
         contour_fields: Optional[QgsFields] = None,
         contour_interval: Optional[float] = None,
+        reverse_side_labels: bool = False,
     ) -> None:
         current_start = start_point
         current_width = inner_width_m
