@@ -898,6 +898,128 @@ class Annex14GeometryMixin:
             grouped.setdefault(surface, []).append(feature)
         return grouped
 
+    def _annex14_contour_consolidation_component(self, feature: QgsFeature) -> Optional[str]:
+        component = str(self._annex14_feature_attribute(feature, "component") or "")
+        surface = str(self._annex14_feature_attribute(feature, "surface") or "")
+        if not component:
+            return None
+
+        side = None
+        for candidate in ("left", "right"):
+            if component.endswith(f"_{candidate}"):
+                side = candidate
+                break
+        if side is None:
+            return None
+
+        if surface == "inner_transitional":
+            return f"inner_transitional_surface_{side}"
+        if surface == "transitional":
+            return f"transitional_surface_{side}"
+        if surface == "precision_approach" and component.startswith("transitional_"):
+            return f"transitional_surface_{side}"
+        return None
+
+    def _annex14_contour_feature_signature(self, feature: QgsFeature, consolidated_component: str) -> tuple:
+        contour_elev = self._annex14_feature_attribute(feature, "contour_elev_am")
+        try:
+            contour_elev = round(float(contour_elev), 6)
+        except (TypeError, ValueError):
+            contour_elev = None
+        return (
+            str(self._annex14_feature_attribute(feature, "rwy_name") or ""),
+            str(self._annex14_feature_attribute(feature, "family") or ""),
+            str(self._annex14_feature_attribute(feature, "surface") or ""),
+            str(self._annex14_feature_attribute(feature, "end_desig") or ""),
+            str(self._annex14_feature_attribute(feature, "adg") or ""),
+            str(self._annex14_feature_attribute(feature, "ref") or ""),
+            consolidated_component,
+            contour_elev,
+        )
+
+    def _annex14_as_polyline_parts(self, geom: QgsGeometry) -> List[List[QgsPointXY]]:
+        if geom is None or geom.isNull() or geom.isEmpty():
+            return []
+        try:
+            if geom.isMultipart():
+                return [part for part in geom.asMultiPolyline() if len(part) >= 2]
+            line = geom.asPolyline()
+            return [line] if len(line) >= 2 else []
+        except Exception:
+            return []
+
+    def _annex14_merge_polyline_parts(self, parts: List[List[QgsPointXY]]) -> List[List[QgsPointXY]]:
+        chains = [list(part) for part in parts if len(part) >= 2]
+
+        def same_point(a: QgsPointXY, b: QgsPointXY) -> bool:
+            return abs(a.x() - b.x()) < 1e-6 and abs(a.y() - b.y()) < 1e-6
+
+        changed = True
+        while changed:
+            changed = False
+            for i in range(len(chains)):
+                if changed:
+                    break
+                for j in range(i + 1, len(chains)):
+                    a = chains[i]
+                    b = chains[j]
+                    merged = None
+                    if same_point(a[-1], b[0]):
+                        merged = a + b[1:]
+                    elif same_point(a[-1], b[-1]):
+                        merged = a + list(reversed(b[:-1]))
+                    elif same_point(a[0], b[-1]):
+                        merged = b + a[1:]
+                    elif same_point(a[0], b[0]):
+                        merged = list(reversed(b)) + a[1:]
+                    if merged is None:
+                        continue
+                    chains[i] = merged
+                    del chains[j]
+                    changed = True
+                    break
+        return chains
+
+    def _annex14_consolidate_transition_contours(self, contour_features: List[QgsFeature]) -> List[QgsFeature]:
+        grouped: Dict[tuple, List[QgsFeature]] = {}
+        passthrough: List[QgsFeature] = []
+        for feature in contour_features:
+            consolidated_component = self._annex14_contour_consolidation_component(feature)
+            if consolidated_component is None:
+                passthrough.append(feature)
+                continue
+            grouped.setdefault(
+                self._annex14_contour_feature_signature(feature, consolidated_component),
+                [],
+            ).append(feature)
+
+        consolidated: List[QgsFeature] = []
+        for signature, features in grouped.items():
+            parts = []
+            for feature in features:
+                parts.extend(self._annex14_as_polyline_parts(feature.geometry()))
+            merged_parts = self._annex14_merge_polyline_parts(parts)
+            if not merged_parts:
+                continue
+
+            source = features[0]
+            new_feature = QgsFeature(source.fields())
+            if len(merged_parts) == 1:
+                geom = QgsGeometry.fromPolylineXY(merged_parts[0])
+            else:
+                geom = QgsGeometry.fromMultiPolylineXY(merged_parts)
+            if geom is None or geom.isNull() or geom.isEmpty():
+                continue
+            new_feature.setGeometry(geom)
+            attrs = list(source.attributes())
+            component_idx = source.fields().indexFromName("component")
+            if component_idx != -1:
+                attrs[component_idx] = signature[6]
+            new_feature.setAttributes(attrs)
+            consolidated.append(new_feature)
+
+        return passthrough + consolidated
+
     def _annex14_surface_label(self, surface: str) -> str:
         return str(surface or "surface").replace("_", " ").title()
 
@@ -908,6 +1030,26 @@ class Annex14GeometryMixin:
         except Exception:
             return "Polygon"
         return "Polygon"
+
+    def _annex14_contour_layer_type(self, features: List[QgsFeature]) -> str:
+        return "MultiLineString" if any(feature.geometry().isMultipart() for feature in features) else "LineString"
+
+    def _annex14_prepare_contour_features_for_layer(self, features: List[QgsFeature]) -> List[QgsFeature]:
+        if not features or self._annex14_contour_layer_type(features) != "MultiLineString":
+            return features
+        prepared = []
+        for feature in features:
+            geom = feature.geometry()
+            if geom is None or geom.isNull() or geom.isEmpty() or geom.isMultipart():
+                prepared.append(feature)
+                continue
+            parts = self._annex14_as_polyline_parts(geom)
+            if not parts:
+                prepared.append(feature)
+                continue
+            feature.setGeometry(QgsGeometry.fromMultiPolylineXY(parts))
+            prepared.append(feature)
+        return prepared
 
     def _annex14_contour_style_key(self, surface: str) -> str:
         surface_key = str(surface or "").strip().lower()
@@ -1634,6 +1776,9 @@ class Annex14GeometryMixin:
                 "runway-axis buffer: threshold-centred arcs joined tangentially",
             )
 
+        ofs_contour_features = self._annex14_consolidate_transition_contours(ofs_contour_features)
+        oes_contour_features = self._annex14_consolidate_transition_contours(oes_contour_features)
+
         created = False
         try:
             for end_config in self._annex14_runway_end_configs(runway_data, rwy_params):
@@ -1665,8 +1810,9 @@ class Annex14GeometryMixin:
                     for surface, surface_features in self._annex14_features_by_surface(end_ofs_contours).items():
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
+                        surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
                         layer = self._create_and_add_layer(
-                            "LineString",
+                            self._annex14_contour_layer_type(surface_features),
                             f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}_Contours",
                             f"Annex 14 OFS {surface_label} Contours RWY {end_desig}",
                             contour_fields,
@@ -1697,8 +1843,9 @@ class Annex14GeometryMixin:
                     for surface, surface_features in self._annex14_features_by_surface(end_oes_contours).items():
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
+                        surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
                         layer = self._create_and_add_layer(
-                            "LineString",
+                            self._annex14_contour_layer_type(surface_features),
                             f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}_Contours",
                             f"Annex 14 OES {surface_label} Contours RWY {end_desig}",
                             contour_fields,
@@ -1739,8 +1886,9 @@ class Annex14GeometryMixin:
                 for surface, surface_features in self._annex14_features_by_surface(runway_wide_oes_contours).items():
                     safe_surface = self._sanitize_filename(surface)
                     surface_label = self._annex14_surface_label(surface)
+                    surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
                     layer = self._create_and_add_layer(
-                        "LineString",
+                        self._annex14_contour_layer_type(surface_features),
                         f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_surface}_Contours",
                         f"Annex 14 OES {surface_label} Contours RWY {runway_name}",
                         contour_fields,
