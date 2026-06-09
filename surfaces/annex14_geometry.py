@@ -897,6 +897,27 @@ class Annex14GeometryMixin:
             sections.append(section_params)
         return sections
 
+    def _annex14_strip_dimensions(self, runway_data: dict) -> Optional[dict]:
+        strip_dims = runway_data.get("calculated_strip_dims")
+        if isinstance(strip_dims, dict):
+            width = self._annex14_float_or_none(strip_dims.get("overall_width"))
+            extension = self._annex14_float_or_none(strip_dims.get("extension_length"))
+            if width is not None and width > 0 and extension is not None and extension >= 0:
+                return {"overall_width": width, "extension_length": extension}
+
+        width = self._annex14_float_or_none(
+            runway_data.get("strip_overall_width")
+            or runway_data.get("overall_strip_width")
+            or runway_data.get("strip_width")
+        )
+        extension = self._annex14_float_or_none(
+            runway_data.get("strip_extension_length")
+            or runway_data.get("strip_extension")
+        )
+        if width is not None and width > 0 and extension is not None and extension >= 0:
+            return {"overall_width": width, "extension_length": extension}
+        return None
+
     def _annex14_feature_attribute(self, feature: QgsFeature, field_name: str):
         try:
             idx = feature.fields().indexFromName(field_name)
@@ -1224,6 +1245,49 @@ class Annex14GeometryMixin:
                 upper_height = float(transitional.get("upper_edge_height_above_highest_threshold_m") or 60.0)
                 horizontal_extent = upper_height / trans_slope if trans_slope > 0 else 0.0
                 upper_edge_z = (highest_threshold_z + upper_height) if highest_threshold_z is not None else None
+                strip_dims = self._annex14_strip_dimensions(runway_data)
+                if strip_dims is not None:
+                    opposite_threshold = end_config.get("opposite_threshold")
+                    strip_end = (
+                        opposite_threshold.project(float(strip_dims["extension_length"]), takeoff_az)
+                        if opposite_threshold is not None
+                        else None
+                    )
+                    strip_adjacent_length = approach_start.distance(strip_end) if strip_end is not None else 0.0
+                    if strip_end is not None and strip_adjacent_length > 1e-3:
+                        self._annex14_add_side_panels_for_trapezoid(
+                            ofs_features,
+                            fields,
+                            approach_start,
+                            takeoff_az,
+                            strip_adjacent_length,
+                            float(strip_dims["overall_width"]),
+                            float(strip_dims["overall_width"]),
+                            horizontal_extent,
+                            runway_name,
+                            "OFS",
+                            "transitional",
+                            "strip_adjacent",
+                            end_desig,
+                            design_group,
+                            trans_slope,
+                            transitional.get("ref", ""),
+                            "Strip-adjacent transitional panels from approach inner edge to strip end.",
+                            lower_start_z=threshold_z,
+                            lower_end_z=opposite_threshold_z,
+                            upper_start_z=upper_edge_z,
+                            upper_end_z=upper_edge_z,
+                            contour_features=ofs_contour_features,
+                            contour_fields=contour_fields,
+                            contour_interval=transitional_contour_interval,
+                        )
+                else:
+                    QgsMessageLog.logMessage(
+                        f"Annex 14 transitional strip-adjacent panels skipped for {runway_name} {end_desig}: "
+                        "strip dimensions unavailable.",
+                        PLUGIN_TAG,
+                        Qgis.Info,
+                    )
                 self._annex14_add_side_panels_for_trapezoid(
                     ofs_features,
                     fields,
