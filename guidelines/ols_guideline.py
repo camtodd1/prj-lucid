@@ -3730,15 +3730,20 @@ class OlsGuidelineMixin:
 
             # --- Inner Approach ---
             try:
-                ia_params = self.get_active_ruleset().ols_parameters(
-                    arc_num, config["approach_type_str"], "InnerApproach"
-                )
+                active_ruleset = self.get_active_ruleset()
+                inner_approach_params_getter = getattr(active_ruleset, "inner_approach_parameters", None)
+                if callable(inner_approach_params_getter):
+                    ia_params = inner_approach_params_getter(arc_num, config["approach_type_str"], arc_let)
+                else:
+                    ia_params = active_ruleset.ols_parameters(arc_num, config["approach_type_str"], "InnerApproach")
                 if ia_params:
                     ia_slope_param = ia_params.get("slope")
                     ia_start_dist_param = ia_params.get("start_dist_from_thr")
                     ia_length_param_val = ia_params.get("length")
                     ia_width_param_val = ia_params.get("width")
                     ia_ref_param = ia_params.get("ref")
+                    if ia_params.get("width_ref"):
+                        ia_ref_param = f"{ia_ref_param}; {ia_params.get('width_ref')}"
                     if all(
                         v is not None
                         for v in [

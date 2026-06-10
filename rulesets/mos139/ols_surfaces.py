@@ -322,6 +322,8 @@ INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.020,  # 2.0%
+        "code_letter_f_width": 140.0,
+        "code_letter_f_width_ref": "MOS 7.10 Table 7.15(1) note g",
         "ref": "MOS 7.10 (PA-CatI, 3/4)",
     },
     (4, "PA_I"): {  # Same as Code 3
@@ -329,6 +331,8 @@ INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.020,  # 2.0%
+        "code_letter_f_width": 140.0,
+        "code_letter_f_width_ref": "MOS 7.10 Table 7.15(1) note g",
         "ref": "MOS 7.10 (PA-CatI, 3/4)",
     },
     # Precision CAT II & III
@@ -337,6 +341,8 @@ INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.020,  # 2.0%
+        "code_letter_f_width": 140.0,
+        "code_letter_f_width_ref": "MOS 7.10 Table 7.15(1) note g",
         "ref": "MOS 7.10 (PA-CatII/III, 3/4)",
     },
     (4, "PA_II_III"): {  # Same as Code 3
@@ -344,6 +350,8 @@ INNER_APPROACH_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "start_dist_from_thr": 60.0,
         "length": 900.0,
         "slope": 0.020,  # 2.0%
+        "code_letter_f_width": 140.0,
+        "code_letter_f_width_ref": "MOS 7.10 Table 7.15(1) note g",
         "ref": "MOS 7.10 (PA-CatII/III, 3/4)",
     },
     # Non-Instrument ('NI') and Non-Precision ('NPA') types are not listed as the Inner Approach Surface does not apply
@@ -711,6 +719,29 @@ def get_baulked_landing_params(
     return result
 
 
+def get_inner_approach_params(
+    arc_num: int,
+    runway_type_str: Optional[str],
+    arc_let: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Return MOS139 inner approach parameters with Table 7.15(1) notes applied."""
+    if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
+        LOGGER.warning("Invalid ARC Number %r for Inner Approach lookup.", arc_num)
+        return None
+
+    key = (arc_num, get_runway_type_abbr(runway_type_str))
+    params = INNER_APPROACH_PARAMS.get(key)
+    if not params:
+        return None
+
+    result = params.copy()
+    if (arc_let or "").strip().upper() == "F" and result.get("code_letter_f_width") is not None:
+        result["width"] = result["code_letter_f_width"]
+        result["width_ref"] = result.get("code_letter_f_width_ref")
+
+    return result
+
+
 def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: str) -> Optional[Dict[str, Any]]:
     """
     Retrieves OLS parameters based on ARC number, runway type, and surface type.
@@ -743,8 +774,7 @@ def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: s
         return params.copy() if params else None
 
     elif surface_type_upper == "INNERAPPROACH":
-        params_dict = INNER_APPROACH_PARAMS
-        # lookup_key remains key_arc_type
+        return get_inner_approach_params(arc_num, runway_type_str)
 
     elif surface_type_upper == "BAULKEDLANDING":
         return get_baulked_landing_params(arc_num, runway_type_str)

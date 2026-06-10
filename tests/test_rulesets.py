@@ -152,6 +152,13 @@ class RulesetRegistryTest(unittest.TestCase):
     def test_mos139_baulked_landing_table_notes(self):
         profile = get_ruleset_profile("mos139_2019")
 
+        inner_approach = profile.inner_approach_parameters(3, "Precision Approach CAT I")
+        self.assertEqual(inner_approach["width"], 120.0)
+
+        inner_approach_f = profile.inner_approach_parameters(3, "Precision Approach CAT I", "F")
+        self.assertEqual(inner_approach_f["width"], 140.0)
+        self.assertEqual(inner_approach_f["width_ref"], "MOS 7.10 Table 7.15(1) note g")
+
         code_1 = profile.baulked_landing_parameters(1, "Precision Approach CAT I")
         self.assertIsNone(code_1["start_dist_from_thr"])
         self.assertEqual(code_1["start_dist_rule"], "distance_to_end_of_runway_strip")
