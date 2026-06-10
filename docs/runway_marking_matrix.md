@@ -723,7 +723,7 @@ Status: implemented as detailed generated polygon geometry.
 
 | Reference | Requirement summary | Notes |
 | --- | --- | --- |
-| MOS 8.16(1) | If an area before the non-displaced threshold, or the runway end in the reciprocal direction, is sealed concrete/asphalt, exceeds 60 m in length, and is not suitable for normal aircraft usage, pre-threshold area markings must be used. | Current dialog has pre-threshold area length but does not yet collect surface/suitability. |
+| MOS 8.16(1) | If an area before the non-displaced threshold, or the runway end in the reciprocal direction, is sealed concrete/asphalt, is 30 m or more in length, and is not suitable for normal aircraft usage, pre-threshold area markings must be used. | Current dialog has pre-threshold area length but does not yet collect surface/suitability. |
 | MOS 8.16(1) Note | This does not apply to runway starter extensions. | Starter extension classification is not modelled in the current dialog. |
 | MOS 8.16(2)(a) | Markings consist of yellow chevrons with 0.9 m wide lines angled 45 degrees to the runway centreline. | Generated as yellow polygon legs. |
 | MOS 8.16(2)(b) | Chevrons are spaced 30 m apart, apex to apex. | Stored as `spacing_m = 30`. |
@@ -736,7 +736,7 @@ Status: implemented as detailed generated polygon geometry.
 
 | Condition | Applies? | Notes |
 | --- | --- | --- |
-| Pre-threshold area length > 60 m | Yes | Uses dialog `thr_pre_area_1` / `thr_pre_area_2`. |
+| Pre-threshold area length >= 30 m | Yes | Uses dialog `thr_pre_area_1` / `thr_pre_area_2`. |
 | Sealed concrete/asphalt surface | Uses runway surface category | Current implementation generates when category is `Sealed`. |
 | Not suitable for normal aircraft usage | Assumed yes when pre-threshold area length is entered | Suitability input does not exist yet. |
 | Runway starter extension | Not modelled | Add explicit input before suppressing markings for starter extensions. |
@@ -768,7 +768,7 @@ Status: implemented as detailed generated polygon geometry.
 ### Implementation Notes
 
 - Generate independently for each runway end with entered pre-threshold area
-  length greater than 60 m.
+  length of 30 m or more.
 - Use one mitered polygon per chevron to avoid extra apex-cap features and
   rendering artifacts at the apex.
 - Place the first theoretical chevron apex 7.5 m on the runway side of the

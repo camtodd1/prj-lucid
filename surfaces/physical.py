@@ -2003,7 +2003,7 @@ class PhysicalGeometryMixin:
                         "current rule for this runway width/type combination."
                     )
 
-            if pre_area_len > 60.0:
+            if pre_area_len >= 30.0:
                 qa_records[end_desig]["assumptions"].add(
                     "Pre-threshold area entered in dialog is assumed sealed and not suitable for normal aircraft usage."
                 )
@@ -2091,7 +2091,7 @@ class PhysicalGeometryMixin:
                     apex_offset += 30.0
                     chevron_no += 1
             elif pre_area_len > 1e-6:
-                skipped.append("Pre-threshold area markings: area length does not exceed 60 m.")
+                skipped.append("Pre-threshold area markings: area length is less than 30 m.")
 
         # One centreline stripe set for the whole runway, measured primary to
         # reciprocal, with the last stripe truncated if needed.
