@@ -180,6 +180,7 @@ class SafeguardingBuilderDialog(
         self._setup_ruleset_selector_ui()
         self._connect_global_controls()
         self._setup_dialog_status_connections()
+        self._setup_project_crs_status_monitor()
 
         # --- Connect Action Buttons ---
         clear_button = self.findChild(QtWidgets.QPushButton, "pushButton_clear_all")
@@ -699,6 +700,7 @@ class SafeguardingBuilderDialog(
             )
             crs_field.setText("")
             crs_field.setToolTip("Suggested projected CRS derived from the airport latitude/longitude.")
+            self._update_airport_crs_status()
 
         header_layout = getattr(
             self,
@@ -890,6 +892,7 @@ class SafeguardingBuilderDialog(
             "ready": ("#eaf6ed", "#1f6b32", "#c7e7cf"),
             "warning": ("#fff5e6", "#8a5200", "#f0d6a8"),
             "info": ("#eaf2ff", "#1f4f99", "#c7d7f5"),
+            "error": ("#fdecec", "#9b1c1c", "#f3b5b5"),
             "neutral": ("#f4f4f4", "#555555", "#d6d6d6"),
         }
         background, foreground, border = colors.get(state, colors["neutral"])
@@ -913,6 +916,78 @@ class SafeguardingBuilderDialog(
         )
         label.updateGeometry()
         return True
+
+    def _setup_project_crs_status_monitor(self) -> None:
+        """Refresh the suggested CRS field when the QGIS project CRS changes."""
+        try:
+            QgsProject.instance().crsChanged.connect(self._update_airport_crs_status)
+        except Exception:
+            QgsMessageLog.logMessage(
+                "Could not connect project CRS status monitor.",
+                DIALOG_LOG_TAG,
+                Qgis.Warning,
+            )
+
+    def _style_crs_status_field(self, state: str, tooltip: str) -> None:
+        crs_field = getattr(
+            self,
+            "lineEdit_airport_crs",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_crs"),
+        )
+        if crs_field is None:
+            return
+        colors = {
+            "ready": ("#eaf6ed", "#1f6b32", "#c7e7cf"),
+            "error": ("#fdecec", "#9b1c1c", "#f3b5b5"),
+            "neutral": ("#ffffff", "#333333", "#c8c8c8"),
+        }
+        background, foreground, border = colors.get(state, colors["neutral"])
+        signature = (state, tooltip, crs_field.text())
+        if getattr(crs_field, "_crs_status_signature", None) == signature:
+            return
+        crs_field._crs_status_signature = signature
+        crs_field.setStyleSheet(
+            f"QLineEdit {{ background: {background}; color: {foreground}; border: 1px solid {border}; "
+            "border-radius: 8px; padding: 4px 10px; font-size: 13px; font-weight: 600; }}"
+            f"QLineEdit:read-only {{ background: {background}; color: {foreground}; }}"
+        )
+        crs_field.setToolTip(tooltip)
+
+    def _update_airport_crs_status(self, *_args: Any) -> None:
+        """Colour the suggested CRS field based on the current project CRS."""
+        crs_field = getattr(
+            self,
+            "lineEdit_airport_crs",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_crs"),
+        )
+        if crs_field is None:
+            return
+
+        suggested_authid = crs_field.text().strip()
+        base_tooltip = "Suggested projected CRS derived from the airport latitude/longitude."
+        if not suggested_authid:
+            self._style_crs_status_field("neutral", base_tooltip)
+            return
+
+        project_crs = QgsProject.instance().crs()
+        if not project_crs or not project_crs.isValid():
+            self._style_crs_status_field(
+                "error",
+                f"{base_tooltip} Project CRS is invalid; expected {suggested_authid}.",
+            )
+            return
+
+        project_authid = project_crs.authid()
+        if project_authid == suggested_authid:
+            self._style_crs_status_field(
+                "ready",
+                f"Project CRS matches the suggested CRS: {suggested_authid}.",
+            )
+        else:
+            self._style_crs_status_field(
+                "error",
+                f"Project CRS is {project_authid or 'unknown'}; suggested CRS is {suggested_authid}.",
+            )
 
     def _connect_global_controls(self):
         """Connects signals for global widgets."""
@@ -1398,6 +1473,7 @@ class SafeguardingBuilderDialog(
         authid = self._projected_crs_authid_from_latlon(latitude, longitude)
         with QtCore.QSignalBlocker(crs_field):
             crs_field.setText(authid or "")
+        self._update_airport_crs_status()
 
     def _projected_crs_authid_from_latlon(self, latitude: Optional[float], longitude: Optional[float]) -> str:
         """Return a projected EPSG authid inferred from a latitude/longitude pair."""
@@ -1475,6 +1551,8 @@ class SafeguardingBuilderDialog(
 
     def update_dialog_status(self):
         """Updates compact workflow status labels."""
+        self._update_airport_crs_status()
+
         icao = self.lineEdit_airport_name.text().strip().upper()
         iata_widget = getattr(self, "lineEdit_iata_code", self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"))
         iata = iata_widget.text().strip().upper() if iata_widget else ""
