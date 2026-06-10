@@ -25,6 +25,9 @@ class OlsService:
     def parameters(self, arc_num: int, runway_type: Optional[str], surface_type: str):
         return ols_surfaces.get_ols_params(arc_num, runway_type, surface_type)
 
+    def baulked_landing_parameters(self, arc_num: int, runway_type: Optional[str], arc_let: Optional[str] = None):
+        return ols_surfaces.get_baulked_landing_params(arc_num, runway_type, arc_let)
+
 
 class PhysicalService:
     def refs(self) -> dict:

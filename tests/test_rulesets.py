@@ -149,6 +149,24 @@ class RulesetRegistryTest(unittest.TestCase):
             taxiway.get_taxiway_separation_offset(3, "C", "Precision Approach CAT I"),
         )
 
+    def test_mos139_baulked_landing_table_notes(self):
+        profile = get_ruleset_profile("mos139_2019")
+
+        code_1 = profile.baulked_landing_parameters(1, "Precision Approach CAT I")
+        self.assertIsNone(code_1["start_dist_from_thr"])
+        self.assertEqual(code_1["start_dist_rule"], "distance_to_end_of_runway_strip")
+        self.assertEqual(code_1["start_dist_ref"], "MOS 7.12 Table 7.15(1) note e")
+
+        code_3 = profile.baulked_landing_parameters(3, "Precision Approach CAT I")
+        self.assertEqual(code_3["start_dist_from_thr"], 1800.0)
+        self.assertEqual(code_3["start_dist_rule"], "1800_m_or_end_of_runway_strip_whichever_is_less")
+        self.assertEqual(code_3["start_dist_ref"], "MOS 7.12 Table 7.15(1) note f")
+        self.assertEqual(code_3["width"], 120.0)
+
+        code_3_f = profile.baulked_landing_parameters(3, "Precision Approach CAT I", "F")
+        self.assertEqual(code_3_f["width"], 140.0)
+        self.assertEqual(code_3_f["width_ref"], "MOS 7.12 Table 7.15(1) note g")
+
     def test_mos139_threshold_marking_params(self):
         profile = get_ruleset_profile("mos139_2019")
         self.assertEqual(profile.threshold_marking_params(30.0), (8, 1.5))

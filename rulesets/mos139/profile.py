@@ -37,6 +37,9 @@ class Mos139RulesetProfile(RulesetProfile):
     def ols_parameters(self, arc_num: int, runway_type: Optional[str], surface_type: str):
         return self.ols.parameters(arc_num, runway_type, surface_type)
 
+    def baulked_landing_parameters(self, arc_num: int, runway_type: Optional[str], arc_let: Optional[str] = None):
+        return self.ols.baulked_landing_parameters(arc_num, runway_type, arc_let)
+
     def taxiway_separation_offset(self, arc_num: int, arc_let: Optional[str], runway_type: Optional[str]):
         return self.physical.taxiway_separation_offset(arc_num, arc_let, runway_type)
 

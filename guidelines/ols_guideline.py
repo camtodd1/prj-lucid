@@ -1279,20 +1279,47 @@ class OlsGuidelineMixin:
         bls_param_dict: dict,
         end_desig: str,
         IHS_ELEVATION_AMSL: float,  # Changed from Optional to required
+        strip_end_distance_from_thr: Optional[float] = None,
     ) -> Optional[Tuple[QgsFeature, QgsGeometry, float, float, QgsPointXY, float]]:
         runway_name = runway_data.get("short_name", "N/A")
 
         width = bls_param_dict.get("width")
         start_dist_from_thr = bls_param_dict.get("start_dist_from_thr")
+        start_dist_rule = bls_param_dict.get("start_dist_rule")
         divergence = bls_param_dict.get("divergence")
         slope = bls_param_dict.get("slope")
         ref = bls_param_dict.get("ref", "MOS (Verify)")
+        ref_notes = [
+            note_ref
+            for note_ref in [
+                bls_param_dict.get("start_dist_ref"),
+                bls_param_dict.get("width_ref"),
+            ]
+            if note_ref
+        ]
+        if ref_notes:
+            ref = f"{ref}; {'; '.join(ref_notes)}"
+
+        resolved_start_dist = start_dist_from_thr
+        normalized_start_dist_rule = str(start_dist_rule or "").strip().lower()
+        if (
+            start_dist_rule == "distance_to_end_of_runway_strip"
+            or "end of strip" in normalized_start_dist_rule
+            or "end_of_runway_strip" in normalized_start_dist_rule
+        ) and "1800" not in normalized_start_dist_rule and "1 800" not in normalized_start_dist_rule:
+            resolved_start_dist = strip_end_distance_from_thr
+        elif (
+            start_dist_rule == "1800_m_or_end_of_runway_strip_whichever_is_less"
+            or "whichever is less" in normalized_start_dist_rule
+        ):
+            if strip_end_distance_from_thr is not None:
+                resolved_start_dist = min(float(start_dist_from_thr), strip_end_distance_from_thr)
 
         # Consolidate missing param check for clarity
         missing_params_list = []
         if width is None:
             missing_params_list.append("width")
-        if start_dist_from_thr is None:
+        if resolved_start_dist is None:
             missing_params_list.append("start_dist_from_thr")
         if divergence is None:
             missing_params_list.append("divergence")
@@ -1305,7 +1332,7 @@ class OlsGuidelineMixin:
             self._log_debug(f"BLS {end_desig} skipped: missing inputs {', '.join(missing_params_list)}.")
             return None
 
-        inner_edge_center_pt = thr_point.project(start_dist_from_thr, outward_azimuth)
+        inner_edge_center_pt = thr_point.project(resolved_start_dist, outward_azimuth)
         if not inner_edge_center_pt:
             self._log_debug(f"BLS {end_desig} skipped: failed to calculate inner edge centre.")
             return None
@@ -1389,7 +1416,7 @@ class OlsGuidelineMixin:
             "innerw_m": width,
             "outerw_m": final_width,
             "divergence_perc": divergence * 100.0,
-            "origin_offset": start_dist_from_thr,
+            "origin_offset": resolved_start_dist,
         }
         for name, value in attr_map.items():
             idx = fields.indexFromName(name)
@@ -3538,6 +3565,7 @@ class OlsGuidelineMixin:
         primary_threshold_point = runway_data.get("thr_point")
         reciprocal_threshold_point = runway_data.get("rec_thr_point")
         arc_num_str = runway_data.get("arc_num")
+        arc_let = str(runway_data.get("arc_let") or "").strip().upper()
         primary_approach_type_str = runway_data.get("type1", "")
         reciprocal_approach_type_str = runway_data.get("type2", "")
         primary_thr_elev = runway_data.get("threshold_elev_1")
@@ -3659,6 +3687,7 @@ class OlsGuidelineMixin:
                 "approach_surface_outward_azimuth": az_reciprocal_to_primary,
                 "baulked_landing_origin_thr_pt": primary_threshold_point,
                 "baulked_landing_flight_path_azimuth": az_primary_to_reciprocal,
+                "baulked_landing_strip_end_pavement_pt": phys_pavement_end_near_reciprocal_thr,
                 "tocs_departure_pavement_end_pt": phys_pavement_end_near_reciprocal_thr,
                 "tocs_flight_path_azimuth": az_primary_to_reciprocal,
                 "tocs_clearway_len_at_departure_end": clearway_len_at_reciprocal_end,
@@ -3672,6 +3701,7 @@ class OlsGuidelineMixin:
                 "approach_surface_outward_azimuth": az_primary_to_reciprocal,
                 "baulked_landing_origin_thr_pt": reciprocal_threshold_point,
                 "baulked_landing_flight_path_azimuth": az_reciprocal_to_primary,
+                "baulked_landing_strip_end_pavement_pt": phys_pavement_end_near_primary_thr,
                 "tocs_departure_pavement_end_pt": phys_pavement_end_near_primary_thr,
                 "tocs_flight_path_azimuth": az_reciprocal_to_primary,
                 "tocs_clearway_len_at_departure_end": clearway_len_at_primary_end,
@@ -3785,10 +3815,27 @@ class OlsGuidelineMixin:
 
             # --- Baulked Landing ---
             try:
-                bls_params_dict = self.get_active_ruleset().ols_parameters(
-                    arc_num, config["approach_type_str"], "BaulkedLanding"
-                )
+                active_ruleset = self.get_active_ruleset()
+                baulked_params_getter = getattr(active_ruleset, "baulked_landing_parameters", None)
+                if callable(baulked_params_getter):
+                    bls_params_dict = baulked_params_getter(arc_num, config["approach_type_str"], arc_let)
+                else:
+                    bls_params_dict = active_ruleset.ols_parameters(arc_num, config["approach_type_str"], "BaulkedLanding")
                 if bls_params_dict and IHS_ELEVATION_AMSL is not None:
+                    strip_end_distance_from_thr = None
+                    strip_type_abbr = active_ruleset.classify_runway_type(config["approach_type_str"])
+                    strip_dims_for_bls = active_ruleset.strip_parameters(
+                        arc_num, strip_type_abbr, runway_actual_width
+                    )
+                    strip_extension_for_bls = (strip_dims_for_bls or {}).get("extension_length")
+                    strip_end_pavement_pt = config.get("baulked_landing_strip_end_pavement_pt")
+                    if strip_end_pavement_pt and strip_extension_for_bls is not None:
+                        strip_end_pt = strip_end_pavement_pt.project(
+                            strip_extension_for_bls,
+                            config["baulked_landing_flight_path_azimuth"],
+                        )
+                        if strip_end_pt:
+                            strip_end_distance_from_thr = config["baulked_landing_origin_thr_pt"].distance(strip_end_pt)
                     bls_result_tuple = self._generate_baulked_landing_surface(
                         runway_data,
                         rwy_params,
@@ -3797,6 +3844,7 @@ class OlsGuidelineMixin:
                         bls_params_dict,
                         current_desig,
                         IHS_ELEVATION_AMSL,
+                        strip_end_distance_from_thr,
                     )
                     if bls_result_tuple:
                         feat_bls, bls_g, bls_l, bls_se, bls_cl_s_xy, bls_ew = bls_result_tuple

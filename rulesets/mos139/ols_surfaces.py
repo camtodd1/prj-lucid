@@ -360,20 +360,24 @@ INNER_TRANSITIONAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     (4, "PA_II_III"): {"slope": 0.333, "ref": "MOS 7.11/Table 7.15 (1) (PA-CatII/III, 3/4)"},  # 33.3%
 }
 
-# --- Baulked Landing Surface (instrument runways only) ---
+# --- Baulked Landing Surface (precision approach runways only) ---
 BAULKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     # Key: (ARC_Number, Runway_Type_Abbreviation)
     # Runway_Type_Abbreviation: "PA_I" (Precision Approach CAT I), "PA_II_III" (Precision Approach CAT II/III)
     (1, "PA_I"): {
         "width": 90.0,  # Inner width of the Baulked Landing surface (metres)
-        "start_dist_from_thr": 1800.0,  # Distance from threshold to the start of Baulked Landing (metres)
+        "start_dist_from_thr": None,
+        "start_dist_rule": "distance_to_end_of_runway_strip",
+        "start_dist_ref": "MOS 7.12 Table 7.15(1) note e",
         "divergence": 0.10,  # Divergence per side (e.g., 0.10 for 10%)
         "slope": 0.04,  # Slope (e.g., 0.04 for 4%)
         "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 1/2)",
     },
     (2, "PA_I"): {
         "width": 90.0,
-        "start_dist_from_thr": 1800.0,
+        "start_dist_from_thr": None,
+        "start_dist_rule": "distance_to_end_of_runway_strip",
+        "start_dist_ref": "MOS 7.12 Table 7.15(1) note e",
         "divergence": 0.10,
         "slope": 0.04,
         "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 1/2)",
@@ -381,29 +385,45 @@ BAULKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
     (3, "PA_I"): {
         "width": 120.0,
         "start_dist_from_thr": 1800.0,
+        "start_dist_rule": "1800_m_or_end_of_runway_strip_whichever_is_less",
+        "start_dist_ref": "MOS 7.12 Table 7.15(1) note f",
         "divergence": 0.10,
         "slope": 0.033,  # 3.3%
+        "code_letter_f_width": 140.0,
+        "code_letter_f_width_ref": "MOS 7.12 Table 7.15(1) note g",
         "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 3/4)",
     },
     (4, "PA_I"): {
         "width": 120.0,
         "start_dist_from_thr": 1800.0,
+        "start_dist_rule": "1800_m_or_end_of_runway_strip_whichever_is_less",
+        "start_dist_ref": "MOS 7.12 Table 7.15(1) note f",
         "divergence": 0.10,
         "slope": 0.033,
+        "code_letter_f_width": 140.0,
+        "code_letter_f_width_ref": "MOS 7.12 Table 7.15(1) note g",
         "ref": "MOS 7.12/Table 7.15 (1) (PA-CatI, 3/4)",
     },
     (3, "PA_II_III"): {
         "width": 120.0,
         "start_dist_from_thr": 1800.0,
+        "start_dist_rule": "1800_m_or_end_of_runway_strip_whichever_is_less",
+        "start_dist_ref": "MOS 7.12 Table 7.15(1) note f",
         "divergence": 0.10,
         "slope": 0.033,
+        "code_letter_f_width": 140.0,
+        "code_letter_f_width_ref": "MOS 7.12 Table 7.15(1) note g",
         "ref": "MOS 7.12/Table 7.15 (1) (PA-CatII/III, 3/4)",
     },
     (4, "PA_II_III"): {
         "width": 120.0,
         "start_dist_from_thr": 1800.0,
+        "start_dist_rule": "1800_m_or_end_of_runway_strip_whichever_is_less",
+        "start_dist_ref": "MOS 7.12 Table 7.15(1) note f",
         "divergence": 0.10,
         "slope": 0.033,
+        "code_letter_f_width": 140.0,
+        "code_letter_f_width_ref": "MOS 7.12 Table 7.15(1) note g",
         "ref": "MOS 7.12/Table 7.15 (1) (PA-CatII/III, 3/4)",
     },
 }
@@ -668,6 +688,29 @@ def get_ihs_base_height() -> Optional[float]:
         return None
 
 
+def get_baulked_landing_params(
+    arc_num: int,
+    runway_type_str: Optional[str],
+    arc_let: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """Return MOS139 baulked landing parameters with Table 7.15(1) notes applied."""
+    if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
+        LOGGER.warning("Invalid ARC Number %r for Baulked Landing lookup.", arc_num)
+        return None
+
+    key = (arc_num, get_runway_type_abbr(runway_type_str))
+    params = BAULKED_LANDING_PARAMS.get(key)
+    if not params:
+        return None
+
+    result = params.copy()
+    if (arc_let or "").strip().upper() == "F" and result.get("code_letter_f_width") is not None:
+        result["width"] = result["code_letter_f_width"]
+        result["width_ref"] = result.get("code_letter_f_width_ref")
+
+    return result
+
+
 def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: str) -> Optional[Dict[str, Any]]:
     """
     Retrieves OLS parameters based on ARC number, runway type, and surface type.
@@ -704,8 +747,7 @@ def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: s
         # lookup_key remains key_arc_type
 
     elif surface_type_upper == "BAULKEDLANDING":
-        params_dict = BAULKED_LANDING_PARAMS
-        # lookup_key remains key_arc_type
+        return get_baulked_landing_params(arc_num, runway_type_str)
 
     elif surface_type_upper == "TOCS":
         params_dict = TOCS_PARAMS
