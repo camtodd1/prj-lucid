@@ -1088,7 +1088,23 @@ class Annex14GeometryMixin:
         return passthrough + consolidated
 
     def _annex14_surface_label(self, surface: str) -> str:
-        return str(surface or "surface").replace("_", " ").title()
+        surface_key = str(surface or "").strip().lower()
+        labels = {
+            "approach": "Approach",
+            "inner_approach": "Inner Approach",
+            "transitional": "Transitional",
+            "inner_transitional": "Inner Transitional",
+            "balked_landing": "Balked Landing",
+            "precision_approach": "Precision Approach",
+            "straight_in_instrument_approach": "Straight-in Instrument Approach",
+            "instrument_departure": "Instrument Departure",
+            "take_off_climb": "Take-off Climb",
+            "horizontal": "Horizontal",
+            "inner_horizontal": "Inner Horizontal",
+            "conical": "Conical",
+            "outer_horizontal": "Outer Horizontal",
+        }
+        return labels.get(surface_key, str(surface or "surface").replace("_", " ").title())
 
     def _annex14_polygon_layer_type(self, features: List[QgsFeature]) -> str:
         try:
@@ -1138,12 +1154,69 @@ class Annex14GeometryMixin:
         runway_group = self._annex14_runway_group(parent_group, runway_label)
         return self._ensure_layer_group(runway_group, family_label)
 
+    def _annex14_runway_surface_layer_group(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        family_label: str,
+        surface: str,
+        runway_label: str,
+        layer_kind: str,
+    ) -> QgsLayerTreeGroup:
+        family_group = self._ensure_layer_group(parent_group, family_label)
+        surface_group = self._ensure_layer_group(family_group, self._annex14_surface_label(surface))
+        runway_group = self._annex14_runway_group(surface_group, runway_label)
+        return self._ensure_layer_group(runway_group, layer_kind)
+
+    def _annex14_aerodrome_wide_surface_layer_group(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        surface: str,
+        layer_kind: str,
+    ) -> QgsLayerTreeGroup:
+        family_group = self._ensure_layer_group(parent_group, "Aerodrome-wide Surfaces")
+        surface_group = self._ensure_layer_group(family_group, self._annex14_surface_label(surface))
+        return self._ensure_layer_group(surface_group, layer_kind)
+
+    def _annex14_runway_label_for_surface(self, surface: str, end_desig: str, runway_name: str) -> str:
+        surface_key = str(surface or "").strip().lower()
+        if surface_key in {"transitional", "inner_transitional", "horizontal"}:
+            return runway_name
+        return end_desig
+
+    def _annex14_prepare_future_ols_layer_tree(self, parent_group: QgsLayerTreeGroup) -> None:
+        ordered_surfaces = {
+            "Obstacle Free Surfaces": [
+                "approach",
+                "inner_approach",
+                "transitional",
+                "inner_transitional",
+                "balked_landing",
+            ],
+            "Obstacle Evaluation Surfaces": [
+                "precision_approach",
+                "straight_in_instrument_approach",
+                "instrument_departure",
+                "take_off_climb",
+                "horizontal",
+            ],
+            "Aerodrome-wide Surfaces": [
+                "inner_horizontal",
+                "conical",
+                "outer_horizontal",
+            ],
+        }
+        for family_label, surfaces in ordered_surfaces.items():
+            family_group = self._ensure_layer_group(parent_group, family_label)
+            for surface in surfaces:
+                self._ensure_layer_group(family_group, self._annex14_surface_label(surface))
+
     def process_annex14_geometry(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         ruleset = self.get_active_protected_airspace_ruleset()
         if getattr(ruleset, "protected_airspace_model", "") != "annex14_modernised_ofs_oes":
             return False
         if layer_group is None:
             return False
+        self._annex14_prepare_future_ols_layer_tree(layer_group)
 
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
@@ -1910,110 +1983,142 @@ class Annex14GeometryMixin:
                 end_oes_contours = self._annex14_features_for_end(oes_contour_features, end_desig)
 
                 if end_ofs_features:
-                    ofs_group = self._annex14_surface_group(layer_group, end_desig, "Obstacle Free Surfaces")
                     for surface, surface_features in self._annex14_features_by_surface(end_ofs_features).items():
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
+                        runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
+                        surface_group = self._annex14_runway_surface_layer_group(
+                            layer_group,
+                            "Obstacle Free Surfaces",
+                            surface,
+                            runway_label,
+                            "Surface",
+                        )
                         layer = self._create_and_add_layer(
                             self._annex14_polygon_layer_type(surface_features),
                             f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
                             f"Annex 14 OFS {surface_label} RWY {end_desig}",
                             fields,
                             surface_features,
-                            ofs_group,
+                            surface_group,
                             "OLS Approach",
                         )
                         created = created or layer is not None
 
                 if end_ofs_contours:
-                    ofs_group = self._annex14_surface_group(layer_group, end_desig, "Obstacle Free Surfaces")
                     for surface, surface_features in self._annex14_features_by_surface(end_ofs_contours).items():
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
                         surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
+                        runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
+                        contour_group = self._annex14_runway_surface_layer_group(
+                            layer_group,
+                            "Obstacle Free Surfaces",
+                            surface,
+                            runway_label,
+                            "Contours",
+                        )
                         layer = self._create_and_add_layer(
                             self._annex14_contour_layer_type(surface_features),
                             f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}_Contours",
                             f"Annex 14 OFS {surface_label} Contours RWY {end_desig}",
                             contour_fields,
                             surface_features,
-                            ofs_group,
+                            contour_group,
                             self._annex14_contour_style_key(surface),
                         )
                         created = created or layer is not None
 
                 if end_oes_features:
-                    oes_group = self._annex14_surface_group(layer_group, end_desig, "Obstacle Evaluation Surfaces")
                     for surface, surface_features in self._annex14_features_by_surface(end_oes_features).items():
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
+                        runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
+                        surface_group = self._annex14_runway_surface_layer_group(
+                            layer_group,
+                            "Obstacle Evaluation Surfaces",
+                            surface,
+                            runway_label,
+                            "Surface",
+                        )
                         layer = self._create_and_add_layer(
                             self._annex14_polygon_layer_type(surface_features),
                             f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
                             f"Annex 14 OES {surface_label} RWY {end_desig}",
                             fields,
                             surface_features,
-                            oes_group,
+                            surface_group,
                             "OLS TOCS",
                         )
                         created = created or layer is not None
 
                 if end_oes_contours:
-                    oes_group = self._annex14_surface_group(layer_group, end_desig, "Obstacle Evaluation Surfaces")
                     for surface, surface_features in self._annex14_features_by_surface(end_oes_contours).items():
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
                         surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
+                        runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
+                        contour_group = self._annex14_runway_surface_layer_group(
+                            layer_group,
+                            "Obstacle Evaluation Surfaces",
+                            surface,
+                            runway_label,
+                            "Contours",
+                        )
                         layer = self._create_and_add_layer(
                             self._annex14_contour_layer_type(surface_features),
                             f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}_Contours",
                             f"Annex 14 OES {surface_label} Contours RWY {end_desig}",
                             contour_fields,
                             surface_features,
-                            oes_group,
+                            contour_group,
                             self._annex14_contour_style_key(surface),
                         )
                         created = created or layer is not None
 
             runway_wide_oes_features = self._annex14_runway_wide_features(oes_features)
             if runway_wide_oes_features:
-                runway_wide_group = self._annex14_surface_group(
-                    layer_group,
-                    runway_name,
-                    "Obstacle Evaluation Surfaces",
-                )
                 for surface, surface_features in self._annex14_features_by_surface(runway_wide_oes_features).items():
                     safe_surface = self._sanitize_filename(surface)
                     surface_label = self._annex14_surface_label(surface)
+                    surface_group = self._annex14_runway_surface_layer_group(
+                        layer_group,
+                        "Obstacle Evaluation Surfaces",
+                        surface,
+                        runway_name,
+                        "Surface",
+                    )
                     layer = self._create_and_add_layer(
                         self._annex14_polygon_layer_type(surface_features),
                         f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_surface}",
                         f"Annex 14 OES {surface_label} RWY {runway_name}",
                         fields,
                         surface_features,
-                        runway_wide_group,
+                        surface_group,
                         "OLS TOCS",
                     )
                     created = created or layer is not None
 
             runway_wide_oes_contours = self._annex14_runway_wide_features(oes_contour_features)
             if runway_wide_oes_contours:
-                runway_wide_group = self._annex14_surface_group(
-                    layer_group,
-                    runway_name,
-                    "Obstacle Evaluation Surfaces",
-                )
                 for surface, surface_features in self._annex14_features_by_surface(runway_wide_oes_contours).items():
                     safe_surface = self._sanitize_filename(surface)
                     surface_label = self._annex14_surface_label(surface)
                     surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
+                    contour_group = self._annex14_runway_surface_layer_group(
+                        layer_group,
+                        "Obstacle Evaluation Surfaces",
+                        surface,
+                        runway_name,
+                        "Contours",
+                    )
                     layer = self._create_and_add_layer(
                         self._annex14_contour_layer_type(surface_features),
                         f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_surface}_Contours",
                         f"Annex 14 OES {surface_label} Contours RWY {runway_name}",
                         contour_fields,
                         surface_features,
-                        runway_wide_group,
+                        contour_group,
                         self._annex14_contour_style_key(surface),
                     )
                     created = created or layer is not None

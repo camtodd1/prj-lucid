@@ -756,12 +756,8 @@ class SafeguardingBuilder(
             runway_ols_group = None
             ofz_group = None
             if guideline_groups.get("F") is not None:
-                if (
-                    getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
-                    == "annex14_modernised_ofs_oes"
-                ):
-                    runway_ols_group = guideline_groups["F"].addGroup(self.tr("Future Annex 14 OLS Surfaces"))
-                    self._stage_layer_tree_node(runway_ols_group)
+                if self._is_future_annex14_protected_airspace():
+                    runway_ols_group = guideline_groups["F"]
                 else:
                     guideline_f_subgroups = self.get_active_framework().guideline_f_subgroup_names()
                     airport_wide_ols_group = guideline_groups["F"].addGroup(
@@ -1366,8 +1362,13 @@ class SafeguardingBuilder(
             )
         protected_airspace_group = groups["protected_airspace"]
         if protected_airspace_group is not None:
+            ols_group_name = (
+                "Annex 14 Future OLS Standard"
+                if self._is_future_annex14_protected_airspace()
+                else output_structure.OLS_SURFACES
+            )
             groups["ols_surfaces"] = self._ensure_layer_group(
-                protected_airspace_group, output_structure.OLS_SURFACES
+                protected_airspace_group, ols_group_name
             )
             groups["controlling_ols_surfaces"] = self._ensure_layer_group(
                 protected_airspace_group, output_structure.CONTROLLING_OLS_SURFACES
@@ -1376,6 +1377,12 @@ class SafeguardingBuilder(
                 protected_airspace_group, output_structure.CONTROLLING_CONTOURS
             )
         return groups
+
+    def _is_future_annex14_protected_airspace(self) -> bool:
+        return (
+            getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
+            == "annex14_modernised_ofs_oes"
+        )
 
     def _move_layer_tree_node(
         self,
@@ -1437,6 +1444,26 @@ class SafeguardingBuilder(
             )
         return moved_any
 
+    def _flatten_direct_child_group(self, parent_group: QgsLayerTreeGroup, group_name: str) -> bool:
+        """Move a child group's contents into its parent and remove the empty wrapper."""
+        source_group = self._find_direct_child_group(parent_group, group_name)
+        if source_group is None or parent_group is None:
+            return False
+
+        moved_any = False
+        for child in list(source_group.children()):
+            moved_any = self._move_layer_tree_node(child, parent_group) or moved_any
+        try:
+            if not source_group.children():
+                parent_group.removeChildNode(source_group)
+        except Exception as e:
+            QgsMessageLog.logMessage(
+                f"Warning: Failed to remove flattened group '{group_name}': {e}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+        return moved_any
+
     def _repair_output_layer_tree(self, main_group: QgsLayerTreeGroup) -> None:
         """Move known generated nodes into the reviewed layer hierarchy if QGIS added them at root level."""
         if main_group is None:
@@ -1446,8 +1473,10 @@ class SafeguardingBuilder(
         infrastructure_group = self._ensure_layer_group(main_group, output_structure.AERODROME_INFRASTRUCTURE)
         protection_group = self._ensure_layer_group(main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION)
         protected_airspace_group = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
+        future_annex14 = self._is_future_annex14_protected_airspace()
+        ols_group_name = "Annex 14 Future OLS Standard" if future_annex14 else output_structure.OLS_SURFACES
         ols_surfaces_group = (
-            self._ensure_layer_group(protected_airspace_group, output_structure.OLS_SURFACES)
+            self._ensure_layer_group(protected_airspace_group, ols_group_name)
             if protected_airspace_group is not None
             else None
         )
@@ -1519,6 +1548,13 @@ class SafeguardingBuilder(
 
         legacy_guideline_f_name = self.tr("Guideline F - Airspace / OLS")
         self._merge_or_move_direct_group(main_group, legacy_guideline_f_name, ols_surfaces_group)
+        if future_annex14:
+            self._merge_or_move_direct_group(
+                protected_airspace_group,
+                self.tr(output_structure.OLS_SURFACES),
+                ols_surfaces_group,
+            )
+            self._flatten_direct_child_group(ols_surfaces_group, self.tr("Future Annex 14 OLS Surfaces"))
         legacy_guideline_f_group = self._find_direct_child_group(ols_surfaces_group, legacy_guideline_f_name)
         if legacy_guideline_f_group is not None:
             for child in list(legacy_guideline_f_group.children()):
@@ -1535,12 +1571,14 @@ class SafeguardingBuilder(
                     PLUGIN_TAG,
                     level=Qgis.Warning,
                 )
-        for group_name in self.get_active_framework().guideline_f_subgroup_names().values():
-            self._merge_or_move_direct_group(main_group, self.tr(group_name), ols_surfaces_group)
+        if not future_annex14:
+            for group_name in self.get_active_framework().guideline_f_subgroup_names().values():
+                self._merge_or_move_direct_group(main_group, self.tr(group_name), ols_surfaces_group)
         for child in list(main_group.children()):
             if isinstance(child, QgsLayerTreeGroup) and re.fullmatch(r"RWY\s+\S+", child.name() or ""):
                 self._merge_or_move_direct_group(main_group, child.name(), ols_surfaces_group)
-        self._repair_guideline_f_layer_tree(ols_surfaces_group, extra_source_groups=[main_group])
+        if not future_annex14:
+            self._repair_guideline_f_layer_tree(ols_surfaces_group, extra_source_groups=[main_group])
         self._repair_debug_development_layer_tree(main_group, debug_group)
 
     def _is_development_poc_layer(self, node: QgsLayerTreeLayer) -> bool:
