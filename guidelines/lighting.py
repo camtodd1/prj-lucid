@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Compatibility shim for NASF Guideline E lighting control zones."""
+"""Compatibility shim for NASF-backed lighting control safeguarding."""
 
 try:
     from ..frameworks.nasf.lighting import LightingGuidelineMixin

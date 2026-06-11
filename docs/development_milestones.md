@@ -172,6 +172,17 @@ Last reviewed: 2026-06-11.
   - Polygon glyph geometry for runway designators.
   - Touchdown-zone default policy decision.
 
+- [ ] Complete safeguarding generator terminology refactor.
+
+  Work items:
+  - Keep generic generator entrypoints such as wildlife, lighting control, CNS
+    building restricted areas, public safety areas, windshear, and runway OLS.
+  - Retain NASF guideline references only as source/provenance metadata.
+  - Decide whether layer-tree group keys should remain framework guideline
+    letters or move to output-family keys with framework-specific labels.
+  - Remove legacy `process_guideline_*` aliases once downstream call sites and
+    saved expectations no longer need them.
+
 ## Scaffolded Or Future Enhancements
 
 - [ ] Annex 14 current OLS.

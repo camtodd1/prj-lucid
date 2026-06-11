@@ -164,6 +164,11 @@ class FrameworkRegistryTest(unittest.TestCase):
         SimpleGuidelinesMixin = simple_module.SimpleGuidelinesMixin
         NasfGuidelinesMixin = processors_module.NasfGuidelinesMixin
         self.assertIs(SimpleGuidelinesMixin, NasfGuidelinesMixin)
+        self.assertTrue(hasattr(NasfGuidelinesMixin, "process_windshear_safeguarding"))
+        self.assertTrue(hasattr(NasfGuidelinesMixin, "process_wildlife_safeguarding"))
+        self.assertTrue(hasattr(NasfGuidelinesMixin, "process_wind_turbine_safeguarding"))
+        self.assertTrue(hasattr(NasfGuidelinesMixin, "process_cns_building_restricted_areas"))
+        self.assertTrue(hasattr(NasfGuidelinesMixin, "process_public_safety_areas"))
         self.assertTrue(hasattr(NasfGuidelinesMixin, "process_guideline_b"))
         self.assertTrue(hasattr(NasfGuidelinesMixin, "process_guideline_c"))
         self.assertTrue(hasattr(NasfGuidelinesMixin, "process_guideline_g"))

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""NASF Guideline G CNS building restricted area processor."""
+"""CNS building restricted area generator backed by NASF policy parameters."""
 
 from typing import Any, List, Optional
 
@@ -21,17 +21,17 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
-    def process_guideline_g(
+    def process_cns_building_restricted_areas(
         self,
         cns_facilities_data: List[dict],
         icao_code: str,
         target_crs: QgsCoordinateReferenceSystem,
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
-        """Processes Guideline G: CNS Facilities BRAs using pre-validated data."""
+        """Generate CNS building restricted areas using pre-validated data."""
         if not cns_facilities_data:
             QgsMessageLog.logMessage(
-                "Guideline G skipped: No valid CNS facilities provided.",
+                "CNS building restricted areas skipped: no valid CNS facilities provided.",
                 PLUGIN_TAG,
                 level=Qgis.Info,
             )
@@ -143,11 +143,26 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
 
         if not overall_success:
             QgsMessageLog.logMessage(
-                "Guideline G: No CNS layers generated or added.",
+                "CNS building restricted areas: no CNS layers generated or added.",
                 PLUGIN_TAG,
                 level=Qgis.Info,
             )
         return overall_success
+
+    def process_guideline_g(
+        self,
+        cns_facilities_data: List[dict],
+        icao_code: str,
+        target_crs: QgsCoordinateReferenceSystem,
+        layer_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Compatibility alias for legacy NASF Guideline G processing."""
+        return self.process_cns_building_restricted_areas(
+            cns_facilities_data,
+            icao_code,
+            target_crs,
+            layer_group,
+        )
 
     def _generate_circular_or_donut(
         self, facility_point_geom: QgsGeometry, surface_spec: dict, description: str

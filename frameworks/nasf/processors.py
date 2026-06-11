@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Composed NASF guideline processor mixin."""
+"""Composed safeguarding generator mixin backed by NASF policy parameters."""
 
 from .airport_guidelines import NasfAirportGuidelinesMixin
 from .cns_guideline import NasfCnsGuidelineMixin
@@ -11,7 +11,7 @@ class NasfGuidelinesMixin(
     NasfAirportGuidelinesMixin,
     NasfCnsGuidelineMixin,
 ):
-    """Aggregate NASF Guideline A/B/C/D/G/I processors."""
+    """Aggregate NASF-backed safeguarding generators."""
 
 
 __all__ = ["NasfGuidelinesMixin"]

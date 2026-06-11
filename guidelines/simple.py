@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Compatibility shim for NASF Guideline A/B/C/D/G/I processors."""
+"""Compatibility shim for NASF-backed safeguarding generators."""
 
 try:
     from ..frameworks.nasf.processors import NasfGuidelinesMixin as SimpleGuidelinesMixin

@@ -39,15 +39,15 @@ The plugin can generate:
 - MOS-informed AGL approach lighting for precision approach CAT II/III runway
   ends, including centreline barrettes, side-row barrettes, crossbars, and
   distance-coded centreline light positions.
-- Guideline B windshear assessment zones.
-- Guideline C wildlife management zones.
-- Guideline D wind turbine assessment zones.
-- Guideline E lighting control zones and airport-wide lighting areas.
-- Guideline F obstacle limitation surfaces, including approach, take-off climb,
+- Building-induced windshear assessment zones.
+- Wildlife management zones.
+- Wind turbine assessment zones.
+- Lighting control zones and airport-wide lighting areas.
+- Obstacle limitation surfaces, including approach, take-off climb,
   transitional, inner horizontal, conical, outer horizontal, and related inner
   surfaces where applicable.
-- Guideline G CNS building restricted areas based on selected CNS facilities.
-- Guideline I public safety areas.
+- CNS building restricted areas based on selected CNS facilities.
+- Public safety areas.
 - Specialised surfaces, including runway airspace object assessment areas and
   taxiway separation offsets.
 - MET station safeguarding surfaces where MET inputs are supplied.
@@ -100,8 +100,8 @@ generation logic is split into smaller modules:
 
 ```text
 safeguarding_builder.py          Plugin lifecycle, orchestration, common
-                                 geometry helpers, ARP/runway layers, MET
-                                 surfaces, and Guideline E logic.
+                                 geometry helpers, ARP/runway layers, and MET
+                                 surfaces.
 safeguarding_builder_dialog.py   QGIS dialog orchestration, global inputs,
                                  runway calculations, and validation.
 dialog/runway_group.py           Dynamic runway input group widget.
@@ -120,8 +120,9 @@ core/styles.py                   Mapping between layer style keys and QML files.
 guidelines/guideline_constants.py
                                  Shared constants for guideline dimensions,
                                  references, contour intervals, and offsets.
-guidelines/simple.py             Guideline B/C/D/G/I and helper logic.
-guidelines/ols_guideline.py      Guideline F and airport-wide OLS generation.
+guidelines/simple.py             Compatibility shim for NASF-backed
+                                 safeguarding generators.
+guidelines/ols_guideline.py      Runway and airport-wide OLS generation.
 surfaces/physical.py             Physical runway and runway protection geometry.
 surfaces/airfield_ground_lighting.py
                                  Airfield Ground Lighting generation and
@@ -143,8 +144,8 @@ rulesets/mos139/physical_data.py
                                  policy.
 rulesets/mos139/taxiway.py      MOS139 taxiway separation policy.
 rulesets/mos139/ols_surfaces.py MOS139 OLS surface dimensions and lookups.
-frameworks/nasf/                Australian NASF safeguarding framework profile
-                                 and capability metadata.
+frameworks/nasf/                Australian NASF safeguarding framework profile,
+                                 policy parameters, and compatibility aliases.
 docs/                            Planning notes, implementation matrices,
                                  TODOs, and reference mapping files.
 styles/*.qml                     QGIS layer styling files.

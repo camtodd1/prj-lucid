@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""NASF airport-centred guideline processors."""
+"""Airport-centred safeguarding generators backed by NASF policy parameters."""
 
 import math
 import traceback
@@ -24,14 +24,14 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
-    def process_guideline_c(
+    def process_wildlife_safeguarding(
         self,
         arp_point: QgsPointXY,
         icao_code: str,
         target_crs: QgsCoordinateReferenceSystem,
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
-        """Processes Guideline C: Wildlife Management Zone."""
+        """Generate wildlife management zones."""
         if arp_point is None or not icao_code or target_crs is None or not target_crs.isValid() or layer_group is None:
             return False
         overall_success = False
@@ -45,7 +45,7 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
             arp_geom = QgsGeometry.fromPointXY(arp_point)
             if arp_geom.isNull():
                 QgsMessageLog.logMessage(
-                    "Guideline C Wildlife failed: ARP geometry is null.",
+                    "Wildlife safeguarding failed: ARP geometry is null.",
                     PLUGIN_TAG,
                     level=Qgis.Warning,
                 )
@@ -62,7 +62,7 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
             ) -> bool:
                 if not geom or geom.isEmpty():
                     QgsMessageLog.logMessage(
-                        f"Guideline C Wildlife zone {zone} failed: geometry is empty.",
+                        f"Wildlife safeguarding zone {zone} failed: geometry is empty.",
                         PLUGIN_TAG,
                         level=Qgis.Warning,
                     )
@@ -103,7 +103,7 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
                 )
                 if layer is None:
                     QgsMessageLog.logMessage(
-                        f"Guideline C Wildlife zone {zone} failed: layer was not created.",
+                        f"Wildlife safeguarding zone {zone} failed: layer was not created.",
                         PLUGIN_TAG,
                         level=Qgis.Warning,
                     )
@@ -170,7 +170,7 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
                 overall_success = True
             if created_zones:
                 QgsMessageLog.logMessage(
-                    "Guideline C Wildlife: created zone layer(s) "
+                    "Wildlife safeguarding: created zone layer(s) "
                     f"{', '.join(created_zones)} from ARP "
                     f"({arp_point.x():.3f}, {arp_point.y():.3f}).",
                     PLUGIN_TAG,
@@ -178,27 +178,37 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
                 )
             if failed_zones:
                 QgsMessageLog.logMessage(
-                    "Guideline C Wildlife partial failure: failed zone layer(s) " f"{', '.join(failed_zones)}.",
+                    "Wildlife safeguarding partial failure: failed zone layer(s) " f"{', '.join(failed_zones)}.",
                     PLUGIN_TAG,
                     level=Qgis.Warning,
                 )
             return overall_success
         except Exception as e:
-            QgsMessageLog.logMessage(f"Guideline C Wildlife failed: {e}", PLUGIN_TAG, level=Qgis.Critical)
+            QgsMessageLog.logMessage(f"Wildlife safeguarding failed: {e}", PLUGIN_TAG, level=Qgis.Critical)
             return False
 
-    def process_guideline_d(
+    def process_guideline_c(
         self,
         arp_point: QgsPointXY,
         icao_code: str,
         target_crs: QgsCoordinateReferenceSystem,
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
-        """Processes Guideline D: Wind Turbine Assessment Zone."""
+        """Compatibility alias for legacy NASF Guideline C processing."""
+        return self.process_wildlife_safeguarding(arp_point, icao_code, target_crs, layer_group)
+
+    def process_wind_turbine_safeguarding(
+        self,
+        arp_point: QgsPointXY,
+        icao_code: str,
+        target_crs: QgsCoordinateReferenceSystem,
+        layer_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Generate wind turbine assessment zones."""
         plugin_tag = PLUGIN_TAG
         if arp_point is None or not icao_code or layer_group is None:
             QgsMessageLog.logMessage(
-                "Guideline D (Wind Turbine) skipped: Missing ARP point, ICAO code, or layer group.",
+                "Wind turbine safeguarding skipped: Missing ARP point, ICAO code, or layer group.",
                 plugin_tag,
                 level=Qgis.Warning,
             )
@@ -208,7 +218,7 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
             arp_geom = QgsGeometry.fromPointXY(arp_point)
             if arp_geom.isNull():
                 QgsMessageLog.logMessage(
-                    "Guideline D (Wind Turbine) skipped: ARP geometry is null.",
+                    "Wind turbine safeguarding skipped: ARP geometry is null.",
                     plugin_tag,
                     level=Qgis.Warning,
                 )
@@ -220,7 +230,7 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
             turbine_zone_geom = arp_geom.buffer(turbine_radius_m, wind_turbine["buffer_segments"])
             if not turbine_zone_geom or turbine_zone_geom.isEmpty():
                 QgsMessageLog.logMessage(
-                    "Guideline D: Failed to create turbine zone buffer.",
+                    "Wind turbine safeguarding: failed to create turbine zone buffer.",
                     plugin_tag,
                     level=Qgis.Warning,
                 )
@@ -229,7 +239,7 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
             valid_geom = turbine_zone_geom.makeValid()
             if not valid_geom or not valid_geom.isGeosValid() or valid_geom.isEmpty():
                 QgsMessageLog.logMessage(
-                    "Guideline D: Turbine zone geometry invalid after makeValid.",
+                    "Wind turbine safeguarding: turbine zone geometry invalid after makeValid.",
                     plugin_tag,
                     level=Qgis.Warning,
                 )
@@ -271,8 +281,18 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
             return layer_created is not None
         except Exception as e:
             QgsMessageLog.logMessage(
-                f"Error processing Guideline D (Wind Turbine): {e}\n{traceback.format_exc()}",
+                f"Error processing wind turbine safeguarding: {e}\n{traceback.format_exc()}",
                 plugin_tag,
                 level=Qgis.Critical,
             )
             return False
+
+    def process_guideline_d(
+        self,
+        arp_point: QgsPointXY,
+        icao_code: str,
+        target_crs: QgsCoordinateReferenceSystem,
+        layer_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Compatibility alias for legacy NASF Guideline D processing."""
+        return self.process_wind_turbine_safeguarding(arp_point, icao_code, target_crs, layer_group)

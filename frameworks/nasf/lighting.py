@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""NASF Guideline E lighting control zone generation."""
+"""Lighting control safeguarding generator backed by NASF policy parameters."""
 
 import traceback
 from typing import Dict, Optional
@@ -27,22 +27,22 @@ class LightingGuidelineMixin:
             return getter()
         return get_framework_profile()
 
-    def process_guideline_e(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
-        """Processes Guideline E: Lighting Control Zone and LCZ Area circle."""
+    def process_lighting_control_zones(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
+        """Generate lighting control zones and the lighting control area."""
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
 
         if thr_point is None or rec_thr_point is None or layer_group is None:
             QgsMessageLog.logMessage(
-                f"Guideline E skipped for {runway_name}: Missing threshold points or layer group.",
+                f"Lighting control safeguarding skipped for {runway_name}: missing threshold points or layer group.",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
             return False
         if thr_point.compare(rec_thr_point, 1e-6):
             QgsMessageLog.logMessage(
-                f"Guideline E skipped for {runway_name}: Threshold points are identical.",
+                f"Lighting control safeguarding skipped for {runway_name}: threshold points are identical.",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
@@ -258,3 +258,7 @@ class LightingGuidelineMixin:
             )
 
         return overall_success
+
+    def process_guideline_e(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
+        """Compatibility alias for legacy NASF Guideline E processing."""
+        return self.process_lighting_control_zones(runway_data, layer_group)

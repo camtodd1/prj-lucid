@@ -82,7 +82,7 @@ class SafeguardingBuilder(
     MetSurfacesMixin,
     LayerMixin,
 ):
-    """QGIS Plugin Implementation for NASF Safeguarding Surface Generation."""
+    """QGIS plugin implementation for aerodrome safeguarding surface generation."""
 
     def __init__(self, iface):
         """Constructor: Initializes plugin resources and UI connections."""
@@ -789,10 +789,10 @@ class SafeguardingBuilder(
                 )
 
             (
-                guideline_c_processed,
-                guideline_d_processed,
-                guideline_g_processed,
-            ) = self._process_airport_guidelines(
+                wildlife_processed,
+                wind_turbine_processed,
+                cns_processed,
+            ) = self._process_airport_safeguarding(
                 arp_point,
                 cns_input_list,
                 icao_code,
@@ -840,9 +840,9 @@ class SafeguardingBuilder(
                 arp_layer_created,
                 met_layers_created_ok,
                 any_runway_base_data_ok,
-                guideline_c_processed,
-                guideline_d_processed,
-                guideline_g_processed,
+                wildlife_processed,
+                wind_turbine_processed,
+                cns_processed,
                 any_guideline_processed_ok,
                 len(processed_runway_data_list),
                 len(runway_input_list),
@@ -878,7 +878,7 @@ class SafeguardingBuilder(
     # Helper Methods
     # ============================================================
 
-    def _process_airport_guidelines(
+    def _process_airport_safeguarding(
         self,
         arp_point: Optional[QgsPointXY],
         cns_input_list: List[dict],
@@ -887,43 +887,53 @@ class SafeguardingBuilder(
         guideline_groups: Dict[str, Optional[QgsLayerTreeGroup]],
     ) -> Tuple[bool, bool, bool]:
         plugin_tag = PLUGIN_TAG
-        guideline_c_processed = False
-        guideline_d_processed = False
-        guideline_g_processed = False
+        wildlife_processed = False
+        wind_turbine_processed = False
+        cns_processed = False
         if arp_point is not None and guideline_groups.get("C") is not None:
-            self._log(f"Guideline C Wildlife: generating from ARP ({arp_point.x():.3f}, {arp_point.y():.3f}).")
-            guideline_c_processed = self.process_guideline_c(arp_point, icao_code, target_crs, guideline_groups["C"])
-            if not guideline_c_processed:
+            self._log(f"Wildlife safeguarding: generating from ARP ({arp_point.x():.3f}, {arp_point.y():.3f}).")
+            wildlife_processed = self.process_wildlife_safeguarding(
+                arp_point,
+                icao_code,
+                target_crs,
+                guideline_groups["C"],
+            )
+            if not wildlife_processed:
                 self._log_warning(
-                    "Guideline C Wildlife failed: no zone layers were created. Check preceding Wildlife messages."
+                    "Wildlife safeguarding failed: no zone layers were created. Check preceding Wildlife messages."
                 )
         elif arp_point is None and guideline_groups.get("C") is not None:
-            self._log("Guideline C Wildlife skipped: ARP coordinates missing; wildlife zones not generated.")
+            self._log("Wildlife safeguarding skipped: ARP coordinates missing; wildlife zones not generated.")
 
         if arp_point is not None and guideline_groups.get("D") is not None:
-            guideline_d_processed = self.process_guideline_d(arp_point, icao_code, target_crs, guideline_groups["D"])
+            wind_turbine_processed = self.process_wind_turbine_safeguarding(
+                arp_point,
+                icao_code,
+                target_crs,
+                guideline_groups["D"],
+            )
         elif arp_point is None and guideline_groups.get("D") is not None:
-            self._log("Guideline D Wind Turbine skipped: ARP coordinates missing; turbine zone not generated.")
+            self._log("Wind turbine safeguarding skipped: ARP coordinates missing; turbine zone not generated.")
 
         if cns_input_list and guideline_groups.get("G") is not None:
             try:
-                guideline_g_processed = self.process_guideline_g(
+                cns_processed = self.process_cns_building_restricted_areas(
                     cns_input_list, icao_code, target_crs, guideline_groups["G"]
                 )
             except Exception as e_proc_g:
                 QgsMessageLog.logMessage(
-                    f"Critical error processing Guideline G (CNS): {e_proc_g}\n{traceback.format_exc()}",
+                    f"Critical error processing CNS building restricted areas: {e_proc_g}\n{traceback.format_exc()}",
                     plugin_tag,
                     level=Qgis.Critical,
                 )
         elif not cns_input_list:
             QgsMessageLog.logMessage(
-                "Guideline G (CNS) skipped: No valid CNS facilities data provided.",
+                "CNS building restricted areas skipped: No valid CNS facilities data provided.",
                 plugin_tag,
                 level=Qgis.Info,
             )
 
-        return guideline_c_processed, guideline_d_processed, guideline_g_processed
+        return wildlife_processed, wind_turbine_processed, cns_processed
 
     def _process_airport_wide_ols_if_possible(
         self,
@@ -1789,18 +1799,18 @@ class SafeguardingBuilder(
         ofz_group: Optional[QgsLayerTreeGroup],
         runway_ols_group: Optional[QgsLayerTreeGroup] = None,
     ) -> bool:
-        """Processes runway-specific guidelines."""
+        """Generate runway-specific safeguarding outputs."""
         any_guideline_processed_ok = False
         if not processed_runway_data_list:
             return False
         for runway_data in processed_runway_data_list:
             rwy_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
             run_success_flags = []
-            try:  # Standard Guidelines
+            try:
                 if guideline_groups.get("B") is not None:
-                    run_success_flags.append(self.process_guideline_b(runway_data, guideline_groups["B"]))
+                    run_success_flags.append(self.process_windshear_safeguarding(runway_data, guideline_groups["B"]))
                 if guideline_groups.get("E") is not None:
-                    run_success_flags.append(self.process_guideline_e(runway_data, guideline_groups["E"]))
+                    run_success_flags.append(self.process_lighting_control_zones(runway_data, guideline_groups["E"]))
                 if guideline_groups.get("F") is not None:
                     if (
                         getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
@@ -1814,15 +1824,15 @@ class SafeguardingBuilder(
                         )
                     else:
                         run_success_flags.append(
-                            self.process_guideline_f(
+                            self.process_runway_ols_surfaces(
                                 runway_data,
                                 guideline_groups["F"],
                                 ofz_group,
                             )
                         )  # F = OLS App/TOCS
                 if guideline_groups.get("I") is not None:
-                    run_success_flags.append(self.process_guideline_i(runway_data, guideline_groups["I"]))
-                # Add calls for other guidelines (A, F, H) here if implemented
+                    run_success_flags.append(self.process_public_safety_areas(runway_data, guideline_groups["I"]))
+                # Add calls for other safeguarding generators as they are implemented.
 
                 # Specialised Surfaces
                 if specialised_group_node is not None:
@@ -2110,10 +2120,10 @@ class SafeguardingBuilder(
         arp_ok: bool,
         met_ok: bool,
         rwy_base_ok: bool,
-        guide_c_ok: bool,
-        guide_d_ok: bool,
-        guide_g_ok: bool,
-        guide_rwy_ok: bool,
+        wildlife_ok: bool,
+        wind_turbine_ok: bool,
+        cns_safeguarding_ok: bool,
+        runway_safeguarding_ok: bool,
         processed_rwy_count: int,
         total_runways_in_input: int,
         physical_protection_ok: bool,
@@ -2279,7 +2289,14 @@ class SafeguardingBuilder(
 
         # Keep these booleans referenced in the checklist builder so future readers
         # can see they are intentionally part of the final diagnostic contract.
-        _ = (met_ok, guide_c_ok, guide_d_ok, guide_g_ok, guide_rwy_ok, physical_protection_ok)
+        _ = (
+            met_ok,
+            wildlife_ok,
+            wind_turbine_ok,
+            cns_safeguarding_ok,
+            runway_safeguarding_ok,
+            physical_protection_ok,
+        )
         return items
 
     def _render_generation_summary(self, checklist_items: List[str]) -> List[str]:
@@ -2356,10 +2373,10 @@ class SafeguardingBuilder(
         arp_ok: bool,
         met_ok: bool,
         rwy_base_ok: bool,
-        guide_c_ok: bool,
-        guide_d_ok: bool,
-        guide_g_ok: bool,
-        guide_rwy_ok: bool,
+        wildlife_ok: bool,
+        wind_turbine_ok: bool,
+        cns_safeguarding_ok: bool,
+        runway_safeguarding_ok: bool,
         processed_rwy_count: int,
         total_runways_in_input: int,
         physical_protection_ok: bool,
@@ -2396,10 +2413,10 @@ class SafeguardingBuilder(
                 arp_ok,
                 met_ok,
                 rwy_base_ok,
-                guide_c_ok,
-                guide_d_ok,
-                guide_g_ok,
-                guide_rwy_ok,
+                wildlife_ok,
+                wind_turbine_ok,
+                cns_safeguarding_ok,
+                runway_safeguarding_ok,
                 processed_rwy_count,
                 total_runways_in_input,
                 physical_protection_ok,
