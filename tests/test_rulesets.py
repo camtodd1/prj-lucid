@@ -2,6 +2,7 @@ import unittest
 
 from dimensions import agl_dimensions as legacy_agl_dimensions
 from dimensions import ols_dimensions as legacy_ols_dimensions
+from rulesets.easa import lighting as easa_lighting
 from rulesets.easa import markings as easa_markings
 from rulesets.easa import ols_surfaces as easa_ols_surfaces
 from rulesets.easa import physical_data as easa_physical_data
@@ -875,6 +876,123 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(easa_markings.touchdown_zone_offsets(1500.0), [150.0, 450.0, 600.0, 750.0])
         self.assertEqual(easa_markings.touchdown_zone_offsets(2400.0), [150.0, 300.0, 600.0, 750.0, 900.0, 1050.0])
         self.assertIsNone(easa_markings.runway_holding_position_rule(3, "Precision Approach CAT I"))
+
+    def test_easa_lighting_traceability_marks_verified_and_fallback_items(self):
+        traceability = easa_lighting.get_lighting_traceability()
+        self.assertEqual(traceability["source_publication"], "EASA Easy Access Rules for Aerodromes, CS-ADR-DSN Issue 7")
+
+        expected_statuses = {
+            "runway_edge_lights": ("CS ADR-DSN.M.675", "operational_verified"),
+            "threshold_lights": ("CS ADR-DSN.M.680", "operational_verified_with_interpretive_width_floor"),
+            "threshold_wing_bar_lights": ("CS ADR-DSN.M.680", "operational_verified"),
+            "runway_end_lights": ("CS ADR-DSN.M.685", "operational_verified_with_interpretive_width_floor"),
+            "simple_approach_lighting": ("CS ADR-DSN.M.626", "operational_verified"),
+            "precision_approach_cat_i_lighting": ("CS ADR-DSN.M.630", "operational_verified"),
+            "precision_approach_cat_ii_iii_lighting": ("CS ADR-DSN.M.635", "operational_verified"),
+            "runway_centreline_lights": ("CS ADR-DSN.M.690", "operational_verified_with_applicability_policy"),
+            "touchdown_zone_lights": ("CS ADR-DSN.M.695", "operational_verified_with_nominal_gauge"),
+            "temporary_displaced_threshold_lights": ("compatibility fallback", "mos_derived_fallback"),
+            "approach_profile_selection": (
+                "CS ADR-DSN.M.626; CS ADR-DSN.M.630; CS ADR-DSN.M.635",
+                "interpretive",
+            ),
+        }
+        for item_key, (source, status) in expected_statuses.items():
+            with self.subTest(item_key=item_key):
+                item = traceability["items"][item_key]
+                self.assertEqual(item["source"], source)
+                self.assertEqual(item["status"], status)
+
+    def test_easa_lighting_runway_light_values_are_regression_checked(self):
+        self.assertEqual(easa_lighting.RUNWAY_EDGE_INSTRUMENT_SPACING_M, 60.0)
+        self.assertEqual(easa_lighting.RUNWAY_EDGE_NON_INSTRUMENT_SPACING_M, 100.0)
+        self.assertEqual(easa_lighting.runway_edge_spacing_for_end("Non-Precision Approach (NPA)"), 60.0)
+        self.assertEqual(easa_lighting.runway_edge_spacing_for_end("Precision Approach CAT I"), 60.0)
+        self.assertEqual(easa_lighting.runway_edge_spacing_for_end("Non-Instrument (NI)"), 100.0)
+        self.assertEqual(easa_lighting.runway_edge_start_offset_for_end("Precision Approach CAT I"), 60.0)
+        self.assertEqual(easa_lighting.runway_edge_start_offset_for_end("Non-Instrument (NI)"), 0.0)
+        self.assertEqual(easa_lighting.runway_edge_start_offset_for_end("Non-Instrument (NI)", True), 100.0)
+
+        self.assertEqual(easa_lighting.PRECISION_THRESHOLD_MAX_SPACING_M, 3.0)
+        self.assertEqual(easa_lighting.NON_PRECISION_THRESHOLD_MIN_LIGHTS, 6)
+        self.assertEqual(easa_lighting.threshold_light_count_for_end("Non-Precision Approach (NPA)", 45.0), 6)
+        self.assertEqual(easa_lighting.threshold_light_count_for_end("Precision Approach CAT I", 45.0), 16)
+        self.assertEqual(easa_lighting.threshold_light_count_for_end("Precision Approach CAT I", 18.0), 11)
+        self.assertEqual(easa_lighting.THRESHOLD_WING_BAR_LIGHTS_PER_SIDE, 5)
+        self.assertEqual(easa_lighting.THRESHOLD_WING_BAR_EXTEND_M, 10.0)
+        self.assertEqual(easa_lighting.THRESHOLD_WING_BAR_SPACING_M, 2.5)
+
+        self.assertEqual(easa_lighting.RUNWAY_END_MIN_LIGHTS, 6)
+        self.assertEqual(easa_lighting.CAT_III_RUNWAY_END_MAX_SPACING_M, 6.0)
+        self.assertEqual(easa_lighting.runway_end_light_count_for_end("Precision Approach CAT II/III", 45.0), 8)
+        self.assertEqual(easa_lighting.runway_end_light_count_for_end("Precision Approach CAT I", 45.0), 6)
+
+    def test_easa_lighting_approach_and_centreline_values_are_regression_checked(self):
+        self.assertEqual(easa_lighting.SALS_DESIGN_LENGTH_M, 420.0)
+        self.assertEqual(easa_lighting.SALS_STANDARD_SPACING_M, 60.0)
+        self.assertEqual(easa_lighting.SALS_ENHANCED_SPACING_M, 30.0)
+        self.assertEqual(easa_lighting.SALS_CROSSBAR_DISTANCE_M, 300.0)
+        self.assertEqual(easa_lighting.SALS_CROSSBAR_LENGTH_NARROW_M, 18.0)
+        self.assertEqual(easa_lighting.SALS_CROSSBAR_LENGTH_STANDARD_M, 30.0)
+
+        self.assertEqual(easa_lighting.PRECISION_APPROACH_DESIGN_LENGTH_M, 900.0)
+        self.assertEqual(easa_lighting.PRECISION_APPROACH_MIN_FULL_LENGTH_M, 720.0)
+        self.assertEqual(
+            [
+                easa_lighting.PRECISION_APPROACH_POINT_A_M,
+                easa_lighting.PRECISION_APPROACH_POINT_B_M,
+                easa_lighting.PRECISION_APPROACH_POINT_C_M,
+                easa_lighting.PRECISION_APPROACH_POINT_D_M,
+                easa_lighting.PRECISION_APPROACH_POINT_E_M,
+            ],
+            [150.0, 300.0, 450.0, 600.0, 750.0],
+        )
+        self.assertEqual(easa_lighting.PRECISION_CROSSBAR_LENGTH_M, 30.0)
+        self.assertEqual(easa_lighting.CAT_II_III_SIDE_ROW_INNER_SPACING_M, 18.0)
+        self.assertEqual(easa_lighting.CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M, 9.0)
+        self.assertEqual(easa_lighting.CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M, 15.0)
+        self.assertEqual(easa_lighting.CAT_II_III_CROSSBAR_MAX_SPACING_M, 2.7)
+        self.assertEqual(easa_lighting.CAT_II_III_SIDE_ROWS_TO_M, 270.0)
+
+        self.assertEqual(easa_lighting.RUNWAY_CENTRELINE_DEFAULT_SPACING_M, 15.0)
+        self.assertEqual(easa_lighting.RUNWAY_CENTRELINE_LOW_VIS_SPACING_M, 30.0)
+        self.assertEqual(easa_lighting.RUNWAY_CENTRELINE_MAX_OFFSET_M, 0.6)
+        self.assertEqual(easa_lighting.RUNWAY_CENTRELINE_RED_ZONE_M, 300.0)
+        self.assertEqual(easa_lighting.RUNWAY_CENTRELINE_ALTERNATING_ZONE_M, 900.0)
+        self.assertTrue(easa_lighting.runway_centreline_required("Non-Instrument (NI)", "Precision Approach CAT II/III"))
+        self.assertTrue(easa_lighting.runway_centreline_required("Non-Instrument (NI)", "Non-Instrument (NI)", True))
+        self.assertFalse(easa_lighting.runway_centreline_required("Non-Instrument (NI)", "Non-Instrument (NI)", False))
+        self.assertTrue(easa_lighting.runway_centreline_recommended("Non-Instrument (NI)", "Non-Instrument (NI)", 60.0))
+        self.assertEqual(easa_lighting.runway_centreline_spacing(True), 15.0)
+        self.assertEqual(easa_lighting.runway_centreline_spacing(False), 30.0)
+
+    def test_easa_lighting_tdz_and_profile_values_are_regression_checked(self):
+        self.assertEqual(easa_lighting.TDZ_LENGTH_M, 900.0)
+        self.assertEqual(easa_lighting.TDZ_ROW_SPACING_M, 60.0)
+        self.assertEqual(easa_lighting.TDZ_BARRETTE_LIGHTS, 3)
+        self.assertEqual(easa_lighting.TDZ_BARRETTE_SPACING_M, 1.5)
+        self.assertEqual(easa_lighting.TDZ_BARRETTE_LENGTH_MIN_M, 3.0)
+        self.assertEqual(easa_lighting.TDZ_BARRETTE_LENGTH_MAX_M, 4.5)
+        self.assertEqual(easa_lighting.TDZ_INNER_OFFSET_M, 9.0)
+        self.assertEqual(easa_lighting.temp_displaced_threshold_lights_per_side(30.0), 3)
+        self.assertEqual(easa_lighting.temp_displaced_threshold_lights_per_side(45.0), 5)
+
+        cat_ii_iii = easa_lighting.approach_profile_for_end("Precision Approach CAT II/III")
+        self.assertEqual(cat_ii_iii["length_m"], 900.0)
+        self.assertEqual(cat_ii_iii["crossbars_m"], [150.0, 300.0, 450.0, 600.0, 750.0])
+        self.assertEqual(cat_ii_iii["side_rows_to_m"], 270.0)
+        self.assertEqual(cat_ii_iii["ref_easa"], "CS ADR-DSN.M.635")
+
+        cat_i = easa_lighting.approach_profile_for_end("Precision Approach CAT I")
+        self.assertEqual(cat_i["length_m"], 900.0)
+        self.assertEqual(cat_i["approach_type"], "cat_i")
+        self.assertEqual(cat_i["ref_easa"], "CS ADR-DSN.M.630")
+
+        sals = easa_lighting.approach_profile_for_end("Non-Precision Approach (NPA)")
+        self.assertEqual(sals["system"], "Simple Approach Lighting System")
+        self.assertEqual(sals["length_m"], 420.0)
+        self.assertEqual(sals["crossbars_m"], [300.0])
+        self.assertEqual(sals["ref_easa"], "CS ADR-DSN.M.626")
 
     def test_annex14_profile_scaffold_smoke_checks(self):
         current_profile = get_ruleset_profile("icao_annex14_vol1_current_ols")

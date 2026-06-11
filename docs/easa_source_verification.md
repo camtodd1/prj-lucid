@@ -39,18 +39,18 @@ https://www.easa.europa.eu/en/document-library/easy-access-rules/online-publicat
 | Aiming point markings | `rulesets/easa/markings.py` | CS ADR-DSN.L.540 Table L-1 | Operational verified with caveat | LDA bands and representative minimum values from Table L-1 are implemented and regression-tested for instrument runways, including NPA. Non-instrument additional-conspicuity output remains marked interpretive. |
 | Touchdown-zone markings | `rulesets/easa/markings.py` | CS ADR-DSN.L.545 | Operational verified with derived offsets | LDA pair-count bands are source verified. Returned offset lists are derived at 150 m intervals with aiming-point conflict omissions and are marked `derived_verified`. |
 | Runway-holding position markings | `rulesets/easa/markings.py` | CS ADR-DSN.L.575, D.335 | Accepted unsupported | Returning `None` is tested and documented because Chapter L defines marking patterns while fixed holding-position distance belongs to Chapter D location/design criteria. |
-| Runway edge lighting | `rulesets/easa/lighting.py` | CS ADR-DSN.M.675 | Source-matched spot check | Instrument spacing 60 m and non-instrument spacing 100 m match checked source text. |
-| Simple approach lighting | `rulesets/easa/lighting.py` | CS ADR-DSN.M.626 | Source-matched spot check | 420 m preferred length, 300 m crossbar, and 18/30 m crossbar length match checked source text. |
-| Precision approach lighting | `rulesets/easa/lighting.py` | CS ADR-DSN.M.630, M.635 | Review required | Values are EASA-referenced, but full geometry/crossbar/side-row rules need detailed source verification. |
-| Threshold/end/temporary displaced threshold lights | `rulesets/easa/lighting.py` | CS ADR-DSN.M.680, M.685 plus legacy fallback | Mixed | Threshold and end-light references exist, but `RUNWAY_LIGHTING_MIN_WIDTH_M` and temporary displaced threshold light counts explicitly retain MOS-derived pragmatic defaults. These are not EASA-source-verified values. |
-| Runway centreline lights | `rulesets/easa/lighting.py` | CS ADR-DSN.M.690 | Mixed | Spacing values are EASA-referenced, but requirement/recommendation helpers currently use MOS-like heuristics. Needs EASA-specific applicability logic. |
-| Touchdown-zone lights | `rulesets/easa/lighting.py` | CS ADR-DSN.M.695 | Source-matched spot check with caveat | TDZ length, 30/60 m row spacing, and at least three lights per barrette match checked source text. Nominal inner offset remains a selected design assumption. |
+| Runway edge lighting | `rulesets/easa/lighting.py` | CS ADR-DSN.M.675 | Operational verified | Instrument spacing 60 m and non-instrument spacing 100 m are implemented with traceability metadata and regression tests. |
+| Simple approach lighting | `rulesets/easa/lighting.py` | CS ADR-DSN.M.626 | Operational verified | Preferred 420 m length, 60/30 m spacing, 300 m crossbar, and 18/30 m crossbar lengths are implemented with traceability metadata and regression tests. |
+| Precision approach lighting | `rulesets/easa/lighting.py` | CS ADR-DSN.M.630, M.635 | Operational verified | CAT I and CAT II/III approach profile geometry, crossbar stations, side-row values, and crossbar spacing limits are implemented with traceability metadata and regression tests. Applicability selection remains a simplified planning policy. |
+| Threshold/end/temporary displaced threshold lights | `rulesets/easa/lighting.py` | CS ADR-DSN.M.680, M.685 plus compatibility fallback | Operational verified with caveats | Threshold and runway-end source values are implemented and tested. The 30 m minimum lit-width floor and temporary displaced threshold counts remain explicitly labelled as compatibility/MOS-derived fallback assumptions. |
+| Runway centreline lights | `rulesets/easa/lighting.py` | CS ADR-DSN.M.690 | Operational verified with applicability policy | Spacing, lateral offset, colour zones, and simplified requirement/recommendation helpers are regression-tested. Applicability helpers remain policy-level simplifications. |
+| Touchdown-zone lights | `rulesets/easa/lighting.py` | CS ADR-DSN.M.695 | Operational verified with nominal gauge | TDZ length, 30/60 m row spacing, at least three lights per barrette, barrette spacing/length, and nominal inner offset are implemented and regression-tested. The 9 m inner offset remains a selected 18 m gauge assumption. |
 
 ## High-confidence findings
 
 1. The EASA package is not an empty scaffold. It contains EASA-specific numeric tables and EASA references in physical, taxiway, marking, lighting, and OLS modules.
-2. Runway strips, RESA, taxiway separations, parallel runway separations, OLS Tables J-1/J-2, and runway markings are now operational-grade verified EASA Issue 7 tranches.
-3. The riskiest remaining areas are precision approach lighting geometry and lighting helpers that explicitly retain MOS-derived assumptions.
+2. Runway strips, RESA, taxiway separations, parallel runway separations, OLS Tables J-1/J-2, runway markings, and airfield ground lighting are now operational-grade verified EASA Issue 7 tranches.
+3. The riskiest remaining area is declared distances, clearway, and stopway because those outputs are not yet implemented as a complete EASA-specific tranche.
 4. The edition decision is now settled: the code targets Issue 7/current EASA, while remaining marked draft until full table-level verification is complete.
 
 ## Confirmed implementation decisions
@@ -72,10 +72,9 @@ https://www.easa.europa.eu/en/document-library/easy-access-rules/online-publicat
    - source clause/table
    - verification status
    - notes
-2. Replace or explicitly label all MOS-derived fallbacks in `rulesets/easa/lighting.py`.
-3. Promote only verified capability keys in `rulesets/easa/metadata.py`; downgrade anything that remains interpretive or only spot-checked.
-4. Add regression tests that assert exact source references as well as numeric values for each verified family.
-5. Revisit the interpretation policy before promoting outputs that depend on conditional rules, ranges, guidance material, or designer judgement.
+2. Promote only verified capability keys in `rulesets/easa/metadata.py`; downgrade anything that remains interpretive or only spot-checked.
+3. Add regression tests that assert exact source references as well as numeric values for each verified family.
+4. Revisit the interpretation policy before promoting outputs that depend on conditional rules, ranges, guidance material, or designer judgement.
 
 ## Working conclusion
 

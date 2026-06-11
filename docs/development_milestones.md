@@ -198,7 +198,7 @@ Last reviewed: 2026-06-11.
   - [x] Taxiway and separation standards.
   - [x] OLS tables and geometry applicability.
   - [x] Runway markings.
-  - Airfield ground lighting.
+  - [x] Airfield ground lighting.
   - Declared distances, clearway, and stopway.
 
   Work items:
