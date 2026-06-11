@@ -1,4 +1,4 @@
-"""EASA CS-ADR-DSN Issue 6 profile facade."""
+"""EASA CS-ADR-DSN Issue 7 profile facade."""
 
 from typing import Optional
 
@@ -8,7 +8,7 @@ from .services import ClassificationService, LightingService, MarkingService, Ol
 
 
 class EasaRulesetProfile(RulesetProfile):
-    """Public ruleset API for the EASA CS-ADR-DSN Issue 6 implementation."""
+    """Public ruleset API for the EASA CS-ADR-DSN Issue 7 implementation."""
 
     classification = ClassificationService()
     ols = OlsService()

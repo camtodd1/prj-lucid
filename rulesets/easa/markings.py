@@ -3,7 +3,7 @@
 This module provides functions to compute runway marking parameters in
 accordance with the European Union Aviation Safety Agency (EASA)
 Certification Specifications for Aerodromes Design (CS-ADR-DSN),
-Issue 6, Chapter L (Markings).  These functions mirror the interface
+Issue 7, Chapter L (Markings).  These functions mirror the interface
 exposed by the MOS139-based :mod:`markings` module but use
 dimensions and criteria extracted from Chapter L of the CS-ADR-DSN.
 

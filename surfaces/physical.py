@@ -28,6 +28,20 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class PhysicalGeometryMixin:
+    def _policy_ref(self, values: Optional[dict], generic_key: str, *fallback_keys: str) -> str:
+        """Return a ruleset-neutral policy reference with legacy-key fallbacks."""
+        if not values:
+            return ""
+        for key in (generic_key, *fallback_keys):
+            value = values.get(key)
+            if value:
+                return str(value)
+        return ""
+
+    def _join_policy_refs(self, *refs: str) -> str:
+        parts = [str(ref).strip() for ref in refs if str(ref or "").strip()]
+        return "; ".join(parts)
+
     def _process_physical_and_protection_layers(
         self,
         main_group: QgsLayerTreeGroup,
@@ -2706,9 +2720,19 @@ class PhysicalGeometryMixin:
                         f"Graded Strip {log_name}",
                     )
                     if graded_strip_geom:
-                        graded_ref = (
-                            f"{strip_dims.get('mos_graded_width_ref', '')}; "
-                            f"{strip_dims.get('mos_extension_length_ref', '')}"
+                        graded_ref = self._join_policy_refs(
+                            self._policy_ref(
+                                strip_dims,
+                                "graded_width_ref",
+                                "mos_graded_width_ref",
+                                "easa_graded_width_ref",
+                            ),
+                            self._policy_ref(
+                                strip_dims,
+                                "extension_length_ref",
+                                "mos_extension_length_ref",
+                                "easa_extension_length_ref",
+                            ),
                         )
                         # Use correct field names: 'rwy', 'desc', 'ref_mos'
                         graded_attrs = {
@@ -2728,9 +2752,19 @@ class PhysicalGeometryMixin:
                         f"Overall Strip {log_name}",
                     )
                     if overall_strip_geom:
-                        overall_ref = (
-                            f"{strip_dims.get('mos_overall_width_ref', '')}; "
-                            f"{strip_dims.get('mos_extension_length_ref', '')}"
+                        overall_ref = self._join_policy_refs(
+                            self._policy_ref(
+                                strip_dims,
+                                "overall_width_ref",
+                                "mos_overall_width_ref",
+                                "easa_overall_width_ref",
+                            ),
+                            self._policy_ref(
+                                strip_dims,
+                                "extension_length_ref",
+                                "mos_extension_length_ref",
+                                "easa_extension_length_ref",
+                            ),
                         )
                         # Use correct field names: 'rwy', 'desc', 'ref_mos'
                         overall_attrs = {
@@ -2744,10 +2778,25 @@ class PhysicalGeometryMixin:
 
                     flyover_width = (overall_width - graded_width) / 2.0
                     if flyover_width > 1e-6:
-                        flyover_ref = (
-                            f"{strip_dims.get('mos_overall_width_ref', '')}; "
-                            f"{strip_dims.get('mos_graded_width_ref', '')}; "
-                            f"{strip_dims.get('mos_extension_length_ref', '')}"
+                        flyover_ref = self._join_policy_refs(
+                            self._policy_ref(
+                                strip_dims,
+                                "overall_width_ref",
+                                "mos_overall_width_ref",
+                                "easa_overall_width_ref",
+                            ),
+                            self._policy_ref(
+                                strip_dims,
+                                "graded_width_ref",
+                                "mos_graded_width_ref",
+                                "easa_graded_width_ref",
+                            ),
+                            self._policy_ref(
+                                strip_dims,
+                                "extension_length_ref",
+                                "mos_extension_length_ref",
+                                "easa_extension_length_ref",
+                            ),
                         )
                         flyover_attrs = {
                             "rwy": runway_name,
@@ -2861,10 +2910,25 @@ class PhysicalGeometryMixin:
 
                 primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
                 reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
-                resa_ref = (
-                    f"{resa_dims.get('mos_applicability_ref', '')}; "
-                    f"{resa_dims.get('mos_width_ref', '')}; "
-                    f"{resa_dims.get('mos_length_ref', '')}"
+                resa_ref = self._join_policy_refs(
+                    self._policy_ref(
+                        resa_dims,
+                        "applicability_ref",
+                        "mos_applicability_ref",
+                        "easa_applicability_ref",
+                    ),
+                    self._policy_ref(
+                        resa_dims,
+                        "width_ref",
+                        "mos_width_ref",
+                        "easa_width_ref",
+                    ),
+                    self._policy_ref(
+                        resa_dims,
+                        "length_ref",
+                        "mos_length_ref",
+                        "easa_length_ref",
+                    ),
                 )
                 # Use correct field names: 'rwy', 'desc', 'ref_mos'
                 resa_base_attrs = {

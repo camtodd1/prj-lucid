@@ -8,19 +8,43 @@ families with jurisdiction-specific policy references.
 Use this table to identify equivalent or partially equivalent standards before
 adding new rulesets, UI labels, generator names, or source-reference fields.
 
+## Safeguarding Taxonomy
+
+```text
+Airport Safeguarding
+├─ Aircraft Noise
+├─ Public Safety
+├─ Protected Airspace
+│  ├─ OLS
+│  ├─ PANS-OPS
+│  └─ CNS Protection
+├─ Wildlife Hazard
+├─ Lighting Hazard
+├─ Wind Turbines
+├─ Building-Induced Turbulence
+├─ Helicopter Operations
+├─ Solar Glare
+├─ Emissions / Visibility
+└─ Emerging Air Mobility
+```
+
 ## Cross-Jurisdiction Mapping
 
-| Topic | Australia (NASF) | UK | Europe | USA |
+| Safeguarding element | Australia (NASF) | UK | Europe | USA |
 | --- | --- | --- | --- | --- |
 | Aircraft noise | Guideline A |  |  |  |
-| Windshear/turbulence | Guideline B |  |  |  |
-| Wildlife | Guideline C |  |  |  |
+| Public safety | Guideline I |  |  |  |
+| Protected airspace - OLS | Guideline F |  |  |  |
+| Protected airspace - PANS-OPS |  |  |  |  |
+| Protected airspace - CNS protection | Guideline G |  |  |  |
+| Wildlife hazard | Guideline C |  |  |  |
+| Lighting hazard | Guideline E |  |  |  |
 | Wind turbines | Guideline D |  |  |  |
-| Lighting | Guideline E |  |  |  |
-| Airspace protection | Guideline F |  |  |  |
-| CNS protection | Guideline G |  |  |  |
-| Helicopter sites | Guideline H |  |  |  |
-| Public safety areas | Guideline I |  |  |  |
+| Building-induced turbulence | Guideline B |  |  |  |
+| Helicopter operations | Guideline H |  |  |  |
+| Solar glare |  |  |  |  |
+| Emissions / visibility |  |  |  |  |
+| Emerging air mobility |  |  |  |  |
 
 ## Working Notes
 

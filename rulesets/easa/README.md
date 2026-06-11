@@ -1,14 +1,23 @@
 # EASA Ruleset Package
 
-This package contains the draft EASA CS-ADR-DSN Issue 6 ruleset implementation.
+This package contains the draft EASA CS-ADR-DSN Issue 7 ruleset implementation.
 It follows the same profile/service structure as `rulesets.mos139` so callers
 can resolve the active ruleset through `rulesets.registry.get_ruleset_profile()`
 and use the shared ruleset contract.
 
+Source verification status is tracked in `docs/easa_source_verification.md`.
+This package targets the current EASA online Easy Access Rules publication,
+which incorporates CS-ADR-DSN Issue 7. It should remain treated as a draft
+current-EASA implementation until the table-level source verification register
+is complete.
+
 Current implemented policy data covers physical runway dimensions, OLS surface
-parameters, runway markings, airfield ground lighting, and taxiway separation.
-Declared distances, clearway, stopway, and parallel runway separation are
-registered explicitly as unsupported until their EASA policy tables are added.
+parameters, runway markings, airfield ground lighting, taxiway separation, and
+partial parallel runway separation.
+
+Declared distances, clearway, stopway, and controlling OLS are registered
+explicitly as unsupported until their EASA policy tables or integration paths
+are added.
 
 ## Modules
 

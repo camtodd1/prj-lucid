@@ -2,7 +2,7 @@
 
 This module defines a set of constants and helper functions that describe
 the aerodrome ground lighting (AGL) requirements contained in EASA's
-Certification Specifications for Aerodromes Design (CS-ADR-DSN), Issue 6,
+Certification Specifications for Aerodromes Design (CS-ADR-DSN), Issue 7,
 Chapter M - Visual aids for navigation (lights).  The constants capture
 dimensional criteria for runway and approach lighting systems under
 European conditions.  These values are drawn from Chapter M of CS-ADR-DSN
@@ -12,7 +12,7 @@ compute or verify lighting layouts when planning an aerodrome to meet
 EASA requirements.
 
 NOTE: The constants in this file are based on the following CS-ADR-DSN
-references (Issue 6):
+references (Issue 7):
 
 * CS ADR-DSN.M.626 - Simple approach lighting systems
 * CS ADR-DSN.M.630 - Precision approach Category I lighting system
@@ -31,7 +31,7 @@ permitted tolerances.
 
 from typing import Dict
 
-CS_ADR_DSN = "CS-ADR-DSN Issue 6"
+CS_ADR_DSN = "CS-ADR-DSN Issue 7"
 # References to the relevant CS-ADR-DSN sections.  These strings are
 # included with constants to allow traceability back to the regulation.
 EASA_REF_RUNWAY_EDGE = "CS ADR-DSN.M.675"

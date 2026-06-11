@@ -1,17 +1,19 @@
 """EASA profile metadata and capability declarations."""
 
-RULESET_ID = "easa_cs_adr_dsn_issue_6"
-DISPLAY_NAME = "EASA CS-ADR-DSN (Issue 6)"
-EDITION = "CS-ADR-DSN Issue 6"
+RULESET_ID = "easa_cs_adr_dsn_issue_7"
+DISPLAY_NAME = "EASA CS-ADR-DSN (Issue 7)"
+EDITION = "CS-ADR-DSN Issue 7"
 STATUS = "draft"
-DESCRIPTION = "Draft EASA CS-ADR-DSN Issue 6 ruleset framework."
+DESCRIPTION = "Draft EASA CS-ADR-DSN Issue 7 ruleset framework."
 ALIASES = (
     "EASA",
     "easa",
     "CS-ADR-DSN",
     "cs_adr_dsn",
+    "cs_adr_dsn_issue_7",
     "cs_adr_dsn_issue_6",
     "easa_cs_adr_dsn",
+    "easa_cs_adr_dsn_issue_6",
 )
 
 CAPABILITY_STATUS_BY_KEY = {

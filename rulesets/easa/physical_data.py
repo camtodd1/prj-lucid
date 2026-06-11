@@ -3,7 +3,7 @@
 This module defines constants and helper functions that encapsulate the
 physical dimensions for runways, runway strips, shoulders and runway end
 safety areas (RESA) as defined in European Union Aviation Safety Agency
-(EASA) CS-ADR-DSN Issue 6, Chapter B (Runways) and Chapter C (RESA).
+(EASA) CS-ADR-DSN Issue 7, Chapter B (Runways) and Chapter C (RESA).
 
 The structure and function signatures mirror those in the MOS-based
 ``physical_data.py`` so that existing code can seamlessly switch
@@ -244,6 +244,9 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
         "overall_width": None,
         "graded_width": None,
         "extension_length": None,
+        "overall_width_ref": "N/A",
+        "graded_width_ref": "N/A",
+        "extension_length_ref": "N/A",
         "easa_overall_width_ref": "N/A",
         "easa_graded_width_ref": "N/A",
         "easa_extension_length_ref": "N/A",
@@ -271,6 +274,7 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
         # use instrument reference for all instrument types
         results["graded_width"] = graded_dict.get(type_abbr, graded_dict.get("NPA"))
         results["easa_graded_width_ref"] = width_rules["ref_graded"].get("INSTR")
+    results["graded_width_ref"] = results["easa_graded_width_ref"]
 
     # overall width
     overall_dict = width_rules["overall_widths"]
@@ -280,6 +284,7 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
     else:
         results["overall_width"] = overall_dict.get(type_abbr, overall_dict.get("NPA"))
         results["easa_overall_width_ref"] = width_rules["ref_overall"].get("INSTR")
+    results["overall_width_ref"] = results["easa_overall_width_ref"]
 
     # extension length
     if arc_num == 1 and is_ni:
@@ -290,6 +295,7 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
     if ext_params:
         results["extension_length"] = ext_params.get("length")
         results["easa_extension_length_ref"] = ext_params.get("ref")
+        results["extension_length_ref"] = results["easa_extension_length_ref"]
 
     return results
 
@@ -317,6 +323,9 @@ def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str) -> dict:
     results = {
         "required": False,
         "length": None,
+        "applicability_ref": "N/A",
+        "length_ref": "N/A",
+        "width_ref": RESA_PARAMS.get("width_ref", "N/A"),
         "easa_applicability_ref": "N/A",
         "easa_length_ref": "N/A",
         "easa_width_ref": RESA_PARAMS.get("width_ref", "N/A"),
@@ -344,6 +353,7 @@ def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str) -> dict:
     else:
         results["required"] = False
         results["easa_applicability_ref"] = applicability_refs.get("not_required", "N/A")
+    results["applicability_ref"] = results["easa_applicability_ref"]
 
     # If required, assign the recommended length
     if results["required"]:
@@ -356,6 +366,8 @@ def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str) -> dict:
             # fallback to minimum length if no rule found
             results["length"] = RESA_PARAMS.get("minimum_length")
             results["easa_length_ref"] = RESA_PARAMS.get("minimum_length_ref", "N/A")
+        results["length_ref"] = results["easa_length_ref"]
+    results["width_ref"] = results["easa_width_ref"]
     return results
 
 

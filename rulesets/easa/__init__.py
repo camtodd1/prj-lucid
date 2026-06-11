@@ -1,4 +1,4 @@
-"""EASA CS-ADR-DSN Issue 6 ruleset profile."""
+"""EASA CS-ADR-DSN Issue 7 ruleset profile."""
 
 from .profile import EASA_PROFILE
 

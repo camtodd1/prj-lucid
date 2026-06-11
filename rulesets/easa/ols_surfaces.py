@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 # rulesets/easa/ols_surfaces.py
 """
-EASA CS-ADR-DSN Issue 6 OLS surface parameters.
+EASA CS-ADR-DSN Issue 7 OLS surface parameters.
 
 This module stores Obstacle Limitation Surface (OLS) parameters derived
-from EASA CS-ADR-DSN Issue 6, Chapters H and J:
+from EASA CS-ADR-DSN Issue 7, Chapters H and J:
 
 - Chapter H defines the geometry and purpose of each OLS surface.
 - Chapter J specifies which surfaces apply to each runway type, and gives
@@ -86,7 +86,7 @@ def _normalize_surface_type(surface_type: str) -> str:
 # Basic constants and references
 # =========================================================================
 
-EASA_OLS_REF = "CS-ADR-DSN Issue 6, Chapters H and J"
+EASA_OLS_REF = "CS-ADR-DSN Issue 7, Chapters H and J"
 TABLE_J1_REF = "CS ADR-DSN.J.470/J.475/J.480 Table J-1"
 TABLE_J2_REF = "CS ADR-DSN.J.485 Table J-2"
 OHS_GUIDANCE_REF = "GM1 ADR-DSN.H.410"
