@@ -1,5 +1,14 @@
 # TODO
 
+## Aircraft Characteristics Registry
+
+- [ ] Integrate an aircraft characteristics registry for design-aircraft nomination.
+
+  Notes:
+  - Allow the user to nominate a design aircraft and look up planning parameters from a registry-backed data source.
+  - Import or maintain aircraft characteristics data outside the main dialog input JSON.
+  - Use the selected aircraft record to populate runway planning and safeguarding parameters where applicable.
+
 ## Placeholder Guidelines
 
 - [ ] Implement Guideline A aircraft noise generation.
