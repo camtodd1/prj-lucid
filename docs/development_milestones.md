@@ -183,6 +183,19 @@ Last reviewed: 2026-06-11.
   - Remove legacy `process_guideline_*` aliases once downstream call sites and
     saved expectations no longer need them.
 
+- [ ] Close remaining ruleset/framework architecture decisions.
+
+  Work items:
+  - Decide whether NASF outputs remain enabled by default when a non-MOS
+    aerodrome standard is selected.
+  - Decide whether the UI should split `Aerodrome Standard` and
+    `Supplementary Frameworks` before the next ruleset is promoted.
+  - Decide whether generated layers need a generic regulatory reference field
+    alongside legacy fields such as `ref_mos` and `ref_nasf`.
+  - Confirm that the selected aerodrome standard remains airport-wide unless a
+    future mixed-standard workflow is explicitly designed.
+  - Define the first golden airport/runway scenario set for MOS139 regression.
+
 ## Scaffolded Or Future Enhancements
 
 - [ ] Annex 14 current OLS.
