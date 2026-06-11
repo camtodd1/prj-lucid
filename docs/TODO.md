@@ -9,6 +9,18 @@
   - Import or maintain aircraft characteristics data outside the main dialog input JSON.
   - Use the selected aircraft record to populate runway planning and safeguarding parameters where applicable.
 
+## EASA CS-ADR-DSN Issue 7 Ruleset
+
+- [ ] Complete operational-grade source verification for the current EASA ruleset.
+
+  Notes:
+  - Authority target is EASA CS-ADR-DSN Issue 7.
+  - Use case is both safeguarding/planning envelopes and aerodrome design compliance support.
+  - Completed verification tranches: physical runway dimensions; taxiway/separation; OLS Tables J-1/J-2; runway markings.
+  - Remaining verification tranches: lighting, then declared distances/clearway/stopway.
+  - Add table/clause traceability and regression tests for promoted values.
+  - Park interpretation policy for follow-up: decide whether conditional/guidance provisions are applied "as is", exposed as designer-selected options, or used to identify variance from a compliant standard.
+
 ## Placeholder Guidelines
 
 - [ ] Implement Guideline A aircraft noise generation.

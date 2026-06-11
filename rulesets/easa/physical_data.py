@@ -59,6 +59,12 @@ Python constants and helper routines.
 
 from typing import Optional
 
+SOURCE_PUBLICATION = "EASA Easy Access Rules for Aerodromes, CS-ADR-DSN Issue 7"
+SOURCE_URL = (
+    "https://www.easa.europa.eu/en/document-library/easy-access-rules/"
+    "online-publications/easy-access-rules-aerodromes-regulation-eu"
+)
+
 # References for pavement and shoulder requirements.  These strings
 # identify the CS-ADR-DSN paragraphs containing the relevant text.
 PAVEMENT_EASA_REF = "CS ADR-DSN.B.090"  # Surface of runways
@@ -91,7 +97,8 @@ STRIP_WIDTH_PARAMS = {
         },
         "ref_overall": {
             "NI": "CS ADR-DSN.B.160(c)(3) Code 1 non-instrument",
-            "INSTR": "CS ADR-DSN.B.160(a)(2) Code 1 instrument",
+            "NPA": "CS ADR-DSN.B.160(b)(2) Code 1 non-precision approach",
+            "PA": "CS ADR-DSN.B.160(a)(2) Code 1 precision approach",
         },
     },
     2: {
@@ -113,7 +120,8 @@ STRIP_WIDTH_PARAMS = {
         },
         "ref_overall": {
             "NI": "CS ADR-DSN.B.160(c)(2) Code 2 non-instrument",
-            "INSTR": "CS ADR-DSN.B.160(a)(2) Code 2 instrument",
+            "NPA": "CS ADR-DSN.B.160(b)(2) Code 2 non-precision approach",
+            "PA": "CS ADR-DSN.B.160(a)(2) Code 2 precision approach",
         },
     },
     3: {
@@ -135,7 +143,8 @@ STRIP_WIDTH_PARAMS = {
         },
         "ref_overall": {
             "NI": "CS ADR-DSN.B.160(c)(1) Code 3 non-instrument",
-            "INSTR": "CS ADR-DSN.B.160(a)(1) Code 3 instrument",
+            "NPA": "CS ADR-DSN.B.160(b)(1) Code 3 non-precision approach",
+            "PA": "CS ADR-DSN.B.160(a)(1) Code 3 precision approach",
         },
     },
     4: {
@@ -157,7 +166,8 @@ STRIP_WIDTH_PARAMS = {
         },
         "ref_overall": {
             "NI": "CS ADR-DSN.B.160(c)(1) Code 4 non-instrument",
-            "INSTR": "CS ADR-DSN.B.160(a)(1) Code 4 instrument",
+            "NPA": "CS ADR-DSN.B.160(b)(1) Code 4 non-precision approach",
+            "PA": "CS ADR-DSN.B.160(a)(1) Code 4 precision approach",
         },
     },
 }
@@ -199,6 +209,44 @@ RESA_PARAMS = {
 }
 
 
+PHYSICAL_TRACEABILITY = {
+    "source_publication": SOURCE_PUBLICATION,
+    "source_url": SOURCE_URL,
+    "items": {
+        "strip_length": {
+            "source": "CS ADR-DSN.B.155",
+            "status": "operational_verified",
+            "implementation": "STRIP_EXTENSION_PARAMS",
+            "notes": "Stores runway-strip extension before threshold and beyond runway/stopway end.",
+        },
+        "strip_overall_width": {
+            "source": "CS ADR-DSN.B.160",
+            "status": "operational_verified",
+            "implementation": "STRIP_WIDTH_PARAMS[*].overall_widths",
+            "notes": "Stored as total strip width; EASA source gives lateral distance on each side.",
+        },
+        "strip_graded_width": {
+            "source": "CS ADR-DSN.B.175",
+            "status": "operational_verified",
+            "implementation": "STRIP_WIDTH_PARAMS[*].graded_widths",
+            "notes": "Stored as total graded width; EASA source gives lateral distance on each side.",
+        },
+        "resa_applicability": {
+            "source": "CS ADR-DSN.C.210",
+            "status": "operational_verified",
+            "implementation": "RESA_PARAMS.applicability_refs",
+            "notes": "Determines whether RESA is required by code number and runway type.",
+        },
+        "resa_dimensions": {
+            "source": "CS ADR-DSN.C.215",
+            "status": "operational_verified",
+            "implementation": "RESA_PARAMS.length_rules and width_ref",
+            "notes": "Stores recommended RESA lengths and width basis.",
+        },
+    },
+}
+
+
 def get_physical_refs() -> dict:
     """Return reference strings for pavement and shoulder requirements.
 
@@ -208,6 +256,19 @@ def get_physical_refs() -> dict:
         pavement surface and shoulder provision.
     """
     return {"pavement": PAVEMENT_EASA_REF, "shoulder": SHOULDER_EASA_REF}
+
+
+def get_physical_traceability() -> dict:
+    """Return source traceability metadata for EASA physical rules."""
+    return PHYSICAL_TRACEABILITY.copy()
+
+
+def _overall_width_ref_key(type_abbr: str) -> str:
+    if type_abbr == "NI":
+        return "NI"
+    if type_abbr == "NPA":
+        return "NPA"
+    return "PA"
 
 
 def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]) -> dict:
@@ -259,7 +320,6 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
     type_abbr = (type_abbr or "").upper()
     # Determine if the runway is non-instrument or instrument
     is_ni = type_abbr == "NI"
-    is_instrument = not is_ni  # includes NPA, PA_I, PA_II_III
 
     width_rules = STRIP_WIDTH_PARAMS.get(arc_num)
     if not width_rules:
@@ -283,7 +343,7 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
         results["easa_overall_width_ref"] = width_rules["ref_overall"].get("NI")
     else:
         results["overall_width"] = overall_dict.get(type_abbr, overall_dict.get("NPA"))
-        results["easa_overall_width_ref"] = width_rules["ref_overall"].get("INSTR")
+        results["easa_overall_width_ref"] = width_rules["ref_overall"].get(_overall_width_ref_key(type_abbr))
     results["overall_width_ref"] = results["easa_overall_width_ref"]
 
     # extension length
@@ -374,10 +434,14 @@ def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str) -> dict:
 __all__ = [
     "PAVEMENT_EASA_REF",
     "SHOULDER_EASA_REF",
+    "SOURCE_PUBLICATION",
+    "SOURCE_URL",
+    "PHYSICAL_TRACEABILITY",
     "STRIP_WIDTH_PARAMS",
     "STRIP_EXTENSION_PARAMS",
     "RESA_PARAMS",
     "get_physical_refs",
+    "get_physical_traceability",
     "get_strip_params",
     "get_resa_params",
 ]

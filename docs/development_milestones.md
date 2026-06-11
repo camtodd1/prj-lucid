@@ -118,10 +118,18 @@ Last reviewed: 2026-06-11.
 - [ ] Validate EASA draft behaviour in the plugin UI.
 
   Notes:
+  - EASA targets current CS-ADR-DSN Issue 7.
+  - The completion target is operational-grade verification: table/clause
+    traceability, tests for key numeric lookups, and documented interpretation
+    choices.
   - EASA has policy-table coverage for several domains, but its profile status
-    is draft and many capabilities are partial.
+    remains draft and many capabilities are partial until table-level
+    verification is complete.
   - Declared distances, clearway, stopway, and controlling OLS are explicitly
     unsupported.
+  - Open interpretation question: whether conditional/guidance provisions are
+    applied "as is", exposed as designer-selected options, or used to identify
+    variance from a compliant standard.
 
 ## In Development
 
@@ -182,6 +190,25 @@ Last reviewed: 2026-06-11.
     letters or move to output-family keys with framework-specific labels.
   - Remove legacy `process_guideline_*` aliases once downstream call sites and
     saved expectations no longer need them.
+
+- [ ] Complete EASA CS-ADR-DSN Issue 7 operational-grade ruleset verification.
+
+  Work order:
+  - [x] Physical runway dimensions.
+  - [x] Taxiway and separation standards.
+  - [x] OLS tables and geometry applicability.
+  - [x] Runway markings.
+  - Airfield ground lighting.
+  - Declared distances, clearway, and stopway.
+
+  Work items:
+  - Continue building machine-readable traceability for each implemented EASA value.
+  - Continue adding regression tests asserting source references and numeric values.
+  - Remove, replace, or explicitly label MOS-derived fallbacks.
+  - Keep interpretation-policy decisions parked until conditional/guidance
+    provisions need to be applied in output logic.
+  - Preserve the dual use case: safeguarding/planning envelopes and aerodrome
+    design compliance support.
 
 - [ ] Close remaining ruleset/framework architecture decisions.
 

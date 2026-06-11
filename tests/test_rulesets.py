@@ -2,6 +2,10 @@ import unittest
 
 from dimensions import agl_dimensions as legacy_agl_dimensions
 from dimensions import ols_dimensions as legacy_ols_dimensions
+from rulesets.easa import markings as easa_markings
+from rulesets.easa import ols_surfaces as easa_ols_surfaces
+from rulesets.easa import physical_data as easa_physical_data
+from rulesets.easa import taxiway as easa_taxiway
 from rulesets.mos139 import classification, lighting, ols_surfaces, physical_data, taxiway
 from rulesets.registry import (
     DEFAULT_RULESET_ID,
@@ -331,22 +335,142 @@ class RulesetRegistryTest(unittest.TestCase):
             profile.taxiway_separation_offset(3, "C", "Precision Approach CAT I")["offset_m"],
             158.0,
         )
-        self.assertEqual(profile.taxiway_separation_offset(2, "A", "Non-Instrument (NI)")["offset_m"], 47.5)
+
+    def test_easa_physical_strip_references_distinguish_npa_from_precision(self):
+        profile = get_ruleset_profile("easa_cs_adr_dsn_issue_7")
+
+        npa_strip = profile.strip_parameters(3, "NPA", 45.0)
+        self.assertEqual(npa_strip["overall_width"], 280.0)
+        self.assertEqual(npa_strip["overall_width_ref"], "CS ADR-DSN.B.160(b)(1) Code 3 non-precision approach")
+
+        precision_strip = profile.strip_parameters(3, "PA_I", 45.0)
+        self.assertEqual(precision_strip["overall_width"], 280.0)
+        self.assertEqual(precision_strip["overall_width_ref"], "CS ADR-DSN.B.160(a)(1) Code 3 precision approach")
+
+        non_instrument_strip = profile.strip_parameters(3, "NI", 45.0)
+        self.assertEqual(non_instrument_strip["overall_width"], 150.0)
+        self.assertEqual(non_instrument_strip["overall_width_ref"], "CS ADR-DSN.B.160(c)(1) Code 3 non-instrument")
+
+    def test_easa_physical_traceability_is_operational_grade_for_verified_items(self):
+        traceability = easa_physical_data.get_physical_traceability()
+        self.assertEqual(traceability["source_publication"], "EASA Easy Access Rules for Aerodromes, CS-ADR-DSN Issue 7")
+
+        expected_items = {
+            "strip_length": "CS ADR-DSN.B.155",
+            "strip_overall_width": "CS ADR-DSN.B.160",
+            "strip_graded_width": "CS ADR-DSN.B.175",
+            "resa_applicability": "CS ADR-DSN.C.210",
+            "resa_dimensions": "CS ADR-DSN.C.215",
+        }
+        for item_key, source in expected_items.items():
+            with self.subTest(item_key=item_key):
+                item = traceability["items"][item_key]
+                self.assertEqual(item["source"], source)
+                self.assertEqual(item["status"], "operational_verified")
+
+    def test_easa_taxiway_traceability_and_table_d1_values_are_operational_grade(self):
+        traceability = easa_taxiway.get_taxiway_traceability()
+        self.assertEqual(traceability["source_publication"], "EASA Easy Access Rules for Aerodromes, CS-ADR-DSN Issue 7")
+
+        expected_items = {
+            "taxiway_runway_separation": "CS ADR-DSN.D.260 Table D-1",
+            "taxiway_to_taxiway_separation": "CS ADR-DSN.D.260 Table D-1",
+            "taxiway_object_separation": "CS ADR-DSN.D.260 Table D-1",
+            "stand_taxilane_to_stand_taxilane_separation": "CS ADR-DSN.D.260 Table D-1",
+            "stand_taxilane_object_separation": "CS ADR-DSN.D.260 Table D-1",
+            "parallel_non_instrument_runways": "CS ADR-DSN.B.050",
+            "parallel_instrument_runways": "CS ADR-DSN.B.055",
+        }
+        for item_key, source in expected_items.items():
+            with self.subTest(item_key=item_key):
+                item = traceability["items"][item_key]
+                self.assertEqual(item["source"], source)
+                self.assertEqual(item["status"], "operational_verified")
+
+        expected_runway_taxiway_offsets = {
+            (1, "A", "INSTR"): 77.5,
+            (2, "A", "INSTR"): 77.5,
+            (1, "B", "INSTR"): 82.0,
+            (2, "B", "INSTR"): 82.0,
+            (3, "B", "INSTR"): 152.0,
+            (1, "C", "INSTR"): 88.0,
+            (2, "C", "INSTR"): 88.0,
+            (3, "C", "INSTR"): 158.0,
+            (4, "C", "INSTR"): 158.0,
+            (3, "D", "INSTR"): 166.0,
+            (4, "D", "INSTR"): 166.0,
+            (3, "E", "INSTR"): 172.5,
+            (4, "E", "INSTR"): 172.5,
+            (3, "F", "INSTR"): 180.0,
+            (4, "F", "INSTR"): 180.0,
+            (1, "A", "NI"): 37.5,
+            (2, "A", "NI"): 47.5,
+            (1, "B", "NI"): 42.0,
+            (2, "B", "NI"): 52.0,
+            (3, "B", "NI"): 87.0,
+            (1, "C", "NI"): 48.0,
+            (2, "C", "NI"): 58.0,
+            (3, "C", "NI"): 93.0,
+            (4, "C", "NI"): 93.0,
+            (3, "D", "NI"): 101.0,
+            (4, "D", "NI"): 101.0,
+            (3, "E", "NI"): 107.5,
+            (4, "E", "NI"): 107.5,
+            (3, "F", "NI"): 115.0,
+            (4, "F", "NI"): 115.0,
+        }
+        self.assertEqual(set(easa_taxiway.TAXIWAY_RUNWAY_SEPARATION_PARAMS), set(expected_runway_taxiway_offsets))
+        for key, expected_offset in expected_runway_taxiway_offsets.items():
+            with self.subTest(key=key):
+                params = easa_taxiway.TAXIWAY_RUNWAY_SEPARATION_PARAMS[key]
+                self.assertEqual(params["offset_m"], expected_offset)
+                self.assertEqual(params["ref"], easa_taxiway.EASA_TAXIWAY_SEPARATION_REF)
+
+        expected_by_letter = {
+            "taxiway_to_taxiway": (
+                easa_taxiway.TAXIWAY_TO_TAXIWAY_SEPARATION_PARAMS,
+                {"A": 23.0, "B": 32.0, "C": 44.0, "D": 63.0, "E": 76.0, "F": 91.0},
+            ),
+            "taxiway_object": (
+                easa_taxiway.TAXIWAY_OBJECT_SEPARATION_PARAMS,
+                {"A": 15.5, "B": 20.0, "C": 26.0, "D": 37.0, "E": 43.5, "F": 51.0},
+            ),
+            "stand_taxilane_to_stand_taxilane": (
+                easa_taxiway.STAND_TAXILANE_TO_STAND_TAXILANE_SEPARATION_PARAMS,
+                {"A": 19.5, "B": 28.5, "C": 40.5, "D": 59.5, "E": 72.5, "F": 87.5},
+            ),
+            "stand_taxilane_object": (
+                easa_taxiway.STAND_TAXILANE_OBJECT_SEPARATION_PARAMS,
+                {"A": 12.0, "B": 16.5, "C": 22.5, "D": 33.5, "E": 40.0, "F": 47.5},
+            ),
+        }
+        for table_name, (actual_params, expected_offsets) in expected_by_letter.items():
+            with self.subTest(table_name=table_name):
+                self.assertEqual(set(actual_params), set(expected_offsets))
+            for code_letter, expected_offset in expected_offsets.items():
+                with self.subTest(table_name=table_name, code_letter=code_letter):
+                    self.assertEqual(actual_params[code_letter]["offset_m"], expected_offset)
+                    self.assertEqual(actual_params[code_letter]["ref"], easa_taxiway.EASA_TAXIWAY_SEPARATION_REF)
+
+    def test_easa_taxiway_and_parallel_runway_smoke_checks(self):
+        profile = get_ruleset_profile("easa_cs_adr_dsn_issue_7")
+        taxiway_offset = profile.taxiway_separation_offset(2, "A", "Non-Instrument (NI)")
+        self.assertEqual(taxiway_offset["offset_m"], 47.5)
+        self.assertEqual(taxiway_offset["ref"], "CS ADR-DSN.D.260 Table D-1")
         self.assertEqual(profile.taxiway_to_taxiway_separation("F")["offset_m"], 91.0)
         self.assertEqual(profile.taxiway_object_separation("D")["offset_m"], 37.0)
         self.assertEqual(profile.stand_taxilane_to_stand_taxilane_separation("B")["offset_m"], 28.5)
         self.assertEqual(profile.stand_taxilane_object_separation("E")["offset_m"], 40.0)
         self.assertIsNone(profile.parallel_runway_separation())
-        self.assertEqual(
-            profile.parallel_runway_separation(
-                1,
-                4,
-                "Non-Instrument (NI)",
-                "Non-Instrument (NI)",
-                "simultaneous",
-            )["distance_m"],
-            210.0,
+        non_instrument_parallel = profile.parallel_runway_separation(
+            1,
+            4,
+            "Non-Instrument (NI)",
+            "Non-Instrument (NI)",
+            "simultaneous",
         )
+        self.assertEqual(non_instrument_parallel["distance_m"], 210.0)
+        self.assertEqual(non_instrument_parallel["ref"], "CS ADR-DSN.B.050")
         self.assertEqual(
             profile.parallel_runway_separation(
                 1,
@@ -402,8 +526,22 @@ class RulesetRegistryTest(unittest.TestCase):
                 "Non-Precision Approach (NPA)",
                 "segregated_parallel_operations",
                 arrival_threshold_stagger_m=300.0,
-            )["distance_m"],
-            700.0,
+            ),
+            {
+                "distance_m": 700.0,
+                "ref": "CS ADR-DSN.B.055",
+                "condition": "Parallel instrument runways intended for segregated parallel operations.",
+                "higher_code_number": 4,
+                "operation_type": "segregated_parallel_operations",
+                "base_distance_m": 760.0,
+                "threshold_stagger_m": 300.0,
+                "stagger_adjustment_m": -60.0,
+                "notes": (
+                    "Other combinations of minimum distances should account for ATM and operational aspects. "
+                    "Guidance on procedures and facilities for simultaneous operations is in ICAO PANS-ATM "
+                    "Doc 4444 Chapter 6, PANS-OPS Doc 8168, and ICAO Doc 9643 SOIR."
+                ),
+            },
         )
         self.assertEqual(
             profile.parallel_runway_separation(
@@ -427,6 +565,316 @@ class RulesetRegistryTest(unittest.TestCase):
             )["distance_m"],
             300.0,
         )
+
+    def test_easa_ols_traceability_marks_j_tables_verified_and_interpretations_visible(self):
+        traceability = easa_ols_surfaces.get_ols_traceability()
+        self.assertEqual(traceability["source_publication"], "EASA Easy Access Rules for Aerodromes, CS-ADR-DSN Issue 7")
+
+        expected_verified_items = {
+            "approach_surface": "CS ADR-DSN.J.470/J.475/J.480 Table J-1",
+            "inner_approach_surface": "CS ADR-DSN.J.470/J.475/J.480 Table J-1",
+            "inner_transitional_surface": "CS ADR-DSN.J.470/J.475/J.480 Table J-1",
+            "balked_landing_surface": "CS ADR-DSN.J.470/J.475/J.480 Table J-1",
+            "inner_horizontal_surface": "CS ADR-DSN.J.470/J.475/J.480 Table J-1",
+            "conical_surface": "CS ADR-DSN.J.470/J.475/J.480 Table J-1",
+            "transitional_surface": "CS ADR-DSN.J.470/J.475/J.480 Table J-1",
+            "take_off_climb_surface": "CS ADR-DSN.J.485 Table J-2",
+        }
+        for item_key, source in expected_verified_items.items():
+            with self.subTest(item_key=item_key):
+                item = traceability["items"][item_key]
+                self.assertEqual(item["source"], source)
+                self.assertEqual(item["status"], "operational_verified")
+
+        self.assertEqual(traceability["items"]["outer_horizontal_surface"]["status"], "guidance_only")
+        self.assertEqual(traceability["items"]["pa_cat_i_ofz_family_applicability"]["status"], "interpretive")
+
+    def test_easa_ols_table_j1_approach_values_are_regression_checked(self):
+        expected_approach_sections = {
+            (1, "NI"): [
+                {"length": 1600.0, "slope": 0.05, "divergence": 0.10, "start_dist_from_thr": 30.0, "start_width": 60.0},
+            ],
+            (2, "NI"): [
+                {"length": 2500.0, "slope": 0.04, "divergence": 0.10, "start_dist_from_thr": 60.0, "start_width": 80.0},
+            ],
+            (3, "NI"): [
+                {"length": 3000.0, "slope": 0.0333, "divergence": 0.10, "start_dist_from_thr": 60.0, "start_width": 150.0},
+            ],
+            (4, "NI"): [
+                {"length": 3000.0, "slope": 0.025, "divergence": 0.10, "start_dist_from_thr": 60.0, "start_width": 150.0},
+            ],
+            (1, "NPA"): [
+                {"length": 2500.0, "slope": 0.0333, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 140.0},
+            ],
+            (2, "NPA"): [
+                {"length": 2500.0, "slope": 0.0333, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 140.0},
+            ],
+            (3, "NPA"): [
+                {"length": 3000.0, "slope": 0.02, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 280.0},
+                {"length": 3600.0, "slope": 0.025, "divergence": 0.15, "variable_length": True},
+                {"length": 8400.0, "slope": 0.0, "divergence": 0.15, "variable_length": True, "total_length": 15000.0},
+            ],
+            (4, "NPA"): [
+                {"length": 3000.0, "slope": 0.02, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 280.0},
+                {"length": 3600.0, "slope": 0.025, "divergence": 0.15, "variable_length": True},
+                {"length": 8400.0, "slope": 0.0, "divergence": 0.15, "variable_length": True, "total_length": 15000.0},
+            ],
+            (1, "PA_I"): [
+                {"length": 3000.0, "slope": 0.025, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 140.0},
+                {"length": 12000.0, "slope": 0.03, "divergence": 0.15, "total_length": 15000.0},
+            ],
+            (2, "PA_I"): [
+                {"length": 3000.0, "slope": 0.025, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 140.0},
+                {"length": 12000.0, "slope": 0.03, "divergence": 0.15, "total_length": 15000.0},
+            ],
+            (3, "PA_I"): [
+                {"length": 3000.0, "slope": 0.02, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 280.0},
+                {"length": 3600.0, "slope": 0.025, "divergence": 0.15, "variable_length": True},
+                {"length": 8400.0, "slope": 0.0, "divergence": 0.15, "variable_length": True, "total_length": 15000.0},
+            ],
+            (4, "PA_I"): [
+                {"length": 3000.0, "slope": 0.02, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 280.0},
+                {"length": 3600.0, "slope": 0.025, "divergence": 0.15, "variable_length": True},
+                {"length": 8400.0, "slope": 0.0, "divergence": 0.15, "variable_length": True, "total_length": 15000.0},
+            ],
+            (3, "PA_II_III"): [
+                {"length": 3000.0, "slope": 0.02, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 280.0},
+                {"length": 3600.0, "slope": 0.025, "divergence": 0.15, "variable_length": True},
+                {"length": 8400.0, "slope": 0.0, "divergence": 0.15, "variable_length": True, "total_length": 15000.0},
+            ],
+            (4, "PA_II_III"): [
+                {"length": 3000.0, "slope": 0.02, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 280.0},
+                {"length": 3600.0, "slope": 0.025, "divergence": 0.15, "variable_length": True},
+                {"length": 8400.0, "slope": 0.0, "divergence": 0.15, "variable_length": True, "total_length": 15000.0},
+            ],
+        }
+        self.assertEqual(set(easa_ols_surfaces.APPROACH_PARAMS), set(expected_approach_sections))
+        for key, expected_sections in expected_approach_sections.items():
+            actual_sections = easa_ols_surfaces.APPROACH_PARAMS[key]
+            self.assertEqual(len(actual_sections), len(expected_sections), key)
+            for index, expected_section in enumerate(expected_sections):
+                with self.subTest(key=key, section=index):
+                    actual_section = actual_sections[index]
+                    for field, expected_value in expected_section.items():
+                        self.assertEqual(actual_section[field], expected_value)
+                    self.assertIn("Table J-1", actual_section["ref"])
+
+    def test_easa_ols_table_j1_surface_values_are_regression_checked(self):
+        expected_conical = {
+            (1, "NI"): 35.0,
+            (2, "NI"): 55.0,
+            (3, "NI"): 75.0,
+            (4, "NI"): 100.0,
+            (1, "NPA"): 60.0,
+            (2, "NPA"): 60.0,
+            (3, "NPA"): 75.0,
+            (4, "NPA"): 100.0,
+            (1, "PA_I"): 60.0,
+            (2, "PA_I"): 60.0,
+            (3, "PA_I"): 100.0,
+            (4, "PA_I"): 100.0,
+            (3, "PA_II_III"): 100.0,
+            (4, "PA_II_III"): 100.0,
+        }
+        self.assertEqual(set(easa_ols_surfaces.CONICAL_PARAMS), set(expected_conical))
+        for key, expected_height in expected_conical.items():
+            with self.subTest(table="conical", key=key):
+                params = easa_ols_surfaces.CONICAL_PARAMS[key]
+                self.assertEqual(params["slope"], 0.05)
+                self.assertEqual(params["height_extent_agl"], expected_height)
+
+        expected_ihs_radius = {
+            (1, "NI"): 2000.0,
+            (2, "NI"): 2500.0,
+            (3, "NI"): 4000.0,
+            (4, "NI"): 4000.0,
+            (1, "NPA"): 3500.0,
+            (2, "NPA"): 3500.0,
+            (3, "NPA"): 4000.0,
+            (4, "NPA"): 4000.0,
+            (1, "PA_I"): 3500.0,
+            (2, "PA_I"): 3500.0,
+            (3, "PA_I"): 4000.0,
+            (4, "PA_I"): 4000.0,
+            (3, "PA_II_III"): 4000.0,
+            (4, "PA_II_III"): 4000.0,
+        }
+        self.assertEqual(set(easa_ols_surfaces.IHS_PARAMS), set(expected_ihs_radius))
+        for key, expected_radius in expected_ihs_radius.items():
+            with self.subTest(table="ihs", key=key):
+                params = easa_ols_surfaces.IHS_PARAMS[key]
+                self.assertEqual(params["height_agl"], 45.0)
+                self.assertEqual(params["radius"], expected_radius)
+
+        expected_transitional_slope = {
+            (1, "NI"): 0.20,
+            (2, "NI"): 0.20,
+            (3, "NI"): 0.143,
+            (4, "NI"): 0.143,
+            (1, "NPA"): 0.20,
+            (2, "NPA"): 0.20,
+            (3, "NPA"): 0.143,
+            (4, "NPA"): 0.143,
+            (1, "PA_I"): 0.143,
+            (2, "PA_I"): 0.143,
+            (3, "PA_I"): 0.143,
+            (4, "PA_I"): 0.143,
+            (3, "PA_II_III"): 0.143,
+            (4, "PA_II_III"): 0.143,
+        }
+        self.assertEqual(set(easa_ols_surfaces.TRANSITIONAL_PARAMS), set(expected_transitional_slope))
+        for key, expected_slope in expected_transitional_slope.items():
+            with self.subTest(table="transitional", key=key):
+                self.assertEqual(easa_ols_surfaces.TRANSITIONAL_PARAMS[key]["slope"], expected_slope)
+
+    def test_easa_ols_table_j1_precision_ofz_values_are_regression_checked(self):
+        expected_inner_approach = {
+            (1, "PA_I"): {"width": 90.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.025, "code_letter_f_width": None},
+            (2, "PA_I"): {"width": 90.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.025, "code_letter_f_width": None},
+            (3, "PA_I"): {"width": 120.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.02, "code_letter_f_width": 140.0},
+            (4, "PA_I"): {"width": 120.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.02, "code_letter_f_width": 140.0},
+            (3, "PA_II_III"): {"width": 120.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.02, "code_letter_f_width": 140.0},
+            (4, "PA_II_III"): {"width": 120.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.02, "code_letter_f_width": 140.0},
+        }
+        self.assertEqual(set(easa_ols_surfaces.INNER_APPROACH_PARAMS), set(expected_inner_approach))
+        for key, expected_fields in expected_inner_approach.items():
+            with self.subTest(table="inner_approach", key=key):
+                for field, expected_value in expected_fields.items():
+                    self.assertEqual(easa_ols_surfaces.INNER_APPROACH_PARAMS[key][field], expected_value)
+
+        expected_inner_transitional = {
+            (1, "PA_I"): 0.40,
+            (2, "PA_I"): 0.40,
+            (3, "PA_I"): 0.333,
+            (4, "PA_I"): 0.333,
+            (3, "PA_II_III"): 0.333,
+            (4, "PA_II_III"): 0.333,
+        }
+        self.assertEqual(set(easa_ols_surfaces.INNER_TRANSITIONAL_PARAMS), set(expected_inner_transitional))
+        for key, expected_slope in expected_inner_transitional.items():
+            with self.subTest(table="inner_transitional", key=key):
+                self.assertEqual(easa_ols_surfaces.INNER_TRANSITIONAL_PARAMS[key]["slope"], expected_slope)
+
+        expected_balked_landing = {
+            (1, "PA_I"): {"width": 90.0, "start_dist_from_thr": None, "divergence": 0.10, "slope": 0.04, "code_letter_f_width": None},
+            (2, "PA_I"): {"width": 90.0, "start_dist_from_thr": None, "divergence": 0.10, "slope": 0.04, "code_letter_f_width": None},
+            (3, "PA_I"): {"width": 120.0, "start_dist_from_thr": 1800.0, "divergence": 0.10, "slope": 0.0333, "code_letter_f_width": 140.0},
+            (4, "PA_I"): {"width": 120.0, "start_dist_from_thr": 1800.0, "divergence": 0.10, "slope": 0.0333, "code_letter_f_width": 140.0},
+            (3, "PA_II_III"): {"width": 120.0, "start_dist_from_thr": 1800.0, "divergence": 0.10, "slope": 0.0333, "code_letter_f_width": 140.0},
+            (4, "PA_II_III"): {"width": 120.0, "start_dist_from_thr": 1800.0, "divergence": 0.10, "slope": 0.0333, "code_letter_f_width": 140.0},
+        }
+        self.assertEqual(set(easa_ols_surfaces.BALKED_LANDING_PARAMS), set(expected_balked_landing))
+        for key, expected_fields in expected_balked_landing.items():
+            with self.subTest(table="balked_landing", key=key):
+                for field, expected_value in expected_fields.items():
+                    self.assertEqual(easa_ols_surfaces.BALKED_LANDING_PARAMS[key][field], expected_value)
+
+    def test_easa_ols_table_j2_takeoff_climb_values_are_regression_checked(self):
+        expected_tocs = {
+            1: {"inner_edge_width": 60.0, "inner_edge_width_clearway": 150.0, "origin_offset": 30.0, "divergence": 0.10, "final_width": 380.0, "length": 1600.0, "slope": 0.05},
+            2: {"inner_edge_width": 80.0, "inner_edge_width_clearway": 150.0, "origin_offset": 60.0, "divergence": 0.10, "final_width": 580.0, "length": 2500.0, "slope": 0.04},
+            3: {"inner_edge_width": 180.0, "inner_edge_width_clearway": 180.0, "origin_offset": 60.0, "divergence": 0.125, "final_width": 1200.0, "final_width_turning": 1800.0, "length": 15000.0, "slope": 0.02},
+            4: {"inner_edge_width": 180.0, "inner_edge_width_clearway": 180.0, "origin_offset": 60.0, "divergence": 0.125, "final_width": 1200.0, "final_width_turning": 1800.0, "length": 15000.0, "slope": 0.02},
+        }
+        self.assertEqual(set(easa_ols_surfaces.TOCS_PARAMS), set(expected_tocs))
+        for key, expected_fields in expected_tocs.items():
+            with self.subTest(key=key):
+                actual_params = easa_ols_surfaces.TOCS_PARAMS[key]
+                for field, expected_value in expected_fields.items():
+                    self.assertEqual(actual_params[field], expected_value)
+                self.assertIn("Table J-2", actual_params["ref"])
+
+        self.assertEqual(easa_ols_surfaces.get_tocs_params(1, clearway_provided=True)["inner_edge_width"], 150.0)
+        self.assertEqual(easa_ols_surfaces.get_tocs_params(3, turning_track_gt_15_deg=True)["final_width"], 1800.0)
+        self.assertEqual(easa_ols_surfaces.get_tocs_params(3)["slope_reduced_guidance"], 0.016)
+        with self.assertLogs("rulesets.easa.ols_surfaces", level="WARNING"):
+            self.assertIsNone(easa_ols_surfaces.get_tocs_params(5))
+
+    def test_easa_marking_traceability_marks_verified_and_interpretive_items(self):
+        traceability = easa_markings.get_marking_traceability()
+        self.assertEqual(traceability["source_publication"], "EASA Easy Access Rules for Aerodromes, CS-ADR-DSN Issue 7")
+
+        expected_statuses = {
+            "runway_centreline_marking_width": ("CS ADR-DSN.L.530", "operational_verified"),
+            "threshold_marking_stripe_count": ("CS ADR-DSN.L.535", "operational_verified"),
+            "threshold_marking_representative_stripe_width": ("CS ADR-DSN.L.535", "interpretive"),
+            "aiming_point_marking_table": ("CS ADR-DSN.L.540 Table L-1", "operational_verified"),
+            "aiming_point_non_instrument_policy": ("CS ADR-DSN.L.540", "interpretive"),
+            "touchdown_zone_pair_counts": ("CS ADR-DSN.L.545", "operational_verified"),
+            "touchdown_zone_offsets": ("CS ADR-DSN.L.545", "derived_verified"),
+            "runway_holding_position_marking": ("CS ADR-DSN.L.575", "accepted_unsupported"),
+        }
+        for item_key, (source, status) in expected_statuses.items():
+            with self.subTest(item_key=item_key):
+                item = traceability["items"][item_key]
+                self.assertEqual(item["source"], source)
+                self.assertEqual(item["status"], status)
+
+    def test_easa_marking_centreline_and_threshold_values_are_regression_checked(self):
+        expected_thresholds = {
+            18.0: (4, 1.8),
+            23.0: (6, 1.8),
+            30.0: (8, 1.8),
+            45.0: (12, 1.8),
+            60.0: (16, 1.8),
+        }
+        self.assertEqual(easa_markings.THRESHOLD_MARKING_PARAMS_BY_WIDTH, expected_thresholds)
+        for runway_width, expected_params in expected_thresholds.items():
+            with self.subTest(runway_width=runway_width):
+                self.assertEqual(easa_markings.threshold_marking_params(runway_width), expected_params)
+
+        self.assertEqual(easa_markings.threshold_marking_params(30.005), (8, 1.8))
+        self.assertIsNone(easa_markings.threshold_marking_params(40.0))
+        self.assertEqual(easa_markings.centreline_marking_width(4, "Non-Precision Approach (NPA)", "Non-Instrument (NI)"), 0.45)
+        self.assertEqual(easa_markings.centreline_marking_width(2, "Non-Precision Approach (NPA)", "Non-Instrument (NI)"), 0.3)
+        self.assertEqual(easa_markings.centreline_marking_width(3, "Precision Approach CAT I", "Non-Instrument (NI)"), 0.45)
+        self.assertEqual(easa_markings.centreline_marking_width(3, "Precision Approach CAT II/III", "Precision Approach CAT I"), 0.9)
+
+    def test_easa_marking_aiming_point_values_are_regression_checked(self):
+        expected_aiming_point_rules = (
+            (800.0, 150.0, 30.0, 4.0, 6.0, "CS ADR-DSN.L.540 Table L-1"),
+            (1200.0, 250.0, 30.0, 6.0, 9.0, "CS ADR-DSN.L.540 Table L-1"),
+            (2400.0, 300.0, 45.0, 9.0, 18.0, "CS ADR-DSN.L.540 Table L-1"),
+            (None, 400.0, 45.0, 9.0, 18.0, "CS ADR-DSN.L.540 Table L-1"),
+        )
+        self.assertEqual(easa_markings.AIMING_POINT_RULES, expected_aiming_point_rules)
+        self.assertEqual(
+            easa_markings.aiming_point_rule(45.0, 700.0, "Precision Approach CAT I"),
+            (150.0, 30.0, 4.0, 6.0, "CS ADR-DSN.L.540 Table L-1"),
+        )
+        self.assertEqual(
+            easa_markings.aiming_point_rule(45.0, 800.0, "Precision Approach CAT I"),
+            (250.0, 30.0, 6.0, 9.0, "CS ADR-DSN.L.540 Table L-1"),
+        )
+        self.assertEqual(
+            easa_markings.aiming_point_rule(45.0, 1200.0, "Non-Precision Approach (NPA)"),
+            (300.0, 45.0, 9.0, 18.0, "CS ADR-DSN.L.540 Table L-1"),
+        )
+        self.assertEqual(
+            easa_markings.aiming_point_rule(45.0, 2400.0, "Non-Precision Approach (NPA)"),
+            (400.0, 45.0, 9.0, 18.0, "CS ADR-DSN.L.540 Table L-1"),
+        )
+        self.assertEqual(
+            easa_markings.aiming_point_rule(30.0, 1800.0, "Non-Instrument (NI)"),
+            (300.0, 45.0, 9.0, 18.0, "CS ADR-DSN.L.540 (default)"),
+        )
+        self.assertIsNone(easa_markings.aiming_point_rule(23.0, 1800.0, "Non-Instrument (NI)"))
+
+    def test_easa_marking_touchdown_zone_and_holding_values_are_regression_checked(self):
+        expected_touchdown_zone_rules = (
+            (900.0, [300.0]),
+            (1200.0, [150.0, 450.0]),
+            (1500.0, [150.0, 450.0, 600.0]),
+            (2400.0, [150.0, 450.0, 600.0, 750.0]),
+            (None, [150.0, 300.0, 600.0, 750.0, 900.0, 1050.0]),
+        )
+        self.assertEqual(easa_markings.TOUCHDOWN_ZONE_OFFSET_RULES, expected_touchdown_zone_rules)
+        self.assertEqual(easa_markings.touchdown_zone_offsets(899.9), [300.0])
+        self.assertEqual(easa_markings.touchdown_zone_offsets(900.0), [150.0, 450.0])
+        self.assertEqual(easa_markings.touchdown_zone_offsets(1200.0), [150.0, 450.0, 600.0])
+        self.assertEqual(easa_markings.touchdown_zone_offsets(1500.0), [150.0, 450.0, 600.0, 750.0])
+        self.assertEqual(easa_markings.touchdown_zone_offsets(2400.0), [150.0, 300.0, 600.0, 750.0, 900.0, 1050.0])
+        self.assertIsNone(easa_markings.runway_holding_position_rule(3, "Precision Approach CAT I"))
 
     def test_annex14_profile_scaffold_smoke_checks(self):
         current_profile = get_ruleset_profile("icao_annex14_vol1_current_ols")

@@ -90,6 +90,14 @@ EASA_OLS_REF = "CS-ADR-DSN Issue 7, Chapters H and J"
 TABLE_J1_REF = "CS ADR-DSN.J.470/J.475/J.480 Table J-1"
 TABLE_J2_REF = "CS ADR-DSN.J.485 Table J-2"
 OHS_GUIDANCE_REF = "GM1 ADR-DSN.H.410"
+SOURCE_PUBLICATION = "EASA Easy Access Rules for Aerodromes, CS-ADR-DSN Issue 7"
+SOURCE_URL = (
+    "https://www.easa.europa.eu/en/document-library/easy-access-rules/"
+    "online-publications/easy-access-rules-aerodromes-regulation-eu"
+)
+TABLE_J1_SOURCE_URL = f"{SOURCE_URL}?erules-id=ERULES-1963177438-2238"
+TABLE_J2_SOURCE_URL = f"{SOURCE_URL}?erules-id=ERULES-1963177438-2239"
+OHS_GUIDANCE_SOURCE_URL = f"{SOURCE_URL}?erules-id=ERULES-1963177438-2214"
 
 IHS_BASE_HEIGHT_AGL = 45.0
 OHS_GUIDANCE_HEIGHT_AGL = 150.0
@@ -646,6 +654,82 @@ TRANSITIONAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 }
 
 # =========================================================================
+# Source traceability
+# =========================================================================
+
+OLS_TRACEABILITY_ITEMS = {
+    "approach_surface": {
+        "source": TABLE_J1_REF,
+        "status": "operational_verified",
+        "implementation": "APPROACH_PARAMS",
+        "notes": "Table J-1 approach inner edge, threshold distance, divergence, section lengths, slopes, and total lengths.",
+    },
+    "inner_approach_surface": {
+        "source": TABLE_J1_REF,
+        "status": "operational_verified",
+        "implementation": "INNER_APPROACH_PARAMS",
+        "notes": "Table J-1 inner approach dimensions for precision approach runway columns.",
+    },
+    "inner_transitional_surface": {
+        "source": TABLE_J1_REF,
+        "status": "operational_verified",
+        "implementation": "INNER_TRANSITIONAL_PARAMS",
+        "notes": "Table J-1 inner transitional slopes for precision approach runway columns.",
+    },
+    "balked_landing_surface": {
+        "source": TABLE_J1_REF,
+        "status": "operational_verified",
+        "implementation": "BALKED_LANDING_PARAMS",
+        "notes": "Table J-1 balked landing dimensions, including distance and code letter F footnotes.",
+    },
+    "inner_horizontal_surface": {
+        "source": TABLE_J1_REF,
+        "status": "operational_verified",
+        "implementation": "IHS_PARAMS",
+        "notes": "Table J-1 inner horizontal height and radius values.",
+    },
+    "conical_surface": {
+        "source": TABLE_J1_REF,
+        "status": "operational_verified",
+        "implementation": "CONICAL_PARAMS",
+        "notes": "Table J-1 conical slope and height values.",
+    },
+    "transitional_surface": {
+        "source": TABLE_J1_REF,
+        "status": "operational_verified",
+        "implementation": "TRANSITIONAL_PARAMS",
+        "notes": "Table J-1 transitional slopes.",
+    },
+    "take_off_climb_surface": {
+        "source": TABLE_J2_REF,
+        "status": "operational_verified",
+        "implementation": "TOCS_PARAMS",
+        "notes": "Table J-2 take-off climb dimensions, slopes, and footnotes for clearways and turning tracks.",
+    },
+    "outer_horizontal_surface": {
+        "source": OHS_GUIDANCE_REF,
+        "status": "guidance_only",
+        "implementation": "OHS_PARAMS",
+        "notes": "GM1 ADR-DSN.H.410 broad specification, not a Table J-1 certification surface.",
+    },
+    "pa_cat_i_ofz_family_applicability": {
+        "source": "GM1 ADR-DSN.J.480(a)",
+        "status": "interpretive",
+        "implementation": "INNER_APPROACH_PARAMS / INNER_TRANSITIONAL_PARAMS / BALKED_LANDING_PARAMS for PA_I",
+        "notes": "CS J.480(a) establishes conical/IHS/approach/transitional for CAT I; GM1 identifies inner approach, inner transitional, and balked landing surfaces for precision approach CAT I.",
+    },
+}
+
+OLS_TRACEABILITY = {
+    "source_publication": SOURCE_PUBLICATION,
+    "source_url": SOURCE_URL,
+    "table_j1_source_url": TABLE_J1_SOURCE_URL,
+    "table_j2_source_url": TABLE_J2_SOURCE_URL,
+    "outer_horizontal_source_url": OHS_GUIDANCE_SOURCE_URL,
+    "items": OLS_TRACEABILITY_ITEMS,
+}
+
+# =========================================================================
 # Helper functions
 # =========================================================================
 
@@ -653,6 +737,11 @@ TRANSITIONAL_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
 def get_ihs_base_height() -> Optional[float]:
     """Return the standard Inner Horizontal Surface height above datum."""
     return IHS_BASE_HEIGHT_AGL
+
+
+def get_ols_traceability() -> Dict[str, Any]:
+    """Return source traceability metadata for EASA OLS rules."""
+    return OLS_TRACEABILITY.copy()
 
 
 def get_tocs_params(
@@ -748,6 +837,11 @@ __all__ = [
     "EASA_OLS_REF",
     "TABLE_J1_REF",
     "TABLE_J2_REF",
+    "SOURCE_PUBLICATION",
+    "SOURCE_URL",
+    "TABLE_J1_SOURCE_URL",
+    "TABLE_J2_SOURCE_URL",
+    "OHS_GUIDANCE_SOURCE_URL",
     "IHS_BASE_HEIGHT_AGL",
     "APPROACH_PARAMS",
     "INNER_APPROACH_PARAMS",
@@ -759,7 +853,10 @@ __all__ = [
     "CONICAL_PARAMS",
     "OHS_PARAMS",
     "TRANSITIONAL_PARAMS",
+    "OLS_TRACEABILITY",
+    "OLS_TRACEABILITY_ITEMS",
     "get_ihs_base_height",
+    "get_ols_traceability",
     "get_tocs_params",
     "get_ols_params",
 ]
