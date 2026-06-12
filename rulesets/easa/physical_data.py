@@ -1,6 +1,6 @@
 """EASA CS-ADR-DSN physical runway dimension policy."""
 
-from typing import Optional
+from typing import Any, Dict, Optional
 
 SOURCE_PUBLICATION = "EASA Easy Access Rules for Aerodromes, CS-ADR-DSN Issue 7"
 SOURCE_URL = (
@@ -10,6 +10,9 @@ SOURCE_URL = (
 
 PAVEMENT_EASA_REF = "CS ADR-DSN.B.090"
 SHOULDER_EASA_REF = "CS ADR-DSN.B.125/B.135"
+DECLARED_DISTANCE_EASA_REF = "CS ADR-DSN.B.035"
+CLEARWAY_EASA_REF = "CS ADR-DSN.B.195"
+STOPWAY_EASA_REF = "CS ADR-DSN.B.200"
 
 STRIP_WIDTH_PARAMS = {
     1: {
@@ -132,6 +135,25 @@ RESA_PARAMS = {
     },
 }
 
+DECLARED_DISTANCE_PARAMS = {
+    "distance_keys": ("tora_m", "toda_m", "asda_m", "lda_m"),
+    "rounding": "nearest_metre",
+    "ref": DECLARED_DISTANCE_EASA_REF,
+}
+
+CLEARWAY_PARAMS = {
+    "width_m": 150.0,
+    "max_length_factor_tora": 0.5,
+    "default_length_m": 0.0,
+    "origin": "end_of_takeoff_run_available",
+    "ref": CLEARWAY_EASA_REF,
+}
+
+STOPWAY_PARAMS = {
+    "width": "same_as_runway",
+    "ref": STOPWAY_EASA_REF,
+}
+
 
 PHYSICAL_TRACEABILITY = {
     "source_publication": SOURCE_PUBLICATION,
@@ -166,6 +188,24 @@ PHYSICAL_TRACEABILITY = {
             "status": "operational_verified",
             "implementation": "RESA_PARAMS.length_rules and width_ref",
             "notes": "Stores recommended RESA lengths and width basis.",
+        },
+        "declared_distances": {
+            "source": DECLARED_DISTANCE_EASA_REF,
+            "status": "operational_verified",
+            "implementation": "DECLARED_DISTANCE_PARAMS",
+            "notes": "TORA, TODA, ASDA, and LDA are calculated for each runway direction.",
+        },
+        "clearway": {
+            "source": CLEARWAY_EASA_REF,
+            "status": "operational_verified",
+            "implementation": "CLEARWAY_PARAMS and get_clearway_params",
+            "notes": "Clearways are optional; width is 150 m total and length is capped at half TORA.",
+        },
+        "stopway": {
+            "source": STOPWAY_EASA_REF,
+            "status": "operational_verified",
+            "implementation": "STOPWAY_PARAMS and get_stopway_params",
+            "notes": "Stopway width follows the associated runway width; entered length contributes to ASDA.",
         },
     },
 }
@@ -291,17 +331,102 @@ def get_resa_params(arc_num: int, type1_abbr: str, type2_abbr: str) -> dict:
     return results
 
 
+def get_declared_distance_params() -> dict:
+    return dict(DECLARED_DISTANCE_PARAMS)
+
+
+def get_clearway_params(
+    runway_width: Optional[float] = None,
+    strip_extension: Optional[float] = None,
+    strip_overall_width: Optional[float] = None,
+    physical_length: Optional[float] = None,
+    clearway_primary_input: Optional[float] = None,
+    clearway_reciprocal_input: Optional[float] = None,
+    stopway_primary: Optional[float] = None,
+    stopway_reciprocal: Optional[float] = None,
+    is_instrument_runway: bool = False,
+) -> Dict[str, Dict[str, Any]]:
+    del runway_width, strip_extension, strip_overall_width, stopway_primary, stopway_reciprocal, is_instrument_runway
+
+    max_length = _positive_or_none(physical_length)
+    if max_length is not None:
+        max_length *= CLEARWAY_PARAMS["max_length_factor_tora"]
+
+    return {
+        "primary": _clearway_end_params(clearway_primary_input, max_length),
+        "reciprocal": _clearway_end_params(clearway_reciprocal_input, max_length),
+    }
+
+
+def get_stopway_params(runway_width: Optional[float] = None, stopway_length: Optional[float] = None) -> Dict[str, Any]:
+    width = _non_negative_float(runway_width, 0.0)
+    length = _non_negative_float(stopway_length, 0.0)
+    return {
+        "length_m": round(length, 3),
+        "width_m": round(width, 3),
+        "ref": STOPWAY_EASA_REF,
+        "ref_easa": STOPWAY_EASA_REF,
+    }
+
+
+def _clearway_end_params(input_length: Optional[float], max_length: Optional[float]) -> Dict[str, Any]:
+    input_length_m = _non_negative_float(input_length, 0.0)
+    effective_length = input_length_m
+    source = "input" if input_length_m > 1e-6 else "none"
+    capped = False
+
+    if max_length is not None and effective_length > max_length:
+        effective_length = max_length
+        capped = True
+        source = f"{source}; capped"
+
+    return {
+        "length_m": round(effective_length, 3),
+        "width_m": round(CLEARWAY_PARAMS["width_m"], 3),
+        "input_length_m": round(input_length_m, 3),
+        "default_length_m": CLEARWAY_PARAMS["default_length_m"],
+        "source": source,
+        "capped": capped,
+        "max_length_m": round(max_length, 3) if max_length is not None else None,
+        "ref": CLEARWAY_EASA_REF,
+        "ref_easa": CLEARWAY_EASA_REF,
+        "ref_mos": CLEARWAY_EASA_REF,
+    }
+
+
+def _non_negative_float(value: Optional[float], default: float = 0.0) -> float:
+    try:
+        parsed = float(value)
+        return parsed if parsed >= 0 else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _positive_or_none(value: Optional[float]) -> Optional[float]:
+    parsed = _non_negative_float(value, 0.0)
+    return parsed if parsed > 0 else None
+
+
 __all__ = [
     "PAVEMENT_EASA_REF",
     "SHOULDER_EASA_REF",
+    "DECLARED_DISTANCE_EASA_REF",
+    "CLEARWAY_EASA_REF",
+    "STOPWAY_EASA_REF",
     "SOURCE_PUBLICATION",
     "SOURCE_URL",
     "PHYSICAL_TRACEABILITY",
     "STRIP_WIDTH_PARAMS",
     "STRIP_EXTENSION_PARAMS",
     "RESA_PARAMS",
+    "DECLARED_DISTANCE_PARAMS",
+    "CLEARWAY_PARAMS",
+    "STOPWAY_PARAMS",
     "get_physical_refs",
     "get_physical_traceability",
     "get_strip_params",
     "get_resa_params",
+    "get_declared_distance_params",
+    "get_clearway_params",
+    "get_stopway_params",
 ]

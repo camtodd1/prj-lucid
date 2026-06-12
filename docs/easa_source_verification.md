@@ -45,12 +45,15 @@ https://www.easa.europa.eu/en/document-library/easy-access-rules/online-publicat
 | Threshold/end/temporary displaced threshold lights | `rulesets/easa/lighting.py` | CS ADR-DSN.M.680, M.685 plus compatibility fallback | Operational verified with caveats | Threshold and runway-end source values are implemented and tested. The 30 m minimum lit-width floor and temporary displaced threshold counts remain explicitly labelled as compatibility/MOS-derived fallback assumptions. |
 | Runway centreline lights | `rulesets/easa/lighting.py` | CS ADR-DSN.M.690 | Operational verified with applicability policy | Spacing, lateral offset, colour zones, and simplified requirement/recommendation helpers are regression-tested. Applicability helpers remain policy-level simplifications. |
 | Touchdown-zone lights | `rulesets/easa/lighting.py` | CS ADR-DSN.M.695 | Operational verified with nominal gauge | TDZ length, 30/60 m row spacing, at least three lights per barrette, barrette spacing/length, and nominal inner offset are implemented and regression-tested. The 9 m inner offset remains a selected 18 m gauge assumption. |
+| Declared distances | `rulesets/easa/physical_data.py`, `safeguarding_builder.py` | CS ADR-DSN.B.035 | Operational verified | TORA, TODA, ASDA, and LDA are registered as calculated outputs for each runway direction with EASA traceability and regression tests. |
+| Clearway | `rulesets/easa/physical_data.py`, `safeguarding_builder.py` | CS ADR-DSN.B.195 | Operational verified | EASA clearways are optional, use a 150 m total width, and are capped at half TORA. The builder now asks the active ruleset for clearway specs instead of applying MOS defaults to EASA. |
+| Stopway | `rulesets/easa/physical_data.py` | CS ADR-DSN.B.200 | Operational verified | Stopway width follows the associated runway width; entered stopway length contributes to ASDA through the declared-distance workflow. Stopway polygon generation remains a separate project TODO. |
 
 ## High-confidence findings
 
 1. The EASA package is not an empty scaffold. It contains EASA-specific numeric tables and EASA references in physical, taxiway, marking, lighting, and OLS modules.
-2. Runway strips, RESA, taxiway separations, parallel runway separations, OLS Tables J-1/J-2, runway markings, and airfield ground lighting are now operational-grade verified EASA Issue 7 tranches.
-3. The riskiest remaining area is declared distances, clearway, and stopway because those outputs are not yet implemented as a complete EASA-specific tranche.
+2. Runway strips, RESA, taxiway separations, parallel runway separations, OLS Tables J-1/J-2, runway markings, airfield ground lighting, declared distances, clearway, and stopway are now operational-grade verified EASA Issue 7 tranches.
+3. Remaining risk is now concentrated in interpretation policy, optional published declared-distance overrides, and geometry completeness such as stopway polygons.
 4. The edition decision is now settled: the code targets Issue 7/current EASA, while remaining marked draft until full table-level verification is complete.
 
 ## Confirmed implementation decisions
@@ -60,7 +63,7 @@ https://www.easa.europa.eu/en/document-library/easy-access-rules/online-publicat
 | Authority target | EASA CS-ADR-DSN Issue 7. |
 | Verification standard | Operational-grade. |
 | Interpretation policy | Parked for follow-up. The open question is whether conditional/guidance values should be applied "as is", exposed as designer-selected options, or used to identify variance from a compliant standard. |
-| Completion order | Physical runway dimensions; taxiway/separation; OLS; markings; lighting; declared distances/clearway/stopway. |
+| Completion order | Core EASA tranches complete through declared distances/clearway/stopway; remaining work is consolidation and interpretation policy. |
 | Use case | Both safeguarding/planning envelopes and aerodrome design compliance, with the interpretation policy still to determine how variance/compliance outputs are framed. |
 
 ## Recommended consolidation todo list

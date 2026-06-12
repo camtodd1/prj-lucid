@@ -16,8 +16,8 @@
   Notes:
   - Authority target is EASA CS-ADR-DSN Issue 7.
   - Use case is both safeguarding/planning envelopes and aerodrome design compliance support.
-  - Completed verification tranches: physical runway dimensions; taxiway/separation; OLS Tables J-1/J-2; runway markings; airfield ground lighting.
-  - Remaining verification tranche: declared distances/clearway/stopway.
+  - Completed verification tranches: physical runway dimensions; taxiway/separation; OLS Tables J-1/J-2; runway markings; airfield ground lighting; declared distances/clearway/stopway.
+  - Remaining verification work is consolidation-focused rather than a missing core tranche.
   - Add table/clause traceability and regression tests for promoted values.
   - Park interpretation policy for follow-up: decide whether conditional/guidance provisions are applied "as is", exposed as designer-selected options, or used to identify variance from a compliant standard.
 

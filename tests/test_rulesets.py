@@ -362,12 +362,53 @@ class RulesetRegistryTest(unittest.TestCase):
             "strip_graded_width": "CS ADR-DSN.B.175",
             "resa_applicability": "CS ADR-DSN.C.210",
             "resa_dimensions": "CS ADR-DSN.C.215",
+            "declared_distances": "CS ADR-DSN.B.035",
+            "clearway": "CS ADR-DSN.B.195",
+            "stopway": "CS ADR-DSN.B.200",
         }
         for item_key, source in expected_items.items():
             with self.subTest(item_key=item_key):
                 item = traceability["items"][item_key]
                 self.assertEqual(item["source"], source)
                 self.assertEqual(item["status"], "operational_verified")
+
+    def test_easa_declared_distance_clearway_and_stopway_params(self):
+        profile = get_ruleset_profile("easa_cs_adr_dsn_issue_7")
+
+        self.assertEqual(profile.capability_status("physical.clearway"), "supported")
+        self.assertEqual(profile.capability_status("physical.stopway"), "supported")
+        self.assertEqual(profile.capability_status("declared_distances.calculated"), "supported")
+        self.assertEqual(
+            profile.declared_distance_parameters(),
+            {
+                "distance_keys": ("tora_m", "toda_m", "asda_m", "lda_m"),
+                "rounding": "nearest_metre",
+                "ref": "CS ADR-DSN.B.035",
+            },
+        )
+
+        clearway_specs = profile.clearway_parameters(
+            runway_width=45.0,
+            strip_extension=60.0,
+            strip_overall_width=280.0,
+            physical_length=1000.0,
+            clearway_primary_input=800.0,
+            clearway_reciprocal_input=0.0,
+            stopway_primary=100.0,
+            stopway_reciprocal=100.0,
+            is_instrument_runway=True,
+        )
+        self.assertEqual(clearway_specs["primary"]["length_m"], 500.0)
+        self.assertEqual(clearway_specs["primary"]["width_m"], 150.0)
+        self.assertTrue(clearway_specs["primary"]["capped"])
+        self.assertEqual(clearway_specs["primary"]["ref"], "CS ADR-DSN.B.195")
+        self.assertEqual(clearway_specs["reciprocal"]["length_m"], 0.0)
+        self.assertEqual(clearway_specs["reciprocal"]["source"], "none")
+
+        stopway_specs = profile.stopway_parameters(runway_width=45.0, stopway_length=125.25)
+        self.assertEqual(stopway_specs["length_m"], 125.25)
+        self.assertEqual(stopway_specs["width_m"], 45.0)
+        self.assertEqual(stopway_specs["ref"], "CS ADR-DSN.B.200")
 
     def test_easa_taxiway_traceability_and_table_d1_values_are_operational_grade(self):
         traceability = easa_taxiway.get_taxiway_traceability()

@@ -31,6 +31,36 @@ class EasaRulesetProfile(RulesetProfile):
     def resa_parameters(self, arc_num: int, type1_abbr: str, type2_abbr: str):
         return self.physical.resa_parameters(arc_num, type1_abbr, type2_abbr)
 
+    def declared_distance_parameters(self):
+        return self.physical.declared_distance_parameters()
+
+    def clearway_parameters(
+        self,
+        runway_width: Optional[float] = None,
+        strip_extension: Optional[float] = None,
+        strip_overall_width: Optional[float] = None,
+        physical_length: Optional[float] = None,
+        clearway_primary_input: Optional[float] = None,
+        clearway_reciprocal_input: Optional[float] = None,
+        stopway_primary: Optional[float] = None,
+        stopway_reciprocal: Optional[float] = None,
+        is_instrument_runway: bool = False,
+    ):
+        return self.physical.clearway_parameters(
+            runway_width=runway_width,
+            strip_extension=strip_extension,
+            strip_overall_width=strip_overall_width,
+            physical_length=physical_length,
+            clearway_primary_input=clearway_primary_input,
+            clearway_reciprocal_input=clearway_reciprocal_input,
+            stopway_primary=stopway_primary,
+            stopway_reciprocal=stopway_reciprocal,
+            is_instrument_runway=is_instrument_runway,
+        )
+
+    def stopway_parameters(self, runway_width: Optional[float] = None, stopway_length: Optional[float] = None):
+        return self.physical.stopway_parameters(runway_width, stopway_length)
+
     def ihs_base_height(self):
         return self.ols.ihs_base_height()
 

@@ -11,13 +11,13 @@ which incorporates CS-ADR-DSN Issue 7. It should remain treated as a draft
 current-EASA implementation until the table-level source verification register
 is complete.
 
-Current implemented policy data covers physical runway dimensions, OLS surface
-parameters, runway markings, airfield ground lighting, taxiway separation, and
-partial parallel runway separation.
+Current implemented policy data covers physical runway dimensions, declared
+distances, clearway, stopway, OLS surface parameters, runway markings,
+airfield ground lighting, taxiway separation, and partial parallel runway
+separation.
 
-Declared distances, clearway, stopway, and controlling OLS are registered
-explicitly as unsupported until their EASA policy tables or integration paths
-are added.
+Controlling OLS remains registered as unsupported until its EASA integration
+path is added.
 
 ## Modules
 

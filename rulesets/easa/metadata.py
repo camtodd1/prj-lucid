@@ -22,8 +22,8 @@ CAPABILITY_STATUS_BY_KEY = {
     "physical.shoulder": "partial",
     "physical.strip": "supported",
     "physical.resa": "supported",
-    "physical.clearway": "unsupported",
-    "physical.stopway": "unsupported",
+    "physical.clearway": "supported",
+    "physical.stopway": "supported",
     "physical.taxiway_separation": "supported",
     "physical.parallel_runway_separation": "partial",
     "ols.airport_wide": "partial",
@@ -34,7 +34,7 @@ CAPABILITY_STATUS_BY_KEY = {
     "markings.runway": "partial",
     "lighting.runway": "partial",
     "lighting.approach": "partial",
-    "declared_distances.calculated": "unsupported",
+    "declared_distances.calculated": "supported",
 }
 
 __all__ = [

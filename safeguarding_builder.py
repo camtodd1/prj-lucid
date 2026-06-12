@@ -1161,7 +1161,7 @@ class SafeguardingBuilder(
         primary_lda = threshold_length + disp_reciprocal if primary_landing_available else None
         reciprocal_lda = threshold_length + disp_primary if reciprocal_landing_available else None
 
-        return [
+        records = [
             {
                 "rwy": runway_name,
                 "end_desig": primary_desig,
@@ -1199,15 +1199,40 @@ class SafeguardingBuilder(
                 "lda_m": reciprocal_lda,
             },
         ]
+        return self._apply_declared_distance_policy(records)
+
+    def _apply_declared_distance_policy(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        declared_distance_parameters = getattr(self.get_active_ruleset(), "declared_distance_parameters", None)
+        if not callable(declared_distance_parameters):
+            return records
+
+        params = declared_distance_parameters() or {}
+        if params.get("rounding") != "nearest_metre":
+            return records
+
+        distance_keys = params.get("distance_keys", ())
+        for record in records:
+            for key in distance_keys:
+                value = record.get(key)
+                if value is not None:
+                    record[key] = round(float(value))
+        return records
 
     def _calculate_effective_clearway_specs(
         self,
         runway_data: Dict[str, Any],
         physical_length: Optional[float] = None,
     ) -> Dict[str, Dict[str, Any]]:
-        """Return MOS 6.27-6.29 clearway length and width specs for each runway end."""
+        """Return active-ruleset clearway length and width specs for each runway end."""
         cached_specs = runway_data.get("_effective_clearway_specs")
-        if isinstance(cached_specs, dict) and "primary" in cached_specs and "reciprocal" in cached_specs:
+        ruleset = self.get_active_ruleset()
+        ruleset_id = getattr(ruleset, "id", None)
+        if (
+            isinstance(cached_specs, dict)
+            and "primary" in cached_specs
+            and "reciprocal" in cached_specs
+            and cached_specs.get("ruleset_id") == ruleset_id
+        ):
             return cached_specs
 
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
@@ -1217,7 +1242,6 @@ class SafeguardingBuilder(
         except (TypeError, ValueError):
             arc_num = 0
 
-        ruleset = self.get_active_ruleset()
         type1_abbr = ruleset.classify_runway_type(runway_data.get("type1"))
         type2_abbr = ruleset.classify_runway_type(runway_data.get("type2"))
         is_instrument_runway = type1_abbr in {"NPA", "PA_I", "PA_II_III"} or type2_abbr in {
@@ -1233,6 +1257,41 @@ class SafeguardingBuilder(
 
         strip_extension = self._non_negative_float((strip_dims or {}).get("extension_length"), 0.0)
         strip_overall_width = self._non_negative_float((strip_dims or {}).get("overall_width"), 0.0)
+
+        clearway_parameters = getattr(ruleset, "clearway_parameters", None)
+        if callable(clearway_parameters):
+            specs = clearway_parameters(
+                runway_width=runway_width or None,
+                strip_extension=strip_extension,
+                strip_overall_width=strip_overall_width,
+                physical_length=physical_length,
+                clearway_primary_input=self._non_negative_float(runway_data.get("clearway1_len"), 0.0),
+                clearway_reciprocal_input=self._non_negative_float(runway_data.get("clearway2_len"), 0.0),
+                stopway_primary=self._non_negative_float(runway_data.get("stopway1_len"), 0.0),
+                stopway_reciprocal=self._non_negative_float(runway_data.get("stopway2_len"), 0.0),
+                is_instrument_runway=is_instrument_runway,
+            )
+            specs["ruleset_id"] = ruleset_id
+            for end_key in ("primary", "reciprocal"):
+                end_spec = specs.get(end_key, {})
+                if end_spec.get("capped"):
+                    max_length_m = end_spec.get("max_length_m")
+                    QgsMessageLog.logMessage(
+                        f"Clearway length for {runway_name} {end_key} end "
+                        f"({end_spec.get('input_length_m', 0.0):.3f} m) exceeds half the TORA "
+                        f"({max_length_m:.3f} m); capping to {end_spec.get('ref', 'active ruleset')}.",
+                        PLUGIN_TAG,
+                        level=Qgis.Warning,
+                    )
+            runway_data["_effective_clearway_specs"] = specs
+            runway_data["effective_clearway1_len"] = specs["primary"]["length_m"]
+            runway_data["effective_clearway2_len"] = specs["reciprocal"]["length_m"]
+            runway_data["effective_clearway_width_m"] = max(
+                specs["primary"].get("width_m", 0.0),
+                specs["reciprocal"].get("width_m", 0.0),
+            )
+            return specs
+
         clearway_width = 150.0 if is_instrument_runway else strip_overall_width
         if clearway_width <= 1e-6 and runway_width > 0:
             clearway_width = runway_width
@@ -1282,6 +1341,7 @@ class SafeguardingBuilder(
         specs = {
             "primary": end_spec("primary", "clearway1_len", "stopway1_len"),
             "reciprocal": end_spec("reciprocal", "clearway2_len", "stopway2_len"),
+            "ruleset_id": ruleset_id,
         }
         runway_data["_effective_clearway_specs"] = specs
         runway_data["effective_clearway1_len"] = specs["primary"]["length_m"]
