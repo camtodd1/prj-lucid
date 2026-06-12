@@ -32,6 +32,7 @@ def clearway_parameters(
     stopway_primary: Optional[float] = None,
     stopway_reciprocal: Optional[float] = None,
     is_instrument_runway: bool = False,
+    arc_num: Optional[int] = None,
 ):
     return physical_data.get_clearway_params(
         runway_width=runway_width,
@@ -43,6 +44,7 @@ def clearway_parameters(
         stopway_primary=stopway_primary,
         stopway_reciprocal=stopway_reciprocal,
         is_instrument_runway=is_instrument_runway,
+        arc_num=arc_num,
     )
 
 

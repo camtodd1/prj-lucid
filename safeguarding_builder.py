@@ -1270,6 +1270,7 @@ class SafeguardingBuilder(
                 stopway_primary=self._non_negative_float(runway_data.get("stopway1_len"), 0.0),
                 stopway_reciprocal=self._non_negative_float(runway_data.get("stopway2_len"), 0.0),
                 is_instrument_runway=is_instrument_runway,
+                arc_num=arc_num,
             )
             specs["ruleset_id"] = ruleset_id
             for end_key in ("primary", "reciprocal"):

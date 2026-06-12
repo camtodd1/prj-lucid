@@ -21,6 +21,16 @@
   - Add table/clause traceability and regression tests for promoted values.
   - Park interpretation policy for follow-up: decide whether conditional/guidance provisions are applied "as is", exposed as designer-selected options, or used to identify variance from a compliant standard.
 
+## UK CAA CAP 168 Ruleset
+
+- [ ] Continue CAP 168 source-loading beyond the initial physical-data tranche.
+
+  Notes:
+  - Registered ruleset id is `uk_caa_cap168_edition_13`.
+  - Initial tranche covers reference code, runway minimum width, declared distances, clearway, stopway, and parallel runway separation.
+  - Remaining tranches: strips, RESA, OLS, markings, runway lighting, and taxiway separation tables.
+  - Keep CAP 168 modules parameter-first, matching the MOS139 style rather than prose summaries.
+
 ## Placeholder Guidelines
 
 - [ ] Implement Guideline A aircraft noise generation.
@@ -118,12 +128,6 @@
 
 ## Runway Markings
 
-- [ ] Add ruleset selection and alternate marking rule sets, such as Annex 14.
-
-  Notes:
-  - Add a ruleset selection method to the dialog UI so the active runway-marking standard can be chosen explicitly.
-  - Keep the current MOS139 ruleset as the default until additional rulesets are implemented.
-
 - [ ] Add runway suitability inputs where marking applicability depends on unavailable pre-threshold areas.
 
   Notes:
@@ -140,7 +144,3 @@
   Open questions:
   - Should sealed runways below 30 m width or 1500 m length generate recommended touchdown zone markings by default, or only when an override is selected?
   - Does MOS 8.23(1) "runway length" mean threshold-to-threshold length, physical pavement length, or declared LDA/TORA for the runway end?
-
-- [ ] Add polygon glyph geometry for runway designation markings.
-
-  Notes:

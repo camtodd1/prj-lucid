@@ -1,4 +1,4 @@
-"""Grouped EASA ruleset service adapters."""
+"""Grouped UK CAA CAP 168 ruleset service adapters."""
 
 from typing import Optional
 
@@ -17,6 +17,12 @@ class ClassificationService:
     def precision_type_codes(self) -> set[str]:
         return set(classification_policy.PRECISION_APPROACH_TYPES)
 
+    def code_number(self, aeroplane_reference_field_length_m: Optional[float]):
+        return classification_policy.code_number(aeroplane_reference_field_length_m)
+
+    def code_letter(self, wingspan_m: Optional[float]):
+        return classification_policy.code_letter(wingspan_m)
+
 
 class OlsService:
     def ihs_base_height(self):
@@ -29,6 +35,14 @@ class OlsService:
 class PhysicalService:
     def refs(self) -> dict:
         return physical_data.get_physical_refs()
+
+    def runway_minimum_width(
+        self,
+        code_number: Optional[int],
+        outer_main_gear_wheel_span_m: Optional[float] = None,
+        runway_type: Optional[str] = None,
+    ):
+        return physical_data.runway_minimum_width(code_number, outer_main_gear_wheel_span_m, runway_type)
 
     def strip_parameters(self, arc_num: int, type_abbr: str, runway_width: Optional[float]):
         return physical_data.get_strip_params(arc_num, type_abbr, runway_width)
@@ -103,7 +117,7 @@ class PhysicalService:
 
 
 class MarkingService:
-    def centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str) -> float:
+    def centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str):
         return marking_policy.centreline_marking_width(arc_num, type_primary, type_reciprocal)
 
     def threshold_marking_params(self, runway_width: float):
@@ -129,16 +143,16 @@ class LightingService:
     def runway_is_precision(self, runway_type: str) -> bool:
         return lighting_policy.runway_is_precision(runway_type)
 
-    def runway_edge_spacing_for_end(self, runway_type: str) -> float:
+    def runway_edge_spacing_for_end(self, runway_type: str):
         return lighting_policy.runway_edge_spacing_for_end(runway_type)
 
-    def threshold_light_count_for_end(self, runway_type: str, runway_width_m: float) -> int:
+    def threshold_light_count_for_end(self, runway_type: str, runway_width_m: float):
         return lighting_policy.threshold_light_count_for_end(runway_type, runway_width_m)
 
-    def runway_end_light_count_for_end(self, runway_type: str, runway_width_m: float) -> int:
+    def runway_end_light_count_for_end(self, runway_type: str, runway_width_m: float):
         return lighting_policy.runway_end_light_count_for_end(runway_type, runway_width_m)
 
-    def temp_displaced_threshold_lights_per_side(self, runway_width_m: float) -> int:
+    def temp_displaced_threshold_lights_per_side(self, runway_width_m: float):
         return lighting_policy.temp_displaced_threshold_lights_per_side(runway_width_m)
 
     def runway_centreline_required(
@@ -151,7 +165,7 @@ class LightingService:
     ) -> bool:
         return lighting_policy.runway_centreline_recommended(runway_type_1, runway_type_2, edge_light_width_m)
 
-    def runway_centreline_spacing(self, rvr_below_350: bool) -> float:
+    def runway_centreline_spacing(self, rvr_below_350: bool):
         return lighting_policy.runway_centreline_spacing(rvr_below_350)
 
     def approach_profile_for_end(self, runway_type: str):

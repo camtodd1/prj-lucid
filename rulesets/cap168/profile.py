@@ -1,4 +1,4 @@
-"""EASA CS-ADR-DSN Issue 7 profile facade."""
+"""UK CAA CAP 168 profile facade."""
 
 from typing import Optional
 
@@ -7,8 +7,8 @@ from . import metadata
 from .services import ClassificationService, LightingService, MarkingService, OlsService, PhysicalService
 
 
-class EasaRulesetProfile(RulesetProfile):
-    """Public ruleset API for the EASA CS-ADR-DSN Issue 7 implementation."""
+class Cap168RulesetProfile(RulesetProfile):
+    """Public ruleset API for the UK CAA CAP 168 Edition 13 implementation."""
 
     classification = ClassificationService()
     ols = OlsService()
@@ -22,8 +22,22 @@ class EasaRulesetProfile(RulesetProfile):
     def precision_type_codes(self) -> set[str]:
         return self.classification.precision_type_codes()
 
+    def code_number(self, aeroplane_reference_field_length_m: Optional[float]):
+        return self.classification.code_number(aeroplane_reference_field_length_m)
+
+    def code_letter(self, wingspan_m: Optional[float]):
+        return self.classification.code_letter(wingspan_m)
+
     def physical_refs(self) -> dict:
         return self.physical.refs()
+
+    def runway_minimum_width(
+        self,
+        code_number: Optional[int],
+        outer_main_gear_wheel_span_m: Optional[float] = None,
+        runway_type: Optional[str] = None,
+    ):
+        return self.physical.runway_minimum_width(code_number, outer_main_gear_wheel_span_m, runway_type)
 
     def strip_parameters(self, arc_num: int, type_abbr: str, runway_width: Optional[float]):
         return self.physical.strip_parameters(arc_num, type_abbr, runway_width)
@@ -102,7 +116,7 @@ class EasaRulesetProfile(RulesetProfile):
             arrival_threshold_stagger_m=arrival_threshold_stagger_m,
         )
 
-    def centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str) -> float:
+    def centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str):
         return self.markings.centreline_marking_width(arc_num, type_primary, type_reciprocal)
 
     def threshold_marking_params(self, runway_width: float):
@@ -126,16 +140,16 @@ class EasaRulesetProfile(RulesetProfile):
     def runway_is_precision(self, runway_type: str) -> bool:
         return self.lighting.runway_is_precision(runway_type)
 
-    def runway_edge_spacing_for_end(self, runway_type: str) -> float:
+    def runway_edge_spacing_for_end(self, runway_type: str):
         return self.lighting.runway_edge_spacing_for_end(runway_type)
 
-    def threshold_light_count_for_end(self, runway_type: str, runway_width_m: float) -> int:
+    def threshold_light_count_for_end(self, runway_type: str, runway_width_m: float):
         return self.lighting.threshold_light_count_for_end(runway_type, runway_width_m)
 
-    def runway_end_light_count_for_end(self, runway_type: str, runway_width_m: float) -> int:
+    def runway_end_light_count_for_end(self, runway_type: str, runway_width_m: float):
         return self.lighting.runway_end_light_count_for_end(runway_type, runway_width_m)
 
-    def temp_displaced_threshold_lights_per_side(self, runway_width_m: float) -> int:
+    def temp_displaced_threshold_lights_per_side(self, runway_width_m: float):
         return self.lighting.temp_displaced_threshold_lights_per_side(runway_width_m)
 
     def runway_centreline_required(
@@ -146,14 +160,14 @@ class EasaRulesetProfile(RulesetProfile):
     def runway_centreline_recommended(self, runway_type_1: str, runway_type_2: str, edge_light_width_m: float) -> bool:
         return self.lighting.runway_centreline_recommended(runway_type_1, runway_type_2, edge_light_width_m)
 
-    def runway_centreline_spacing(self, rvr_below_350: bool) -> float:
+    def runway_centreline_spacing(self, rvr_below_350: bool):
         return self.lighting.runway_centreline_spacing(rvr_below_350)
 
     def approach_profile_for_end(self, runway_type: str):
         return self.lighting.approach_profile_for_end(runway_type)
 
 
-EASA_PROFILE = EasaRulesetProfile(
+CAP168_PROFILE = Cap168RulesetProfile(
     id=metadata.RULESET_ID,
     display_name=metadata.DISPLAY_NAME,
     edition=metadata.EDITION,
@@ -163,4 +177,4 @@ EASA_PROFILE = EasaRulesetProfile(
     capabilities=capability_map(metadata.CAPABILITY_STATUS_BY_KEY),
 )
 
-__all__ = ["EASA_PROFILE", "EasaRulesetProfile"]
+__all__ = ["CAP168_PROFILE", "Cap168RulesetProfile"]

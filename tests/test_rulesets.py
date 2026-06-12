@@ -2,6 +2,8 @@ import unittest
 
 from dimensions import agl_dimensions as legacy_agl_dimensions
 from dimensions import ols_dimensions as legacy_ols_dimensions
+from rulesets.cap168 import physical_data as cap168_physical_data
+from rulesets.cap168 import taxiway as cap168_taxiway
 from rulesets.easa import lighting as easa_lighting
 from rulesets.easa import markings as easa_markings
 from rulesets.easa import ols_surfaces as easa_ols_surfaces
@@ -97,6 +99,11 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(normalize_ruleset_id("EASA"), "easa_cs_adr_dsn_issue_7")
         self.assertEqual(get_ruleset_profile("CS-ADR-DSN").id, "easa_cs_adr_dsn_issue_7")
         self.assertEqual(normalize_ruleset_id("easa_cs_adr_dsn_issue_6"), "easa_cs_adr_dsn_issue_7")
+
+    def test_cap168_alias_normalizes_to_canonical_id(self):
+        self.assertEqual(normalize_ruleset_id("CAP168"), "uk_caa_cap168_edition_13")
+        self.assertEqual(get_ruleset_profile("UK CAA CAP 168").id, "uk_caa_cap168_edition_13")
+        self.assertEqual(normalize_ruleset_id("caa_cap168"), "uk_caa_cap168_edition_13")
 
     def test_annex14_alias_normalizes_to_canonical_id(self):
         self.assertEqual(normalize_ruleset_id("Annex 14"), "icao_annex14_vol1_current_ols")
@@ -409,6 +416,104 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(stopway_specs["length_m"], 125.25)
         self.assertEqual(stopway_specs["width_m"], 45.0)
         self.assertEqual(stopway_specs["ref"], "CS ADR-DSN.B.200")
+
+    def test_cap168_reference_code_runway_width_declared_clearway_and_stopway_params(self):
+        profile = get_ruleset_profile("uk_caa_cap168_edition_13")
+
+        self.assertEqual(profile.capability_status("physical.runway_width"), "supported")
+        self.assertEqual(profile.capability_status("physical.clearway"), "supported")
+        self.assertEqual(profile.capability_status("physical.stopway"), "supported")
+        self.assertEqual(profile.capability_status("declared_distances.calculated"), "supported")
+        self.assertEqual(profile.code_number(799.9)["code_number"], 1)
+        self.assertEqual(profile.code_number(800.0)["code_number"], 2)
+        self.assertEqual(profile.code_number(1800.0)["code_number"], 4)
+        self.assertEqual(profile.code_letter(36.0)["code_letter"], "D")
+        self.assertEqual(profile.code_letter(79.9)["code_letter"], "F")
+        self.assertIsNone(profile.code_letter(80.0))
+        self.assertEqual(
+            profile.declared_distance_parameters(),
+            {
+                "distance_keys": ("tora_m", "toda_m", "asda_m", "lda_m"),
+                "approval": "approved_and_promulgated_by_caa",
+                "ref": "CAP 168 3.19",
+            },
+        )
+
+        code_1_precision_width = profile.runway_minimum_width(1, 4.0, "PA_I")
+        self.assertEqual(code_1_precision_width["width_m"], 30.0)
+        self.assertEqual(code_1_precision_width["ref"], "CAP 168 3.20 Table 3.2")
+        self.assertEqual(profile.runway_minimum_width(3, 10.0, "NI")["width_m"], 45.0)
+        self.assertEqual(profile.runway_minimum_width(4, 8.5, "NI")["width_m"], 45.0)
+        self.assertIsNone(profile.runway_minimum_width(4, 5.0, "NI"))
+
+        clearway_specs = profile.clearway_parameters(
+            physical_length=1200.0,
+            clearway_primary_input=900.0,
+            clearway_reciprocal_input=100.0,
+            arc_num=4,
+        )
+        self.assertEqual(clearway_specs["primary"]["length_m"], 600.0)
+        self.assertEqual(clearway_specs["primary"]["width_m"], 180.0)
+        self.assertEqual(clearway_specs["primary"]["origin_width_m"], 150.0)
+        self.assertTrue(clearway_specs["primary"]["capped"])
+        self.assertEqual(clearway_specs["primary"]["max_slope"], 0.0125)
+        self.assertEqual(clearway_specs["primary"]["ref"], "CAP 168 3.176-3.185")
+        self.assertEqual(clearway_specs["reciprocal"]["length_m"], 100.0)
+
+        code_2_clearway = profile.clearway_parameters(
+            physical_length=600.0,
+            clearway_primary_input=200.0,
+            arc_num=2,
+        )
+        self.assertEqual(code_2_clearway["primary"]["width_m"], 150.0)
+        self.assertEqual(code_2_clearway["primary"]["max_slope"], 0.02)
+
+        stopway_specs = profile.stopway_parameters(runway_width=30.0, stopway_length=90.5)
+        self.assertEqual(stopway_specs["length_m"], 90.5)
+        self.assertEqual(stopway_specs["width_m"], 30.0)
+        self.assertEqual(stopway_specs["ref"], "CAP 168 3.186-3.195")
+
+        traceability = cap168_physical_data.get_physical_traceability()
+        self.assertEqual(traceability["items"]["runway_width"]["source"], "CAP 168 3.20 Table 3.2")
+        self.assertEqual(traceability["items"]["clearway"]["status"], "operational_verified")
+
+    def test_cap168_parallel_runway_separation_params(self):
+        profile = get_ruleset_profile("CAP168")
+
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                1,
+                4,
+                "Non-Instrument (NI)",
+                "Non-Instrument (NI)",
+                "simultaneous",
+            )["distance_m"],
+            210.0,
+        )
+        self.assertEqual(
+            profile.parallel_runway_separation(
+                3,
+                4,
+                "Precision Approach CAT I",
+                "Non-Precision Approach (NPA)",
+                "dependent_parallel_approaches",
+            )["distance_m"],
+            915.0,
+        )
+        segregated = profile.parallel_runway_separation(
+            3,
+            4,
+            "Precision Approach CAT I",
+            "Precision Approach CAT I",
+            "segregated",
+            arrival_threshold_stagger_m=300.0,
+        )
+        self.assertEqual(segregated["distance_m"], 700.0)
+        self.assertEqual(segregated["stagger_adjustment_m"], -60.0)
+        self.assertEqual(
+            cap168_taxiway.get_taxiway_traceability()["items"]["parallel_instrument_runways"]["source"],
+            "CAP 168 3.24-3.25",
+        )
 
     def test_easa_taxiway_traceability_and_table_d1_values_are_operational_grade(self):
         traceability = easa_taxiway.get_taxiway_traceability()

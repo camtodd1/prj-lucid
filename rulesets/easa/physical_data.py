@@ -345,8 +345,9 @@ def get_clearway_params(
     stopway_primary: Optional[float] = None,
     stopway_reciprocal: Optional[float] = None,
     is_instrument_runway: bool = False,
+    arc_num: Optional[int] = None,
 ) -> Dict[str, Dict[str, Any]]:
-    del runway_width, strip_extension, strip_overall_width, stopway_primary, stopway_reciprocal, is_instrument_runway
+    del runway_width, strip_extension, strip_overall_width, stopway_primary, stopway_reciprocal, is_instrument_runway, arc_num
 
     max_length = _positive_or_none(physical_length)
     if max_length is not None:
