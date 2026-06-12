@@ -2,6 +2,8 @@ import unittest
 
 from dimensions import agl_dimensions as legacy_agl_dimensions
 from dimensions import ols_dimensions as legacy_ols_dimensions
+from rulesets.cap168 import lighting as cap168_lighting
+from rulesets.cap168 import markings as cap168_markings
 from rulesets.cap168 import physical_data as cap168_physical_data
 from rulesets.cap168 import taxiway as cap168_taxiway
 from rulesets.easa import lighting as easa_lighting
@@ -527,6 +529,132 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(traceability["items"]["strip_width"]["source"], "CAP 168 3.78-3.84")
         self.assertEqual(traceability["items"]["strip_construction_variations"]["status"], "operational_verified")
 
+    def test_cap168_marking_params_are_source_backed(self):
+        profile = get_ruleset_profile("CAP168")
+
+        self.assertEqual(profile.capability_status("markings.runway"), "supported")
+        self.assertEqual(profile.threshold_marking_params(45.0), (12, 1.8))
+        self.assertEqual(profile.threshold_marking_params(30.005), (8, 1.8))
+        self.assertIsNone(profile.threshold_marking_params(60.0))
+
+        non_precision_30 = cap168_markings.threshold_marking_params_for_type(30.0, "Non-Precision Approach (NPA)")
+        self.assertEqual(non_precision_30["stripe_count"], 6)
+        self.assertEqual(non_precision_30["gap_m"], 0.9)
+        self.assertEqual(non_precision_30["stripe_length_m"], 30.0)
+        self.assertEqual(non_precision_30["character_height_m"], 12.0)
+
+        self.assertEqual(
+            profile.centreline_marking_width(4, "Non-Precision Approach (NPA)", "Non-Instrument (NI)"),
+            0.45,
+        )
+        self.assertEqual(
+            profile.centreline_marking_width(2, "Non-Precision Approach (NPA)", "Non-Instrument (NI)"),
+            0.3,
+        )
+        self.assertEqual(
+            profile.centreline_marking_width(3, "Precision Approach CAT II/III", "Precision Approach CAT I"),
+            0.9,
+        )
+
+        self.assertEqual(
+            profile.aiming_point_rule(45.0, 700.0, "Precision Approach CAT I"),
+            (150.0, 30.0, 4.0, 6.0, "CAP 168 7.211-7.214 Table 7.24"),
+        )
+        self.assertEqual(
+            profile.aiming_point_rule(45.0, 2400.0, "Non-Precision Approach (NPA)"),
+            (400.0, 45.0, 6.0, 18.0, "CAP 168 7.211-7.214 Table 7.24"),
+        )
+        self.assertEqual(
+            profile.aiming_point_rule(30.0, 1800.0, "Non-Instrument (NI)"),
+            (300.0, 45.0, 6.0, 18.0, "CAP 168 7.212-7.213; Table 7.24"),
+        )
+        self.assertIsNone(profile.aiming_point_rule(23.0, 1800.0, "Non-Instrument (NI)"))
+
+        self.assertEqual(profile.touchdown_zone_offsets(899.9), [300.0])
+        self.assertEqual(profile.touchdown_zone_offsets(900.0), [150.0, 450.0])
+        self.assertEqual(profile.touchdown_zone_offsets(1500.0), [150.0, 450.0, 600.0, 750.0])
+        self.assertEqual(profile.touchdown_zone_offsets(2400.0), [150.0, 300.0, 600.0, 750.0, 900.0, 1050.0])
+
+        self.assertEqual(cap168_markings.runway_side_stripe_params(30.0)["width_m"], 0.9)
+        self.assertEqual(cap168_markings.runway_side_stripe_params(23.0)["width_m"], 0.45)
+        self.assertEqual(cap168_markings.runway_side_stripe_params(65.0)["offset_from_centreline_m"], 30.0)
+        self.assertEqual(cap168_markings.dashed_runway_side_stripe_params(23.0)["length_m"], 6.0)
+        self.assertEqual(cap168_markings.dashed_runway_side_stripe_params(18.0)["width_m"], 0.25)
+
+        self.assertEqual(
+            profile.runway_holding_position_rule(3, "Non-Instrument (NI)"),
+            (55.0, "CAP 168 7.256-7.265; CAP 168 3.161 Table 3.3"),
+        )
+        self.assertEqual(
+            profile.runway_holding_position_rule(4, "Precision Approach CAT I"),
+            (90.0, "CAP 168 7.256-7.265; CAP 168 3.161 Table 3.3"),
+        )
+        self.assertIsNone(profile.runway_holding_position_rule(1, "Precision Approach CAT II/III"))
+
+        traceability = cap168_markings.get_marking_traceability()
+        self.assertEqual(traceability["source_publication"], "UK CAA CAP 168 Licensing of Aerodromes, Edition 13")
+        self.assertEqual(traceability["items"]["threshold_marking"]["source"], "CAP 168 7.207-7.210 Table 7.3")
+        self.assertEqual(traceability["items"]["runway_holding_position_marking"]["status"], "operational_verified")
+
+    def test_cap168_lighting_params_are_source_backed(self):
+        profile = get_ruleset_profile("CAP168")
+
+        self.assertEqual(profile.capability_status("lighting.runway"), "supported")
+        self.assertEqual(profile.capability_status("lighting.approach"), "supported")
+        self.assertTrue(profile.runway_type_supports_agl("Non-Instrument (NI)"))
+        self.assertTrue(profile.runway_type_supports_agl("Non-Precision Approach (NPA)"))
+        self.assertTrue(profile.runway_is_precision("Precision Approach CAT I"))
+        self.assertFalse(profile.runway_is_precision("Non-Precision Approach (NPA)"))
+
+        self.assertEqual(profile.runway_edge_spacing_for_end("Non-Instrument (NI)"), 60.0)
+        self.assertEqual(profile.runway_edge_spacing_for_end("Precision Approach CAT I"), 60.0)
+        self.assertEqual(profile.threshold_light_count_for_end("Non-Instrument (NI)", 30.0), 11)
+        self.assertEqual(profile.threshold_light_count_for_end("Precision Approach CAT I", 45.0), 16)
+        self.assertEqual(profile.runway_end_light_count_for_end("Precision Approach CAT II/III", 45.0), 6)
+        self.assertEqual(profile.temp_displaced_threshold_lights_per_side(30.0), 3)
+        self.assertEqual(profile.temp_displaced_threshold_lights_per_side(45.0), 5)
+
+        self.assertTrue(
+            profile.runway_centreline_required(
+                "Precision Approach CAT II/III",
+                "Non-Instrument (NI)",
+            )
+        )
+        self.assertTrue(profile.runway_centreline_required("Non-Instrument (NI)", "Non-Instrument (NI)", True))
+        self.assertFalse(profile.runway_centreline_required("Precision Approach CAT I", "Non-Instrument (NI)"))
+        self.assertTrue(profile.runway_centreline_recommended("Precision Approach CAT I", "Non-Instrument (NI)", 45.0))
+        self.assertTrue(profile.runway_centreline_recommended("Non-Instrument (NI)", "Non-Instrument (NI)", 60.0))
+        self.assertEqual(profile.runway_centreline_spacing(True), 15.0)
+        self.assertEqual(profile.runway_centreline_spacing(False), 30.0)
+
+        cat_ii_profile = profile.approach_profile_for_end("Precision Approach CAT II/III")
+        self.assertEqual(cat_ii_profile["length_m"], 900.0)
+        self.assertEqual(cat_ii_profile["crossbars_m"], [150.0, 300.0, 450.0, 600.0, 750.0])
+        self.assertEqual(cat_ii_profile["side_rows_to_m"], 270.0)
+        self.assertEqual(cat_ii_profile["side_row_inner_spacing_m"], 18.0)
+        self.assertEqual(cat_ii_profile["ref_cap168"], "CAP 168 6.39-6.46; CAP 168 6.144-6.160")
+
+        simple_profile = profile.approach_profile_for_end("Non-Precision Approach (NPA)")
+        self.assertEqual(simple_profile["system"], "Simple Approach Lighting System")
+        self.assertEqual(simple_profile["length_m"], 420.0)
+        self.assertEqual(simple_profile["spacing_m"], 60.0)
+        self.assertEqual(simple_profile["crossbars_m"], [300.0])
+
+        self.assertEqual(cap168_lighting.TDZ_LIGHTING_PARAMS["barrette_lights"], 4)
+        self.assertEqual(cap168_lighting.TDZ_LIGHTING_PARAMS["inner_offset_max_m"], 11.5)
+        self.assertEqual(cap168_lighting.SIMPLE_TDZ_LIGHTING_PARAMS["offset_beyond_final_tdz_marking_m"], 0.3)
+        self.assertEqual(
+            cap168_lighting.STARTER_EXTENSION_LIGHTING_PARAMS["narrower_than_runway"]["edge_colour"],
+            "blue",
+        )
+        self.assertEqual(cap168_lighting.STROBE_APPROACH_PARAMS["light_count"], 7)
+        self.assertEqual(cap168_lighting.STROBE_APPROACH_PARAMS["max_sequence_interval_s"], 1.2)
+
+        traceability = cap168_lighting.get_lighting_traceability()
+        self.assertEqual(traceability["source_publication"], "UK CAA CAP 168 Licensing of Aerodromes, Edition 13")
+        self.assertEqual(traceability["items"]["runway_edge_lights"]["source"], "CAP 168 6.112-6.121")
+        self.assertEqual(traceability["items"]["touchdown_zone_lights"]["status"], "operational_verified")
+
     def test_cap168_parallel_runway_separation_params(self):
         profile = get_ruleset_profile("CAP168")
 
@@ -563,6 +691,108 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(
             cap168_taxiway.get_taxiway_traceability()["items"]["parallel_instrument_runways"]["source"],
             "CAP 168 3.24-3.25",
+        )
+
+    def test_cap168_taxiway_separation_params_are_source_backed(self):
+        profile = get_ruleset_profile("CAP168")
+        traceability = cap168_taxiway.get_taxiway_traceability()
+
+        self.assertEqual(profile.capability_status("physical.taxiway_separation"), "supported")
+        self.assertEqual(traceability["source_publication"], "UK CAA CAP 168 Licensing of Aerodromes, Edition 13")
+
+        expected_items = {
+            "taxiway_runway_separation": "CAP 168 3.163 Table 3.4(a)-(b)",
+            "taxiway_to_taxiway_separation": "CAP 168 3.163 Table 3.4(c)",
+            "taxiway_object_separation": "CAP 168 3.163 Table 3.4(c)",
+            "stand_taxilane_to_stand_taxilane_separation": "CAP 168 3.163 Table 3.4(c)",
+            "stand_taxilane_object_separation": "CAP 168 3.163 Table 3.4(c)",
+            "taxiway_object_height_restrictions": "CAP 168 3.164-3.167",
+        }
+        for item_key, source in expected_items.items():
+            with self.subTest(item_key=item_key):
+                item = traceability["items"][item_key]
+                self.assertEqual(item["source"], source)
+                self.assertEqual(item["status"], "operational_verified")
+
+        expected_runway_taxiway_offsets = {
+            (1, "A", "INSTR"): 77.5,
+            (2, "A", "INSTR"): 77.5,
+            (1, "B", "INSTR"): 82.0,
+            (2, "B", "INSTR"): 82.0,
+            (3, "B", "INSTR"): 152.0,
+            (1, "C", "INSTR"): 88.0,
+            (2, "C", "INSTR"): 88.0,
+            (3, "C", "INSTR"): 158.0,
+            (4, "C", "INSTR"): 158.0,
+            (3, "D", "INSTR"): 166.0,
+            (4, "D", "INSTR"): 166.0,
+            (3, "E", "INSTR"): 172.5,
+            (4, "E", "INSTR"): 172.5,
+            (3, "F", "INSTR"): 180.0,
+            (4, "F", "INSTR"): 180.0,
+            (1, "A", "NI"): 37.5,
+            (2, "A", "NI"): 47.5,
+            (1, "B", "NI"): 42.0,
+            (2, "B", "NI"): 52.0,
+            (3, "B", "NI"): 67.0,
+            (1, "C", "NI"): 48.0,
+            (2, "C", "NI"): 58.0,
+            (3, "C", "NI"): 73.0,
+            (4, "C", "NI"): 93.0,
+            (3, "D", "NI"): 81.0,
+            (4, "D", "NI"): 101.0,
+            (3, "E", "NI"): 81.0,
+            (4, "E", "NI"): 101.0,
+            (3, "F", "NI"): 95.0,
+            (4, "F", "NI"): 115.0,
+        }
+        self.assertEqual(set(cap168_taxiway.TAXIWAY_RUNWAY_SEPARATION_PARAMS), set(expected_runway_taxiway_offsets))
+        for key, expected_offset in expected_runway_taxiway_offsets.items():
+            with self.subTest(key=key):
+                params = cap168_taxiway.TAXIWAY_RUNWAY_SEPARATION_PARAMS[key]
+                self.assertEqual(params["offset_m"], expected_offset)
+                self.assertEqual(params["ref"], cap168_taxiway.CAP168_TAXIWAY_RUNWAY_SEPARATION_REF)
+
+        expected_by_letter = {
+            "taxiway_to_taxiway": (
+                cap168_taxiway.TAXIWAY_TO_TAXIWAY_SEPARATION_PARAMS,
+                {"A": 23.0, "B": 32.0, "C": 44.0, "D": 63.0, "E": 76.0, "F": 91.0},
+            ),
+            "taxiway_object": (
+                cap168_taxiway.TAXIWAY_OBJECT_SEPARATION_PARAMS,
+                {"A": 15.5, "B": 20.0, "C": 26.0, "D": 37.0, "E": 43.5, "F": 51.0},
+            ),
+            "stand_taxilane_to_stand_taxilane": (
+                cap168_taxiway.STAND_TAXILANE_TO_STAND_TAXILANE_SEPARATION_PARAMS,
+                {"A": 19.5, "B": 28.5, "C": 40.5, "D": 59.5, "E": 72.5, "F": 87.5},
+            ),
+            "stand_taxilane_object": (
+                cap168_taxiway.STAND_TAXILANE_OBJECT_SEPARATION_PARAMS,
+                {"A": 15.0, "B": 16.5, "C": 22.5, "D": 33.5, "E": 40.0, "F": 47.5},
+            ),
+        }
+        for table_name, (actual_params, expected_offsets) in expected_by_letter.items():
+            with self.subTest(table_name=table_name):
+                self.assertEqual(set(actual_params), set(expected_offsets))
+            for code_letter, expected_offset in expected_offsets.items():
+                with self.subTest(table_name=table_name, code_letter=code_letter):
+                    self.assertEqual(actual_params[code_letter]["offset_m"], expected_offset)
+                    self.assertEqual(actual_params[code_letter]["ref"], cap168_taxiway.CAP168_TAXIWAY_MINIMUM_SEPARATION_REF)
+
+        self.assertEqual(
+            profile.taxiway_separation_offset(3, "B", "Precision Approach CAT I")["offset_m"],
+            152.0,
+        )
+        self.assertEqual(profile.taxiway_separation_offset(3, "C", "Non-Instrument (NI)")["offset_m"], 73.0)
+        self.assertEqual(profile.taxiway_separation_offset(4, "F", "Non-Instrument (NI)")["offset_m"], 115.0)
+        self.assertIsNone(profile.taxiway_separation_offset(1, "D", "Precision Approach CAT I"))
+        self.assertEqual(profile.taxiway_to_taxiway_separation("E")["offset_m"], 76.0)
+        self.assertEqual(profile.taxiway_object_separation("E")["offset_m"], 43.5)
+        self.assertEqual(profile.stand_taxilane_to_stand_taxilane_separation("F")["offset_m"], 87.5)
+        self.assertEqual(profile.stand_taxilane_object_separation("A")["offset_m"], 15.0)
+        self.assertEqual(
+            cap168_taxiway.TAXIWAY_OBJECT_HEIGHT_RESTRICTION_PARAMS["edge_distance_by_code_letter_m"]["F"],
+            22.0,
         )
 
     def test_easa_taxiway_traceability_and_table_d1_values_are_operational_grade(self):
