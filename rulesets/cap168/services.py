@@ -44,8 +44,27 @@ class PhysicalService:
     ):
         return physical_data.runway_minimum_width(code_number, outer_main_gear_wheel_span_m, runway_type)
 
-    def strip_parameters(self, arc_num: int, type_abbr: str, runway_width: Optional[float]):
-        return physical_data.get_strip_params(arc_num, type_abbr, runway_width)
+    def strip_parameters(
+        self,
+        arc_num: int,
+        type_abbr: str,
+        runway_width: Optional[float],
+        has_rnp_apch: bool = False,
+        minimum_runway_width_m: Optional[float] = None,
+        starter_extension: bool = False,
+        wingspan_m: Optional[float] = None,
+        wing_overhang_m: Optional[float] = None,
+    ):
+        return physical_data.get_strip_params(
+            arc_num,
+            type_abbr,
+            runway_width,
+            has_rnp_apch=has_rnp_apch,
+            minimum_runway_width_m=minimum_runway_width_m,
+            starter_extension=starter_extension,
+            wingspan_m=wingspan_m,
+            wing_overhang_m=wing_overhang_m,
+        )
 
     def resa_parameters(self, arc_num: int, type1_abbr: str, type2_abbr: str):
         return physical_data.get_resa_params(arc_num, type1_abbr, type2_abbr)

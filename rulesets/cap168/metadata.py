@@ -21,7 +21,7 @@ CAPABILITY_STATUS_BY_KEY = {
     "physical.pavement": "partial",
     "physical.shoulder": "partial",
     "physical.runway_width": "supported",
-    "physical.strip": "unsupported",
+    "physical.strip": "supported",
     "physical.resa": "unsupported",
     "physical.clearway": "supported",
     "physical.stopway": "supported",

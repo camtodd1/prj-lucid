@@ -27,8 +27,8 @@
 
   Notes:
   - Registered ruleset id is `uk_caa_cap168_edition_13`.
-  - Initial tranche covers reference code, runway minimum width, declared distances, clearway, stopway, and parallel runway separation.
-  - Remaining tranches: strips, RESA, OLS, markings, runway lighting, and taxiway separation tables.
+  - Initial tranches cover reference code, runway minimum width, runway strips, declared distances, clearway, stopway, and parallel runway separation.
+  - Remaining tranches: RESA, OLS, markings, runway lighting, and taxiway separation tables.
   - Keep CAP 168 modules parameter-first, matching the MOS139 style rather than prose summaries.
 
 ## Placeholder Guidelines

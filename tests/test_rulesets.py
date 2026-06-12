@@ -421,6 +421,7 @@ class RulesetRegistryTest(unittest.TestCase):
         profile = get_ruleset_profile("uk_caa_cap168_edition_13")
 
         self.assertEqual(profile.capability_status("physical.runway_width"), "supported")
+        self.assertEqual(profile.capability_status("physical.strip"), "supported")
         self.assertEqual(profile.capability_status("physical.clearway"), "supported")
         self.assertEqual(profile.capability_status("physical.stopway"), "supported")
         self.assertEqual(profile.capability_status("declared_distances.calculated"), "supported")
@@ -476,6 +477,55 @@ class RulesetRegistryTest(unittest.TestCase):
         traceability = cap168_physical_data.get_physical_traceability()
         self.assertEqual(traceability["items"]["runway_width"]["source"], "CAP 168 3.20 Table 3.2")
         self.assertEqual(traceability["items"]["clearway"]["status"], "operational_verified")
+
+    def test_cap168_strip_params_include_width_and_construction_variations(self):
+        profile = get_ruleset_profile("CAP168")
+
+        precision_code_4 = profile.strip_parameters(4, "PA_I", 45.0)
+        self.assertEqual(precision_code_4["overall_width"], 280.0)
+        self.assertEqual(precision_code_4["overall_width_ref"], "CAP 168 3.81(1)")
+        self.assertEqual(precision_code_4["graded_width"], 150.0)
+        self.assertEqual(precision_code_4["graded_width_ref"], "CAP 168 3.91")
+        self.assertEqual(precision_code_4["extension_length"], 60.0)
+        self.assertEqual(precision_code_4["slope_limits"]["max_longitudinal_slope"], 0.015)
+        self.assertEqual(precision_code_4["slope_limits"]["max_transverse_slope"], 0.025)
+        self.assertEqual(
+            precision_code_4["construction"]["delethalisation"]["ref"],
+            "CAP 168 3.71-3.72",
+        )
+
+        code_3_ni = profile.strip_parameters(3, "NI", 30.0)
+        self.assertEqual(code_3_ni["overall_width"], 110.0)
+        self.assertEqual(code_3_ni["graded_width"], 110.0)
+        self.assertEqual(code_3_ni["overall_width_ref"], "CAP 168 3.78(2)")
+
+        code_3_ni_rnp = profile.strip_parameters(3, "NI", 30.0, has_rnp_apch=True)
+        self.assertEqual(code_3_ni_rnp["overall_width"], 150.0)
+        self.assertEqual(code_3_ni_rnp["graded_width"], 150.0)
+        self.assertEqual(code_3_ni_rnp["overall_width_ref"], "CAP 168 3.79")
+
+        wide_code_2 = profile.strip_parameters(2, "NI", 34.0, minimum_runway_width_m=30.0)
+        self.assertEqual(wide_code_2["overall_width"], 90.0)
+        self.assertEqual(wide_code_2["wide_non_instrument_variation"]["edge_margin_m"], 28.0)
+        self.assertEqual(wide_code_2["wide_non_instrument_variation"]["ref"], "CAP 168 3.80(1)")
+        self.assertEqual(wide_code_2["graded_width"], 80.0)
+
+        starter = profile.strip_parameters(
+            1,
+            "NI",
+            23.0,
+            starter_extension=True,
+            wingspan_m=50.0,
+            wing_overhang_m=4.0,
+        )
+        self.assertEqual(starter["extension_length"], 30.0)
+        self.assertEqual(starter["starter_extension"]["safety_margin_m"], 10.0)
+        self.assertEqual(starter["starter_extension"]["lateral_margin_from_extension_edge_m"], 14.0)
+        self.assertEqual(starter["starter_extension"]["splay_each_side"], 0.2)
+
+        traceability = cap168_physical_data.get_physical_traceability()
+        self.assertEqual(traceability["items"]["strip_width"]["source"], "CAP 168 3.78-3.84")
+        self.assertEqual(traceability["items"]["strip_construction_variations"]["status"], "operational_verified")
 
     def test_cap168_parallel_runway_separation_params(self):
         profile = get_ruleset_profile("CAP168")
