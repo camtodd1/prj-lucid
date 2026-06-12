@@ -1,50 +1,6 @@
 # -*- coding: utf-8 -*-
 # rulesets/easa/ols_surfaces.py
-"""
-EASA CS-ADR-DSN Issue 7 OLS surface parameters.
-
-This module stores Obstacle Limitation Surface (OLS) parameters derived
-from EASA CS-ADR-DSN Issue 7, Chapters H and J:
-
-- Chapter H defines the geometry and purpose of each OLS surface.
-- Chapter J specifies which surfaces apply to each runway type, and gives
-  the controlling dimensions and slopes in Table J-1 and Table J-2.
-
-The structure mirrors the MOS139 `ols_surfaces.py` module so it can be
-used as a ruleset replacement. Values are expressed as metres and slopes
-as gradients, for example 5% is stored as 0.05.
-
-Runway type abbreviations used by this module:
-- NI: Non-instrument runway
-- NPA: Non-precision approach runway
-- PA_I: Precision approach Category I runway
-- PA_II_III: Precision approach Category II or III runway
-
-Notes on EASA interpretation:
-- Table J-1 gives inner approach and balked landing surfaces for
-  precision approach Category I, as well as for Category II/III. The OFZ
-  requirement in CS ADR-DSN.H.445 is aimed at Category II/III operations,
-  but GM1 ADR-DSN.J.480(a) also identifies the inner approach, inner
-  transitional and balked landing surfaces for precision approach
-  Category I. This module therefore includes these surfaces for PA_I.
-- Table J-1 footnote (c) gives the PA_I Code 1/2 balked landing distance
-  as "distance to the end of strip". Because that is runway-length
-  dependent, the numeric field is None and a rule string is supplied.
-- Table J-1 footnote (d) gives the PA_I Code 3/4 and PA_II/III balked
-  landing distance as 1 800 m or the end of runway, whichever is less.
-  The numeric field is 1800.0 and a rule string is supplied.
-- Table J-2 gives the Code 3/4 take-off climb final width as 1 200 m, or
-  1 800 m where the intended track includes heading changes greater than
-  15 degrees for operations conducted in IMC or VMC by night. The default
-  final_width is 1200.0 and the conditional value is stored separately.
-- Table J-2 footnote (e) increases the take-off climb inner edge width to
-  150 m where a clearway is provided. The normal value and clearway value
-  are both retained.
-- Chapter H treats the outer horizontal surface as guidance material rather
-  than as a Table J-1 requirement. The OHS values included here are
-  guidance-only defaults based on GM1 ADR-DSN.H.410: 150 m above aerodrome
-  elevation within 15 000 m for code number 3 or 4 aerodromes.
-"""
+"""EASA CS-ADR-DSN OLS surface parameters."""
 
 import logging
 import re

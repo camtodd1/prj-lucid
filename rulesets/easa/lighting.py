@@ -1,33 +1,4 @@
-"""EASA CS-ADR-DSN airfield ground lighting dimensions and policy.
-
-This module defines a set of constants and helper functions that describe
-the aerodrome ground lighting (AGL) requirements contained in EASA's
-Certification Specifications for Aerodromes Design (CS-ADR-DSN), Issue 7,
-Chapter M - Visual aids for navigation (lights).  The constants capture
-dimensional criteria for runway and approach lighting systems under
-European conditions.  These values are drawn from Chapter M of CS-ADR-DSN
-and are intended to mirror the structure of the `lighting.py` schema used
-for Australian MOS 139 regulations.  They provide a convenient way to
-compute or verify lighting layouts when planning an aerodrome to meet
-EASA requirements.
-
-NOTE: The constants in this file are based on the following CS-ADR-DSN
-references (Issue 7):
-
-* CS ADR-DSN.M.626 - Simple approach lighting systems
-* CS ADR-DSN.M.630 - Precision approach Category I lighting system
-* CS ADR-DSN.M.635 - Precision approach Category II and III lighting system
-* CS ADR-DSN.M.675 - Runway edge lights
-* CS ADR-DSN.M.680 - Runway threshold and wing bar lights
-* CS ADR-DSN.M.685 - Runway end lights
-* CS ADR-DSN.M.690 - Runway centre line lights
-* CS ADR-DSN.M.695 - Runway touchdown zone lights
-
-Where the specification provides a range (e.g. spacing between lights),
-the most common or preferred value is encoded here to support typical
-planning assumptions.  See the referenced CS-ADR-DSN paragraphs for
-permitted tolerances.
-"""
+"""EASA CS-ADR-DSN airfield ground lighting dimensions and policy."""
 
 from typing import Any, Dict
 
@@ -38,8 +9,6 @@ SOURCE_URL = (
     "online-publications/easy-access-rules-aerodromes-regulation-eu"
 )
 
-# References to the relevant CS-ADR-DSN sections.  These strings are
-# included with constants to allow traceability back to the regulation.
 EASA_REF_RUNWAY_EDGE = "CS ADR-DSN.M.675"
 EASA_REF_THRESHOLD = "CS ADR-DSN.M.680"
 EASA_REF_RUNWAY_END = "CS ADR-DSN.M.685"
@@ -58,48 +27,19 @@ RUNWAY_END_SOURCE_URL = f"{SOURCE_URL}?erules-id=ERULES-1963177438-2283"
 RUNWAY_CENTRELINE_SOURCE_URL = f"{SOURCE_URL}?erules-id=ERULES-1963177438-2284"
 TDZ_SOURCE_URL = f"{SOURCE_URL}?erules-id=ERULES-1963177438-2285"
 
-# ---------------------------------------------------------------------------
-# Runway edge lights
-# Under CS ADR-DSN.M.675 the maximum interval between runway edge lights is
-# 60 m for an instrument runway and 100 m for a non-instrument runway.
 RUNWAY_EDGE_INSTRUMENT_SPACING_M = 60.0
 RUNWAY_EDGE_NON_INSTRUMENT_SPACING_M = 100.0
-
-# Minimum width of runway used to determine the number of threshold and end
-# lights.  CS-ADR-DSN does not specify a minimum lighting width, so 30 m is
-# retained from MOS 139 as a pragmatic lower bound when calculating light
-# counts.
 RUNWAY_LIGHTING_MIN_WIDTH_M = 30.0
 
-# ---------------------------------------------------------------------------
-# Threshold lighting
-# CS ADR-DSN.M.680 requires at least six threshold lights on a non-instrument
-# or non-precision runway and threshold lights on precision runways spaced
-# not more than 3 m between the runway edge light rows.
 PRECISION_THRESHOLD_MAX_SPACING_M = 3.0
 NON_PRECISION_THRESHOLD_MIN_LIGHTS = 6
-
-# Wing bar lights consist of at least five lights extending at least 10 m
-# outward from the runway edge line.  Uniform spacing
-# over 10 m yields a nominal 2.5 m spacing between lights.
 THRESHOLD_WING_BAR_LIGHTS_PER_SIDE = 5
 THRESHOLD_WING_BAR_EXTEND_M = 10.0
 THRESHOLD_WING_BAR_SPACING_M = THRESHOLD_WING_BAR_EXTEND_M / (THRESHOLD_WING_BAR_LIGHTS_PER_SIDE - 1)
 
-# ---------------------------------------------------------------------------
-# Runway end lights
-# CS ADR-DSN.M.685 requires at least six runway end lights, with a maximum
-# spacing of 6 m for Category III runways.
 RUNWAY_END_MIN_LIGHTS = 6
 CAT_III_RUNWAY_END_MAX_SPACING_M = 6.0
 
-# ---------------------------------------------------------------------------
-# Simple approach lighting system (SALS)
-# CS ADR-DSN.M.626 describes a row of lights on the extended centre line
-# extending preferably 420 m from the threshold with a crossbar at
-# 300 m.  Centreline lights are spaced at 60 m
-# intervals, but 30 m may be used for improved guidance.
-# The crossbar may be 18 m or 30 m long.
 SALS_STANDARD_SPACING_M = 60.0
 SALS_ENHANCED_SPACING_M = 30.0
 SALS_CROSSBAR_DISTANCE_M = 300.0
@@ -107,84 +47,41 @@ SALS_CROSSBAR_LENGTH_NARROW_M = 18.0
 SALS_CROSSBAR_LENGTH_STANDARD_M = 30.0
 SALS_DESIGN_LENGTH_M = 420.0
 
-# ---------------------------------------------------------------------------
-# Precision approach lighting systems
-# Both Category I and Category II/III systems extend up to 900 m from the
-# threshold.  Crossbars are
-# provided at 150 m and 300 m, with additional crossbars at 450 m, 600 m and
-# 750 m for systems using single light sources.
 PRECISION_APPROACH_DESIGN_LENGTH_M = 900.0
-PRECISION_APPROACH_MIN_FULL_LENGTH_M = 720.0  # used as a recommended minimum
+PRECISION_APPROACH_MIN_FULL_LENGTH_M = 720.0
 PRECISION_APPROACH_POINT_A_M = 150.0
 PRECISION_APPROACH_POINT_B_M = 300.0
 PRECISION_APPROACH_POINT_C_M = 450.0
 PRECISION_APPROACH_POINT_D_M = 600.0
 PRECISION_APPROACH_POINT_E_M = 750.0
 
-# The standard crossbar length is 30 m for both Category I and Category II/III
-# systems.  For Category II/III
-# systems the crossbar at 300 m extends 15 m from the centre line on each
-# side.
 PRECISION_CROSSBAR_LENGTH_M = 30.0
-CAT_II_III_SIDE_ROW_INNER_SPACING_M = 18.0  # preferred gauge between side rows
+CAT_II_III_SIDE_ROW_INNER_SPACING_M = 18.0
 CAT_II_III_SIDE_ROW_HALF_INNER_SPACING_M = CAT_II_III_SIDE_ROW_INNER_SPACING_M / 2.0
-CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M = 15.0  # half-length of 300 m crossbar
-CAT_II_III_CROSSBAR_MAX_SPACING_M = 2.7  # maximum spacing of lights on crossbars
-
-# Side rows for Category II/III approaches extend 270 m from the threshold
-# (240 m if higher serviceability is demonstrated).
+CAT_II_III_POINT_B_CROSSBAR_HALF_WIDTH_M = 15.0
+CAT_II_III_CROSSBAR_MAX_SPACING_M = 2.7
 CAT_II_III_SIDE_ROWS_TO_M = 270.0
 
-# ---------------------------------------------------------------------------
-# Runway centre line lights
-# CS ADR-DSN.M.690 specifies centreline lights at approximately 15 m
-# intervals, increasing to 30 m when runway visual range is >= 350 m and
-# sufficient serviceability is demonstrated.
 RUNWAY_CENTRELINE_DEFAULT_SPACING_M = 15.0
 RUNWAY_CENTRELINE_LOW_VIS_SPACING_M = 30.0
-
-# Maximum lateral offset from the runway centre line is 0.6 m (60 cm)
-#.
 RUNWAY_CENTRELINE_MAX_OFFSET_M = 0.6
-
-# Colour zones along the runway for centreline lights: variable white from
-# threshold to 900 m from the runway end, alternating red and white from
-# 900 m to 300 m from the runway end, and red from 300 m to the end.
 RUNWAY_CENTRELINE_RED_ZONE_M = 300.0
 RUNWAY_CENTRELINE_ALTERNATING_ZONE_M = 900.0
 
-# ---------------------------------------------------------------------------
-# Touchdown zone lights (TDZ)
-# CS ADR-DSN.M.695 requires touchdown zone lights to extend 900 m from the
-# threshold (or to the midpoint of shorter runways).
 TDZ_LENGTH_M = 900.0
-# Pairs of barrettes are spaced at 30 m or 60 m intervals.
 TDZ_ROW_SPACING_M = 60.0
-# Each barrette has at least three lights with a spacing of <= 1.5 m and a
-# length between 3 m and 4.5 m.
 TDZ_BARRETTE_LIGHTS = 3
 TDZ_BARRETTE_SPACING_M = 1.5
 TDZ_BARRETTE_LENGTH_MIN_M = 3.0
 TDZ_BARRETTE_LENGTH_MAX_M = 4.5
-# The lateral offset between the runway centre line and the innermost lights
-# of a TDZ barrette equals half the gauge selected for the touchdown zone
-# marking.  A nominal 9 m offset is provided here for typical 18 m gauge.
 TDZ_INNER_OFFSET_M = 9.0
 
-# ---------------------------------------------------------------------------
-# Light colours used in EASA systems
 LIGHT_COLOUR_VARIABLE_WHITE = "variable white"
 LIGHT_COLOUR_YELLOW = "yellow"
 LIGHT_COLOUR_GREEN = "green"
 LIGHT_COLOUR_RED = "red"
 LIGHT_COLOUR_BLUE = "blue"
 LIGHT_COLOUR_FLASHING_WHITE = "flashing white"
-
-# ---------------------------------------------------------------------------
-# Approach profiles
-# Each approach profile dictionary captures the salient features of the
-# approach lighting system for a given runway type.  These are organised
-# similarly to the MOS 139 profile definitions to facilitate comparisons.
 
 APPROACH_PROFILE_NONE = {
     "system": "None",
