@@ -902,14 +902,26 @@ class PlanarControllingOlsEngine:
             )
             return None
         try:
-            boundary = clipped_lower.boundary().intersection(domain)
+            raw_boundary = clipped_lower.boundary()
         except Exception:
             return None
-        if boundary is not None and not boundary.isEmpty():
+        if raw_boundary is None or raw_boundary.isEmpty():
+            return None
+
+        boundary = raw_boundary
+        try:
+            clipped_boundary = raw_boundary.intersection(domain)
+            if clipped_boundary is not None and self._linework_parts(clipped_boundary):
+                boundary = clipped_boundary
+        except Exception:
+            boundary = raw_boundary
+
+        if boundary is not None and not boundary.isEmpty() and self._linework_parts(boundary):
             self._region_solve_stats["global_fallback_lower_partial_count"] = (
                 self._region_solve_stats.get("global_fallback_lower_partial_count", 0.0) + 1.0
             )
-        return boundary
+            return boundary
+        return None
 
     def _areas_match(self, first: QgsGeometry, second: QgsGeometry, tolerance_m2: float = 1.0) -> bool:
         if not self._has_polygon_area(first) or not self._has_polygon_area(second):
