@@ -752,21 +752,21 @@ class PlanarControllingOlsEngine:
     ) -> None:
         equality_count = 0
         needs_fallback = self._pair_needs_fallback_boundary(first_candidate, second_candidate)
-        if not self._pair_prefers_fallback_boundary(first_candidate, second_candidate):
-            equality = self._global_equality_geometry_for_pair(domain, first_candidate, second_candidate)
-            if equality is not None and not equality.isEmpty():
-                equality_count = self._append_linework_geometry(linework, equality, domain=domain)
-                self._region_solve_stats["global_equality_line_count"] = (
-                    self._region_solve_stats.get("global_equality_line_count", 0.0) + float(equality_count)
-                )
-        if equality_count and not needs_fallback:
+        equality = self._global_equality_geometry_for_pair(domain, first_candidate, second_candidate)
+        if equality is not None and not equality.isEmpty():
+            equality_count = self._append_linework_geometry(linework, equality, domain=domain)
+            self._region_solve_stats["global_equality_line_count"] = (
+                self._region_solve_stats.get("global_equality_line_count", 0.0) + float(equality_count)
+            )
+        if equality_count:
+            return
+        if not needs_fallback:
             return
         fallback_count = 0
-        fallback_pairs = (
+        for lower_candidate, higher_candidate in (
             (first_candidate, second_candidate),
             (second_candidate, first_candidate),
-        ) if needs_fallback else ((first_candidate, second_candidate),)
-        for lower_candidate, higher_candidate in fallback_pairs:
+        ):
             fallback = self._fallback_pair_boundary_geometry(domain, lower_candidate, higher_candidate)
             if fallback is None or fallback.isEmpty():
                 continue
@@ -786,14 +786,6 @@ class PlanarControllingOlsEngine:
     ) -> bool:
         models = {first_candidate.model, second_candidate.model}
         return "conical" in models and bool(models.intersection({"axis", "plane"}))
-
-    def _pair_prefers_fallback_boundary(
-        self,
-        first_candidate: ControllingOlsCandidate,
-        second_candidate: ControllingOlsCandidate,
-    ) -> bool:
-        models = {first_candidate.model, second_candidate.model}
-        return models == {"axis", "conical"}
 
     def _append_linework_geometry(
         self,
