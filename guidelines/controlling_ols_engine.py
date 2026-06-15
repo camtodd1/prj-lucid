@@ -37,6 +37,7 @@ CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
+AXIS_CONICAL_FULL_OVERLAP_TRIANGULATION_ENABLED = True
 AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
 AXIS_CONICAL_VERTEX_CURVE_STATION_STEP_M = 5.0
 AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M = 0.5
@@ -548,6 +549,7 @@ class PlanarControllingOlsEngine:
             f"curved_time[sampled={stats.get('sampled_lower_region_time_s', 0.0):.2f}s, "
             f"const={stats.get('conical_constant_time_s', 0.0):.2f}s, "
             f"axis={stats.get('axis_conical_time_s', 0.0):.2f}s, "
+            f"axis_full={stats.get('axis_full_overlap_triangulation_time_s', 0.0):.2f}s, "
             f"axis_exact[calls={int(stats.get('axis_exact_calls', 0.0))}, "
             f"success={int(stats.get('axis_exact_success', 0.0))}, "
             f"fallback={int(stats.get('axis_exact_fallback', 0.0))}, "
@@ -719,15 +721,15 @@ class PlanarControllingOlsEngine:
         first_candidate: ControllingOlsCandidate,
         second_candidate: ControllingOlsCandidate,
     ) -> None:
-        equality = self._global_equality_geometry_for_pair(domain, first_candidate, second_candidate)
         equality_count = 0
-        if equality is not None and not equality.isEmpty():
-            equality_count = self._append_linework_geometry(linework, equality, domain=domain)
-            self._region_solve_stats["global_equality_line_count"] = (
-                self._region_solve_stats.get("global_equality_line_count", 0.0) + float(equality_count)
-            )
-
         needs_fallback = self._pair_needs_fallback_boundary(first_candidate, second_candidate)
+        if not self._pair_prefers_fallback_boundary(first_candidate, second_candidate):
+            equality = self._global_equality_geometry_for_pair(domain, first_candidate, second_candidate)
+            if equality is not None and not equality.isEmpty():
+                equality_count = self._append_linework_geometry(linework, equality, domain=domain)
+                self._region_solve_stats["global_equality_line_count"] = (
+                    self._region_solve_stats.get("global_equality_line_count", 0.0) + float(equality_count)
+                )
         if equality_count and not needs_fallback:
             return
         fallback_count = 0
@@ -755,6 +757,14 @@ class PlanarControllingOlsEngine:
     ) -> bool:
         models = {first_candidate.model, second_candidate.model}
         return "conical" in models and bool(models.intersection({"axis", "plane"}))
+
+    def _pair_prefers_fallback_boundary(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> bool:
+        models = {first_candidate.model, second_candidate.model}
+        return models == {"axis", "conical"}
 
     def _append_linework_geometry(
         self,
@@ -1889,6 +1899,34 @@ class PlanarControllingOlsEngine:
                     self._region_solve_stats.get("axis_exact_unresolved", 0.0) + 1.0
                 )
                 return None
+
+        if AXIS_CONICAL_FULL_OVERLAP_TRIANGULATION_ENABLED:
+            whole_overlap_decision = self._sampled_lower_decision(
+                axis_candidate,
+                conical_candidate,
+                overlap,
+                dense=True,
+                all_higher_margin_m=2.0,
+            )
+            if whole_overlap_decision == "all_higher":
+                return QgsGeometry()
+            if whole_overlap_decision == "all_lower":
+                return QgsGeometry(overlap)
+            triangulation_start = time.perf_counter()
+            full_overlap_region = self._triangulated_candidate_lower_region(
+                axis_candidate,
+                conical_candidate,
+                overlap,
+            )
+            self._region_solve_stats["axis_full_overlap_triangulation_time_s"] = (
+                self._region_solve_stats.get("axis_full_overlap_triangulation_time_s", 0.0)
+                + (time.perf_counter() - triangulation_start)
+            )
+            self._region_solve_stats["axis_full_overlap_triangulation_calls"] = (
+                self._region_solve_stats.get("axis_full_overlap_triangulation_calls", 0.0) + 1.0
+            )
+            if full_overlap_region is not None:
+                return full_overlap_region if self._has_polygon_area(full_overlap_region) else QgsGeometry()
 
         station_range = self._axis_station_range(axis, overlap)
         if station_range is None:
