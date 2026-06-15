@@ -44,6 +44,10 @@ AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M = 0.5
 AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M = 0.5
 AXIS_CONICAL_CURVE_ENDPOINT_SNAP_TOLERANCE_M = 2.0
 AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M = 25.0
+AXIS_CONICAL_LATERAL_ROOT_STEP_M = 10.0
+AXIS_CONICAL_LATERAL_ROOT_MAX_STEP_M = 25.0
+AXIS_CONICAL_LATERAL_ROOT_CONNECT_TOLERANCE_M = 75.0
+AXIS_CONICAL_SAMPLED_CURVE_MIN_LENGTH_M = 2.0
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -2209,6 +2213,18 @@ class PlanarControllingOlsEngine:
         max_distance = float(max_distance) if max_distance is not None else None
 
         curve_pieces: List[QgsGeometry] = []
+        curve_pieces.extend(
+            self._sampled_axis_conical_transition_pieces(
+                axis,
+                base_footprint,
+                a_offset,
+                b_slope,
+                max_distance,
+                min_station,
+                max_station,
+                overlap,
+            )
+        )
         for ring in self._polygon_boundary_parts(base_footprint):
             points = ring[:-1] if len(ring) > 1 and ring[0].distance(ring[-1]) <= 1e-6 else ring
             if len(points) < 2:
@@ -2248,6 +2264,133 @@ class PlanarControllingOlsEngine:
             return QgsGeometry.unaryUnion(curve_pieces) if len(curve_pieces) > 1 else curve_pieces[0]
         except Exception:
             return curve_pieces[0]
+
+    def _sampled_axis_conical_transition_pieces(
+        self,
+        axis: dict,
+        base_footprint: QgsGeometry,
+        a_offset: float,
+        b_slope: float,
+        max_distance: Optional[float],
+        min_station: float,
+        max_station: float,
+        overlap: QgsGeometry,
+    ) -> List[QgsGeometry]:
+        stations = self._axis_conical_sample_stations(axis, overlap, min_station, max_station)
+        if len(stations) < 2:
+            return []
+        try:
+            l_min, l_max = self._axis_lateral_bounds(axis, overlap.boundingBox())
+        except Exception:
+            return []
+        lateral_span = l_max - l_min
+        if lateral_span <= 1e-6:
+            return []
+        lateral_step = max(
+            AXIS_CONICAL_LATERAL_ROOT_STEP_M,
+            min(AXIS_CONICAL_LATERAL_ROOT_MAX_STEP_M, lateral_span / 200.0),
+        )
+        station_gaps = [
+            end_station - start_station
+            for start_station, end_station in zip(stations[:-1], stations[1:])
+            if end_station > start_station
+        ]
+        max_station_gap = max(station_gaps) if station_gaps else 0.0
+        connect_tolerance = max(
+            AXIS_CONICAL_LATERAL_ROOT_CONNECT_TOLERANCE_M,
+            (max_station_gap * 2.5) + lateral_step,
+        )
+
+        pieces: List[QgsGeometry] = []
+        active_curves: List[List[QgsPointXY]] = []
+
+        def _append_curve(points: Sequence[QgsPointXY]) -> None:
+            if len(points) < 2 or self._path_length(points) < AXIS_CONICAL_SAMPLED_CURVE_MIN_LENGTH_M:
+                return
+            simplified = self._simplify_transition_curve_points(
+                points,
+                AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
+            )
+            if len(simplified) < 2:
+                return
+            geometry = QgsGeometry.fromPolylineXY(simplified)
+            if geometry is not None and not geometry.isEmpty():
+                pieces.append(geometry)
+
+        for station in stations:
+            required_distance = a_offset + (b_slope * station)
+            if required_distance < -self.tie_tolerance_m:
+                for curve in active_curves:
+                    _append_curve(curve)
+                active_curves = []
+                continue
+            required_distance = max(0.0, required_distance)
+            if max_distance is not None and required_distance > max_distance + self.tie_tolerance_m:
+                for curve in active_curves:
+                    _append_curve(curve)
+                active_curves = []
+                continue
+
+            roots = self._axis_conical_lateral_roots(
+                axis,
+                base_footprint,
+                station,
+                required_distance,
+                l_min,
+                l_max,
+                lateral_step,
+            )
+            filtered_roots: List[QgsPointXY] = []
+            for root in roots:
+                if not self._axis_conical_curve_point_is_valid(
+                    axis,
+                    base_footprint,
+                    root,
+                    a_offset,
+                    b_slope,
+                    max_distance,
+                    overlap,
+                ):
+                    continue
+                if filtered_roots and root.distance(filtered_roots[-1]) <= 0.5:
+                    continue
+                filtered_roots.append(QgsPointXY(root.x(), root.y()))
+
+            if not filtered_roots:
+                for curve in active_curves:
+                    _append_curve(curve)
+                active_curves = []
+                continue
+
+            used_active: set[int] = set()
+            next_active: List[List[QgsPointXY]] = []
+            for root in filtered_roots:
+                best_index: Optional[int] = None
+                best_distance = math.inf
+                for index, curve in enumerate(active_curves):
+                    if index in used_active or not curve:
+                        continue
+                    distance = curve[-1].distance(root)
+                    if distance < best_distance:
+                        best_distance = distance
+                        best_index = index
+                if best_index is not None and best_distance <= connect_tolerance:
+                    curve = list(active_curves[best_index])
+                    if root.distance(curve[-1]) > 1e-6:
+                        curve.append(root)
+                    next_active.append(curve)
+                    used_active.add(best_index)
+                else:
+                    next_active.append([root])
+
+            for index, curve in enumerate(active_curves):
+                if index not in used_active:
+                    _append_curve(curve)
+            active_curves = next_active
+
+        for curve in active_curves:
+            _append_curve(curve)
+        return pieces
 
     def _axis_conical_edge_transition_pieces(
         self,
