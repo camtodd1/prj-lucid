@@ -580,6 +580,7 @@ class PlanarControllingOlsEngine:
             f"refined={int(stats.get('axis_refined_bands', 0.0))}, "
             f"triangulated={int(stats.get('axis_triangulated_bands', 0.0))}], "
             f"tri_points[calls={triangulation_calls}, avg={avg_tri_points:.1f}, "
+            f"curve={int(stats.get('triangulation_curve_point_count', 0.0))}, "
             f"max={int(stats.get('triangulation_points_max', 0.0))}], "
             f"losing_diff={stats.get('losing_difference_time_s', 0.0):.2f}s, "
             f"region_diff={stats.get('region_difference_time_s', 0.0):.2f}s, "
@@ -3212,6 +3213,7 @@ class PlanarControllingOlsEngine:
         start_time = time.perf_counter()
         try:
             points = self._triangulation_sample_points(geometry)
+            points = self._supplement_triangulation_points(candidate, competitor, geometry, points)
             point_count = len(points)
             self._region_solve_stats["triangulation_calls"] = (
                 self._region_solve_stats.get("triangulation_calls", 0.0) + 1.0
@@ -3265,6 +3267,68 @@ class PlanarControllingOlsEngine:
                 self._region_solve_stats.get("triangulation_time_s", 0.0)
                 + (time.perf_counter() - start_time)
             )
+
+    def _supplement_triangulation_points(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        geometry: QgsGeometry,
+        points: List[QgsPointXY],
+    ) -> List[QgsPointXY]:
+        if not points:
+            return points
+        models = {candidate.model, competitor.model}
+        if models != {"axis", "conical"}:
+            return points
+
+        axis_candidate = candidate if candidate.model == "axis" else competitor
+        conical_candidate = candidate if candidate.model == "conical" else competitor
+        axis = self._axis_model(axis_candidate)
+        conical_model = self._conical_model(conical_candidate)
+        if axis is None or conical_model is None:
+            return points
+
+        transition_curve = self._axis_conical_transition_curve(axis, conical_model, geometry)
+        if transition_curve is None or transition_curve.isEmpty():
+            return points
+
+        seen = {(round(point.x(), 3), round(point.y(), 3)) for point in points}
+
+        def _add(point_xy: QgsPointXY) -> None:
+            key = (round(point_xy.x(), 3), round(point_xy.y(), 3))
+            if key in seen:
+                return
+            seen.add(key)
+            points.append(point_xy)
+
+        added = 0
+        for curve_points in self._line_parts(transition_curve):
+            if len(curve_points) < 2:
+                continue
+            conditioned = self._condition_transition_curve_for_polygonize(curve_points, geometry)
+            for start_point, end_point in zip(conditioned[:-1], conditioned[1:]):
+                _add(QgsPointXY(start_point))
+                added += 1
+                length = start_point.distance(end_point)
+                if length <= 1e-9:
+                    continue
+                steps = max(1, int(math.ceil(length / 10.0)))
+                for step in range(1, steps):
+                    fraction = step / steps
+                    _add(
+                        QgsPointXY(
+                            start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+                            start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+                        )
+                    )
+                    added += 1
+            _add(QgsPointXY(conditioned[-1]))
+            added += 1
+
+        self._region_solve_stats["triangulation_curve_point_count"] = (
+            self._region_solve_stats.get("triangulation_curve_point_count", 0.0) + float(added)
+        )
+        return points
 
     def _lower_polygon_rings(
         self,
