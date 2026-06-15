@@ -28,11 +28,9 @@ except ImportError:
     from core import output_structure
 
 PLUGIN_TAG = "SafeguardingBuilder"
-CONTROLLING_REGION_TOPOLOGY_WELD_M = 0.01
-CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS = 8
-CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2 = 0.05
-CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO = 1e-10
-CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M = 50.0
+CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS = 8
+CONTROLLING_REGION_MAX_NEW_SEGMENT_M = 50.0
+CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M = 0.02
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
@@ -640,7 +638,7 @@ class PlanarControllingOlsEngine:
         geometry: Optional[QgsGeometry],
         source_boundary: Optional[QgsGeometry] = None,
     ) -> Optional[QgsGeometry]:
-        """Collapse shared internal multipart boundaries after same-candidate dissolves."""
+        """Collapse shared internal multipart boundaries without offsetting solved edges."""
         if not self._has_polygon_area(geometry):
             return geometry
         candidates: List[QgsGeometry] = []
@@ -658,16 +656,6 @@ class PlanarControllingOlsEngine:
                 candidates.append(repaired)
         except Exception:
             pass
-        if self._polygon_part_count(geometry) > 1:
-            try:
-                tolerance = CONTROLLING_REGION_TOPOLOGY_WELD_M
-                segments = CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS
-                closed = geometry.buffer(tolerance, segments).buffer(-tolerance, segments)
-                closed = self._normalised_polygon_geometry(closed)
-                if self._topology_weld_is_acceptable(geometry, closed, source_boundary):
-                    candidates.append(closed)
-            except Exception:
-                pass
 
         return min(candidates, key=self._polygon_part_count) if candidates else None
 
@@ -684,49 +672,23 @@ class PlanarControllingOlsEngine:
         except Exception:
             pass
         try:
-            buffered = geometry.buffer(0.0, CONTROLLING_REGION_TOPOLOGY_WELD_SEGMENTS)
+            buffered = geometry.buffer(0.0, CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS)
             if self._has_polygon_area(buffered):
                 return buffered
         except Exception:
             pass
         return geometry
 
-    def _topology_weld_is_acceptable(
-        self,
-        original: Optional[QgsGeometry],
-        welded: Optional[QgsGeometry],
-        source_boundary: Optional[QgsGeometry] = None,
-    ) -> bool:
-        if not self._has_polygon_area(original) or not self._has_polygon_area(welded):
-            return False
-        try:
-            if not welded.isGeosValid():
-                return False
-        except Exception:
-            return False
-        try:
-            original_area = abs(original.area())
-            welded_area = abs(welded.area())
-        except Exception:
-            return False
-        allowed_delta = max(
-            CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_M2,
-            original_area * CONTROLLING_REGION_TOPOLOGY_WELD_MAX_AREA_DELTA_RATIO,
-        )
-        if abs(welded_area - original_area) > allowed_delta:
-            return False
-        return not self._introduces_long_new_boundary_segment(welded, source_boundary)
-
     def _introduces_long_new_boundary_segment(
         self,
         geometry: QgsGeometry,
         source_boundary: Optional[QgsGeometry],
     ) -> bool:
-        """Reject topology welds that shortcut boundaries with new long chords."""
+        """Reject geometry repairs that shortcut boundaries with new long chords."""
         if source_boundary is None or source_boundary.isEmpty():
             return False
-        max_new_segment_length = CONTROLLING_REGION_TOPOLOGY_WELD_MAX_NEW_SEGMENT_M
-        distance_tolerance = CONTROLLING_REGION_TOPOLOGY_WELD_M * 2.0
+        max_new_segment_length = CONTROLLING_REGION_MAX_NEW_SEGMENT_M
+        distance_tolerance = CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M
         for ring in self._polygon_boundary_parts(geometry):
             for start_point, end_point in zip(ring, ring[1:]):
                 segment_length = start_point.distance(end_point)
