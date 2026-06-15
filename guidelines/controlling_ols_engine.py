@@ -3876,7 +3876,6 @@ class ControllingOlsEngineMixin:
         surface_type_by_id = {candidate.surface_id: candidate.surface_type for candidate in engine.candidates}
         targeted_pairs = {
             frozenset(("Approach", "TOCS")),
-            frozenset(("Approach", "OHS")),
             frozenset(("TOCS", "OHS")),
         }
         seen_transition_contours = set()
