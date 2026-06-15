@@ -858,10 +858,13 @@ class OlsGuidelineMixin:
                                     ControllingOlsCandidate(
                                         surface_id=f"OHS:{icao_code}",
                                         surface_type="OHS",
-                                        footprint=QgsGeometry(ohs_final_geom),
+                                        footprint=QgsGeometry(ohs_full_circle_geom),
                                         elevation_at_xy=constant_elevation_evaluator(ohs_elevation_amsl),
                                         model="constant",
-                                        metadata={"elevation_m": ohs_elevation_amsl},
+                                        metadata={
+                                            "elevation_m": ohs_elevation_amsl,
+                                            "display_footprint": QgsGeometry(ohs_final_geom),
+                                        },
                                     )
                                 )
                         else:
