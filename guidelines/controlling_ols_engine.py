@@ -525,7 +525,8 @@ class PlanarControllingOlsEngine:
         global_summary = ""
         if stats.get("global_linework_count", 0.0) or stats.get("global_cell_count", 0.0):
             global_summary = (
-                f"global[linework={int(stats.get('global_linework_count', 0.0))}, "
+                f"global[raw_linework={int(stats.get('global_raw_linework_count', 0.0))}, "
+                f"linework={int(stats.get('global_linework_count', 0.0))}, "
                 f"cells={int(stats.get('global_cell_count', 0.0))}, "
                 f"assigned={int(stats.get('global_assigned_cell_count', 0.0))}, "
                 f"regions={int(stats.get('global_region_count', 0.0))}, "
@@ -588,7 +589,9 @@ class PlanarControllingOlsEngine:
         if not hasattr(QgsGeometry, "polygonize"):
             return []
 
-        linework = self._global_cell_linework()
+        raw_linework = self._global_cell_linework()
+        self._region_solve_stats["global_raw_linework_count"] = float(len(raw_linework))
+        linework = self._noded_global_linework(raw_linework)
         self._region_solve_stats["global_linework_count"] = float(len(linework))
         if len(linework) < 3:
             return []
@@ -671,6 +674,32 @@ class PlanarControllingOlsEngine:
                         second_candidate,
                     )
         return [geometry for geometry in linework if geometry is not None and not geometry.isEmpty()]
+
+    def _noded_global_linework(self, linework: Sequence[QgsGeometry]) -> List[QgsGeometry]:
+        valid_linework = [QgsGeometry(geometry) for geometry in linework if geometry is not None and not geometry.isEmpty()]
+        if not valid_linework:
+            return []
+        try:
+            noded = QgsGeometry.unaryUnion(valid_linework) if len(valid_linework) > 1 else valid_linework[0]
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Controlling OLS global cell solver line noding failed: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+            return valid_linework
+        if noded is None or noded.isEmpty():
+            return valid_linework
+
+        noded_segments: List[QgsGeometry] = []
+        for line_points in self._line_parts(noded):
+            for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+                if start_point.distance(end_point) <= 1e-6:
+                    continue
+                segment = QgsGeometry.fromPolylineXY([start_point, end_point])
+                if segment is not None and not segment.isEmpty():
+                    noded_segments.append(segment)
+        return noded_segments if len(noded_segments) >= 3 else valid_linework
 
     def _append_polygon_boundary_linework(self, linework: List[QgsGeometry], polygon_geometry: QgsGeometry) -> None:
         for ring_points in self._polygon_boundary_parts(polygon_geometry):
