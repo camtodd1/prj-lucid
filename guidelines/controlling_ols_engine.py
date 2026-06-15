@@ -531,6 +531,10 @@ class PlanarControllingOlsEngine:
                 f"eq={int(stats.get('global_equality_line_count', 0.0))}, "
                 f"fallback={int(stats.get('global_fallback_line_count', 0.0))}, "
                 f"fallback_empty={int(stats.get('global_fallback_empty_count', 0.0))}, "
+                f"fallback_outcome[none={int(stats.get('global_fallback_lower_none_count', 0.0))}, "
+                f"empty={int(stats.get('global_fallback_lower_empty_count', 0.0))}, "
+                f"full={int(stats.get('global_fallback_lower_full_count', 0.0))}, "
+                f"partial={int(stats.get('global_fallback_lower_partial_count', 0.0))}], "
                 f"cells={int(stats.get('global_cell_count', 0.0))}, "
                 f"assigned={int(stats.get('global_assigned_cell_count', 0.0))}, "
                 f"regions={int(stats.get('global_region_count', 0.0))}, "
@@ -871,17 +875,41 @@ class PlanarControllingOlsEngine:
         second_candidate: ControllingOlsCandidate,
     ) -> Optional[QgsGeometry]:
         lower_region = self._candidate_lower_region(first_candidate, second_candidate, domain)
-        if lower_region is None or lower_region.isEmpty():
+        if lower_region is None:
+            self._region_solve_stats["global_fallback_lower_none_count"] = (
+                self._region_solve_stats.get("global_fallback_lower_none_count", 0.0) + 1.0
+            )
+            return None
+        if lower_region.isEmpty():
+            self._region_solve_stats["global_fallback_lower_empty_count"] = (
+                self._region_solve_stats.get("global_fallback_lower_empty_count", 0.0) + 1.0
+            )
             return None
         clipped_lower = self._clip_lower_region_to_overlap(lower_region, domain)
-        if clipped_lower is None or clipped_lower.isEmpty():
+        if clipped_lower is None:
+            self._region_solve_stats["global_fallback_clip_none_count"] = (
+                self._region_solve_stats.get("global_fallback_clip_none_count", 0.0) + 1.0
+            )
+            return None
+        if clipped_lower.isEmpty():
+            self._region_solve_stats["global_fallback_clip_empty_count"] = (
+                self._region_solve_stats.get("global_fallback_clip_empty_count", 0.0) + 1.0
+            )
             return None
         if self._areas_match(clipped_lower, domain):
+            self._region_solve_stats["global_fallback_lower_full_count"] = (
+                self._region_solve_stats.get("global_fallback_lower_full_count", 0.0) + 1.0
+            )
             return None
         try:
-            return clipped_lower.boundary().intersection(domain)
+            boundary = clipped_lower.boundary().intersection(domain)
         except Exception:
             return None
+        if boundary is not None and not boundary.isEmpty():
+            self._region_solve_stats["global_fallback_lower_partial_count"] = (
+                self._region_solve_stats.get("global_fallback_lower_partial_count", 0.0) + 1.0
+            )
+        return boundary
 
     def _areas_match(self, first: QgsGeometry, second: QgsGeometry, tolerance_m2: float = 1.0) -> bool:
         if not self._has_polygon_area(first) or not self._has_polygon_area(second):
@@ -3294,12 +3322,27 @@ class PlanarControllingOlsEngine:
 
         seen = {(round(point.x(), 3), round(point.y(), 3)) for point in points}
 
-        def _add(point_xy: QgsPointXY) -> None:
+        def _add(point_xy: QgsPointXY) -> bool:
+            try:
+                if not geometry.intersects(QgsGeometry.fromPointXY(point_xy)):
+                    return False
+            except Exception:
+                return False
             key = (round(point_xy.x(), 3), round(point_xy.y(), 3))
             if key in seen:
-                return
+                return False
             seen.add(key)
             points.append(point_xy)
+            return True
+
+        def _add_curve_sample(point_xy: QgsPointXY, nx: float, ny: float) -> int:
+            added_count = 1 if _add(point_xy) else 0
+            for offset in (0.5, 2.0):
+                if _add(QgsPointXY(point_xy.x() + (nx * offset), point_xy.y() + (ny * offset))):
+                    added_count += 1
+                if _add(QgsPointXY(point_xy.x() - (nx * offset), point_xy.y() - (ny * offset))):
+                    added_count += 1
+            return added_count
 
         added = 0
         for curve_points in self._line_parts(transition_curve):
@@ -3307,23 +3350,35 @@ class PlanarControllingOlsEngine:
                 continue
             conditioned = self._condition_transition_curve_for_polygonize(curve_points, geometry)
             for start_point, end_point in zip(conditioned[:-1], conditioned[1:]):
-                _add(QgsPointXY(start_point))
-                added += 1
                 length = start_point.distance(end_point)
                 if length <= 1e-9:
+                    if _add(QgsPointXY(start_point)):
+                        added += 1
                     continue
+                nx = -(end_point.y() - start_point.y()) / length
+                ny = (end_point.x() - start_point.x()) / length
+                added += _add_curve_sample(QgsPointXY(start_point), nx, ny)
                 steps = max(1, int(math.ceil(length / 10.0)))
                 for step in range(1, steps):
                     fraction = step / steps
-                    _add(
+                    added += _add_curve_sample(
                         QgsPointXY(
                             start_point.x() + ((end_point.x() - start_point.x()) * fraction),
                             start_point.y() + ((end_point.y() - start_point.y()) * fraction),
-                        )
+                        ),
+                        nx,
+                        ny,
                     )
+            final_start = conditioned[-2]
+            final_end = conditioned[-1]
+            final_length = final_start.distance(final_end)
+            if final_length <= 1e-9:
+                if _add(QgsPointXY(final_end)):
                     added += 1
-            _add(QgsPointXY(conditioned[-1]))
-            added += 1
+            else:
+                nx = -(final_end.y() - final_start.y()) / final_length
+                ny = (final_end.x() - final_start.x()) / final_length
+                added += _add_curve_sample(QgsPointXY(final_end), nx, ny)
 
         self._region_solve_stats["triangulation_curve_point_count"] = (
             self._region_solve_stats.get("triangulation_curve_point_count", 0.0) + float(added)
