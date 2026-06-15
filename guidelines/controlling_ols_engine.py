@@ -527,6 +527,8 @@ class PlanarControllingOlsEngine:
             global_summary = (
                 f"global[raw_linework={int(stats.get('global_raw_linework_count', 0.0))}, "
                 f"linework={int(stats.get('global_linework_count', 0.0))}, "
+                f"eq={int(stats.get('global_equality_line_count', 0.0))}, "
+                f"fallback={int(stats.get('global_fallback_line_count', 0.0))}, "
                 f"cells={int(stats.get('global_cell_count', 0.0))}, "
                 f"assigned={int(stats.get('global_assigned_cell_count', 0.0))}, "
                 f"regions={int(stats.get('global_region_count', 0.0))}, "
@@ -717,20 +719,37 @@ class PlanarControllingOlsEngine:
         second_candidate: ControllingOlsCandidate,
     ) -> None:
         equality = self._global_equality_geometry_for_pair(domain, first_candidate, second_candidate)
+        equality_count = 0
         if equality is not None and not equality.isEmpty():
-            self._append_linework_geometry(linework, equality, domain=domain)
-            return
+            equality_count = self._append_linework_geometry(linework, equality, domain=domain)
+            self._region_solve_stats["global_equality_line_count"] = (
+                self._region_solve_stats.get("global_equality_line_count", 0.0) + float(equality_count)
+            )
 
+        if equality_count and not self._pair_needs_fallback_boundary(first_candidate, second_candidate):
+            return
         fallback = self._fallback_pair_boundary_geometry(domain, first_candidate, second_candidate)
         if fallback is not None and not fallback.isEmpty():
-            self._append_linework_geometry(linework, fallback, domain=domain)
+            fallback_count = self._append_linework_geometry(linework, fallback, domain=domain)
+            self._region_solve_stats["global_fallback_line_count"] = (
+                self._region_solve_stats.get("global_fallback_line_count", 0.0) + float(fallback_count)
+            )
+
+    def _pair_needs_fallback_boundary(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> bool:
+        models = {first_candidate.model, second_candidate.model}
+        return "conical" in models and bool(models.intersection({"axis", "plane"}))
 
     def _append_linework_geometry(
         self,
         linework: List[QgsGeometry],
         geometry: QgsGeometry,
         domain: Optional[QgsGeometry] = None,
-    ) -> None:
+    ) -> int:
+        appended = 0
         for line_points in self._line_parts(geometry):
             if domain is not None:
                 line_points = self._condition_transition_curve_for_polygonize(line_points, domain)
@@ -739,6 +758,8 @@ class PlanarControllingOlsEngine:
             line = QgsGeometry.fromPolylineXY(line_points)
             if line is not None and not line.isEmpty():
                 linework.append(line)
+                appended += 1
+        return appended
 
     def _global_equality_geometry_for_pair(
         self,
@@ -894,15 +915,25 @@ class PlanarControllingOlsEngine:
             return None
         if len(cleaned_parts) == 1:
             return cleaned_parts[0]
-        try:
-            dissolved = QgsGeometry.unaryUnion(cleaned_parts)
-        except Exception:
-            dissolved = None
         if source_boundary is None:
             source_boundary = self._combined_boundary_geometry(cleaned_parts)
-        dissolved = self._finalize_dissolved_region_geometry(dissolved, source_boundary=source_boundary)
-        if self._has_polygon_area(dissolved):
-            return dissolved
+        dissolve_candidates: List[QgsGeometry] = []
+        try:
+            dissolved = QgsGeometry.unaryUnion(cleaned_parts)
+            if self._has_polygon_area(dissolved):
+                dissolve_candidates.append(dissolved)
+        except Exception:
+            pass
+        polygonized = self._polygonized_same_candidate_dissolve(cleaned_parts)
+        if self._has_polygon_area(polygonized):
+            dissolve_candidates.append(polygonized)
+        finalized_candidates: List[QgsGeometry] = []
+        for dissolve_candidate in dissolve_candidates:
+            finalized = self._finalize_dissolved_region_geometry(dissolve_candidate, source_boundary=source_boundary)
+            if self._has_polygon_area(finalized):
+                finalized_candidates.append(finalized)
+        if finalized_candidates:
+            return min(finalized_candidates, key=self._polygon_part_count)
 
         multi_polygon = []
         for clean_part in cleaned_parts:
@@ -913,6 +944,96 @@ class PlanarControllingOlsEngine:
             if polygon:
                 multi_polygon.append(polygon)
         return QgsGeometry.fromMultiPolygonXY(multi_polygon) if multi_polygon else None
+
+    def _polygonized_same_candidate_dissolve(
+        self,
+        geometries: Sequence[QgsGeometry],
+    ) -> Optional[QgsGeometry]:
+        """Remove exact shared cell edges for one controlling candidate."""
+        if not hasattr(QgsGeometry, "polygonize"):
+            return None
+        valid_parts = [QgsGeometry(geometry) for geometry in geometries if self._has_polygon_area(geometry)]
+        if len(valid_parts) < 2:
+            return valid_parts[0] if valid_parts else None
+
+        segment_counts: Dict[Tuple[Tuple[int, int], Tuple[int, int]], int] = {}
+        segment_points: Dict[Tuple[Tuple[int, int], Tuple[int, int]], Tuple[QgsPointXY, QgsPointXY]] = {}
+        for geometry in valid_parts:
+            for ring in self._polygon_boundary_parts(geometry):
+                for start_point, end_point in zip(ring[:-1], ring[1:]):
+                    if start_point.distance(end_point) <= 1e-9:
+                        continue
+                    key = self._boundary_segment_key(start_point, end_point)
+                    segment_counts[key] = segment_counts.get(key, 0) + 1
+                    segment_points.setdefault(key, (start_point, end_point))
+
+        exterior_linework: List[QgsGeometry] = []
+        for key, count in segment_counts.items():
+            if count != 1:
+                continue
+            start_point, end_point = segment_points[key]
+            segment = QgsGeometry.fromPolylineXY([start_point, end_point])
+            if segment is not None and not segment.isEmpty():
+                exterior_linework.append(segment)
+        if len(exterior_linework) < 3:
+            return None
+
+        try:
+            polygonized = QgsGeometry.polygonize(exterior_linework)
+        except Exception:
+            return None
+        if not self._has_polygon_area(polygonized):
+            return None
+
+        coverage = self._combined_area_geometry(valid_parts)
+        if not self._has_polygon_area(coverage):
+            return None
+        kept_faces: List[QgsGeometry] = []
+        for face in self._polygon_parts(polygonized):
+            try:
+                sample_point = face.pointOnSurface()
+            except Exception:
+                sample_point = None
+            if sample_point is None or sample_point.isEmpty():
+                continue
+            try:
+                if coverage.intersects(sample_point):
+                    kept_faces.append(face)
+            except Exception:
+                continue
+        if not kept_faces:
+            return None
+        try:
+            return QgsGeometry.unaryUnion(kept_faces) if len(kept_faces) > 1 else QgsGeometry(kept_faces[0])
+        except Exception:
+            return QgsGeometry(kept_faces[0])
+
+    def _combined_area_geometry(self, geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
+        valid_parts = [QgsGeometry(geometry) for geometry in geometries if self._has_polygon_area(geometry)]
+        if not valid_parts:
+            return None
+        try:
+            combined = QgsGeometry.unaryUnion(valid_parts) if len(valid_parts) > 1 else QgsGeometry(valid_parts[0])
+            if self._has_polygon_area(combined):
+                return combined
+        except Exception:
+            pass
+        combined = QgsGeometry(valid_parts[0])
+        for geometry in valid_parts[1:]:
+            try:
+                combined = combined.combine(geometry)
+            except Exception:
+                continue
+        return combined if self._has_polygon_area(combined) else None
+
+    def _boundary_segment_key(
+        self,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+    ) -> Tuple[Tuple[int, int], Tuple[int, int]]:
+        first = (int(round(start_point.x() * 1000.0)), int(round(start_point.y() * 1000.0)))
+        second = (int(round(end_point.x() * 1000.0)), int(round(end_point.y() * 1000.0)))
+        return (first, second) if first <= second else (second, first)
 
     def _finalize_dissolved_region_geometry(
         self,
