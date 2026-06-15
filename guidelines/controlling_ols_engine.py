@@ -34,6 +34,7 @@ CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M = 0.02
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
+CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
@@ -426,6 +427,14 @@ class PlanarControllingOlsEngine:
             "merge_time_s": 0.0,
             "total_time_s": 0.0,
         }
+        if CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED:
+            global_start = time.perf_counter()
+            global_region_parts = self._build_global_cell_region_geometries()
+            self._region_solve_stats["global_cell_time_s"] = time.perf_counter() - global_start
+            if global_region_parts:
+                self._region_solve_stats["total_time_s"] = time.perf_counter() - solve_start
+                return global_region_parts
+
         region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
             region = self._effective_footprint(candidate)
@@ -513,8 +522,17 @@ class PlanarControllingOlsEngine:
             if triangulation_calls
             else 0.0
         )
+        global_summary = ""
+        if stats.get("global_linework_count", 0.0) or stats.get("global_cell_count", 0.0):
+            global_summary = (
+                f"global[linework={int(stats.get('global_linework_count', 0.0))}, "
+                f"cells={int(stats.get('global_cell_count', 0.0))}, "
+                f"assigned={int(stats.get('global_assigned_cell_count', 0.0))}, "
+                f"regions={int(stats.get('global_region_count', 0.0))}, "
+                f"time={stats.get('global_cell_time_s', 0.0):.2f}s], "
+            )
         return (
-            f"region solve: pairs={pair_checks}, bbox_skips={bbox_skips}, "
+            f"region solve: {global_summary}pairs={pair_checks}, bbox_skips={bbox_skips}, "
             f"intersections={intersections} ({stats.get('geos_intersection_time_s', 0.0):.2f}s), "
             f"lower_calls={lower_calls}, linear={stats.get('linear_lower_time_s', 0.0):.2f}s, "
             f"curved={stats.get('curved_lower_time_s', 0.0):.2f}s, "
@@ -564,6 +582,240 @@ class PlanarControllingOlsEngine:
             f"merge={stats.get('merge_time_s', 0.0):.2f}s, "
             f"total={stats.get('total_time_s', 0.0):.2f}s"
         )
+
+    def _build_global_cell_region_geometries(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        """Build one global arrangement, then label each cell by lowest candidate."""
+        if not hasattr(QgsGeometry, "polygonize"):
+            return []
+
+        linework = self._global_cell_linework()
+        self._region_solve_stats["global_linework_count"] = float(len(linework))
+        if len(linework) < 3:
+            return []
+
+        try:
+            polygonized = QgsGeometry.polygonize(linework)
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Controlling OLS global cell solver polygonize failed: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+            return []
+        if not self._has_polygon_area(polygonized):
+            return []
+
+        cell_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
+        cell_count = 0
+        assigned_count = 0
+        for cell in self._polygon_parts(polygonized):
+            if not self._has_polygon_area(cell, min_area=1.0):
+                continue
+            cell_count += 1
+            controller = self._controlling_candidate_for_cell(cell)
+            if controller is None:
+                continue
+            candidate, _elevation = controller
+            try:
+                clipped_cell = cell.intersection(self._effective_footprint(candidate))
+            except Exception:
+                clipped_cell = QgsGeometry(cell)
+            for part in self._polygon_parts(clipped_cell):
+                if not self._has_polygon_area(part, min_area=1.0):
+                    continue
+                cell_parts.append((candidate, part))
+                assigned_count += 1
+
+        self._region_solve_stats["global_cell_count"] = float(cell_count)
+        self._region_solve_stats["global_assigned_cell_count"] = float(assigned_count)
+        if not cell_parts:
+            return []
+
+        merge_start = time.perf_counter()
+        merged_parts = self._merge_region_parts_by_candidate(cell_parts)
+        self._region_solve_stats["merge_time_s"] = time.perf_counter() - merge_start
+        self._region_solve_stats["global_region_count"] = float(len(merged_parts))
+        return merged_parts
+
+    def _global_cell_linework(self) -> List[QgsGeometry]:
+        linework: List[QgsGeometry] = []
+        effective_footprints: Dict[str, QgsGeometry] = {}
+        for candidate in self.candidates:
+            footprint = self._effective_footprint(candidate)
+            if not self._has_polygon_area(footprint):
+                continue
+            effective_footprints[candidate.surface_id] = footprint
+            self._append_polygon_boundary_linework(linework, footprint)
+
+        for index, first_candidate in enumerate(self.candidates):
+            first_footprint = effective_footprints.get(first_candidate.surface_id)
+            if not self._has_polygon_area(first_footprint):
+                continue
+            for second_candidate in self.candidates[index + 1 :]:
+                second_footprint = effective_footprints.get(second_candidate.surface_id)
+                if not self._has_polygon_area(second_footprint):
+                    continue
+                if not self._bounding_boxes_intersect(first_footprint, second_footprint):
+                    continue
+                try:
+                    overlap = first_footprint.intersection(second_footprint)
+                except Exception:
+                    overlap = None
+                if not self._has_polygon_area(overlap):
+                    continue
+                for overlap_part in self._polygon_parts(overlap):
+                    self._append_pair_construction_linework(
+                        linework,
+                        overlap_part,
+                        first_candidate,
+                        second_candidate,
+                    )
+        return [geometry for geometry in linework if geometry is not None and not geometry.isEmpty()]
+
+    def _append_polygon_boundary_linework(self, linework: List[QgsGeometry], polygon_geometry: QgsGeometry) -> None:
+        for ring_points in self._polygon_boundary_parts(polygon_geometry):
+            if len(ring_points) < 2:
+                continue
+            line = QgsGeometry.fromPolylineXY(ring_points)
+            if line is not None and not line.isEmpty():
+                linework.append(line)
+
+    def _append_pair_construction_linework(
+        self,
+        linework: List[QgsGeometry],
+        domain: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> None:
+        equality = self._global_equality_geometry_for_pair(domain, first_candidate, second_candidate)
+        if equality is not None and not equality.isEmpty():
+            self._append_linework_geometry(linework, equality, domain=domain)
+            return
+
+        fallback = self._fallback_pair_boundary_geometry(domain, first_candidate, second_candidate)
+        if fallback is not None and not fallback.isEmpty():
+            self._append_linework_geometry(linework, fallback, domain=domain)
+
+    def _append_linework_geometry(
+        self,
+        linework: List[QgsGeometry],
+        geometry: QgsGeometry,
+        domain: Optional[QgsGeometry] = None,
+    ) -> None:
+        for line_points in self._line_parts(geometry):
+            if domain is not None:
+                line_points = self._condition_transition_curve_for_polygonize(line_points, domain)
+            if len(line_points) < 2:
+                continue
+            line = QgsGeometry.fromPolylineXY(line_points)
+            if line is not None and not line.isEmpty():
+                linework.append(line)
+
+    def _global_equality_geometry_for_pair(
+        self,
+        domain: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        first_conical = first_candidate.model == "conical"
+        second_conical = second_candidate.model == "conical"
+        if not first_conical and not second_conical:
+            return self._plane_plane_line(domain, first_candidate, second_candidate)
+
+        if first_conical and second_conical:
+            return None
+
+        conical_candidate = first_candidate if first_conical else second_candidate
+        other_candidate = second_candidate if first_conical else first_candidate
+        if other_candidate.model == "constant":
+            return self._conical_constant_equality_geometry(domain, conical_candidate, other_candidate)
+        if other_candidate.model == "axis":
+            conical_model = self._conical_model(conical_candidate)
+            axis = self._axis_model(other_candidate)
+            if conical_model is None or axis is None:
+                return None
+            return self._axis_conical_transition_curve(axis, conical_model, domain)
+        return None
+
+    def _conical_constant_equality_geometry(
+        self,
+        domain: QgsGeometry,
+        conical_candidate: ControllingOlsCandidate,
+        constant_candidate: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        conical_model = self._conical_model(conical_candidate)
+        constant_elevation = self._constant_elevation(constant_candidate)
+        if conical_model is None or constant_elevation is None:
+            return None
+        slope = float(conical_model.get("slope", 0.0))
+        if slope <= 0.0:
+            return None
+        distance = (constant_elevation - float(conical_model["base_elevation_m"])) / slope
+        if distance < -self.tie_tolerance_m:
+            return None
+        max_distance = conical_model.get("max_distance_m")
+        if max_distance is not None and distance > float(max_distance) + self.tie_tolerance_m:
+            return None
+        distance = max(0.0, distance)
+        base_footprint = conical_model.get("base_footprint")
+        if base_footprint is None or base_footprint.isEmpty():
+            return None
+        try:
+            offset_geometry = (
+                QgsGeometry(base_footprint).boundary()
+                if distance <= 1e-6
+                else QgsGeometry(base_footprint).buffer(distance, CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS).boundary()
+            )
+            return offset_geometry.intersection(domain)
+        except Exception:
+            return None
+
+    def _fallback_pair_boundary_geometry(
+        self,
+        domain: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        lower_region = self._candidate_lower_region(first_candidate, second_candidate, domain)
+        if lower_region is None or lower_region.isEmpty():
+            return None
+        clipped_lower = self._clip_lower_region_to_overlap(lower_region, domain)
+        if clipped_lower is None or clipped_lower.isEmpty():
+            return None
+        if self._areas_match(clipped_lower, domain):
+            return None
+        try:
+            return clipped_lower.boundary().intersection(domain)
+        except Exception:
+            return None
+
+    def _areas_match(self, first: QgsGeometry, second: QgsGeometry, tolerance_m2: float = 1.0) -> bool:
+        if not self._has_polygon_area(first) or not self._has_polygon_area(second):
+            return False
+        try:
+            first_area = abs(first.area())
+            second_area = abs(second.area())
+        except Exception:
+            return False
+        return abs(first_area - second_area) <= max(tolerance_m2, second_area * 1e-10)
+
+    def _controlling_candidate_for_cell(
+        self,
+        cell: QgsGeometry,
+    ) -> Optional[Tuple[ControllingOlsCandidate, float]]:
+        sample_points: List[QgsPointXY] = []
+        try:
+            point = cell.pointOnSurface().asPoint()
+            sample_points.append(QgsPointXY(point.x(), point.y()))
+        except Exception:
+            pass
+        sample_points.extend(self._geometry_sample_points(cell)[:5])
+
+        for point_xy in sample_points:
+            result = self.controlling_candidate_at_xy(point_xy)
+            if result is not None:
+                return result
+        return None
 
     def _merge_region_parts_by_candidate(
         self,

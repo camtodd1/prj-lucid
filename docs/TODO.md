@@ -103,6 +103,15 @@
 
 ## Controlling OLS
 
+- [ ] Validate and promote the global cell-solver region construction.
+
+  Notes:
+  - See `docs/controlling_ols_global_cell_solver_plan.md`.
+  - Use YMEN as the first regression case for same-surface split-plane
+    artefacts across OHS, Conical, TOCS, Approach, and Transitional outputs.
+  - Compare candidate footprints, solved regions, transition diagnostics, and
+    clipped contours before replacing the legacy pairwise subtract fallback.
+
 - [ ] Root-cause remaining controlling-region geometry cleanup safeguards.
 
   Notes:
