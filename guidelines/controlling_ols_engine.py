@@ -3763,12 +3763,12 @@ class ControllingOlsEngineMixin:
         start_time = time.perf_counter()
         if not contours:
             QgsMessageLog.logMessage(
-                "Controlling OLS clipped contours POC skipped: no source contours were registered "
+                "Controlling OLS clipped contours POC: no source contours were registered; "
+                "horizontal planar transitions will still be checked "
                 f"after {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
-            return False
 
         region_parts = [
             (candidate, region)
@@ -3799,6 +3799,7 @@ class ControllingOlsEngineMixin:
         )
         features: List[QgsFeature] = []
         contour_id = 1
+        seen_output_keys = set()
         for contour in contours:
             matching_regions = regions_by_surface_id.get(contour.surface_id, [])
             if not matching_regions:
@@ -3848,6 +3849,14 @@ class ControllingOlsEngineMixin:
             line_geometry = self._controlling_contour_geometry_from_parts(clipped_line_parts)
             if line_geometry is None or line_geometry.isEmpty():
                 continue
+            feature_key = self._controlling_contour_output_key(
+                line_geometry,
+                contour.contour_elevation_m,
+                contour.surface_id,
+            )
+            if feature_key in seen_output_keys:
+                continue
+            seen_output_keys.add(feature_key)
             feature = QgsFeature(fields)
             feature.setGeometry(line_geometry)
             feature.setAttributes(
@@ -3863,9 +3872,61 @@ class ControllingOlsEngineMixin:
             features.append(feature)
             contour_id += 1
 
+        transition_fields = QgsFields(
+            [
+                QgsField("transition_id", QVariant.String, self.tr("Transition ID"), 160),
+                QgsField("surface", QVariant.String, self.tr("Surface"), 50),
+                QgsField("elev_min", QVariant.Double, self.tr("Min Elev AMSL"), 12, 3),
+                QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
+                QgsField("adjacent", QVariant.String, self.tr("Adjacent Surfaces"), 254),
+                QgsField("method", QVariant.String, self.tr("Method"), 50),
+            ]
+        )
+        transition_features = self._deduplicate_controlling_transition_features(
+            engine.region_boundary_features(transition_fields)
+        )
+        for transition_feature in transition_features:
+            try:
+                elev_min = float(transition_feature.attribute("elev_min"))
+                elev_max = float(transition_feature.attribute("elev_max"))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(elev_min) or not math.isfinite(elev_max):
+                continue
+            if abs(elev_max - elev_min) > 0.01:
+                continue
+            geometry = transition_feature.geometry()
+            if geometry is None or geometry.isEmpty():
+                continue
+            transition_id = str(transition_feature.attribute("transition_id") or "")[:160]
+            contour_elevation = (elev_min + elev_max) / 2.0
+            feature_key = self._controlling_contour_output_key(
+                geometry,
+                contour_elevation,
+                transition_id,
+            )
+            if feature_key in seen_output_keys:
+                continue
+            seen_output_keys.add(feature_key)
+            feature = QgsFeature(fields)
+            feature.setGeometry(QgsGeometry(geometry))
+            feature.setAttributes(
+                [
+                    contour_id,
+                    transition_id,
+                    "Transition",
+                    contour_elevation,
+                    "OLS Controlling Planar Transitions",
+                    "horizontal_planar_transition",
+                ]
+            )
+            features.append(feature)
+            contour_id += 1
+
         if not features:
             QgsMessageLog.logMessage(
                 "Controlling OLS clipped contours POC skipped: registered contours did not intersect matching regions "
+                "and no horizontal planar transitions were produced "
                 f"after {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
@@ -3933,6 +3994,23 @@ class ControllingOlsEngineMixin:
         rounded_points = tuple((int(round(point.x() * 1000.0)), int(round(point.y() * 1000.0))) for point in line_points)
         reversed_points = tuple(reversed(rounded_points))
         return rounded_points if rounded_points <= reversed_points else reversed_points
+
+    def _controlling_contour_output_key(
+        self,
+        geometry: QgsGeometry,
+        contour_elevation_m: Optional[float],
+        surface_id: str,
+    ) -> Tuple[str, Optional[int], str]:
+        try:
+            geometry_key = geometry.asWkt(3)
+        except Exception:
+            geometry_key = str(id(geometry))
+        elevation_key = (
+            int(round(float(contour_elevation_m) * 1000.0))
+            if contour_elevation_m is not None
+            else None
+        )
+        return geometry_key, elevation_key, surface_id
 
     def _deduplicate_controlling_transition_features(self, features: List[QgsFeature]) -> List[QgsFeature]:
         deduplicated: List[QgsFeature] = []
