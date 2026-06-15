@@ -3828,7 +3828,7 @@ class ControllingOlsEngineMixin:
                 clipped = None
             _add_clipped_parts(clipped)
 
-            if contour.surface_type in {"Conical", "Transitional"}:
+            if contour.surface_type in {"Approach", "Conical", "TOCS", "Transitional"}:
                 try:
                     tolerant_clip_geometry = clip_geometry.buffer(
                         CONTROLLING_CONTOUR_CLIP_TOLERANCE_M,

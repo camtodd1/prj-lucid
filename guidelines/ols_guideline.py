@@ -2911,6 +2911,7 @@ class OlsGuidelineMixin:
         outward_azimuth: float,
         end_desig: str,
         threshold_elevation: Optional[float],
+        inner_horizontal_elevation_amsl: Optional[float] = None,
     ) -> Tuple[List[QgsFeature], List[QgsFeature]]:
         """
         Generates a list of Approach Surface section features (polygons)
@@ -3146,6 +3147,12 @@ class OlsGuidelineMixin:
 
                     contour_elevs.add(round(start_elev, 6))
 
+                if inner_horizontal_elevation_amsl is not None:
+                    lower_elev = min(start_elev, end_elev)
+                    upper_elev = max(start_elev, end_elev)
+                    if lower_elev - 1e-6 <= inner_horizontal_elevation_amsl <= upper_elev + 1e-6:
+                        contour_elevs.add(round(inner_horizontal_elevation_amsl, 6))
+
                 # --- Add a contour at the very end of the final section if it's horizontal ---
                 if abs(section_slope) < 1e-9 and i == len(sections) - 1:
                     contour_elevs.add(round(end_elev, 6))
@@ -3227,6 +3234,7 @@ class OlsGuidelineMixin:
         outward_azimuth: float,
         end_desig: str,
         origin_elevation: Optional[float],
+        inner_horizontal_elevation_amsl: Optional[float] = None,
     ) -> Tuple[Optional[QgsFeature], List[QgsFeature]]:
         """
         Generates a single Take-Off Climb Surface (TOCS) feature and a list of contour features.
@@ -3475,6 +3483,12 @@ class OlsGuidelineMixin:
             # Always add start and end elevation
             contour_elevs.add(round(start_elev, 6))
             contour_elevs.add(round(end_elev, 6))
+
+            if inner_horizontal_elevation_amsl is not None:
+                lower_elev = min(start_elev, end_elev)
+                upper_elev = max(start_elev, end_elev)
+                if lower_elev - 1e-6 <= inner_horizontal_elevation_amsl <= upper_elev + 1e-6:
+                    contour_elevs.add(round(inner_horizontal_elevation_amsl, 6))
 
             contour_elevs = sorted(contour_elevs)
 
@@ -4095,6 +4109,7 @@ class OlsGuidelineMixin:
                     config["approach_surface_outward_azimuth"],
                     current_desig,
                     config["landing_threshold_elev"],
+                    IHS_ELEVATION_AMSL,
                 )
                 if app_sections:
                     approach_poly_features.extend(app_sections)
@@ -4147,6 +4162,7 @@ class OlsGuidelineMixin:
                         config["tocs_flight_path_azimuth"],
                         current_desig,
                         tocs_actual_start_elevation,
+                        IHS_ELEVATION_AMSL,
                     )
                     if tocs_feat:
                         tocs_poly_features.append(tocs_feat)
