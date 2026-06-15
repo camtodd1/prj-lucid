@@ -322,18 +322,8 @@ def _diagnose_conical_overlaps(plugin: SafeguardingBuilder) -> None:
         reverse_fallback_boundary = engine._fallback_pair_boundary_geometry(overlap, conical, candidate)
         lower_boundary = None
         conical_boundary = None
-        try:
-            lower_boundary = lower_region.boundary() if lower_region is not None and not lower_region.isEmpty() else None
-        except Exception:
-            lower_boundary = None
-        try:
-            conical_boundary = (
-                conical_lower_region.boundary()
-                if conical_lower_region is not None and not conical_lower_region.isEmpty()
-                else None
-            )
-        except Exception:
-            conical_boundary = None
+        lower_boundary = engine._normalised_boundary_geometry(lower_region)
+        conical_boundary = engine._normalised_boundary_geometry(conical_lower_region)
         curve = None
         if candidate.model == "axis" and conical_model is not None:
             axis = engine._axis_model(candidate)

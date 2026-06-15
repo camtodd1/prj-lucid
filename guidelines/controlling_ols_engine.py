@@ -296,6 +296,26 @@ class PlanarControllingOlsEngine:
             return []
         return rings
 
+    def _polygon_boundary_geometry(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
+        """Return polygon boundary linework without relying on QgsGeometry.boundary()."""
+        boundary_lines: List[QgsGeometry] = []
+        for ring in self._polygon_boundary_parts(geometry):
+            if len(ring) < 2:
+                continue
+            ring_points = list(ring)
+            if ring_points[0].distance(ring_points[-1]) > 1e-6:
+                ring_points.append(ring_points[0])
+            line = QgsGeometry.fromPolylineXY(ring_points)
+            if line is not None and not line.isEmpty():
+                boundary_lines.append(line)
+        if not boundary_lines:
+            return None
+        try:
+            combined = QgsGeometry.unaryUnion(boundary_lines) if len(boundary_lines) > 1 else boundary_lines[0]
+        except Exception:
+            combined = boundary_lines[0]
+        return combined if combined is not None and not combined.isEmpty() else None
+
     def _controllers_across_segment(
         self,
         start_point: QgsPointXY,
@@ -334,7 +354,11 @@ class PlanarControllingOlsEngine:
                 if first_candidate.surface_id == second_candidate.surface_id:
                     continue
                 try:
-                    boundary = first_region.boundary().intersection(second_region.boundary())
+                    first_boundary = self._normalised_boundary_geometry(first_region)
+                    second_boundary = self._normalised_boundary_geometry(second_region)
+                    if first_boundary is None or second_boundary is None:
+                        continue
+                    boundary = first_boundary.intersection(second_boundary)
                 except Exception:
                     continue
                 for line_points in self._line_parts(boundary):
@@ -798,8 +822,7 @@ class PlanarControllingOlsEngine:
             if geometry.type() == QgsWkbTypes.LineGeometry:
                 return self._line_parts(geometry)
             if geometry.type() == QgsWkbTypes.PolygonGeometry:
-                boundary = geometry.boundary()
-                return self._line_parts(boundary)
+                return self._polygon_boundary_parts(geometry)
             if hasattr(geometry, "asGeometryCollection"):
                 parts: List[List[QgsPointXY]] = []
                 for part_geom in geometry.asGeometryCollection():
@@ -859,11 +882,14 @@ class PlanarControllingOlsEngine:
         if base_footprint is None or base_footprint.isEmpty():
             return None
         try:
-            offset_geometry = (
-                QgsGeometry(base_footprint).boundary()
+            offset_source = (
+                QgsGeometry(base_footprint)
                 if distance <= 1e-6
-                else QgsGeometry(base_footprint).buffer(distance, CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS).boundary()
+                else QgsGeometry(base_footprint).buffer(distance, CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS)
             )
+            offset_geometry = self._normalised_boundary_geometry(offset_source)
+            if offset_geometry is None or offset_geometry.isEmpty():
+                return None
             return offset_geometry.intersection(domain)
         except Exception:
             return None
@@ -901,10 +927,7 @@ class PlanarControllingOlsEngine:
                 self._region_solve_stats.get("global_fallback_lower_full_count", 0.0) + 1.0
             )
             return None
-        try:
-            raw_boundary = clipped_lower.boundary()
-        except Exception:
-            return None
+        raw_boundary = self._normalised_boundary_geometry(clipped_lower)
         if raw_boundary is None or raw_boundary.isEmpty():
             return None
 
@@ -1238,6 +1261,10 @@ class PlanarControllingOlsEngine:
         return combined if combined is not None and not combined.isEmpty() else None
 
     def _normalised_boundary_geometry(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
+        if geometry is None or geometry.isEmpty():
+            return None
+        if geometry.type() == QgsWkbTypes.PolygonGeometry:
+            return self._polygon_boundary_geometry(geometry)
         try:
             boundary = geometry.boundary()
         except Exception:
