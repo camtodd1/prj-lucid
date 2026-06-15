@@ -3763,12 +3763,12 @@ class ControllingOlsEngineMixin:
         start_time = time.perf_counter()
         if not contours:
             QgsMessageLog.logMessage(
-                "Controlling OLS clipped contours POC skipped: no source contours were registered "
+                "Controlling OLS clipped contours POC: no source contours were registered; "
+                "targeted horizontal transition contours will still be checked "
                 f"after {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
-            return False
 
         region_parts = [
             (candidate, region)
@@ -3863,9 +3863,82 @@ class ControllingOlsEngineMixin:
             features.append(feature)
             contour_id += 1
 
+        transition_fields = QgsFields(
+            [
+                QgsField("transition_id", QVariant.String, self.tr("Transition ID"), 160),
+                QgsField("surface", QVariant.String, self.tr("Surface"), 50),
+                QgsField("elev_min", QVariant.Double, self.tr("Min Elev AMSL"), 12, 3),
+                QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
+                QgsField("adjacent", QVariant.String, self.tr("Adjacent Surfaces"), 254),
+                QgsField("method", QVariant.String, self.tr("Method"), 50),
+            ]
+        )
+        surface_type_by_id = {candidate.surface_id: candidate.surface_type for candidate in engine.candidates}
+        targeted_pairs = {
+            frozenset(("Approach", "TOCS")),
+            frozenset(("Approach", "OHS")),
+            frozenset(("TOCS", "OHS")),
+        }
+        seen_transition_contours = set()
+        transition_features = self._deduplicate_controlling_transition_features(
+            engine.region_boundary_features(transition_fields)
+        )
+        for transition_feature in transition_features:
+            adjacent = str(transition_feature.attribute("adjacent") or "")
+            adjacent_ids = adjacent.split("|")
+            if len(adjacent_ids) != 2:
+                continue
+            adjacent_surface_types = [
+                surface_type_by_id.get(surface_id)
+                for surface_id in adjacent_ids
+            ]
+            if None in adjacent_surface_types:
+                continue
+            if frozenset(adjacent_surface_types) not in targeted_pairs:
+                continue
+            try:
+                elev_min = float(transition_feature.attribute("elev_min"))
+                elev_max = float(transition_feature.attribute("elev_max"))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(elev_min) or not math.isfinite(elev_max):
+                continue
+            if abs(elev_max - elev_min) > 0.01:
+                continue
+            geometry = transition_feature.geometry()
+            if geometry is None or geometry.isEmpty():
+                continue
+            line_geometry = self._controlling_contour_geometry_from_parts(engine._line_parts(geometry))
+            if line_geometry is None or line_geometry.isEmpty():
+                continue
+            contour_elevation = (elev_min + elev_max) / 2.0
+            try:
+                geometry_key = line_geometry.asWkt(3)
+            except Exception:
+                geometry_key = str(id(line_geometry))
+            transition_key = (adjacent, int(round(contour_elevation * 1000.0)), geometry_key)
+            if transition_key in seen_transition_contours:
+                continue
+            seen_transition_contours.add(transition_key)
+            feature = QgsFeature(fields)
+            feature.setGeometry(line_geometry)
+            feature.setAttributes(
+                [
+                    contour_id,
+                    adjacent[:160],
+                    "Transition",
+                    contour_elevation,
+                    "OLS Controlling Planar Transitions",
+                    "targeted_horizontal_transition",
+                ]
+            )
+            features.append(feature)
+            contour_id += 1
+
         if not features:
             QgsMessageLog.logMessage(
                 "Controlling OLS clipped contours POC skipped: registered contours did not intersect matching regions "
+                "and no targeted horizontal transition contours were produced "
                 f"after {time.perf_counter() - start_time:.2f}s.",
                 PLUGIN_TAG,
                 Qgis.Info,
