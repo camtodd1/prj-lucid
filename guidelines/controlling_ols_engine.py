@@ -2312,6 +2312,11 @@ class PlanarControllingOlsEngine:
                 points,
                 AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
             )
+            simplified = self._condition_transition_curve_for_polygonize(
+                simplified,
+                overlap,
+                AXIS_CONICAL_SAMPLED_CURVE_ENDPOINT_EXTENSION_M,
+            )
             if len(simplified) < 2:
                 return
             geometry = QgsGeometry.fromPolylineXY(simplified)
@@ -3096,6 +3101,7 @@ class PlanarControllingOlsEngine:
         self,
         curve_points: Sequence[QgsPointXY],
         overlap: QgsGeometry,
+        endpoint_extension_m: float = AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M,
     ) -> List[QgsPointXY]:
         conditioned = [QgsPointXY(point.x(), point.y()) for point in curve_points]
         if len(conditioned) < 2 or overlap is None or overlap.isEmpty():
@@ -3104,11 +3110,13 @@ class PlanarControllingOlsEngine:
             conditioned[0],
             conditioned[1],
             overlap,
+            endpoint_extension_m,
         )
         conditioned[-1] = self._condition_transition_curve_endpoint(
             conditioned[-1],
             conditioned[-2],
             overlap,
+            endpoint_extension_m,
         )
         return conditioned
 
@@ -3117,6 +3125,7 @@ class PlanarControllingOlsEngine:
         endpoint: QgsPointXY,
         adjacent_point: QgsPointXY,
         overlap: QgsGeometry,
+        endpoint_extension_m: float = AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M,
     ) -> QgsPointXY:
         nearest_boundary_point, nearest_distance = self._nearest_boundary_point(overlap, endpoint)
         if (
@@ -3135,7 +3144,7 @@ class PlanarControllingOlsEngine:
             endpoint,
             direction,
             overlap,
-            AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M,
+            endpoint_extension_m,
         )
         if boundary_point is not None:
             return boundary_point
