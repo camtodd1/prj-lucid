@@ -49,6 +49,7 @@ AXIS_CONICAL_LATERAL_ROOT_MAX_STEP_M = 25.0
 AXIS_CONICAL_LATERAL_ROOT_CONNECT_TOLERANCE_M = 75.0
 AXIS_CONICAL_SAMPLED_CURVE_MIN_LENGTH_M = 2.0
 AXIS_CONICAL_SAMPLED_CURVE_ENDPOINT_EXTENSION_M = 750.0
+AXIS_CONICAL_GLOBAL_LINEWORK_ENDPOINT_EXTENSION_M = 750.0
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -759,7 +760,13 @@ class PlanarControllingOlsEngine:
         needs_fallback = self._pair_needs_fallback_boundary(first_candidate, second_candidate)
         equality = self._global_equality_geometry_for_pair(domain, first_candidate, second_candidate)
         if equality is not None and not equality.isEmpty():
-            equality_count = self._append_linework_geometry(linework, equality, domain=domain)
+            endpoint_extension_m = self._linework_endpoint_extension_for_pair(first_candidate, second_candidate)
+            equality_count = self._append_linework_geometry(
+                linework,
+                equality,
+                domain=domain,
+                endpoint_extension_m=endpoint_extension_m,
+            )
             self._region_solve_stats["global_equality_line_count"] = (
                 self._region_solve_stats.get("global_equality_line_count", 0.0) + float(equality_count)
             )
@@ -792,17 +799,41 @@ class PlanarControllingOlsEngine:
         models = {first_candidate.model, second_candidate.model}
         return "conical" in models and bool(models.intersection({"axis", "plane"}))
 
+    def _pair_is_axis_conical(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> bool:
+        return {first_candidate.model, second_candidate.model} == {"axis", "conical"}
+
+    def _linework_endpoint_extension_for_pair(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> float:
+        if not self._pair_is_axis_conical(first_candidate, second_candidate):
+            return AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M
+        axis_candidate = first_candidate if first_candidate.model == "axis" else second_candidate
+        if axis_candidate.surface_type == "TOCS":
+            return AXIS_CONICAL_GLOBAL_LINEWORK_ENDPOINT_EXTENSION_M
+        return AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M
+
     def _append_linework_geometry(
         self,
         linework: List[QgsGeometry],
         geometry: QgsGeometry,
         domain: Optional[QgsGeometry] = None,
+        endpoint_extension_m: float = AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M,
     ) -> int:
         appended = 0
         for line_points in self._linework_parts(geometry):
             is_closed = bool(line_points and line_points[0].distance(line_points[-1]) <= 1e-6)
             if domain is not None and not is_closed:
-                line_points = self._condition_transition_curve_for_polygonize(line_points, domain)
+                line_points = self._condition_transition_curve_for_polygonize(
+                    line_points,
+                    domain,
+                    endpoint_extension_m,
+                )
             if len(line_points) < 2:
                 continue
             line = QgsGeometry.fromPolylineXY(line_points)
