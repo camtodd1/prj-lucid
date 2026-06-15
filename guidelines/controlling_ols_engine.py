@@ -894,7 +894,7 @@ class PlanarControllingOlsEngine:
 
     def _exclusions_for_candidate(self, candidate: ControllingOlsCandidate) -> List[QgsGeometry]:
         """Return no-OLS exclusion masks that apply to this candidate surface."""
-        if candidate.surface_type not in {"Approach", "IHS", "TOCS", "Transitional"}:
+        if candidate.surface_type not in {"Approach", "IHS", "OHS", "TOCS", "Transitional"}:
             return []
         return self.exclusion_geometries
 

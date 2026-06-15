@@ -239,12 +239,10 @@ offset. This avoids treating a sloping-plane/conical intersection as a simple
 buffer, which is not geometrically correct and can round planar corners or
 place the equality edge at the wrong height.
 
-No-OLS strip-core exclusion masks are applied to runway-related planar
-candidates before competition. These masks suppress IHS, Approach, TOCS, and
-Transitional candidate footprints within the runway strip core/lower-edge
-corridor where no OLS surface should be apparent. OHS is intentionally not
-masked by these strip-core exclusions, so it can remain the controlling
-airport-wide surface where no lower runway-related candidate applies.
+No-OLS strip-core exclusion masks are applied before competition. These masks
+suppress IHS, OHS, Approach, TOCS, and Transitional candidate footprints within
+the runway strip core/lower-edge corridor where no OLS surface should be
+apparent.
 
 The planar region output now includes a stable `region_id` attribute for
 diagnostic labelling and GeoJSON review. The region layer uses the

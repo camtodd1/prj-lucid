@@ -427,6 +427,7 @@ class LayerMixin:
                         "outline_color": outline_color,
                         "outline_width": "0.22",
                         "outline_width_unit": "MM",
+                        "outline_style": "no",
                         "style": "solid",
                     }
                 )
