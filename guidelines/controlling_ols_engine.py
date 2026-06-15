@@ -2261,7 +2261,7 @@ class PlanarControllingOlsEngine:
         if not curve_pieces:
             return None
         try:
-            return QgsGeometry.unaryUnion(curve_pieces) if len(curve_pieces) > 1 else curve_pieces[0]
+            return QgsGeometry.collectGeometry(curve_pieces) if len(curve_pieces) > 1 else curve_pieces[0]
         except Exception:
             return curve_pieces[0]
 
