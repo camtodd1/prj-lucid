@@ -529,6 +529,7 @@ class PlanarControllingOlsEngine:
                 f"linework={int(stats.get('global_linework_count', 0.0))}, "
                 f"eq={int(stats.get('global_equality_line_count', 0.0))}, "
                 f"fallback={int(stats.get('global_fallback_line_count', 0.0))}, "
+                f"fallback_empty={int(stats.get('global_fallback_empty_count', 0.0))}, "
                 f"cells={int(stats.get('global_cell_count', 0.0))}, "
                 f"assigned={int(stats.get('global_assigned_cell_count', 0.0))}, "
                 f"regions={int(stats.get('global_region_count', 0.0))}, "
@@ -726,13 +727,25 @@ class PlanarControllingOlsEngine:
                 self._region_solve_stats.get("global_equality_line_count", 0.0) + float(equality_count)
             )
 
-        if equality_count and not self._pair_needs_fallback_boundary(first_candidate, second_candidate):
+        needs_fallback = self._pair_needs_fallback_boundary(first_candidate, second_candidate)
+        if equality_count and not needs_fallback:
             return
-        fallback = self._fallback_pair_boundary_geometry(domain, first_candidate, second_candidate)
-        if fallback is not None and not fallback.isEmpty():
-            fallback_count = self._append_linework_geometry(linework, fallback, domain=domain)
-            self._region_solve_stats["global_fallback_line_count"] = (
-                self._region_solve_stats.get("global_fallback_line_count", 0.0) + float(fallback_count)
+        fallback_count = 0
+        fallback_pairs = (
+            (first_candidate, second_candidate),
+            (second_candidate, first_candidate),
+        ) if needs_fallback else ((first_candidate, second_candidate),)
+        for lower_candidate, higher_candidate in fallback_pairs:
+            fallback = self._fallback_pair_boundary_geometry(domain, lower_candidate, higher_candidate)
+            if fallback is None or fallback.isEmpty():
+                continue
+            fallback_count += self._append_linework_geometry(linework, fallback, domain=domain)
+        self._region_solve_stats["global_fallback_line_count"] = (
+            self._region_solve_stats.get("global_fallback_line_count", 0.0) + float(fallback_count)
+        )
+        if needs_fallback and fallback_count <= 0:
+            self._region_solve_stats["global_fallback_empty_count"] = (
+                self._region_solve_stats.get("global_fallback_empty_count", 0.0) + 1.0
             )
 
     def _pair_needs_fallback_boundary(
@@ -750,8 +763,9 @@ class PlanarControllingOlsEngine:
         domain: Optional[QgsGeometry] = None,
     ) -> int:
         appended = 0
-        for line_points in self._line_parts(geometry):
-            if domain is not None:
+        for line_points in self._linework_parts(geometry):
+            is_closed = bool(line_points and line_points[0].distance(line_points[-1]) <= 1e-6)
+            if domain is not None and not is_closed:
                 line_points = self._condition_transition_curve_for_polygonize(line_points, domain)
             if len(line_points) < 2:
                 continue
@@ -760,6 +774,25 @@ class PlanarControllingOlsEngine:
                 linework.append(line)
                 appended += 1
         return appended
+
+    def _linework_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
+        """Extract linework, using polygon boundaries when fallback regions are polygonal."""
+        if geometry is None or geometry.isEmpty():
+            return []
+        try:
+            if geometry.type() == QgsWkbTypes.LineGeometry:
+                return self._line_parts(geometry)
+            if geometry.type() == QgsWkbTypes.PolygonGeometry:
+                boundary = geometry.boundary()
+                return self._line_parts(boundary)
+            if hasattr(geometry, "asGeometryCollection"):
+                parts: List[List[QgsPointXY]] = []
+                for part_geom in geometry.asGeometryCollection():
+                    parts.extend(self._linework_parts(part_geom))
+                return parts
+        except Exception:
+            return []
+        return []
 
     def _global_equality_geometry_for_pair(
         self,
@@ -956,25 +989,36 @@ class PlanarControllingOlsEngine:
         if len(valid_parts) < 2:
             return valid_parts[0] if valid_parts else None
 
-        segment_counts: Dict[Tuple[Tuple[int, int], Tuple[int, int]], int] = {}
-        segment_points: Dict[Tuple[Tuple[int, int], Tuple[int, int]], Tuple[QgsPointXY, QgsPointXY]] = {}
+        coverage = self._combined_area_geometry(valid_parts)
+        if not self._has_polygon_area(coverage):
+            return None
+
+        raw_linework: List[QgsGeometry] = []
         for geometry in valid_parts:
             for ring in self._polygon_boundary_parts(geometry):
-                for start_point, end_point in zip(ring[:-1], ring[1:]):
+                if len(ring) < 2:
+                    continue
+                line = QgsGeometry.fromPolylineXY(ring)
+                if line is not None and not line.isEmpty():
+                    raw_linework.append(line)
+        if len(raw_linework) < 3:
+            return None
+
+        noded_linework = self._noded_global_linework(raw_linework)
+        exterior_linework: List[QgsGeometry] = []
+        for line in noded_linework:
+            for line_points in self._line_parts(line):
+                for start_point, end_point in zip(line_points[:-1], line_points[1:]):
                     if start_point.distance(end_point) <= 1e-9:
                         continue
-                    key = self._boundary_segment_key(start_point, end_point)
-                    segment_counts[key] = segment_counts.get(key, 0) + 1
-                    segment_points.setdefault(key, (start_point, end_point))
-
-        exterior_linework: List[QgsGeometry] = []
-        for key, count in segment_counts.items():
-            if count != 1:
-                continue
-            start_point, end_point = segment_points[key]
-            segment = QgsGeometry.fromPolylineXY([start_point, end_point])
-            if segment is not None and not segment.isEmpty():
-                exterior_linework.append(segment)
+                    if self._segment_is_internal_to_coverage(start_point, end_point, coverage):
+                        continue
+                    segment = QgsGeometry.fromPolylineXY([start_point, end_point])
+                    if segment is not None and not segment.isEmpty():
+                        exterior_linework.append(segment)
+        if len(exterior_linework) < 3:
+            return None
+        exterior_linework = self._noded_global_linework(exterior_linework)
         if len(exterior_linework) < 3:
             return None
 
@@ -985,9 +1029,6 @@ class PlanarControllingOlsEngine:
         if not self._has_polygon_area(polygonized):
             return None
 
-        coverage = self._combined_area_geometry(valid_parts)
-        if not self._has_polygon_area(coverage):
-            return None
         kept_faces: List[QgsGeometry] = []
         for face in self._polygon_parts(polygonized):
             try:
@@ -998,15 +1039,41 @@ class PlanarControllingOlsEngine:
                 continue
             try:
                 if coverage.intersects(sample_point):
-                    kept_faces.append(face)
+                    kept_faces.append(face.intersection(coverage))
             except Exception:
                 continue
+        kept_faces = [part for face in kept_faces for part in self._polygon_parts(face)]
         if not kept_faces:
             return None
         try:
             return QgsGeometry.unaryUnion(kept_faces) if len(kept_faces) > 1 else QgsGeometry(kept_faces[0])
         except Exception:
             return QgsGeometry(kept_faces[0])
+
+    def _segment_is_internal_to_coverage(
+        self,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+        coverage: QgsGeometry,
+    ) -> bool:
+        length = start_point.distance(end_point)
+        if length <= 1e-9 or not self._has_polygon_area(coverage):
+            return False
+        dx = (end_point.x() - start_point.x()) / length
+        dy = (end_point.y() - start_point.y()) / length
+        offset = min(0.25, max(CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M, length * 0.01))
+        midpoint = QgsPointXY(
+            (start_point.x() + end_point.x()) / 2.0,
+            (start_point.y() + end_point.y()) / 2.0,
+        )
+        left_point = QgsPointXY(midpoint.x() - (dy * offset), midpoint.y() + (dx * offset))
+        right_point = QgsPointXY(midpoint.x() + (dy * offset), midpoint.y() - (dx * offset))
+        try:
+            left_inside = coverage.intersects(QgsGeometry.fromPointXY(left_point))
+            right_inside = coverage.intersects(QgsGeometry.fromPointXY(right_point))
+        except Exception:
+            return False
+        return bool(left_inside and right_inside)
 
     def _combined_area_geometry(self, geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
         valid_parts = [QgsGeometry(geometry) for geometry in geometries if self._has_polygon_area(geometry)]
