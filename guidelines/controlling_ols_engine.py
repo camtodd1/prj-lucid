@@ -35,6 +35,9 @@ CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
+CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M = 0.20
+AXIS_CONICAL_FOOTPRINT_SNAP_TOLERANCE_M = 5.0
+AXIS_CONICAL_FOOTPRINT_SNAP_VERTICAL_TOLERANCE_M = 0.25
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_FULL_OVERLAP_TRIANGULATION_ENABLED = True
@@ -885,13 +888,140 @@ class PlanarControllingOlsEngine:
             axis = self._axis_model(other_candidate)
             if conical_model is None or axis is None:
                 return None
-            return self._axis_conical_transition_curve(
+            equality = self._axis_conical_transition_curve(
                 axis,
                 conical_model,
                 domain,
                 deduplicate_curves=False,
             )
+            if other_candidate.surface_type in {"Approach", "TOCS"}:
+                return self._snap_axis_conical_curve_to_axis_footprint_boundary(
+                    equality,
+                    domain,
+                    other_candidate,
+                    conical_candidate,
+                )
+            return equality
         return None
+
+    def _snap_axis_conical_curve_to_axis_footprint_boundary(
+        self,
+        equality: Optional[QgsGeometry],
+        domain: QgsGeometry,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+    ) -> Optional[QgsGeometry]:
+        if equality is None or equality.isEmpty() or not self._has_polygon_area(domain):
+            return equality
+
+        axis_boundary = self._normalised_boundary_geometry(self._effective_footprint(axis_candidate))
+        if axis_boundary is None or axis_boundary.isEmpty():
+            return equality
+
+        snapped_boundary_segments = self._axis_boundary_segments_near_curve(
+            axis_boundary,
+            equality,
+            domain,
+            axis_candidate,
+            conical_candidate,
+        )
+        if not snapped_boundary_segments:
+            return equality
+
+        kept_equality_segments: List[QgsGeometry] = []
+        for line_points in self._linework_parts(equality):
+            if len(line_points) < 2:
+                continue
+            current_run: List[QgsPointXY] = []
+            for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+                if start_point.distance(end_point) <= 1e-9:
+                    continue
+                midpoint = QgsPointXY(
+                    (start_point.x() + end_point.x()) / 2.0,
+                    (start_point.y() + end_point.y()) / 2.0,
+                )
+                try:
+                    near_axis_boundary = (
+                        QgsGeometry.fromPointXY(midpoint).distance(axis_boundary)
+                        <= AXIS_CONICAL_FOOTPRINT_SNAP_TOLERANCE_M
+                    )
+                except Exception:
+                    near_axis_boundary = False
+                if near_axis_boundary:
+                    if len(current_run) >= 2:
+                        segment = QgsGeometry.fromPolylineXY(current_run)
+                        if segment is not None and not segment.isEmpty():
+                            kept_equality_segments.append(segment)
+                    current_run = []
+                    continue
+                if not current_run:
+                    current_run.append(start_point)
+                current_run.append(end_point)
+            if len(current_run) >= 2:
+                segment = QgsGeometry.fromPolylineXY(current_run)
+                if segment is not None and not segment.isEmpty():
+                    kept_equality_segments.append(segment)
+
+        self._region_solve_stats["axis_conical_footprint_snap_count"] = (
+            self._region_solve_stats.get("axis_conical_footprint_snap_count", 0.0)
+            + float(len(snapped_boundary_segments))
+        )
+        return self._collected_line_geometry(kept_equality_segments + snapped_boundary_segments)
+
+    def _axis_boundary_segments_near_curve(
+        self,
+        axis_boundary: QgsGeometry,
+        equality: QgsGeometry,
+        domain: QgsGeometry,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+    ) -> List[QgsGeometry]:
+        try:
+            search_domain = domain.buffer(AXIS_CONICAL_FOOTPRINT_SNAP_TOLERANCE_M, 8)
+            candidate_boundary = axis_boundary.intersection(search_domain)
+        except Exception:
+            candidate_boundary = axis_boundary
+
+        snapped_segments: List[QgsGeometry] = []
+        for line_points in self._linework_parts(candidate_boundary):
+            if len(line_points) < 2:
+                continue
+            current_run: List[QgsPointXY] = []
+            for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+                if start_point.distance(end_point) <= 1e-9:
+                    continue
+                midpoint = QgsPointXY(
+                    (start_point.x() + end_point.x()) / 2.0,
+                    (start_point.y() + end_point.y()) / 2.0,
+                )
+                point_geometry = QgsGeometry.fromPointXY(midpoint)
+                try:
+                    near_curve = point_geometry.distance(equality) <= AXIS_CONICAL_FOOTPRINT_SNAP_TOLERANCE_M
+                    in_domain = domain.buffer(0.10, 4).intersects(point_geometry)
+                except Exception:
+                    near_curve = False
+                    in_domain = False
+                difference = self._candidate_difference(axis_candidate, conical_candidate, midpoint)
+                near_vertical_tie = (
+                    difference is not None
+                    and math.isfinite(difference)
+                    and abs(difference) <= AXIS_CONICAL_FOOTPRINT_SNAP_VERTICAL_TOLERANCE_M
+                )
+                if near_curve and in_domain and near_vertical_tie:
+                    if not current_run:
+                        current_run.append(start_point)
+                    current_run.append(end_point)
+                    continue
+                if len(current_run) >= 2:
+                    segment = QgsGeometry.fromPolylineXY(current_run)
+                    if segment is not None and not segment.isEmpty():
+                        snapped_segments.append(segment)
+                current_run = []
+            if len(current_run) >= 2:
+                segment = QgsGeometry.fromPolylineXY(current_run)
+                if segment is not None and not segment.isEmpty():
+                    snapped_segments.append(segment)
+        return snapped_segments
 
     def _conical_constant_equality_geometry(
         self,
@@ -1004,10 +1134,69 @@ class PlanarControllingOlsEngine:
         sample_points.extend(self._geometry_sample_points(cell)[:5])
 
         for point_xy in sample_points:
-            result = self.controlling_candidate_at_xy(point_xy)
+            result = self._controlling_candidate_at_xy_for_global_cell(point_xy)
             if result is not None:
                 return result
         return None
+
+    def _controlling_candidate_at_xy_for_global_cell(
+        self,
+        point_xy: QgsPointXY,
+    ) -> Optional[Tuple[ControllingOlsCandidate, float]]:
+        """Return the cell controller, treating near-tied axis/plane-vs-conical edges as coincident.
+
+        CASA OLS construction can produce adjacent planar and conical edge linework that is
+        topologically coincident in plan but differs by a few centimetres in Z because each
+        source surface carries its own elevation model. For global cells, letting those tiny
+        differences win creates long, narrow conical slivers along TOCS/Approach footprint
+        boundaries. Keep the exact lower-envelope evaluators intact, but label those
+        near-coincident cells to the finite planar surface so the controlling region outline
+        follows the constructed OLS boundary.
+        """
+        evaluated: List[Tuple[ControllingOlsCandidate, float]] = []
+        for candidate in self.candidates:
+            footprint = self._effective_footprint(candidate)
+            if footprint is None or footprint.isEmpty() or not footprint.intersects(QgsGeometry.fromPointXY(point_xy)):
+                continue
+            elevation = candidate.elevation_at_xy(point_xy)
+            if elevation is None or not math.isfinite(elevation):
+                continue
+            evaluated.append((candidate, elevation))
+        if not evaluated:
+            return None
+
+        evaluated.sort(key=lambda item: item[1])
+        best_candidate, best_elevation = evaluated[0]
+        if best_candidate.model != "conical":
+            return best_candidate, best_elevation
+
+        tolerance = max(0.0, CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M)
+        if tolerance <= 0.0:
+            return best_candidate, best_elevation
+
+        near_planar = [
+            (candidate, elevation)
+            for candidate, elevation in evaluated[1:]
+            if candidate.model in {"axis", "plane"}
+            and candidate.surface_type in {"Approach", "TOCS"}
+            and elevation <= best_elevation + tolerance
+        ]
+        if not near_planar:
+            return best_candidate, best_elevation
+
+        near_planar.sort(key=lambda item: (self._global_cell_tie_priority(item[0]), item[1]))
+        return near_planar[0]
+
+    def _global_cell_tie_priority(self, candidate: ControllingOlsCandidate) -> int:
+        priorities = {
+            "Approach": 0,
+            "TOCS": 1,
+            "Transitional": 2,
+            "IHS": 3,
+            "Conical": 4,
+            "OHS": 5,
+        }
+        return priorities.get(candidate.surface_type, 99)
 
     def _merge_region_parts_by_candidate(
         self,
