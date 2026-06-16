@@ -32,10 +32,11 @@ CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS = 8
 CONTROLLING_REGION_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M = 0.02
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
+CONTROLLING_REGION_SMALL_HOLE_MAX_AREA_M2 = 5.0
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
-CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M = 0.20
+CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M = 0.10
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_FULL_OVERLAP_TRIANGULATION_ENABLED = True
@@ -339,10 +340,10 @@ class PlanarControllingOlsEngine:
         nx = -dy / length
         ny = dx / length
         for offset in [0.05, 0.1, 0.25, 0.5, 1.0, max(min(length * 0.02, 5.0), 0.25), 10.0]:
-            left = self.controlling_candidate_at_xy(
+            left = self._controlling_candidate_at_xy_for_global_cell(
                 QgsPointXY(mid_point.x() + (nx * offset), mid_point.y() + (ny * offset))
             )
-            right = self.controlling_candidate_at_xy(
+            right = self._controlling_candidate_at_xy_for_global_cell(
                 QgsPointXY(mid_point.x() - (nx * offset), mid_point.y() - (ny * offset))
             )
             if left is None or right is None:
@@ -886,12 +887,28 @@ class PlanarControllingOlsEngine:
             axis = self._axis_model(other_candidate)
             if conical_model is None or axis is None:
                 return None
-            return self._axis_conical_transition_curve(
+            equality = self._axis_conical_transition_curve(
                 axis,
                 conical_model,
                 domain,
                 deduplicate_curves=False,
             )
+            if other_candidate.surface_type == "TOCS":
+                tolerance = max(0.0, CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M)
+                if tolerance > 0.0:
+                    tie_boundary = self._axis_conical_transition_curve(
+                        axis,
+                        conical_model,
+                        domain,
+                        deduplicate_curves=False,
+                        axis_vertical_offset_m=tolerance,
+                    )
+                    if tie_boundary is not None and not tie_boundary.isEmpty():
+                        if equality is None or equality.isEmpty():
+                            equality = tie_boundary
+                        else:
+                            equality = self._collected_line_geometry([equality, tie_boundary])
+            return equality
         return None
 
     def _conical_constant_equality_geometry(
@@ -1498,7 +1515,7 @@ class PlanarControllingOlsEngine:
             pass
         sample_points.extend(self._geometry_sample_points(gap_geometry))
         for point_xy in sample_points:
-            result = self.controlling_candidate_at_xy(point_xy)
+            result = self._controlling_candidate_at_xy_for_global_cell(point_xy)
             if result is not None:
                 return result[0]
         return None
@@ -1552,7 +1569,12 @@ class PlanarControllingOlsEngine:
         opened = self._open_boundary_touching_holes_geometry(geometry)
         if opened is not None and not opened.isEmpty():
             candidates.append(opened)
-        despiked = self._despiked_polygon_geometry(opened if opened is not None else geometry)
+        small_holes_filled = self._filled_small_interior_holes_geometry(opened if opened is not None else geometry)
+        if small_holes_filled is not None and not small_holes_filled.isEmpty():
+            candidates.append(small_holes_filled)
+        despiked = self._despiked_polygon_geometry(
+            small_holes_filled if small_holes_filled is not None else (opened if opened is not None else geometry)
+        )
         if despiked is not None and not despiked.isEmpty():
             candidates.append(despiked)
         candidates.append(geometry)
@@ -1574,6 +1596,36 @@ class PlanarControllingOlsEngine:
         except Exception:
             pass
         return []
+
+    def _filled_small_interior_holes_geometry(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
+        """Drop tiny interior rings left by noding noise while preserving real no-OLS voids."""
+        changed = False
+        rebuilt_polygons = []
+        try:
+            polygons = geometry.asMultiPolygon() if geometry.isMultipart() else [geometry.asPolygon()]
+        except Exception:
+            return None
+        for polygon in polygons:
+            if not polygon or not polygon[0]:
+                continue
+            rebuilt_polygon = [polygon[0]]
+            for ring in polygon[1:]:
+                if len(ring) < 4:
+                    changed = True
+                    continue
+                hole_area = abs(self._ring_signed_area(ring))
+                if hole_area <= CONTROLLING_REGION_SMALL_HOLE_MAX_AREA_M2:
+                    changed = True
+                    continue
+                rebuilt_polygon.append(ring)
+            rebuilt_polygons.append(rebuilt_polygon)
+        if not rebuilt_polygons:
+            return None
+        if not changed:
+            return QgsGeometry(geometry)
+        if len(rebuilt_polygons) == 1:
+            return QgsGeometry.fromPolygonXY(rebuilt_polygons[0])
+        return QgsGeometry.fromMultiPolygonXY(rebuilt_polygons)
 
     def _despiked_polygon_geometry(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
         """Remove zero-width out-and-back ring spikes without buffering corners."""
@@ -2302,6 +2354,7 @@ class PlanarControllingOlsEngine:
         conical_model: dict,
         overlap: QgsGeometry,
         deduplicate_curves: bool = False,
+        axis_vertical_offset_m: float = 0.0,
     ) -> Optional[QgsGeometry]:
         station_range = self._axis_station_range(axis, overlap)
         conical_slope = float(conical_model["slope"])
@@ -2312,7 +2365,11 @@ class PlanarControllingOlsEngine:
         if max_station - min_station <= 1e-6:
             return None
 
-        a_offset = (float(axis["origin_elevation_m"]) - float(conical_model["base_elevation_m"])) / conical_slope
+        a_offset = (
+            float(axis["origin_elevation_m"])
+            - float(axis_vertical_offset_m)
+            - float(conical_model["base_elevation_m"])
+        ) / conical_slope
         b_slope = float(axis["slope"]) / conical_slope
         max_distance = conical_model.get("max_distance_m")
         max_distance = float(max_distance) if max_distance is not None else None
