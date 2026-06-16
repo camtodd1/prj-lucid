@@ -32,11 +32,11 @@ CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS = 8
 CONTROLLING_REGION_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M = 0.02
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
-CONTROLLING_REGION_SMALL_HOLE_MAX_AREA_M2 = 5.0
+CONTROLLING_REGION_SMALL_HOLE_MAX_AREA_M2 = 500.0
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
-CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M = 0.10
+CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M = 0.20
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_FULL_OVERLAP_TRIANGULATION_ENABLED = True
@@ -250,7 +250,7 @@ class PlanarControllingOlsEngine:
     def region_boundary_features(self, fields: QgsFields) -> List[QgsFeature]:
         """Return line features where solved controlling region boundaries change controller."""
         region_parts = self._controlling_region_geometries()
-        features: List[QgsFeature] = []
+        grouped_segments: Dict[Tuple[str, str], Tuple[ControllingOlsCandidate, ControllingOlsCandidate, List[QgsGeometry]]] = {}
         seen_keys = set()
         for region_candidate, region in region_parts:
             for line_points in self._polygon_boundary_parts(region):
@@ -270,24 +270,163 @@ class PlanarControllingOlsEngine:
                     if key in seen_keys:
                         continue
                     seen_keys.add(key)
-                    z_values = self._transition_z_values(segment_points, first_controller, second_controller)
-                    z_line = self._line_points_to_z_geometry(segment_points, z_values)
-                    if z_line is None or z_line.isEmpty():
+                    segment = QgsGeometry.fromPolylineXY(segment_points)
+                    if segment is None or segment.isEmpty():
                         continue
-                    feature = QgsFeature(fields)
-                    feature.setGeometry(z_line)
-                    feature.setAttributes(
-                        [
-                            f"{first_controller.surface_id}|{second_controller.surface_id}"[:160],
-                            "Transition",
-                            min(z_values),
-                            max(z_values),
-                            f"{first_controller.surface_id}|{second_controller.surface_id}"[:254],
-                            "region_boundary",
-                        ]
+                    surface_key = tuple(sorted([first_controller.surface_id, second_controller.surface_id]))
+                    if surface_key not in grouped_segments:
+                        grouped_segments[surface_key] = (first_controller, second_controller, [])
+                    grouped_segments[surface_key][2].append(segment)
+
+        features: List[QgsFeature] = []
+        for first_controller, second_controller, segments in grouped_segments.values():
+            line_parts = self._smoothed_axis_conical_transition_line_parts(
+                first_controller,
+                second_controller,
+                segments,
+            )
+            if not line_parts:
+                line_parts = self._merged_transition_line_parts(segments)
+            for line_points in line_parts:
+                if len(line_points) < 2:
+                    continue
+                z_values = self._transition_z_values(line_points, first_controller, second_controller)
+                z_line = self._line_points_to_z_geometry(line_points, z_values)
+                if z_line is None or z_line.isEmpty():
+                    continue
+                feature = QgsFeature(fields)
+                feature.setGeometry(z_line)
+                feature.setAttributes(
+                    [
+                        f"{first_controller.surface_id}|{second_controller.surface_id}"[:160],
+                        "Transition",
+                        min(z_values),
+                        max(z_values),
+                        f"{first_controller.surface_id}|{second_controller.surface_id}"[:254],
+                        "region_boundary",
+                    ]
                     )
-                    features.append(feature)
+                features.append(feature)
         return features
+
+    def _merged_transition_line_parts(
+        self,
+        segments: Sequence[QgsGeometry],
+        touch_tolerance_m: float = 0.01,
+        simplify_tolerance_m: float = 0.25,
+        min_length_m: float = 0.0,
+    ) -> List[List[QgsPointXY]]:
+        """Merge adjacent transition micro-segments into continuous linework."""
+        line_parts: List[List[QgsPointXY]] = []
+        for segment in segments:
+            if segment is None or segment.isEmpty():
+                continue
+            for points in self._line_parts(segment):
+                if len(points) >= 2:
+                    line_parts.append([QgsPointXY(point.x(), point.y()) for point in points])
+        if not line_parts:
+            return []
+
+        merged_parts: List[List[QgsPointXY]] = []
+        unused = line_parts
+        while unused:
+            current = unused.pop()
+            changed = True
+            while changed:
+                changed = False
+                for index, candidate in enumerate(unused):
+                    if current[-1].distance(candidate[0]) <= touch_tolerance_m:
+                        current.extend(candidate[1:])
+                    elif current[-1].distance(candidate[-1]) <= touch_tolerance_m:
+                        current.extend(reversed(candidate[:-1]))
+                    elif current[0].distance(candidate[-1]) <= touch_tolerance_m:
+                        current = candidate[:-1] + current
+                    elif current[0].distance(candidate[0]) <= touch_tolerance_m:
+                        current = list(reversed(candidate[1:])) + current
+                    else:
+                        continue
+                    unused.pop(index)
+                    changed = True
+                    break
+            if self._path_length(current) < min_length_m:
+                continue
+            simplified = self._simplify_transition_curve_points(current, simplify_tolerance_m)
+            if len(simplified) >= 2 and self._path_length(simplified) >= min_length_m:
+                merged_parts.append(simplified)
+        return merged_parts
+
+    def _smoothed_axis_conical_transition_line_parts(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+        boundary_segments: Sequence[QgsGeometry],
+    ) -> List[List[QgsPointXY]]:
+        """Regenerate axis-vs-conical transition edges from the equality curve near the solved boundary."""
+        if {first_candidate.model, second_candidate.model} != {"axis", "conical"}:
+            return []
+        axis_candidate = first_candidate if first_candidate.model == "axis" else second_candidate
+        conical_candidate = first_candidate if first_candidate.model == "conical" else second_candidate
+        if axis_candidate.surface_type not in {"Approach", "TOCS"}:
+            return []
+
+        boundary = self._collected_line_geometry(boundary_segments)
+        if boundary is None or boundary.isEmpty():
+            return []
+        axis = self._axis_model(axis_candidate)
+        conical_model = self._conical_model(conical_candidate)
+        if axis is None or conical_model is None:
+            return []
+
+        corridor_width = 90.0 if axis_candidate.surface_type == "TOCS" else 35.0
+        try:
+            corridor = boundary.buffer(corridor_width, 12)
+        except Exception:
+            return []
+        if corridor is None or corridor.isEmpty():
+            return []
+
+        try:
+            overlap = self._effective_footprint(axis_candidate).intersection(
+                self._effective_footprint(conical_candidate)
+            )
+            if self._has_polygon_area(overlap):
+                clipped_corridor = corridor.intersection(overlap)
+                if clipped_corridor is not None and not clipped_corridor.isEmpty():
+                    corridor = clipped_corridor
+        except Exception:
+            pass
+
+        curve = self._axis_conical_transition_curve(
+            axis,
+            conical_model,
+            corridor,
+            deduplicate_curves=True,
+        )
+        if curve is None or curve.isEmpty():
+            return []
+
+        curve_geometries: List[QgsGeometry] = []
+        min_length = 25.0 if axis_candidate.surface_type == "TOCS" else 2.0
+        simplify_tolerance = 2.0 if axis_candidate.surface_type == "TOCS" else 0.35
+        touch_tolerance = 120.0 if axis_candidate.surface_type == "TOCS" else 6.0
+        for points in self._line_parts(curve):
+            if len(points) < 2:
+                continue
+            if points[0].distance(points[-1]) <= 0.01 and self._path_length(points) > min_length:
+                continue
+            simplified = self._simplify_transition_curve_points(points, simplify_tolerance)
+            if len(simplified) < 2 or self._path_length(simplified) < min_length:
+                continue
+            geometry = QgsGeometry.fromPolylineXY(simplified)
+            if geometry is not None and not geometry.isEmpty():
+                curve_geometries.append(geometry)
+
+        return self._merged_transition_line_parts(
+            curve_geometries,
+            touch_tolerance_m=touch_tolerance,
+            simplify_tolerance_m=simplify_tolerance,
+            min_length_m=min_length,
+        )
 
     def _polygon_boundary_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
         """Return exterior and interior polygon rings as line point lists."""
@@ -893,21 +1032,6 @@ class PlanarControllingOlsEngine:
                 domain,
                 deduplicate_curves=False,
             )
-            if other_candidate.surface_type == "TOCS":
-                tolerance = max(0.0, CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M)
-                if tolerance > 0.0:
-                    tie_boundary = self._axis_conical_transition_curve(
-                        axis,
-                        conical_model,
-                        domain,
-                        deduplicate_curves=False,
-                        axis_vertical_offset_m=tolerance,
-                    )
-                    if tie_boundary is not None and not tie_boundary.isEmpty():
-                        if equality is None or equality.isEmpty():
-                            equality = tie_boundary
-                        else:
-                            equality = self._collected_line_geometry([equality, tie_boundary])
             return equality
         return None
 
@@ -1553,7 +1677,7 @@ class PlanarControllingOlsEngine:
 
     def _exclusions_for_candidate(self, candidate: ControllingOlsCandidate) -> List[QgsGeometry]:
         """Return no-OLS exclusion masks that apply to this candidate surface."""
-        if candidate.surface_type not in {"Approach", "IHS", "OHS", "TOCS", "Transitional"}:
+        if candidate.surface_type not in {"Approach", "IHS", "OHS", "Transitional"}:
             return []
         return self.exclusion_geometries
 
@@ -2354,7 +2478,6 @@ class PlanarControllingOlsEngine:
         conical_model: dict,
         overlap: QgsGeometry,
         deduplicate_curves: bool = False,
-        axis_vertical_offset_m: float = 0.0,
     ) -> Optional[QgsGeometry]:
         station_range = self._axis_station_range(axis, overlap)
         conical_slope = float(conical_model["slope"])
@@ -2365,11 +2488,7 @@ class PlanarControllingOlsEngine:
         if max_station - min_station <= 1e-6:
             return None
 
-        a_offset = (
-            float(axis["origin_elevation_m"])
-            - float(axis_vertical_offset_m)
-            - float(conical_model["base_elevation_m"])
-        ) / conical_slope
+        a_offset = (float(axis["origin_elevation_m"]) - float(conical_model["base_elevation_m"])) / conical_slope
         b_slope = float(axis["slope"]) / conical_slope
         max_distance = conical_model.get("max_distance_m")
         max_distance = float(max_distance) if max_distance is not None else None
