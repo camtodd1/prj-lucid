@@ -50,6 +50,9 @@ AXIS_CONICAL_LATERAL_ROOT_CONNECT_TOLERANCE_M = 75.0
 AXIS_CONICAL_SAMPLED_CURVE_MIN_LENGTH_M = 2.0
 AXIS_CONICAL_SAMPLED_CURVE_ENDPOINT_EXTENSION_M = 750.0
 AXIS_CONICAL_GLOBAL_LINEWORK_ENDPOINT_EXTENSION_M = 750.0
+AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M = 2.0
+AXIS_CONICAL_CURVE_DEDUP_SAMPLE_STEP_M = 15.0
+AXIS_CONICAL_CURVE_DEDUP_COVERAGE_FRACTION = 0.85
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -887,7 +890,7 @@ class PlanarControllingOlsEngine:
                 axis,
                 conical_model,
                 domain,
-                sampled_only=other_candidate.surface_type == "TOCS",
+                deduplicate_curves=other_candidate.surface_type == "TOCS",
             )
         return None
 
@@ -2132,7 +2135,7 @@ class PlanarControllingOlsEngine:
                 axis,
                 conical_model,
                 overlap,
-                sampled_only=axis_candidate.surface_type == "TOCS",
+                deduplicate_curves=axis_candidate.surface_type == "TOCS",
             )
             self._region_solve_stats["axis_exact_curve_time_s"] = (
                 self._region_solve_stats.get("axis_exact_curve_time_s", 0.0)
@@ -2239,7 +2242,7 @@ class PlanarControllingOlsEngine:
         axis: dict,
         conical_model: dict,
         overlap: QgsGeometry,
-        sampled_only: bool = False,
+        deduplicate_curves: bool = False,
     ) -> Optional[QgsGeometry]:
         station_range = self._axis_station_range(axis, overlap)
         conical_slope = float(conical_model["slope"])
@@ -2265,14 +2268,15 @@ class PlanarControllingOlsEngine:
             max_station,
             overlap,
         )
-        curve_pieces: List[QgsGeometry] = [] if sampled_only else list(sampled_pieces)
+        edge_pieces: List[QgsGeometry] = []
+        vertex_pieces: List[QgsGeometry] = []
         for ring in self._polygon_boundary_parts(base_footprint):
             points = ring[:-1] if len(ring) > 1 and ring[0].distance(ring[-1]) <= 1e-6 else ring
             if len(points) < 2:
                 continue
             for index, start_point in enumerate(points):
                 end_point = points[(index + 1) % len(points)]
-                curve_pieces.extend(
+                edge_pieces.extend(
                     self._axis_conical_edge_transition_pieces(
                         axis,
                         base_footprint,
@@ -2285,7 +2289,7 @@ class PlanarControllingOlsEngine:
                     )
                 )
             for vertex in points:
-                curve_pieces.extend(
+                vertex_pieces.extend(
                     self._axis_conical_vertex_transition_pieces(
                         axis,
                         base_footprint,
@@ -2299,12 +2303,93 @@ class PlanarControllingOlsEngine:
                     )
                 )
 
+        if deduplicate_curves:
+            curve_pieces = self._deduplicated_axis_conical_curve_pieces(
+                edge_pieces + vertex_pieces + list(sampled_pieces)
+            )
+        else:
+            curve_pieces = list(sampled_pieces) + edge_pieces + vertex_pieces
+
         if not curve_pieces:
             return None
         try:
             return QgsGeometry.collectGeometry(curve_pieces) if len(curve_pieces) > 1 else curve_pieces[0]
         except Exception:
             return curve_pieces[0]
+
+    def _deduplicated_axis_conical_curve_pieces(self, pieces: Sequence[QgsGeometry]) -> List[QgsGeometry]:
+        accepted: List[QgsGeometry] = []
+        accepted_geometry: Optional[QgsGeometry] = None
+        for piece in pieces:
+            if piece is None or piece.isEmpty():
+                continue
+            if (
+                accepted_geometry is not None
+                and self._transition_curve_piece_is_covered_by_geometry(piece, accepted_geometry)
+            ):
+                self._region_solve_stats["axis_curve_dedup_skipped"] = (
+                    self._region_solve_stats.get("axis_curve_dedup_skipped", 0.0) + 1.0
+                )
+                continue
+            accepted.append(piece)
+            try:
+                accepted_geometry = (
+                    QgsGeometry(accepted[0])
+                    if len(accepted) == 1
+                    else QgsGeometry.collectGeometry(accepted)
+                )
+            except Exception:
+                accepted_geometry = QgsGeometry(piece)
+        return accepted
+
+    def _transition_curve_piece_is_covered_by_geometry(
+        self,
+        piece: QgsGeometry,
+        existing_geometry: QgsGeometry,
+    ) -> bool:
+        if piece is None or piece.isEmpty() or existing_geometry is None or existing_geometry.isEmpty():
+            return False
+
+        sampled_count = 0
+        near_count = 0
+        seen: set[Tuple[int, int]] = set()
+
+        def _add_sample(point_xy: QgsPointXY) -> None:
+            nonlocal sampled_count, near_count
+            key = (int(round(point_xy.x() * 1000.0)), int(round(point_xy.y() * 1000.0)))
+            if key in seen:
+                return
+            seen.add(key)
+            point_geometry = QgsGeometry.fromPointXY(point_xy)
+            if point_geometry is None or point_geometry.isEmpty():
+                return
+            sampled_count += 1
+            try:
+                if existing_geometry.distance(point_geometry) <= AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M:
+                    near_count += 1
+            except Exception:
+                pass
+
+        for line_points in self._line_parts(piece):
+            if len(line_points) < 2:
+                continue
+            for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+                segment_length = start_point.distance(end_point)
+                if segment_length <= 1e-9:
+                    continue
+                steps = max(2, int(math.ceil(segment_length / AXIS_CONICAL_CURVE_DEDUP_SAMPLE_STEP_M)))
+                for step_index in range(steps + 1):
+                    fraction = step_index / steps
+                    _add_sample(
+                        QgsPointXY(
+                            start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+                            start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+                        )
+                    )
+
+        if sampled_count <= 0:
+            return False
+        return (near_count / sampled_count) >= AXIS_CONICAL_CURVE_DEDUP_COVERAGE_FRACTION
 
     def _sampled_axis_conical_transition_pieces(
         self,
@@ -3544,7 +3629,7 @@ class PlanarControllingOlsEngine:
             axis,
             conical_model,
             geometry,
-            sampled_only=axis_candidate.surface_type == "TOCS",
+            deduplicate_curves=axis_candidate.surface_type == "TOCS",
         )
         if transition_curve is None or transition_curve.isEmpty():
             return points
