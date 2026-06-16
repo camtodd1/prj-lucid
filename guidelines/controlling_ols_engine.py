@@ -50,9 +50,8 @@ AXIS_CONICAL_LATERAL_ROOT_CONNECT_TOLERANCE_M = 75.0
 AXIS_CONICAL_SAMPLED_CURVE_MIN_LENGTH_M = 2.0
 AXIS_CONICAL_SAMPLED_CURVE_ENDPOINT_EXTENSION_M = 750.0
 AXIS_CONICAL_GLOBAL_LINEWORK_ENDPOINT_EXTENSION_M = 750.0
-AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M = 2.0
-AXIS_CONICAL_CURVE_DEDUP_SAMPLE_STEP_M = 15.0
-AXIS_CONICAL_CURVE_DEDUP_COVERAGE_FRACTION = 0.85
+AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M = 3.0
+AXIS_CONICAL_CURVE_DEDUP_SAMPLE_STEP_M = 10.0
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -2323,73 +2322,102 @@ class PlanarControllingOlsEngine:
         for piece in pieces:
             if piece is None or piece.isEmpty():
                 continue
-            if (
-                accepted_geometry is not None
-                and self._transition_curve_piece_is_covered_by_geometry(piece, accepted_geometry)
-            ):
+            unique_pieces = self._unique_transition_curve_piece_runs(piece, accepted_geometry)
+            if not unique_pieces:
                 self._region_solve_stats["axis_curve_dedup_skipped"] = (
                     self._region_solve_stats.get("axis_curve_dedup_skipped", 0.0) + 1.0
                 )
                 continue
-            accepted.append(piece)
-            try:
-                accepted_geometry = (
-                    QgsGeometry(accepted[0])
-                    if len(accepted) == 1
-                    else QgsGeometry.collectGeometry(accepted)
-                )
-            except Exception:
-                accepted_geometry = QgsGeometry(piece)
+            accepted.extend(unique_pieces)
+            accepted_geometry = self._collected_line_geometry(accepted)
         return accepted
 
-    def _transition_curve_piece_is_covered_by_geometry(
+    def _unique_transition_curve_piece_runs(
         self,
         piece: QgsGeometry,
-        existing_geometry: QgsGeometry,
-    ) -> bool:
-        if piece is None or piece.isEmpty() or existing_geometry is None or existing_geometry.isEmpty():
-            return False
+        existing_geometry: Optional[QgsGeometry],
+    ) -> List[QgsGeometry]:
+        if piece is None or piece.isEmpty():
+            return []
+        if existing_geometry is None or existing_geometry.isEmpty():
+            return [QgsGeometry(piece)]
 
-        sampled_count = 0
-        near_count = 0
-        seen: set[Tuple[int, int]] = set()
-
-        def _add_sample(point_xy: QgsPointXY) -> None:
-            nonlocal sampled_count, near_count
-            key = (int(round(point_xy.x() * 1000.0)), int(round(point_xy.y() * 1000.0)))
-            if key in seen:
-                return
-            seen.add(key)
-            point_geometry = QgsGeometry.fromPointXY(point_xy)
-            if point_geometry is None or point_geometry.isEmpty():
-                return
-            sampled_count += 1
-            try:
-                if existing_geometry.distance(point_geometry) <= AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M:
-                    near_count += 1
-            except Exception:
-                pass
-
+        unique_pieces: List[QgsGeometry] = []
         for line_points in self._line_parts(piece):
             if len(line_points) < 2:
                 continue
-            for start_point, end_point in zip(line_points[:-1], line_points[1:]):
-                segment_length = start_point.distance(end_point)
-                if segment_length <= 1e-9:
+            densified = self._densified_transition_curve_points(
+                line_points,
+                AXIS_CONICAL_CURVE_DEDUP_SAMPLE_STEP_M,
+            )
+            current_run: List[QgsPointXY] = []
+            for start_point, end_point in zip(densified[:-1], densified[1:]):
+                if start_point.distance(end_point) <= 1e-9:
                     continue
-                steps = max(2, int(math.ceil(segment_length / AXIS_CONICAL_CURVE_DEDUP_SAMPLE_STEP_M)))
-                for step_index in range(steps + 1):
-                    fraction = step_index / steps
-                    _add_sample(
-                        QgsPointXY(
-                            start_point.x() + ((end_point.x() - start_point.x()) * fraction),
-                            start_point.y() + ((end_point.y() - start_point.y()) * fraction),
-                        )
-                    )
+                midpoint = QgsPointXY(
+                    (start_point.x() + end_point.x()) / 2.0,
+                    (start_point.y() + end_point.y()) / 2.0,
+                )
+                duplicate_segment = self._point_is_near_line_geometry(midpoint, existing_geometry)
+                if duplicate_segment:
+                    if len(current_run) >= 2:
+                        geometry = QgsGeometry.fromPolylineXY(current_run)
+                        if geometry is not None and not geometry.isEmpty():
+                            unique_pieces.append(geometry)
+                    current_run = []
+                    continue
+                if not current_run:
+                    current_run = [QgsPointXY(start_point)]
+                if end_point.distance(current_run[-1]) > 1e-6:
+                    current_run.append(QgsPointXY(end_point))
+            if len(current_run) >= 2:
+                geometry = QgsGeometry.fromPolylineXY(current_run)
+                if geometry is not None and not geometry.isEmpty():
+                    unique_pieces.append(geometry)
+        return unique_pieces
 
-        if sampled_count <= 0:
+    def _densified_transition_curve_points(
+        self,
+        line_points: Sequence[QgsPointXY],
+        max_segment_length_m: float,
+    ) -> List[QgsPointXY]:
+        if len(line_points) < 2 or max_segment_length_m <= 0.0:
+            return [QgsPointXY(point.x(), point.y()) for point in line_points]
+        densified: List[QgsPointXY] = [QgsPointXY(line_points[0])]
+        for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+            segment_length = start_point.distance(end_point)
+            if segment_length <= 1e-9:
+                continue
+            steps = max(1, int(math.ceil(segment_length / max_segment_length_m)))
+            for step_index in range(1, steps + 1):
+                fraction = step_index / steps
+                point_xy = QgsPointXY(
+                    start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+                    start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+                )
+                if point_xy.distance(densified[-1]) > 1e-6:
+                    densified.append(point_xy)
+        return densified
+
+    def _point_is_near_line_geometry(self, point_xy: QgsPointXY, geometry: QgsGeometry) -> bool:
+        if geometry is None or geometry.isEmpty():
             return False
-        return (near_count / sampled_count) >= AXIS_CONICAL_CURVE_DEDUP_COVERAGE_FRACTION
+        point_geometry = QgsGeometry.fromPointXY(point_xy)
+        if point_geometry is None or point_geometry.isEmpty():
+            return False
+        try:
+            return geometry.distance(point_geometry) <= AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M
+        except Exception:
+            return False
+
+    def _collected_line_geometry(self, geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
+        valid_geometries = [QgsGeometry(geometry) for geometry in geometries if geometry is not None and not geometry.isEmpty()]
+        if not valid_geometries:
+            return None
+        try:
+            return QgsGeometry.collectGeometry(valid_geometries) if len(valid_geometries) > 1 else valid_geometries[0]
+        except Exception:
+            return valid_geometries[0]
 
     def _sampled_axis_conical_transition_pieces(
         self,
