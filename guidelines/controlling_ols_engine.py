@@ -883,7 +883,12 @@ class PlanarControllingOlsEngine:
             axis = self._axis_model(other_candidate)
             if conical_model is None or axis is None:
                 return None
-            return self._axis_conical_transition_curve(axis, conical_model, domain)
+            return self._axis_conical_transition_curve(
+                axis,
+                conical_model,
+                domain,
+                sampled_only=other_candidate.surface_type == "TOCS",
+            )
         return None
 
     def _conical_constant_equality_geometry(
@@ -2123,7 +2128,12 @@ class PlanarControllingOlsEngine:
                 return self._record_axis_exact_fallback(total_start, "bad_model")
 
             curve_start = time.perf_counter()
-            transition_curve = self._axis_conical_transition_curve(axis, conical_model, overlap)
+            transition_curve = self._axis_conical_transition_curve(
+                axis,
+                conical_model,
+                overlap,
+                sampled_only=axis_candidate.surface_type == "TOCS",
+            )
             self._region_solve_stats["axis_exact_curve_time_s"] = (
                 self._region_solve_stats.get("axis_exact_curve_time_s", 0.0)
                 + (time.perf_counter() - curve_start)
@@ -2229,6 +2239,7 @@ class PlanarControllingOlsEngine:
         axis: dict,
         conical_model: dict,
         overlap: QgsGeometry,
+        sampled_only: bool = False,
     ) -> Optional[QgsGeometry]:
         station_range = self._axis_station_range(axis, overlap)
         conical_slope = float(conical_model["slope"])
@@ -2244,19 +2255,23 @@ class PlanarControllingOlsEngine:
         max_distance = conical_model.get("max_distance_m")
         max_distance = float(max_distance) if max_distance is not None else None
 
-        curve_pieces: List[QgsGeometry] = []
-        curve_pieces.extend(
-            self._sampled_axis_conical_transition_pieces(
-                axis,
-                base_footprint,
-                a_offset,
-                b_slope,
-                max_distance,
-                min_station,
-                max_station,
-                overlap,
-            )
+        sampled_pieces = self._sampled_axis_conical_transition_pieces(
+            axis,
+            base_footprint,
+            a_offset,
+            b_slope,
+            max_distance,
+            min_station,
+            max_station,
+            overlap,
         )
+        if sampled_only and sampled_pieces:
+            try:
+                return QgsGeometry.collectGeometry(sampled_pieces) if len(sampled_pieces) > 1 else sampled_pieces[0]
+            except Exception:
+                return sampled_pieces[0]
+
+        curve_pieces: List[QgsGeometry] = list(sampled_pieces)
         for ring in self._polygon_boundary_parts(base_footprint):
             points = ring[:-1] if len(ring) > 1 and ring[0].distance(ring[-1]) <= 1e-6 else ring
             if len(points) < 2:
@@ -3531,7 +3546,12 @@ class PlanarControllingOlsEngine:
         if axis is None or conical_model is None:
             return points
 
-        transition_curve = self._axis_conical_transition_curve(axis, conical_model, geometry)
+        transition_curve = self._axis_conical_transition_curve(
+            axis,
+            conical_model,
+            geometry,
+            sampled_only=axis_candidate.surface_type == "TOCS",
+        )
         if transition_curve is None or transition_curve.isEmpty():
             return points
 
