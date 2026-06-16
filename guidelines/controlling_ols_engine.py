@@ -36,8 +36,8 @@ CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
 CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M = 0.20
-AXIS_CONICAL_FOOTPRINT_SNAP_TOLERANCE_M = 5.0
-AXIS_CONICAL_FOOTPRINT_SNAP_VERTICAL_TOLERANCE_M = 0.25
+CONTROLLING_CONICAL_AXIS_SLIVER_WIDTH_M = 3.0
+CONTROLLING_CONICAL_AXIS_SLIVER_MAX_AREA_M2 = 10000.0
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_FULL_OVERLAP_TRIANGULATION_ENABLED = True
@@ -888,140 +888,13 @@ class PlanarControllingOlsEngine:
             axis = self._axis_model(other_candidate)
             if conical_model is None or axis is None:
                 return None
-            equality = self._axis_conical_transition_curve(
+            return self._axis_conical_transition_curve(
                 axis,
                 conical_model,
                 domain,
                 deduplicate_curves=False,
             )
-            if other_candidate.surface_type in {"Approach", "TOCS"}:
-                return self._snap_axis_conical_curve_to_axis_footprint_boundary(
-                    equality,
-                    domain,
-                    other_candidate,
-                    conical_candidate,
-                )
-            return equality
         return None
-
-    def _snap_axis_conical_curve_to_axis_footprint_boundary(
-        self,
-        equality: Optional[QgsGeometry],
-        domain: QgsGeometry,
-        axis_candidate: ControllingOlsCandidate,
-        conical_candidate: ControllingOlsCandidate,
-    ) -> Optional[QgsGeometry]:
-        if equality is None or equality.isEmpty() or not self._has_polygon_area(domain):
-            return equality
-
-        axis_boundary = self._normalised_boundary_geometry(self._effective_footprint(axis_candidate))
-        if axis_boundary is None or axis_boundary.isEmpty():
-            return equality
-
-        snapped_boundary_segments = self._axis_boundary_segments_near_curve(
-            axis_boundary,
-            equality,
-            domain,
-            axis_candidate,
-            conical_candidate,
-        )
-        if not snapped_boundary_segments:
-            return equality
-
-        kept_equality_segments: List[QgsGeometry] = []
-        for line_points in self._linework_parts(equality):
-            if len(line_points) < 2:
-                continue
-            current_run: List[QgsPointXY] = []
-            for start_point, end_point in zip(line_points[:-1], line_points[1:]):
-                if start_point.distance(end_point) <= 1e-9:
-                    continue
-                midpoint = QgsPointXY(
-                    (start_point.x() + end_point.x()) / 2.0,
-                    (start_point.y() + end_point.y()) / 2.0,
-                )
-                try:
-                    near_axis_boundary = (
-                        QgsGeometry.fromPointXY(midpoint).distance(axis_boundary)
-                        <= AXIS_CONICAL_FOOTPRINT_SNAP_TOLERANCE_M
-                    )
-                except Exception:
-                    near_axis_boundary = False
-                if near_axis_boundary:
-                    if len(current_run) >= 2:
-                        segment = QgsGeometry.fromPolylineXY(current_run)
-                        if segment is not None and not segment.isEmpty():
-                            kept_equality_segments.append(segment)
-                    current_run = []
-                    continue
-                if not current_run:
-                    current_run.append(start_point)
-                current_run.append(end_point)
-            if len(current_run) >= 2:
-                segment = QgsGeometry.fromPolylineXY(current_run)
-                if segment is not None and not segment.isEmpty():
-                    kept_equality_segments.append(segment)
-
-        self._region_solve_stats["axis_conical_footprint_snap_count"] = (
-            self._region_solve_stats.get("axis_conical_footprint_snap_count", 0.0)
-            + float(len(snapped_boundary_segments))
-        )
-        return self._collected_line_geometry(kept_equality_segments + snapped_boundary_segments)
-
-    def _axis_boundary_segments_near_curve(
-        self,
-        axis_boundary: QgsGeometry,
-        equality: QgsGeometry,
-        domain: QgsGeometry,
-        axis_candidate: ControllingOlsCandidate,
-        conical_candidate: ControllingOlsCandidate,
-    ) -> List[QgsGeometry]:
-        try:
-            search_domain = domain.buffer(AXIS_CONICAL_FOOTPRINT_SNAP_TOLERANCE_M, 8)
-            candidate_boundary = axis_boundary.intersection(search_domain)
-        except Exception:
-            candidate_boundary = axis_boundary
-
-        snapped_segments: List[QgsGeometry] = []
-        for line_points in self._linework_parts(candidate_boundary):
-            if len(line_points) < 2:
-                continue
-            current_run: List[QgsPointXY] = []
-            for start_point, end_point in zip(line_points[:-1], line_points[1:]):
-                if start_point.distance(end_point) <= 1e-9:
-                    continue
-                midpoint = QgsPointXY(
-                    (start_point.x() + end_point.x()) / 2.0,
-                    (start_point.y() + end_point.y()) / 2.0,
-                )
-                point_geometry = QgsGeometry.fromPointXY(midpoint)
-                try:
-                    near_curve = point_geometry.distance(equality) <= AXIS_CONICAL_FOOTPRINT_SNAP_TOLERANCE_M
-                    in_domain = domain.buffer(0.10, 4).intersects(point_geometry)
-                except Exception:
-                    near_curve = False
-                    in_domain = False
-                difference = self._candidate_difference(axis_candidate, conical_candidate, midpoint)
-                near_vertical_tie = (
-                    difference is not None
-                    and math.isfinite(difference)
-                    and abs(difference) <= AXIS_CONICAL_FOOTPRINT_SNAP_VERTICAL_TOLERANCE_M
-                )
-                if near_curve and in_domain and near_vertical_tie:
-                    if not current_run:
-                        current_run.append(start_point)
-                    current_run.append(end_point)
-                    continue
-                if len(current_run) >= 2:
-                    segment = QgsGeometry.fromPolylineXY(current_run)
-                    if segment is not None and not segment.isEmpty():
-                        snapped_segments.append(segment)
-                current_run = []
-            if len(current_run) >= 2:
-                segment = QgsGeometry.fromPolylineXY(current_run)
-                if segment is not None and not segment.isEmpty():
-                    snapped_segments.append(segment)
-        return snapped_segments
 
     def _conical_constant_equality_geometry(
         self,
@@ -1227,7 +1100,136 @@ class PlanarControllingOlsEngine:
             cleaned_merged = self._clean_merged_region_geometry(merged, candidate, source_boundary)
             if self._has_polygon_area(cleaned_merged):
                 merged_parts.append((candidate, cleaned_merged))
-        return merged_parts
+        return self._suppress_conical_axis_slivers(merged_parts)
+
+    def _suppress_conical_axis_slivers(
+        self,
+        region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        axis_candidates = [
+            candidate
+            for candidate, _geometry in region_parts
+            if candidate.model in {"axis", "plane"} and candidate.surface_type in {"Approach", "TOCS"}
+        ]
+        if not axis_candidates:
+            return region_parts
+
+        additions: Dict[str, List[QgsGeometry]] = {}
+        output_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
+        width = max(0.0, CONTROLLING_CONICAL_AXIS_SLIVER_WIDTH_M)
+        if width <= 0.0:
+            return region_parts
+
+        for candidate, geometry in region_parts:
+            if candidate.model != "conical" or not self._has_polygon_area(geometry):
+                output_parts.append((candidate, geometry))
+                continue
+
+            try:
+                opened = geometry.buffer(-width, 8)
+                opened = opened.buffer(width, 8) if opened is not None and not opened.isEmpty() else QgsGeometry()
+                if opened is not None and not opened.isEmpty():
+                    opened = opened.intersection(geometry)
+            except Exception:
+                output_parts.append((candidate, geometry))
+                continue
+            if not self._has_polygon_area(opened):
+                output_parts.append((candidate, geometry))
+                continue
+
+            try:
+                removed = geometry.difference(opened)
+            except Exception:
+                output_parts.append((candidate, geometry))
+                continue
+
+            retained_conical_parts: List[QgsGeometry] = [opened]
+            reassigned_count = 0
+            for sliver in self._polygon_parts(removed):
+                if not self._has_polygon_area(sliver):
+                    continue
+                try:
+                    sliver_area = abs(sliver.area())
+                except Exception:
+                    sliver_area = CONTROLLING_CONICAL_AXIS_SLIVER_MAX_AREA_M2 + 1.0
+                target = None
+                if sliver_area <= CONTROLLING_CONICAL_AXIS_SLIVER_MAX_AREA_M2:
+                    target = self._axis_candidate_for_conical_sliver(sliver, candidate, axis_candidates)
+                if target is None:
+                    retained_conical_parts.append(sliver)
+                    continue
+                additions.setdefault(target.surface_id, []).append(sliver)
+                reassigned_count += 1
+
+            if reassigned_count:
+                self._region_solve_stats["conical_axis_sliver_reassigned_count"] = (
+                    self._region_solve_stats.get("conical_axis_sliver_reassigned_count", 0.0)
+                    + float(reassigned_count)
+                )
+            try:
+                retained = (
+                    QgsGeometry.unaryUnion(retained_conical_parts)
+                    if len(retained_conical_parts) > 1
+                    else QgsGeometry(retained_conical_parts[0])
+                )
+            except Exception:
+                retained = geometry
+            if self._has_polygon_area(retained):
+                output_parts.append((candidate, retained))
+
+        if not additions:
+            return output_parts
+
+        final_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
+        for candidate, geometry in output_parts:
+            extra_parts = additions.get(candidate.surface_id)
+            if not extra_parts:
+                final_parts.append((candidate, geometry))
+                continue
+            try:
+                merged = QgsGeometry.unaryUnion([geometry] + extra_parts)
+            except Exception:
+                merged = geometry
+            if self._has_polygon_area(merged):
+                final_parts.append((candidate, merged))
+            else:
+                final_parts.append((candidate, geometry))
+        return final_parts
+
+    def _axis_candidate_for_conical_sliver(
+        self,
+        sliver: QgsGeometry,
+        conical_candidate: ControllingOlsCandidate,
+        axis_candidates: Sequence[ControllingOlsCandidate],
+    ) -> Optional[ControllingOlsCandidate]:
+        try:
+            point = sliver.pointOnSurface().asPoint()
+            point_xy = QgsPointXY(point.x(), point.y())
+        except Exception:
+            return None
+
+        viable: List[Tuple[int, float, ControllingOlsCandidate]] = []
+        point_geometry = QgsGeometry.fromPointXY(point_xy)
+        for axis_candidate in axis_candidates:
+            footprint = self._effective_footprint(axis_candidate)
+            try:
+                if footprint is None or footprint.isEmpty() or not footprint.intersects(point_geometry):
+                    continue
+            except Exception:
+                continue
+            difference = self._candidate_difference(axis_candidate, conical_candidate, point_xy)
+            if difference is None or not math.isfinite(difference):
+                continue
+            if difference > CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M:
+                continue
+            axis_elevation = axis_candidate.elevation_at_xy(point_xy)
+            if axis_elevation is None or not math.isfinite(axis_elevation):
+                continue
+            viable.append((self._global_cell_tie_priority(axis_candidate), float(axis_elevation), axis_candidate))
+        if not viable:
+            return None
+        viable.sort(key=lambda item: (item[0], item[1]))
+        return viable[0][2]
 
     def _clean_merged_region_geometry(
         self,
