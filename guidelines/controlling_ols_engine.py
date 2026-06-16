@@ -52,8 +52,6 @@ AXIS_CONICAL_SAMPLED_CURVE_ENDPOINT_EXTENSION_M = 750.0
 AXIS_CONICAL_GLOBAL_LINEWORK_ENDPOINT_EXTENSION_M = 750.0
 AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M = 8.0
 AXIS_CONICAL_CURVE_DEDUP_SAMPLE_STEP_M = 10.0
-AXIS_CONICAL_TOCS_SLIVER_WIDTH_M = 8.0
-AXIS_CONICAL_TOCS_SLIVER_VERTICAL_TOLERANCE_M = 0.35
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -184,22 +182,19 @@ class PlanarControllingOlsEngine:
 
     def controlling_candidate_at_xy(self, point_xy: QgsPointXY) -> Optional[Tuple[ControllingOlsCandidate, float]]:
         """Return the lowest applicable planar candidate at a point."""
-        evaluated = self._evaluated_candidates_at_xy(point_xy)
-        return evaluated[0] if evaluated else None
-
-    def _evaluated_candidates_at_xy(self, point_xy: QgsPointXY) -> List[Tuple[ControllingOlsCandidate, float]]:
         evaluated: List[Tuple[ControllingOlsCandidate, float]] = []
-        point_geometry = QgsGeometry.fromPointXY(point_xy)
         for candidate in self.candidates:
             footprint = self._effective_footprint(candidate)
-            if footprint is None or footprint.isEmpty() or not footprint.intersects(point_geometry):
+            if footprint is None or footprint.isEmpty() or not footprint.intersects(QgsGeometry.fromPointXY(point_xy)):
                 continue
             elevation = candidate.elevation_at_xy(point_xy)
             if elevation is None or not math.isfinite(elevation):
                 continue
             evaluated.append((candidate, elevation))
+        if not evaluated:
+            return None
         evaluated.sort(key=lambda item: item[1])
-        return evaluated
+        return evaluated[0]
 
     def transition_features(self, fields: QgsFields) -> List[QgsFeature]:
         """Return exact line features where supported planar candidates exchange control."""
@@ -895,7 +890,6 @@ class PlanarControllingOlsEngine:
                 conical_model,
                 domain,
                 deduplicate_curves=False,
-                sampled_only=other_candidate.surface_type == "TOCS",
             )
         return None
 
@@ -1010,60 +1004,10 @@ class PlanarControllingOlsEngine:
         sample_points.extend(self._geometry_sample_points(cell)[:5])
 
         for point_xy in sample_points:
-            evaluated = self._evaluated_candidates_at_xy(point_xy)
-            if not evaluated:
-                continue
-            preferred = self._preferred_tocs_for_conical_sliver(cell, evaluated)
-            return preferred if preferred is not None else evaluated[0]
+            result = self.controlling_candidate_at_xy(point_xy)
+            if result is not None:
+                return result
         return None
-
-    def _preferred_tocs_for_conical_sliver(
-        self,
-        cell: QgsGeometry,
-        evaluated: Sequence[Tuple[ControllingOlsCandidate, float]],
-    ) -> Optional[Tuple[ControllingOlsCandidate, float]]:
-        if not evaluated or cell is None or cell.isEmpty():
-            return None
-        lowest_candidate, lowest_elevation = evaluated[0]
-        if lowest_candidate.model != "conical":
-            return None
-        for candidate, elevation in evaluated[1:]:
-            if candidate.model != "axis" or candidate.surface_type != "TOCS":
-                continue
-            if elevation - lowest_elevation > AXIS_CONICAL_TOCS_SLIVER_VERTICAL_TOLERANCE_M:
-                continue
-            if self._cell_is_tocs_boundary_sliver(cell, candidate):
-                return candidate, elevation
-        return None
-
-    def _cell_is_tocs_boundary_sliver(
-        self,
-        cell: QgsGeometry,
-        tocs_candidate: ControllingOlsCandidate,
-    ) -> bool:
-        footprint = self._effective_footprint(tocs_candidate)
-        if not self._has_polygon_area(footprint):
-            return False
-        boundary = self._polygon_boundary_geometry(footprint)
-        if boundary is None or boundary.isEmpty():
-            return False
-        sample_points: List[QgsPointXY] = []
-        try:
-            point = cell.pointOnSurface().asPoint()
-            sample_points.append(QgsPointXY(point.x(), point.y()))
-        except Exception:
-            pass
-        sample_points.extend(self._geometry_sample_points(cell)[:8])
-        if not sample_points:
-            return False
-        for point_xy in sample_points:
-            try:
-                distance = QgsGeometry.fromPointXY(point_xy).distance(boundary)
-            except Exception:
-                return False
-            if distance > AXIS_CONICAL_TOCS_SLIVER_WIDTH_M:
-                return False
-        return True
 
     def _merge_region_parts_by_candidate(
         self,
@@ -2191,7 +2135,6 @@ class PlanarControllingOlsEngine:
                 conical_model,
                 overlap,
                 deduplicate_curves=False,
-                sampled_only=axis_candidate.surface_type == "TOCS",
             )
             self._region_solve_stats["axis_exact_curve_time_s"] = (
                 self._region_solve_stats.get("axis_exact_curve_time_s", 0.0)
@@ -2299,7 +2242,6 @@ class PlanarControllingOlsEngine:
         conical_model: dict,
         overlap: QgsGeometry,
         deduplicate_curves: bool = False,
-        sampled_only: bool = False,
     ) -> Optional[QgsGeometry]:
         station_range = self._axis_station_range(axis, overlap)
         conical_slope = float(conical_model["slope"])
@@ -2333,19 +2275,18 @@ class PlanarControllingOlsEngine:
                 continue
             for index, start_point in enumerate(points):
                 end_point = points[(index + 1) % len(points)]
-                if not sampled_only:
-                    edge_pieces.extend(
-                        self._axis_conical_edge_transition_pieces(
-                            axis,
-                            base_footprint,
-                            start_point,
-                            end_point,
-                            a_offset,
-                            b_slope,
-                            max_distance,
-                            overlap,
-                        )
+                edge_pieces.extend(
+                    self._axis_conical_edge_transition_pieces(
+                        axis,
+                        base_footprint,
+                        start_point,
+                        end_point,
+                        a_offset,
+                        b_slope,
+                        max_distance,
+                        overlap,
                     )
+                )
             for vertex in points:
                 vertex_pieces.extend(
                     self._axis_conical_vertex_transition_pieces(
@@ -3717,7 +3658,6 @@ class PlanarControllingOlsEngine:
             conical_model,
             geometry,
             deduplicate_curves=False,
-            sampled_only=axis_candidate.surface_type == "TOCS",
         )
         if transition_curve is None or transition_curve.isEmpty():
             return points
