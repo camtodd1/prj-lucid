@@ -50,7 +50,7 @@ AXIS_CONICAL_LATERAL_ROOT_CONNECT_TOLERANCE_M = 75.0
 AXIS_CONICAL_SAMPLED_CURVE_MIN_LENGTH_M = 2.0
 AXIS_CONICAL_SAMPLED_CURVE_ENDPOINT_EXTENSION_M = 750.0
 AXIS_CONICAL_GLOBAL_LINEWORK_ENDPOINT_EXTENSION_M = 750.0
-AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M = 3.0
+AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M = 8.0
 AXIS_CONICAL_CURVE_DEDUP_SAMPLE_STEP_M = 10.0
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
@@ -2304,7 +2304,7 @@ class PlanarControllingOlsEngine:
 
         if deduplicate_curves:
             curve_pieces = self._deduplicated_axis_conical_curve_pieces(
-                edge_pieces + vertex_pieces + list(sampled_pieces)
+                list(sampled_pieces) + vertex_pieces + edge_pieces
             )
         else:
             curve_pieces = list(sampled_pieces) + edge_pieces + vertex_pieces
