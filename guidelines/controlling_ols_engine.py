@@ -36,8 +36,6 @@ CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
 CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M = 0.20
-CONTROLLING_CONICAL_AXIS_SLIVER_WIDTH_M = 3.0
-CONTROLLING_CONICAL_AXIS_SLIVER_MAX_AREA_M2 = 10000.0
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_FULL_OVERLAP_TRIANGULATION_ENABLED = True
@@ -1100,136 +1098,7 @@ class PlanarControllingOlsEngine:
             cleaned_merged = self._clean_merged_region_geometry(merged, candidate, source_boundary)
             if self._has_polygon_area(cleaned_merged):
                 merged_parts.append((candidate, cleaned_merged))
-        return self._suppress_conical_axis_slivers(merged_parts)
-
-    def _suppress_conical_axis_slivers(
-        self,
-        region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]],
-    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
-        axis_candidates = [
-            candidate
-            for candidate, _geometry in region_parts
-            if candidate.model in {"axis", "plane"} and candidate.surface_type in {"Approach", "TOCS"}
-        ]
-        if not axis_candidates:
-            return region_parts
-
-        additions: Dict[str, List[QgsGeometry]] = {}
-        output_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
-        width = max(0.0, CONTROLLING_CONICAL_AXIS_SLIVER_WIDTH_M)
-        if width <= 0.0:
-            return region_parts
-
-        for candidate, geometry in region_parts:
-            if candidate.model != "conical" or not self._has_polygon_area(geometry):
-                output_parts.append((candidate, geometry))
-                continue
-
-            try:
-                opened = geometry.buffer(-width, 8)
-                opened = opened.buffer(width, 8) if opened is not None and not opened.isEmpty() else QgsGeometry()
-                if opened is not None and not opened.isEmpty():
-                    opened = opened.intersection(geometry)
-            except Exception:
-                output_parts.append((candidate, geometry))
-                continue
-            if not self._has_polygon_area(opened):
-                output_parts.append((candidate, geometry))
-                continue
-
-            try:
-                removed = geometry.difference(opened)
-            except Exception:
-                output_parts.append((candidate, geometry))
-                continue
-
-            retained_conical_parts: List[QgsGeometry] = [opened]
-            reassigned_count = 0
-            for sliver in self._polygon_parts(removed):
-                if not self._has_polygon_area(sliver):
-                    continue
-                try:
-                    sliver_area = abs(sliver.area())
-                except Exception:
-                    sliver_area = CONTROLLING_CONICAL_AXIS_SLIVER_MAX_AREA_M2 + 1.0
-                target = None
-                if sliver_area <= CONTROLLING_CONICAL_AXIS_SLIVER_MAX_AREA_M2:
-                    target = self._axis_candidate_for_conical_sliver(sliver, candidate, axis_candidates)
-                if target is None:
-                    retained_conical_parts.append(sliver)
-                    continue
-                additions.setdefault(target.surface_id, []).append(sliver)
-                reassigned_count += 1
-
-            if reassigned_count:
-                self._region_solve_stats["conical_axis_sliver_reassigned_count"] = (
-                    self._region_solve_stats.get("conical_axis_sliver_reassigned_count", 0.0)
-                    + float(reassigned_count)
-                )
-            try:
-                retained = (
-                    QgsGeometry.unaryUnion(retained_conical_parts)
-                    if len(retained_conical_parts) > 1
-                    else QgsGeometry(retained_conical_parts[0])
-                )
-            except Exception:
-                retained = geometry
-            if self._has_polygon_area(retained):
-                output_parts.append((candidate, retained))
-
-        if not additions:
-            return output_parts
-
-        final_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
-        for candidate, geometry in output_parts:
-            extra_parts = additions.get(candidate.surface_id)
-            if not extra_parts:
-                final_parts.append((candidate, geometry))
-                continue
-            try:
-                merged = QgsGeometry.unaryUnion([geometry] + extra_parts)
-            except Exception:
-                merged = geometry
-            if self._has_polygon_area(merged):
-                final_parts.append((candidate, merged))
-            else:
-                final_parts.append((candidate, geometry))
-        return final_parts
-
-    def _axis_candidate_for_conical_sliver(
-        self,
-        sliver: QgsGeometry,
-        conical_candidate: ControllingOlsCandidate,
-        axis_candidates: Sequence[ControllingOlsCandidate],
-    ) -> Optional[ControllingOlsCandidate]:
-        try:
-            point = sliver.pointOnSurface().asPoint()
-            point_xy = QgsPointXY(point.x(), point.y())
-        except Exception:
-            return None
-
-        viable: List[Tuple[int, float, ControllingOlsCandidate]] = []
-        point_geometry = QgsGeometry.fromPointXY(point_xy)
-        for axis_candidate in axis_candidates:
-            footprint = self._effective_footprint(axis_candidate)
-            try:
-                if footprint is None or footprint.isEmpty() or not footprint.intersects(point_geometry):
-                    continue
-            except Exception:
-                continue
-            difference = self._candidate_difference(axis_candidate, conical_candidate, point_xy)
-            if difference is None or not math.isfinite(difference):
-                continue
-            if difference > CONTROLLING_GLOBAL_AXIS_CONICAL_TIE_TOLERANCE_M:
-                continue
-            axis_elevation = axis_candidate.elevation_at_xy(point_xy)
-            if axis_elevation is None or not math.isfinite(axis_elevation):
-                continue
-            viable.append((self._global_cell_tie_priority(axis_candidate), float(axis_elevation), axis_candidate))
-        if not viable:
-            return None
-        viable.sort(key=lambda item: (item[0], item[1]))
-        return viable[0][2]
+        return merged_parts
 
     def _clean_merged_region_geometry(
         self,

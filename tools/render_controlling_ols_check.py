@@ -213,7 +213,7 @@ def render(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--regions", required=True, help="Generated controlling region GeoJSON.")
-    parser.add_argument("--known-edges", required=True, help="Known-good edge GeoJSON.")
+    parser.add_argument("--known-edges", help="Optional known-good edge GeoJSON.")
     parser.add_argument("--missing-edges", help="Known-good segments not matched by generated output.")
     parser.add_argument("--extra-edges", help="Generated segments not matched by known-good output.")
     parser.add_argument("--output", required=True, help="Output PNG path.")
