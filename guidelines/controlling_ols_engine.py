@@ -2265,13 +2265,7 @@ class PlanarControllingOlsEngine:
             max_station,
             overlap,
         )
-        if sampled_only and sampled_pieces:
-            try:
-                return QgsGeometry.collectGeometry(sampled_pieces) if len(sampled_pieces) > 1 else sampled_pieces[0]
-            except Exception:
-                return sampled_pieces[0]
-
-        curve_pieces: List[QgsGeometry] = list(sampled_pieces)
+        curve_pieces: List[QgsGeometry] = [] if sampled_only else list(sampled_pieces)
         for ring in self._polygon_boundary_parts(base_footprint):
             points = ring[:-1] if len(ring) > 1 and ring[0].distance(ring[-1]) <= 1e-6 else ring
             if len(points) < 2:
