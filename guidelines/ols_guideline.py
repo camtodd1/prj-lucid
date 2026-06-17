@@ -493,6 +493,15 @@ class OlsGuidelineMixin:
                                                 "slope": slope,
                                                 "max_distance_m": horizontal_extent,
                                                 "height_extent_agl": height_extent_agl,
+                                                "vertical_model": "linear_edge_interpolation",
+                                                "z_units": "m",
+                                                "height_reference": "AMSL",
+                                                "lower_edge_role": "inner_ring",
+                                                "lower_edge_z_m": IHS_ELEVATION_AMSL,
+                                                "upper_edge_role": "outer_ring",
+                                                "upper_edge_z_m": conical_outer_elevation,
+                                                "surface_axis": "distance_from_inner_ring",
+                                                "edge_elevation_source": OLS_EDGE_ELEVATION_SOURCE,
                                             },
                                         )
                                     )
@@ -3160,6 +3169,7 @@ class OlsGuidelineMixin:
                                     "runway": runway_data.get("short_name", "N/A"),
                                     "end": end_desig,
                                     "section": i + 1,
+                                    **section_vertical_attrs,
                                 },
                             )
                         )
@@ -3516,6 +3526,15 @@ class OlsGuidelineMixin:
                         "max_distance_m": overall_length,
                         "runway": runway_data.get("short_name", "N/A"),
                         "end": end_desig,
+                        "vertical_model": "linear_edge_interpolation",
+                        "z_units": "m",
+                        "height_reference": "AMSL",
+                        "lower_edge_role": "narrow_edge",
+                        "lower_edge_z_m": origin_elevation,
+                        "upper_edge_role": "wide_edge",
+                        "upper_edge_z_m": elevation_amsl,
+                        "surface_axis": "distance_along_centerline_from_narrow_edge",
+                        "edge_elevation_source": OLS_EDGE_ELEVATION_SOURCE,
                     },
                 )
             )

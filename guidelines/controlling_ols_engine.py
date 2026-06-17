@@ -4084,6 +4084,14 @@ class ControllingOlsEngineMixin:
                 QgsField("model", QVariant.String, self.tr("Model"), 30),
                 QgsField("elev_min", QVariant.Double, self.tr("Min Elev AMSL"), 12, 3),
                 QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
+                QgsField("vertical_model", QVariant.String, self.tr("Vertical Model"), 40),
+                QgsField("height_ref", QVariant.String, self.tr("Height Reference"), 30),
+                QgsField("lower_role", QVariant.String, self.tr("Lower Edge Role"), 40),
+                QgsField("lower_z_m", QVariant.Double, self.tr("Lower Edge Elev (m)"), 12, 3),
+                QgsField("upper_role", QVariant.String, self.tr("Upper Edge Role"), 40),
+                QgsField("upper_z_m", QVariant.Double, self.tr("Upper Edge Elev (m)"), 12, 3),
+                QgsField("surface_axis", QVariant.String, self.tr("Surface Axis"), 60),
+                QgsField("edge_src", QVariant.String, self.tr("Edge Elevation Source"), 80),
             ]
         )
         features: List[QgsFeature] = []
@@ -4091,7 +4099,24 @@ class ControllingOlsEngineMixin:
             feature = QgsFeature(fields)
             feature.setGeometry(QgsGeometry(candidate.footprint))
             min_elev, max_elev = self._candidate_elevation_range(candidate)
-            feature.setAttributes([candidate.surface_id, candidate.surface_type, candidate.model, min_elev, max_elev])
+            metadata = candidate.metadata or {}
+            feature.setAttributes(
+                [
+                    candidate.surface_id,
+                    candidate.surface_type,
+                    candidate.model,
+                    min_elev,
+                    max_elev,
+                    metadata.get("vertical_model"),
+                    metadata.get("height_reference"),
+                    metadata.get("lower_edge_role"),
+                    metadata.get("lower_edge_z_m"),
+                    metadata.get("upper_edge_role"),
+                    metadata.get("upper_edge_z_m"),
+                    metadata.get("surface_axis"),
+                    metadata.get("edge_elevation_source"),
+                ]
+            )
             features.append(feature)
 
         layer = self._create_and_add_layer(

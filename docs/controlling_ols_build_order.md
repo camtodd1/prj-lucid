@@ -239,6 +239,35 @@ offset. This avoids treating a sloping-plane/conical intersection as a simple
 buffer, which is not geometrically correct and can round planar corners or
 place the equality edge at the wrong height.
 
+### Vertical Model Contract
+
+Approach, TOCS, and Conical polygon outputs now carry the same explicit
+vertical-model vocabulary used by the controlling candidate metadata:
+
+- `vertical_model` identifies whether the feature is modelled by linear edge
+  interpolation or as a constant elevation;
+- `z_units` and `height_reference` describe the vertical unit and datum;
+- `lower_edge_role`, `lower_edge_z_m`, `upper_edge_role`, and `upper_edge_z_m`
+  identify the defining vertical edges;
+- `surface_axis` describes how interpolation is measured in plan;
+- `edge_elevation_source` records that the values were calculated by the
+  generator.
+
+The controlling engine still evaluates candidates from generated in-memory
+models, not by re-reading exported GeoJSON. The shared fields are therefore an
+audit contract: exported layers, candidate diagnostics, and solver metadata can
+be compared directly when an edge case needs investigation. Future import-based
+or file-based workflows should validate that these fields are present before
+computing conical intersections.
+
+For conical intersections with Approach and TOCS, the controlling engine now
+supplements the existing analytical transition constructors with a sampled
+zero-contour method. Over the 2D overlap of the conical footprint and the
+axis-rising surface, it samples `z_axis - z_conical`, interpolates zero
+crossings along grid-cell edges, and uses that curve as preferred linework for
+the global cell solver and region splitting. The older analytical
+axis-vs-conical curve remains as a fallback.
+
 No-OLS strip-core exclusion masks are applied before competition. These masks
 suppress IHS, OHS, Approach, TOCS, and Transitional candidate footprints within
 the runway strip core/lower-edge corridor where no OLS surface should be
