@@ -38,6 +38,7 @@ from .controlling_ols_engine import (
 )
 
 PLUGIN_TAG = "SafeguardingBuilder"
+OLS_EDGE_ELEVATION_SOURCE = "safeguarding_builder_calculated"
 
 
 class OlsGuidelineMixin:
@@ -447,6 +448,15 @@ class OlsGuidelineMixin:
                                     "slope_perc": slope * 100.0,
                                     "ref_mos": ref,
                                     "height_extent": height_extent_agl,
+                                    "vertical_model": "linear_edge_interpolation",
+                                    "z_units": "m",
+                                    "height_reference": "AMSL",
+                                    "lower_edge_role": "inner_ring",
+                                    "lower_edge_z_m": IHS_ELEVATION_AMSL,
+                                    "upper_edge_role": "outer_ring",
+                                    "upper_edge_z_m": conical_outer_elevation,
+                                    "surface_axis": "distance_from_inner_ring",
+                                    "edge_elevation_source": OLS_EDGE_ELEVATION_SOURCE,
                                 }
                                 for name, value in attr_map.items():
                                     idx = fields.indexFromName(name)
@@ -2739,6 +2749,21 @@ class OlsGuidelineMixin:
             QgsField("slope_perc", QVariant.Double, self.tr("Slope (%)"), 6, 3),
             QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
         ]
+        if surface_type in ["Approach", "TOCS", "Conical"]:
+            fields_list.extend(
+                [
+                    QgsField("vertical_model", QVariant.String, self.tr("Vertical Model"), 40),
+                    QgsField("z_units", QVariant.String, self.tr("Z Units"), 10),
+                    QgsField("height_reference", QVariant.String, self.tr("Height Reference"), 30),
+                    QgsField("lower_edge_role", QVariant.String, self.tr("Lower Edge Role"), 40),
+                    QgsField("lower_edge_z_m", QVariant.Double, self.tr("Lower Edge Elev (m)"), 12, 3),
+                    QgsField("upper_edge_role", QVariant.String, self.tr("Upper Edge Role"), 40),
+                    QgsField("upper_edge_z_m", QVariant.Double, self.tr("Upper Edge Elev (m)"), 12, 3),
+                    QgsField("surface_axis", QVariant.String, self.tr("Surface Axis"), 60),
+                    QgsField("constant_z_m", QVariant.Double, self.tr("Constant Elev (m)"), 12, 3),
+                    QgsField("edge_elevation_source", QVariant.String, self.tr("Edge Elevation Source"), 80),
+                ]
+            )
         # Add specific fields based on type
         if surface_type in [
             "Approach",
@@ -2823,6 +2848,7 @@ class OlsGuidelineMixin:
                 "shape_desc",
                 "radius_m",
                 "side",
+                "constant_z_m",
             ],
             "OHS": [
                 "end_desig",
@@ -2866,6 +2892,7 @@ class OlsGuidelineMixin:
                 "height_extent",
                 "radius_m",
                 "side",
+                "constant_z_m",
             ],  # Keep App/TOCS specific + base
             "InnerTransitional": [
                 "shape_desc",
@@ -3063,6 +3090,25 @@ class OlsGuidelineMixin:
                         else None
                     )
                     section_height_gain = section_length * section_slope  # Height gain over this section
+                    is_horizontal_section = abs(section_slope) < 1e-9
+                    section_vertical_attrs = {
+                        "vertical_model": (
+                            "constant_elevation" if is_horizontal_section else "linear_edge_interpolation"
+                        ),
+                        "z_units": "m",
+                        "height_reference": "AMSL",
+                        "lower_edge_role": "entire_polygon" if is_horizontal_section else "inner_edge",
+                        "lower_edge_z_m": current_elevation_amsl,
+                        "upper_edge_role": "entire_polygon" if is_horizontal_section else "outer_edge",
+                        "upper_edge_z_m": section_outer_elevation,
+                        "surface_axis": (
+                            "none_horizontal_plane"
+                            if is_horizontal_section
+                            else "distance_along_centerline_from_inner_edge"
+                        ),
+                        "constant_z_m": current_elevation_amsl if is_horizontal_section else None,
+                        "edge_elevation_source": OLS_EDGE_ELEVATION_SOURCE,
+                    }
 
                     attr_map = {
                         "rwy_name": runway_data.get("short_name", "N/A"),
@@ -3079,6 +3125,7 @@ class OlsGuidelineMixin:
                         "diverg_perc": (section_divergence * 100.0 if section_divergence is not None else None),
                         "origin_offset": section_start_dist_thr,  # Distance from THR to start of this section
                     }
+                    attr_map.update(section_vertical_attrs)
                     for name, value in attr_map.items():
                         idx = fields.indexFromName(name)
                         if idx != -1:
@@ -3432,6 +3479,15 @@ class OlsGuidelineMixin:
             "outerw_m": final_width,
             "diverg_perc": divergence * 100.0 if divergence is not None else None,
             "origin_offset": origin_offset,
+            "vertical_model": "linear_edge_interpolation",
+            "z_units": "m",
+            "height_reference": "AMSL",
+            "lower_edge_role": "narrow_edge",
+            "lower_edge_z_m": origin_elevation,
+            "upper_edge_role": "wide_edge",
+            "upper_edge_z_m": elevation_amsl,
+            "surface_axis": "distance_along_centerline_from_narrow_edge",
+            "edge_elevation_source": OLS_EDGE_ELEVATION_SOURCE,
         }
         for name, value in attr_map.items():
             idx = fields.indexFromName(name)
