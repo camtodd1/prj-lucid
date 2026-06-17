@@ -22,7 +22,7 @@ from qgis.core import (  # type: ignore
     QgsProject,
     QgsRendererCategory,
     QgsRuleBasedLabeling,
-    QgsSingleSymbolRenderer,
+    QgsRuleBasedRenderer,
     QgsTextBufferSettings,
     QgsTextFormat,
     QgsVectorLayerSimpleLabeling,
@@ -414,12 +414,12 @@ class LayerMixin:
         try:
             categories = []
             for surface, fill_color, outline_color in [
-                ("Approach", "42,157,181,150", "22,98,116,255"),
-                ("TOCS", "240,166,76,145", "150,85,31,255"),
-                ("Transitional", "88,178,124,140", "42,105,65,255"),
-                ("Conical", "160,105,194,140", "95,58,125,255"),
-                ("IHS", "236,205,91,130", "145,118,37,255"),
-                ("OHS", "119,135,158,120", "70,84,105,255"),
+                ("Approach", "42,157,181,115", "22,98,116,230"),
+                ("TOCS", "240,166,76,115", "150,85,31,230"),
+                ("Transitional", "88,178,124,105", "42,105,65,230"),
+                ("Conical", "160,105,194,100", "95,58,125,230"),
+                ("IHS", "236,205,91,100", "145,118,37,230"),
+                ("OHS", "119,135,158,85", "70,84,105,220"),
             ]:
                 symbol = QgsFillSymbol.createSimple(
                     {
@@ -484,7 +484,8 @@ class LayerMixin:
             rule = QgsRuleBasedLabeling.Rule(settings)
             rule.setFilterExpression(
                 '"elev_min" IS NOT NULL AND "elev_max" IS NOT NULL '
-                'AND abs("elev_min" - "elev_max") <= 0.01'
+                'AND abs("elev_min" - "elev_max") <= 0.01 '
+                "AND $area >= 10000"
             )
             root.appendChild(rule)
             layer.setLabeling(QgsRuleBasedLabeling(root))
@@ -501,19 +502,123 @@ class LayerMixin:
         if layer is None or not layer.isValid():
             return
         try:
-            symbol = QgsLineSymbol.createSimple(
+            index_expression = (
+                '"contour_elev_am" IS NOT NULL AND '
+                'abs(("contour_elev_am" / 50.0) - round("contour_elev_am" / 50.0)) <= 0.001'
+            )
+            root = QgsRuleBasedRenderer.Rule(None)
+
+            transition_symbol = QgsLineSymbol.createSimple(
                 {
-                    "line_color": "18,166,142,255",
-                    "line_width": "0.32",
+                    "line_color": "196,59,77,245",
+                    "line_width": "0.44",
+                    "line_width_unit": "MM",
+                    "line_style": "dash",
+                }
+            )
+            transition_rule = QgsRuleBasedRenderer.Rule(transition_symbol)
+            transition_rule.setFilterExpression('"surface" = \'Transition\'')
+            transition_rule.setLabel("Transition / intersection")
+            root.appendChild(transition_rule)
+
+            index_symbol = QgsLineSymbol.createSimple(
+                {
+                    "line_color": "18,75,82,240",
+                    "line_width": "0.40",
                     "line_width_unit": "MM",
                     "line_style": "solid",
                 }
             )
-            layer.setRenderer(QgsSingleSymbolRenderer(symbol))
-            layer.setLabelsEnabled(True)
+            index_rule = QgsRuleBasedRenderer.Rule(index_symbol)
+            index_rule.setFilterExpression(index_expression)
+            index_rule.setLabel("Index contour")
+            root.appendChild(index_rule)
+
+            normal_symbol = QgsLineSymbol.createSimple(
+                {
+                    "line_color": "38,111,117,175",
+                    "line_width": "0.20",
+                    "line_width_unit": "MM",
+                    "line_style": "solid",
+                }
+            )
+            normal_rule = QgsRuleBasedRenderer.Rule(normal_symbol)
+            normal_rule.setFilterExpression(
+                f'("surface" IS NULL OR "surface" <> \'Transition\') AND NOT ({index_expression})'
+            )
+            normal_rule.setLabel("Intermediate contour")
+            root.appendChild(normal_rule)
+
+            layer.setRenderer(QgsRuleBasedRenderer(root))
+            self._apply_controlling_contour_labels(layer, index_expression)
         except Exception as exc:
             QgsMessageLog.logMessage(
                 f"Warning: failed to apply controlling contour line style: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
+    def _apply_controlling_contour_labels(self, layer: QgsVectorLayer, index_expression: str):
+        """Label only index controlling contours to keep dense areas readable."""
+        if layer is None or not layer.isValid() or layer.fields().indexFromName("contour_elev_am") < 0:
+            return
+        try:
+            settings = QgsPalLayerSettings()
+            settings.fieldName = (
+                "CASE "
+                "WHEN round(\"contour_elev_am\" * 2) / 2 = floor(round(\"contour_elev_am\" * 2) / 2) "
+                "THEN format_number(round(\"contour_elev_am\" * 2) / 2, 0) "
+                "ELSE format_number(round(\"contour_elev_am\" * 2) / 2, 1) "
+                "END"
+            )
+            settings.isExpression = True
+            settings.placement = QgsPalLayerSettings.Line
+            try:
+                line_settings = settings.lineSettings()
+                qgis_core = __import__("qgis.core").core
+                placement_flag_owner = getattr(qgis_core, "QgsLabelLineSettings", None)
+                on_line = None
+                if placement_flag_owner is not None:
+                    on_line = getattr(placement_flag_owner, "OnLine", None)
+                    if on_line is None and hasattr(placement_flag_owner, "LinePlacementFlag"):
+                        on_line = getattr(placement_flag_owner.LinePlacementFlag, "OnLine", None)
+                if on_line is None:
+                    on_line = getattr(QgsPalLayerSettings, "OnLine", None)
+                if on_line is not None:
+                    if hasattr(line_settings, "setPlacementFlags"):
+                        line_settings.setPlacementFlags(on_line)
+                    elif hasattr(settings, "placementFlags"):
+                        settings.placementFlags = on_line
+                if hasattr(line_settings, "setMergeLines"):
+                    line_settings.setMergeLines(True)
+                if hasattr(settings, "labelPerPart"):
+                    settings.labelPerPart = False
+            except Exception:
+                pass
+            settings.priority = 6
+            settings.obstacle = False
+
+            text_format = QgsTextFormat()
+            text_format.setFont(QFont("Helvetica", 9))
+            text_format.setSize(9)
+            text_format.setColor(QColor(47, 52, 55))
+
+            buffer = QgsTextBufferSettings()
+            buffer.setEnabled(True)
+            buffer.setSize(0.8)
+            buffer.setColor(QColor(255, 255, 255))
+            text_format.setBuffer(buffer)
+            settings.setFormat(text_format)
+
+            root = QgsRuleBasedLabeling.Rule(None)
+            rule = QgsRuleBasedLabeling.Rule(settings)
+            rule.setFilterExpression(f"({index_expression})")
+            root.appendChild(rule)
+            layer.setLabeling(QgsRuleBasedLabeling(root))
+            layer.setLabelsEnabled(True)
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Warning: failed to apply controlling contour labels: {exc}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
