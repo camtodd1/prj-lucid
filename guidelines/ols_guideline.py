@@ -26,6 +26,7 @@ from qgis.core import (  # type: ignore
 from .ols_constants import (
     APPROACH_CONTOUR_INTERVAL,
     CONICAL_CONTOUR_INTERVAL,
+    PRIMARY_CONTOUR_INTERVAL,
     TOCS_CONTOUR_INTERVAL,
     TRANSITIONAL_CONTOUR_INTERVAL,
 )
@@ -43,13 +44,71 @@ OLS_EDGE_ELEVATION_SOURCE = "safeguarding_builder_calculated"
 
 class OlsGuidelineMixin:
     def _get_contour_interval(self, surface_key: str, fallback: float) -> float:
-        """Return a positive contour interval from dialog options, or the default fallback."""
+        """Return a positive intermediate contour interval from dialog options, or the default fallback."""
+        return self._get_contour_interval_value(surface_key, "intermediate", fallback)
+
+    def _get_primary_contour_interval(self, surface_key: str, fallback: float = PRIMARY_CONTOUR_INTERVAL) -> float:
+        """Return a positive primary contour interval from dialog options, or the default fallback."""
+        return self._get_contour_interval_value(surface_key, "primary", fallback)
+
+    def _get_contour_interval_value(self, surface_key: str, role: str, fallback: float) -> float:
         intervals = getattr(self, "contour_intervals", {}) or {}
+        raw_value = intervals.get(surface_key)
+        if isinstance(raw_value, dict):
+            value = raw_value.get(role)
+        elif role == "intermediate":
+            value = raw_value
+        else:
+            value = intervals.get(f"{surface_key}_{role}")
+        if value is None:
+            default_value = intervals.get("default")
+            if isinstance(default_value, dict):
+                value = default_value.get(role)
+            elif role == "intermediate":
+                value = default_value
         try:
-            value = float(intervals.get(surface_key, fallback))
+            numeric_value = float(value)
         except (TypeError, ValueError):
             return fallback
-        return value if value > 0 else fallback
+        return numeric_value if numeric_value > 0 else fallback
+
+    def _contour_attribute_values(self, surface_key: str, contour_elevation: Optional[float]) -> Dict[str, object]:
+        fallback_by_surface = {
+            "approach": APPROACH_CONTOUR_INTERVAL,
+            "conical": CONICAL_CONTOUR_INTERVAL,
+            "tocs": TOCS_CONTOUR_INTERVAL,
+            "transitional": TRANSITIONAL_CONTOUR_INTERVAL,
+        }
+        intermediate_interval = self._get_contour_interval(
+            surface_key,
+            fallback_by_surface.get(surface_key, CONICAL_CONTOUR_INTERVAL),
+        )
+        primary_interval = self._get_primary_contour_interval(surface_key)
+        contour_class = "intermediate"
+        try:
+            elevation = float(contour_elevation)
+            ratio = elevation / primary_interval
+            if primary_interval > 0 and math.isfinite(elevation) and abs(ratio - round(ratio)) <= 0.001:
+                contour_class = "primary"
+        except (TypeError, ValueError):
+            pass
+        return {
+            "contour_class": contour_class,
+            "contour_interval_m": intermediate_interval,
+            "primary_interval_m": primary_interval,
+        }
+
+    def _apply_contour_metadata(
+        self,
+        feature: QgsFeature,
+        fields: QgsFields,
+        surface_key: str,
+        contour_elevation: Optional[float],
+    ) -> None:
+        for name, value in self._contour_attribute_values(surface_key, contour_elevation).items():
+            idx = fields.indexFromName(name)
+            if idx != -1:
+                feature.setAttribute(idx, value)
 
     def _contour_interval_elevations(
         self,
@@ -641,6 +700,7 @@ class OlsGuidelineMixin:
                     feat.setAttribute(fields.indexFromName("contour_hgt_abv"), 0)
                     feat.setAttribute(fields.indexFromName("ref_mos"), ref)
                     feat.setAttribute(fields.indexFromName("surface_id"), conical_surface_id)
+                    self._apply_contour_metadata(feat, fields, "conical", IHS_ELEVATION_AMSL)
                     contour_features.append(feat)
                     # QgsMessageLog.logMessage(
                     #     f"Conical start contour at {IHS_ELEVATION_AMSL:.2f}m AMSL.",
@@ -696,6 +756,12 @@ class OlsGuidelineMixin:
                             )
                             feat.setAttribute(fields.indexFromName("ref_mos"), ref)
                             feat.setAttribute(fields.indexFromName("surface_id"), conical_surface_id)
+                            self._apply_contour_metadata(
+                                feat,
+                                fields,
+                                "conical",
+                                current_target_contour_elev_amsl,
+                            )
                             contour_features.append(feat)
                             # QgsMessageLog.logMessage(
                             #     f"Conical interval contour at {current_target_contour_elev_amsl:.2f}m AMSL.", plugin_tag, Qgis.Info
@@ -729,6 +795,7 @@ class OlsGuidelineMixin:
                         feat.setAttribute(fields.indexFromName("contour_hgt_abv"), height_extent_agl)
                         feat.setAttribute(fields.indexFromName("ref_mos"), ref)
                         feat.setAttribute(fields.indexFromName("surface_id"), conical_surface_id)
+                        self._apply_contour_metadata(feat, fields, "conical", conical_outer_elevation)
                         contour_features.append(feat)
                         # QgsMessageLog.logMessage(
                         #     f"Conical end contour at {conical_outer_elevation:.2f}m AMSL.",
@@ -1725,6 +1792,7 @@ class OlsGuidelineMixin:
                     "ref_mos": transitional_ref,
                     "surface_id": surface_id,
                 }
+                attr_map.update(self._contour_attribute_values("transitional", current_z))
                 for name, value in attr_map.items():
                     idx = contour_fields.indexFromName(name)
                     if idx != -1:
@@ -1760,6 +1828,7 @@ class OlsGuidelineMixin:
             "ref_mos": transitional_ref,
             "surface_id": surface_id,
         }
+        attr_map.update(self._contour_attribute_values("transitional", contour_elevation))
         for name, value in attr_map.items():
             idx = contour_fields.indexFromName(name)
             if idx != -1:
@@ -2632,6 +2701,7 @@ class OlsGuidelineMixin:
                 "ref_mos": transitional_ref,
                 "surface_id": surface_id,
             }
+            attr_map.update(self._contour_attribute_values("transitional", current_z))
             #     QgsMessageLog.logMessage(
             #     f"Setting contour_elev_am for contour: current_z={current_z} (type={type(current_z)})",
             #     PLUGIN_TAG,
@@ -2667,6 +2737,9 @@ class OlsGuidelineMixin:
                 ),
                 QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
                 QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
+                QgsField("contour_class", QVariant.String, self.tr("Contour Class"), 20),
+                QgsField("contour_interval_m", QVariant.Double, self.tr("Intermediate Interval (m)"), 10, 2),
+                QgsField("primary_interval_m", QVariant.Double, self.tr("Primary Interval (m)"), 10, 2),
             ]
         )
         return fields
@@ -2689,6 +2762,9 @@ class OlsGuidelineMixin:
                 QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
                 QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
                 QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
+                QgsField("contour_class", QVariant.String, self.tr("Contour Class"), 20),
+                QgsField("contour_interval_m", QVariant.Double, self.tr("Intermediate Interval (m)"), 10, 2),
+                QgsField("primary_interval_m", QVariant.Double, self.tr("Primary Interval (m)"), 10, 2),
             ]
         )
         return fields
@@ -2769,6 +2845,9 @@ class OlsGuidelineMixin:
                 QgsField("surface", QVariant.String),
                 QgsField("contour_elev_am", QVariant.Double),
                 QgsField("surface_id", QVariant.String),
+                QgsField("contour_class", QVariant.String),
+                QgsField("contour_interval_m", QVariant.Double),
+                QgsField("primary_interval_m", QVariant.Double),
             ]
         )
 
@@ -2792,6 +2871,9 @@ class OlsGuidelineMixin:
                 QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
                 QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
                 QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
+                QgsField("contour_class", QVariant.String, self.tr("Contour Class"), 20),
+                QgsField("contour_interval_m", QVariant.Double, self.tr("Intermediate Interval (m)"), 10, 2),
+                QgsField("primary_interval_m", QVariant.Double, self.tr("Primary Interval (m)"), 10, 2),
             ]
         )
 
@@ -3305,6 +3387,9 @@ class OlsGuidelineMixin:
                                             "contour_elev_am": target_elev,
                                             "surface_id": section_surface_id,
                                         }
+                                        contour_attr_map.update(
+                                            self._contour_attribute_values("approach", target_elev)
+                                        )
                                         for name, value in contour_attr_map.items():
                                             idx = contour_fields.indexFromName(name)
                                             if idx != -1:
@@ -3666,6 +3751,7 @@ class OlsGuidelineMixin:
                         "contour_elev_am": target_elev,
                         "surface_id": tocs_surface_id,
                     }
+                    contour_attr_map.update(self._contour_attribute_values("tocs", target_elev))
                     for name, value in contour_attr_map.items():
                         idx = contour_fields.indexFromName(name)
                         if idx != -1:

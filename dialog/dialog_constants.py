@@ -26,6 +26,7 @@ OUTPUT_FORMATS = {
 DEFAULT_OUTPUT_FORMAT = "ESRI Shapefile"
 
 DEFAULT_CONTOUR_INTERVAL = 10.0
+DEFAULT_PRIMARY_CONTOUR_INTERVAL = 50.0
 CONTOUR_INTERVAL_KEYS = ("approach", "tocs", "transitional", "conical")
 CONTOUR_INTERVAL_LABELS = {
     "approach": "OLS Approach",

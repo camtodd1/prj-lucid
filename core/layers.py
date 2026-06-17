@@ -502,11 +502,15 @@ class LayerMixin:
         if layer is None or not layer.isValid():
             return
         try:
-            index_expression = (
-                '"contour_elev_am" IS NOT NULL AND '
-                'abs(("contour_elev_am" / 50.0) - round("contour_elev_am" / 50.0)) <= 0.001'
-            )
+            if layer.fields().indexFromName("contour_class") >= 0:
+                index_expression = '"contour_class" = \'primary\''
+            else:
+                index_expression = (
+                    '"contour_elev_am" IS NOT NULL AND '
+                    'abs(("contour_elev_am" / 50.0) - round("contour_elev_am" / 50.0)) <= 0.001'
+                )
             root = QgsRuleBasedRenderer.Rule(None)
+            primary_filter = f'("surface" IS NULL OR "surface" <> \'Transition\') AND ({index_expression})'
 
             transition_symbol = QgsLineSymbol.createSimple(
                 {
@@ -530,8 +534,8 @@ class LayerMixin:
                 }
             )
             index_rule = QgsRuleBasedRenderer.Rule(index_symbol)
-            index_rule.setFilterExpression(index_expression)
-            index_rule.setLabel("Index contour")
+            index_rule.setFilterExpression(primary_filter)
+            index_rule.setLabel("Primary contour")
             root.appendChild(index_rule)
 
             normal_symbol = QgsLineSymbol.createSimple(
@@ -550,7 +554,7 @@ class LayerMixin:
             root.appendChild(normal_rule)
 
             layer.setRenderer(QgsRuleBasedRenderer(root))
-            self._apply_controlling_contour_labels(layer, index_expression)
+            self._apply_controlling_contour_labels(layer, primary_filter)
         except Exception as exc:
             QgsMessageLog.logMessage(
                 f"Warning: failed to apply controlling contour line style: {exc}",

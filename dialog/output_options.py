@@ -7,6 +7,7 @@ from .dialog_constants import (
     CONTOUR_INTERVAL_KEYS,
     CONTOUR_INTERVAL_LABELS,
     DEFAULT_CONTOUR_INTERVAL,
+    DEFAULT_PRIMARY_CONTOUR_INTERVAL,
     DEFAULT_OUTPUT_FORMAT,
     DIALOG_LOG_TAG,
     OUTPUT_FORMATS,
@@ -119,50 +120,93 @@ class OutputOptionsMixin:
             grid.setVerticalSpacing(6)
             grid.setColumnStretch(0, 1)
             grid.setColumnStretch(1, 0)
+            grid.setColumnStretch(2, 0)
 
+        primary_header = getattr(self, "labelContourPrimaryHeader", None)
+        if primary_header is None:
+            primary_header = QtWidgets.QLabel(self.tr("Primary"))
+            primary_header.setObjectName("labelContourPrimaryHeader")
+            grid.addWidget(primary_header, 0, 1)
+        intermediate_header = getattr(self, "labelContourIntermediateHeader", None)
+        if intermediate_header is None:
+            intermediate_header = QtWidgets.QLabel(self.tr("Intermediate"))
+            intermediate_header.setObjectName("labelContourIntermediateHeader")
+            grid.addWidget(intermediate_header, 0, 2)
+
+        self._contour_primary_interval_spinboxes = {}
         self._contour_interval_spinboxes = {}
         default_label = getattr(self, "labelContourDefault", None)
         if default_label is None:
             default_label = QtWidgets.QLabel(self.tr("Default contour interval"))
             default_label.setObjectName("labelContourDefault")
-            grid.addWidget(default_label, 0, 0)
+            grid.addWidget(default_label, 1, 0)
+        self.doubleSpinBoxContourDefaultPrimary = getattr(
+            self,
+            "doubleSpinBoxContourDefaultPrimary",
+            None,
+        ) or self._create_contour_interval_spinbox(
+            "doubleSpinBoxContourDefaultPrimary",
+            DEFAULT_PRIMARY_CONTOUR_INTERVAL,
+        )
         self.doubleSpinBoxContourDefault = getattr(
             self,
             "doubleSpinBoxContourDefault",
             None,
         ) or self._create_contour_interval_spinbox("doubleSpinBoxContourDefault")
-        grid.addWidget(self.doubleSpinBoxContourDefault, 0, 1)
+        grid.addWidget(self.doubleSpinBoxContourDefaultPrimary, 1, 1)
+        grid.addWidget(self.doubleSpinBoxContourDefault, 1, 2)
 
-        for row, key in enumerate(CONTOUR_INTERVAL_KEYS, start=1):
+        for row, key in enumerate(CONTOUR_INTERVAL_KEYS, start=2):
             label_name = f"labelContour{key.title()}"
-            spin_name = f"doubleSpinBoxContour{key.title()}"
+            primary_spin_name = f"doubleSpinBoxContour{key.title()}Primary"
+            intermediate_spin_name = f"doubleSpinBoxContour{key.title()}Intermediate"
             label = getattr(self, label_name, None)
             if label is None:
                 label = QtWidgets.QLabel(self.tr(CONTOUR_INTERVAL_LABELS[key]))
                 label.setObjectName(label_name)
                 grid.addWidget(label, row, 0)
-            spinbox = getattr(self, spin_name, None)
-            if spinbox is None:
-                spinbox = self._create_contour_interval_spinbox(spin_name)
-            self._contour_interval_spinboxes[key] = spinbox
-            grid.addWidget(spinbox, row, 1)
+            primary_spinbox = getattr(self, primary_spin_name, None)
+            if primary_spinbox is None:
+                primary_spinbox = self._create_contour_interval_spinbox(
+                    primary_spin_name,
+                    DEFAULT_PRIMARY_CONTOUR_INTERVAL,
+                )
+            intermediate_spinbox = getattr(self, intermediate_spin_name, None)
+            if intermediate_spinbox is None:
+                intermediate_spinbox = self._create_contour_interval_spinbox(intermediate_spin_name)
+            self._contour_primary_interval_spinboxes[key] = primary_spinbox
+            self._contour_interval_spinboxes[key] = intermediate_spinbox
+            grid.addWidget(primary_spinbox, row, 1)
+            grid.addWidget(intermediate_spinbox, row, 2)
 
-        self.doubleSpinBoxContourDefault.valueChanged.connect(self._apply_default_contour_interval)
+        self.doubleSpinBoxContourDefaultPrimary.valueChanged.connect(
+            lambda value: self._apply_default_contour_interval("primary", value)
+        )
+        self.doubleSpinBoxContourDefault.valueChanged.connect(
+            lambda value: self._apply_default_contour_interval("intermediate", value)
+        )
+        for spinbox in self._contour_primary_interval_spinboxes.values():
+            spinbox.valueChanged.connect(self._on_contour_interval_changed)
         for spinbox in self._contour_interval_spinboxes.values():
             spinbox.valueChanged.connect(self._on_contour_interval_changed)
 
-    def _create_contour_interval_spinbox(self, object_name: str):
+    def _create_contour_interval_spinbox(self, object_name: str, default_value: float = DEFAULT_CONTOUR_INTERVAL):
         spinbox = QtWidgets.QDoubleSpinBox()
         spinbox.setObjectName(object_name)
         spinbox.setRange(0.1, 10000.0)
         spinbox.setDecimals(2)
         spinbox.setSingleStep(1.0)
         spinbox.setSuffix(" m")
-        spinbox.setValue(DEFAULT_CONTOUR_INTERVAL)
+        spinbox.setValue(default_value)
         return spinbox
 
-    def _apply_default_contour_interval(self, value: float):
-        for spinbox in getattr(self, "_contour_interval_spinboxes", {}).values():
+    def _apply_default_contour_interval(self, role: str, value: float):
+        attr_name = (
+            "_contour_primary_interval_spinboxes"
+            if role == "primary"
+            else "_contour_interval_spinboxes"
+        )
+        for spinbox in getattr(self, attr_name, {}).values():
             spinbox.blockSignals(True)
             spinbox.setValue(value)
             spinbox.blockSignals(False)
@@ -173,26 +217,90 @@ class OutputOptionsMixin:
             self.update_dialog_status()
 
     def get_contour_interval_options(self):
-        spinboxes = getattr(self, "_contour_interval_spinboxes", {})
-        return {
-            "default": self.doubleSpinBoxContourDefault.value()
+        primary_spinboxes = getattr(self, "_contour_primary_interval_spinboxes", {})
+        intermediate_spinboxes = getattr(self, "_contour_interval_spinboxes", {})
+        default_primary = (
+            self.doubleSpinBoxContourDefaultPrimary.value()
+            if hasattr(self, "doubleSpinBoxContourDefaultPrimary")
+            else DEFAULT_PRIMARY_CONTOUR_INTERVAL
+        )
+        default_intermediate = (
+            self.doubleSpinBoxContourDefault.value()
             if hasattr(self, "doubleSpinBoxContourDefault")
-            else DEFAULT_CONTOUR_INTERVAL,
-            **{key: spinboxes[key].value() for key in CONTOUR_INTERVAL_KEYS if key in spinboxes},
+            else DEFAULT_CONTOUR_INTERVAL
+        )
+        return {
+            "default": {
+                "primary": default_primary,
+                "intermediate": default_intermediate,
+            },
+            **{
+                key: {
+                    "primary": primary_spinboxes[key].value()
+                    if key in primary_spinboxes
+                    else default_primary,
+                    "intermediate": intermediate_spinboxes[key].value()
+                    if key in intermediate_spinboxes
+                    else default_intermediate,
+                }
+                for key in CONTOUR_INTERVAL_KEYS
+            },
         }
 
     def set_contour_interval_options(self, contour_options):
         if not isinstance(contour_options, dict):
             contour_options = {}
-        default_value = self._coerce_contour_interval(contour_options.get("default"), DEFAULT_CONTOUR_INTERVAL)
+        default_primary = self._coerce_contour_interval_value(
+            contour_options,
+            "default",
+            "primary",
+            DEFAULT_PRIMARY_CONTOUR_INTERVAL,
+        )
+        default_intermediate = self._coerce_contour_interval_value(
+            contour_options,
+            "default",
+            "intermediate",
+            DEFAULT_CONTOUR_INTERVAL,
+        )
+        if hasattr(self, "doubleSpinBoxContourDefaultPrimary"):
+            self.doubleSpinBoxContourDefaultPrimary.setValue(default_primary)
         if hasattr(self, "doubleSpinBoxContourDefault"):
-            self.doubleSpinBoxContourDefault.setValue(default_value)
+            self.doubleSpinBoxContourDefault.setValue(default_intermediate)
 
-        spinboxes = getattr(self, "_contour_interval_spinboxes", {})
+        primary_spinboxes = getattr(self, "_contour_primary_interval_spinboxes", {})
+        intermediate_spinboxes = getattr(self, "_contour_interval_spinboxes", {})
         for key in CONTOUR_INTERVAL_KEYS:
-            if key in spinboxes:
-                value = self._coerce_contour_interval(contour_options.get(key), default_value)
-                spinboxes[key].setValue(value)
+            primary_value = self._coerce_contour_interval_value(
+                contour_options,
+                key,
+                "primary",
+                default_primary,
+            )
+            intermediate_value = self._coerce_contour_interval_value(
+                contour_options,
+                key,
+                "intermediate",
+                default_intermediate,
+            )
+            if key in primary_spinboxes:
+                primary_spinboxes[key].setValue(primary_value)
+            if key in intermediate_spinboxes:
+                intermediate_spinboxes[key].setValue(intermediate_value)
+
+    def _coerce_contour_interval_value(
+        self,
+        contour_options,
+        key: str,
+        role: str,
+        fallback: float,
+    ) -> float:
+        raw_value = contour_options.get(key)
+        if isinstance(raw_value, dict):
+            return self._coerce_contour_interval(raw_value.get(role), fallback)
+        if role == "intermediate":
+            return self._coerce_contour_interval(raw_value, fallback)
+        legacy_primary = contour_options.get(f"{key}_{role}")
+        return self._coerce_contour_interval(legacy_primary, fallback)
 
     def _coerce_contour_interval(self, value, fallback: float) -> float:
         try:

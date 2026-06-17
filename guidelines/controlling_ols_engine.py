@@ -78,6 +78,9 @@ class ControllingOlsContour:
     geometry: QgsGeometry
     contour_elevation_m: Optional[float]
     source_layer: str
+    contour_class: Optional[str] = None
+    contour_interval_m: Optional[float] = None
+    primary_interval_m: Optional[float] = None
 
 
 def constant_elevation_evaluator(elevation_m: float) -> ElevationEvaluator:
@@ -4098,6 +4101,31 @@ class ControllingOlsEngineMixin:
             contour_elevation = float(contour_elevation) if contour_elevation is not None else None
         except (KeyError, TypeError, ValueError):
             contour_elevation = None
+
+        def _feature_attr(name: str):
+            try:
+                return contour_feature.attribute(name)
+            except (KeyError, TypeError):
+                return None
+
+        contour_class = _feature_attr("contour_class")
+        contour_class = str(contour_class) if contour_class not in (None, "") else None
+
+        def _float_attr(name: str) -> Optional[float]:
+            try:
+                value = _feature_attr(name)
+                return float(value) if value not in (None, "") else None
+            except (TypeError, ValueError):
+                return None
+
+        contour_interval_m = _float_attr("contour_interval_m")
+        primary_interval_m = _float_attr("primary_interval_m")
+        if contour_class is None and hasattr(self, "_contour_attribute_values"):
+            surface_key = str(surface_type or "").lower()
+            metadata = self._contour_attribute_values(surface_key, contour_elevation)
+            contour_class = metadata.get("contour_class")  # type: ignore[assignment]
+            contour_interval_m = contour_interval_m or metadata.get("contour_interval_m")  # type: ignore[assignment]
+            primary_interval_m = primary_interval_m or metadata.get("primary_interval_m")  # type: ignore[assignment]
         self._controlling_ols_contours.append(
             ControllingOlsContour(
                 surface_id=surface_id,
@@ -4105,6 +4133,9 @@ class ControllingOlsEngineMixin:
                 geometry=QgsGeometry(geometry),
                 contour_elevation_m=contour_elevation,
                 source_layer=source_layer,
+                contour_class=contour_class,
+                contour_interval_m=contour_interval_m,
+                primary_interval_m=primary_interval_m,
             )
         )
 
@@ -4420,6 +4451,9 @@ class ControllingOlsEngineMixin:
                 QgsField("contour_elev_am", QVariant.Double, self.tr("Contour Elev AMSL"), 12, 3),
                 QgsField("source_layer", QVariant.String, self.tr("Source Layer"), 80),
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
+                QgsField("contour_class", QVariant.String, self.tr("Contour Class"), 20),
+                QgsField("contour_interval_m", QVariant.Double, self.tr("Intermediate Interval (m)"), 10, 2),
+                QgsField("primary_interval_m", QVariant.Double, self.tr("Primary Interval (m)"), 10, 2),
             ]
         )
         features: List[QgsFeature] = []
@@ -4483,6 +4517,9 @@ class ControllingOlsEngineMixin:
                     contour.contour_elevation_m,
                     contour.source_layer,
                     method,
+                    contour.contour_class,
+                    contour.contour_interval_m,
+                    contour.primary_interval_m,
                 ]
             )
             features.append(feature)
@@ -4554,6 +4591,9 @@ class ControllingOlsEngineMixin:
                     contour_elevation,
                     "OLS Controlling Planar Transitions",
                     "targeted_horizontal_transition",
+                    "transition",
+                    None,
+                    None,
                 ]
             )
             features.append(feature)

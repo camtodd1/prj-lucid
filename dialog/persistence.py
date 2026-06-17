@@ -15,6 +15,7 @@ from qgis.PyQt.QtWidgets import (  # type: ignore
 from .dialog_constants import (
     CONTOUR_INTERVAL_KEYS,
     DEFAULT_CONTOUR_INTERVAL,
+    DEFAULT_PRIMARY_CONTOUR_INTERVAL,
     DEFAULT_OUTPUT_FORMAT,
     DIALOG_LOG_TAG,
     OUTPUT_FORMATS,
@@ -492,10 +493,23 @@ class PersistenceMixin:
             return True
         if hasattr(self, "get_contour_interval_options"):
             contour_options = self.get_contour_interval_options()
-            if abs(float(contour_options.get("default", DEFAULT_CONTOUR_INTERVAL)) - DEFAULT_CONTOUR_INTERVAL) > 1e-9:
+            default_options = contour_options.get("default", {})
+            if not isinstance(default_options, dict):
+                default_options = {"intermediate": default_options}
+            if (
+                abs(float(default_options.get("primary", DEFAULT_PRIMARY_CONTOUR_INTERVAL)) - DEFAULT_PRIMARY_CONTOUR_INTERVAL)
+                > 1e-9
+            ):
+                return True
+            if abs(float(default_options.get("intermediate", DEFAULT_CONTOUR_INTERVAL)) - DEFAULT_CONTOUR_INTERVAL) > 1e-9:
                 return True
             for key in CONTOUR_INTERVAL_KEYS:
-                if abs(float(contour_options.get(key, DEFAULT_CONTOUR_INTERVAL)) - DEFAULT_CONTOUR_INTERVAL) > 1e-9:
+                value = contour_options.get(key, {})
+                if not isinstance(value, dict):
+                    value = {"intermediate": value}
+                if abs(float(value.get("primary", DEFAULT_PRIMARY_CONTOUR_INTERVAL)) - DEFAULT_PRIMARY_CONTOUR_INTERVAL) > 1e-9:
+                    return True
+                if abs(float(value.get("intermediate", DEFAULT_CONTOUR_INTERVAL)) - DEFAULT_CONTOUR_INTERVAL) > 1e-9:
                     return True
         return False
 

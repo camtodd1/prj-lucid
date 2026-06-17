@@ -871,8 +871,14 @@ class SafeguardingBuilderDialog(
         if footer_status:
             footer_status.setStyleSheet("color: #555555; font-size: 11px;")
 
-        for spinbox in getattr(self, "_contour_interval_spinboxes", {}).values():
-            spinbox.setMaximumWidth(160)
+        for spinbox_map in (
+            getattr(self, "_contour_primary_interval_spinboxes", {}),
+            getattr(self, "_contour_interval_spinboxes", {}),
+        ):
+            for spinbox in spinbox_map.values():
+                spinbox.setMaximumWidth(160)
+        if hasattr(self, "doubleSpinBoxContourDefaultPrimary"):
+            self.doubleSpinBoxContourDefaultPrimary.setMaximumWidth(160)
         if hasattr(self, "doubleSpinBoxContourDefault"):
             self.doubleSpinBoxContourDefault.setMaximumWidth(160)
 
