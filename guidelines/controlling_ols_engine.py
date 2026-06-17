@@ -421,12 +421,46 @@ class PlanarControllingOlsEngine:
             if geometry is not None and not geometry.isEmpty():
                 curve_geometries.append(geometry)
 
-        return self._merged_transition_line_parts(
+        merged_parts = self._merged_transition_line_parts(
             curve_geometries,
             touch_tolerance_m=touch_tolerance,
             simplify_tolerance_m=simplify_tolerance,
             min_length_m=min_length,
         )
+        return self._axis_station_ordered_transition_parts(
+            axis,
+            merged_parts,
+            simplify_tolerance,
+            min_length,
+        )
+
+    def _axis_station_ordered_transition_parts(
+        self,
+        axis: dict,
+        line_parts: Sequence[Sequence[QgsPointXY]],
+        simplify_tolerance_m: float,
+        min_length_m: float,
+    ) -> List[List[QgsPointXY]]:
+        """Order axis-based transition curves monotonically by local station."""
+        ordered_parts: List[List[QgsPointXY]] = []
+        for points in line_parts:
+            if len(points) < 2:
+                continue
+            ordered = sorted(
+                (QgsPointXY(point.x(), point.y()) for point in points),
+                key=lambda point: self._axis_station(axis, point),
+            )
+            deduped: List[QgsPointXY] = []
+            for point in ordered:
+                if deduped and point.distance(deduped[-1]) <= 1e-6:
+                    continue
+                deduped.append(point)
+            if len(deduped) < 2 or self._path_length(deduped) < min_length_m:
+                continue
+            simplified = self._simplify_transition_curve_points(deduped, simplify_tolerance_m)
+            if len(simplified) >= 2 and self._path_length(simplified) >= min_length_m:
+                ordered_parts.append(simplified)
+        return ordered_parts
 
     def _polygon_boundary_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
         """Return exterior and interior polygon rings as line point lists."""
