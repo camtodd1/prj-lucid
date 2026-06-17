@@ -51,6 +51,58 @@ class OlsGuidelineMixin:
             return fallback
         return value if value > 0 else fallback
 
+    def _contour_interval_elevations(
+        self,
+        start_elev: Optional[float],
+        end_elev: Optional[float],
+        interval: float,
+        *,
+        include_start: bool = False,
+        include_end: bool = False,
+        include_lower: bool = False,
+        include_upper: bool = False,
+    ) -> List[float]:
+        """Return contour interval elevations between two AMSL elevations, including negative datums."""
+        if start_elev is None or end_elev is None:
+            return []
+        try:
+            start_z = float(start_elev)
+            end_z = float(end_elev)
+            spacing = float(interval)
+        except (TypeError, ValueError):
+            return []
+        if spacing <= 0 or not math.isfinite(start_z) or not math.isfinite(end_z):
+            return []
+
+        lower = min(start_z, end_z)
+        upper = max(start_z, end_z)
+        if upper < lower - 1e-6:
+            return []
+
+        elevations = set()
+        if include_start:
+            elevations.add(round(start_z, 6))
+        if include_end:
+            elevations.add(round(end_z, 6))
+        if include_lower:
+            elevations.add(round(lower, 6))
+        if include_upper:
+            elevations.add(round(upper, 6))
+
+        first = math.ceil((lower - 1e-9) / spacing) * spacing
+        if first < lower - 1e-6:
+            first += spacing
+
+        current = first
+        guard = 0
+        while current <= upper + 1e-6 and guard < 10000:
+            rounded = 0.0 if abs(current) < 1e-9 else current
+            elevations.add(round(rounded, 6))
+            current += spacing
+            guard += 1
+
+        return sorted(elevations)
+
     def _generate_airport_wide_ols(
         self,
         processed_runway_data_list: List[dict],
@@ -602,21 +654,21 @@ class OlsGuidelineMixin:
                     )
 
             # 2. Interval contours (main loop)
-            if IHS_ELEVATION_AMSL % conical_contour_interval == 0:
-                first_contour_elev_amsl = IHS_ELEVATION_AMSL + conical_contour_interval
-            else:
-                first_contour_elev_amsl = (
-                    math.ceil(IHS_ELEVATION_AMSL / conical_contour_interval) * conical_contour_interval
-                )
-            current_target_contour_elev_amsl = first_contour_elev_amsl
-
-            while current_target_contour_elev_amsl < conical_outer_elevation - 1e-6:
+            for current_target_contour_elev_amsl in self._contour_interval_elevations(
+                IHS_ELEVATION_AMSL,
+                conical_outer_elevation,
+                conical_contour_interval,
+            ):
+                if (
+                    current_target_contour_elev_amsl <= IHS_ELEVATION_AMSL + 1e-6
+                    or current_target_contour_elev_amsl >= conical_outer_elevation - 1e-6
+                ):
+                    continue
                 contour_h_above_ihs = min(
                     current_target_contour_elev_amsl - IHS_ELEVATION_AMSL,
                     height_extent_agl,
                 )
                 if contour_h_above_ihs < 1e-6:
-                    current_target_contour_elev_amsl += conical_contour_interval
                     continue
                 try:
                     horizontal_dist = contour_h_above_ihs / slope
@@ -653,7 +705,6 @@ class OlsGuidelineMixin:
                         plugin_tag,
                         Qgis.Warning,
                     )
-                current_target_contour_elev_amsl += conical_contour_interval
 
             # 3. End contour at conical outer elevation
             end_geom = outer_conical_geom
@@ -1600,11 +1651,16 @@ class OlsGuidelineMixin:
         normals = [(-uy, ux), (uy, -ux)]
         extra = 2 * top_len
 
+        contour_elevations = [
+            elev
+            for elev in self._contour_interval_elevations(min_panel_elev, max_panel_elev, contour_interval)
+            if min_panel_elev + 1e-6 < elev < max_panel_elev - 1e-6
+        ]
+        if not contour_elevations:
+            return contours
+
         # Figure out which normal points inside the polygon by testing the first contour
-        first_contour_elev = max(
-            contour_interval,
-            contour_interval * (int(min_panel_elev // contour_interval) + 1),
-        )
+        first_contour_elev = contour_elevations[0]
         direction_found = False
         for nx, ny in normals:
             delta_z = max_panel_elev - first_contour_elev
@@ -1628,8 +1684,7 @@ class OlsGuidelineMixin:
             return contours
 
         # Now generate all contours in the selected direction
-        current_z = first_contour_elev
-        while current_z < max_panel_elev - 1e-6:
+        for current_z in contour_elevations:
             delta_z = max_panel_elev - current_z
             offset = delta_z / transitional_slope
             pt1 = QgsPointXY(
@@ -1643,7 +1698,6 @@ class OlsGuidelineMixin:
             line_geom = QgsGeometry.fromPolylineXY([pt1, pt2])
             clipped = line_geom.intersection(panel_geom)
             if clipped.isEmpty():
-                current_z += contour_interval
                 continue
 
             # Handle multipart or single part
@@ -1653,7 +1707,6 @@ class OlsGuidelineMixin:
             elif clipped.type() == QgsWkbTypes.LineGeometry:
                 geoms = [clipped]
             else:
-                current_z += contour_interval
                 continue
 
             for g in geoms:
@@ -1676,8 +1729,6 @@ class OlsGuidelineMixin:
                     if idx != -1:
                         feat.setAttribute(idx, value)
                 contours.append(feat)
-
-            current_z += contour_interval
 
         return contours
 
@@ -2541,9 +2592,12 @@ class OlsGuidelineMixin:
         contours = []
         min_z = min(z_start, z_end)
         max_z = IHS_ELEVATION_AMSL
-        first_contour = math.ceil(min_z / contour_interval) * contour_interval
-        current_z = first_contour
-        while current_z < max_z:
+        contour_elevations = [
+            elev
+            for elev in self._contour_interval_elevations(min_z, max_z, contour_interval)
+            if min_z - 1e-6 <= elev < max_z - 1e-6
+        ]
+        for current_z in contour_elevations:
             # Linear interpolation for contour endpoints along base->top lines
             t_start = (current_z - z_start) / (max_z - z_start) if max_z > z_start else 1.0
             t_end = (current_z - z_end) / (max_z - z_end) if max_z > z_end else 1.0
@@ -2561,7 +2615,6 @@ class OlsGuidelineMixin:
             if bounding_polygon is not None and line_geom is not None:
                 clipped_geom = line_geom.intersection(bounding_polygon)
                 if clipped_geom.isEmpty():
-                    current_z += contour_interval
                     continue  # Skip if completely outside
                 line_geom = clipped_geom  # Use the clipped geometry
 
@@ -2587,7 +2640,6 @@ class OlsGuidelineMixin:
                 if idx != -1:
                     feat.setAttribute(idx, value)
             contours.append(feat)
-            current_z += contour_interval
         return contours
 
     # Guideline F: OLS Processing Helpers
@@ -3196,15 +3248,9 @@ class OlsGuidelineMixin:
                     contour_elevs.add(round(end_elev, 6))
                 else:
                     # Sloped section: intervals + start
-                    first_contour = math.ceil(start_elev / approach_contour_interval) * approach_contour_interval
-                    if first_contour < start_elev - 1e-6:
-                        first_contour += approach_contour_interval
-
-                    c_elev = first_contour
-                    while c_elev <= end_elev + 1e-6:
-                        contour_elevs.add(round(c_elev, 6))
-                        c_elev += approach_contour_interval
-
+                    contour_elevs.update(
+                        self._contour_interval_elevations(start_elev, end_elev, approach_contour_interval)
+                    )
                     contour_elevs.add(round(start_elev, 6))
 
                 if inner_horizontal_elevation_amsl is not None:
@@ -3549,14 +3595,7 @@ class OlsGuidelineMixin:
             contour_elevs = set()
 
             # Add interval contours
-            first_contour = math.ceil(start_elev / tocs_contour_interval) * tocs_contour_interval
-            if first_contour < start_elev - 1e-6:
-                first_contour += tocs_contour_interval
-
-            c_elev = first_contour
-            while c_elev <= end_elev + 1e-6:
-                contour_elevs.add(round(c_elev, 6))
-                c_elev += tocs_contour_interval
+            contour_elevs.update(self._contour_interval_elevations(start_elev, end_elev, tocs_contour_interval))
 
             # Always add start and end elevation
             contour_elevs.add(round(start_elev, 6))

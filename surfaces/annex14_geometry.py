@@ -161,11 +161,12 @@ class Annex14GeometryMixin:
         z_min = min(float(start_z), float(end_z))
         z_max = max(float(start_z), float(end_z))
         elevations = {round(z_min, 6), round(z_max, 6)}
-        current = math.ceil(z_min / interval) * interval
-        if current < z_min + 1e-6:
+        current = math.ceil((z_min - 1e-9) / interval) * interval
+        if current < z_min - 1e-6:
             current += interval
         while current < z_max - 1e-6:
-            elevations.add(round(current, 6))
+            rounded = 0.0 if abs(current) < 1e-9 else current
+            elevations.add(round(rounded, 6))
             current += interval
         return sorted(elevations)
 
