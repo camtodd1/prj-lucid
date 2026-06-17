@@ -43,6 +43,11 @@ AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M = 0.5
 AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M = 0.5
 AXIS_CONICAL_CURVE_ENDPOINT_SNAP_TOLERANCE_M = 2.0
 AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M = 25.0
+AXIS_CONICAL_ZERO_CONTOUR_ENABLED = True
+AXIS_CONICAL_ZERO_CONTOUR_MIN_GRID_M = 20.0
+AXIS_CONICAL_ZERO_CONTOUR_MAX_GRID_M = 75.0
+AXIS_CONICAL_ZERO_CONTOUR_TARGET_STEPS = 160.0
+AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS = 80000
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -409,6 +414,12 @@ class PlanarControllingOlsEngine:
             "axis_exact_curve_vertices_raw": 0.0,
             "axis_exact_curve_vertices_simplified": 0.0,
             "axis_exact_curve_time_s": 0.0,
+            "axis_zero_contour_calls": 0.0,
+            "axis_zero_contour_success": 0.0,
+            "axis_zero_contour_no_curve": 0.0,
+            "axis_zero_contour_cells": 0.0,
+            "axis_zero_contour_segments": 0.0,
+            "axis_zero_contour_time_s": 0.0,
             "axis_exact_split_time_s": 0.0,
             "axis_exact_classify_time_s": 0.0,
             "axis_exact_total_time_s": 0.0,
@@ -561,6 +572,12 @@ class PlanarControllingOlsEngine:
             f"curve_vertices[raw={int(stats.get('axis_exact_curve_vertices_raw', 0.0))}, "
             f"simplified={int(stats.get('axis_exact_curve_vertices_simplified', 0.0))}], "
             f"curve={stats.get('axis_exact_curve_time_s', 0.0):.2f}s, "
+            f"zero_contour[calls={int(stats.get('axis_zero_contour_calls', 0.0))}, "
+            f"success={int(stats.get('axis_zero_contour_success', 0.0))}, "
+            f"none={int(stats.get('axis_zero_contour_no_curve', 0.0))}, "
+            f"cells={int(stats.get('axis_zero_contour_cells', 0.0))}, "
+            f"segments={int(stats.get('axis_zero_contour_segments', 0.0))}, "
+            f"time={stats.get('axis_zero_contour_time_s', 0.0):.2f}s], "
             f"split={stats.get('axis_exact_split_time_s', 0.0):.2f}s, "
             f"classify={stats.get('axis_exact_classify_time_s', 0.0):.2f}s, "
             f"total={stats.get('axis_exact_total_time_s', 0.0):.2f}s], "
@@ -763,6 +780,15 @@ class PlanarControllingOlsEngine:
             axis = self._axis_model(other_candidate)
             if conical_model is None or axis is None:
                 return None
+            sampled_curve = self._axis_conical_sampled_transition_curve(
+                other_candidate,
+                conical_candidate,
+                axis,
+                conical_model,
+                domain,
+            )
+            if sampled_curve is not None and not sampled_curve.isEmpty():
+                return sampled_curve
             return self._axis_conical_transition_curve(axis, conical_model, domain)
         return None
 
@@ -1801,13 +1827,19 @@ class PlanarControllingOlsEngine:
                 return self._record_axis_exact_fallback(total_start, "bad_model")
 
             curve_start = time.perf_counter()
-            transition_curve = self._axis_conical_transition_curve(axis, conical_model, overlap)
+            transition_curves = self._axis_conical_transition_curves_for_solver(
+                axis_candidate,
+                conical_candidate,
+                axis,
+                conical_model,
+                overlap,
+            )
             self._region_solve_stats["axis_exact_curve_time_s"] = (
                 self._region_solve_stats.get("axis_exact_curve_time_s", 0.0)
                 + (time.perf_counter() - curve_start)
             )
 
-            if transition_curve is None or transition_curve.isEmpty():
+            if not transition_curves:
                 self._region_solve_stats["axis_exact_no_curve"] = (
                     self._region_solve_stats.get("axis_exact_no_curve", 0.0) + 1.0
                 )
@@ -1825,16 +1857,17 @@ class PlanarControllingOlsEngine:
                     return QgsGeometry()
                 return self._record_axis_exact_fallback(total_start, "no_curve_mixed")
 
-            combined = self._axis_conical_region_from_transition_curve(
-                axis_candidate,
-                conical_candidate,
-                overlap,
-                transition_curve,
-            )
-            if combined is None:
-                return self._record_axis_exact_fallback(total_start, "split_invalid")
-            self._record_axis_exact_success(total_start)
-            return combined if self._has_polygon_area(combined) else QgsGeometry()
+            for transition_curve in transition_curves:
+                combined = self._axis_conical_region_from_transition_curve(
+                    axis_candidate,
+                    conical_candidate,
+                    overlap,
+                    transition_curve,
+                )
+                if combined is not None:
+                    self._record_axis_exact_success(total_start)
+                    return combined if self._has_polygon_area(combined) else QgsGeometry()
+            return self._record_axis_exact_fallback(total_start, "split_invalid")
         except Exception:
             return self._record_axis_exact_fallback(total_start, "exception")
 
@@ -1880,6 +1913,185 @@ class PlanarControllingOlsEngine:
         if combined is None:
             return None
         return combined if self._has_polygon_area(combined) else QgsGeometry()
+
+    def _axis_conical_transition_curves_for_solver(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+        axis: dict,
+        conical_model: dict,
+        overlap: QgsGeometry,
+    ) -> List[QgsGeometry]:
+        """Return preferred conical/axis transition curves for splitting controlling regions."""
+        curves: List[QgsGeometry] = []
+        sampled_curve = self._axis_conical_sampled_transition_curve(
+            axis_candidate,
+            conical_candidate,
+            axis,
+            conical_model,
+            overlap,
+        )
+        if sampled_curve is not None and not sampled_curve.isEmpty():
+            curves.append(sampled_curve)
+        analytic_curve = self._axis_conical_transition_curve(axis, conical_model, overlap)
+        if analytic_curve is not None and not analytic_curve.isEmpty():
+            curves.append(analytic_curve)
+        return curves
+
+    def _axis_conical_sampled_transition_curve(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+        axis: dict,
+        conical_model: dict,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        """Build a zero-contour of axis elevation minus conical elevation over the overlap."""
+        if not AXIS_CONICAL_ZERO_CONTOUR_ENABLED:
+            return None
+        if not self._axis_conical_zero_contour_applies(axis_candidate):
+            return None
+        if overlap is None or overlap.isEmpty() or axis is None or conical_model is None:
+            return None
+
+        self._region_solve_stats["axis_zero_contour_calls"] = (
+            self._region_solve_stats.get("axis_zero_contour_calls", 0.0) + 1.0
+        )
+        start_time = time.perf_counter()
+        try:
+            spacing = self._axis_conical_zero_contour_spacing(overlap)
+            bbox = overlap.boundingBox()
+            if spacing <= 0.0 or bbox.width() <= 0.0 or bbox.height() <= 0.0:
+                self._region_solve_stats["axis_zero_contour_no_curve"] = (
+                    self._region_solve_stats.get("axis_zero_contour_no_curve", 0.0) + 1.0
+                )
+                return None
+
+            columns = max(1, int(math.ceil(bbox.width() / spacing)))
+            rows = max(1, int(math.ceil(bbox.height() / spacing)))
+            cell_count = columns * rows
+            if cell_count > AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS:
+                scale = math.sqrt(cell_count / AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS)
+                spacing *= scale
+                columns = max(1, int(math.ceil(bbox.width() / spacing)))
+                rows = max(1, int(math.ceil(bbox.height() / spacing)))
+                cell_count = columns * rows
+            self._region_solve_stats["axis_zero_contour_cells"] = (
+                self._region_solve_stats.get("axis_zero_contour_cells", 0.0) + float(cell_count)
+            )
+
+            value_cache: Dict[Tuple[int, int], Optional[float]] = {}
+
+            def _point_at(column: int, row: int) -> QgsPointXY:
+                return QgsPointXY(
+                    min(bbox.xMaximum(), bbox.xMinimum() + (column * spacing)),
+                    min(bbox.yMaximum(), bbox.yMinimum() + (row * spacing)),
+                )
+
+            def _value_at(column: int, row: int) -> Optional[float]:
+                key = (column, row)
+                if key not in value_cache:
+                    point_xy = _point_at(column, row)
+                    difference = self._candidate_difference(axis_candidate, conical_candidate, point_xy)
+                    value_cache[key] = difference if difference is not None and math.isfinite(difference) else None
+                return value_cache[key]
+
+            segments: List[QgsGeometry] = []
+            for column in range(columns):
+                for row in range(rows):
+                    corners = [
+                        (column, row),
+                        (column + 1, row),
+                        (column + 1, row + 1),
+                        (column, row + 1),
+                    ]
+                    points = [_point_at(corner_column, corner_row) for corner_column, corner_row in corners]
+                    values = [_value_at(corner_column, corner_row) for corner_column, corner_row in corners]
+                    zero_points = self._zero_crossings_for_grid_cell(points, values)
+                    if len(zero_points) < 2:
+                        continue
+                    for start_index in range(0, len(zero_points) - 1, 2):
+                        segment = QgsGeometry.fromPolylineXY([zero_points[start_index], zero_points[start_index + 1]])
+                        if segment is None or segment.isEmpty():
+                            continue
+                        try:
+                            clipped_segment = segment.intersection(overlap)
+                        except Exception:
+                            clipped_segment = segment
+                        for line_points in self._line_parts(clipped_segment):
+                            if len(line_points) < 2:
+                                continue
+                            line = QgsGeometry.fromPolylineXY(line_points)
+                            if line is not None and not line.isEmpty():
+                                segments.append(line)
+
+            if not segments:
+                self._region_solve_stats["axis_zero_contour_no_curve"] = (
+                    self._region_solve_stats.get("axis_zero_contour_no_curve", 0.0) + 1.0
+                )
+                return None
+
+            self._region_solve_stats["axis_zero_contour_segments"] = (
+                self._region_solve_stats.get("axis_zero_contour_segments", 0.0) + float(len(segments))
+            )
+            self._region_solve_stats["axis_zero_contour_success"] = (
+                self._region_solve_stats.get("axis_zero_contour_success", 0.0) + 1.0
+            )
+            try:
+                return QgsGeometry.unaryUnion(segments) if len(segments) > 1 else segments[0]
+            except Exception:
+                return segments[0]
+        finally:
+            self._region_solve_stats["axis_zero_contour_time_s"] = (
+                self._region_solve_stats.get("axis_zero_contour_time_s", 0.0)
+                + (time.perf_counter() - start_time)
+            )
+
+    def _axis_conical_zero_contour_applies(self, axis_candidate: ControllingOlsCandidate) -> bool:
+        """Apply the GeoJSON surface-intersection style sampler to runway axis surfaces."""
+        return axis_candidate.model == "axis" and axis_candidate.surface_type in {"Approach", "TOCS"}
+
+    def _axis_conical_zero_contour_spacing(self, overlap: QgsGeometry) -> float:
+        bbox = overlap.boundingBox()
+        max_dimension = max(float(bbox.width()), float(bbox.height()), 1.0)
+        adaptive_spacing = max_dimension / AXIS_CONICAL_ZERO_CONTOUR_TARGET_STEPS
+        return max(
+            AXIS_CONICAL_ZERO_CONTOUR_MIN_GRID_M,
+            min(AXIS_CONICAL_ZERO_CONTOUR_MAX_GRID_M, adaptive_spacing),
+        )
+
+    def _zero_crossings_for_grid_cell(
+        self,
+        points: Sequence[QgsPointXY],
+        values: Sequence[Optional[float]],
+    ) -> List[QgsPointXY]:
+        zero_points: List[QgsPointXY] = []
+
+        def _add(point_xy: QgsPointXY) -> None:
+            key = (round(point_xy.x(), 3), round(point_xy.y(), 3))
+            for existing in zero_points:
+                if (round(existing.x(), 3), round(existing.y(), 3)) == key:
+                    return
+            zero_points.append(point_xy)
+
+        for start_index, end_index in ((0, 1), (1, 2), (2, 3), (3, 0)):
+            start_value = values[start_index]
+            end_value = values[end_index]
+            if start_value is None or end_value is None:
+                continue
+            start_point = points[start_index]
+            end_point = points[end_index]
+            start_is_zero = abs(start_value) <= self.tie_tolerance_m
+            end_is_zero = abs(end_value) <= self.tie_tolerance_m
+            if start_is_zero:
+                _add(start_point)
+            if end_is_zero:
+                _add(end_point)
+            if start_is_zero or end_is_zero:
+                continue
+            if start_value * end_value < 0.0:
+                _add(self._interpolated_zero_crossing(start_point, end_point, start_value, end_value))
+        return zero_points
 
     def _record_axis_exact_success(self, start_time: float) -> None:
         self._region_solve_stats["axis_exact_success"] = (
