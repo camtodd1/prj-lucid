@@ -446,10 +446,13 @@ class PlanarControllingOlsEngine:
         for points in line_parts:
             if len(points) < 2:
                 continue
-            ordered = sorted(
-                (QgsPointXY(point.x(), point.y()) for point in points),
-                key=lambda point: self._axis_station(axis, point),
-            )
+            original = [QgsPointXY(point.x(), point.y()) for point in points]
+            chord_length = original[0].distance(original[-1])
+            path_length = self._path_length(original)
+            if chord_length > 1e-6 and path_length / chord_length <= 2.0:
+                ordered = original
+            else:
+                ordered = sorted(original, key=lambda point: self._axis_station(axis, point))
             deduped: List[QgsPointXY] = []
             for point in ordered:
                 if deduped and point.distance(deduped[-1]) <= 1e-6:
