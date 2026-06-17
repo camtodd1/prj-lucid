@@ -4300,10 +4300,13 @@ class ControllingOlsEngineMixin:
         if not features:
             QgsMessageLog.logMessage(
                 "[skip] Controlling OLS regions layer: no controlling planar regions were produced "
-                f"({time.perf_counter() - start_time:.2f}s). Solver details: {solve_summary}.",
+                f"({time.perf_counter() - start_time:.2f}s).",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
+            debug_log = getattr(self, "_log_dev_debug", None)
+            if callable(debug_log):
+                debug_log(f"Controlling OLS regions solver details: {solve_summary}", "controlling-ols")
             return False
         feature_count = len(features)
         layer = self._create_and_add_layer(
@@ -4318,10 +4321,13 @@ class ControllingOlsEngineMixin:
         if layer is not None:
             QgsMessageLog.logMessage(
                 f"[done] Controlling OLS regions layer: {feature_count} regions "
-                f"({time.perf_counter() - start_time:.2f}s). Solver details: {solve_summary}.",
+                f"({time.perf_counter() - start_time:.2f}s).",
                 PLUGIN_TAG,
                 Qgis.Info,
             )
+            debug_log = getattr(self, "_log_dev_debug", None)
+            if callable(debug_log):
+                debug_log(f"Controlling OLS regions solver details: {solve_summary}", "controlling-ols")
             return True
         return False
 
