@@ -35,7 +35,6 @@ CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
 CONTROLLING_REGION_DISSOLVE_GRID_M = 1e-6
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
-CONTROLLING_CONTOUR_MIN_REAL_OVERLAP_M = 0.5
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
@@ -4489,16 +4488,11 @@ class ControllingOlsEngineMixin:
             seen_part_keys = set()
             used_tolerant_clip = False
 
-            def _add_clipped_parts(geometry: Optional[QgsGeometry], require_real_overlap: bool = False) -> None:
+            def _add_clipped_parts(geometry: Optional[QgsGeometry]) -> None:
                 if geometry is None or geometry.isEmpty():
                     return
                 for line_points in engine._line_parts(geometry):
                     if len(line_points) < 2:
-                        continue
-                    if require_real_overlap and not self._controlling_contour_part_has_real_overlap(
-                        line_points,
-                        clip_geometry,
-                    ):
                         continue
                     part_key = self._controlling_contour_part_key(line_points)
                     if part_key in seen_part_keys:
@@ -4526,7 +4520,7 @@ class ControllingOlsEngineMixin:
                     except Exception:
                         tolerant_clipped = None
                     before_tolerant_count = len(clipped_line_parts)
-                    _add_clipped_parts(tolerant_clipped, require_real_overlap=True)
+                    _add_clipped_parts(tolerant_clipped)
                     used_tolerant_clip = len(clipped_line_parts) > before_tolerant_count
             method = "clip_to_controlling_region_tolerant" if used_tolerant_clip else "clip_to_controlling_region"
             line_geometry = self._controlling_contour_geometry_from_parts(clipped_line_parts)
@@ -4668,38 +4662,14 @@ class ControllingOlsEngineMixin:
             clip_geometry = valid_regions[0]
         if clip_geometry is None or clip_geometry.isEmpty():
             return None
+        if surface_type == "Transitional":
+            try:
+                buffered = clip_geometry.buffer(CONTROLLING_CONTOUR_CLIP_TOLERANCE_M, CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS)
+                if buffered is not None and not buffered.isEmpty():
+                    return buffered
+            except Exception:
+                pass
         return clip_geometry
-
-    def _controlling_contour_part_has_real_overlap(
-        self,
-        line_points: Sequence[QgsPointXY],
-        clip_geometry: QgsGeometry,
-    ) -> bool:
-        """Return True when a tolerant contour fragment overlaps the real controlling region."""
-        if clip_geometry is None or clip_geometry.isEmpty() or len(line_points) < 2:
-            return False
-        try:
-            line_geometry = QgsGeometry.fromPolylineXY(list(line_points))
-        except Exception:
-            return False
-        if line_geometry is None or line_geometry.isEmpty():
-            return False
-        try:
-            real_overlap = line_geometry.intersection(clip_geometry)
-        except Exception:
-            real_overlap = None
-        if real_overlap is None or real_overlap.isEmpty():
-            return False
-        try:
-            overlap_length = real_overlap.length()
-        except Exception:
-            overlap_length = 0.0
-        if overlap_length >= CONTROLLING_CONTOUR_MIN_REAL_OVERLAP_M:
-            return True
-        try:
-            return bool(line_geometry.within(clip_geometry) or clip_geometry.contains(line_geometry))
-        except Exception:
-            return False
 
     def _controlling_contour_geometry_from_parts(
         self,
