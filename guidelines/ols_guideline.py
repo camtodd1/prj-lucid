@@ -122,7 +122,8 @@ class OlsGuidelineMixin:
         BUFFER_SEGMENTS = 36  # Segments for geometry buffers
 
         QgsMessageLog.logMessage(
-            f"Starting Airport-Wide OLS Generation (Transitional, IHS, Conical, OHS - Applying RED: {reference_elevation_datum:.2f}m)",
+            f"[step] Airport-wide OLS: generating Transitional, IHS, Conical and OHS surfaces "
+            f"(RED={reference_elevation_datum:.2f}m).",
             plugin_tag,
             level=Qgis.Info,
         )
@@ -1064,7 +1065,7 @@ class OlsGuidelineMixin:
             )
 
         # --- Final Log ---
-        QgsMessageLog.logMessage("Finished Airport-Wide OLS Generation.", plugin_tag, level=Qgis.Info)
+        QgsMessageLog.logMessage("[done] Airport-wide OLS: generation finished.", plugin_tag, level=Qgis.Info)
         return overall_success
 
     # --- Geometry Helper Methods ---
@@ -1862,7 +1863,7 @@ class OlsGuidelineMixin:
         """
         plugin_tag = PLUGIN_TAG
         QgsMessageLog.logMessage(
-            "Starting Transitional Surface feature generation...",
+            "[step] Transitional OLS: generating surface and contour features.",
             plugin_tag,
             level=Qgis.Info,
         )
@@ -2560,7 +2561,8 @@ class OlsGuidelineMixin:
                     prev_section_length = section_length
 
         QgsMessageLog.logMessage(
-            f"Finished Transitional Surface feature generation. Created {len(transitional_features)} polygons, {len(transitional_contour_features)} contours.",
+            f"[done] Transitional OLS: generated {len(transitional_features)} polygons and "
+            f"{len(transitional_contour_features)} contours.",
             plugin_tag,
             level=Qgis.Info,
         )
@@ -3707,7 +3709,7 @@ class OlsGuidelineMixin:
         runway_actual_width_val = runway_data.get("width")
         if runway_actual_width_val is None:
             QgsMessageLog.logMessage(
-                f"Runway OLS for {runway_name} SKIPPED: Missing 'width' in runway_data.",
+                f"[skip] Runway OLS {runway_name}: missing 'width' in runway_data.",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -3716,21 +3718,21 @@ class OlsGuidelineMixin:
             runway_actual_width = float(runway_actual_width_val)
             if runway_actual_width <= 0:
                 QgsMessageLog.logMessage(
-                    f"Runway OLS for {runway_name} SKIPPED: Runway 'width' ({runway_actual_width}) must be positive.",
+                    f"[skip] Runway OLS {runway_name}: runway width ({runway_actual_width}) must be positive.",
                     plugin_tag,
                     Qgis.Warning,
                 )
                 return False
         except (ValueError, TypeError):
             QgsMessageLog.logMessage(
-                f"Runway OLS for {runway_name} SKIPPED: Invalid 'width' ('{runway_actual_width_val}') in runway_data.",
+                f"[skip] Runway OLS {runway_name}: invalid runway width '{runway_actual_width_val}'.",
                 plugin_tag,
                 Qgis.Warning,
             )
             return False
 
         QgsMessageLog.logMessage(
-            f"Starting Runway OLS processing (OFZ components, Approach, TOCS) for {runway_name}",
+            f"[step] Runway OLS {runway_name}: generating OFZ components, approach and TOCS surfaces.",
             plugin_tag,
             level=Qgis.Info,
         )
@@ -3742,7 +3744,7 @@ class OlsGuidelineMixin:
             or arc_num_str in (None, "")
         ):
             QgsMessageLog.logMessage(
-                f"Runway OLS for {runway_name} SKIPPED: Missing essential base data.",
+                f"[skip] Runway OLS {runway_name}: missing essential base data.",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -3751,7 +3753,7 @@ class OlsGuidelineMixin:
             arc_num = int(arc_num_str)
         except (ValueError, TypeError):
             QgsMessageLog.logMessage(
-                f"Runway OLS for {runway_name} SKIPPED: Invalid ARC number '{arc_num_str}'.",
+                f"[skip] Runway OLS {runway_name}: invalid ARC number '{arc_num_str}'.",
                 plugin_tag,
                 Qgis.Warning,
             )
@@ -4126,7 +4128,8 @@ class OlsGuidelineMixin:
                                     ofz_inner_trans_features.append(panel_feat)
                             else:
                                 QgsMessageLog.logMessage(
-                                    f"ITS IA-Adjacent Panel {current_desig} {side_label_its_panel} SKIPPED: Missing 3D base points from IA.",
+                                    f"[skip] ITS IA-adjacent panel {current_desig} {side_label_its_panel}: "
+                                    "missing 3D base points from IA.",
                                     plugin_tag,
                                     Qgis.Warning,
                                 )
@@ -4149,7 +4152,8 @@ class OlsGuidelineMixin:
                                     ofz_inner_trans_features.append(panel_feat)
                             else:
                                 QgsMessageLog.logMessage(
-                                    f"ITS BLS-Adjacent Panel {current_desig} {side_label_its_panel} SKIPPED: Missing 3D base points from BLS.",
+                                    f"[skip] ITS BLS-adjacent panel {current_desig} {side_label_its_panel}: "
+                                    "missing 3D base points from BLS.",
                                     plugin_tag,
                                     Qgis.Warning,
                                 )
@@ -4184,31 +4188,33 @@ class OlsGuidelineMixin:
                                         ofz_inner_trans_features.append(panel_feat)
                                 else:
                                     QgsMessageLog.logMessage(
-                                        f"ITS Strip Panel {current_desig} {side_label_its_panel} SKIPPED: _define_strip_edge_segment_3d None.",
+                                        f"[skip] ITS strip panel {current_desig} {side_label_its_panel}: "
+                                        "_define_strip_edge_segment_3d returned no segment.",
                                         plugin_tag,
                                         Qgis.Warning,
                                     )
                             else:
                                 QgsMessageLog.logMessage(
-                                    f"ITS Strip Panel {current_desig} {side_label_its_panel} SKIPPED: Missing required alignment points.",
+                                    f"[skip] ITS strip panel {current_desig} {side_label_its_panel}: "
+                                    "missing required alignment points.",
                                     plugin_tag,
                                     Qgis.Warning,
                                 )
                     else:
                         QgsMessageLog.logMessage(
-                            f"ITS for {current_desig} SKIPPED: Invalid ITS slope.",
+                            f"[skip] ITS {current_desig}: invalid ITS slope.",
                             plugin_tag,
                             Qgis.Warning,
                         )
                 else:
                     QgsMessageLog.logMessage(
-                        f"ITS for {current_desig} SKIPPED: No ITS parameters found.",
+                        f"[skip] ITS {current_desig}: no ITS parameters found.",
                         plugin_tag,
                         Qgis.Info,
                     )
             else:
                 QgsMessageLog.logMessage(
-                    f"ITS for {current_desig} SKIPPED: IHS_ELEVATION_AMSL is None.",
+                    f"[skip] ITS {current_desig}: IHS_ELEVATION_AMSL is None.",
                     plugin_tag,
                     Qgis.Warning,
                 )
@@ -4295,7 +4301,8 @@ class OlsGuidelineMixin:
         # --- END OF LOOP for runway_end_configurations ---
 
         QgsMessageLog.logMessage(
-            f"Finished Runway OFZ processing for {runway_name}. Total BLS features: {len(ofz_bls_features)}, Total ITS features: {len(ofz_inner_trans_features)}",
+            f"[done] Runway OLS {runway_name}: generated {len(ofz_bls_features)} BLS features and "
+            f"{len(ofz_inner_trans_features)} ITS features before layer write.",
             plugin_tag,
             Qgis.Success,
         )

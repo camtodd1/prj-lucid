@@ -165,15 +165,29 @@ class SafeguardingBuilder(
     def _log_success(self, message: str, notify_user: bool = False):
         self._log(message, Qgis.Success, notify_user)
 
+    def _log_step(self, message: str):
+        self._log(f"[step] {message}", Qgis.Info, notify_user=False)
+
+    def _log_done(self, message: str):
+        self._log_success(f"[done] {message}", notify_user=False)
+
+    def _log_skip(self, message: str):
+        self._log(f"[skip] {message}", Qgis.Info, notify_user=False)
+
     def _log_warning(self, message: str, notify_user: bool = True):
         self._log(message, Qgis.Warning, notify_user)
 
     def _log_critical(self, message: str, notify_user: bool = True):
         self._log(message, Qgis.Critical, notify_user)
 
+    def _log_dev_debug(self, message: str, topic: Optional[str] = None):
+        if not self.debug_logging:
+            return
+        prefix = "[temporary debug]" if not topic else f"[temporary debug:{topic}]"
+        self._log(f"{prefix} {message}", Qgis.Info, notify_user=False)
+
     def _log_debug(self, message: str):
-        if self.debug_logging:
-            self._log(message, Qgis.Info, notify_user=False)
+        self._log_dev_debug(message)
 
     def _crs_is_geographic(self, crs: QgsCoordinateReferenceSystem) -> bool:
         """Return True when a CRS uses angular units and is unsuitable for metre buffers."""
@@ -487,7 +501,7 @@ class SafeguardingBuilder(
 
     def run_safeguarding_processing(self):
         plugin_tag = PLUGIN_TAG
-        self._log("Started safeguarding generation.")
+        self._log_step("Safeguarding generation started.")
 
         self.successfully_generated_layers = []
         self.reference_elevation_datum = None
@@ -498,6 +512,7 @@ class SafeguardingBuilder(
         self.output_format_extension = None
         self.contour_intervals = {}
         self.generate_controlling_ols = True
+        self.debug_logging = False
 
         if self.dlg is None:
             self._log_critical("Processing aborted: dialog reference missing.")
@@ -537,7 +552,7 @@ class SafeguardingBuilder(
             self._clear_processing_status()
             return
 
-        self._log(f"Project CRS: {target_crs_authid} ({target_crs.description()}).")
+        self._log_step(f"Using project CRS {target_crs_authid} ({target_crs.description()}).")
 
         # Force CRS subsystem to initialise properly
         self._initialise_crs()
@@ -577,6 +592,7 @@ class SafeguardingBuilder(
         self.output_format_extension = input_data.get("output_format_extension")
         self.contour_intervals = input_data.get("contour_intervals", {})
         self.generate_controlling_ols = bool(input_data.get("generate_controlling_ols", True))
+        self.debug_logging = bool(input_data.get("debug_logging", False))
         self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
         protected_airspace_policy = input_data.get("protected_airspace_policy", "ruleset_aligned")
         if protected_airspace_policy == "future_annex14_ofs_oes":
@@ -604,7 +620,7 @@ class SafeguardingBuilder(
             if self.output_mode == "memory"
             else f"{self.output_format_driver or 'file'} -> {self.output_path or 'N/A'}"
         )
-        self._log(
+        self._log_step(
             f"Inputs: ICAO={icao_code}, output={output_desc}, "
             f"ARP={'yes' if arp_point is not None else 'no'}, "
             f"MET={'yes' if met_point is not None else 'no'}, "
@@ -689,7 +705,7 @@ class SafeguardingBuilder(
                         level=Qgis.Warning,
                     )
             else:
-                self._log("MET skipped: no MET coordinates provided; MET station surfaces not generated.")
+                self._log_skip("MET station surfaces: no MET coordinates provided.")
 
             if cns_input_list:
                 cns_source_group = reference_group.addGroup(self.tr(output_structure.CNS_TECHNICAL_FACILITIES))
@@ -697,7 +713,7 @@ class SafeguardingBuilder(
                     self._stage_layer_tree_node(cns_source_group)
                     self.create_cns_source_facility_layer(cns_input_list, icao_code, cns_source_group)
                 else:
-                    self._log_warning("CNS source facilities skipped: failed to create reference group.")
+                    self._log_warning("[skip] CNS source facilities: failed to create reference group.")
 
             self._set_processing_status(self.tr("Generating runway reference geometry..."))
             processed_runway_data_list, any_runway_base_data_ok = self._process_runways_part1(
@@ -743,9 +759,9 @@ class SafeguardingBuilder(
                         agl_group,
                     )
                 else:
-                    self._log_warning("Airfield Ground Lighting skipped: failed to create output group.")
+                    self._log_warning("[skip] Airfield ground lighting: failed to create output group.")
             else:
-                self._log("Airfield Ground Lighting skipped: option not enabled.")
+                self._log_skip("Airfield ground lighting: option not enabled.")
 
             self._set_processing_status(self.tr(self.get_active_framework().generation_status_message()))
             guideline_groups = self._create_guideline_groups(external_safeguarding_group, bool(cns_input_list))
@@ -825,7 +841,7 @@ class SafeguardingBuilder(
                 )
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
             elif guideline_groups.get("F") is not None:
-                self._log("Controlling OLS generation skipped: output option disabled.")
+                self._log_skip("Controlling OLS: output option disabled.")
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
             self._set_processing_status(self.tr("Finalising generated layers..."))
@@ -855,7 +871,7 @@ class SafeguardingBuilder(
                 pa_runways_exist,
             )
 
-            self._log("Finished safeguarding generation.")
+            self._log_done("Safeguarding generation finished.")
 
             if self.successfully_generated_layers:
                 if self.dlg:
@@ -891,7 +907,7 @@ class SafeguardingBuilder(
         wind_turbine_processed = False
         cns_processed = False
         if arp_point is not None and guideline_groups.get("C") is not None:
-            self._log(f"Wildlife safeguarding: generating from ARP ({arp_point.x():.3f}, {arp_point.y():.3f}).")
+            self._log_step(f"Wildlife safeguarding: generating from ARP ({arp_point.x():.3f}, {arp_point.y():.3f}).")
             wildlife_processed = self.process_wildlife_safeguarding(
                 arp_point,
                 icao_code,
@@ -903,7 +919,7 @@ class SafeguardingBuilder(
                     "Wildlife safeguarding failed: no zone layers were created. Check preceding Wildlife messages."
                 )
         elif arp_point is None and guideline_groups.get("C") is not None:
-            self._log("Wildlife safeguarding skipped: ARP coordinates missing; wildlife zones not generated.")
+            self._log_skip("Wildlife safeguarding: ARP coordinates missing; wildlife zones not generated.")
 
         if arp_point is not None and guideline_groups.get("D") is not None:
             wind_turbine_processed = self.process_wind_turbine_safeguarding(
@@ -913,7 +929,7 @@ class SafeguardingBuilder(
                 guideline_groups["D"],
             )
         elif arp_point is None and guideline_groups.get("D") is not None:
-            self._log("Wind turbine safeguarding skipped: ARP coordinates missing; turbine zone not generated.")
+            self._log_skip("Wind turbine safeguarding: ARP coordinates missing; turbine zone not generated.")
 
         if cns_input_list and guideline_groups.get("G") is not None:
             try:
@@ -927,11 +943,7 @@ class SafeguardingBuilder(
                     level=Qgis.Critical,
                 )
         elif not cns_input_list:
-            QgsMessageLog.logMessage(
-                "CNS building restricted areas skipped: No valid CNS facilities data provided.",
-                plugin_tag,
-                level=Qgis.Info,
-            )
+            self._log_skip("CNS building restricted areas: no valid CNS facilities data provided.")
 
         return wildlife_processed, wind_turbine_processed, cns_processed
 
@@ -949,7 +961,7 @@ class SafeguardingBuilder(
             getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
             == "annex14_modernised_ofs_oes"
         ):
-            self._log("Airport-wide current OLS skipped: protected airspace policy is future Annex 14 OFS/OES.")
+            self._log_skip("Airport-wide current OLS: protected airspace policy is future Annex 14 OFS/OES.")
             return False
         if guideline_groups.get("F") is not None and processed_runway_data_list:
             if self.reference_elevation_datum is not None:
@@ -1092,13 +1104,13 @@ class SafeguardingBuilder(
     ) -> Optional[str]:
         """Write the Critical Runway Information Summary Markdown report."""
         if not processed_runway_data_list:
-            self._log("Runway summary report skipped: no processed runway data.")
+            self._log_skip("Runway summary report: no processed runway data.")
             return None
         if self.output_mode != "file":
             self._log("Runway summary report not written: select file output to create the Markdown report.")
             return None
         if not self.output_path:
-            self._log_warning("Runway summary report skipped: file output path is not available.")
+            self._log_warning("[skip] Runway summary report: file output path is not available.")
             return None
 
         safe_icao = self._sanitize_filename(icao_code or "UNKNOWN")
