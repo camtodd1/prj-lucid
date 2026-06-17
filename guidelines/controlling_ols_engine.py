@@ -54,6 +54,10 @@ AXIS_CONICAL_SAMPLED_CURVE_ENDPOINT_EXTENSION_M = 750.0
 AXIS_CONICAL_GLOBAL_LINEWORK_ENDPOINT_EXTENSION_M = 750.0
 AXIS_CONICAL_CURVE_DEDUP_TOLERANCE_M = 8.0
 AXIS_CONICAL_CURVE_DEDUP_SAMPLE_STEP_M = 10.0
+TOCS_CONICAL_GENERATOR_SAMPLE_SPACING_M = 10.0
+TOCS_CONICAL_GENERATOR_ROOT_STEP_M = 10.0
+TOCS_CONICAL_GENERATOR_ROOT_TOLERANCE_M = 0.02
+TOCS_CONICAL_GENERATOR_BRANCH_CONNECT_M = 80.0
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -280,11 +284,19 @@ class PlanarControllingOlsEngine:
 
         features: List[QgsFeature] = []
         for first_controller, second_controller, segments in grouped_segments.values():
-            line_parts = self._smoothed_axis_conical_transition_line_parts(
+            method = "region_boundary"
+            line_parts = self._direct_tocs_conical_transition_line_parts(
                 first_controller,
                 second_controller,
-                segments,
             )
+            if line_parts:
+                method = "parametric_tocs_conical"
+            else:
+                line_parts = self._smoothed_axis_conical_transition_line_parts(
+                    first_controller,
+                    second_controller,
+                    segments,
+                )
             if not line_parts:
                 line_parts = self._merged_transition_line_parts(segments)
             for line_points in line_parts:
@@ -303,11 +315,28 @@ class PlanarControllingOlsEngine:
                         min(z_values),
                         max(z_values),
                         f"{first_controller.surface_id}|{second_controller.surface_id}"[:254],
-                        "region_boundary",
+                        method,
                     ]
                     )
                 features.append(feature)
         return features
+
+    def _direct_tocs_conical_transition_line_parts(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> List[List[QgsPointXY]]:
+        if {first_candidate.model, second_candidate.model} != {"axis", "conical"}:
+            return []
+        axis_candidate = first_candidate if first_candidate.model == "axis" else second_candidate
+        conical_candidate = first_candidate if first_candidate.model == "conical" else second_candidate
+        if axis_candidate.surface_type != "TOCS":
+            return []
+        axis = self._axis_model(axis_candidate)
+        conical_model = self._conical_model(conical_candidate)
+        if axis is None or conical_model is None:
+            return []
+        return self._tocs_conical_generator_transition_parts(axis_candidate, axis, conical_model)
 
     def _merged_transition_line_parts(
         self,
@@ -468,6 +497,15 @@ class PlanarControllingOlsEngine:
         if axis is None or conical_model is None:
             return []
 
+        if axis_candidate.surface_type == "TOCS":
+            generator_parts = self._tocs_conical_generator_transition_parts(
+                axis_candidate,
+                axis,
+                conical_model,
+            )
+            if generator_parts:
+                return generator_parts
+
         corridor_width = 90.0 if axis_candidate.surface_type == "TOCS" else 35.0
         try:
             corridor = boundary.buffer(corridor_width, 12)
@@ -555,6 +593,271 @@ class PlanarControllingOlsEngine:
             if len(simplified) >= 2 and self._path_length(simplified) >= min_length_m:
                 valid_parts.append(simplified)
         return valid_parts
+
+    def _tocs_conical_generator_transition_parts(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        axis: dict,
+        conical_model: dict,
+    ) -> List[List[QgsPointXY]]:
+        """Solve TOCS/conical intersections along TOCS generators from the inner edge."""
+        edge_ranges = self._axis_inner_outer_edge_ranges(axis_candidate.footprint, axis)
+        if edge_ranges is None:
+            return []
+        inner_edge, outer_edge = edge_ranges
+        inner_station, inner_lateral_min, inner_lateral_max = inner_edge
+        outer_station, outer_lateral_min, outer_lateral_max = outer_edge
+        if outer_station - inner_station <= 1e-6:
+            return []
+        edge_span = max(inner_lateral_max - inner_lateral_min, outer_lateral_max - outer_lateral_min)
+        if edge_span <= 1e-6:
+            return []
+
+        sample_count = max(2, int(math.ceil(edge_span / TOCS_CONICAL_GENERATOR_SAMPLE_SPACING_M)) + 1)
+        generator_values = [
+            index / (sample_count - 1)
+            for index in range(sample_count)
+        ]
+
+        branch_runs: List[List[Tuple[float, QgsPointXY]]] = []
+        active: List[List[Tuple[float, QgsPointXY]]] = []
+        for fraction in generator_values:
+            start_lateral = inner_lateral_min + ((inner_lateral_max - inner_lateral_min) * fraction)
+            end_lateral = outer_lateral_min + ((outer_lateral_max - outer_lateral_min) * fraction)
+            start_point = self._axis_point_from_local(axis, inner_station, start_lateral)
+            end_point = self._axis_point_from_local(axis, outer_station, end_lateral)
+            roots = self._tocs_conical_generator_roots(
+                axis_candidate,
+                axis,
+                conical_model,
+                start_point,
+                end_point,
+            )
+            used_active: set[int] = set()
+            next_active: List[List[Tuple[float, QgsPointXY]]] = []
+            for generator_position, point_xy in roots:
+                best_index: Optional[int] = None
+                best_distance = math.inf
+                for index, run in enumerate(active):
+                    if index in used_active or not run:
+                        continue
+                    previous_position, previous_point = run[-1]
+                    distance = math.hypot(
+                        (generator_position - previous_position) * edge_span,
+                        point_xy.distance(previous_point),
+                    )
+                    if distance < best_distance:
+                        best_distance = distance
+                        best_index = index
+                if best_index is not None and best_distance <= TOCS_CONICAL_GENERATOR_BRANCH_CONNECT_M:
+                    run = list(active[best_index])
+                    run.append((generator_position, point_xy))
+                    next_active.append(run)
+                    used_active.add(best_index)
+                else:
+                    next_active.append([(generator_position, point_xy)])
+            for index, run in enumerate(active):
+                if index not in used_active:
+                    branch_runs.append(run)
+            active = next_active
+        branch_runs.extend(active)
+
+        parts: List[List[QgsPointXY]] = []
+        for run in branch_runs:
+            if len(run) < 2:
+                continue
+            points = [point for _station, point in run]
+            if self._path_length(points) < 25.0:
+                continue
+            simplified = self._simplify_transition_curve_points(points, 0.5)
+            if len(simplified) >= 2 and self._path_length(simplified) >= 25.0:
+                parts.append(simplified)
+        if parts:
+            self._region_solve_stats["tocs_conical_generator_parts"] = (
+                self._region_solve_stats.get("tocs_conical_generator_parts", 0.0) + float(len(parts))
+            )
+            dominant = max(parts, key=lambda part: (self._path_length(part), len(part)))
+            dropped_count = len(parts) - 1
+            if dropped_count > 0:
+                self._region_solve_stats["tocs_conical_generator_branches_dropped"] = (
+                    self._region_solve_stats.get("tocs_conical_generator_branches_dropped", 0.0)
+                    + float(dropped_count)
+                )
+            return [dominant]
+        return []
+
+    def _axis_inner_outer_edge_ranges(
+        self,
+        footprint: QgsGeometry,
+        axis: dict,
+    ) -> Optional[Tuple[Tuple[float, float, float], Tuple[float, float, float]]]:
+        """Return station/lateral bounds for the TOCS inner and outer edges."""
+        inner_station = math.inf
+        outer_station = -math.inf
+        inner_range: Optional[Tuple[float, float, float]] = None
+        outer_range: Optional[Tuple[float, float, float]] = None
+        for ring in self._polygon_boundary_parts(footprint):
+            for start_point, end_point in zip(ring[:-1], ring[1:]):
+                start_station, start_lateral = self._axis_local_coordinates(axis, start_point)
+                end_station, end_lateral = self._axis_local_coordinates(axis, end_point)
+                segment_station = (start_station + end_station) / 2.0
+                lateral_length = abs(end_lateral - start_lateral)
+                station_length = abs(end_station - start_station)
+                if lateral_length <= 1e-6 or lateral_length < station_length:
+                    continue
+                lateral_range = (segment_station, min(start_lateral, end_lateral), max(start_lateral, end_lateral))
+                if segment_station < inner_station:
+                    inner_station = segment_station
+                    inner_range = lateral_range
+                if segment_station > outer_station:
+                    outer_station = segment_station
+                    outer_range = lateral_range
+        if inner_range is None or outer_range is None:
+            return None
+        return inner_range, outer_range
+
+    def _tocs_conical_generator_roots(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        axis: dict,
+        conical_model: dict,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+    ) -> List[Tuple[float, QgsPointXY]]:
+        roots: List[Tuple[float, QgsPointXY]] = []
+        generator_length = start_point.distance(end_point)
+        if generator_length <= 1e-6:
+            return []
+        step = min(1.0, TOCS_CONICAL_GENERATOR_ROOT_STEP_M / generator_length)
+        samples: List[Tuple[float, Optional[float]]] = []
+        position = 0.0
+        while position <= 1.0 + 1e-9:
+            samples.append((position, self._tocs_conical_generator_difference(
+                axis_candidate,
+                axis,
+                conical_model,
+                start_point,
+                end_point,
+                position,
+            )))
+            position += step
+        if not samples or samples[-1][0] < 1.0:
+            samples.append((1.0, self._tocs_conical_generator_difference(
+                axis_candidate,
+                axis,
+                conical_model,
+                start_point,
+                end_point,
+                1.0,
+            )))
+
+        previous_position: Optional[float] = None
+        previous_value: Optional[float] = None
+        for current_position, current_value in samples:
+            if current_value is None:
+                previous_position = None
+                previous_value = None
+                continue
+            if abs(current_value) <= TOCS_CONICAL_GENERATOR_ROOT_TOLERANCE_M:
+                roots.append((current_position, self._point_along_segment(start_point, end_point, current_position)))
+            elif previous_position is not None and previous_value is not None and previous_value * current_value < 0.0:
+                root_position = self._bisect_tocs_conical_generator_root(
+                    axis_candidate,
+                    axis,
+                    conical_model,
+                    start_point,
+                    end_point,
+                    previous_position,
+                    current_position,
+                    previous_value,
+                    current_value,
+                )
+                if root_position is not None:
+                    roots.append((root_position, self._point_along_segment(start_point, end_point, root_position)))
+            previous_position = current_position
+            previous_value = current_value
+
+        deduped: List[Tuple[float, QgsPointXY]] = []
+        for root_position, root_point in sorted(roots, key=lambda item: item[0]):
+            if deduped and root_point.distance(deduped[-1][1]) <= 0.5:
+                continue
+            deduped.append((root_position, root_point))
+        return deduped
+
+    def _tocs_conical_generator_difference(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        axis: dict,
+        conical_model: dict,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+        position: float,
+    ) -> Optional[float]:
+        point_xy = self._point_along_segment(start_point, end_point, position)
+        point_geometry = QgsGeometry.fromPointXY(point_xy)
+        try:
+            if not axis_candidate.footprint.intersects(point_geometry):
+                return None
+            conical_footprint = conical_model.get("base_footprint")
+            conical_z = conical_elevation_evaluator(
+                conical_footprint,
+                float(conical_model["base_elevation_m"]),
+                float(conical_model["slope"]),
+                conical_model.get("max_distance_m"),
+            )(point_xy)
+            axis_z = axis_candidate.elevation_at_xy(point_xy)
+        except Exception:
+            return None
+        if conical_z is None or axis_z is None:
+            return None
+        return float(axis_z) - float(conical_z)
+
+    def _bisect_tocs_conical_generator_root(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        axis: dict,
+        conical_model: dict,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+        lower_position: float,
+        upper_position: float,
+        lower_value: float,
+        upper_value: float,
+    ) -> Optional[float]:
+        low_position = lower_position
+        high_position = upper_position
+        low_value = lower_value
+        high_value = upper_value
+        if low_value * high_value > 0.0:
+            return None
+        for _iteration in range(40):
+            mid_position = (low_position + high_position) / 2.0
+            mid_value = self._tocs_conical_generator_difference(
+                axis_candidate,
+                axis,
+                conical_model,
+                start_point,
+                end_point,
+                mid_position,
+            )
+            if mid_value is None:
+                return None
+            if abs(mid_value) <= TOCS_CONICAL_GENERATOR_ROOT_TOLERANCE_M or abs(high_position - low_position) <= 1e-6:
+                return mid_position
+            if low_value * mid_value <= 0.0:
+                high_position = mid_position
+                high_value = mid_value
+            else:
+                low_position = mid_position
+                low_value = mid_value
+        return (low_position + high_position) / 2.0
+
+    @staticmethod
+    def _point_along_segment(start_point: QgsPointXY, end_point: QgsPointXY, fraction: float) -> QgsPointXY:
+        return QgsPointXY(
+            start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+            start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+        )
 
     def _polygon_boundary_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
         """Return exterior and interior polygon rings as line point lists."""
@@ -1154,6 +1457,15 @@ class PlanarControllingOlsEngine:
             axis = self._axis_model(other_candidate)
             if conical_model is None or axis is None:
                 return None
+            if other_candidate.surface_type == "TOCS":
+                equality = self._tocs_conical_generator_equality_geometry(
+                    domain,
+                    other_candidate,
+                    axis,
+                    conical_model,
+                )
+                if equality is not None and not equality.isEmpty():
+                    return equality
             equality = self._axis_conical_transition_curve(
                 axis,
                 conical_model,
@@ -1162,6 +1474,35 @@ class PlanarControllingOlsEngine:
             )
             return equality
         return None
+
+    def _tocs_conical_generator_equality_geometry(
+        self,
+        domain: QgsGeometry,
+        axis_candidate: ControllingOlsCandidate,
+        axis: dict,
+        conical_model: dict,
+    ) -> Optional[QgsGeometry]:
+        """Return TOCS/conical equality linework solved along TOCS edge-to-edge generators."""
+        line_geometries: List[QgsGeometry] = []
+        for line_points in self._tocs_conical_generator_transition_parts(axis_candidate, axis, conical_model):
+            if len(line_points) < 2:
+                continue
+            line = QgsGeometry.fromPolylineXY(line_points)
+            if line is None or line.isEmpty():
+                continue
+            try:
+                clipped = line.intersection(domain)
+            except Exception:
+                clipped = line
+            if clipped is None or clipped.isEmpty():
+                continue
+            for clipped_points in self._linework_parts(clipped):
+                if len(clipped_points) < 2 or self._path_length(clipped_points) < 5.0:
+                    continue
+                clipped_line = QgsGeometry.fromPolylineXY(clipped_points)
+                if clipped_line is not None and not clipped_line.isEmpty():
+                    line_geometries.append(clipped_line)
+        return self._collected_line_geometry(line_geometries)
 
     def _conical_constant_equality_geometry(
         self,
