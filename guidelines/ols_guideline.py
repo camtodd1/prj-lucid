@@ -3735,13 +3735,11 @@ class OlsGuidelineMixin:
             level=Qgis.Info,
         )
 
-        if not all(
-            [
-                primary_threshold_point,
-                reciprocal_threshold_point,
-                layer_group,
-                arc_num_str,
-            ]
+        if (
+            primary_threshold_point is None
+            or reciprocal_threshold_point is None
+            or layer_group is None
+            or arc_num_str in (None, "")
         ):
             QgsMessageLog.logMessage(
                 f"Runway OLS for {runway_name} SKIPPED: Missing essential base data.",

@@ -540,6 +540,7 @@ class PlanarControllingOlsEngine:
                 f"linework={int(stats.get('global_linework_count', 0.0))}, "
                 f"cells={int(stats.get('global_cell_count', 0.0))}, "
                 f"assigned={int(stats.get('global_assigned_cell_count', 0.0))}, "
+                f"refined={int(stats.get('global_refined_cell_count', 0.0))}, "
                 f"regions={int(stats.get('global_region_count', 0.0))}, "
                 f"time={stats.get('global_cell_time_s', 0.0):.2f}s], "
             )
@@ -628,6 +629,7 @@ class PlanarControllingOlsEngine:
         cell_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         cell_count = 0
         assigned_count = 0
+        refined_count = 0
         for cell in self._polygon_parts(polygonized):
             if not self._has_polygon_area(cell, min_area=1.0):
                 continue
@@ -636,6 +638,17 @@ class PlanarControllingOlsEngine:
             if controller is None:
                 continue
             candidate, _elevation = controller
+            refinement_candidates = self._global_cell_refinement_candidates(cell, candidate)
+            if refinement_candidates:
+                refined_parts = self._lower_envelope_parts_for_candidates(cell, refinement_candidates)
+                if refined_parts:
+                    for refined_candidate, refined_geometry in refined_parts:
+                        if not self._has_polygon_area(refined_geometry, min_area=1.0):
+                            continue
+                        cell_parts.append((refined_candidate, refined_geometry))
+                        assigned_count += 1
+                    refined_count += 1
+                    continue
             try:
                 clipped_cell = cell.intersection(self._effective_footprint(candidate))
             except Exception:
@@ -648,6 +661,7 @@ class PlanarControllingOlsEngine:
 
         self._region_solve_stats["global_cell_count"] = float(cell_count)
         self._region_solve_stats["global_assigned_cell_count"] = float(assigned_count)
+        self._region_solve_stats["global_refined_cell_count"] = float(refined_count)
         if not cell_parts:
             return []
 
@@ -656,6 +670,131 @@ class PlanarControllingOlsEngine:
         self._region_solve_stats["merge_time_s"] = time.perf_counter() - merge_start
         self._region_solve_stats["global_region_count"] = float(len(merged_parts))
         return merged_parts
+
+    def _global_cell_refinement_candidates(
+        self,
+        cell: QgsGeometry,
+        assigned_candidate: ControllingOlsCandidate,
+    ) -> List[ControllingOlsCandidate]:
+        """Return a small candidate set when interior samples disagree with a cell's controller."""
+        if cell is None or cell.isEmpty() or assigned_candidate is None:
+            return []
+        try:
+            boundary = cell.boundary()
+        except Exception:
+            boundary = None
+
+        candidates_by_id: Dict[str, ControllingOlsCandidate] = {assigned_candidate.surface_id: assigned_candidate}
+        for point_xy in self._global_cell_validation_points(cell):
+            try:
+                if boundary is not None and not boundary.isEmpty():
+                    if QgsGeometry.fromPointXY(point_xy).distance(boundary) <= 0.05:
+                        continue
+                controller = self.controlling_candidate_at_xy(point_xy)
+            except Exception:
+                continue
+            if controller is None:
+                continue
+            candidate, _elevation = controller
+            if candidate.surface_id != assigned_candidate.surface_id:
+                candidates_by_id[candidate.surface_id] = candidate
+        return list(candidates_by_id.values()) if len(candidates_by_id) > 1 else []
+
+    def _lower_envelope_parts_for_candidates(
+        self,
+        domain: QgsGeometry,
+        candidates: Sequence[ControllingOlsCandidate],
+    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        refined_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
+        for candidate in candidates:
+            try:
+                candidate_footprint = self._effective_footprint(candidate)
+                if not self._bounding_boxes_intersect(domain, candidate_footprint):
+                    continue
+                candidate_region = domain.intersection(candidate_footprint)
+            except Exception:
+                candidate_region = None
+            if not self._has_polygon_area(candidate_region):
+                continue
+            for competitor in candidates:
+                if competitor.surface_id == candidate.surface_id:
+                    continue
+                if candidate_region is None or candidate_region.isEmpty():
+                    break
+                try:
+                    competitor_footprint = self._effective_footprint(competitor)
+                    if not self._bounding_boxes_intersect(candidate_region, competitor_footprint):
+                        continue
+                    overlap = candidate_region.intersection(competitor_footprint)
+                except Exception:
+                    overlap = None
+                if not self._has_polygon_area(overlap):
+                    continue
+                lower_region = self._local_refinement_lower_region(candidate, competitor, overlap)
+                if lower_region is None:
+                    continue
+                if lower_region.isEmpty():
+                    losing_area = overlap
+                else:
+                    lower_region = self._clip_lower_region_to_overlap(lower_region, overlap)
+                    if lower_region is None:
+                        continue
+                    losing_area = overlap if lower_region.isEmpty() else overlap.difference(lower_region)
+                if self._has_polygon_area(losing_area):
+                    try:
+                        candidate_region = candidate_region.difference(losing_area)
+                    except Exception:
+                        candidate_region = QgsGeometry()
+                        break
+            for region_part in self._polygon_parts(candidate_region):
+                for clean_part in self._clean_region_polygon_parts(region_part, candidate):
+                    if clean_part.area() > 1.0:
+                        refined_parts.append((candidate, clean_part))
+        return refined_parts
+
+    def _local_refinement_lower_region(
+        self,
+        candidate: ControllingOlsCandidate,
+        competitor: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        """Resolve a small mixed global cell without invoking broad axis/conical station bands."""
+        if (
+            {candidate.model, competitor.model} == {"axis", "conical"}
+            and self._has_polygon_area(overlap)
+        ):
+            return self._triangulated_candidate_lower_region(candidate, competitor, overlap)
+        return self._candidate_lower_region(candidate, competitor, overlap)
+
+    def _global_cell_validation_points(self, cell: QgsGeometry) -> List[QgsPointXY]:
+        sample_points: List[QgsPointXY] = []
+        seen = set()
+
+        def _add(point_xy: QgsPointXY) -> None:
+            key = (round(point_xy.x(), 3), round(point_xy.y(), 3))
+            if key in seen:
+                return
+            seen.add(key)
+            sample_points.append(point_xy)
+
+        try:
+            point = cell.pointOnSurface().asPoint()
+            _add(QgsPointXY(point.x(), point.y()))
+        except Exception:
+            pass
+        try:
+            bbox = cell.boundingBox()
+            for fx in (0.2, 0.4, 0.6, 0.8):
+                for fy in (0.2, 0.4, 0.6, 0.8):
+                    point_xy = QgsPointXY(
+                        bbox.xMinimum() + (bbox.width() * fx),
+                        bbox.yMinimum() + (bbox.height() * fy),
+                    )
+                    if cell.intersects(QgsGeometry.fromPointXY(point_xy)):
+                        _add(point_xy)
+        except Exception:
+            pass
+        return sample_points
 
     def _global_cell_linework(self) -> List[QgsGeometry]:
         linework: List[QgsGeometry] = []
