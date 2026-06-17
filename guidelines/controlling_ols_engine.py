@@ -315,6 +315,7 @@ class PlanarControllingOlsEngine:
         touch_tolerance_m: float = 0.01,
         simplify_tolerance_m: float = 0.25,
         min_length_m: float = 0.0,
+        require_directional_continuity: bool = False,
     ) -> List[List[QgsPointXY]]:
         """Merge adjacent transition micro-segments into continuous linework."""
         line_parts: List[List[QgsPointXY]] = []
@@ -335,13 +336,41 @@ class PlanarControllingOlsEngine:
             while changed:
                 changed = False
                 for index, candidate in enumerate(unused):
-                    if current[-1].distance(candidate[0]) <= touch_tolerance_m:
+                    if self._can_merge_transition_parts(
+                        current,
+                        candidate,
+                        current_at_end=True,
+                        candidate_at_start=True,
+                        touch_tolerance_m=touch_tolerance_m,
+                        require_directional_continuity=require_directional_continuity,
+                    ):
                         current.extend(candidate[1:])
-                    elif current[-1].distance(candidate[-1]) <= touch_tolerance_m:
+                    elif self._can_merge_transition_parts(
+                        current,
+                        candidate,
+                        current_at_end=True,
+                        candidate_at_start=False,
+                        touch_tolerance_m=touch_tolerance_m,
+                        require_directional_continuity=require_directional_continuity,
+                    ):
                         current.extend(reversed(candidate[:-1]))
-                    elif current[0].distance(candidate[-1]) <= touch_tolerance_m:
+                    elif self._can_merge_transition_parts(
+                        current,
+                        candidate,
+                        current_at_end=False,
+                        candidate_at_start=False,
+                        touch_tolerance_m=touch_tolerance_m,
+                        require_directional_continuity=require_directional_continuity,
+                    ):
                         current = candidate[:-1] + current
-                    elif current[0].distance(candidate[0]) <= touch_tolerance_m:
+                    elif self._can_merge_transition_parts(
+                        current,
+                        candidate,
+                        current_at_end=False,
+                        candidate_at_start=True,
+                        touch_tolerance_m=touch_tolerance_m,
+                        require_directional_continuity=require_directional_continuity,
+                    ):
                         current = list(reversed(candidate[1:])) + current
                     else:
                         continue
@@ -354,6 +383,68 @@ class PlanarControllingOlsEngine:
             if len(simplified) >= 2 and self._path_length(simplified) >= min_length_m:
                 merged_parts.append(simplified)
         return merged_parts
+
+    def _can_merge_transition_parts(
+        self,
+        current: Sequence[QgsPointXY],
+        candidate: Sequence[QgsPointXY],
+        current_at_end: bool,
+        candidate_at_start: bool,
+        touch_tolerance_m: float,
+        require_directional_continuity: bool,
+    ) -> bool:
+        if len(current) < 2 or len(candidate) < 2:
+            return False
+        current_join = current[-1] if current_at_end else current[0]
+        candidate_join = candidate[0] if candidate_at_start else candidate[-1]
+        if current_join.distance(candidate_join) > touch_tolerance_m:
+            return False
+        if not require_directional_continuity:
+            return True
+
+        current_tangent = self._transition_part_tangent(current, at_end=current_at_end, outward=True)
+        candidate_tangent = self._transition_part_tangent(candidate, at_end=not candidate_at_start, outward=False)
+        if current_tangent is None or candidate_tangent is None:
+            return False
+        if self._vector_dot(current_tangent, candidate_tangent) < 0.0:
+            return False
+
+        gap = (candidate_join.x() - current_join.x(), candidate_join.y() - current_join.y())
+        gap_length = math.hypot(gap[0], gap[1])
+        if gap_length <= 1e-6:
+            return True
+        gap_unit = (gap[0] / gap_length, gap[1] / gap_length)
+        return (
+            self._vector_dot(current_tangent, gap_unit) >= -0.15
+            and self._vector_dot(candidate_tangent, gap_unit) >= -0.15
+        )
+
+    def _transition_part_tangent(
+        self,
+        points: Sequence[QgsPointXY],
+        at_end: bool,
+        outward: bool,
+    ) -> Optional[Tuple[float, float]]:
+        if len(points) < 2:
+            return None
+        if at_end:
+            start_point = points[-2]
+            end_point = points[-1]
+        else:
+            start_point = points[1]
+            end_point = points[0]
+        if not outward:
+            start_point, end_point = end_point, start_point
+        dx = end_point.x() - start_point.x()
+        dy = end_point.y() - start_point.y()
+        length = math.hypot(dx, dy)
+        if length <= 1e-9:
+            return None
+        return (dx / length, dy / length)
+
+    @staticmethod
+    def _vector_dot(first: Tuple[float, float], second: Tuple[float, float]) -> float:
+        return (first[0] * second[0]) + (first[1] * second[1])
 
     def _smoothed_axis_conical_transition_line_parts(
         self,
@@ -426,35 +517,35 @@ class PlanarControllingOlsEngine:
             touch_tolerance_m=touch_tolerance,
             simplify_tolerance_m=simplify_tolerance,
             min_length_m=min_length,
+            require_directional_continuity=True,
         )
-        return self._axis_station_ordered_transition_parts(
-            axis,
+        return self._valid_axis_conical_transition_parts(
             merged_parts,
             simplify_tolerance,
             min_length,
         )
 
-    def _axis_station_ordered_transition_parts(
+    def _valid_axis_conical_transition_parts(
         self,
-        axis: dict,
         line_parts: Sequence[Sequence[QgsPointXY]],
         simplify_tolerance_m: float,
         min_length_m: float,
     ) -> List[List[QgsPointXY]]:
-        """Order axis-based transition curves monotonically by local station."""
-        ordered_parts: List[List[QgsPointXY]] = []
+        """Return sane regenerated axis/conical curves without station reordering."""
+        valid_parts: List[List[QgsPointXY]] = []
         for points in line_parts:
             if len(points) < 2:
                 continue
             original = [QgsPointXY(point.x(), point.y()) for point in points]
             chord_length = original[0].distance(original[-1])
             path_length = self._path_length(original)
-            if chord_length > 1e-6 and path_length / chord_length <= 2.0:
-                ordered = original
-            else:
-                ordered = sorted(original, key=lambda point: self._axis_station(axis, point))
+            if chord_length > 1e-6 and path_length / chord_length > 2.0:
+                self._region_solve_stats["axis_curve_rejected_high_sinuosity"] = (
+                    self._region_solve_stats.get("axis_curve_rejected_high_sinuosity", 0.0) + 1.0
+                )
+                continue
             deduped: List[QgsPointXY] = []
-            for point in ordered:
+            for point in original:
                 if deduped and point.distance(deduped[-1]) <= 1e-6:
                     continue
                 deduped.append(point)
@@ -462,8 +553,8 @@ class PlanarControllingOlsEngine:
                 continue
             simplified = self._simplify_transition_curve_points(deduped, simplify_tolerance_m)
             if len(simplified) >= 2 and self._path_length(simplified) >= min_length_m:
-                ordered_parts.append(simplified)
-        return ordered_parts
+                valid_parts.append(simplified)
+        return valid_parts
 
     def _polygon_boundary_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
         """Return exterior and interior polygon rings as line point lists."""
