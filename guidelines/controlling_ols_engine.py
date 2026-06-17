@@ -32,6 +32,7 @@ CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS = 8
 CONTROLLING_REGION_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M = 0.02
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
+CONTROLLING_REGION_DISSOLVE_GRID_M = 1e-6
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_CONTOUR_MIN_REAL_OVERLAP_M = 0.5
@@ -1034,8 +1035,13 @@ class PlanarControllingOlsEngine:
             if grouped_entry is None:
                 continue
             _, geometries = grouped_entry
+            dissolve_geometries = [self._region_dissolve_geometry(geometry) for geometry in geometries]
             try:
-                merged = QgsGeometry.unaryUnion(geometries) if len(geometries) > 1 else QgsGeometry(geometries[0])
+                merged = (
+                    QgsGeometry.unaryUnion(dissolve_geometries)
+                    if len(dissolve_geometries) > 1
+                    else QgsGeometry(dissolve_geometries[0])
+                )
             except Exception:
                 merged = QgsGeometry()
             if not self._has_polygon_area(merged):
@@ -1045,6 +1051,19 @@ class PlanarControllingOlsEngine:
             if self._has_polygon_area(cleaned_merged):
                 merged_parts.append((candidate, cleaned_merged))
         return merged_parts
+
+    def _region_dissolve_geometry(self, geometry: QgsGeometry) -> QgsGeometry:
+        """Remove sub-micrometre coordinate noise before same-candidate dissolve."""
+        try:
+            snapped = geometry.snappedToGrid(
+                CONTROLLING_REGION_DISSOLVE_GRID_M,
+                CONTROLLING_REGION_DISSOLVE_GRID_M,
+            )
+            if self._has_polygon_area(snapped) and snapped.isGeosValid():
+                return snapped
+        except Exception:
+            pass
+        return QgsGeometry(geometry)
 
     def _clean_merged_region_geometry(
         self,
