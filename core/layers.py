@@ -432,9 +432,66 @@ class LayerMixin:
                 )
                 categories.append(QgsRendererCategory(surface, symbol, surface))
             layer.setRenderer(QgsCategorizedSymbolRenderer("surface", categories))
+            self._apply_controlling_region_labels(layer)
         except Exception as exc:
             QgsMessageLog.logMessage(
                 f"Warning: failed to apply controlling OLS region style: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
+    def _apply_controlling_region_labels(self, layer: QgsVectorLayer):
+        """Label flat controlling regions with their horizontal-plane elevation."""
+        if layer is None or not layer.isValid():
+            return
+        if layer.fields().indexFromName("elev_min") < 0 or layer.fields().indexFromName("elev_max") < 0:
+            return
+        try:
+            settings = QgsPalLayerSettings()
+            settings.fieldName = (
+                "'Horizontal plane ' || "
+                "CASE "
+                "WHEN round(\"elev_max\" * 2) / 2 = floor(round(\"elev_max\" * 2) / 2) "
+                "THEN format_number(round(\"elev_max\" * 2) / 2, 0) "
+                "ELSE format_number(round(\"elev_max\" * 2) / 2, 1) "
+                "END"
+            )
+            settings.isExpression = True
+            settings.placement = QgsPalLayerSettings.Horizontal
+            settings.centroidInside = True
+            settings.centroidWhole = False
+            settings.fitInPolygonOnly = True
+            try:
+                settings.setPolygonPlacementFlags(Qgis.LabelPolygonPlacementFlag.AllowPlacementInsideOfPolygon)
+            except Exception:
+                pass
+            settings.priority = 5
+            settings.obstacle = False
+
+            text_format = QgsTextFormat()
+            text_format.setFont(QFont("Helvetica", 10))
+            text_format.setSize(10)
+            text_format.setColor(QColor(50, 50, 50))
+
+            buffer = QgsTextBufferSettings()
+            buffer.setEnabled(True)
+            buffer.setSize(1)
+            buffer.setColor(QColor(250, 250, 250))
+            text_format.setBuffer(buffer)
+            settings.setFormat(text_format)
+
+            root = QgsRuleBasedLabeling.Rule(None)
+            rule = QgsRuleBasedLabeling.Rule(settings)
+            rule.setFilterExpression(
+                '"elev_min" IS NOT NULL AND "elev_max" IS NOT NULL '
+                'AND abs("elev_min" - "elev_max") <= 0.01'
+            )
+            root.appendChild(rule)
+            layer.setLabeling(QgsRuleBasedLabeling(root))
+            layer.setLabelsEnabled(True)
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Warning: failed to apply controlling OLS region labels: {exc}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
