@@ -2272,9 +2272,9 @@ class SafeguardingBuilder(
         framework = self.get_active_framework()
         safeguarding_group_name = framework.safeguarding_group_name()
         guideline_groups = framework.guideline_group_definitions(include_cns=True)
-        guideline_f_checklist_labels = framework.guideline_f_checklist_labels()
         primary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.PRIMARY_SURFACES]
         secondary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.SECONDARY_SURFACES]
+        controlling_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_SURFACES]
 
         items = [
             self._format_checklist_layer_item(
@@ -2376,39 +2376,24 @@ class SafeguardingBuilder(
             ),
             self._format_checklist_item(
                 main_group,
-                guideline_f_checklist_labels["airport_wide"],
+                output_structure.SECONDARY_SURFACES,
                 secondary_surfaces_path,
                 missing_reason=no_runway_reason or red_missing_reason,
                 failed_reason="airport-wide OLS failed; check RED, runway strip dimensions, ARP, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
-                guideline_f_checklist_labels["runway"],
+                output_structure.PRIMARY_SURFACES,
                 primary_surfaces_path,
                 missing_reason=no_runway_reason,
-                failed_reason="approach or TOCS generation failed; check runway type, elevations, clearway, and preceding warnings",
+                failed_reason="runway OLS generation failed; check runway type, elevations, clearway, OFZ prerequisites, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
-                guideline_f_checklist_labels["ofz"],
-                primary_surfaces_path,
-                missing_reason=no_runway_reason,
-                not_applicable_reason=None if pa_runways_exist else "no precision approach runway was entered",
-                failed_reason="OFZ generation failed; check precision approach type, elevations, IHS/RED, and preceding warnings",
-            ),
-            self._format_checklist_item(
-                main_group,
-                output_structure.CONTROLLING_OLS_SURFACES,
-                [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_SURFACES],
+                output_structure.CONTROLLING_SURFACES,
+                controlling_surfaces_path,
                 not_applicable_reason=None if self.generate_controlling_ols else "controlling OLS option is disabled",
-                failed_reason="controlling OLS regions failed to generate",
-            ),
-            self._format_checklist_item(
-                main_group,
-                output_structure.CONTROLLING_CONTOURS,
-                [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_SURFACES],
-                not_applicable_reason=None if self.generate_controlling_ols else "controlling OLS option is disabled",
-                failed_reason="controlling OLS contours failed to generate",
+                failed_reason="controlling OLS outputs failed to generate",
             ),
             self._format_checklist_item(
                 main_group,
@@ -2442,7 +2427,6 @@ class SafeguardingBuilder(
         """Render checklist items as a compact grouped final summary."""
         safeguarding_section = self.get_active_framework().safeguarding_summary_section()
         guideline_groups = self.get_active_framework().guideline_group_definitions(include_cns=True)
-        guideline_f_checklist_labels = self.get_active_framework().guideline_f_checklist_labels()
         section_order = list(output_structure.SECTION_ORDER)
         section_map = {
             "ARP": output_structure.REFERENCE_DATA,
@@ -2454,11 +2438,9 @@ class SafeguardingBuilder(
             "Physical geometry": output_structure.AERODROME_INFRASTRUCTURE,
             "Runway protection areas": output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
             "Specialised runway safeguarding": output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
-            guideline_f_checklist_labels["airport_wide"]: output_structure.PROTECTED_AIRSPACE,
-            guideline_f_checklist_labels["runway"]: output_structure.PROTECTED_AIRSPACE,
-            guideline_f_checklist_labels["ofz"]: output_structure.PROTECTED_AIRSPACE,
-            output_structure.CONTROLLING_OLS_SURFACES: output_structure.PROTECTED_AIRSPACE,
-            output_structure.CONTROLLING_CONTOURS: output_structure.PROTECTED_AIRSPACE,
+            output_structure.SECONDARY_SURFACES: output_structure.PROTECTED_AIRSPACE,
+            output_structure.PRIMARY_SURFACES: output_structure.PROTECTED_AIRSPACE,
+            output_structure.CONTROLLING_SURFACES: output_structure.PROTECTED_AIRSPACE,
             guideline_groups["B"]: safeguarding_section,
             guideline_groups["C"]: safeguarding_section,
             guideline_groups["D"]: safeguarding_section,
