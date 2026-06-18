@@ -377,11 +377,12 @@ class LayerMixin:
                     if str(style_key) == "Parallel Runway Standards Line":
                         self._apply_parallel_runway_standards_style(layer)
                     if str(style_key) in {"OLS IHS", "OLS OHS"}:
-                        self._apply_horizontal_surface_labels(layer)
+                        self._apply_horizontal_surface_labels(layer, decimal_places=1)
                     if str(style_key) == "OLS Approach":
                         self._apply_horizontal_surface_labels(
                             layer,
                             filter_expression='"section_desc" = \'Horizontal\'',
+                            decimal_places=2,
                         )
                     if str(style_key) in {"OLS Transitional Contour", "OLS Controlling Contour"}:
                         layer.setLabelsEnabled(True)
@@ -449,12 +450,8 @@ class LayerMixin:
         try:
             settings = QgsPalLayerSettings()
             settings.fieldName = (
-                "'Horizontal plane ' || "
-                "CASE "
-                "WHEN round(\"elev_max\" * 2) / 2 = floor(round(\"elev_max\" * 2) / 2) "
-                "THEN format_number(round(\"elev_max\" * 2) / 2, 0) "
-                "ELSE format_number(round(\"elev_max\" * 2) / 2, 1) "
-                "END"
+                "'HP' || '\n' || "
+                'format_number("elev_max", 1)'
             )
             settings.isExpression = True
             settings.placement = QgsPalLayerSettings.Horizontal
@@ -740,16 +737,23 @@ class LayerMixin:
         self,
         layer: QgsVectorLayer,
         filter_expression: Optional[str] = None,
+        decimal_places: int = 1,
     ) -> None:
         """Label a horizontal polygon surface at its centroid with elevation."""
         if layer is None or not layer.isValid():
             return
-        if layer.fields().indexFromName("elev_m") < 0:
+        has_elev_max = layer.fields().indexFromName("elev_max") >= 0
+        has_elev_m = layer.fields().indexFromName("elev_m") >= 0
+        if not has_elev_max and not has_elev_m:
             return
 
         try:
+            elevation_expression = '"elev_max"' if has_elev_max else '"elev_m"'
             settings = QgsPalLayerSettings()
-            settings.fieldName = 'format_number("elev_m", 0)'
+            settings.fieldName = (
+                "'HP' || '\n' || "
+                f"format_number({elevation_expression}, {max(0, int(decimal_places))})"
+            )
             settings.isExpression = True
             settings.placement = QgsPalLayerSettings.Horizontal
             settings.centroidInside = True
