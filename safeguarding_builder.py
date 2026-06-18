@@ -662,7 +662,15 @@ class SafeguardingBuilder(
             reference_group = output_groups.get("reference_data") or main_group
             external_safeguarding_group = output_groups.get("external_safeguarding") or main_group
             ols_surfaces_group = output_groups.get("ols_surfaces") or main_group
-            debug_group = output_groups.get("debug_development") or main_group
+            debug_group = output_groups.get("debug_development")
+            if debug_group is None:
+                debug_group = main_group
+            controlling_ols_surfaces_group = output_groups.get("controlling_ols_surfaces")
+            if controlling_ols_surfaces_group is None:
+                controlling_ols_surfaces_group = debug_group
+            controlling_contours_group = output_groups.get("controlling_contours")
+            if controlling_contours_group is None:
+                controlling_contours_group = debug_group
 
             arp_layer_created = False
             if arp_point is not None:
@@ -838,6 +846,8 @@ class SafeguardingBuilder(
                 controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
                     icao_code,
                     debug_group,
+                    controlling_ols_surfaces_group,
+                    controlling_contours_group,
                 )
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
             elif guideline_groups.get("F") is not None:
@@ -1563,6 +1573,14 @@ class SafeguardingBuilder(
             if protected_airspace_group is not None
             else None
         )
+        controlling_ols_surfaces_group = self._ensure_layer_group(
+            protected_airspace_group,
+            output_structure.CONTROLLING_OLS_SURFACES,
+        )
+        controlling_contours_group = self._ensure_layer_group(
+            protected_airspace_group,
+            output_structure.CONTROLLING_CONTOURS,
+        )
         framework = self.get_active_framework()
         external_group = self._ensure_layer_group(main_group, framework.safeguarding_group_name())
         debug_group = self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
@@ -1572,10 +1590,23 @@ class SafeguardingBuilder(
             or protection_group is None
             or protected_airspace_group is None
             or ols_surfaces_group is None
+            or controlling_ols_surfaces_group is None
+            or controlling_contours_group is None
             or external_group is None
             or debug_group is None
         ):
             return
+
+        for child in list(debug_group.children()):
+            if not isinstance(child, QgsLayerTreeLayer):
+                continue
+            layer = child.layer()
+            layer_name = layer.name() if layer is not None else child.name()
+            style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
+            if style_key == "OLS Controlling Planar Region" or "OLS Controlling Planar Regions" in layer_name:
+                self._move_layer_tree_node(child, controlling_ols_surfaces_group)
+            elif style_key == "OLS Controlling Contour" or "OLS Controlling Contours" in layer_name:
+                self._move_layer_tree_node(child, controlling_contours_group)
 
         runway_centreline_group = self._ensure_layer_group(reference_group, output_structure.RUNWAY_CENTRE_LINES)
         self._merge_or_move_direct_group(main_group, self.tr("Runway Centrelines"), reference_group)
@@ -1668,6 +1699,12 @@ class SafeguardingBuilder(
         """Return True for proof-of-concept output layers."""
         layer = node.layer()
         layer_name = layer.name() if layer is not None else node.name()
+        style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
+        if style_key in {"OLS Controlling Planar Region", "OLS Controlling Contour"} or any(
+            production_name in layer_name
+            for production_name in ["OLS Controlling Planar Regions", "OLS Controlling Contours"]
+        ):
+            return False
         return "POC" in layer_name
 
     def _repair_debug_development_layer_tree(
@@ -2346,6 +2383,20 @@ class SafeguardingBuilder(
             ),
             self._format_checklist_item(
                 main_group,
+                output_structure.CONTROLLING_OLS_SURFACES,
+                [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_OLS_SURFACES],
+                not_applicable_reason=None if self.generate_controlling_ols else "controlling OLS option is disabled",
+                failed_reason="controlling OLS regions failed to generate",
+            ),
+            self._format_checklist_item(
+                main_group,
+                output_structure.CONTROLLING_CONTOURS,
+                [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_CONTOURS],
+                not_applicable_reason=None if self.generate_controlling_ols else "controlling OLS option is disabled",
+                failed_reason="controlling OLS contours failed to generate",
+            ),
+            self._format_checklist_item(
+                main_group,
                 guideline_groups["G"],
                 [safeguarding_group_name, guideline_groups["G"]],
                 missing_reason=cns_missing_reason,
@@ -2391,6 +2442,8 @@ class SafeguardingBuilder(
             guideline_f_checklist_labels["airport_wide"]: output_structure.PROTECTED_AIRSPACE,
             guideline_f_checklist_labels["runway"]: output_structure.PROTECTED_AIRSPACE,
             guideline_f_checklist_labels["ofz"]: output_structure.PROTECTED_AIRSPACE,
+            output_structure.CONTROLLING_OLS_SURFACES: output_structure.PROTECTED_AIRSPACE,
+            output_structure.CONTROLLING_CONTOURS: output_structure.PROTECTED_AIRSPACE,
             guideline_groups["B"]: safeguarding_section,
             guideline_groups["C"]: safeguarding_section,
             guideline_groups["D"]: safeguarding_section,

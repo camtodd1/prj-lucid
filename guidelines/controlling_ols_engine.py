@@ -4178,7 +4178,9 @@ class ControllingOlsEngineMixin:
     def _create_controlling_ols_planar_poc_layers(
         self,
         icao_code: str,
-        layer_group: QgsLayerTreeGroup,
+        debug_group: QgsLayerTreeGroup,
+        controlling_surfaces_group: Optional[QgsLayerTreeGroup] = None,
+        controlling_contours_group: Optional[QgsLayerTreeGroup] = None,
     ) -> bool:
         overall_start = time.perf_counter()
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
@@ -4197,7 +4199,9 @@ class ControllingOlsEngineMixin:
             )
             return False
 
-        output_group = self._controlling_ols_poc_group(layer_group)
+        output_group = self._controlling_ols_poc_group(debug_group)
+        region_output_group = controlling_surfaces_group if controlling_surfaces_group is not None else output_group
+        contour_output_group = controlling_contours_group if controlling_contours_group is not None else output_group
         engine = PlanarControllingOlsEngine(planar_candidates, exclusion_geometries=exclusion_geometries)
         timing_splits: Dict[str, float] = {}
 
@@ -4206,7 +4210,7 @@ class ControllingOlsEngineMixin:
         timing_splits["candidates"] = time.perf_counter() - step_start
 
         step_start = time.perf_counter()
-        region_layer_ok = self._create_controlling_region_layer(icao_code, output_group, engine)
+        region_layer_ok = self._create_controlling_region_layer(icao_code, region_output_group, engine)
         timing_splits["regions"] = time.perf_counter() - step_start
 
         step_start = time.perf_counter()
@@ -4216,7 +4220,7 @@ class ControllingOlsEngineMixin:
         step_start = time.perf_counter()
         contour_layer_ok = self._create_controlling_contour_layer(
             icao_code,
-            output_group,
+            contour_output_group,
             engine,
             contours,
         )
