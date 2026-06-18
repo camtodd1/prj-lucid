@@ -132,6 +132,9 @@ class FrameworkRegistryTest(unittest.TestCase):
     def test_output_structure_separates_protected_airspace_from_external_safeguarding(self):
         self.assertEqual(output_structure.PROTECTED_AIRSPACE, "04 Obstacle Limitation Surfaces")
         self.assertEqual(output_structure.EXTERNAL_SAFEGUARDING, "05 External Safeguarding")
+        self.assertEqual(output_structure.PRIMARY_SURFACES, "Primary Surfaces")
+        self.assertEqual(output_structure.SECONDARY_SURFACES, "Secondary Surfaces")
+        self.assertEqual(output_structure.CONTROLLING_SURFACES, "Controlling Surfaces")
         self.assertEqual(output_structure.OLS_SURFACES, "OLS Surfaces")
         self.assertEqual(output_structure.DEBUG_DEVELOPMENT, "99 Debug / Development")
         self.assertIn(output_structure.PROTECTED_AIRSPACE, output_structure.SECTION_ORDER)

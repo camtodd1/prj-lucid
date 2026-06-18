@@ -780,18 +780,8 @@ class SafeguardingBuilder(
             runway_ols_group = None
             ofz_group = None
             if guideline_groups.get("F") is not None:
-                if self._is_future_annex14_protected_airspace():
-                    runway_ols_group = guideline_groups["F"]
-                else:
-                    guideline_f_subgroups = self.get_active_framework().guideline_f_subgroup_names()
-                    airport_wide_ols_group = guideline_groups["F"].addGroup(
-                        self.tr(guideline_f_subgroups["airport_wide"])
-                    )
-                    self._stage_layer_tree_node(airport_wide_ols_group)
-                    runway_ols_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["runway"]))
-                    self._stage_layer_tree_node(runway_ols_group)
-                    ofz_group = guideline_groups["F"].addGroup(self.tr(guideline_f_subgroups["ofz"]))
-                    self._stage_layer_tree_node(ofz_group)
+                runway_ols_group = guideline_groups["F"]
+                airport_wide_ols_group = output_groups.get("airport_wide_ols")
 
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl, runway_input_list
@@ -1455,20 +1445,17 @@ class SafeguardingBuilder(
             )
         protected_airspace_group = groups["protected_airspace"]
         if protected_airspace_group is not None:
-            ols_group_name = (
-                "Annex 14 Future OLS Standard"
-                if self._is_future_annex14_protected_airspace()
-                else output_structure.OLS_SURFACES
-            )
             groups["ols_surfaces"] = self._ensure_layer_group(
-                protected_airspace_group, ols_group_name
+                protected_airspace_group, output_structure.PRIMARY_SURFACES
             )
-            groups["controlling_ols_surfaces"] = self._ensure_layer_group(
-                protected_airspace_group, output_structure.CONTROLLING_OLS_SURFACES
+            groups["airport_wide_ols"] = self._ensure_layer_group(
+                protected_airspace_group, output_structure.SECONDARY_SURFACES
             )
-            groups["controlling_contours"] = self._ensure_layer_group(
-                protected_airspace_group, output_structure.CONTROLLING_CONTOURS
+            groups["controlling_surfaces"] = self._ensure_layer_group(
+                protected_airspace_group, output_structure.CONTROLLING_SURFACES
             )
+            groups["controlling_ols_surfaces"] = groups["controlling_surfaces"]
+            groups["controlling_contours"] = groups["controlling_surfaces"]
         return groups
 
     def _is_future_annex14_protected_airspace(self) -> bool:
@@ -1566,20 +1553,18 @@ class SafeguardingBuilder(
         infrastructure_group = self._ensure_layer_group(main_group, output_structure.AERODROME_INFRASTRUCTURE)
         protection_group = self._ensure_layer_group(main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION)
         protected_airspace_group = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
-        future_annex14 = self._is_future_annex14_protected_airspace()
-        ols_group_name = "Annex 14 Future OLS Standard" if future_annex14 else output_structure.OLS_SURFACES
-        ols_surfaces_group = (
-            self._ensure_layer_group(protected_airspace_group, ols_group_name)
+        primary_surfaces_group = (
+            self._ensure_layer_group(protected_airspace_group, output_structure.PRIMARY_SURFACES)
             if protected_airspace_group is not None
             else None
         )
-        controlling_ols_surfaces_group = self._ensure_layer_group(
+        secondary_surfaces_group = self._ensure_layer_group(
             protected_airspace_group,
-            output_structure.CONTROLLING_OLS_SURFACES,
+            output_structure.SECONDARY_SURFACES,
         )
-        controlling_contours_group = self._ensure_layer_group(
+        controlling_surfaces_group = self._ensure_layer_group(
             protected_airspace_group,
-            output_structure.CONTROLLING_CONTOURS,
+            output_structure.CONTROLLING_SURFACES,
         )
         framework = self.get_active_framework()
         external_group = self._ensure_layer_group(main_group, framework.safeguarding_group_name())
@@ -1589,9 +1574,9 @@ class SafeguardingBuilder(
             or infrastructure_group is None
             or protection_group is None
             or protected_airspace_group is None
-            or ols_surfaces_group is None
-            or controlling_ols_surfaces_group is None
-            or controlling_contours_group is None
+            or primary_surfaces_group is None
+            or secondary_surfaces_group is None
+            or controlling_surfaces_group is None
             or external_group is None
             or debug_group is None
         ):
@@ -1604,9 +1589,9 @@ class SafeguardingBuilder(
             layer_name = layer.name() if layer is not None else child.name()
             style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
             if style_key == "OLS Controlling Planar Region" or "OLS Controlling Planar Regions" in layer_name:
-                self._move_layer_tree_node(child, controlling_ols_surfaces_group)
+                self._move_layer_tree_node(child, controlling_surfaces_group)
             elif style_key == "OLS Controlling Contour" or "OLS Controlling Contours" in layer_name:
-                self._move_layer_tree_node(child, controlling_contours_group)
+                self._move_layer_tree_node(child, controlling_surfaces_group)
 
         runway_centreline_group = self._ensure_layer_group(reference_group, output_structure.RUNWAY_CENTRE_LINES)
         self._merge_or_move_direct_group(main_group, self.tr("Runway Centrelines"), reference_group)
@@ -1661,38 +1646,74 @@ class SafeguardingBuilder(
         self._repair_debug_development_layer_tree(main_group, debug_group)
 
         legacy_guideline_f_name = self.tr("Guideline F - Airspace / OLS")
-        self._merge_or_move_direct_group(main_group, legacy_guideline_f_name, ols_surfaces_group)
-        if future_annex14:
-            self._merge_or_move_direct_group(
-                protected_airspace_group,
-                self.tr(output_structure.OLS_SURFACES),
-                ols_surfaces_group,
-            )
-            self._flatten_direct_child_group(ols_surfaces_group, self.tr("Future Annex 14 OLS Surfaces"))
-        legacy_guideline_f_group = self._find_direct_child_group(ols_surfaces_group, legacy_guideline_f_name)
+        self._merge_or_move_direct_group(main_group, legacy_guideline_f_name, primary_surfaces_group)
+        legacy_guideline_f_group = self._find_direct_child_group(
+            primary_surfaces_group, legacy_guideline_f_name
+        )
         if legacy_guideline_f_group is not None:
             for child in list(legacy_guideline_f_group.children()):
-                if isinstance(child, QgsLayerTreeGroup):
-                    self._merge_or_move_direct_group(legacy_guideline_f_group, child.name(), ols_surfaces_group)
-                else:
-                    self._move_layer_tree_node(child, ols_surfaces_group)
-            try:
-                if not legacy_guideline_f_group.children():
-                    ols_surfaces_group.removeChildNode(legacy_guideline_f_group)
-            except Exception as e:
-                QgsMessageLog.logMessage(
-                    f"Warning: Failed to remove legacy OLS group '{legacy_guideline_f_name}': {e}",
-                    PLUGIN_TAG,
-                    level=Qgis.Warning,
-                )
-        if not future_annex14:
-            for group_name in self.get_active_framework().guideline_f_subgroup_names().values():
-                self._merge_or_move_direct_group(main_group, self.tr(group_name), ols_surfaces_group)
+                self._move_layer_tree_node(child, primary_surfaces_group)
+            if not legacy_guideline_f_group.children():
+                primary_surfaces_group.removeChildNode(legacy_guideline_f_group)
         for child in list(main_group.children()):
             if isinstance(child, QgsLayerTreeGroup) and re.fullmatch(r"RWY\s+\S+", child.name() or ""):
-                self._merge_or_move_direct_group(main_group, child.name(), ols_surfaces_group)
-        if not future_annex14:
-            self._repair_guideline_f_layer_tree(ols_surfaces_group, extra_source_groups=[main_group])
+                self._merge_or_move_direct_group(main_group, child.name(), primary_surfaces_group)
+
+        # Migrate the former OLS hierarchy and any legacy category groups into the
+        # three reviewed folders without retaining extra wrapper levels.
+        legacy_ols_names = [output_structure.OLS_SURFACES, "Annex 14 Future OLS Standard"]
+        legacy_primary_names = [
+            self.get_active_framework().guideline_f_subgroup_names()["runway"],
+            self.get_active_framework().guideline_f_subgroup_names()["ofz"],
+            "Future Annex 14 OLS Surfaces",
+        ]
+        airport_wide_legacy_name = self.get_active_framework().guideline_f_subgroup_names()["airport_wide"]
+        for legacy_name, destination in [
+            (airport_wide_legacy_name, secondary_surfaces_group),
+            *((name, primary_surfaces_group) for name in legacy_primary_names),
+        ]:
+            legacy_group = self._find_direct_child_group(main_group, self.tr(legacy_name))
+            if legacy_group is not None:
+                for child in list(legacy_group.children()):
+                    self._move_layer_tree_node(child, destination)
+                if not legacy_group.children():
+                    main_group.removeChildNode(legacy_group)
+        for legacy_name in legacy_ols_names:
+            legacy_group = self._find_direct_child_group(protected_airspace_group, self.tr(legacy_name))
+            if legacy_group is None:
+                continue
+            airport_wide_name = self.tr(airport_wide_legacy_name)
+            airport_wide_group = self._find_direct_child_group(legacy_group, airport_wide_name)
+            if airport_wide_group is not None:
+                for child in list(airport_wide_group.children()):
+                    self._move_layer_tree_node(child, secondary_surfaces_group)
+                if not airport_wide_group.children():
+                    legacy_group.removeChildNode(airport_wide_group)
+            for primary_name in legacy_primary_names:
+                primary_group = self._find_direct_child_group(legacy_group, self.tr(primary_name))
+                if primary_group is not None:
+                    for child in list(primary_group.children()):
+                        self._move_layer_tree_node(child, primary_surfaces_group)
+                    if not primary_group.children():
+                        legacy_group.removeChildNode(primary_group)
+            for child in list(legacy_group.children()):
+                self._move_layer_tree_node(child, primary_surfaces_group)
+            if not legacy_group.children():
+                protected_airspace_group.removeChildNode(legacy_group)
+
+        for legacy_name in [output_structure.CONTROLLING_OLS_SURFACES, output_structure.CONTROLLING_CONTOURS]:
+            legacy_group = self._find_direct_child_group(protected_airspace_group, self.tr(legacy_name))
+            if legacy_group is not None:
+                for child in list(legacy_group.children()):
+                    self._move_layer_tree_node(child, controlling_surfaces_group)
+                if not legacy_group.children():
+                    protected_airspace_group.removeChildNode(legacy_group)
+
+        self._repair_guideline_f_layer_tree(
+            primary_surfaces_group,
+            secondary_surfaces_group,
+            extra_source_groups=[main_group],
+        )
         self._repair_debug_development_layer_tree(main_group, debug_group)
 
     def _is_development_poc_layer(self, node: QgsLayerTreeLayer) -> bool:
@@ -1728,19 +1749,12 @@ class SafeguardingBuilder(
 
     def _repair_guideline_f_layer_tree(
         self,
-        ols_surfaces_group: QgsLayerTreeGroup,
+        primary_surfaces_group: QgsLayerTreeGroup,
+        secondary_surfaces_group: QgsLayerTreeGroup,
         extra_source_groups: Optional[List[QgsLayerTreeGroup]] = None,
     ) -> None:
-        """Move direct OLS layers into their reviewed OLS subfolders."""
-        guideline_f_group = ols_surfaces_group
-        if guideline_f_group is None:
-            return
-
-        guideline_f_subgroups = self.get_active_framework().guideline_f_subgroup_names()
-        airport_wide_group = self._ensure_layer_group(guideline_f_group, guideline_f_subgroups["airport_wide"])
-        runway_group = self._ensure_layer_group(guideline_f_group, guideline_f_subgroups["runway"])
-        ofz_group = self._ensure_layer_group(guideline_f_group, guideline_f_subgroups["ofz"])
-        if airport_wide_group is None or runway_group is None or ofz_group is None:
+        """Move direct OLS layers into the reviewed primary/secondary folders."""
+        if primary_surfaces_group is None or secondary_surfaces_group is None:
             return
 
         airport_wide_style_keys = {
@@ -1779,7 +1793,7 @@ class SafeguardingBuilder(
                     "OLS Baulked Landing",
                 ]
             ):
-                return ofz_group
+                return primary_surfaces_group
             if style_key in airport_wide_style_keys or any(
                 label in layer_name
                 for label in [
@@ -1789,7 +1803,7 @@ class SafeguardingBuilder(
                     "OLS Transitional",
                 ]
             ):
-                return airport_wide_group
+                return secondary_surfaces_group
             if style_key in runway_style_keys or any(
                 label in layer_name
                 for label in [
@@ -1797,10 +1811,10 @@ class SafeguardingBuilder(
                     "OLS TOCS",
                 ]
             ):
-                return runway_group
+                return primary_surfaces_group
             return None
 
-        source_groups = [guideline_f_group, runway_group, ofz_group, airport_wide_group]
+        source_groups = [primary_surfaces_group, secondary_surfaces_group]
         source_groups.extend(group for group in (extra_source_groups or []) if group is not None)
         for group in source_groups:
             for child in list(group.children()):
@@ -1937,7 +1951,7 @@ class SafeguardingBuilder(
                         run_success_flags.append(
                             self.process_runway_ols_surfaces(
                                 runway_data,
-                                guideline_groups["F"],
+                                runway_ols_group or guideline_groups["F"],
                                 ofz_group,
                             )
                         )  # F = OLS App/TOCS
@@ -2053,7 +2067,7 @@ class SafeguardingBuilder(
             return "no protection or separation layers generated; check runway inputs and preceding warnings"
         if group_name == self.tr(output_structure.PROTECTED_AIRSPACE):
             return "no protected airspace layers generated; check runway, approach, and RED inputs"
-        if group_name == self.tr(output_structure.OLS_SURFACES):
+        if group_name == self.tr(output_structure.PRIMARY_SURFACES):
             return "no OLS layers generated; check runway, approach, and RED inputs"
         if group_name == self.tr(output_structure.DEBUG_DEVELOPMENT):
             return "no debug or development layers generated; enable debug outputs or controlling OLS"
@@ -2258,9 +2272,9 @@ class SafeguardingBuilder(
         framework = self.get_active_framework()
         safeguarding_group_name = framework.safeguarding_group_name()
         guideline_groups = framework.guideline_group_definitions(include_cns=True)
-        guideline_f_subgroups = framework.guideline_f_subgroup_names()
         guideline_f_checklist_labels = framework.guideline_f_checklist_labels()
-        protected_airspace_path = [output_structure.PROTECTED_AIRSPACE, output_structure.OLS_SURFACES]
+        primary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.PRIMARY_SURFACES]
+        secondary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.SECONDARY_SURFACES]
 
         items = [
             self._format_checklist_layer_item(
@@ -2363,21 +2377,21 @@ class SafeguardingBuilder(
             self._format_checklist_item(
                 main_group,
                 guideline_f_checklist_labels["airport_wide"],
-                [*protected_airspace_path, guideline_f_subgroups["airport_wide"]],
+                secondary_surfaces_path,
                 missing_reason=no_runway_reason or red_missing_reason,
                 failed_reason="airport-wide OLS failed; check RED, runway strip dimensions, ARP, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
                 guideline_f_checklist_labels["runway"],
-                [*protected_airspace_path, guideline_f_subgroups["runway"]],
+                primary_surfaces_path,
                 missing_reason=no_runway_reason,
                 failed_reason="approach or TOCS generation failed; check runway type, elevations, clearway, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
                 guideline_f_checklist_labels["ofz"],
-                [*protected_airspace_path, guideline_f_subgroups["ofz"]],
+                primary_surfaces_path,
                 missing_reason=no_runway_reason,
                 not_applicable_reason=None if pa_runways_exist else "no precision approach runway was entered",
                 failed_reason="OFZ generation failed; check precision approach type, elevations, IHS/RED, and preceding warnings",
@@ -2385,14 +2399,14 @@ class SafeguardingBuilder(
             self._format_checklist_item(
                 main_group,
                 output_structure.CONTROLLING_OLS_SURFACES,
-                [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_OLS_SURFACES],
+                [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_SURFACES],
                 not_applicable_reason=None if self.generate_controlling_ols else "controlling OLS option is disabled",
                 failed_reason="controlling OLS regions failed to generate",
             ),
             self._format_checklist_item(
                 main_group,
                 output_structure.CONTROLLING_CONTOURS,
-                [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_CONTOURS],
+                [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_SURFACES],
                 not_applicable_reason=None if self.generate_controlling_ols else "controlling OLS option is disabled",
                 failed_reason="controlling OLS contours failed to generate",
             ),
