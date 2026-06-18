@@ -447,12 +447,22 @@ class LayerMixin:
             return
         if layer.fields().indexFromName("elev_min") < 0 or layer.fields().indexFromName("elev_max") < 0:
             return
+        has_surface = layer.fields().indexFromName("surface") >= 0
         try:
             settings = QgsPalLayerSettings()
-            settings.fieldName = (
-                "'HP' || '\n' || "
-                'format_number("elev_max", 1)'
-            )
+            if has_surface:
+                settings.fieldName = (
+                    "'HP' || '\n' || "
+                    'CASE WHEN "surface" = \'Approach\' '
+                    'THEN format_number("elev_max", 2) '
+                    'ELSE format_number("elev_max", 1) '
+                    "END"
+                )
+            else:
+                settings.fieldName = (
+                    "'HP' || '\n' || "
+                    'format_number("elev_max", 1)'
+                )
             settings.isExpression = True
             settings.placement = QgsPalLayerSettings.Horizontal
             settings.centroidInside = True
