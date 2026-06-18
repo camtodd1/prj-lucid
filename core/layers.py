@@ -433,7 +433,7 @@ class LayerMixin:
                 )
                 categories.append(QgsRendererCategory(surface, symbol, surface))
             layer.setRenderer(QgsCategorizedSymbolRenderer("surface", categories))
-            layer.setLabelsEnabled(False)
+            self._apply_controlling_region_labels(layer)
         except Exception as exc:
             QgsMessageLog.logMessage(
                 f"Warning: failed to apply controlling OLS region style: {exc}",
@@ -570,17 +570,13 @@ class LayerMixin:
             )
 
     def _apply_controlling_contour_labels(self, layer: QgsVectorLayer, index_expression: str):
-        """Label index controlling contours, including HP shorthand for flat surfaces."""
+        """Label only index controlling contours to keep dense areas readable."""
         if layer is None or not layer.isValid() or layer.fields().indexFromName("contour_elev_am") < 0:
             return
         try:
             settings = QgsPalLayerSettings()
             settings.fieldName = (
                 "CASE "
-                "WHEN \"surface\" IN ('IHS', 'OHS') "
-                "THEN 'HP' || '\n' || format_number(\"contour_elev_am\", 1) "
-                "WHEN \"surface\" = 'Approach' "
-                "THEN 'HP' || '\n' || format_number(\"contour_elev_am\", 2) "
                 "WHEN round(\"contour_elev_am\" * 2) / 2 = floor(round(\"contour_elev_am\" * 2) / 2) "
                 "THEN format_number(round(\"contour_elev_am\" * 2) / 2, 0) "
                 "ELSE format_number(round(\"contour_elev_am\" * 2) / 2, 1) "
