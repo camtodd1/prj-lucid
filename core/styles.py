@@ -39,6 +39,7 @@ DEFAULT_STYLE_MAP = {
     "OLS Inner Approach": "default_ofz_polygon.qml",
     "OLS Inner Transitional": "default_ofz_polygon.qml",
     "OLS Baulked Landing": "default_ofz_polygon.qml",
+    "OLS OFZ Contour": "ols_ofz_contours.qml",
     "OLS TOCS": "ols_tocs_polygon.qml",
     "OLS TOCS Contour": "ols_tocs_contours.qml",
     "OLS IHS": "default_ols_polygon.qml",

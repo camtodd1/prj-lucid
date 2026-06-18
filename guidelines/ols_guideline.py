@@ -78,6 +78,9 @@ class OlsGuidelineMixin:
             "conical": CONICAL_CONTOUR_INTERVAL,
             "tocs": TOCS_CONTOUR_INTERVAL,
             "transitional": TRANSITIONAL_CONTOUR_INTERVAL,
+            "inner_approach": APPROACH_CONTOUR_INTERVAL,
+            "inner_transitional": TRANSITIONAL_CONTOUR_INTERVAL,
+            "baulked_landing": APPROACH_CONTOUR_INTERVAL,
         }
         intermediate_interval = self._get_contour_interval(
             surface_key,
@@ -1573,6 +1576,189 @@ class OlsGuidelineMixin:
             final_width,
         )
 
+    def _make_ofz_contour_feature(
+        self,
+        geometry: QgsGeometry,
+        surface_key: str,
+        surface_name: str,
+        runway_name: str,
+        end_desig: str,
+        contour_elevation: Optional[float],
+        ref_mos: Optional[str],
+        surface_id: str,
+        section_desc: Optional[str] = None,
+        side_label: Optional[str] = None,
+    ) -> Optional[QgsFeature]:
+        """Create a consistently attributed contour for an OFZ surface."""
+        if geometry is None or geometry.isEmpty() or geometry.length() <= 1e-3:
+            return None
+        fields = self._get_ofz_contour_fields()
+        feature = QgsFeature(fields)
+        feature.setGeometry(geometry)
+        attributes = {
+            "rwy_name": runway_name,
+            "end_desig": end_desig,
+            "surface": surface_name,
+            "section_desc": section_desc,
+            "side": side_label,
+            "contour_elev_am": contour_elevation,
+            "ref_mos": ref_mos,
+            "surface_id": surface_id,
+        }
+        attributes.update(self._contour_attribute_values(surface_key, contour_elevation))
+        for name, value in attributes.items():
+            index = fields.indexFromName(name)
+            if index != -1:
+                feature.setAttribute(index, value)
+        return feature
+
+    def _generate_ofz_axis_contours(
+        self,
+        *,
+        surface_key: str,
+        surface_name: str,
+        runway_name: str,
+        end_desig: str,
+        start_point: QgsPointXY,
+        outward_azimuth: float,
+        length: float,
+        start_width: float,
+        end_width: float,
+        start_elevation: float,
+        end_elevation: float,
+        polygon: QgsGeometry,
+        ref_mos: Optional[str],
+        surface_id: str,
+    ) -> List[QgsFeature]:
+        """Generate cross-section contours for a longitudinally sloping OFZ surface."""
+        if length <= 1e-6 or polygon is None or polygon.isEmpty():
+            return []
+        interval = self._get_contour_interval(surface_key, APPROACH_CONTOUR_INTERVAL)
+        elevations = set(self._contour_interval_elevations(start_elevation, end_elevation, interval))
+        elevations.update([round(start_elevation, 6), round(end_elevation, 6)])
+        elevation_range = end_elevation - start_elevation
+        contours: List[QgsFeature] = []
+        for elevation in sorted(elevations):
+            if abs(elevation_range) <= 1e-9:
+                ratio = 0.0
+            else:
+                ratio = (elevation - start_elevation) / elevation_range
+            if ratio < -1e-6 or ratio > 1.0 + 1e-6:
+                continue
+            ratio = min(1.0, max(0.0, ratio))
+            centre = start_point.project(length * ratio, outward_azimuth)
+            width = start_width + ((end_width - start_width) * ratio)
+            if centre is None or width <= 1e-6:
+                continue
+            left = centre.project(width / 2.0, (outward_azimuth - 90.0) % 360.0)
+            right = centre.project(width / 2.0, (outward_azimuth + 90.0) % 360.0)
+            if left is None or right is None:
+                continue
+            geometry = QgsGeometry.fromPolylineXY([left, right])
+            clipped = geometry.intersection(polygon)
+            feature = self._make_ofz_contour_feature(
+                clipped,
+                surface_key,
+                surface_name,
+                runway_name,
+                end_desig,
+                elevation,
+                ref_mos,
+                surface_id,
+            )
+            if feature is not None:
+                contours.append(feature)
+        return contours
+
+    def _generate_inner_transitional_panel_contours(
+        self,
+        *,
+        base_p1_3d: QgsPoint,
+        base_p2_3d: QgsPoint,
+        its_slope: float,
+        IHS_ELEVATION_AMSL: float,
+        outward_projection_azimuth: float,
+        runway_name: str,
+        end_desig: str,
+        side_label: str,
+        panel_description: str,
+        ref_mos: str,
+        panel_geometry: QgsGeometry,
+    ) -> List[QgsFeature]:
+        """Generate true planar contours for one Inner Transitional panel."""
+        z1 = float(base_p1_3d.z())
+        z2 = float(base_p2_3d.z())
+        base1 = QgsPointXY(base_p1_3d.x(), base_p1_3d.y())
+        base2 = QgsPointXY(base_p2_3d.x(), base_p2_3d.y())
+        top1 = base1.project(max(0.0, (IHS_ELEVATION_AMSL - z1) / its_slope), outward_projection_azimuth)
+        if top1 is None:
+            return []
+        coefficients = self._plane_coefficients_from_points(
+            base1,
+            z1,
+            base2,
+            z2,
+            top1,
+            IHS_ELEVATION_AMSL,
+        )
+        if coefficients is None:
+            return []
+        a_coefficient, b_coefficient, c_coefficient = coefficients
+        gradient_norm = math.hypot(a_coefficient, b_coefficient)
+        if gradient_norm <= 1e-12:
+            return []
+
+        interval = self._get_contour_interval("inner_transitional", TRANSITIONAL_CONTOUR_INTERVAL)
+        minimum_elevation = min(z1, z2)
+        elevations = set(
+            self._contour_interval_elevations(minimum_elevation, IHS_ELEVATION_AMSL, interval)
+        )
+        elevations.update([round(z1, 6), round(z2, 6), round(IHS_ELEVATION_AMSL, 6)])
+        bounds = panel_geometry.boundingBox()
+        line_half_length = max(10.0, math.hypot(bounds.width(), bounds.height()) * 2.0)
+        direction_x = -b_coefficient / gradient_norm
+        direction_y = a_coefficient / gradient_norm
+        centre_x = bounds.center().x()
+        centre_y = bounds.center().y()
+        surface_id = (
+            f"OFZ:ITS:{runway_name}:{end_desig}:"
+            f"{panel_description.replace(' ', '_')}:{side_label}"
+        )
+        contours: List[QgsFeature] = []
+        for elevation in sorted(elevations):
+            if elevation < minimum_elevation - 1e-6 or elevation > IHS_ELEVATION_AMSL + 1e-6:
+                continue
+            if abs(b_coefficient) > abs(a_coefficient):
+                point_x = centre_x
+                point_y = (elevation - a_coefficient * point_x - c_coefficient) / b_coefficient
+            else:
+                point_y = centre_y
+                point_x = (elevation - b_coefficient * point_y - c_coefficient) / a_coefficient
+            start = QgsPointXY(
+                point_x - direction_x * line_half_length,
+                point_y - direction_y * line_half_length,
+            )
+            end = QgsPointXY(
+                point_x + direction_x * line_half_length,
+                point_y + direction_y * line_half_length,
+            )
+            clipped = QgsGeometry.fromPolylineXY([start, end]).intersection(panel_geometry)
+            feature = self._make_ofz_contour_feature(
+                clipped,
+                "inner_transitional",
+                "Inner Transitional",
+                runway_name,
+                end_desig,
+                elevation,
+                ref_mos,
+                surface_id,
+                section_desc=panel_description,
+                side_label=side_label,
+            )
+            if feature is not None:
+                contours.append(feature)
+        return contours
+
     def _generate_its_panel_feature(
         self,
         base_p1_3d: QgsPoint,
@@ -2769,6 +2955,42 @@ class OlsGuidelineMixin:
         )
         return fields
 
+    def _get_ofz_contour_fields(self) -> QgsFields:
+        """Return the shared schema for Inner Approach, ITS and Baulked Landing contours."""
+        return QgsFields(
+            [
+                QgsField("rwy_name", QVariant.String, self.tr("Runway"), 50),
+                QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
+                QgsField("surface", QVariant.String, self.tr("Surface Type"), 30),
+                QgsField("section_desc", QVariant.String, self.tr("Section Desc"), 50),
+                QgsField("side", QVariant.String, self.tr("Side"), 5),
+                QgsField(
+                    "contour_elev_am",
+                    QVariant.Double,
+                    self.tr("Contour Elev (AMSL)"),
+                    10,
+                    2,
+                ),
+                QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
+                QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
+                QgsField("contour_class", QVariant.String, self.tr("Contour Class"), 20),
+                QgsField(
+                    "contour_interval_m",
+                    QVariant.Double,
+                    self.tr("Intermediate Interval (m)"),
+                    10,
+                    2,
+                ),
+                QgsField(
+                    "primary_interval_m",
+                    QVariant.Double,
+                    self.tr("Primary Interval (m)"),
+                    10,
+                    2,
+                ),
+            ]
+        )
+
     def _ols_child_group(self, parent_group: QgsLayerTreeGroup, name: str) -> QgsLayerTreeGroup:
         existing = self._find_direct_child_group(parent_group, self.tr(name))
         if existing is not None:
@@ -3881,6 +4103,9 @@ class OlsGuidelineMixin:
             ofz_inner_trans_features,
             ofz_bls_features,
         ) = ([], [], [], [])
+        inner_approach_contour_features: List[QgsFeature] = []
+        ofz_inner_trans_contour_features: List[QgsFeature] = []
+        ofz_bls_contour_features: List[QgsFeature] = []
 
         IHS_ELEVATION_AMSL: Optional[float] = None
         if self.reference_elevation_datum is not None:
@@ -4026,6 +4251,24 @@ class OlsGuidelineMixin:
                                     if fields.indexFromName(n) != -1:
                                         feat.setAttribute(fields.indexFromName(n), v_attr)
                                 inner_approach_features.append(feat)
+                                inner_approach_contour_features.extend(
+                                    self._generate_ofz_axis_contours(
+                                        surface_key="inner_approach",
+                                        surface_name="Inner Approach",
+                                        runway_name=runway_name,
+                                        end_desig=current_desig,
+                                        start_point=ia_cl_start_xy,
+                                        outward_azimuth=config["approach_surface_outward_azimuth"],
+                                        length=ia_length_param_val,
+                                        start_width=ia_width_param_val,
+                                        end_width=ia_width_param_val,
+                                        start_elevation=ia_start_elev,
+                                        end_elevation=ia_end_elev,
+                                        polygon=ia_geom_for_its,
+                                        ref_mos=ia_ref_param,
+                                        surface_id=f"OFZ:IA:{runway_name}:{current_desig}",
+                                    )
+                                )
 
             except Exception as e_ia:
                 QgsMessageLog.logMessage(
@@ -4081,6 +4324,24 @@ class OlsGuidelineMixin:
                             )
                         if feat_bls:
                             ofz_bls_features.append(feat_bls)
+                            ofz_bls_contour_features.extend(
+                                self._generate_ofz_axis_contours(
+                                    surface_key="baulked_landing",
+                                    surface_name="Baulked Landing",
+                                    runway_name=runway_name,
+                                    end_desig=current_desig,
+                                    start_point=bls_cl_start_xy,
+                                    outward_azimuth=config["baulked_landing_flight_path_azimuth"],
+                                    length=bls_len,
+                                    start_width=bls_start_width,
+                                    end_width=bls_end_width,
+                                    start_elevation=bls_start_elev,
+                                    end_elevation=IHS_ELEVATION_AMSL,
+                                    polygon=bls_geom_for_its,
+                                    ref_mos=bls_params_dict.get("ref", "MOS (Verify)"),
+                                    surface_id=f"OFZ:BLS:{runway_name}:{current_desig}",
+                                )
+                            )
                         else:
                             self._log_debug(f"BLS {current_desig} skipped: helper returned no feature.")
                     else:
@@ -4211,6 +4472,21 @@ class OlsGuidelineMixin:
                                 )
                                 if panel_feat:
                                     ofz_inner_trans_features.append(panel_feat)
+                                    ofz_inner_trans_contour_features.extend(
+                                        self._generate_inner_transitional_panel_contours(
+                                            base_p1_3d=P_IA_outer_3d_side,
+                                            base_p2_3d=P_IA_inner_3d_side,
+                                            its_slope=its_slope,
+                                            IHS_ELEVATION_AMSL=IHS_ELEVATION_AMSL,
+                                            outward_projection_azimuth=outward_projection_az_for_panel,
+                                            runway_name=runway_name,
+                                            end_desig=current_desig,
+                                            side_label=side_label_its_panel,
+                                            panel_description="IA Adjacent",
+                                            ref_mos=its_ref_mos,
+                                            panel_geometry=panel_feat.geometry(),
+                                        )
+                                    )
                             else:
                                 QgsMessageLog.logMessage(
                                     f"[skip] ITS IA-adjacent panel {current_desig} {side_label_its_panel}: "
@@ -4235,6 +4511,21 @@ class OlsGuidelineMixin:
                                 )
                                 if panel_feat:
                                     ofz_inner_trans_features.append(panel_feat)
+                                    ofz_inner_trans_contour_features.extend(
+                                        self._generate_inner_transitional_panel_contours(
+                                            base_p1_3d=P_BLS_inner_3d_side,
+                                            base_p2_3d=P_BLS_outer_3d_side,
+                                            its_slope=its_slope,
+                                            IHS_ELEVATION_AMSL=IHS_ELEVATION_AMSL,
+                                            outward_projection_azimuth=outward_projection_az_for_panel,
+                                            runway_name=runway_name,
+                                            end_desig=current_desig,
+                                            side_label=side_label_its_panel,
+                                            panel_description="BLS Adjacent",
+                                            ref_mos=its_ref_mos,
+                                            panel_geometry=panel_feat.geometry(),
+                                        )
+                                    )
                             else:
                                 QgsMessageLog.logMessage(
                                     f"[skip] ITS BLS-adjacent panel {current_desig} {side_label_its_panel}: "
@@ -4271,6 +4562,21 @@ class OlsGuidelineMixin:
                                     )
                                     if panel_feat:
                                         ofz_inner_trans_features.append(panel_feat)
+                                        ofz_inner_trans_contour_features.extend(
+                                            self._generate_inner_transitional_panel_contours(
+                                                base_p1_3d=strip_p1_3d,
+                                                base_p2_3d=strip_p2_3d,
+                                                its_slope=its_slope,
+                                                IHS_ELEVATION_AMSL=IHS_ELEVATION_AMSL,
+                                                outward_projection_azimuth=outward_projection_az_for_panel,
+                                                runway_name=runway_name,
+                                                end_desig=current_desig,
+                                                side_label=side_label_its_panel,
+                                                panel_description="Strip Adjacent",
+                                                ref_mos=its_ref_mos,
+                                                panel_geometry=panel_feat.geometry(),
+                                            )
+                                        )
                                 else:
                                     QgsMessageLog.logMessage(
                                         f"[skip] ITS strip panel {current_desig} {side_label_its_panel}: "
@@ -4400,8 +4706,15 @@ class OlsGuidelineMixin:
             current_desig = config["current_desig"]
             safe_end_desig = str(current_desig).replace("/", "_")
             end_inner_approach_features = self._ols_features_for_end(inner_approach_features, current_desig)
+            end_inner_approach_contours = self._ols_features_for_end(
+                inner_approach_contour_features, current_desig
+            )
             end_inner_trans_features = self._ols_features_for_end(ofz_inner_trans_features, current_desig)
+            end_inner_trans_contours = self._ols_features_for_end(
+                ofz_inner_trans_contour_features, current_desig
+            )
             end_bls_features = self._ols_features_for_end(ofz_bls_features, current_desig)
+            end_bls_contours = self._ols_features_for_end(ofz_bls_contour_features, current_desig)
             end_approach_features = self._ols_features_for_end(approach_poly_features, current_desig)
             end_approach_contour_features = self._ols_features_for_end(approach_contour_features, current_desig)
             end_tocs_features = self._ols_features_for_end(tocs_poly_features, current_desig)
@@ -4477,6 +4790,19 @@ class OlsGuidelineMixin:
                 ):
                     overall_success = True
 
+            if end_inner_trans_contours:
+                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
+                if self._create_and_add_layer(
+                    "LineString",
+                    f"OLS_InnerTransitional_Contours_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} Inner Transitional Contours RWY {current_desig}",
+                    self._get_ofz_contour_fields(),
+                    end_inner_trans_contours,
+                    ofz_direction_group,
+                    "OLS OFZ Contour",
+                ):
+                    overall_success = True
+
             if end_inner_approach_features:
                 ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
                 fields = self._get_ols_fields("InnerApproach")
@@ -4488,6 +4814,19 @@ class OlsGuidelineMixin:
                     end_inner_approach_features,
                     ofz_direction_group,
                     "OLS Inner Approach",
+                ):
+                    overall_success = True
+
+            if end_inner_approach_contours:
+                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
+                if self._create_and_add_layer(
+                    "LineString",
+                    f"OLS_InnerApproach_Contours_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} Inner Approach Contours RWY {current_desig}",
+                    self._get_ofz_contour_fields(),
+                    end_inner_approach_contours,
+                    ofz_direction_group,
+                    "OLS OFZ Contour",
                 ):
                     overall_success = True
 
@@ -4511,6 +4850,19 @@ class OlsGuidelineMixin:
                         plugin_tag,
                         Qgis.Warning,
                     )
+
+            if end_bls_contours:
+                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
+                if self._create_and_add_layer(
+                    "LineString",
+                    f"OLS_BaulkedLanding_Contours_{safe_runway_name}_{safe_end_desig}",
+                    f"{self.tr('OLS')} Baulked Landing Contours RWY {current_desig}",
+                    self._get_ofz_contour_fields(),
+                    end_bls_contours,
+                    ofz_direction_group,
+                    "OLS OFZ Contour",
+                ):
+                    overall_success = True
 
         # Logging for empty ITS on Precision Approach runways
         is_precision_runway = False

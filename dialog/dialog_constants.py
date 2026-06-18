@@ -27,10 +27,21 @@ DEFAULT_OUTPUT_FORMAT = "ESRI Shapefile"
 
 DEFAULT_CONTOUR_INTERVAL = 10.0
 DEFAULT_PRIMARY_CONTOUR_INTERVAL = 50.0
-CONTOUR_INTERVAL_KEYS = ("approach", "tocs", "transitional", "conical")
+CONTOUR_INTERVAL_KEYS = (
+    "approach",
+    "tocs",
+    "transitional",
+    "conical",
+    "inner_approach",
+    "inner_transitional",
+    "baulked_landing",
+)
 CONTOUR_INTERVAL_LABELS = {
     "approach": "OLS Approach",
     "tocs": "OLS TOCS",
     "transitional": "OLS Transitional",
     "conical": "OLS Conical",
+    "inner_approach": "OFZ Inner Approach",
+    "inner_transitional": "OFZ Inner Transitional",
+    "baulked_landing": "OFZ Baulked Landing",
 }

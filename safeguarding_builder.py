@@ -1761,6 +1761,7 @@ class SafeguardingBuilder(
             "OLS Inner Approach",
             "OLS Inner Transitional",
             "OLS Baulked Landing",
+            "OLS OFZ Contour",
         }
 
         def ols_destination_for_node(node: QgsLayerTreeLayer) -> Optional[QgsLayerTreeGroup]:

@@ -15,9 +15,20 @@ from rulesets.registry import get_ruleset_profile
 from rulesets.context import RulesetContext
 from dimensions import cns_dimensions
 from surfaces.constants import RAOA_MOS_REF_VAL
+from dialog.dialog_constants import CONTOUR_INTERVAL_KEYS, CONTOUR_INTERVAL_LABELS
 
 
 class FrameworkRegistryTest(unittest.TestCase):
+    def test_ofz_surfaces_have_independent_contour_interval_controls(self):
+        expected = {
+            "inner_approach": "OFZ Inner Approach",
+            "inner_transitional": "OFZ Inner Transitional",
+            "baulked_landing": "OFZ Baulked Landing",
+        }
+        for key, label in expected.items():
+            self.assertIn(key, CONTOUR_INTERVAL_KEYS)
+            self.assertEqual(CONTOUR_INTERVAL_LABELS[key], label)
+
     def test_default_framework_is_nasf_aus(self):
         self.assertEqual(DEFAULT_FRAMEWORK_ID, "nasf_aus")
         self.assertEqual(get_framework_profile().id, "nasf_aus")
