@@ -3008,7 +3008,6 @@ class OlsGuidelineMixin:
                 "slope_perc",
             ],
             "Transitional": [
-                "end_desig",
                 "len_m",
                 "innerw_m",
                 "outerw_m",
