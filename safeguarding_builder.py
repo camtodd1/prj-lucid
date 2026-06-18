@@ -1446,12 +1446,16 @@ class SafeguardingBuilder(
             )
         protected_airspace_group = groups["protected_airspace"]
         if protected_airspace_group is not None:
-            groups["ols_surfaces"] = self._ensure_layer_group(
-                protected_airspace_group, output_structure.PRIMARY_SURFACES
-            )
-            groups["airport_wide_ols"] = self._ensure_layer_group(
-                protected_airspace_group, output_structure.SECONDARY_SURFACES
-            )
+            if self._is_future_annex14_protected_airspace():
+                groups["ols_surfaces"] = self._ensure_layer_group(protected_airspace_group, "OFS")
+                groups["airport_wide_ols"] = self._ensure_layer_group(protected_airspace_group, "OES")
+            else:
+                groups["ols_surfaces"] = self._ensure_layer_group(
+                    protected_airspace_group, output_structure.PRIMARY_SURFACES
+                )
+                groups["airport_wide_ols"] = self._ensure_layer_group(
+                    protected_airspace_group, output_structure.SECONDARY_SURFACES
+                )
             groups["controlling_surfaces"] = self._ensure_layer_group(
                 protected_airspace_group, output_structure.CONTROLLING_SURFACES
             )
@@ -1554,15 +1558,19 @@ class SafeguardingBuilder(
         infrastructure_group = self._ensure_layer_group(main_group, output_structure.AERODROME_INFRASTRUCTURE)
         protection_group = self._ensure_layer_group(main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION)
         protected_airspace_group = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
-        primary_surfaces_group = (
-            self._ensure_layer_group(protected_airspace_group, output_structure.PRIMARY_SURFACES)
-            if protected_airspace_group is not None
-            else None
-        )
-        secondary_surfaces_group = self._ensure_layer_group(
-            protected_airspace_group,
-            output_structure.SECONDARY_SURFACES,
-        )
+        if self._is_future_annex14_protected_airspace():
+            primary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OFS")
+            secondary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OES")
+        else:
+            primary_surfaces_group = (
+                self._ensure_layer_group(protected_airspace_group, output_structure.PRIMARY_SURFACES)
+                if protected_airspace_group is not None
+                else None
+            )
+            secondary_surfaces_group = self._ensure_layer_group(
+                protected_airspace_group,
+                output_structure.SECONDARY_SURFACES,
+            )
         controlling_surfaces_group = self._ensure_layer_group(
             protected_airspace_group,
             output_structure.CONTROLLING_SURFACES,

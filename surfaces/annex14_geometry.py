@@ -1148,38 +1148,19 @@ class Annex14GeometryMixin:
 
     def _annex14_runway_surface_layer_group(
         self,
-        primary_group: QgsLayerTreeGroup,
-        secondary_group: Optional[QgsLayerTreeGroup],
+        ofs_group: QgsLayerTreeGroup,
+        oes_group: Optional[QgsLayerTreeGroup],
         family_label: str,
         surface: str,
         runway_label: str,
     ) -> QgsLayerTreeGroup:
-        """Return the compact, task-first destination for an Annex 14 layer.
-
-        Runway-direction surfaces follow the MOS139 exemplar: runway first,
-        then the regulatory family and surface. Runway-wide surfaces are kept
-        in Secondary Surfaces and omit the otherwise redundant OFS/OES level.
-        Polygon and contour layers are direct siblings in the returned group.
-        """
-        surface_key = str(surface or "").strip().lower()
-        is_secondary = surface_key in {
-            "transitional",
-            "horizontal",
-            "inner_horizontal",
-            "conical",
-            "outer_horizontal",
-        }
-        destination = secondary_group if is_secondary and secondary_group is not None else primary_group
-        runway_group = self._annex14_runway_group(destination, runway_label)
-        if is_secondary:
-            return self._ensure_layer_group(runway_group, self._annex14_surface_label(surface))
-
-        family_names = {
-            "Obstacle Free Surfaces": "OFS",
-            "Obstacle Evaluation Surfaces": "OES",
-        }
-        family_group = self._ensure_layer_group(runway_group, family_names.get(family_label, family_label))
-        return self._ensure_layer_group(family_group, self._annex14_surface_label(surface))
+        """Return an OFS/OES runway group with no deeper subgrouping."""
+        destination = (
+            oes_group
+            if family_label == "Obstacle Evaluation Surfaces" and oes_group is not None
+            else ofs_group
+        )
+        return self._annex14_runway_group(destination, runway_label)
 
     def _annex14_aerodrome_wide_surface_layer_group(
         self,
@@ -1198,7 +1179,7 @@ class Annex14GeometryMixin:
         self,
         runway_data: dict,
         layer_group: QgsLayerTreeGroup,
-        secondary_group: Optional[QgsLayerTreeGroup] = None,
+        oes_group: Optional[QgsLayerTreeGroup] = None,
     ) -> bool:
         ruleset = self.get_active_protected_airspace_ruleset()
         if getattr(ruleset, "protected_airspace_model", "") != "annex14_modernised_ofs_oes":
@@ -1961,7 +1942,12 @@ class Annex14GeometryMixin:
 
         created = False
         try:
-            for end_config in self._annex14_runway_end_configs(runway_data, rwy_params):
+            runway_end_configs = self._annex14_runway_end_configs(runway_data, rwy_params)
+            all_ofs_by_surface = self._annex14_features_by_surface(ofs_features)
+            all_oes_by_surface = self._annex14_features_by_surface(oes_features)
+            all_ofs_contours_by_surface = self._annex14_features_by_surface(ofs_contour_features)
+            all_oes_contours_by_surface = self._annex14_features_by_surface(oes_contour_features)
+            for end_index, end_config in enumerate(runway_end_configs):
                 end_desig = end_config["end_desig"]
                 safe_end_desig = str(end_desig).replace("/", "_")
                 end_ofs_features = self._annex14_features_for_end(ofs_features, end_desig)
@@ -1972,10 +1958,15 @@ class Annex14GeometryMixin:
                 if end_ofs_features:
                     for surface, surface_features in self._annex14_features_by_surface(end_ofs_features).items():
                         safe_surface = self._sanitize_filename(surface)
+                        surface_label = self._annex14_surface_label(surface)
                         runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
+                        if runway_label == runway_name:
+                            if end_index > 0:
+                                continue
+                            surface_features = all_ofs_by_surface.get(surface, surface_features)
                         surface_group = self._annex14_runway_surface_layer_group(
                             layer_group,
-                            secondary_group,
+                            oes_group,
                             "Obstacle Free Surfaces",
                             surface,
                             runway_label,
@@ -1983,7 +1974,7 @@ class Annex14GeometryMixin:
                         layer = self._create_and_add_layer(
                             self._annex14_polygon_layer_type(surface_features),
                             f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
-                            self.tr("Surface"),
+                            f"{surface_label} — {self.tr('Surface')}",
                             fields,
                             surface_features,
                             surface_group,
@@ -1994,11 +1985,16 @@ class Annex14GeometryMixin:
                 if end_ofs_contours:
                     for surface, surface_features in self._annex14_features_by_surface(end_ofs_contours).items():
                         safe_surface = self._sanitize_filename(surface)
-                        surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
+                        surface_label = self._annex14_surface_label(surface)
                         runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
+                        if runway_label == runway_name:
+                            if end_index > 0:
+                                continue
+                            surface_features = all_ofs_contours_by_surface.get(surface, surface_features)
+                        surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
                         contour_group = self._annex14_runway_surface_layer_group(
                             layer_group,
-                            secondary_group,
+                            oes_group,
                             "Obstacle Free Surfaces",
                             surface,
                             runway_label,
@@ -2006,7 +2002,7 @@ class Annex14GeometryMixin:
                         layer = self._create_and_add_layer(
                             self._annex14_contour_layer_type(surface_features),
                             f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}_Contours",
-                            self.tr("Contours"),
+                            f"{surface_label} — {self.tr('Contours')}",
                             contour_fields,
                             surface_features,
                             contour_group,
@@ -2017,10 +2013,15 @@ class Annex14GeometryMixin:
                 if end_oes_features:
                     for surface, surface_features in self._annex14_features_by_surface(end_oes_features).items():
                         safe_surface = self._sanitize_filename(surface)
+                        surface_label = self._annex14_surface_label(surface)
                         runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
+                        if runway_label == runway_name:
+                            if end_index > 0:
+                                continue
+                            surface_features = all_oes_by_surface.get(surface, surface_features)
                         surface_group = self._annex14_runway_surface_layer_group(
                             layer_group,
-                            secondary_group,
+                            oes_group,
                             "Obstacle Evaluation Surfaces",
                             surface,
                             runway_label,
@@ -2028,7 +2029,7 @@ class Annex14GeometryMixin:
                         layer = self._create_and_add_layer(
                             self._annex14_polygon_layer_type(surface_features),
                             f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
-                            self.tr("Surface"),
+                            f"{surface_label} — {self.tr('Surface')}",
                             fields,
                             surface_features,
                             surface_group,
@@ -2039,11 +2040,16 @@ class Annex14GeometryMixin:
                 if end_oes_contours:
                     for surface, surface_features in self._annex14_features_by_surface(end_oes_contours).items():
                         safe_surface = self._sanitize_filename(surface)
-                        surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
+                        surface_label = self._annex14_surface_label(surface)
                         runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
+                        if runway_label == runway_name:
+                            if end_index > 0:
+                                continue
+                            surface_features = all_oes_contours_by_surface.get(surface, surface_features)
+                        surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
                         contour_group = self._annex14_runway_surface_layer_group(
                             layer_group,
-                            secondary_group,
+                            oes_group,
                             "Obstacle Evaluation Surfaces",
                             surface,
                             runway_label,
@@ -2051,7 +2057,7 @@ class Annex14GeometryMixin:
                         layer = self._create_and_add_layer(
                             self._annex14_contour_layer_type(surface_features),
                             f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}_Contours",
-                            self.tr("Contours"),
+                            f"{surface_label} — {self.tr('Contours')}",
                             contour_fields,
                             surface_features,
                             contour_group,
@@ -2063,9 +2069,10 @@ class Annex14GeometryMixin:
             if runway_wide_oes_features:
                 for surface, surface_features in self._annex14_features_by_surface(runway_wide_oes_features).items():
                     safe_surface = self._sanitize_filename(surface)
+                    surface_label = self._annex14_surface_label(surface)
                     surface_group = self._annex14_runway_surface_layer_group(
                         layer_group,
-                        secondary_group,
+                        oes_group,
                         "Obstacle Evaluation Surfaces",
                         surface,
                         runway_name,
@@ -2073,7 +2080,7 @@ class Annex14GeometryMixin:
                     layer = self._create_and_add_layer(
                         self._annex14_polygon_layer_type(surface_features),
                         f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_surface}",
-                        self.tr("Surface"),
+                        f"{surface_label} — {self.tr('Surface')}",
                         fields,
                         surface_features,
                         surface_group,
@@ -2085,10 +2092,11 @@ class Annex14GeometryMixin:
             if runway_wide_oes_contours:
                 for surface, surface_features in self._annex14_features_by_surface(runway_wide_oes_contours).items():
                     safe_surface = self._sanitize_filename(surface)
+                    surface_label = self._annex14_surface_label(surface)
                     surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
                     contour_group = self._annex14_runway_surface_layer_group(
                         layer_group,
-                        secondary_group,
+                        oes_group,
                         "Obstacle Evaluation Surfaces",
                         surface,
                         runway_name,
@@ -2096,7 +2104,7 @@ class Annex14GeometryMixin:
                     layer = self._create_and_add_layer(
                         self._annex14_contour_layer_type(surface_features),
                         f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_surface}_Contours",
-                        self.tr("Contours"),
+                        f"{surface_label} — {self.tr('Contours')}",
                         contour_fields,
                         surface_features,
                         contour_group,
