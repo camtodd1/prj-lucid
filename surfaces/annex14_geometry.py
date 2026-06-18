@@ -21,6 +21,11 @@ from qgis.core import (  # type: ignore
     QgsWkbTypes,
 )
 
+try:
+    from ..guidelines.controlling_ols_engine import ControllingOlsCandidate, plane_elevation_evaluator
+except ImportError:
+    from guidelines.controlling_ols_engine import ControllingOlsCandidate, plane_elevation_evaluator
+
 PLUGIN_TAG = "SafeguardingBuilder"
 
 
@@ -436,6 +441,108 @@ class Annex14GeometryMixin:
             ]
         )
         features.append(feature)
+        self._annex14_register_controlling_candidate(
+            feature,
+            runway_name,
+            family,
+            surface,
+            component,
+            end_desig,
+            ref,
+        )
+
+    def _annex14_register_controlling_candidate(
+        self,
+        feature: QgsFeature,
+        runway_name: str,
+        family: str,
+        surface: str,
+        component: str,
+        end_desig: str,
+        ref: str,
+    ) -> None:
+        """Register one planar Annex 14 component with the lower-envelope solver."""
+        if not getattr(self, "generate_controlling_ols", True):
+            return
+        register = getattr(self, "_register_controlling_ols_candidate", None)
+        if not callable(register):
+            return
+        geometry = feature.geometry()
+        if geometry is None or geometry.isNull() or geometry.isEmpty():
+            return
+
+        vertices = []
+        try:
+            for vertex in geometry.vertices():
+                z = float(vertex.z())
+                if math.isfinite(z):
+                    vertices.append((float(vertex.x()), float(vertex.y()), z))
+        except (TypeError, ValueError):
+            return
+        if len(vertices) < 3:
+            return
+
+        origin = vertices[0]
+        plane = None
+        for second_index in range(1, len(vertices)):
+            second = vertices[second_index]
+            for third in vertices[second_index + 1 :]:
+                ux, uy, uz = (second[i] - origin[i] for i in range(3))
+                vx, vy, vz = (third[i] - origin[i] for i in range(3))
+                nx = (uy * vz) - (uz * vy)
+                ny = (uz * vx) - (ux * vz)
+                nz = (ux * vy) - (uy * vx)
+                if abs(nz) <= 1e-9:
+                    continue
+                a = -nx / nz
+                b = -ny / nz
+                c = origin[2] - (a * origin[0]) - (b * origin[1])
+                plane = (a, b, c)
+                break
+            if plane is not None:
+                break
+        if plane is None:
+            return
+
+        a, b, c = plane
+        if any(abs(z - ((a * x) + (b * y) + c)) > 0.1 for x, y, z in vertices):
+            QgsMessageLog.logMessage(
+                f"Annex 14 controlling candidate skipped: non-planar component "
+                f"{family} {surface} {component} {runway_name} {end_desig}.",
+                PLUGIN_TAG,
+                Qgis.Warning,
+            )
+            return
+
+        footprint = QgsGeometry(geometry)
+        try:
+            footprint.get().dropZValue()
+        except (AttributeError, RuntimeError):
+            return
+        family_key = str(family or "").strip().upper()
+        candidate_number = len(getattr(self, "_controlling_ols_candidates", []) or []) + 1
+        surface_id = ":".join(
+            part
+            for part in ["Annex14", family_key, runway_name, end_desig, surface, component]
+            if part
+        )
+        surface_id = f"{surface_id}:{candidate_number}"[:160]
+        register(
+            ControllingOlsCandidate(
+                surface_id=surface_id,
+                surface_type=self._annex14_surface_label(surface),
+                footprint=footprint,
+                elevation_at_xy=plane_elevation_evaluator(a, b, c),
+                model="plane",
+                metadata={
+                    "annex14_family": family_key,
+                    "runway": runway_name,
+                    "runway_end": end_desig,
+                    "component": component,
+                    "ref": ref,
+                },
+            )
+        )
 
     def _annex14_trapezoid_from_widths(
         self,

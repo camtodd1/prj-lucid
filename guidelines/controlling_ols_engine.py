@@ -4240,6 +4240,39 @@ class ControllingOlsEngineMixin:
         )
         return candidate_layer_ok or region_layer_ok or transition_layer_ok or contour_layer_ok
 
+    def _create_annex14_controlling_surface_layers(
+        self,
+        icao_code: str,
+        ofs_group: QgsLayerTreeGroup,
+        oes_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Create independent future Annex 14 OFS and OES lower envelopes."""
+        candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+        created = False
+        for family, output_group in (("OFS", ofs_group), ("OES", oes_group)):
+            family_candidates = [
+                candidate
+                for candidate in candidates
+                if candidate.model in {"constant", "axis", "plane", "conical"}
+                and str((candidate.metadata or {}).get("annex14_family") or "").upper() == family
+            ]
+            if not family_candidates:
+                QgsMessageLog.logMessage(
+                    f"[skip] Controlling {family}: no future Annex 14 planar candidates were registered.",
+                    PLUGIN_TAG,
+                    Qgis.Info,
+                )
+                continue
+            engine = PlanarControllingOlsEngine(family_candidates)
+            created = self._create_controlling_region_layer(
+                icao_code,
+                output_group,
+                engine,
+                internal_name=f"Annex14_Controlling_{family}_{icao_code}",
+                display_name=f"Controlling {family} — Surface",
+            ) or created
+        return created
+
     def _controlling_ols_poc_group(self, layer_group: QgsLayerTreeGroup) -> QgsLayerTreeGroup:
         group_name = self.tr(output_structure.DEBUG_DEVELOPMENT)
         if layer_group is not None and layer_group.name() == group_name:
@@ -4353,6 +4386,8 @@ class ControllingOlsEngineMixin:
         icao_code: str,
         output_group: QgsLayerTreeGroup,
         engine: PlanarControllingOlsEngine,
+        internal_name: Optional[str] = None,
+        display_name: Optional[str] = None,
     ) -> bool:
         start_time = time.perf_counter()
         fields = QgsFields(
@@ -4366,7 +4401,29 @@ class ControllingOlsEngineMixin:
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
             ]
         )
+        if display_name is not None:
+            for field in [
+                QgsField("family", QVariant.String, self.tr("Family"), 10),
+                QgsField("runway", QVariant.String, self.tr("Runway"), 50),
+                QgsField("rwy_end", QVariant.String, self.tr("Runway End"), 10),
+                QgsField("component", QVariant.String, self.tr("Component"), 80),
+                QgsField("ref", QVariant.String, self.tr("Reference"), 120),
+            ]:
+                fields.append(field)
         features = engine.region_features(fields)
+        if display_name is not None:
+            candidates_by_id = {candidate.surface_id: candidate for candidate in engine.candidates}
+            for feature in features:
+                attributes = list(feature.attributes())
+                if len(attributes) < fields.count():
+                    feature.setAttributes(attributes + [None] * (fields.count() - len(attributes)))
+                candidate = candidates_by_id.get(str(feature.attribute("surface_id") or ""))
+                metadata = candidate.metadata if candidate is not None else {}
+                feature.setAttribute("family", metadata.get("annex14_family"))
+                feature.setAttribute("runway", metadata.get("runway"))
+                feature.setAttribute("rwy_end", metadata.get("runway_end"))
+                feature.setAttribute("component", metadata.get("component"))
+                feature.setAttribute("ref", metadata.get("ref"))
         solve_summary = engine.region_solve_timing_summary()
         if not features:
             QgsMessageLog.logMessage(
@@ -4382,8 +4439,8 @@ class ControllingOlsEngineMixin:
         feature_count = len(features)
         layer = self._create_and_add_layer(
             "MultiPolygon",
-            f"OLS_Controlling_Planar_Regions_{icao_code}",
-            f"{self.tr('OLS')} Controlling Planar Regions POC {icao_code}",
+            internal_name or f"OLS_Controlling_Planar_Regions_{icao_code}",
+            display_name or f"{self.tr('OLS')} Controlling Planar Regions POC {icao_code}",
             fields,
             features,
             output_group,

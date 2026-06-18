@@ -833,13 +833,21 @@ class SafeguardingBuilder(
                 airport_wide_ols_group,
             )
             if guideline_groups.get("F") is not None and self.generate_controlling_ols:
-                self._set_processing_status(self.tr("Solving controlling OLS lower envelope..."))
-                controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
-                    icao_code,
-                    debug_group,
-                    controlling_ols_surfaces_group,
-                    controlling_contours_group,
-                )
+                if self._is_future_annex14_protected_airspace():
+                    self._set_processing_status(self.tr("Solving controlling Annex 14 OFS/OES surfaces..."))
+                    controlling_ols_ok = self._create_annex14_controlling_surface_layers(
+                        icao_code,
+                        runway_ols_group,
+                        airport_wide_ols_group,
+                    )
+                else:
+                    self._set_processing_status(self.tr("Solving controlling OLS lower envelope..."))
+                    controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
+                        icao_code,
+                        debug_group,
+                        controlling_ols_surfaces_group,
+                        controlling_contours_group,
+                    )
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
             elif guideline_groups.get("F") is not None:
                 self._log_skip("Controlling OLS: output option disabled.")
@@ -1456,11 +1464,11 @@ class SafeguardingBuilder(
                 groups["airport_wide_ols"] = self._ensure_layer_group(
                     protected_airspace_group, output_structure.SECONDARY_SURFACES
                 )
-            groups["controlling_surfaces"] = self._ensure_layer_group(
-                protected_airspace_group, output_structure.CONTROLLING_SURFACES
-            )
-            groups["controlling_ols_surfaces"] = groups["controlling_surfaces"]
-            groups["controlling_contours"] = groups["controlling_surfaces"]
+                groups["controlling_surfaces"] = self._ensure_layer_group(
+                    protected_airspace_group, output_structure.CONTROLLING_SURFACES
+                )
+                groups["controlling_ols_surfaces"] = groups["controlling_surfaces"]
+                groups["controlling_contours"] = groups["controlling_surfaces"]
         return groups
 
     def _is_future_annex14_protected_airspace(self) -> bool:
@@ -1561,6 +1569,7 @@ class SafeguardingBuilder(
         if self._is_future_annex14_protected_airspace():
             primary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OFS")
             secondary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OES")
+            controlling_surfaces_group = protected_airspace_group
         else:
             primary_surfaces_group = (
                 self._ensure_layer_group(protected_airspace_group, output_structure.PRIMARY_SURFACES)
@@ -1571,10 +1580,10 @@ class SafeguardingBuilder(
                 protected_airspace_group,
                 output_structure.SECONDARY_SURFACES,
             )
-        controlling_surfaces_group = self._ensure_layer_group(
-            protected_airspace_group,
-            output_structure.CONTROLLING_SURFACES,
-        )
+            controlling_surfaces_group = self._ensure_layer_group(
+                protected_airspace_group,
+                output_structure.CONTROLLING_SURFACES,
+            )
         framework = self.get_active_framework()
         external_group = self._ensure_layer_group(main_group, framework.safeguarding_group_name())
         debug_group = self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
