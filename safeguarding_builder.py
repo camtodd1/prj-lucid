@@ -821,6 +821,7 @@ class SafeguardingBuilder(
                 specialised_safeguarding_group,
                 ofz_group,
                 runway_ols_group,
+                airport_wide_ols_group,
             )
 
             self._set_processing_status(self.tr("Generating airport-wide OLS surfaces..."))
@@ -1923,6 +1924,7 @@ class SafeguardingBuilder(
         specialised_group_node: Optional[QgsLayerTreeGroup],
         ofz_group: Optional[QgsLayerTreeGroup],
         runway_ols_group: Optional[QgsLayerTreeGroup] = None,
+        airport_wide_ols_group: Optional[QgsLayerTreeGroup] = None,
     ) -> bool:
         """Generate runway-specific safeguarding outputs."""
         any_guideline_processed_ok = False
@@ -1945,6 +1947,7 @@ class SafeguardingBuilder(
                             self.process_annex14_geometry(
                                 runway_data,
                                 runway_ols_group or guideline_groups["F"],
+                                airport_wide_ols_group,
                             )
                         )
                     else:
