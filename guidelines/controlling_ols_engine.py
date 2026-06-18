@@ -33,6 +33,8 @@ CONTROLLING_REGION_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M = 0.02
 CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
 CONTROLLING_REGION_DISSOLVE_GRID_M = 1e-6
+CONTROLLING_REGION_DISSOLVE_RETRY_GRID_M = 2e-6
+CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2 = 0.01
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
@@ -1112,6 +1114,21 @@ class PlanarControllingOlsEngine:
         candidates: List[QgsGeometry] = []
         if not self._introduces_long_new_boundary_segment(geometry, source_boundary):
             candidates.append(geometry)
+        if self._polygon_part_count(geometry) > 1:
+            try:
+                retry_dissolved = geometry.snappedToGrid(
+                    CONTROLLING_REGION_DISSOLVE_RETRY_GRID_M,
+                    CONTROLLING_REGION_DISSOLVE_RETRY_GRID_M,
+                ).buffer(0.0, 8)
+                area_change = abs(retry_dissolved.area() - geometry.area())
+                if (
+                    self._has_polygon_area(retry_dissolved)
+                    and area_change <= CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2
+                    and not self._introduces_long_new_boundary_segment(retry_dissolved, source_boundary)
+                ):
+                    candidates.append(retry_dissolved)
+            except Exception:
+                pass
         try:
             buffered = geometry.buffer(0.0, 8)
             if self._has_polygon_area(buffered) and not self._introduces_long_new_boundary_segment(buffered, source_boundary):
