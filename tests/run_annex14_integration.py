@@ -98,6 +98,31 @@ def _union(layer):
     return QgsGeometry.unaryUnion(geometries) if geometries else QgsGeometry()
 
 
+def _polygon_ring_stats(layer):
+    stats = []
+    for feature in layer.getFeatures():
+        geometry = feature.geometry()
+        polygons = geometry.asMultiPolygon() if geometry.isMultipart() else [geometry.asPolygon()]
+        part_areas = []
+        hole_areas = []
+        for polygon in polygons:
+            if not polygon:
+                continue
+            part_areas.append(QgsGeometry.fromPolygonXY(polygon).area())
+            for ring in polygon[1:]:
+                hole_areas.append(QgsGeometry.fromPolygonXY([ring]).area())
+        if hole_areas or len(part_areas) > 1:
+            stats.append({
+                "surface": str(feature.attribute("surface") or ""),
+                "surface_id": str(feature.attribute("surface_id") or ""),
+                "parts": len(part_areas),
+                "part_areas_m2": part_areas,
+                "holes": len(hole_areas),
+                "hole_areas_m2": hole_areas,
+            })
+    return stats
+
+
 def run(input_path, audit_path, preview_path):
     workspace = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     sys.path.insert(0, os.path.dirname(workspace))
@@ -188,6 +213,13 @@ def run(input_path, audit_path, preview_path):
         outside_contour_length = 0.0 if outside_contours.isEmpty() else outside_contours.length()
         coplanar_keys = []
         multipart_regions = 0
+        ring_stats = _polygon_ring_stats(controlling)
+        tiny_interior_rings = sum(
+            1
+            for feature_stats in ring_stats
+            for area in feature_stats["hole_areas_m2"]
+            if area < 0.01
+        )
         for feature in controlling.getFeatures():
             coplanar_keys.append(
                 (
@@ -211,11 +243,14 @@ def run(input_path, audit_path, preview_path):
             "outside_contour_length_m": outside_contour_length,
             "coplanar_groups": len(coplanar_keys),
             "multipart_regions": multipart_regions,
+            "tiny_interior_rings": tiny_interior_rings,
+            "polygon_ring_stats": ring_stats,
         }
         assert difference_area <= max(0.1, candidate_area * 1e-7), coverage[family]
         assert overlap <= max(0.1, candidate_area * 1e-7), coverage[family]
         assert controlling_contours.featureCount() > 0, coverage[family]
         assert outside_contour_length <= 0.01, coverage[family]
+        assert tiny_interior_rings == 0, coverage[family]
 
     preview_style_keys = {
         "Annex 14 OFS Surface", "Annex 14 OES Surface",

@@ -35,6 +35,7 @@ CONTROLLING_REGION_RING_TOUCH_TOLERANCE_M = 0.05
 CONTROLLING_REGION_DISSOLVE_GRID_M = 1e-6
 CONTROLLING_REGION_DISSOLVE_RETRY_GRID_M = 2e-6
 CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2 = 0.01
+CONTROLLING_REGION_MIN_INTERIOR_RING_AREA_M2 = 0.01
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
@@ -4605,6 +4606,19 @@ class ControllingOlsEngineMixin:
                     )
             if geometry.isNull() or geometry.isEmpty():
                 continue
+            try:
+                cleaned_geometry = geometry.removeInteriorRings(
+                    CONTROLLING_REGION_MIN_INTERIOR_RING_AREA_M2
+                )
+            except Exception:
+                cleaned_geometry = None
+            if (
+                cleaned_geometry is not None
+                and not cleaned_geometry.isNull()
+                and not cleaned_geometry.isEmpty()
+                and cleaned_geometry.isGeosValid()
+            ):
+                geometry = cleaned_geometry
             output = QgsFeature(group_features[0])
             output.setGeometry(geometry)
             source_candidate = candidates_by_id.get(str(group_features[0].attribute("surface_id") or ""))
