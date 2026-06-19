@@ -2085,7 +2085,7 @@ class Annex14GeometryMixin:
                             fields,
                             surface_features,
                             surface_group,
-                            "OLS Approach",
+                            "Annex 14 OFS Surface",
                         )
                         created = created or layer is not None
 
@@ -2113,7 +2113,7 @@ class Annex14GeometryMixin:
                             contour_fields,
                             surface_features,
                             contour_group,
-                            self._annex14_contour_style_key(surface),
+                            "Annex 14 OFS Contour",
                         )
                         created = created or layer is not None
 
@@ -2140,7 +2140,7 @@ class Annex14GeometryMixin:
                             fields,
                             surface_features,
                             surface_group,
-                            "OLS TOCS",
+                            "Annex 14 OES Surface",
                         )
                         created = created or layer is not None
 
@@ -2168,7 +2168,7 @@ class Annex14GeometryMixin:
                             contour_fields,
                             surface_features,
                             contour_group,
-                            self._annex14_contour_style_key(surface),
+                            "Annex 14 OES Contour",
                         )
                         created = created or layer is not None
 
@@ -2191,7 +2191,7 @@ class Annex14GeometryMixin:
                         fields,
                         surface_features,
                         surface_group,
-                        "OLS TOCS",
+                        "Annex 14 OES Surface",
                     )
                     created = created or layer is not None
 
@@ -2215,7 +2215,7 @@ class Annex14GeometryMixin:
                         contour_fields,
                         surface_features,
                         contour_group,
-                        self._annex14_contour_style_key(surface),
+                        "Annex 14 OES Contour",
                     )
                     created = created or layer is not None
         except Exception as exc:

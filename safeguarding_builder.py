@@ -659,9 +659,15 @@ class SafeguardingBuilder(
                 return
 
             output_groups = self._create_output_layer_groups(main_group, bool(agl_options.get("enabled")))
-            reference_group = output_groups.get("reference_data") or main_group
-            external_safeguarding_group = output_groups.get("external_safeguarding") or main_group
-            ols_surfaces_group = output_groups.get("ols_surfaces") or main_group
+            reference_group = output_groups.get("reference_data")
+            if reference_group is None:
+                reference_group = main_group
+            external_safeguarding_group = output_groups.get("external_safeguarding")
+            if external_safeguarding_group is None:
+                external_safeguarding_group = main_group
+            ols_surfaces_group = output_groups.get("ols_surfaces")
+            if ols_surfaces_group is None:
+                ols_surfaces_group = main_group
             debug_group = output_groups.get("debug_development")
             if debug_group is None:
                 debug_group = main_group
@@ -839,6 +845,7 @@ class SafeguardingBuilder(
                         icao_code,
                         runway_ols_group,
                         airport_wide_ols_group,
+                        debug_group,
                     )
                 else:
                     self._set_processing_status(self.tr("Solving controlling OLS lower envelope..."))

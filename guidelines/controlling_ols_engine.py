@@ -4245,6 +4245,7 @@ class ControllingOlsEngineMixin:
         icao_code: str,
         ofs_group: QgsLayerTreeGroup,
         oes_group: QgsLayerTreeGroup,
+        debug_group: QgsLayerTreeGroup,
     ) -> bool:
         """Create independent future Annex 14 OFS and OES lower envelopes."""
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
@@ -4264,12 +4265,31 @@ class ControllingOlsEngineMixin:
                 )
                 continue
             engine = PlanarControllingOlsEngine(family_candidates)
+            family_debug_group = self._ensure_layer_group(debug_group, f"Annex 14 {family} Controlling")
+            self._create_controlling_candidate_layer(
+                icao_code,
+                family_debug_group,
+                family_candidates,
+                internal_name=f"Annex14_{family}_Planar_Candidates_{icao_code}",
+                display_name=f"{family} — Planar Candidates",
+                style_key=f"Annex 14 Candidate {family}",
+            )
+            self._create_controlling_transition_layer(
+                icao_code,
+                family_debug_group,
+                engine,
+                internal_name=f"Annex14_{family}_Planar_Transitions_{icao_code}",
+                display_name=f"{family} — Planar Transitions",
+                style_key=f"Annex 14 Transition {family}",
+            )
             created = self._create_controlling_region_layer(
                 icao_code,
                 output_group,
                 engine,
                 internal_name=f"Annex14_Controlling_{family}_{icao_code}",
                 display_name=f"Controlling {family} — Surface",
+                style_key=f"Annex 14 Controlling {family}",
+                partition_overlaps=True,
             ) or created
         return created
 
@@ -4318,6 +4338,9 @@ class ControllingOlsEngineMixin:
         icao_code: str,
         output_group: QgsLayerTreeGroup,
         candidates: Sequence[ControllingOlsCandidate],
+        internal_name: Optional[str] = None,
+        display_name: Optional[str] = None,
+        style_key: str = "Default Polygon",
     ) -> bool:
         start_time = time.perf_counter()
         fields = QgsFields(
@@ -4364,12 +4387,12 @@ class ControllingOlsEngineMixin:
 
         layer = self._create_and_add_layer(
             "Polygon",
-            f"OLS_Controlling_Planar_Candidates_{icao_code}",
-            f"{self.tr('OLS')} Controlling Planar Candidates POC {icao_code}",
+            internal_name or f"OLS_Controlling_Planar_Candidates_{icao_code}",
+            display_name or f"{self.tr('OLS')} Controlling Planar Candidates POC {icao_code}",
             fields,
             features,
             output_group,
-            "Default Polygon",
+            style_key,
         )
         if layer is not None:
             QgsMessageLog.logMessage(
@@ -4388,6 +4411,8 @@ class ControllingOlsEngineMixin:
         engine: PlanarControllingOlsEngine,
         internal_name: Optional[str] = None,
         display_name: Optional[str] = None,
+        style_key: str = "OLS Controlling Planar Region",
+        partition_overlaps: bool = False,
     ) -> bool:
         start_time = time.perf_counter()
         fields = QgsFields(
@@ -4411,6 +4436,8 @@ class ControllingOlsEngineMixin:
             ]:
                 fields.append(field)
         features = engine.region_features(fields)
+        if partition_overlaps:
+            features = self._partition_controlling_region_features(features)
         if display_name is not None:
             candidates_by_id = {candidate.surface_id: candidate for candidate in engine.candidates}
             for feature in features:
@@ -4444,7 +4471,7 @@ class ControllingOlsEngineMixin:
             fields,
             features,
             output_group,
-            "OLS Controlling Planar Region",
+            style_key,
         )
         if layer is not None:
             QgsMessageLog.logMessage(
@@ -4459,11 +4486,41 @@ class ControllingOlsEngineMixin:
             return True
         return False
 
+    def _partition_controlling_region_features(self, features: List[QgsFeature]) -> List[QgsFeature]:
+        """Remove tied-region overlaps while preserving the complete envelope domain."""
+        partitioned: List[QgsFeature] = []
+        assigned = QgsGeometry()
+        ordered = sorted(features, key=lambda feature: str(feature.attribute("surface_id") or ""))
+        for feature in ordered:
+            geometry = QgsGeometry(feature.geometry())
+            if geometry.isNull() or geometry.isEmpty():
+                continue
+            if not assigned.isNull() and not assigned.isEmpty():
+                geometry = geometry.difference(assigned)
+            if geometry.isNull() or geometry.isEmpty():
+                continue
+            if not geometry.isGeosValid():
+                geometry = geometry.makeValid()
+            if geometry.isNull() or geometry.isEmpty():
+                continue
+            feature.setGeometry(geometry)
+            feature.setAttribute("region_id", len(partitioned) + 1)
+            partitioned.append(feature)
+            assigned = (
+                QgsGeometry(geometry)
+                if assigned.isNull() or assigned.isEmpty()
+                else QgsGeometry.unaryUnion([assigned, geometry])
+            )
+        return partitioned
+
     def _create_controlling_transition_layer(
         self,
         icao_code: str,
         output_group: QgsLayerTreeGroup,
         engine: PlanarControllingOlsEngine,
+        internal_name: Optional[str] = None,
+        display_name: Optional[str] = None,
+        style_key: str = "Default Line",
     ) -> bool:
         start_time = time.perf_counter()
         fields = QgsFields(
@@ -4489,12 +4546,12 @@ class ControllingOlsEngineMixin:
         feature_count = len(features)
         layer = self._create_and_add_layer(
             "LineStringZ",
-            f"OLS_Controlling_Planar_Transitions_{icao_code}",
-            f"{self.tr('OLS')} Controlling Planar Transitions POC {icao_code}",
+            internal_name or f"OLS_Controlling_Planar_Transitions_{icao_code}",
+            display_name or f"{self.tr('OLS')} Controlling Planar Transitions POC {icao_code}",
             fields,
             features,
             output_group,
-            "Default Line",
+            style_key,
         )
         if layer is not None:
             QgsMessageLog.logMessage(
