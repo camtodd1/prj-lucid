@@ -83,6 +83,8 @@ def _layer_records(group, path=()):
                 "style_key": str(layer.customProperty("safeguarding_style_key") or ""),
                 "renderer": renderer.type() if renderer is not None else None,
                 "rules": rules,
+                "labels_enabled": layer.labelsEnabled(),
+                "labeling": layer.labeling().type() if layer.labeling() is not None else None,
                 "invalid": invalid,
                 "empty": empty,
                 "fields": layer.fields().names(),
@@ -156,6 +158,8 @@ def run(input_path, audit_path, preview_path):
     assert expected_styles <= {record["style_key"] for record in annex}
     assert all(record["renderer"] == "RuleRenderer" for record in annex)
     assert all(record["features"] > 0 and record["invalid"] == 0 and record["empty"] == 0 for record in annex)
+    contour_records = [record for record in annex if record["style_key"] in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}]
+    assert all(record["labels_enabled"] and record["labeling"] == "rule-based" for record in contour_records)
     assert {"Annex 14 OFS Controlling", "Annex 14 OES Controlling"} <= set(_child_names(debug))
 
     coverage = {}
@@ -177,6 +181,19 @@ def run(input_path, audit_path, preview_path):
         difference_area = 0.0 if difference.isEmpty() else difference.area()
         candidate_area = candidate_union.area()
         overlap = max(0.0, sum(f.geometry().area() for f in controlling.getFeatures()) - controlling_union.area())
+        coplanar_keys = []
+        multipart_regions = 0
+        for feature in controlling.getFeatures():
+            coplanar_keys.append(
+                (
+                    str(feature.attribute("surface") or ""),
+                    round(float(feature.attribute("plane_a")), 11),
+                    round(float(feature.attribute("plane_b")), 11),
+                    round(float(feature.attribute("plane_c")), 5),
+                )
+            )
+            multipart_regions += int(feature.geometry().isMultipart())
+        assert len(coplanar_keys) == len(set(coplanar_keys)), coplanar_keys
         coverage[family] = {
             "candidates": candidates.featureCount(),
             "transitions": transitions.featureCount(),
@@ -185,6 +202,8 @@ def run(input_path, audit_path, preview_path):
             "coverage_difference_m2": difference_area,
             "coverage_difference_ratio": difference_area / candidate_area if candidate_area else None,
             "region_overlap_m2": overlap,
+            "coplanar_groups": len(coplanar_keys),
+            "multipart_regions": multipart_regions,
         }
         assert difference_area <= max(0.1, candidate_area * 1e-7), coverage[family]
         assert overlap <= max(0.1, candidate_area * 1e-7), coverage[family]

@@ -374,6 +374,11 @@ class LayerMixin:
                         self._apply_controlling_region_style(layer)
                     if str(style_key) == "OLS Controlling Contour":
                         self._apply_controlling_contour_style(layer)
+                    if str(style_key) in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}:
+                        self._apply_controlling_contour_labels(
+                            layer,
+                            '"contour_elev_am" IS NOT NULL',
+                        )
                     if str(style_key) == "Parallel Runway Standards Line":
                         self._apply_parallel_runway_standards_style(layer)
                     if str(style_key) in {"OLS IHS", "OLS OHS"}:

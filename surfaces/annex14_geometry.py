@@ -540,6 +540,9 @@ class Annex14GeometryMixin:
                     "runway_end": end_desig,
                     "component": component,
                     "ref": ref,
+                    "plane_a": a,
+                    "plane_b": b,
+                    "plane_c": c,
                 },
             )
         )

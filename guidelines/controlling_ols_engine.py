@@ -4433,6 +4433,9 @@ class ControllingOlsEngineMixin:
                 QgsField("rwy_end", QVariant.String, self.tr("Runway End"), 10),
                 QgsField("component", QVariant.String, self.tr("Component"), 80),
                 QgsField("ref", QVariant.String, self.tr("Reference"), 120),
+                QgsField("plane_a", QVariant.Double, self.tr("Plane A"), 20, 12),
+                QgsField("plane_b", QVariant.Double, self.tr("Plane B"), 20, 12),
+                QgsField("plane_c", QVariant.Double, self.tr("Plane C"), 20, 5),
             ]:
                 fields.append(field)
         features = engine.region_features(fields)
@@ -4451,6 +4454,11 @@ class ControllingOlsEngineMixin:
                 feature.setAttribute("rwy_end", metadata.get("runway_end"))
                 feature.setAttribute("component", metadata.get("component"))
                 feature.setAttribute("ref", metadata.get("ref"))
+                feature.setAttribute("plane_a", metadata.get("plane_a"))
+                feature.setAttribute("plane_b", metadata.get("plane_b"))
+                feature.setAttribute("plane_c", metadata.get("plane_c"))
+        if partition_overlaps:
+            features = self._dissolve_coplanar_controlling_regions(features, engine)
         solve_summary = engine.region_solve_timing_summary()
         if not features:
             QgsMessageLog.logMessage(
@@ -4512,6 +4520,95 @@ class ControllingOlsEngineMixin:
                 else QgsGeometry.unaryUnion([assigned, geometry])
             )
         return partitioned
+
+    def _dissolve_coplanar_controlling_regions(
+        self,
+        features: List[QgsFeature],
+        engine: PlanarControllingOlsEngine,
+    ) -> List[QgsFeature]:
+        """Dissolve disjoint solved pieces sharing a surface type and elevation plane."""
+        candidates_by_id = {candidate.surface_id: candidate for candidate in engine.candidates}
+        grouped: Dict[Tuple[object, ...], List[QgsFeature]] = {}
+        for feature in features:
+            candidate = candidates_by_id.get(str(feature.attribute("surface_id") or ""))
+            metadata = candidate.metadata if candidate is not None else {}
+            plane = tuple(metadata.get(name) for name in ("plane_a", "plane_b", "plane_c"))
+            if any(value is None for value in plane):
+                key = ("candidate", feature.attribute("surface_id"))
+            else:
+                key = (
+                    "plane",
+                    str(feature.attribute("surface") or ""),
+                    round(float(plane[0]), 11),
+                    round(float(plane[1]), 11),
+                    round(float(plane[2]), 5),
+                )
+            grouped.setdefault(key, []).append(feature)
+
+        dissolved: List[QgsFeature] = []
+        for group_features in grouped.values():
+            geometries = [QgsGeometry(feature.geometry()) for feature in group_features]
+            source_area = sum(geometry.area() for geometry in geometries)
+            geometry = QgsGeometry.unaryUnion(geometries) if len(geometries) > 1 else QgsGeometry(geometries[0])
+            if geometry.isNull() or geometry.isEmpty():
+                continue
+            if not geometry.isGeosValid():
+                repair_candidates: List[QgsGeometry] = []
+                try:
+                    repair_candidates.append(geometry.makeValid())
+                except Exception:
+                    pass
+                try:
+                    repair_candidates.append(geometry.buffer(0.0, 8))
+                except Exception:
+                    pass
+                try:
+                    repair_candidates.append(
+                        geometry.snappedToGrid(
+                            CONTROLLING_REGION_DISSOLVE_RETRY_GRID_M,
+                            CONTROLLING_REGION_DISSOLVE_RETRY_GRID_M,
+                        ).buffer(0.0, 8)
+                    )
+                except Exception:
+                    pass
+                repair_candidates = [
+                    candidate
+                    for candidate in repair_candidates
+                    if candidate is not None
+                    and not candidate.isNull()
+                    and not candidate.isEmpty()
+                    and candidate.isGeosValid()
+                ]
+                if repair_candidates:
+                    geometry = min(
+                        repair_candidates,
+                        key=lambda candidate: (
+                            abs(candidate.area() - source_area),
+                            engine._polygon_part_count(candidate),
+                        ),
+                    )
+            if geometry.isNull() or geometry.isEmpty():
+                continue
+            output = QgsFeature(group_features[0])
+            output.setGeometry(geometry)
+            source_candidate = candidates_by_id.get(str(group_features[0].attribute("surface_id") or ""))
+            if source_candidate is not None:
+                elev_min, elev_max = engine._geometry_elevation_range(geometry, source_candidate)
+                output.setAttribute("elev_min", elev_min)
+                output.setAttribute("elev_max", elev_max)
+            if len(group_features) > 1:
+                source_ids = sorted({str(feature.attribute("surface_id") or "") for feature in group_features})
+                components = sorted({str(feature.attribute("component") or "") for feature in group_features})
+                runway_ends = sorted({str(feature.attribute("rwy_end") or "") for feature in group_features})
+                output.setAttribute("surface_id", "|".join(source_ids)[:160])
+                output.setAttribute("component", "|".join(filter(None, components))[:80])
+                output.setAttribute("rwy_end", "|".join(filter(None, runway_ends))[:10])
+                output.setAttribute("method", "exact_planar_halfplane_coplanar_dissolve")
+            dissolved.append(output)
+        dissolved.sort(key=lambda feature: str(feature.attribute("surface_id") or ""))
+        for region_id, feature in enumerate(dissolved, start=1):
+            feature.setAttribute("region_id", region_id)
+        return dissolved
 
     def _create_controlling_transition_layer(
         self,
