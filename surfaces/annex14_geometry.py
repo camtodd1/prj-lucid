@@ -547,6 +547,51 @@ class Annex14GeometryMixin:
             )
         )
 
+    def _annex14_register_controlling_contours(self, contour_features: List[QgsFeature]) -> None:
+        """Link generated Annex 14 contours to the planar candidates they describe."""
+        if not getattr(self, "generate_controlling_ols", True):
+            return
+        register = getattr(self, "_register_controlling_ols_contour", None)
+        candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+        if not callable(register) or not candidates:
+            return
+
+        for feature in contour_features:
+            family = str(self._annex14_feature_attribute(feature, "family") or "").upper()
+            runway = str(self._annex14_feature_attribute(feature, "rwy_name") or "")
+            runway_end = str(self._annex14_feature_attribute(feature, "end_desig") or "")
+            surface = self._annex14_surface_label(
+                str(self._annex14_feature_attribute(feature, "surface") or "")
+            )
+            component = str(self._annex14_feature_attribute(feature, "component") or "")
+            component_side = next(
+                (side for side in ("left", "right") if component.endswith(f"_{side}")),
+                None,
+            )
+            matching = []
+            for candidate in candidates:
+                metadata = candidate.metadata or {}
+                if str(metadata.get("annex14_family") or "").upper() != family:
+                    continue
+                if str(metadata.get("runway") or "") != runway:
+                    continue
+                if str(metadata.get("runway_end") or "") != runway_end:
+                    continue
+                if candidate.surface_type != surface:
+                    continue
+                candidate_component = str(metadata.get("component") or "")
+                if candidate_component == component or (
+                    component_side is not None and candidate_component.endswith(f"_{component_side}")
+                ):
+                    matching.append(candidate)
+            for candidate in matching:
+                register(
+                    candidate.surface_id,
+                    candidate.surface_type,
+                    feature,
+                    f"Annex 14 {family} {surface}",
+                )
+
     def _annex14_trapezoid_from_widths(
         self,
         start_point: QgsPointXY,
@@ -2049,6 +2094,8 @@ class Annex14GeometryMixin:
 
         ofs_contour_features = self._annex14_consolidate_transition_contours(ofs_contour_features)
         oes_contour_features = self._annex14_consolidate_transition_contours(oes_contour_features)
+        self._annex14_register_controlling_contours(ofs_contour_features)
+        self._annex14_register_controlling_contours(oes_contour_features)
 
         created = False
         try:

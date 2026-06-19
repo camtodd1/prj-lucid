@@ -173,6 +173,7 @@ def run(input_path, audit_path, preview_path):
         if f"Controlling {family} — Surface" not in layers:
             print(json.dumps({"family": family, "available": sorted(layers), "records": annex, "logs": logs}, indent=2))
         controlling = layers[f"Controlling {family} — Surface"]
+        controlling_contours = layers[f"Controlling {family} — Contours"]
         candidates = layers[f"{family} — Planar Candidates"]
         transitions = layers[f"{family} — Planar Transitions"]
         controlling_union = _union(controlling)
@@ -181,6 +182,10 @@ def run(input_path, audit_path, preview_path):
         difference_area = 0.0 if difference.isEmpty() else difference.area()
         candidate_area = candidate_union.area()
         overlap = max(0.0, sum(f.geometry().area() for f in controlling.getFeatures()) - controlling_union.area())
+        contour_union = _union(controlling_contours)
+        contour_clip = controlling_union.buffer(0.001, 4)
+        outside_contours = contour_union.difference(contour_clip)
+        outside_contour_length = 0.0 if outside_contours.isEmpty() else outside_contours.length()
         coplanar_keys = []
         multipart_regions = 0
         for feature in controlling.getFeatures():
@@ -202,11 +207,15 @@ def run(input_path, audit_path, preview_path):
             "coverage_difference_m2": difference_area,
             "coverage_difference_ratio": difference_area / candidate_area if candidate_area else None,
             "region_overlap_m2": overlap,
+            "controlling_contours": controlling_contours.featureCount(),
+            "outside_contour_length_m": outside_contour_length,
             "coplanar_groups": len(coplanar_keys),
             "multipart_regions": multipart_regions,
         }
         assert difference_area <= max(0.1, candidate_area * 1e-7), coverage[family]
         assert overlap <= max(0.1, candidate_area * 1e-7), coverage[family]
+        assert controlling_contours.featureCount() > 0, coverage[family]
+        assert outside_contour_length <= 0.01, coverage[family]
 
     preview_style_keys = {
         "Annex 14 OFS Surface", "Annex 14 OES Surface",

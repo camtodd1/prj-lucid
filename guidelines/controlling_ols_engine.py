@@ -4249,6 +4249,7 @@ class ControllingOlsEngineMixin:
     ) -> bool:
         """Create independent future Annex 14 OFS and OES lower envelopes."""
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+        contours = list(getattr(self, "_controlling_ols_contours", []) or [])
         created = False
         for family, output_group in (("OFS", ofs_group), ("OES", oes_group)):
             family_candidates = [
@@ -4282,7 +4283,7 @@ class ControllingOlsEngineMixin:
                 display_name=f"{family} — Planar Transitions",
                 style_key=f"Annex 14 Transition {family}",
             )
-            created = self._create_controlling_region_layer(
+            region_created = self._create_controlling_region_layer(
                 icao_code,
                 output_group,
                 engine,
@@ -4290,7 +4291,22 @@ class ControllingOlsEngineMixin:
                 display_name=f"Controlling {family} — Surface",
                 style_key=f"Annex 14 Controlling {family}",
                 partition_overlaps=True,
-            ) or created
+            )
+            family_surface_ids = {candidate.surface_id for candidate in family_candidates}
+            family_contours = [
+                contour for contour in contours if contour.surface_id in family_surface_ids
+            ]
+            contour_created = self._create_controlling_contour_layer(
+                icao_code,
+                output_group,
+                engine,
+                family_contours,
+                internal_name=f"Annex14_Controlling_{family}_Contours_{icao_code}",
+                display_name=f"Controlling {family} — Contours",
+                style_key=f"Annex 14 {family} Contour",
+                strict_clip=True,
+            )
+            created = region_created or contour_created or created
         return created
 
     def _controlling_ols_poc_group(self, layer_group: QgsLayerTreeGroup) -> QgsLayerTreeGroup:
@@ -4666,6 +4682,10 @@ class ControllingOlsEngineMixin:
         output_group: QgsLayerTreeGroup,
         engine: PlanarControllingOlsEngine,
         contours: Sequence[ControllingOlsContour],
+        internal_name: Optional[str] = None,
+        display_name: Optional[str] = None,
+        style_key: str = "OLS Controlling Contour",
+        strict_clip: bool = False,
     ) -> bool:
         start_time = time.perf_counter()
         if not contours:
@@ -4713,7 +4733,11 @@ class ControllingOlsEngineMixin:
             matching_regions = regions_by_surface_id.get(contour.surface_id, [])
             if not matching_regions:
                 continue
-            clip_geometry = self._controlling_contour_clip_geometry(contour.surface_type, matching_regions)
+            clip_geometry = self._controlling_contour_clip_geometry(
+                contour.surface_type,
+                matching_regions,
+                strict=strict_clip,
+            )
             if clip_geometry is None or clip_geometry.isEmpty():
                 continue
             clipped_line_parts: List[List[QgsPointXY]] = []
@@ -4738,7 +4762,7 @@ class ControllingOlsEngineMixin:
                 clipped = None
             _add_clipped_parts(clipped)
 
-            if contour.surface_type in {"Approach", "Conical", "TOCS", "Transitional"}:
+            if not strict_clip and contour.surface_type in {"Approach", "Conical", "TOCS", "Transitional"}:
                 try:
                     tolerant_clip_geometry = clip_geometry.buffer(
                         CONTROLLING_CONTOUR_CLIP_TOLERANCE_M,
@@ -4863,12 +4887,12 @@ class ControllingOlsEngineMixin:
         feature_count = len(features)
         layer = self._create_and_add_layer(
             "MultiLineString",
-            f"OLS_Controlling_Contours_{icao_code}",
-            f"{self.tr('OLS')} Controlling Contours POC {icao_code}",
+            internal_name or f"OLS_Controlling_Contours_{icao_code}",
+            display_name or f"{self.tr('OLS')} Controlling Contours POC {icao_code}",
             fields,
             features,
             output_group,
-            "OLS Controlling Contour",
+            style_key,
         )
         if layer is not None:
             QgsMessageLog.logMessage(
@@ -4884,6 +4908,7 @@ class ControllingOlsEngineMixin:
         self,
         surface_type: str,
         regions: Sequence[QgsGeometry],
+        strict: bool = False,
     ) -> Optional[QgsGeometry]:
         valid_regions = [QgsGeometry(region) for region in regions if region is not None and not region.isEmpty()]
         if not valid_regions:
@@ -4894,7 +4919,7 @@ class ControllingOlsEngineMixin:
             clip_geometry = valid_regions[0]
         if clip_geometry is None or clip_geometry.isEmpty():
             return None
-        if surface_type == "Transitional":
+        if not strict and surface_type == "Transitional":
             try:
                 buffered = clip_geometry.buffer(CONTROLLING_CONTOUR_CLIP_TOLERANCE_M, CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS)
                 if buffered is not None and not buffered.isEmpty():
