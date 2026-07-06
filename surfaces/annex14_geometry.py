@@ -1368,6 +1368,7 @@ class Annex14GeometryMixin:
         tocs_contour_interval = self._annex14_contour_interval("tocs")
         transitional_contour_interval = self._annex14_contour_interval("transitional")
         code_f_no_digital = bool(runway_data.get("code_letter_f_without_digital_avionics", False))
+        strip_adjacent_transitional_created = False
 
         for end_config in self._annex14_runway_end_configs(runway_data, rwy_params):
             threshold = end_config["threshold"]
@@ -1460,7 +1461,7 @@ class Annex14GeometryMixin:
                 horizontal_extent = upper_height / trans_slope if trans_slope > 0 else 0.0
                 upper_edge_z = (highest_threshold_z + upper_height) if highest_threshold_z is not None else None
                 strip_dims = self._annex14_strip_dimensions(runway_data)
-                if strip_dims is not None:
+                if strip_dims is not None and not strip_adjacent_transitional_created:
                     opposite_threshold = end_config.get("opposite_threshold")
                     strip_end = (
                         opposite_threshold.project(float(strip_dims["extension_length"]), takeoff_az)
@@ -1482,7 +1483,7 @@ class Annex14GeometryMixin:
                             "OFS",
                             "transitional",
                             "strip_adjacent",
-                            end_desig,
+                            "",
                             design_group,
                             trans_slope,
                             transitional.get("ref", ""),
@@ -1495,7 +1496,8 @@ class Annex14GeometryMixin:
                             contour_fields=contour_fields,
                             contour_interval=transitional_contour_interval,
                         )
-                else:
+                        strip_adjacent_transitional_created = True
+                elif strip_dims is None:
                     QgsMessageLog.logMessage(
                         f"Annex 14 transitional strip-adjacent panels skipped for {runway_name} {end_desig}: "
                         "strip dimensions unavailable.",

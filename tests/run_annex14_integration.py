@@ -198,6 +198,24 @@ def run(input_path, audit_path, preview_path):
     assert all(record["labels_enabled"] and record["labeling"] == "rule-based" for record in contour_records)
     assert {"Annex 14 OFS Controlling", "Annex 14 OES Controlling"} <= set(_child_names(debug))
 
+    strip_adjacent_by_runway = {}
+    for node in root.findLayers():
+        layer = node.layer()
+        if layer is None or layer.name() != "Transitional — Surface":
+            continue
+        for feature in layer.getFeatures():
+            if not str(feature.attribute("component") or "").startswith("strip_adjacent_"):
+                continue
+            runway = str(feature.attribute("rwy_name") or "")
+            strip_adjacent_by_runway.setdefault(runway, []).append(feature)
+    assert strip_adjacent_by_runway, "No strip-adjacent transitional surfaces were generated"
+    for runway, features in strip_adjacent_by_runway.items():
+        assert len(features) == 2, (runway, [feature.attributes() for feature in features])
+        assert {str(feature.attribute("component")) for feature in features} == {
+            "strip_adjacent_left", "strip_adjacent_right",
+        }
+        assert all(not str(feature.attribute("end_desig") or "") for feature in features)
+
     coverage = {}
     for family, family_group in (("OFS", ofs), ("OES", oes)):
         debug_family = _group_at(debug, [f"Annex 14 {family} Controlling"])
