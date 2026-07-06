@@ -37,6 +37,7 @@ CONTROLLING_REGION_DISSOLVE_RETRY_GRID_M = 2e-6
 CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2 = 0.01
 CONTROLLING_REGION_MIN_INTERIOR_RING_AREA_M2 = 0.01
 CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
+CONTROLLING_CONTOUR_STRICT_BOUNDARY_TOLERANCE_M = 0.001
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
@@ -4833,8 +4834,12 @@ class ControllingOlsEngineMixin:
             return False
 
         regions_by_surface_id: Dict[str, List[QgsGeometry]] = {}
+        candidates_by_surface_id = {candidate.surface_id: candidate for candidate in engine.candidates}
+        regions_by_coplanar_key: Dict[Tuple[object, ...], List[QgsGeometry]] = {}
         for candidate, region in region_parts:
             regions_by_surface_id.setdefault(candidate.surface_id, []).append(region)
+            coplanar_key = self._controlling_candidate_dissolve_key(candidate)
+            regions_by_coplanar_key.setdefault(coplanar_key, []).append(region)
 
         fields = QgsFields(
             [
@@ -4852,7 +4857,14 @@ class ControllingOlsEngineMixin:
         features: List[QgsFeature] = []
         contour_id = 1
         for contour in contours:
-            matching_regions = regions_by_surface_id.get(contour.surface_id, [])
+            contour_candidate = candidates_by_surface_id.get(contour.surface_id)
+            if contour_candidate is not None:
+                matching_regions = regions_by_coplanar_key.get(
+                    self._controlling_candidate_dissolve_key(contour_candidate),
+                    [],
+                )
+            else:
+                matching_regions = regions_by_surface_id.get(contour.surface_id, [])
             if not matching_regions:
                 continue
             clip_geometry = self._controlling_contour_clip_geometry(
@@ -5041,6 +5053,16 @@ class ControllingOlsEngineMixin:
             clip_geometry = valid_regions[0]
         if clip_geometry is None or clip_geometry.isEmpty():
             return None
+        if strict:
+            try:
+                buffered = clip_geometry.buffer(
+                    CONTROLLING_CONTOUR_STRICT_BOUNDARY_TOLERANCE_M,
+                    CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS,
+                )
+                if buffered is not None and not buffered.isEmpty():
+                    return buffered
+            except Exception:
+                pass
         if not strict and surface_type == "Transitional":
             try:
                 buffered = clip_geometry.buffer(CONTROLLING_CONTOUR_CLIP_TOLERANCE_M, CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS)
