@@ -248,6 +248,14 @@ def run(input_path, audit_path, preview_path):
         record for record in contour_records if record["name"].startswith("Controlling ")
     ]
     assert all(record["rules"] == ["Primary contour", "Intermediate contour"] for record in controlling_contour_records), controlling_contour_records
+    controlling_surface_records = [
+        record for record in annex
+        if record["style_key"] in {"Annex 14 Controlling OFS", "Annex 14 Controlling OES"}
+    ]
+    assert all(
+        record["labels_enabled"] and record["labeling"] == "rule-based"
+        for record in controlling_surface_records
+    ), controlling_surface_records
     for node in root.findLayers():
         layer = node.layer()
         if layer is None or not layer.name().startswith("Controlling ") or "Contours" not in layer.name():

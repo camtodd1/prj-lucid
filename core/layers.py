@@ -386,6 +386,8 @@ class LayerMixin:
                         "Annex 14 Candidate OES",
                     }:
                         self._prune_annex14_renderer_rules(layer)
+                    if str(style_key) in {"Annex 14 Controlling OFS", "Annex 14 Controlling OES"}:
+                        self._apply_controlling_region_labels(layer)
                     if str(style_key) in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}:
                         if str(layer.name()).startswith("Controlling "):
                             self._apply_controlling_contour_style(
