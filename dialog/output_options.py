@@ -107,9 +107,10 @@ class OutputOptionsMixin:
             return
         group = getattr(self, "groupBox_contourIntervals", None)
         if group is None:
-            group = QtWidgets.QGroupBox(self.tr("OLS Contour Intervals"))
+            group = QtWidgets.QGroupBox(self.tr("Protected Airspace Contour Intervals"))
             group.setObjectName("groupBox_contourIntervals")
             parent_layout.addWidget(group)
+        group.setTitle(self.tr("Protected Airspace Contour Intervals"))
 
         grid = group.layout()
         if grid is None:

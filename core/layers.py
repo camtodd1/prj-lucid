@@ -387,10 +387,13 @@ class LayerMixin:
                     }:
                         self._prune_annex14_renderer_rules(layer)
                     if str(style_key) in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}:
-                        self._apply_controlling_contour_labels(
-                            layer,
-                            '"contour_elev_am" IS NOT NULL',
-                        )
+                        if str(layer.name()).startswith("Controlling "):
+                            self._apply_controlling_contour_style(layer)
+                        else:
+                            self._apply_controlling_contour_labels(
+                                layer,
+                                '"contour_elev_am" IS NOT NULL',
+                            )
                     if str(style_key) == "Parallel Runway Standards Line":
                         self._apply_parallel_runway_standards_style(layer)
                     if str(style_key) in {"OLS IHS", "OLS OHS"}:
@@ -554,6 +557,14 @@ class LayerMixin:
         if layer is None or not layer.isValid():
             return
         try:
+            surface_values = {
+                str(feature.attribute("surface") or "")
+                for feature in layer.getFeatures()
+            } if layer.fields().indexFromName("surface") >= 0 else set()
+            contour_classes = {
+                str(feature.attribute("contour_class") or "")
+                for feature in layer.getFeatures()
+            } if layer.fields().indexFromName("contour_class") >= 0 else set()
             if layer.fields().indexFromName("contour_class") >= 0:
                 index_expression = '"contour_class" = \'primary\''
             else:
@@ -564,18 +575,19 @@ class LayerMixin:
             root = QgsRuleBasedRenderer.Rule(None)
             primary_filter = f'("surface" IS NULL OR "surface" <> \'Transition\') AND ({index_expression})'
 
-            transition_symbol = QgsLineSymbol.createSimple(
-                {
-                    "line_color": "196,59,77,245",
-                    "line_width": "0.44",
-                    "line_width_unit": "MM",
-                    "line_style": "dash",
-                }
-            )
-            transition_rule = QgsRuleBasedRenderer.Rule(transition_symbol)
-            transition_rule.setFilterExpression('"surface" = \'Transition\'')
-            transition_rule.setLabel("Transition / intersection")
-            root.appendChild(transition_rule)
+            if "Transition" in surface_values:
+                transition_symbol = QgsLineSymbol.createSimple(
+                    {
+                        "line_color": "196,59,77,245",
+                        "line_width": "0.44",
+                        "line_width_unit": "MM",
+                        "line_style": "dash",
+                    }
+                )
+                transition_rule = QgsRuleBasedRenderer.Rule(transition_symbol)
+                transition_rule.setFilterExpression('"surface" = \'Transition\'')
+                transition_rule.setLabel("Transition / intersection")
+                root.appendChild(transition_rule)
 
             index_symbol = QgsLineSymbol.createSimple(
                 {
@@ -588,7 +600,8 @@ class LayerMixin:
             index_rule = QgsRuleBasedRenderer.Rule(index_symbol)
             index_rule.setFilterExpression(primary_filter)
             index_rule.setLabel("Primary contour")
-            root.appendChild(index_rule)
+            if not contour_classes or "primary" in contour_classes:
+                root.appendChild(index_rule)
 
             normal_symbol = QgsLineSymbol.createSimple(
                 {
@@ -603,7 +616,8 @@ class LayerMixin:
                 f'("surface" IS NULL OR "surface" <> \'Transition\') AND NOT ({index_expression})'
             )
             normal_rule.setLabel("Intermediate contour")
-            root.appendChild(normal_rule)
+            if not contour_classes or "intermediate" in contour_classes:
+                root.appendChild(normal_rule)
 
             layer.setRenderer(QgsRuleBasedRenderer(root))
             self._apply_controlling_contour_labels(layer, primary_filter)

@@ -656,7 +656,7 @@
        <item>
         <widget class="QGroupBox" name="groupBox_contourIntervals">
          <property name="title">
-          <string>OLS Contour Intervals</string>
+          <string>Protected Airspace Contour Intervals</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_contourIntervals"/>
         </widget>

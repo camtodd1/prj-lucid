@@ -19,11 +19,11 @@ from dialog.dialog_constants import CONTOUR_INTERVAL_KEYS, CONTOUR_INTERVAL_LABE
 
 
 class FrameworkRegistryTest(unittest.TestCase):
-    def test_ofz_surfaces_have_independent_contour_interval_controls(self):
+    def test_inner_surfaces_have_standard_neutral_contour_interval_controls(self):
         expected = {
-            "inner_approach": "OFZ Inner Approach",
-            "inner_transitional": "OFZ Inner Transitional",
-            "baulked_landing": "OFZ Baulked Landing",
+            "inner_approach": "Inner approach",
+            "inner_transitional": "Inner transitional",
+            "baulked_landing": "Balked / baulked landing",
         }
         for key, label in expected.items():
             self.assertIn(key, CONTOUR_INTERVAL_KEYS)

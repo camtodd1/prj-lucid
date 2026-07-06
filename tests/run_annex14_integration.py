@@ -196,6 +196,22 @@ def run(input_path, audit_path, preview_path):
     assert all(record["features"] > 0 and record["invalid"] == 0 and record["empty"] == 0 for record in annex)
     contour_records = [record for record in annex if record["style_key"] in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}]
     assert all(record["labels_enabled"] and record["labeling"] == "rule-based" for record in contour_records)
+    controlling_contour_records = [
+        record for record in contour_records if record["name"].startswith("Controlling ")
+    ]
+    assert all(record["rules"] == ["Primary contour", "Intermediate contour"] for record in controlling_contour_records), controlling_contour_records
+    for node in root.findLayers():
+        layer = node.layer()
+        if layer is None or not layer.name().startswith("Controlling ") or "Contours" not in layer.name():
+            continue
+        classes = {str(feature.attribute("contour_class") or "") for feature in layer.getFeatures()}
+        assert {"primary", "intermediate"} <= classes, (layer.name(), classes)
+        regular_features = [
+            feature for feature in layer.getFeatures()
+            if str(feature.attribute("surface") or "") != "Transition"
+        ]
+        assert all(float(feature.attribute("contour_interval_m")) > 0 for feature in regular_features)
+        assert all(float(feature.attribute("primary_interval_m")) > 0 for feature in regular_features)
     assert {"Annex 14 OFS Controlling", "Annex 14 OES Controlling"} <= set(_child_names(debug))
 
     strip_adjacent_by_runway = {}

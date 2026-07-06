@@ -4159,7 +4159,9 @@ class ControllingOlsEngineMixin:
         contour_interval_m = _float_attr("contour_interval_m")
         primary_interval_m = _float_attr("primary_interval_m")
         if contour_class is None and hasattr(self, "_contour_attribute_values"):
-            surface_key = str(surface_type or "").lower()
+            surface_key = str(surface_type or "").strip().lower().replace("-", "_").replace(" ", "_")
+            if surface_key == "balked_landing":
+                surface_key = "baulked_landing"
             metadata = self._contour_attribute_values(surface_key, contour_elevation)
             contour_class = metadata.get("contour_class")  # type: ignore[assignment]
             contour_interval_m = contour_interval_m or metadata.get("contour_interval_m")  # type: ignore[assignment]

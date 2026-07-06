@@ -60,6 +60,9 @@ class Annex14GeometryMixin:
                 QgsField("adg", QVariant.String, self.tr("ADG"), 20),
                 QgsField("contour_elev_am", QVariant.Double, self.tr("Contour Elev (AMSL)"), 12, 2),
                 QgsField("ref", QVariant.String, self.tr("Reference"), 120),
+                QgsField("contour_class", QVariant.String, self.tr("Contour Class"), 20),
+                QgsField("contour_interval_m", QVariant.Double, self.tr("Intermediate Interval (m)"), 10, 2),
+                QgsField("primary_interval_m", QVariant.Double, self.tr("Primary Interval (m)"), 10, 2),
             ]
         )
 
@@ -205,8 +208,17 @@ class Annex14GeometryMixin:
                 design_group,
                 contour_elev_am,
                 ref,
+                None,
+                None,
+                None,
             ]
         )
+        contour_metadata = getattr(self, "_apply_contour_metadata", None)
+        if callable(contour_metadata):
+            surface_key = str(surface or "").strip().lower().replace("-", "_").replace(" ", "_")
+            if surface_key == "balked_landing":
+                surface_key = "baulked_landing"
+            contour_metadata(feature, contour_fields, surface_key, contour_elev_am)
         contour_features.append(feature)
 
     def _annex14_add_quad_contour_feature(

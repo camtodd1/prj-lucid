@@ -37,11 +37,11 @@ CONTOUR_INTERVAL_KEYS = (
     "baulked_landing",
 )
 CONTOUR_INTERVAL_LABELS = {
-    "approach": "OLS Approach",
-    "tocs": "OLS TOCS",
-    "transitional": "OLS Transitional",
-    "conical": "OLS Conical",
-    "inner_approach": "OFZ Inner Approach",
-    "inner_transitional": "OFZ Inner Transitional",
-    "baulked_landing": "OFZ Baulked Landing",
+    "approach": "Approach",
+    "tocs": "Take-off climb / departure",
+    "transitional": "Transitional",
+    "conical": "Conical",
+    "inner_approach": "Inner approach",
+    "inner_transitional": "Inner transitional",
+    "baulked_landing": "Balked / baulked landing",
 }
