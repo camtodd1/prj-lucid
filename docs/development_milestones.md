@@ -5,7 +5,7 @@ ruleset metadata, implementation notes, tests, and TODO ledger. It is intended
 as a practical working list for deciding what to validate, consolidate, and
 build next.
 
-Last reviewed: 2026-06-11.
+Last reviewed: 2026-07-06.
 
 ## High Confidence Delivery
 
@@ -37,7 +37,7 @@ Last reviewed: 2026-06-11.
   Notes:
   - Registry aliases, structured payload normalisation, capability metadata,
     and service contracts are covered by unit tests.
-  - The local test run on 2026-06-11 passed: 36 tests, 1 QGIS-runtime skip.
+  - The local test run on 2026-07-06 passed: 62 tests, 1 QGIS-runtime skip.
 
 - [x] Declared-distance first pass is implemented.
 
@@ -55,6 +55,30 @@ Last reviewed: 2026-06-11.
     screening, and operational intent are documented.
 
 ## Needs Testing And Consolidation
+
+- [ ] Validate the modernised Annex 14 OFS/OES workflow in QGIS 4.
+
+  Current implementation:
+  - OFS and OES are generated as separate, styled layer families with runway
+    and aerodrome-wide grouping.
+  - Planar surface components are registered as 3D lower-envelope candidates.
+  - OFS and OES are solved independently into controlling regions, transition
+    diagnostics, and clipped controlling contours.
+  - The integration audit checks layer structure, styles, labels, geometry
+    validity, candidate coverage, region overlap, contour containment, and
+    small interior rings.
+  - Recent corrections cover contour clipping and dual-runway competition.
+
+  Validation work:
+  - Recover or create committed single-runway and dual-runway input fixtures
+    for `tests/run_annex14_integration.py`.
+  - Run the audit under QGIS 4 and retain its JSON audit and preview image as
+    review evidence.
+  - Add intersecting, parallel, and converging runway regression scenarios.
+  - Confirm that candidate and transition layers remain diagnostic-only.
+  - Reconcile `ols.controlling_lower_envelope` capability metadata, which still
+    reports `unsupported`, after runtime validation establishes the appropriate
+    promoted status.
 
 - [ ] Run a QGIS smoke-test pass for MOS139 default generation.
 
@@ -88,6 +112,8 @@ Last reviewed: 2026-06-11.
     transitional, conical, transition-edge, and clipped-contour diagnostics.
   - It remains marked experimental and should stay in the debug/development
     output group until QGIS geometry validation is complete.
+  - Treat the established MOS/NASF controlling OLS POC separately from the new
+    modernised Annex 14 OFS/OES lower-envelope workflow.
 
 - [ ] Add tests around Controlling OLS geometry contracts where possible outside
       QGIS.
@@ -132,6 +158,19 @@ Last reviewed: 2026-06-11.
     variance from a compliant standard.
 
 ## In Development
+
+- [ ] Consolidate modernised Annex 14 OFS/OES controlling output.
+
+  Work items:
+  - Complete the QGIS 4 integration pass for single- and multi-runway cases.
+  - Confirm complete candidate coverage with no material overlap or contour
+    leakage for each OFS/OES family.
+  - Document which complex transitional and inner-transitional components are
+    complete, approximated, or still pending.
+  - Align ruleset capability metadata and `rulesets/annex14/README.md` with the
+    verified implementation state.
+  - Keep the ruleset gated as a draft future standard and retain the
+    21 November 2030 applicability warning.
 
 - [ ] Harden the Controlling OLS engine.
 
@@ -236,8 +275,18 @@ Last reviewed: 2026-06-11.
   Status:
   - Future OFS/OES ruleset is registered as draft and not enforceable until
     2030-11-21.
-  - ADG and reference-code classification, OFS/OES lookup tables, and first-pass
-    geometry exist.
+  - ADG and reference-code classification and OFS/OES lookup tables exist.
+  - Styled OFS/OES plan-view surfaces and elevation contours are generated in
+    separate output families.
+  - Planar components participate in independent OFS and OES controlling
+    lower-envelope solves, including controlling regions, transition
+    diagnostics, and clipped contours.
+  - Layer grouping and dual-runway controlling behaviour received targeted
+    corrections in the latest development branch.
+  - The headless QGIS integration audit exists but still needs reproducible
+    input fixtures and a recorded QGIS 4 validation run before promotion.
+  - Full complex transitional and inner-transitional geometry, plus
+    TODA/clearway-aware departure starts, remain incomplete.
   - Physical, taxiway, markings, lighting, declared-distance, and current OLS
     source tables remain incomplete or unsupported.
 
@@ -260,20 +309,28 @@ Last reviewed: 2026-06-11.
 
 ## Suggested Working Order
 
-- [ ] 1. QGIS smoke-test the current MOS139 workflow and record any runtime
+- [ ] 1. Re-establish a reproducible Annex 14 baseline: add representative
+      fixtures and run the headless QGIS 4 integration audit.
+- [ ] 2. Close the modernised Annex 14 branch by addressing audit findings,
+      reconciling capability metadata and documentation, and preserving the
+      results as regression evidence.
+- [ ] 3. QGIS smoke-test the current MOS139 workflow and record any runtime
       issues before adding new capability.
-- [ ] 2. Consolidate declared distances and stopway geometry, because this is
+- [ ] 4. Consolidate declared distances and stopway geometry, because this is
       already partially delivered and user-facing.
-- [ ] 3. Decide whether Controlling OLS remains diagnostic-only or moves toward
-      promoted output; then harden accordingly.
-- [ ] 4. Close the highest-value AGL and marking gaps that depend on missing UI
+- [ ] 5. Decide whether the established MOS/NASF Controlling OLS remains
+      diagnostic-only or moves toward promoted output; then harden accordingly.
+- [ ] 6. Close the highest-value AGL and marking gaps that depend on missing UI
       context.
-- [ ] 5. Add the aircraft characteristics registry as a new, isolated data
+- [ ] 7. Add the aircraft characteristics registry as a new, isolated data
       service and wire it into design-aircraft nomination.
-- [ ] 6. Continue EASA and Annex 14 expansion only with clear capability gating
+- [ ] 8. Continue EASA and Annex 14 expansion only with clear capability gating
       so draft/scaffolded outputs cannot be mistaken for complete coverage.
 
 ## Verification Snapshot
 
-- [x] `python3 -m unittest tests.test_rulesets tests.test_frameworks`
-- [x] `python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols_guideline.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/guideline_constants.py dimensions/*.py rulesets/*.py rulesets/mos139/*.py frameworks/*.py frameworks/nasf/*.py`
+- [x] 2026-07-06: `python3 -m unittest tests.test_rulesets tests.test_frameworks`
+      passed 62 tests with 1 expected QGIS-runtime skip.
+- [x] 2026-07-06: `python3 -m compileall -q .`
+- [ ] Run `tests/run_annex14_integration.py` under QGIS 4 with committed
+      single-runway and dual-runway fixtures; record audit JSON and previews.
