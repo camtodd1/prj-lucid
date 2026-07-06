@@ -15,6 +15,7 @@ from qgis.core import (
     QgsLayerTreeLayer,
     QgsMapRendererParallelJob,
     QgsMapSettings,
+    QgsPointXY,
     QgsProject,
     QgsRectangle,
 )
@@ -128,6 +129,11 @@ def run(input_path, audit_path, preview_path):
     sys.path.insert(0, os.path.dirname(workspace))
     from safeguarding_builder.safeguarding_builder import SafeguardingBuilder
     from safeguarding_builder.safeguarding_builder_dialog import SafeguardingBuilderDialog
+    from safeguarding_builder.guidelines.controlling_ols_engine import (
+        ControllingOlsCandidate,
+        PlanarControllingOlsEngine,
+        constant_elevation_evaluator,
+    )
 
     app = QgsApplication([], True)
     app.setPrefixPath("/Applications/QGIS-4.0.app/Contents/MacOS", True)
@@ -151,6 +157,28 @@ def run(input_path, audit_path, preview_path):
         dialog._airport_lookup_timer.stop()
     if dialog.get_all_input_data() is None:
         raise RuntimeError("Input failed dialog validation")
+
+    tie_domain = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+    oes_tied_candidate = ControllingOlsCandidate(
+        surface_id="tie:oes",
+        surface_type="Precision Approach",
+        footprint=tie_domain,
+        elevation_at_xy=constant_elevation_evaluator(100.0),
+        model="constant",
+        metadata={"annex14_family": "OES"},
+    )
+    ofs_tied_candidate = ControllingOlsCandidate(
+        surface_id="tie:ofs",
+        surface_type="Inner Approach",
+        footprint=tie_domain,
+        elevation_at_xy=constant_elevation_evaluator(100.005),
+        model="constant",
+        metadata={"annex14_family": "OFS"},
+    )
+    tied_controller = PlanarControllingOlsEngine(
+        [oes_tied_candidate, ofs_tied_candidate]
+    ).controlling_candidate_at_xy(QgsPointXY(50.0, 50.0))
+    assert tied_controller is not None and tied_controller[0].surface_id == "tie:ofs", tied_controller
 
     iface = _Iface()
     builder = SafeguardingBuilder(iface)

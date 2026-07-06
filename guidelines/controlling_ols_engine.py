@@ -197,8 +197,26 @@ class PlanarControllingOlsEngine:
             evaluated.append((candidate, elevation))
         if not evaluated:
             return None
+        minimum_elevation = min(item[1] for item in evaluated)
+        tied = [
+            item for item in evaluated
+            if item[1] <= minimum_elevation + self.tie_tolerance_m
+        ]
+        tied_families = {
+            str((item[0].metadata or {}).get("annex14_family") or "").strip().upper()
+            for item in tied
+        }
+        if "OFS" in tied_families and "OES" in tied_families:
+            tied.sort(key=lambda item: self._candidate_tie_priority(item[0]))
+            return tied[0]
         evaluated.sort(key=lambda item: item[1])
         return evaluated[0]
+
+    @staticmethod
+    def _candidate_tie_priority(candidate: ControllingOlsCandidate) -> int:
+        """Prefer OFS over OES for elevations tied within the solver tolerance."""
+        family = str((candidate.metadata or {}).get("annex14_family") or "").strip().upper()
+        return {"OFS": 0, "OES": 1}.get(family, 2)
 
     def transition_features(self, fields: QgsFields) -> List[QgsFeature]:
         """Return exact line features where supported planar candidates exchange control."""
@@ -4519,7 +4537,14 @@ class ControllingOlsEngineMixin:
         """Remove tied-region overlaps while preserving the complete envelope domain."""
         partitioned: List[QgsFeature] = []
         assigned = QgsGeometry()
-        ordered = sorted(features, key=lambda feature: str(feature.attribute("surface_id") or ""))
+        family_priority = {"OFS": 0, "OES": 1}
+        ordered = sorted(
+            features,
+            key=lambda feature: (
+                family_priority.get(str(feature.attribute("family") or "").strip().upper(), 2),
+                str(feature.attribute("surface_id") or ""),
+            ),
+        )
         for feature in ordered:
             geometry = QgsGeometry(feature.geometry())
             if geometry.isNull() or geometry.isEmpty():
