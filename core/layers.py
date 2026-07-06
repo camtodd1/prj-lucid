@@ -388,7 +388,10 @@ class LayerMixin:
                         self._prune_annex14_renderer_rules(layer)
                     if str(style_key) in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}:
                         if str(layer.name()).startswith("Controlling "):
-                            self._apply_controlling_contour_style(layer)
+                            self._apply_controlling_contour_style(
+                                layer,
+                                palette="ofs" if str(style_key) == "Annex 14 OFS Contour" else "default",
+                            )
                         else:
                             self._apply_controlling_contour_labels(
                                 layer,
@@ -552,7 +555,7 @@ class LayerMixin:
                 level=Qgis.Warning,
             )
 
-    def _apply_controlling_contour_style(self, layer: QgsVectorLayer):
+    def _apply_controlling_contour_style(self, layer: QgsVectorLayer, palette: str = "default"):
         """Keep controlling contours visually distinct and label-ready."""
         if layer is None or not layer.isValid():
             return
@@ -574,6 +577,12 @@ class LayerMixin:
                 )
             root = QgsRuleBasedRenderer.Rule(None)
             primary_filter = f'("surface" IS NULL OR "surface" <> \'Transition\') AND ({index_expression})'
+            if palette == "ofs":
+                primary_color = "174,68,45,245"
+                intermediate_color = "190,103,36,185"
+            else:
+                primary_color = "18,75,82,240"
+                intermediate_color = "38,111,117,175"
 
             if "Transition" in surface_values:
                 transition_symbol = QgsLineSymbol.createSimple(
@@ -591,7 +600,7 @@ class LayerMixin:
 
             index_symbol = QgsLineSymbol.createSimple(
                 {
-                    "line_color": "18,75,82,240",
+                    "line_color": primary_color,
                     "line_width": "0.40",
                     "line_width_unit": "MM",
                     "line_style": "solid",
@@ -605,7 +614,7 @@ class LayerMixin:
 
             normal_symbol = QgsLineSymbol.createSimple(
                 {
-                    "line_color": "38,111,117,175",
+                    "line_color": intermediate_color,
                     "line_width": "0.20",
                     "line_width_unit": "MM",
                     "line_style": "solid",

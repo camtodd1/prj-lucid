@@ -204,6 +204,9 @@ def run(input_path, audit_path, preview_path):
         layer = node.layer()
         if layer is None or not layer.name().startswith("Controlling ") or "Contours" not in layer.name():
             continue
+        if layer.name().startswith("Controlling OFS"):
+            rule_colors = [rule.symbol().color().name() for rule in layer.renderer().rootRule().children()]
+            assert rule_colors == ["#ae442d", "#be6724"], rule_colors
         classes = {str(feature.attribute("contour_class") or "") for feature in layer.getFeatures()}
         assert {"primary", "intermediate"} <= classes, (layer.name(), classes)
         regular_features = [
