@@ -401,6 +401,10 @@ class LayerMixin:
                             )
                     if str(style_key) == "Parallel Runway Standards Line":
                         self._apply_parallel_runway_standards_style(layer)
+                    if str(style_key) in {"OLS Modernisation Gain", "OLS Modernisation Loss"}:
+                        self._apply_modernisation_comparison_style(
+                            layer, gain=str(style_key) == "OLS Modernisation Gain"
+                        )
                     if str(style_key) in {"OLS IHS", "OLS OHS"}:
                         self._apply_horizontal_surface_labels(layer, decimal_places=1)
                     if str(style_key) == "OLS Approach":
@@ -432,6 +436,20 @@ class LayerMixin:
                 plugin_tag,
                 level=Qgis.Critical,
             )
+
+    def _apply_modernisation_comparison_style(self, layer: QgsVectorLayer, gain: bool) -> None:
+        """Apply an unambiguous green/gain or red/loss comparison symbol."""
+        fill = QColor(55, 168, 82, 105) if gain else QColor(214, 63, 63, 105)
+        outline = QColor(27, 112, 52, 230) if gain else QColor(155, 32, 32, 230)
+        symbol = QgsFillSymbol.createSimple(
+            {
+                "color": fill.name(QColor.NameFormat.HexArgb),
+                "outline_color": outline.name(QColor.NameFormat.HexArgb),
+                "outline_width": "0.45",
+            }
+        )
+        symbol.setColor(fill)
+        layer.setRenderer(QgsSingleSymbolRenderer(symbol))
 
     def _prune_annex14_renderer_rules(self, layer: QgsVectorLayer):
         """Keep only Annex 14 legend rules represented by features in this layer."""

@@ -60,6 +60,8 @@ DEFAULT_STYLE_MAP = {
     "Annex 14 Candidate OES": "annex14_oes_surfaces.qml",
     "Annex 14 Transition OFS": "annex14_ofs_contours.qml",
     "Annex 14 Transition OES": "annex14_oes_contours.qml",
+    "OLS Modernisation Gain": "default_ols_polygon.qml",
+    "OLS Modernisation Loss": "default_ols_polygon.qml",
     "CNS Circle Zone": "default_cns_zone_polygon.qml",
     "CNS Donut Zone": "default_cns_zone_polygon.qml",
     "Default CNS": "default_cns_zone_polygon.qml",

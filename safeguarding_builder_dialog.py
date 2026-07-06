@@ -601,9 +601,13 @@ class SafeguardingBuilderDialog(
             "Future Annex 14 OFS/OES",
             userData="future_annex14_ofs_oes",
         )
+        self.protected_airspace_policy_combo.addItem(
+            "OLS modernisation comparison",
+            userData="modernisation_comparison",
+        )
         self.protected_airspace_policy_combo.setToolTip(
             "Protected airspace/OLS policy. Use Ruleset aligned for the selected design standard, "
-            "or overlay the future Annex 14 OFS/OES model."
+            "overlay the future Annex 14 OFS/OES model, or compare both against the selected baseline."
         )
         self.protected_airspace_policy_combo.setMinimumWidth(190)
 
@@ -1633,7 +1637,7 @@ class SafeguardingBuilderDialog(
             ]
             if (
                 active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
-                or protected_airspace_policy == "future_annex14_ofs_oes"
+                or protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}
             ):
                 required_values.append(data.get("adg", data.get("design_group", "")))
             if not all(str(value).strip() for value in required_values):
@@ -2003,6 +2007,15 @@ class SafeguardingBuilderDialog(
         protected_airspace_policy = (
             protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
         )
+        if (
+            protected_airspace_policy == "modernisation_comparison"
+            and design_standard == "icao_annex14_vol1_modernised_ofs_oes"
+        ):
+            validation_ok = False
+            error_messages.append(
+                "OLS modernisation comparison requires an existing ruleset as the baseline; "
+                "select MOS 139, EASA, CAP 168, or current Annex 14."
+            )
         final_data.update(
             {
                 "icao_code": icao,
@@ -2375,7 +2388,7 @@ class SafeguardingBuilderDialog(
         )
         if (
             active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
-            or protected_airspace_policy == "future_annex14_ofs_oes"
+            or protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}
         ) and not adg:
             errors.append(f"Rwy {index}: ADG is required for Annex 14 OFS/OES generation.")
             current_errors += 1

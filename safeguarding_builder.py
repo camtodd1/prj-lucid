@@ -46,6 +46,7 @@ from .frameworks.nasf.processors import NasfGuidelinesMixin
 from .frameworks.nasf.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
+from .guidelines.ols_modernisation_comparison import OlsModernisationComparisonMixin
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 from .frameworks.registry import get_framework_profile
 from .rulesets.context import RulesetContext
@@ -74,6 +75,7 @@ class SafeguardingBuilder(
     NasfGuidelinesMixin,
     LightingGuidelineMixin,
     ControllingOlsEngineMixin,
+    OlsModernisationComparisonMixin,
     OlsGuidelineMixin,
     PhysicalGeometryMixin,
     Annex14GeometryMixin,
@@ -103,6 +105,7 @@ class SafeguardingBuilder(
         self.output_format_extension: Optional[str] = None
         self.contour_intervals: Dict[str, float] = {}
         self.generate_controlling_ols: bool = True
+        self.protected_airspace_policy: str = "ruleset_aligned"
         self.debug_logging: bool = False
         self.ruleset = get_ruleset_profile()
         self.protected_airspace_ruleset = self.ruleset
@@ -512,6 +515,7 @@ class SafeguardingBuilder(
         self.output_format_extension = None
         self.contour_intervals = {}
         self.generate_controlling_ols = True
+        self.protected_airspace_policy = "ruleset_aligned"
         self.debug_logging = False
 
         if self.dlg is None:
@@ -595,6 +599,7 @@ class SafeguardingBuilder(
         self.debug_logging = bool(input_data.get("debug_logging", False))
         self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
         protected_airspace_policy = input_data.get("protected_airspace_policy", "ruleset_aligned")
+        self.protected_airspace_policy = protected_airspace_policy
         if protected_airspace_policy == "future_annex14_ofs_oes":
             self.protected_airspace_ruleset = get_ruleset_profile("icao_annex14_vol1_modernised_ofs_oes")
         else:
@@ -856,6 +861,15 @@ class SafeguardingBuilder(
                         controlling_contours_group,
                     )
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
+                if self._is_modernisation_comparison() and not self._is_future_annex14_protected_airspace():
+                    self._set_processing_status(self.tr("Comparing baseline OLS with future Annex 14..."))
+                    comparison_ok = self._run_modernisation_comparison(
+                        icao_code,
+                        processed_runway_data_list,
+                        output_groups,
+                        debug_group,
+                    )
+                    any_guideline_processed_ok = any_guideline_processed_ok or comparison_ok
             elif guideline_groups.get("F") is not None:
                 self._log_skip("Controlling OLS: output option disabled.")
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
@@ -1476,6 +1490,21 @@ class SafeguardingBuilder(
                 )
                 groups["controlling_ols_surfaces"] = groups["controlling_surfaces"]
                 groups["controlling_contours"] = groups["controlling_surfaces"]
+                if self._is_modernisation_comparison():
+                    future_group = self._ensure_layer_group(
+                        protected_airspace_group, "Future Annex 14 OFS/OES"
+                    )
+                    groups["future_annex14_ofs"] = self._ensure_layer_group(future_group, "OFS")
+                    groups["future_annex14_oes"] = self._ensure_layer_group(future_group, "OES")
+                    comparison_group = self._ensure_layer_group(
+                        protected_airspace_group, "OLS Modernisation Comparison"
+                    )
+                    groups["comparison_ofs"] = self._ensure_layer_group(
+                        comparison_group, "OFS — Protected Airspace Change"
+                    )
+                    groups["comparison_oes"] = self._ensure_layer_group(
+                        comparison_group, "OES — Assessment Trigger Change"
+                    )
         return groups
 
     def _is_future_annex14_protected_airspace(self) -> bool:
@@ -1483,6 +1512,72 @@ class SafeguardingBuilder(
             getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
             == "annex14_modernised_ofs_oes"
         )
+
+    def _is_modernisation_comparison(self) -> bool:
+        return getattr(self, "protected_airspace_policy", "ruleset_aligned") == "modernisation_comparison"
+
+    def _run_modernisation_comparison(
+        self,
+        icao_code: str,
+        processed_runway_data_list: List[dict],
+        output_groups: Dict[str, Optional[QgsLayerTreeGroup]],
+        debug_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Generate future OFS/OES beside the selected baseline and compare envelopes."""
+        baseline_candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+        baseline_exclusions = list(getattr(self, "_controlling_ols_exclusion_geometries", []) or [])
+        future_ofs_group = output_groups.get("future_annex14_ofs")
+        future_oes_group = output_groups.get("future_annex14_oes")
+        comparison_ofs_group = output_groups.get("comparison_ofs")
+        comparison_oes_group = output_groups.get("comparison_oes")
+        if any(
+            group is None
+            for group in (future_ofs_group, future_oes_group, comparison_ofs_group, comparison_oes_group)
+        ):
+            self._log_warning("[skip] OLS modernisation comparison: output groups are unavailable.")
+            return False
+        if not baseline_candidates:
+            self._log_warning("[skip] OLS modernisation comparison: baseline envelope is empty.")
+            return False
+
+        original_protected_ruleset = self.protected_airspace_ruleset
+        try:
+            self.protected_airspace_ruleset = get_ruleset_profile(
+                "icao_annex14_vol1_modernised_ofs_oes"
+            )
+            self._reset_controlling_ols_engine()
+            future_geometry_created = False
+            for runway_data in processed_runway_data_list:
+                future_geometry_created = self.process_annex14_geometry(
+                    runway_data,
+                    future_ofs_group,
+                    future_oes_group,
+                ) or future_geometry_created
+            future_candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+            if not future_geometry_created or not future_candidates:
+                self._log_warning(
+                    "[skip] OLS modernisation comparison: future Annex 14 produced no candidates. "
+                    "Check ADG and runway operational inputs."
+                )
+                return False
+            future_controlling_created = self._create_annex14_controlling_surface_layers(
+                icao_code,
+                future_ofs_group,
+                future_oes_group,
+                debug_group,
+            )
+            comparison_created = self._create_ols_modernisation_comparison_layers(
+                icao_code,
+                self.ruleset.id,
+                baseline_candidates,
+                baseline_exclusions,
+                future_candidates,
+                comparison_ofs_group,
+                comparison_oes_group,
+            )
+            return future_controlling_created or comparison_created
+        finally:
+            self.protected_airspace_ruleset = original_protected_ruleset
 
     def _move_layer_tree_node(
         self,
