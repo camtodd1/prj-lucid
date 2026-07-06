@@ -23,6 +23,7 @@ from qgis.core import (  # type: ignore
     QgsRendererCategory,
     QgsRuleBasedLabeling,
     QgsRuleBasedRenderer,
+    QgsSingleSymbolRenderer,
     QgsTextBufferSettings,
     QgsTextFormat,
     QgsVectorLayerSimpleLabeling,
@@ -444,6 +445,12 @@ class LayerMixin:
             label = str(rule.label() or "").strip()
             if rule.isElse() or normalized_surface(label) not in surface_values:
                 root_rule.removeChild(rule)
+        remaining_rules = list(root_rule.children())
+        if len(surface_values) == 1 and len(remaining_rules) == 1:
+            symbol = remaining_rules[0].symbol()
+            if symbol is not None:
+                layer.setRenderer(QgsSingleSymbolRenderer(symbol.clone()))
+                return
         layer.setRenderer(renderer)
 
     def _apply_controlling_region_style(self, layer: QgsVectorLayer):

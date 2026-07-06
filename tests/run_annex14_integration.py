@@ -181,7 +181,18 @@ def run(input_path, audit_path, preview_path):
         "Annex 14 Transition OFS", "Annex 14 Transition OES",
     }
     assert expected_styles <= {record["style_key"] for record in annex}
-    assert all(record["renderer"] == "RuleRenderer" for record in annex)
+    individual_style_keys = {
+        "Annex 14 OFS Surface", "Annex 14 OES Surface",
+        "Annex 14 OFS Contour", "Annex 14 OES Contour",
+    }
+    individual_layers = [
+        record for record in annex
+        if record["style_key"] in individual_style_keys
+        and not record["name"].startswith("Controlling ")
+    ]
+    assert all(record["renderer"] == "singleSymbol" for record in individual_layers), individual_layers
+    mixed_layers = [record for record in annex if record not in individual_layers]
+    assert all(record["renderer"] == "RuleRenderer" for record in mixed_layers), mixed_layers
     assert all(record["features"] > 0 and record["invalid"] == 0 and record["empty"] == 0 for record in annex)
     contour_records = [record for record in annex if record["style_key"] in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}]
     assert all(record["labels_enabled"] and record["labeling"] == "rule-based" for record in contour_records)
