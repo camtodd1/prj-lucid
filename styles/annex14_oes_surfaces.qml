@@ -7,7 +7,6 @@
       <rule key="oes-departure" label="Instrument Departure" symbol="2" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') = 'instrument_departure'"/>
       <rule key="oes-takeoff" label="Take-off Climb" symbol="3" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') = 'take_off_climb'"/>
       <rule key="oes-horizontal" label="Horizontal" symbol="4" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') = 'horizontal'"/>
-      <rule key="oes-other" label="Other OES" symbol="5" else="1"/>
     </rules>
     <symbols>
       <symbol name="0" type="fill" alpha="1" clip_to_extent="1" force_rhr="0"><layer class="SimpleFill" enabled="1"><Option type="Map"><Option name="color" value="69,123,157,74" type="QString"/><Option name="outline_color" value="33,85,117,255" type="QString"/><Option name="outline_width" value="0.35" type="QString"/><Option name="outline_width_unit" value="MM" type="QString"/><Option name="style" value="solid" type="QString"/></Option></layer></symbol>

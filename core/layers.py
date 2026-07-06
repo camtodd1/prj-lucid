@@ -374,6 +374,17 @@ class LayerMixin:
                         self._apply_controlling_region_style(layer)
                     if str(style_key) == "OLS Controlling Contour":
                         self._apply_controlling_contour_style(layer)
+                    if str(style_key) in {
+                        "Annex 14 OFS Surface",
+                        "Annex 14 OES Surface",
+                        "Annex 14 OFS Contour",
+                        "Annex 14 OES Contour",
+                        "Annex 14 Controlling OFS",
+                        "Annex 14 Controlling OES",
+                        "Annex 14 Candidate OFS",
+                        "Annex 14 Candidate OES",
+                    }:
+                        self._prune_annex14_renderer_rules(layer)
                     if str(style_key) in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}:
                         self._apply_controlling_contour_labels(
                             layer,
@@ -412,6 +423,28 @@ class LayerMixin:
                 plugin_tag,
                 level=Qgis.Critical,
             )
+
+    def _prune_annex14_renderer_rules(self, layer: QgsVectorLayer):
+        """Keep only Annex 14 legend rules represented by features in this layer."""
+        if layer is None or not layer.isValid() or layer.fields().indexOf("surface") < 0:
+            return
+        renderer = layer.renderer()
+        if renderer is None or renderer.type() != "RuleRenderer":
+            return
+        def normalized_surface(value) -> str:
+            return str(value or "").strip().casefold().replace("-", "_").replace(" ", "_")
+
+        surface_values = {
+            normalized_surface(feature.attribute("surface"))
+            for feature in layer.getFeatures()
+        }
+        surface_values.discard("")
+        root_rule = renderer.rootRule()
+        for rule in list(root_rule.children()):
+            label = str(rule.label() or "").strip()
+            if rule.isElse() or normalized_surface(label) not in surface_values:
+                root_rule.removeChild(rule)
+        layer.setRenderer(renderer)
 
     def _apply_controlling_region_style(self, layer: QgsVectorLayer):
         """Apply complementary solid fills for controlling OLS regions."""
