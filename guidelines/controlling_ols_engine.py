@@ -209,14 +209,20 @@ class PlanarControllingOlsEngine:
         if "OFS" in tied_families and "OES" in tied_families:
             tied.sort(key=lambda item: self._candidate_tie_priority(item[0]))
             return tied[0]
+        tied_surface_types = {item[0].surface_type for item in tied}
+        if {"Inner Approach", "Approach"} <= tied_surface_types:
+            tied.sort(key=lambda item: self._candidate_tie_priority(item[0]))
+            return tied[0]
         evaluated.sort(key=lambda item: item[1])
         return evaluated[0]
 
     @staticmethod
-    def _candidate_tie_priority(candidate: ControllingOlsCandidate) -> int:
-        """Prefer OFS over OES for elevations tied within the solver tolerance."""
+    def _candidate_tie_priority(candidate: ControllingOlsCandidate) -> Tuple[int, int, str]:
+        """Apply explicit family and nested-surface priorities to tied elevations."""
         family = str((candidate.metadata or {}).get("annex14_family") or "").strip().upper()
-        return {"OFS": 0, "OES": 1}.get(family, 2)
+        family_priority = {"OFS": 0, "OES": 1}.get(family, 2)
+        surface_priority = {"Inner Approach": 0, "Approach": 1}.get(candidate.surface_type, 2)
+        return family_priority, surface_priority, candidate.surface_id
 
     def transition_features(self, fields: QgsFields) -> List[QgsFeature]:
         """Return exact line features where supported planar candidates exchange control."""
@@ -4538,10 +4544,12 @@ class ControllingOlsEngineMixin:
         partitioned: List[QgsFeature] = []
         assigned = QgsGeometry()
         family_priority = {"OFS": 0, "OES": 1}
+        surface_priority = {"Inner Approach": 0, "Approach": 1}
         ordered = sorted(
             features,
             key=lambda feature: (
                 family_priority.get(str(feature.attribute("family") or "").strip().upper(), 2),
+                surface_priority.get(str(feature.attribute("surface") or ""), 2),
                 str(feature.attribute("surface_id") or ""),
             ),
         )

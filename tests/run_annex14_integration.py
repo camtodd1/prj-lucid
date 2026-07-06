@@ -179,6 +179,26 @@ def run(input_path, audit_path, preview_path):
         [oes_tied_candidate, ofs_tied_candidate]
     ).controlling_candidate_at_xy(QgsPointXY(50.0, 50.0))
     assert tied_controller is not None and tied_controller[0].surface_id == "tie:ofs", tied_controller
+    approach_tied_candidate = ControllingOlsCandidate(
+        surface_id="tie:ofs:approach",
+        surface_type="Approach",
+        footprint=tie_domain,
+        elevation_at_xy=constant_elevation_evaluator(100.0),
+        model="constant",
+        metadata={"annex14_family": "OFS"},
+    )
+    inner_approach_tied_candidate = ControllingOlsCandidate(
+        surface_id="tie:ofs:inner_approach",
+        surface_type="Inner Approach",
+        footprint=tie_domain,
+        elevation_at_xy=constant_elevation_evaluator(100.0),
+        model="constant",
+        metadata={"annex14_family": "OFS"},
+    )
+    tied_controller = PlanarControllingOlsEngine(
+        [approach_tied_candidate, inner_approach_tied_candidate]
+    ).controlling_candidate_at_xy(QgsPointXY(50.0, 50.0))
+    assert tied_controller is not None and tied_controller[0].surface_id == "tie:ofs:inner_approach", tied_controller
 
     iface = _Iface()
     builder = SafeguardingBuilder(iface)
@@ -278,6 +298,11 @@ def run(input_path, audit_path, preview_path):
         candidates = layers[f"{family} — Planar Candidates"]
         transitions = layers[f"{family} — Planar Transitions"]
         controlling_union = _union(controlling)
+        if family == "OFS":
+            assert any(
+                str(feature.attribute("surface") or "") == "Inner Approach"
+                for feature in controlling.getFeatures()
+            ), "Tied OFS Inner Approach regions were not retained"
         candidate_union = _union(candidates)
         difference = controlling_union.symDifference(candidate_union)
         difference_area = 0.0 if difference.isEmpty() else difference.area()
