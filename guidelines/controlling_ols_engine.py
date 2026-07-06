@@ -4476,6 +4476,7 @@ class ControllingOlsEngineMixin:
                 feature.setAttribute("plane_c", metadata.get("plane_c"))
         if partition_overlaps:
             features = self._dissolve_coplanar_controlling_regions(features, engine)
+            features = self._repair_final_controlling_partition(features, engine)
         solve_summary = engine.region_solve_timing_summary()
         if not features:
             QgsMessageLog.logMessage(
@@ -4548,18 +4549,7 @@ class ControllingOlsEngineMixin:
         grouped: Dict[Tuple[object, ...], List[QgsFeature]] = {}
         for feature in features:
             candidate = candidates_by_id.get(str(feature.attribute("surface_id") or ""))
-            metadata = candidate.metadata if candidate is not None else {}
-            plane = tuple(metadata.get(name) for name in ("plane_a", "plane_b", "plane_c"))
-            if any(value is None for value in plane):
-                key = ("candidate", feature.attribute("surface_id"))
-            else:
-                key = (
-                    "plane",
-                    str(feature.attribute("surface") or ""),
-                    round(float(plane[0]), 11),
-                    round(float(plane[1]), 11),
-                    round(float(plane[2]), 5),
-                )
+            key = self._controlling_candidate_dissolve_key(candidate, feature)
             grouped.setdefault(key, []).append(feature)
 
         dissolved: List[QgsFeature] = []
@@ -4639,6 +4629,124 @@ class ControllingOlsEngineMixin:
         for region_id, feature in enumerate(dissolved, start=1):
             feature.setAttribute("region_id", region_id)
         return dissolved
+
+    def _controlling_candidate_dissolve_key(
+        self,
+        candidate: Optional[ControllingOlsCandidate],
+        feature: Optional[QgsFeature] = None,
+    ) -> Tuple[object, ...]:
+        """Return the stable plane key used by Annex 14 output normalisation."""
+        metadata = candidate.metadata if candidate is not None else {}
+        plane = tuple(metadata.get(name) for name in ("plane_a", "plane_b", "plane_c"))
+        if any(value is None for value in plane):
+            surface_id = (
+                candidate.surface_id
+                if candidate is not None
+                else feature.attribute("surface_id") if feature is not None else ""
+            )
+            return ("candidate", str(surface_id or ""))
+        surface_type = (
+            candidate.surface_type
+            if candidate is not None
+            else feature.attribute("surface") if feature is not None else ""
+        )
+        return (
+            "plane",
+            str(surface_type or ""),
+            round(float(plane[0]), 11),
+            round(float(plane[1]), 11),
+            round(float(plane[2]), 5),
+        )
+
+    def _repair_final_controlling_partition(
+        self,
+        features: List[QgsFeature],
+        engine: PlanarControllingOlsEngine,
+    ) -> List[QgsFeature]:
+        """Close topology gaps introduced by output partitioning and coplanar dissolve."""
+        if not features:
+            return features
+
+        candidates_by_id = {candidate.surface_id: candidate for candidate in engine.candidates}
+        features_by_key: Dict[Tuple[object, ...], QgsFeature] = {}
+        for feature in features:
+            source_id = str(feature.attribute("surface_id") or "").split("|", 1)[0]
+            candidate = candidates_by_id.get(source_id)
+            features_by_key[self._controlling_candidate_dissolve_key(candidate, feature)] = feature
+
+        coverage_parts = []
+        for candidate in engine.candidates:
+            footprint = engine._effective_footprint(candidate)
+            if engine._has_polygon_area(footprint):
+                coverage_parts.append(footprint)
+        solved_parts = [feature.geometry() for feature in features if engine._has_polygon_area(feature.geometry())]
+        try:
+            coverage = QgsGeometry.unaryUnion(coverage_parts)
+            solved = QgsGeometry.unaryUnion(solved_parts)
+            gaps = coverage.difference(solved)
+        except Exception:
+            return features
+        if not engine._has_polygon_area(gaps):
+            return features
+
+        repaired_count = 0
+        repaired_area = 0.0
+        for gap in engine._polygon_parts(gaps):
+            if gap.area() <= 1e-3:
+                continue
+            repairs = engine._gap_lower_envelope_parts(gap)
+            if not repairs:
+                try:
+                    point = gap.pointOnSurface().asPoint()
+                    result = engine.controlling_candidate_at_xy(QgsPointXY(point.x(), point.y()))
+                    candidate = result[0] if result is not None else None
+                except Exception:
+                    candidate = None
+                repairs = [(candidate, gap)] if candidate is not None else []
+            for candidate, repair in repairs:
+                key = self._controlling_candidate_dissolve_key(candidate)
+                target = features_by_key.get(key)
+                if target is None or not engine._has_polygon_area(repair):
+                    continue
+                try:
+                    combined = QgsGeometry.unaryUnion([target.geometry(), repair])
+                except Exception:
+                    combined = None
+                if combined is None or combined.isNull() or combined.isEmpty():
+                    continue
+                try:
+                    if not combined.isGeosValid() or combined.validateGeometry():
+                        normalized = combined.buffer(0.0, CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS)
+                        if normalized is not None and not normalized.isNull() and not normalized.isEmpty():
+                            combined = normalized
+                except Exception:
+                    pass
+                target.setGeometry(combined)
+                elev_min, elev_max = engine._geometry_elevation_range(combined, candidate)
+                target.setAttribute("elev_min", elev_min)
+                target.setAttribute("elev_max", elev_max)
+                repaired_count += 1
+                repaired_area += repair.area()
+
+        if repaired_count:
+            QgsMessageLog.logMessage(
+                f"[repair] Controlling output partition: restored {repaired_area:.6f} m² "
+                f"across {repaired_count} lower-envelope gap part(s).",
+                PLUGIN_TAG,
+                Qgis.Info,
+            )
+        valid_features = [
+            feature
+            for feature in features
+            if engine._has_polygon_area(feature.geometry())
+        ]
+        # Geometry normalisation can very slightly expand a repaired boundary.
+        # Repartition once so the delivered lower envelope remains exclusive.
+        valid_features = self._partition_controlling_region_features(valid_features)
+        valid_features.sort(key=lambda feature: str(feature.attribute("surface_id") or ""))
+        for region_id, feature in enumerate(valid_features, start=1):
+            feature.setAttribute("region_id", region_id)
+        return valid_features
 
     def _create_controlling_transition_layer(
         self,
