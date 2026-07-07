@@ -456,19 +456,26 @@ class LayerMixin:
             fill = QColor(214, 63, 63, 95)
             outline = QColor(155, 32, 32, 230)
         elif style_key == "OLS Modernisation No Change":
-            fill = QColor(245, 245, 245, 70)
-            outline = QColor(85, 105, 125, 210)
+            fill = QColor(63, 169, 245, 125)
+            outline = QColor(12, 95, 150, 245)
         else:
             fill = QColor(150, 150, 150, 45)
             outline = QColor(95, 95, 95, 210)
-        symbol = QgsFillSymbol.createSimple(
-            {
-                "color": fill.name(QColor.NameFormat.HexArgb),
-                "outline_color": outline.name(QColor.NameFormat.HexArgb),
-                "outline_width": "0.45",
-                "outline_width_unit": "MM",
-            }
-        )
+        symbol_options = {
+            "color": fill.name(QColor.NameFormat.HexArgb),
+            "outline_color": outline.name(QColor.NameFormat.HexArgb),
+            "outline_width": "0.45",
+            "outline_width_unit": "MM",
+        }
+        if style_key == "OLS Modernisation No Change":
+            symbol_options.update(
+                {
+                    "style": "diagonal_x",
+                    "outline_width": "0.65",
+                    "outline_style": "dash",
+                }
+            )
+        symbol = QgsFillSymbol.createSimple(symbol_options)
         symbol.setColor(fill)
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
         self._apply_modernisation_comparison_labels(layer, style_key)
@@ -531,7 +538,7 @@ class LayerMixin:
             elif style_key == "OLS Modernisation Loss":
                 text_format.setColor(QColor(132, 29, 29))
             elif style_key == "OLS Modernisation No Change":
-                text_format.setColor(QColor(50, 70, 90))
+                text_format.setColor(QColor(8, 78, 126))
             else:
                 text_format.setColor(QColor(80, 80, 80))
 
