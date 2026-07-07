@@ -48,11 +48,16 @@
 
 ## Declared Distances And Stopways
 
-- [ ] Add stopway geometry generation.
+- [x] Add stopway geometry generation.
 
   Notes:
-  - Runway summaries currently warn when stopway length contributes to ASDA but no `Stopway` features are generated.
-  - Keep generated stopway layers in the normal physical geometry output/grouping/style workflow.
+  - `surfaces/physical.py` generates `Stopway` features when stopway length
+    and runway width are present.
+  - Generated stopway layers use the normal physical geometry
+    output/grouping/style workflow.
+  - Representative QGIS smoke-test evidence is recorded in
+    `docs/mos139_smoke_test_2026-07-07.md`.
+  - Broader declared-distance scenario validation remains tracked separately.
 
 - [ ] Add validation warnings for inconsistent declared-distance results.
 
@@ -65,10 +70,13 @@
   - Add per-direction optional overrides for `TORA`, `TODA`, `ASDA`, and `LDA`.
   - Add source/notes fields for published data provenance.
 
-- [ ] Feed declared-distance outputs into the runway summary report.
+- [x] Feed declared-distance outputs into the runway summary report.
 
   Notes:
-  - Include calculated declared distances and relevant warnings in generated runway summaries.
+  - `reports/runway_summary.py` renders calculated `TORA`, `TODA`, `ASDA`,
+    and `LDA` values plus captured warnings in generated runway summaries.
+  - Published-distance overrides and provenance fields remain part of the
+    declared-distance second pass.
 
 ## CNS Safeguarding
 

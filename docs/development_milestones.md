@@ -5,7 +5,7 @@ ruleset metadata, implementation notes, tests, and TODO ledger. It is intended
 as a practical working list for deciding what to validate, consolidate, and
 build next.
 
-Last reviewed: 2026-07-06.
+Last reviewed: 2026-07-07.
 
 ## High Confidence Delivery
 
@@ -43,9 +43,13 @@ Last reviewed: 2026-07-06.
 
   Notes:
   - Clearway and stopway inputs, persistence, validation, calculated distance
-    records, centreline field population, and TOCS clearway reuse are documented
-    as complete.
-  - Published-distance overrides remain future work.
+    records, centreline field population, runway summary report integration,
+    and TOCS clearway reuse are documented as complete.
+  - Stopway geometry generation is implemented when stopway length and runway
+    width are present, with QGIS smoke-test evidence recorded in
+    `docs/mos139_smoke_test_2026-07-07.md`.
+  - Stronger consistency warnings, published-distance overrides, and provenance
+    fields remain future work.
 
 - [x] AGL has a documented MOS-backed implementation surface.
 
@@ -80,7 +84,7 @@ Last reviewed: 2026-07-06.
     reports `unsupported`, after runtime validation establishes the appropriate
     promoted status.
 
-- [ ] Run a QGIS smoke-test pass for MOS139 default generation.
+- [x] Run a QGIS smoke-test pass for MOS139 default generation.
 
   Test checklist:
   - Basic single-runway airport with memory layers.
@@ -88,6 +92,7 @@ Last reviewed: 2026-07-06.
   - Physical runway geometry, strips, RESA, clearways, markings, AGL, OLS,
     MET, and NASF outputs.
   - Save/load dialog JSON round trip.
+  - Evidence recorded in `docs/mos139_smoke_test_2026-07-07.md`.
 
 - [ ] Validate declared-distance outputs against real or known sample airports.
 
@@ -103,7 +108,11 @@ Last reviewed: 2026-07-06.
 
   Notes:
   - Stopway inputs currently contribute to ASDA.
-  - Stopway geometry generation is still tracked as outstanding work.
+  - Stopway geometry generation is implemented in the physical runway
+    protection layer workflow.
+  - QGIS memory and GeoPackage output smoke-test evidence is recorded.
+  - Remaining consolidation work is broader declared-distance scenario
+    validation for representative runway configurations.
 
 - [ ] Promote or contain Controlling OLS POC outputs.
 
@@ -151,8 +160,9 @@ Last reviewed: 2026-07-06.
   - EASA has policy-table coverage for several domains, but its profile status
     remains draft and many capabilities are partial until table-level
     verification is complete.
-  - Declared distances, clearway, stopway, and controlling OLS are explicitly
-    unsupported.
+  - Declared distances, clearway, and stopway policy lookups are implemented
+    and covered by unit tests; plugin UI/runtime behaviour still needs review.
+  - Controlling OLS remains explicitly unsupported.
   - Open interpretation question: whether conditional/guidance provisions are
     applied "as is", exposed as designer-selected options, or used to identify
     variance from a compliant standard.
@@ -181,13 +191,16 @@ Last reviewed: 2026-07-06.
     transition diagnostics are promoted.
   - Define an explicit equal-elevation tie-break policy.
 
-- [ ] Finish MOS139 stopway geometry.
+- [x] Finish MOS139 stopway geometry.
 
   Work items:
-  - Generate stopway features when stopway length is entered.
-  - Keep output grouping and styling aligned with physical runway geometry.
-  - Ensure runway summaries distinguish calculated ASDA from generated stopway
+  - Stopway features are generated when stopway length is entered and runway
+    width is available.
+  - Output grouping and styling are aligned with physical runway protection
     geometry.
+  - Runway summaries include declared-distance values and generated feature
+    counts; representative QGIS smoke testing remains tracked under
+    consolidation.
 
 - [ ] Complete declared-distance second pass.
 
@@ -195,7 +208,7 @@ Last reviewed: 2026-07-06.
   - Optional `TORA`, `TODA`, `ASDA`, and `LDA` override fields.
   - Source and notes fields for published data provenance.
   - Stronger validation for impossible or inconsistent declared distances.
-  - Runway summary report integration.
+  - Fixture-backed tests for calculated distances and summary warnings.
 
 - [ ] Resolve CNS partial implementation.
 
@@ -238,7 +251,7 @@ Last reviewed: 2026-07-06.
   - [x] OLS tables and geometry applicability.
   - [x] Runway markings.
   - [x] Airfield ground lighting.
-  - Declared distances, clearway, and stopway.
+  - [x] Declared distances, clearway, and stopway.
 
   Work items:
   - Continue building machine-readable traceability for each implemented EASA value.
@@ -309,15 +322,16 @@ Last reviewed: 2026-07-06.
 
 ## Suggested Working Order
 
-- [ ] 1. Re-establish a reproducible Annex 14 baseline: add representative
-      fixtures and run the headless QGIS 4 integration audit.
-- [ ] 2. Close the modernised Annex 14 branch by addressing audit findings,
+- [x] 1. QGIS smoke-test the current MOS139 workflow and record any runtime
+      issues before adding new capability.
+- [ ] 2. Consolidate declared distances around warning/override behaviour,
+      because the first pass is implemented and user-facing.
+- [ ] 3. Re-establish a reproducible Annex 14 baseline when advanced-module
+      work resumes: add representative fixtures and run the headless QGIS 4
+      integration audit.
+- [ ] 4. Close the modernised Annex 14 branch by addressing audit findings,
       reconciling capability metadata and documentation, and preserving the
       results as regression evidence.
-- [ ] 3. QGIS smoke-test the current MOS139 workflow and record any runtime
-      issues before adding new capability.
-- [ ] 4. Consolidate declared distances and stopway geometry, because this is
-      already partially delivered and user-facing.
 - [ ] 5. Decide whether the established MOS/NASF Controlling OLS remains
       diagnostic-only or moves toward promoted output; then harden accordingly.
 - [ ] 6. Close the highest-value AGL and marking gaps that depend on missing UI
@@ -332,5 +346,13 @@ Last reviewed: 2026-07-06.
 - [x] 2026-07-06: `python3 -m unittest tests.test_rulesets tests.test_frameworks`
       passed 62 tests with 1 expected QGIS-runtime skip.
 - [x] 2026-07-06: `python3 -m compileall -q .`
+- [x] 2026-07-07: `python3 -m unittest tests.test_rulesets tests.test_frameworks`
+      passed 62 tests with 1 expected QGIS-runtime skip.
+- [x] 2026-07-07: headless QGIS 4 MOS139 smoke test passed for memory and
+      GeoPackage output; evidence recorded in
+      `docs/mos139_smoke_test_2026-07-07.md`.
+- [ ] 2026-07-07: the broader unittest command including
+      `tests.test_ols_modernisation_comparison` could not complete outside the
+      QGIS runtime because `qgis` Python bindings were unavailable.
 - [ ] Run `tests/run_annex14_integration.py` under QGIS 4 with committed
       single-runway and dual-runway fixtures; record audit JSON and previews.
