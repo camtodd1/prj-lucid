@@ -69,19 +69,23 @@
   - Broader fixture/sample-airport validation remains tracked in
     `docs/development_milestones.md`.
 
-- [ ] Add optional declared-distance override fields.
+- [x] Add optional declared-distance override fields.
 
   Notes:
-  - Add per-direction optional overrides for `TORA`, `TODA`, `ASDA`, and `LDA`.
-  - Add source/notes fields for published data provenance.
+  - Per-direction optional overrides for `TORA`, `TODA`, `ASDA`, and `LDA`
+    are captured on each runway.
+  - Shared source/notes fields capture published data provenance.
+  - Override values are used as effective declared distances while calculated
+    values are retained on the records as `calc_*` fields.
+  - Missing provenance and inconsistent override relationships are surfaced as
+    declared-distance warnings.
 
 - [x] Feed declared-distance outputs into the runway summary report.
 
   Notes:
   - `reports/runway_summary.py` renders calculated `TORA`, `TODA`, `ASDA`,
     and `LDA` values plus captured warnings in generated runway summaries.
-  - Published-distance overrides and provenance fields remain part of the
-    declared-distance second pass.
+  - Published-distance source/notes are included in the summary assumptions.
 
 ## CNS Safeguarding
 

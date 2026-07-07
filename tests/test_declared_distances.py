@@ -1,9 +1,128 @@
 import unittest
 
-from reports.declared_distances import annotate_declared_distance_warnings
+from reports.declared_distances import annotate_declared_distance_warnings, apply_declared_distance_overrides
+from reports.runway_summary import build_runway_summaries
 
 
 class DeclaredDistanceWarningTest(unittest.TestCase):
+    def test_no_overrides_keep_calculated_values(self):
+        runway = {"short_name": "05/23"}
+        records = [
+            {
+                "direction": "primary",
+                "end_desig": "05",
+                "tora_m": 2000.0,
+                "toda_m": 2100.0,
+                "asda_m": 2050.0,
+                "lda_m": 1900.0,
+            }
+        ]
+
+        updated = apply_declared_distance_overrides(runway, records)
+
+        self.assertEqual(updated, records)
+        self.assertEqual(records[0]["tora_m"], 2000.0)
+        self.assertEqual(records[0]["calc_tora_m"], 2000.0)
+        self.assertEqual(records[0]["calc_src"], "calculated")
+
+    def test_partial_overrides_replace_only_supplied_values(self):
+        runway = {
+            "short_name": "05/23",
+            "tora_override_1": 1950.0,
+            "asda_override_1": 2025.0,
+            "declared_distance_source": "AIP AD 2 YSMK",
+            "declared_distance_notes": "Reduced due to obstacle assessment",
+        }
+        records = [
+            {
+                "direction": "primary",
+                "end_desig": "05",
+                "tora_m": 2000.0,
+                "toda_m": 2100.0,
+                "asda_m": 2050.0,
+                "lda_m": 1900.0,
+            }
+        ]
+
+        apply_declared_distance_overrides(runway, records)
+
+        self.assertEqual(records[0]["tora_m"], 1950.0)
+        self.assertEqual(records[0]["toda_m"], 2100.0)
+        self.assertEqual(records[0]["asda_m"], 2025.0)
+        self.assertEqual(records[0]["calc_tora_m"], 2000.0)
+        self.assertEqual(records[0]["calc_asda_m"], 2050.0)
+        self.assertEqual(records[0]["calc_src"], "override")
+        self.assertEqual(records[0]["override_fields"], "TORA, ASDA")
+        self.assertIn("Source: AIP AD 2 YSMK", records[0]["notes"])
+        self.assertIn("Reduced due to obstacle assessment", records[0]["notes"])
+
+    def test_summary_includes_declared_distance_provenance(self):
+        runway = {
+            "short_name": "05/23",
+            "declared_distance_source": "AIP AD 2 YSMK",
+            "declared_distance_notes": "Published values verified",
+            "declared_distances": [],
+        }
+
+        summary = build_runway_summaries([runway])[0]
+
+        self.assertIn("Declared-distance source: AIP AD 2 YSMK", summary["warnings"])
+        self.assertIn("Declared-distance notes: Published values verified", summary["warnings"])
+
+    def test_overrides_without_source_warn(self):
+        runway = {
+            "short_name": "05/23",
+            "tora_override_1": 1950.0,
+        }
+        records = [
+            {
+                "direction": "primary",
+                "end_desig": "05",
+                "physical_len_m": 2000.0,
+                "threshold_len_m": 2000.0,
+                "takeoff_available": True,
+                "landing_available": True,
+                "tora_m": 2000.0,
+                "toda_m": 2100.0,
+                "asda_m": 2050.0,
+                "lda_m": 1900.0,
+            }
+        ]
+
+        apply_declared_distance_overrides(runway, records)
+        warnings = annotate_declared_distance_warnings(runway, records)
+
+        self.assertIn("05/23 05: declared-distance overrides are used but no source is recorded.", warnings)
+        self.assertIn("no source is recorded", records[0]["notes"])
+
+    def test_override_relationship_warnings_use_effective_values(self):
+        runway = {
+            "short_name": "05/23",
+            "toda_override_1": 1900.0,
+            "asda_override_1": 1800.0,
+            "declared_distance_source": "Manual test source",
+        }
+        records = [
+            {
+                "direction": "primary",
+                "end_desig": "05",
+                "physical_len_m": 2000.0,
+                "threshold_len_m": 2000.0,
+                "takeoff_available": True,
+                "landing_available": True,
+                "tora_m": 2000.0,
+                "toda_m": 2100.0,
+                "asda_m": 2050.0,
+                "lda_m": 1900.0,
+            }
+        ]
+
+        apply_declared_distance_overrides(runway, records)
+        warnings = annotate_declared_distance_warnings(runway, records)
+
+        self.assertIn("05/23 05: TODA is less than TORA.", warnings)
+        self.assertIn("05/23 05: ASDA is less than TORA.", warnings)
+
     def test_valid_declared_distances_have_no_warnings(self):
         runway = {
             "short_name": "05/23",

@@ -490,7 +490,7 @@ class PhysicalGeometryMixin:
                                     "toda_m": declared_record.get("toda_m"),
                                     "asda_m": declared_record.get("asda_m"),
                                     "lda_m": declared_record.get("lda_m"),
-                                    "calc_src": "calculated",
+                                    "calc_src": declared_record.get("calc_src", "calculated"),
                                     "notes": declared_record.get("notes", ""),
                                 }
                                 for field_name, value in declared_attrs.items():

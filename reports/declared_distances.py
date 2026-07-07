@@ -5,6 +5,50 @@ from typing import Any, Dict, Iterable, List, Optional
 
 
 TOLERANCE_M = 1e-6
+DISTANCE_KEYS = ("tora_m", "toda_m", "asda_m", "lda_m")
+OVERRIDE_INPUT_KEYS = {
+    "tora_m": "tora_override",
+    "toda_m": "toda_override",
+    "asda_m": "asda_override",
+    "lda_m": "lda_override",
+}
+
+
+def apply_declared_distance_overrides(
+    runway_data: Dict[str, Any],
+    records: Iterable[Dict[str, Any]],
+) -> List[Dict[str, Any]]:
+    """Apply optional published declared-distance overrides to calculated records."""
+    record_list = list(records)
+    source = str(runway_data.get("declared_distance_source") or "").strip()
+    notes = str(runway_data.get("declared_distance_notes") or "").strip()
+
+    for record in record_list:
+        direction_suffix = _direction_suffix(record)
+        overridden_keys: List[str] = []
+        for distance_key in DISTANCE_KEYS:
+            record[f"calc_{distance_key}"] = record.get(distance_key)
+            override_input_key = f"{OVERRIDE_INPUT_KEYS[distance_key]}_{direction_suffix}"
+            override_value = _number_or_none(runway_data.get(override_input_key))
+            if override_value is None:
+                continue
+            record[distance_key] = override_value
+            record[f"override_{distance_key}"] = override_value
+            overridden_keys.append(distance_key.replace("_m", "").upper())
+
+        if overridden_keys:
+            record["calc_src"] = "override"
+            record["override_fields"] = ", ".join(overridden_keys)
+            record["declared_distance_source"] = source
+            record["declared_distance_notes"] = notes
+            _merge_record_notes(record, _provenance_notes(source, notes))
+        else:
+            record.setdefault("calc_src", "calculated")
+            if source or notes:
+                record["declared_distance_source"] = source
+                record["declared_distance_notes"] = notes
+
+    return record_list
 
 
 def annotate_declared_distance_warnings(
@@ -64,6 +108,11 @@ def _record_warnings(runway_name: str, record: Dict[str, Any]) -> List[str]:
     clearway_entered = _number_or_zero(record.get("clearway_input_m", record.get("clearway_m")))
     stopway_entered = _number_or_zero(record.get("stopway_input_m", record.get("stopway_m")))
     physical_length = _number_or_none(record.get("physical_len_m"))
+    has_overrides = str(record.get("calc_src") or "") == "override"
+    source = str(record.get("declared_distance_source") or "").strip()
+
+    if has_overrides and not source:
+        warnings.append(f"{label}: declared-distance overrides are used but no source is recorded.")
 
     if takeoff_available:
         if not _positive(tora):
@@ -97,6 +146,19 @@ def _merge_record_notes(record: Dict[str, Any], warnings: List[str]) -> None:
     merged = _unique_preserving_order(existing + warnings)
     record["warnings"] = _unique_preserving_order(list(record.get("warnings") or []) + warnings)
     record["notes"] = "; ".join(merged)
+
+
+def _direction_suffix(record: Dict[str, Any]) -> str:
+    return "1" if record.get("direction") == "primary" else "2"
+
+
+def _provenance_notes(source: str, notes: str) -> List[str]:
+    result = []
+    if source:
+        result.append(f"Source: {source}")
+    if notes:
+        result.append(f"Notes: {notes}")
+    return result
 
 
 def _first_number(values: Iterable[Any]) -> Optional[float]:

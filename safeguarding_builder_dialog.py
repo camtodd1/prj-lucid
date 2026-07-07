@@ -2358,6 +2358,33 @@ class SafeguardingBuilderDialog(
                 current_errors += 1
                 validated[field_name] = 0.0
 
+        for field_name, label in [
+            ("tora_override_1", "primary TORA override"),
+            ("tora_override_2", "reciprocal TORA override"),
+            ("toda_override_1", "primary TODA override"),
+            ("toda_override_2", "reciprocal TODA override"),
+            ("asda_override_1", "primary ASDA override"),
+            ("asda_override_2", "reciprocal ASDA override"),
+            ("lda_override_1", "primary LDA override"),
+            ("lda_override_2", "reciprocal LDA override"),
+        ]:
+            try:
+                raw_value = str(inputs.get(field_name, "")).strip()
+                if raw_value:
+                    parsed_value = float(raw_value)
+                    if parsed_value <= 0:
+                        raise ValueError("Must be positive")
+                    validated[field_name] = parsed_value
+                else:
+                    validated[field_name] = None
+            except ValueError:
+                errors.append(f"Rwy {index}: Invalid {label} '{inputs.get(field_name, '')}'. Must be positive.")
+                current_errors += 1
+                validated[field_name] = None
+
+        validated["declared_distance_source"] = str(inputs.get("declared_distance_source", "") or "").strip()
+        validated["declared_distance_notes"] = str(inputs.get("declared_distance_notes", "") or "").strip()
+
         for field_name in [
             "takeoff_available_1",
             "takeoff_available_2",

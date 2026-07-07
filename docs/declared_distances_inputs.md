@@ -125,9 +125,9 @@ Default behavior:
 
 - Clearway and stopway blank values validate as zero.
 - Takeoff and landing availability default to checked.
-- Overrides can be deferred to a second pass.
+- Override blank values use calculated declared distances.
 
-Recommended second-pass controls:
+Second-pass controls:
 
 - Optional declared-distance override fields for `TORA`, `TODA`, `ASDA`, and
   `LDA` in both directions.
@@ -152,4 +152,10 @@ The first-pass declared-distance implementation is complete for clearway and
 stopway inputs, persistence, validation, declared-distance calculation,
 generated output records, centreline field population, and TOCS clearway reuse.
 
-Outstanding declared-distance work is tracked centrally in `docs/TODO.md`.
+The second-pass declared-distance implementation is complete for optional
+published-distance overrides, source/notes provenance, warning annotations,
+effective declared-distance output, and unit coverage for override and warning
+behaviour.
+
+Remaining declared-distance consolidation work is tracked centrally in
+`docs/TODO.md` and `docs/development_milestones.md`.

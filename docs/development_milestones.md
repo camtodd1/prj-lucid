@@ -49,7 +49,8 @@ Last reviewed: 2026-07-07.
     width are present, with QGIS smoke-test evidence recorded in
     `docs/mos139_smoke_test_2026-07-07.md`.
   - Stronger consistency warnings, published-distance overrides, and provenance
-    fields remain future work.
+    fields are implemented as the declared-distance second pass.
+  - Real/sample-airport validation scenarios remain future consolidation work.
 
 - [x] AGL has a documented MOS-backed implementation surface.
 
@@ -202,13 +203,14 @@ Last reviewed: 2026-07-07.
     counts; representative QGIS smoke testing remains tracked under
     consolidation.
 
-- [ ] Complete declared-distance second pass.
+- [x] Complete declared-distance second pass.
 
   Work items:
-  - Optional `TORA`, `TODA`, `ASDA`, and `LDA` override fields.
-  - Source and notes fields for published data provenance.
+  - [x] Optional `TORA`, `TODA`, `ASDA`, and `LDA` override fields.
+  - [x] Source and notes fields for published data provenance.
   - [x] Stronger validation for impossible or inconsistent declared distances.
-  - Fixture-backed tests for calculated distances and summary warnings.
+  - [x] Unit tests for calculated distances, override application, provenance,
+    and summary warnings.
 
 - [ ] Resolve CNS partial implementation.
 
@@ -324,8 +326,8 @@ Last reviewed: 2026-07-07.
 
 - [x] 1. QGIS smoke-test the current MOS139 workflow and record any runtime
       issues before adding new capability.
-- [ ] 2. Consolidate declared distances around warning/override behaviour,
-      because the first pass is implemented and user-facing.
+- [x] 2. Consolidate declared distances around warning/override behaviour,
+      because the first and second passes are implemented and user-facing.
 - [ ] 3. Re-establish a reproducible Annex 14 baseline when advanced-module
       work resumes: add representative fixtures and run the headless QGIS 4
       integration audit.
@@ -352,7 +354,7 @@ Last reviewed: 2026-07-07.
       GeoPackage output; evidence recorded in
       `docs/mos139_smoke_test_2026-07-07.md`.
 - [x] 2026-07-07: `python3 -m unittest tests.test_declared_distances
-      tests.test_rulesets tests.test_frameworks` passed 67 tests with 1
+      tests.test_rulesets tests.test_frameworks` passed 72 tests with 1
       expected QGIS-runtime skip.
 - [ ] 2026-07-07: the broader unittest command including
       `tests.test_ols_modernisation_comparison` could not complete outside the

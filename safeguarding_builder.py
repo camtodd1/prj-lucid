@@ -47,7 +47,7 @@ from .frameworks.nasf.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
 from .guidelines.ols_modernisation_comparison import OlsModernisationComparisonMixin
-from .reports.declared_distances import annotate_declared_distance_warnings
+from .reports.declared_distances import annotate_declared_distance_warnings, apply_declared_distance_overrides
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 from .frameworks.registry import get_framework_profile
 from .rulesets.context import RulesetContext
@@ -1249,6 +1249,7 @@ class SafeguardingBuilder(
             },
         ]
         records = self._apply_declared_distance_policy(records)
+        records = apply_declared_distance_overrides(runway_data, records)
         warnings = annotate_declared_distance_warnings(runway_data, records)
         if warnings:
             existing_warnings = list(runway_data.get("summary_warnings") or [])
