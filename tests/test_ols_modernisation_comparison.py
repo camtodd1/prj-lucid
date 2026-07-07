@@ -93,7 +93,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         )
         parts = engine.baseline_only_parts()
         self.assertEqual(len(parts), 1)
-        self.assertAlmostEqual(parts[0][1].area(), 4950.0, delta=1.0)
+        self.assertAlmostEqual(parts[0][1].area(), 5000.0, places=3)
 
     def test_baseline_only_ignores_tiny_boundary_sliver(self):
         baseline = self.constant("baseline", 100.0)

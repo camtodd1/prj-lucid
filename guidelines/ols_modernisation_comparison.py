@@ -134,15 +134,27 @@ class OlsEnvelopeComparisonEngine:
         future_union = self._union_geometries(future_regions)
         future_coverage = self._comparison_coverage_geometry(future_union)
         for baseline_candidate, baseline_region in self.baseline_engine._controlling_region_geometries():
-            if future_coverage is None or future_coverage.isEmpty():
+            if future_union is None or future_union.isEmpty():
                 remaining = QgsGeometry(baseline_region)
+                tolerant_remaining = QgsGeometry(baseline_region)
             else:
                 try:
-                    remaining = baseline_region.difference(future_coverage)
+                    remaining = baseline_region.difference(future_union)
                 except Exception:
                     continue
+                try:
+                    tolerant_remaining = (
+                        baseline_region.difference(future_coverage)
+                        if future_coverage is not None and not future_coverage.isEmpty()
+                        else QgsGeometry(remaining)
+                    )
+                except Exception:
+                    tolerant_remaining = QgsGeometry(remaining)
             remaining = self._normalise_no_overlay_geometry(remaining)
+            tolerant_remaining = self._normalise_no_overlay_geometry(tolerant_remaining)
             for part in self.baseline_engine._polygon_parts(remaining):
+                if not self._no_overlay_part_has_tolerant_core(part, tolerant_remaining):
+                    continue
                 part = self._clean_no_overlay_part(part)
                 if self._has_no_overlay_area(part):
                     result.append((baseline_candidate, QgsGeometry(part)))
@@ -387,6 +399,23 @@ class OlsEnvelopeComparisonEngine:
         except Exception:
             pass
         return self._normalise_no_overlay_geometry(coverage)
+
+    def _no_overlay_part_has_tolerant_core(
+        self,
+        exact_part: QgsGeometry,
+        tolerant_remaining: Optional[QgsGeometry],
+    ) -> bool:
+        if not self._has_no_overlay_area(exact_part):
+            return False
+        if tolerant_remaining is None:
+            return True
+        if tolerant_remaining.isEmpty():
+            return False
+        try:
+            core = exact_part.intersection(tolerant_remaining)
+        except Exception:
+            return True
+        return self._has_no_overlay_area(core)
 
     def _normalise_no_overlay_geometry(self, geometry: Optional[QgsGeometry]) -> Optional[QgsGeometry]:
         if geometry is None or geometry.isEmpty():
