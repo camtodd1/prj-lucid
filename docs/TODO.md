@@ -59,10 +59,15 @@
     `docs/mos139_smoke_test_2026-07-07.md`.
   - Broader declared-distance scenario validation remains tracked separately.
 
-- [ ] Add validation warnings for inconsistent declared-distance results.
+- [x] Add validation warnings for inconsistent declared-distance results.
 
   Notes:
-  - Validate inconsistent or impossible generated declared-distance values before output.
+  - `reports/declared_distances.py` validates inconsistent or impossible
+    generated declared-distance values before output.
+  - Warnings are stored on runway summaries and per-direction declared-distance
+    records so they can appear in summary reports and generated layer notes.
+  - Broader fixture/sample-airport validation remains tracked in
+    `docs/development_milestones.md`.
 
 - [ ] Add optional declared-distance override fields.
 

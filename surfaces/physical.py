@@ -491,7 +491,7 @@ class PhysicalGeometryMixin:
                                     "asda_m": declared_record.get("asda_m"),
                                     "lda_m": declared_record.get("lda_m"),
                                     "calc_src": "calculated",
-                                    "notes": "",
+                                    "notes": declared_record.get("notes", ""),
                                 }
                                 for field_name, value in declared_attrs.items():
                                     idx = declared_feature.fieldNameIndex(field_name)

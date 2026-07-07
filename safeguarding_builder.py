@@ -47,6 +47,7 @@ from .frameworks.nasf.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
 from .guidelines.ols_modernisation_comparison import OlsModernisationComparisonMixin
+from .reports.declared_distances import annotate_declared_distance_warnings
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 from .frameworks.registry import get_framework_profile
 from .rulesets.context import RulesetContext
@@ -1190,6 +1191,8 @@ class SafeguardingBuilder(
         clearway_specs = self._calculate_effective_clearway_specs(runway_data, physical_length)
         clearway_primary_end = clearway_specs["primary"]["length_m"]
         clearway_reciprocal_end = clearway_specs["reciprocal"]["length_m"]
+        clearway_primary_input = self._non_negative_float(runway_data.get("clearway1_len"), 0.0)
+        clearway_reciprocal_input = self._non_negative_float(runway_data.get("clearway2_len"), 0.0)
         stopway_primary_end = self._non_negative_float(runway_data.get("stopway1_len"), 0.0)
         stopway_reciprocal_end = self._non_negative_float(runway_data.get("stopway2_len"), 0.0)
 
@@ -1214,7 +1217,9 @@ class SafeguardingBuilder(
                 "threshold_len_m": threshold_length,
                 "disp_thr_m": disp_primary,
                 "clearway_m": clearway_reciprocal_end,
+                "clearway_input_m": clearway_reciprocal_input,
                 "stopway_m": stopway_reciprocal_end,
+                "stopway_input_m": stopway_reciprocal_end,
                 "takeoff_available": primary_takeoff_available,
                 "landing_available": primary_landing_available,
                 "tora_m": primary_tora,
@@ -1232,7 +1237,9 @@ class SafeguardingBuilder(
                 "threshold_len_m": threshold_length,
                 "disp_thr_m": disp_reciprocal,
                 "clearway_m": clearway_primary_end,
+                "clearway_input_m": clearway_primary_input,
                 "stopway_m": stopway_primary_end,
+                "stopway_input_m": stopway_primary_end,
                 "takeoff_available": reciprocal_takeoff_available,
                 "landing_available": reciprocal_landing_available,
                 "tora_m": reciprocal_tora,
@@ -1241,7 +1248,14 @@ class SafeguardingBuilder(
                 "lda_m": reciprocal_lda,
             },
         ]
-        return self._apply_declared_distance_policy(records)
+        records = self._apply_declared_distance_policy(records)
+        warnings = annotate_declared_distance_warnings(runway_data, records)
+        if warnings:
+            existing_warnings = list(runway_data.get("summary_warnings") or [])
+            runway_data["summary_warnings"] = sorted(set(existing_warnings + warnings))
+            for warning in warnings:
+                QgsMessageLog.logMessage(warning, PLUGIN_TAG, level=Qgis.Warning)
+        return records
 
     def _apply_declared_distance_policy(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         declared_distance_parameters = getattr(self.get_active_ruleset(), "declared_distance_parameters", None)

@@ -102,7 +102,7 @@ Last reviewed: 2026-07-07.
   - Reciprocal displaced thresholds.
   - Clearway and stopway entered by the user.
   - Takeoff or landing unavailable in one direction.
-  - Confirm warnings for inconsistent results.
+  - Confirm warnings for inconsistent results across representative scenarios.
 
 - [ ] Consolidate stopway handling.
 
@@ -207,7 +207,7 @@ Last reviewed: 2026-07-07.
   Work items:
   - Optional `TORA`, `TODA`, `ASDA`, and `LDA` override fields.
   - Source and notes fields for published data provenance.
-  - Stronger validation for impossible or inconsistent declared distances.
+  - [x] Stronger validation for impossible or inconsistent declared distances.
   - Fixture-backed tests for calculated distances and summary warnings.
 
 - [ ] Resolve CNS partial implementation.
@@ -351,6 +351,9 @@ Last reviewed: 2026-07-07.
 - [x] 2026-07-07: headless QGIS 4 MOS139 smoke test passed for memory and
       GeoPackage output; evidence recorded in
       `docs/mos139_smoke_test_2026-07-07.md`.
+- [x] 2026-07-07: `python3 -m unittest tests.test_declared_distances
+      tests.test_rulesets tests.test_frameworks` passed 67 tests with 1
+      expected QGIS-runtime skip.
 - [ ] 2026-07-07: the broader unittest command including
       `tests.test_ols_modernisation_comparison` could not complete outside the
       QGIS runtime because `qgis` Python bindings were unavailable.
