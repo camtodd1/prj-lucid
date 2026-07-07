@@ -101,6 +101,20 @@ class OlsEnvelopeComparisonEngine:
 
                 self._append_parts(result["gain"], baseline_candidate, future_candidate, baseline_lower, "gain")
                 self._append_parts(result["loss"], baseline_candidate, future_candidate, future_lower, "loss")
+                self._append_parts(
+                    result["no_change"],
+                    baseline_candidate,
+                    future_candidate,
+                    baseline_lower,
+                    "no_change",
+                )
+                self._append_parts(
+                    result["no_change"],
+                    baseline_candidate,
+                    future_candidate,
+                    future_lower,
+                    "no_change",
+                )
                 self._append_transition_parts(
                     result["transition"],
                     pair_engine,
@@ -110,6 +124,7 @@ class OlsEnvelopeComparisonEngine:
                     baseline_lower,
                     future_lower,
                 )
+        self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
         return result
 
     def baseline_only_parts(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
@@ -233,6 +248,93 @@ class OlsEnvelopeComparisonEngine:
                     destination.append((baseline, future, QgsGeometry(part)))
             except Exception:
                 continue
+
+    def _append_common_domain_gap_parts(
+        self,
+        result,
+        baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+        future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> None:
+        baseline_union = self._union_geometries([geometry for _candidate, geometry in baseline_regions])
+        future_union = self._union_geometries([geometry for _candidate, geometry in future_regions])
+        if baseline_union is None or future_union is None or baseline_union.isEmpty() or future_union.isEmpty():
+            return
+        try:
+            common_domain = baseline_union.intersection(future_union)
+        except Exception:
+            return
+        if not self._has_area(common_domain):
+            return
+
+        classified_geometries = [
+            geometry
+            for change in ("gain", "loss", "no_change")
+            for _baseline, _future, geometry in result.get(change, [])
+            if geometry is not None and not geometry.isEmpty()
+        ]
+        classified_union = self._union_geometries(classified_geometries)
+        if classified_union is None or classified_union.isEmpty():
+            remainder = common_domain
+        else:
+            try:
+                remainder = common_domain.difference(classified_union)
+            except Exception:
+                return
+        if not self._has_area(remainder):
+            return
+
+        for part in self.baseline_engine._polygon_parts(remainder):
+            if not self._has_area(part):
+                continue
+            controllers = self._controllers_for_gap_part(part)
+            if controllers is None:
+                continue
+            baseline_candidate, future_candidate = controllers
+            change = self._classify_change_for_part(part, baseline_candidate, future_candidate)
+            if change is None:
+                continue
+            self._append_parts(result[change], baseline_candidate, future_candidate, part, change)
+
+    def _controllers_for_gap_part(
+        self,
+        geometry: QgsGeometry,
+    ) -> Optional[Tuple[ControllingOlsCandidate, ControllingOlsCandidate]]:
+        for point in self._sample_points(geometry):
+            baseline = self.baseline_engine.controlling_candidate_at_xy(point)
+            future = self.future_engine.controlling_candidate_at_xy(point)
+            if baseline is not None and future is not None:
+                return baseline[0], future[0]
+        return None
+
+    def _classify_change_for_part(
+        self,
+        geometry: QgsGeometry,
+        baseline_candidate: ControllingOlsCandidate,
+        future_candidate: ControllingOlsCandidate,
+    ) -> Optional[str]:
+        delta_min, delta_max, delta_representative = self.delta_range(
+            geometry,
+            baseline_candidate,
+            future_candidate,
+        )
+        if delta_representative is None:
+            return None
+        if delta_min is not None and delta_min > self.tolerance_m:
+            return "gain"
+        if delta_max is not None and delta_max < -self.tolerance_m:
+            return "loss"
+        if (
+            delta_min is not None
+            and delta_max is not None
+            and abs(delta_min) <= self.tolerance_m
+            and abs(delta_max) <= self.tolerance_m
+        ):
+            return "no_change"
+        if delta_representative > self.tolerance_m:
+            return "gain"
+        if delta_representative < -self.tolerance_m:
+            return "loss"
+        return "no_change"
 
     def _sample_points(self, geometry: QgsGeometry) -> List[QgsPointXY]:
         points: List[QgsPointXY] = []
