@@ -157,5 +157,8 @@ published-distance overrides, source/notes provenance, warning annotations,
 effective declared-distance output, and unit coverage for override and warning
 behaviour.
 
+Synthetic fixture-backed regression scenarios cover representative calculated,
+override, unavailable-operation, provenance, and invalid-relationship cases.
+
 Remaining declared-distance consolidation work is tracked centrally in
 `docs/TODO.md` and `docs/development_milestones.md`.

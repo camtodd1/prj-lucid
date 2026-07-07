@@ -50,6 +50,8 @@ Last reviewed: 2026-07-07.
     `docs/mos139_smoke_test_2026-07-07.md`.
   - Stronger consistency warnings, published-distance overrides, and provenance
     fields are implemented as the declared-distance second pass.
+  - Synthetic fixture-backed regression scenarios cover representative
+    declared-distance calculations, overrides, provenance, and warnings.
   - Real/sample-airport validation scenarios remain future consolidation work.
 
 - [x] AGL has a documented MOS-backed implementation surface.
@@ -98,12 +100,14 @@ Last reviewed: 2026-07-07.
 - [ ] Validate declared-distance outputs against real or known sample airports.
 
   Test checklist:
-  - No displaced thresholds.
-  - One displaced threshold.
-  - Reciprocal displaced thresholds.
-  - Clearway and stopway entered by the user.
-  - Takeoff or landing unavailable in one direction.
-  - Confirm warnings for inconsistent results across representative scenarios.
+  - Synthetic regression fixtures now cover no displaced thresholds,
+    displaced-threshold/clearway/stopway combinations, unavailable operations,
+    published overrides, missing provenance, and invalid distance
+    relationships.
+  - Add source-backed sample-airport fixtures with authoritative published
+    values.
+  - Compare calculated and override values against known sample inputs.
+  - Retain fixture outputs as review evidence when promoting behaviour.
 
 - [ ] Consolidate stopway handling.
 
@@ -112,8 +116,10 @@ Last reviewed: 2026-07-07.
   - Stopway geometry generation is implemented in the physical runway
     protection layer workflow.
   - QGIS memory and GeoPackage output smoke-test evidence is recorded.
-  - Remaining consolidation work is broader declared-distance scenario
-    validation for representative runway configurations.
+  - Synthetic declared-distance fixtures now cover clearway/stopway and
+    unavailable-takeoff warning behaviour.
+  - Remaining consolidation work is source-backed sample-airport validation
+    for representative runway configurations.
 
 - [ ] Promote or contain Controlling OLS POC outputs.
 
@@ -210,7 +216,7 @@ Last reviewed: 2026-07-07.
   - [x] Source and notes fields for published data provenance.
   - [x] Stronger validation for impossible or inconsistent declared distances.
   - [x] Unit tests for calculated distances, override application, provenance,
-    and summary warnings.
+    summary warnings, and synthetic fixture-backed regression scenarios.
 
 - [ ] Resolve CNS partial implementation.
 

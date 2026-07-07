@@ -1,0 +1,56 @@
+{
+  "name": "invalid_relationships_missing_source",
+  "runway_data": {
+    "short_name": "05/23",
+    "thr_displaced_1": 1100,
+    "thr_displaced_2": 950,
+    "tora_override_1": 1950,
+    "toda_override_1": 1900,
+    "asda_override_1": 1800
+  },
+  "records": [
+    {
+      "direction": "primary",
+      "end_desig": "05",
+      "physical_len_m": 2000,
+      "threshold_len_m": -50,
+      "takeoff_available": true,
+      "landing_available": true,
+      "clearway_m": 0,
+      "clearway_input_m": 0,
+      "stopway_m": 0,
+      "stopway_input_m": 0,
+      "tora_m": 2000,
+      "toda_m": 2100,
+      "asda_m": 2050,
+      "lda_m": 2050
+    }
+  ],
+  "expected": {
+    "warnings": [
+      "05/23: threshold-to-threshold length is not positive.",
+      "05/23: combined displaced thresholds (2050 m) leave no positive threshold-to-threshold landing length.",
+      "05/23 05: declared-distance overrides are used but no source is recorded.",
+      "05/23 05: TODA is less than TORA.",
+      "05/23 05: ASDA is less than TORA.",
+      "05/23 05: LDA exceeds physical runway length."
+    ],
+    "records": [
+      {
+        "direction": "primary",
+        "tora_m": 1950,
+        "toda_m": 1900,
+        "asda_m": 1800,
+        "lda_m": 2050,
+        "calc_src": "override",
+        "override_fields": "TORA, TODA, ASDA",
+        "notes_contains": [
+          "declared-distance overrides are used but no source is recorded",
+          "TODA is less than TORA",
+          "ASDA is less than TORA",
+          "LDA exceeds physical runway length"
+        ]
+      }
+    ]
+  }
+}
