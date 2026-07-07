@@ -401,10 +401,19 @@ class LayerMixin:
                             )
                     if str(style_key) == "Parallel Runway Standards Line":
                         self._apply_parallel_runway_standards_style(layer)
-                    if str(style_key) in {"OLS Modernisation Gain", "OLS Modernisation Loss"}:
-                        self._apply_modernisation_comparison_style(
-                            layer, gain=str(style_key) == "OLS Modernisation Gain"
-                        )
+                    if str(style_key) in {
+                        "OLS Modernisation Gain",
+                        "OLS Modernisation Loss",
+                        "OLS Modernisation No Future Overlay",
+                    }:
+                        self._apply_modernisation_comparison_style(layer, str(style_key))
+                    if str(style_key) in {
+                        "OLS Modernisation Baseline Wireframe",
+                        "OLS Modernisation Future Wireframe",
+                    }:
+                        self._apply_modernisation_wireframe_style(layer, str(style_key))
+                    if str(style_key) == "OLS Modernisation Transition":
+                        self._apply_modernisation_transition_style(layer)
                     if str(style_key) in {"OLS IHS", "OLS OHS"}:
                         self._apply_horizontal_surface_labels(layer, decimal_places=1)
                     if str(style_key) == "OLS Approach":
@@ -437,19 +446,108 @@ class LayerMixin:
                 level=Qgis.Critical,
             )
 
-    def _apply_modernisation_comparison_style(self, layer: QgsVectorLayer, gain: bool) -> None:
-        """Apply an unambiguous green/gain or red/loss comparison symbol."""
-        fill = QColor(55, 168, 82, 105) if gain else QColor(214, 63, 63, 105)
-        outline = QColor(27, 112, 52, 230) if gain else QColor(155, 32, 32, 230)
+    def _apply_modernisation_comparison_style(self, layer: QgsVectorLayer, style_key: str) -> None:
+        """Apply readable gain/loss/no-overlay comparison symbols and delta labels."""
+        if style_key == "OLS Modernisation Gain":
+            fill = QColor(55, 168, 82, 95)
+            outline = QColor(27, 112, 52, 230)
+        elif style_key == "OLS Modernisation Loss":
+            fill = QColor(214, 63, 63, 95)
+            outline = QColor(155, 32, 32, 230)
+        else:
+            fill = QColor(150, 150, 150, 45)
+            outline = QColor(95, 95, 95, 210)
         symbol = QgsFillSymbol.createSimple(
             {
                 "color": fill.name(QColor.NameFormat.HexArgb),
                 "outline_color": outline.name(QColor.NameFormat.HexArgb),
                 "outline_width": "0.45",
+                "outline_width_unit": "MM",
             }
         )
         symbol.setColor(fill)
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
+        self._apply_modernisation_comparison_labels(layer, style_key)
+
+    def _apply_modernisation_wireframe_style(self, layer: QgsVectorLayer, style_key: str) -> None:
+        """Render comparison envelope polygons as outline-only wireframes."""
+        if style_key == "OLS Modernisation Baseline Wireframe":
+            outline = QColor(45, 76, 109, 235)
+            line_style = "solid"
+        else:
+            outline = QColor(128, 68, 170, 235)
+            line_style = "dash"
+        symbol = QgsFillSymbol.createSimple(
+            {
+                "color": "0,0,0,0",
+                "outline_color": outline.name(QColor.NameFormat.HexArgb),
+                "outline_width": "0.34",
+                "outline_width_unit": "MM",
+                "outline_style": line_style,
+            }
+        )
+        symbol.setColor(QColor(0, 0, 0, 0))
+        layer.setRenderer(QgsSingleSymbolRenderer(symbol))
+
+    def _apply_modernisation_transition_style(self, layer: QgsVectorLayer) -> None:
+        """Render baseline/future equal-height breaklines as dashed transition guides."""
+        symbol = QgsLineSymbol.createSimple(
+            {
+                "line_color": "32,32,32,245",
+                "line_width": "0.46",
+                "line_width_unit": "MM",
+                "line_style": "dash",
+            }
+        )
+        layer.setRenderer(QgsSingleSymbolRenderer(symbol))
+
+    def _apply_modernisation_comparison_labels(self, layer: QgsVectorLayer, style_key: str) -> None:
+        """Label larger comparison polygons with representative height change."""
+        if layer.fields().indexFromName("label_txt") < 0:
+            return
+        try:
+            settings = QgsPalLayerSettings()
+            settings.fieldName = "label_txt"
+            settings.placement = QgsPalLayerSettings.Horizontal
+            settings.centroidInside = True
+            settings.centroidWhole = False
+            settings.fitInPolygonOnly = True
+            try:
+                settings.setPolygonPlacementFlags(Qgis.LabelPolygonPlacementFlag.AllowPlacementInsideOfPolygon)
+            except Exception:
+                pass
+            settings.priority = 7
+            settings.obstacle = False
+
+            text_format = QgsTextFormat()
+            text_format.setFont(QFont("Helvetica", 9))
+            text_format.setSize(9)
+            if style_key == "OLS Modernisation Gain":
+                text_format.setColor(QColor(20, 94, 42))
+            elif style_key == "OLS Modernisation Loss":
+                text_format.setColor(QColor(132, 29, 29))
+            else:
+                text_format.setColor(QColor(80, 80, 80))
+
+            buffer = QgsTextBufferSettings()
+            buffer.setEnabled(True)
+            buffer.setSize(0.9)
+            buffer.setColor(QColor(255, 255, 255))
+            text_format.setBuffer(buffer)
+            settings.setFormat(text_format)
+
+            root = QgsRuleBasedLabeling.Rule(None)
+            rule = QgsRuleBasedLabeling.Rule(settings)
+            rule.setFilterExpression('"label_txt" IS NOT NULL AND "label_txt" <> \'\' AND $area >= 2500')
+            root.appendChild(rule)
+            layer.setLabeling(QgsRuleBasedLabeling(root))
+            layer.setLabelsEnabled(True)
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Warning: failed to apply OLS modernisation comparison labels: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
 
     def _prune_annex14_renderer_rules(self, layer: QgsVectorLayer):
         """Keep only Annex 14 legend rules represented by features in this layer."""

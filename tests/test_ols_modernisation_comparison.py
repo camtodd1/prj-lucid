@@ -59,10 +59,29 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         loss_area = sum(part[2].area() for part in parts["loss"])
         self.assertAlmostEqual(gain_area, 5000.0, delta=1.0)
         self.assertAlmostEqual(loss_area, 5000.0, delta=1.0)
+        self.assertGreater(sum(part[2].length() for part in parts["transition"]), 0.0)
 
     def test_equal_surfaces_emit_no_change(self):
         parts = self.compare(self.constant("baseline", 100.0), self.constant("future", 100.0))
-        self.assertEqual(parts, {"gain": [], "loss": []})
+        self.assertEqual(parts, {"gain": [], "loss": [], "transition": []})
+
+    def test_baseline_only_parts_show_missing_future_overlay(self):
+        baseline = self.constant("baseline", 100.0)
+        future = ControllingOlsCandidate(
+            surface_id="future",
+            surface_type="Future",
+            footprint=QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0)),
+            elevation_at_xy=constant_elevation_evaluator(110.0),
+            model="constant",
+            metadata={"elevation_m": 110.0},
+        )
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        parts = engine.baseline_only_parts()
+        self.assertEqual(len(parts), 1)
+        self.assertAlmostEqual(parts[0][1].area(), 5000.0, places=3)
 
 
 if __name__ == "__main__":
