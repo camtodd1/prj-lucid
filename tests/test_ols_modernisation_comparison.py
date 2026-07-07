@@ -81,7 +81,23 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         )
         parts = engine.baseline_only_parts()
         self.assertEqual(len(parts), 1)
-        self.assertAlmostEqual(parts[0][1].area(), 5000.0, places=3)
+        self.assertAlmostEqual(parts[0][1].area(), 4950.0, delta=1.0)
+
+    def test_baseline_only_ignores_tiny_boundary_sliver(self):
+        baseline = self.constant("baseline", 100.0)
+        future = ControllingOlsCandidate(
+            surface_id="future",
+            surface_type="Future",
+            footprint=QgsGeometry.fromRect(QgsRectangle(0.2, 0.0, 100.0, 100.0)),
+            elevation_at_xy=constant_elevation_evaluator(110.0),
+            model="constant",
+            metadata={"elevation_m": 110.0},
+        )
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        self.assertEqual(engine.baseline_only_parts(), [])
 
 
 if __name__ == "__main__":

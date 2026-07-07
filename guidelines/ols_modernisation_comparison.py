@@ -21,6 +21,15 @@ from .controlling_ols_engine import ControllingOlsCandidate, PlanarControllingOl
 PLUGIN_TAG = "SafeguardingBuilder"
 COMPARISON_TOLERANCE_M = 0.01
 COMPARISON_MIN_AREA_M2 = 0.01
+COMPARISON_NO_OVERLAY_COVERAGE_TOLERANCE_M = 0.5
+COMPARISON_NO_OVERLAY_MIN_AREA_M2 = 5.0
+COMPARISON_NO_OVERLAY_GRID_M = 0.001
+COMPARISON_SPIKE_ANGLE_DEGREES = 12.0
+COMPARISON_SPIKE_DETOUR_RATIO = 1.8
+COMPARISON_SPIKE_BASE_MAX_M = 175.0
+COMPARISON_SPIKE_HEIGHT_MIN_M = 25.0
+COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO = 0.01
+COMPARISON_SPIKE_MAX_AREA_CHANGE_M2 = 25.0
 
 
 class OlsEnvelopeComparisonEngine:
@@ -100,16 +109,19 @@ class OlsEnvelopeComparisonEngine:
         result: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         future_regions = [region for _, region in self.future_engine._controlling_region_geometries()]
         future_union = self._union_geometries(future_regions)
+        future_coverage = self._comparison_coverage_geometry(future_union)
         for baseline_candidate, baseline_region in self.baseline_engine._controlling_region_geometries():
-            if future_union is None or future_union.isEmpty():
+            if future_coverage is None or future_coverage.isEmpty():
                 remaining = QgsGeometry(baseline_region)
             else:
                 try:
-                    remaining = baseline_region.difference(future_union)
+                    remaining = baseline_region.difference(future_coverage)
                 except Exception:
                     continue
+            remaining = self._normalise_no_overlay_geometry(remaining)
             for part in self.baseline_engine._polygon_parts(remaining):
-                if self._has_area(part):
+                part = self._clean_no_overlay_part(part)
+                if self._has_no_overlay_area(part):
                     result.append((baseline_candidate, QgsGeometry(part)))
         return result
 
@@ -226,6 +238,177 @@ class OlsEnvelopeComparisonEngine:
             and not geometry.isEmpty()
             and geometry.area() > COMPARISON_MIN_AREA_M2
         )
+
+    @staticmethod
+    def _has_no_overlay_area(geometry: Optional[QgsGeometry]) -> bool:
+        return bool(
+            geometry is not None
+            and not geometry.isEmpty()
+            and geometry.area() >= COMPARISON_NO_OVERLAY_MIN_AREA_M2
+        )
+
+    def _comparison_coverage_geometry(self, geometry: Optional[QgsGeometry]) -> Optional[QgsGeometry]:
+        if geometry is None or geometry.isEmpty():
+            return geometry
+        coverage = QgsGeometry(geometry)
+        try:
+            coverage = coverage.buffer(COMPARISON_NO_OVERLAY_COVERAGE_TOLERANCE_M, 4)
+        except Exception:
+            pass
+        return self._normalise_no_overlay_geometry(coverage)
+
+    def _normalise_no_overlay_geometry(self, geometry: Optional[QgsGeometry]) -> Optional[QgsGeometry]:
+        if geometry is None or geometry.isEmpty():
+            return geometry
+        normalised = QgsGeometry(geometry)
+        try:
+            normalised = normalised.snappedToGrid(
+                COMPARISON_NO_OVERLAY_GRID_M,
+                COMPARISON_NO_OVERLAY_GRID_M,
+            )
+        except Exception:
+            pass
+        try:
+            if normalised is not None and not normalised.isEmpty() and not normalised.isGeosValid():
+                normalised = normalised.makeValid()
+        except Exception:
+            pass
+        try:
+            buffered = normalised.buffer(0.0, 8)
+            if buffered is not None and not buffered.isEmpty():
+                normalised = buffered
+        except Exception:
+            pass
+        return normalised
+
+    def _clean_no_overlay_part(self, geometry: QgsGeometry) -> QgsGeometry:
+        """Remove small overlay artefacts without materially changing real no-overlay areas."""
+        if geometry is None or geometry.isEmpty():
+            return geometry
+        original_area = geometry.area()
+        if original_area < COMPARISON_NO_OVERLAY_MIN_AREA_M2:
+            return QgsGeometry()
+        cleaned = self._remove_no_overlay_ring_spikes(geometry)
+        if cleaned is None or cleaned.isEmpty():
+            return geometry
+        area_change = abs(cleaned.area() - original_area)
+        allowed_change = max(
+            COMPARISON_SPIKE_MAX_AREA_CHANGE_M2,
+            original_area * COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO,
+        )
+        if area_change <= allowed_change:
+            return cleaned
+        return geometry
+
+    def _remove_no_overlay_ring_spikes(self, geometry: QgsGeometry) -> Optional[QgsGeometry]:
+        try:
+            if QgsWkbTypes.geometryType(geometry.wkbType()) != Qgis.GeometryType.Polygon:
+                return geometry
+            if geometry.isMultipart():
+                polygons = geometry.asMultiPolygon()
+                cleaned_polygons = []
+                for polygon in polygons:
+                    cleaned = self._clean_no_overlay_polygon_rings(polygon)
+                    if cleaned:
+                        cleaned_polygons.append(cleaned)
+                return QgsGeometry.fromMultiPolygonXY(cleaned_polygons) if cleaned_polygons else QgsGeometry()
+            polygon = geometry.asPolygon()
+            cleaned_polygon = self._clean_no_overlay_polygon_rings(polygon)
+            return QgsGeometry.fromPolygonXY(cleaned_polygon) if cleaned_polygon else QgsGeometry()
+        except Exception:
+            return geometry
+
+    def _clean_no_overlay_polygon_rings(self, polygon) -> list:
+        if not polygon:
+            return []
+        cleaned = [self._clean_no_overlay_ring(polygon[0], exterior=True)]
+        for ring in polygon[1:]:
+            cleaned_ring = self._clean_no_overlay_ring(ring, exterior=False)
+            if len(cleaned_ring) >= 4:
+                cleaned.append(cleaned_ring)
+        return cleaned if len(cleaned[0]) >= 4 else []
+
+    def _clean_no_overlay_ring(self, ring, exterior: bool) -> list:
+        if not ring:
+            return []
+        points = [QgsPointXY(point) for point in ring]
+        if len(points) >= 2 and self._same_point(points[0], points[-1]):
+            points = points[:-1]
+        if len(points) < 3:
+            return []
+        # Interior rings are left alone except for duplicate/near-duplicate
+        # closure handling; removing hole vertices risks changing semantics.
+        if not exterior:
+            return points + [points[0]]
+        for _ in range(12):
+            removed = False
+            count = len(points)
+            if count < 4:
+                break
+            for index in range(count):
+                previous_point = points[(index - 1) % count]
+                current_point = points[index]
+                next_point = points[(index + 1) % count]
+                if self._is_no_overlay_spike_vertex(previous_point, current_point, next_point):
+                    points.pop(index)
+                    removed = True
+                    break
+            if not removed:
+                break
+        return points + [points[0]]
+
+    @staticmethod
+    def _same_point(first: QgsPointXY, second: QgsPointXY) -> bool:
+        return (
+            abs(first.x() - second.x()) <= 1e-9
+            and abs(first.y() - second.y()) <= 1e-9
+        )
+
+    @staticmethod
+    def _is_no_overlay_spike_vertex(
+        previous_point: QgsPointXY,
+        current_point: QgsPointXY,
+        next_point: QgsPointXY,
+    ) -> bool:
+        first_length = math.hypot(
+            previous_point.x() - current_point.x(),
+            previous_point.y() - current_point.y(),
+        )
+        second_length = math.hypot(
+            next_point.x() - current_point.x(),
+            next_point.y() - current_point.y(),
+        )
+        base_length = math.hypot(
+            previous_point.x() - next_point.x(),
+            previous_point.y() - next_point.y(),
+        )
+        if first_length <= 1e-9 or second_length <= 1e-9 or base_length <= 1e-9:
+            return False
+        if base_length > COMPARISON_SPIKE_BASE_MAX_M:
+            return False
+        detour_ratio = (first_length + second_length) / base_length
+        if detour_ratio < COMPARISON_SPIKE_DETOUR_RATIO:
+            return False
+        cosine = (
+            (first_length * first_length)
+            + (second_length * second_length)
+            - (base_length * base_length)
+        ) / (2.0 * first_length * second_length)
+        angle_degrees = math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+        if angle_degrees > COMPARISON_SPIKE_ANGLE_DEGREES:
+            return False
+        semi_perimeter = (first_length + second_length + base_length) / 2.0
+        triangle_area = math.sqrt(
+            max(
+                0.0,
+                semi_perimeter
+                * (semi_perimeter - first_length)
+                * (semi_perimeter - second_length)
+                * (semi_perimeter - base_length),
+            )
+        )
+        height = (2.0 * triangle_area / base_length) if base_length > 0.0 else 0.0
+        return height >= COMPARISON_SPIKE_HEIGHT_MIN_M or angle_degrees <= 2.0
 
     @staticmethod
     def _union_geometries(geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
