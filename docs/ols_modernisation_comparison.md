@@ -15,6 +15,7 @@ Outputs are grouped as follows:
   - **Future Annex 14 Wireframe**: dashed outline-only future Annex 14 controlling envelope.
   - **Height Gain** (green): future OFS is higher than the baseline OLS.
   - **Height Loss** (red): future OFS is lower than the baseline OLS.
+  - **No Height Change** (neutral): future OFS and baseline OLS are effectively equal.
   - **Planar Transition / Equal Height** (dashed): approximate breakline where
     the two controlling elevations are equal.
   - **No Future OLS Overlay** (grey): baseline controlling OLS area with no
@@ -25,6 +26,8 @@ Outputs are grouped as follows:
     higher than the baseline OLS.
   - **Trigger Height Lowered** (red): the future aeronautical-study trigger is
     lower than the baseline OLS.
+  - **Trigger Height Unchanged** (neutral): the future aeronautical-study trigger
+    is effectively equal to the baseline OLS.
   - **Planar Transition / Equal Height** and **No Future OLS Overlay**.
 
 OES layers are assessment-trigger comparisons, not development approval limits.

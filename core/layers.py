@@ -404,6 +404,7 @@ class LayerMixin:
                     if str(style_key) in {
                         "OLS Modernisation Gain",
                         "OLS Modernisation Loss",
+                        "OLS Modernisation No Change",
                         "OLS Modernisation No Future Overlay",
                     }:
                         self._apply_modernisation_comparison_style(layer, str(style_key))
@@ -454,6 +455,9 @@ class LayerMixin:
         elif style_key == "OLS Modernisation Loss":
             fill = QColor(214, 63, 63, 95)
             outline = QColor(155, 32, 32, 230)
+        elif style_key == "OLS Modernisation No Change":
+            fill = QColor(245, 245, 245, 70)
+            outline = QColor(85, 105, 125, 210)
         else:
             fill = QColor(150, 150, 150, 45)
             outline = QColor(95, 95, 95, 210)
@@ -526,6 +530,8 @@ class LayerMixin:
                 text_format.setColor(QColor(20, 94, 42))
             elif style_key == "OLS Modernisation Loss":
                 text_format.setColor(QColor(132, 29, 29))
+            elif style_key == "OLS Modernisation No Change":
+                text_format.setColor(QColor(50, 70, 90))
             else:
                 text_format.setColor(QColor(80, 80, 80))
 

@@ -62,6 +62,7 @@ DEFAULT_STYLE_MAP = {
     "Annex 14 Transition OES": "annex14_oes_contours.qml",
     "OLS Modernisation Gain": "default_ols_polygon.qml",
     "OLS Modernisation Loss": "default_ols_polygon.qml",
+    "OLS Modernisation No Change": "default_ols_polygon.qml",
     "OLS Modernisation No Future Overlay": "default_ols_polygon.qml",
     "OLS Modernisation Baseline Wireframe": "default_ols_polygon.qml",
     "OLS Modernisation Future Wireframe": "default_ols_polygon.qml",

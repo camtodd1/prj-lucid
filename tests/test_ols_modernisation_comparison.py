@@ -45,12 +45,14 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         parts = self.compare(self.constant("baseline", 100.0), self.constant("future", 110.0))
         self.assertEqual(len(parts["gain"]), 1)
         self.assertEqual(len(parts["loss"]), 0)
+        self.assertEqual(len(parts["no_change"]), 0)
         self.assertAlmostEqual(parts["gain"][0][2].area(), 10000.0, places=3)
 
     def test_lower_future_surface_is_loss(self):
         parts = self.compare(self.constant("baseline", 100.0), self.constant("future", 90.0))
         self.assertEqual(len(parts["gain"]), 0)
         self.assertEqual(len(parts["loss"]), 1)
+        self.assertEqual(len(parts["no_change"]), 0)
         self.assertAlmostEqual(parts["loss"][0][2].area(), 10000.0, places=3)
 
     def test_crossing_surface_splits_gain_and_loss(self):
@@ -63,7 +65,17 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
     def test_equal_surfaces_emit_no_change(self):
         parts = self.compare(self.constant("baseline", 100.0), self.constant("future", 100.0))
-        self.assertEqual(parts, {"gain": [], "loss": [], "transition": []})
+        self.assertEqual(len(parts["gain"]), 0)
+        self.assertEqual(len(parts["loss"]), 0)
+        self.assertEqual(len(parts["transition"]), 0)
+        self.assertEqual(len(parts["no_change"]), 1)
+        self.assertAlmostEqual(parts["no_change"][0][2].area(), 10000.0, places=3)
+
+    def test_nearly_equal_surfaces_emit_no_change(self):
+        parts = self.compare(self.constant("baseline", 100.0), self.constant("future", 100.005))
+        self.assertEqual(len(parts["gain"]), 0)
+        self.assertEqual(len(parts["loss"]), 0)
+        self.assertEqual(len(parts["no_change"]), 1)
 
     def test_baseline_only_parts_show_missing_future_overlay(self):
         baseline = self.constant("baseline", 100.0)

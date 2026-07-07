@@ -48,8 +48,8 @@ class OlsEnvelopeComparisonEngine:
     def comparison_parts(
         self,
     ) -> Dict[str, List[Tuple[ControllingOlsCandidate, ControllingOlsCandidate, QgsGeometry]]]:
-        """Return gain/loss polygons and transition lines for the common domain."""
-        result = {"gain": [], "loss": [], "transition": []}
+        """Return gain/loss/no-change polygons and transition lines for the common domain."""
+        result = {"gain": [], "loss": [], "no_change": [], "transition": []}
         baseline_regions = self.baseline_engine._controlling_region_geometries()
         future_regions = self.future_engine._controlling_region_geometries()
 
@@ -62,6 +62,14 @@ class OlsEnvelopeComparisonEngine:
                 except Exception:
                     continue
                 if not self._has_area(overlap):
+                    continue
+
+                if self._append_no_change_if_equal(
+                    result["no_change"],
+                    baseline_candidate,
+                    future_candidate,
+                    overlap,
+                ):
                     continue
 
                 pair_engine = PlanarControllingOlsEngine([baseline_candidate, future_candidate])
@@ -154,6 +162,22 @@ class OlsEnvelopeComparisonEngine:
             self._append_parts(result["gain"], baseline, future, overlap, "gain")
         elif delta_max is not None and delta_max < -self.tolerance_m:
             self._append_parts(result["loss"], baseline, future, overlap, "loss")
+        elif (
+            delta_min is not None
+            and delta_max is not None
+            and abs(delta_min) <= self.tolerance_m
+            and abs(delta_max) <= self.tolerance_m
+        ):
+            self._append_parts(result["no_change"], baseline, future, overlap, "no_change")
+
+    def _append_no_change_if_equal(self, destination, baseline, future, overlap) -> bool:
+        delta_min, delta_max, _delta_representative = self.delta_range(overlap, baseline, future)
+        if delta_min is None or delta_max is None:
+            return False
+        if abs(delta_min) > self.tolerance_m or abs(delta_max) > self.tolerance_m:
+            return False
+        self._append_parts(destination, baseline, future, overlap, "no_change")
+        return True
 
     def _append_parts(self, destination, baseline, future, geometry, change: str) -> None:
         if geometry is None or geometry.isEmpty():
@@ -168,6 +192,11 @@ class OlsEnvelopeComparisonEngine:
                 continue
             if change == "loss" and delta_representative >= -self.tolerance_m:
                 continue
+            if change == "no_change":
+                if delta_min is None or delta_max is None:
+                    continue
+                if abs(delta_min) > self.tolerance_m or abs(delta_max) > self.tolerance_m:
+                    continue
             destination.append((baseline, future, QgsGeometry(part)))
 
     def _append_transition_parts(
@@ -505,6 +534,7 @@ class OlsModernisationComparisonMixin:
             ) or created
             gain_name = "Height Gain" if family == "OFS" else "Trigger Height Raised"
             loss_name = "Height Loss" if family == "OFS" else "Trigger Height Lowered"
+            no_change_name = "No Height Change" if family == "OFS" else "Trigger Height Unchanged"
             created = self._create_modernisation_change_layer(
                 icao_code, baseline_ruleset_id, family, "gain", gain_name,
                 parts["gain"], comparison, family_group,
@@ -512,6 +542,10 @@ class OlsModernisationComparisonMixin:
             created = self._create_modernisation_change_layer(
                 icao_code, baseline_ruleset_id, family, "loss", loss_name,
                 parts["loss"], comparison, family_group,
+            ) or created
+            created = self._create_modernisation_change_layer(
+                icao_code, baseline_ruleset_id, family, "no_change", no_change_name,
+                parts["no_change"], comparison, family_group,
             ) or created
             created = self._create_modernisation_transition_layer(
                 icao_code, baseline_ruleset_id, family, parts["transition"], comparison, family_group,
@@ -525,6 +559,8 @@ class OlsModernisationComparisonMixin:
     def _comparison_label(self, change: str, delta_representative: Optional[float]) -> str:
         if delta_representative is None:
             return ""
+        if change == "no_change":
+            return f"{delta_representative:.1f} m no change"
         sign = "+" if delta_representative > 0 else ""
         suffix = "gain" if change == "gain" else "loss"
         return f"{sign}{delta_representative:.1f} m {suffix}"
@@ -556,17 +592,19 @@ class OlsModernisationComparisonMixin:
         ])
         features: List[QgsFeature] = []
         if family == "OFS":
-            meaning = (
-                "Future obstacle-free reference surface is higher than baseline"
-                if change == "gain"
-                else "Future obstacle-free reference surface is lower than baseline"
-            )
+            if change == "gain":
+                meaning = "Future obstacle-free reference surface is higher than baseline"
+            elif change == "loss":
+                meaning = "Future obstacle-free reference surface is lower than baseline"
+            else:
+                meaning = "Future obstacle-free reference surface is effectively equal to baseline"
         else:
-            meaning = (
-                "Future aeronautical-study trigger is raised; this is not an approval limit"
-                if change == "gain"
-                else "Future aeronautical-study trigger is lowered; this is not an approval limit"
-            )
+            if change == "gain":
+                meaning = "Future aeronautical-study trigger is raised; this is not an approval limit"
+            elif change == "loss":
+                meaning = "Future aeronautical-study trigger is lowered; this is not an approval limit"
+            else:
+                meaning = "Future aeronautical-study trigger is effectively unchanged; this is not an approval limit"
         for baseline, future, geometry in parts:
             delta_min, delta_max, delta_representative = comparison.delta_range(geometry, baseline, future)
             feature = QgsFeature(fields)
@@ -593,7 +631,11 @@ class OlsModernisationComparisonMixin:
             fields,
             features,
             output_group,
-            "OLS Modernisation Gain" if change == "gain" else "OLS Modernisation Loss",
+            {
+                "gain": "OLS Modernisation Gain",
+                "loss": "OLS Modernisation Loss",
+                "no_change": "OLS Modernisation No Change",
+            }.get(change, "OLS Modernisation No Change"),
         )
         return layer is not None
 
