@@ -208,13 +208,22 @@ class OlsEnvelopeComparisonEngine:
         self._append_parts(destination, baseline, future, overlap, "no_change")
         return True
 
-    def _append_parts(self, destination, baseline, future, geometry, change: str) -> None:
+    def _append_parts(
+        self,
+        destination,
+        baseline,
+        future,
+        geometry,
+        change: str,
+        clean_spikes: bool = True,
+    ) -> None:
         if geometry is None or geometry.isEmpty():
             return
         for part in self.baseline_engine._polygon_parts(geometry):
             if not self._has_area(part):
                 continue
-            part = self._clean_comparison_part(part, baseline, future, change)
+            if clean_spikes:
+                part = self._clean_comparison_part(part, baseline, future, change)
             if not self._has_area(part):
                 continue
             delta_min, delta_max, delta_representative = self.delta_range(part, baseline, future, change)
@@ -312,7 +321,14 @@ class OlsEnvelopeComparisonEngine:
             change = self._classify_change_for_part(part, baseline_candidate, future_candidate)
             if change is None:
                 continue
-            self._append_parts(result[change], baseline_candidate, future_candidate, part, change)
+            self._append_parts(
+                result[change],
+                baseline_candidate,
+                future_candidate,
+                part,
+                change,
+                clean_spikes=False,
+            )
 
     def _controllers_for_gap_part(
         self,

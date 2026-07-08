@@ -148,6 +148,14 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(cleaned_max, 0.0)
         self.assertLess(cleaned_rep, 0.0)
 
+        spike_remainder = QgsGeometry.fromPolygonXY([
+            [QgsPointXY(50.0, 51.0), QgsPointXY(40.0, 50.0), QgsPointXY(50.0, 49.0), QgsPointXY(50.0, 51.0)]
+        ])
+        self.assertEqual(engine._classify_change_for_part(spike_remainder, baseline, future), "gain")
+        repaired_parts = []
+        engine._append_parts(repaired_parts, baseline, future, spike_remainder, "gain", clean_spikes=False)
+        self.assertEqual(len(repaired_parts), 1)
+
     def test_delta_range_rounds_to_published_precision(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 100.000000523)
