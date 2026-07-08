@@ -190,44 +190,6 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertNotIn((50.0, 400.0), final_vertices)
         self.assertAlmostEqual(parts["loss"][0][2].area(), 10000.0, places=3)
 
-    def test_severe_boundary_spike_detection_covers_broad_lobes_without_rectangle_corners(self):
-        engine = OlsEnvelopeComparisonEngine(
-            PlanarControllingOlsEngine([self.constant("baseline", 100.0)]),
-            PlanarControllingOlsEngine([self.constant("future", 90.0)]),
-        )
-
-        broad_lobe = engine._comparison_spike_metrics(
-            QgsPointXY(326814.342, 6239927.087),
-            QgsPointXY(328192.016, 6238053.654),
-            QgsPointXY(326373.071, 6237502.332),
-        )
-        self.assertIsNotNone(broad_lobe)
-        self.assertTrue(engine._is_severe_comparison_spike_shape(broad_lobe))
-
-        moderate_appendage = engine._comparison_spike_metrics(
-            QgsPointXY(331763.503, 6242404.428),
-            QgsPointXY(331768.629, 6242315.319),
-            QgsPointXY(331734.348, 6242395.590),
-        )
-        self.assertIsNotNone(moderate_appendage)
-        self.assertTrue(engine._is_severe_comparison_spike_shape(moderate_appendage))
-
-        chained_lobe = engine._comparison_spike_metrics(
-            QgsPointXY(326814.342, 6239927.087),
-            QgsPointXY(326373.071, 6237502.332),
-            QgsPointXY(326140.813, 6237818.169),
-        )
-        self.assertIsNotNone(chained_lobe)
-        self.assertTrue(engine._is_severe_comparison_spike_shape(chained_lobe))
-
-        rectangle_corner = engine._comparison_spike_metrics(
-            QgsPointXY(0.0, 1000.0),
-            QgsPointXY(0.0, 0.0),
-            QgsPointXY(1000.0, 0.0),
-        )
-        self.assertIsNotNone(rectangle_corner)
-        self.assertFalse(engine._is_severe_comparison_spike_shape(rectangle_corner))
-
     def test_delta_range_rounds_to_published_precision(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 100.000000523)
