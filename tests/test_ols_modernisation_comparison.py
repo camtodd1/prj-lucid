@@ -153,6 +153,16 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(delta_max, 0.0)
         self.assertEqual(delta_rep, 0.0)
 
+    def test_gap_part_classification_does_not_require_preselected_change(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 90.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        self.assertEqual(engine._classify_change_for_part(self.domain, baseline, future), "loss")
+
 
 if __name__ == "__main__":
     unittest.main()

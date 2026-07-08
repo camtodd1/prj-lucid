@@ -336,7 +336,6 @@ class OlsEnvelopeComparisonEngine:
             geometry,
             baseline_candidate,
             future_candidate,
-            change,
         )
         if delta_representative is None:
             return None
