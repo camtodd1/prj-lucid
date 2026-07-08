@@ -718,17 +718,17 @@ class SafeguardingBuilderDialog(
             "optional": QtGui.QColor("#66717d"),
             "neutral": QtGui.QColor("#66717d"),
         }
-        self._workflow_tab_order = [
-            ("tab_airport", "1 Airport"),
-            ("tab_runways", "2 Runways"),
-            ("tab_cns", "3 CNS"),
-            ("tab_ols", "4 OLS"),
-            ("tab_lighting", "5 Lighting"),
-            ("tab_output", "6 Output"),
+        self._workflow_tab_labels = [
+            ("tab_airport", "Airport"),
+            ("tab_runways", "Runways"),
+            ("tab_cns", "CNS"),
+            ("tab_ols", "OLS"),
+            ("tab_lighting", "Lighting"),
+            ("tab_output", "Output"),
         ]
         tab_widget = getattr(self, "tabWidget_workflow", None)
         if tab_widget is not None:
-            for tab_name, tab_text in self._workflow_tab_order:
+            for tab_name, tab_text in self._workflow_tab_labels:
                 tab_page = getattr(self, tab_name, None)
                 index = tab_widget.indexOf(tab_page) if tab_page is not None else -1
                 if index >= 0:
@@ -740,7 +740,6 @@ class SafeguardingBuilderDialog(
         return [
             {
                 "tab": "tab_airport",
-                "step": "1",
                 "title": "Airport setup",
                 "summary": "Identity, ARP, MET, and project CRS",
                 "feeds": ["Reference data", "RED", "Airport-wide safeguards"],
@@ -753,7 +752,6 @@ class SafeguardingBuilderDialog(
             },
             {
                 "tab": "tab_runways",
-                "step": "2",
                 "title": "Runway definitions",
                 "summary": "Geometry, classification, elevations, and declared distances",
                 "feeds": ["Centrelines", "Physical surfaces", "OLS"],
@@ -766,7 +764,6 @@ class SafeguardingBuilderDialog(
             },
             {
                 "tab": "tab_cns",
-                "step": "3",
                 "title": "CNS facilities",
                 "summary": "Optional technical facility coordinates",
                 "feeds": ["CNS references", "NASF CNS guidelines"],
@@ -778,7 +775,6 @@ class SafeguardingBuilderDialog(
             },
             {
                 "tab": "tab_ols",
-                "step": "4",
                 "title": "Protected airspace",
                 "summary": "Contour intervals and controlling OLS output",
                 "feeds": ["Runway OLS", "Airport-wide OLS", "Controlling surfaces"],
@@ -791,7 +787,6 @@ class SafeguardingBuilderDialog(
             },
             {
                 "tab": "tab_lighting",
-                "step": "5",
                 "title": "Airfield lighting",
                 "summary": "Optional AGL elements and approach-light rows",
                 "feeds": ["AGL points", "Aerodrome infrastructure"],
@@ -802,7 +797,6 @@ class SafeguardingBuilderDialog(
             },
             {
                 "tab": "tab_output",
-                "step": "6",
                 "title": "Output destination",
                 "summary": "Memory layers or persistent file outputs",
                 "feeds": ["Layer tree", "Files", "Final report"],
@@ -852,16 +846,6 @@ class SafeguardingBuilderDialog(
             row.setContentsMargins(10, 8, 10, 8)
             row.setSpacing(10)
             row.setAlignment(QtCore.Qt.AlignmentFlag.AlignVCenter)
-
-            step = QtWidgets.QLabel(str(spec["step"]), frame)
-            step.setObjectName(f"label_workflow_step_{tab_name}")
-            step.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-            step.setFixedSize(24, 24)
-            step.setStyleSheet(
-                "QLabel { background: #2f6fbd; color: #ffffff; border-radius: 12px; "
-                "font-size: 11px; font-weight: 700; }"
-            )
-            row.addWidget(step, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
 
             title_stack = QtWidgets.QVBoxLayout()
             title_stack.setContentsMargins(0, 0, 0, 0)
