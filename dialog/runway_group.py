@@ -69,10 +69,11 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
                 max-height: 28px;
                 padding-left: 6px;
                 padding-right: 6px;
+                background: #ffffff;
             }
             QLineEdit[requiredEmpty="true"] {
-                background: #fffbe6;
-                border: 1px solid #e0b000;
+                background: #ffffff;
+                border: 1px solid #d39800;
             }
             """
         )
@@ -170,9 +171,12 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         gridLayout_Coords = core_layout
         gridLayout_Coords.setObjectName(f"gridLayout_Coords_{self.index}")
-        gridLayout_Coords.setColumnStretch(0, 2)
+        gridLayout_Coords.setColumnStretch(0, 0)
         gridLayout_Coords.setColumnStretch(1, 1)
         gridLayout_Coords.setColumnStretch(2, 1)
+        gridLayout_Coords.setColumnMinimumWidth(0, 170)
+        gridLayout_Coords.setColumnMinimumWidth(1, 220)
+        gridLayout_Coords.setColumnMinimumWidth(2, 220)
 
         label_designation_row = QtWidgets.QLabel("Designation:")
         label_designation_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -200,6 +204,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._mark_required_label(label_northing_row)
 
         h_layout_desig_inputs = QtWidgets.QHBoxLayout()
+        h_layout_desig_inputs.setContentsMargins(0, 0, 0, 0)
+        h_layout_desig_inputs.setSpacing(6)
         self.desig_le = QtWidgets.QLineEdit()
         self.desig_le.setObjectName(f"lineEdit_rwy_desig_{self.index}")
         self.desig_le.setMaxLength(2)
@@ -219,6 +225,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.rec_desig_hdr_lbl.setObjectName(f"label_header_desig2_{self.index}")
         self.rec_desig_hdr_lbl.setToolTip("Calculated reciprocal designation")
         self.rec_desig_hdr_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.rec_desig_hdr_lbl.setMinimumHeight(28)
+        self.rec_desig_hdr_lbl.setStyleSheet(
+            "QLabel { color: #555555; border: 1px solid #cfcfcf; border-radius: 4px; padding: 4px 8px; }"
+        )
 
         label_runway_width = QtWidgets.QLabel("Runway Width (m):")
         label_runway_width.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -325,13 +335,19 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.thr_pre_area_2_le.setValidator(self.distance_validator)
         self.thr_pre_area_2_le.setMinimumWidth(190)
 
+        primary_header = self._column_header_label("Primary End")
+        reciprocal_header = self._column_header_label("Reciprocal End")
+
         current_coord_row = 0
+        gridLayout_Coords.addWidget(primary_header, current_coord_row, 1)
+        gridLayout_Coords.addWidget(reciprocal_header, current_coord_row, 2)
+        current_coord_row += 1
         gridLayout_Coords.addWidget(label_designation_row, current_coord_row, 0)
         gridLayout_Coords.addLayout(h_layout_desig_inputs, current_coord_row, 1)
         gridLayout_Coords.addWidget(self.rec_desig_hdr_lbl, current_coord_row, 2)
         current_coord_row += 1
         gridLayout_Coords.addWidget(label_runway_width, current_coord_row, 0)
-        gridLayout_Coords.addWidget(self.width_le, current_coord_row, 1, 1, 2)
+        gridLayout_Coords.addWidget(self.width_le, current_coord_row, 1)
         current_coord_row += 1
         gridLayout_Coords.addWidget(label_easting_row, current_coord_row, 0)
         gridLayout_Coords.addWidget(self.thr_east_le, current_coord_row, 1)
@@ -365,22 +381,27 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         threshold_group.setObjectName(f"groupBox_threshold_details_{self.index}")
         self._style_section_groupbox(threshold_group)
         threshold_layout = QtWidgets.QGridLayout(threshold_group)
-        threshold_layout.setColumnStretch(0, 2)
+        threshold_layout.setColumnStretch(0, 0)
         threshold_layout.setColumnStretch(1, 1)
         threshold_layout.setColumnStretch(2, 1)
+        threshold_layout.setColumnMinimumWidth(0, 170)
+        threshold_layout.setColumnMinimumWidth(1, 220)
+        threshold_layout.setColumnMinimumWidth(2, 220)
 
-        threshold_layout.addWidget(label_runway_end_elevation_row, 0, 0)
-        threshold_layout.addWidget(self.runway_end_elev_1_le, 0, 1)
-        threshold_layout.addWidget(self.runway_end_elev_2_le, 0, 2)
-        threshold_layout.addWidget(label_threshold_elevation_row, 1, 0)
-        threshold_layout.addWidget(self.threshold_elev_1_le, 1, 1)
-        threshold_layout.addWidget(self.threshold_elev_2_le, 1, 2)
-        threshold_layout.addWidget(label_displaced_row, 2, 0)
-        threshold_layout.addWidget(self.thr_displaced_1_le, 2, 1)
-        threshold_layout.addWidget(self.thr_displaced_2_le, 2, 2)
-        threshold_layout.addWidget(label_pre_threshold_area_row, 3, 0)
-        threshold_layout.addWidget(self.thr_pre_area_1_le, 3, 1)
-        threshold_layout.addWidget(self.thr_pre_area_2_le, 3, 2)
+        threshold_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
+        threshold_layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
+        threshold_layout.addWidget(label_runway_end_elevation_row, 1, 0)
+        threshold_layout.addWidget(self.runway_end_elev_1_le, 1, 1)
+        threshold_layout.addWidget(self.runway_end_elev_2_le, 1, 2)
+        threshold_layout.addWidget(label_threshold_elevation_row, 2, 0)
+        threshold_layout.addWidget(self.threshold_elev_1_le, 2, 1)
+        threshold_layout.addWidget(self.threshold_elev_2_le, 2, 2)
+        threshold_layout.addWidget(label_displaced_row, 3, 0)
+        threshold_layout.addWidget(self.thr_displaced_1_le, 3, 1)
+        threshold_layout.addWidget(self.thr_displaced_2_le, 3, 2)
+        threshold_layout.addWidget(label_pre_threshold_area_row, 4, 0)
+        threshold_layout.addWidget(self.thr_pre_area_1_le, 4, 1)
+        threshold_layout.addWidget(self.thr_pre_area_2_le, 4, 2)
 
         advanced_body_layout.addWidget(threshold_group)
 
@@ -437,6 +458,15 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._update_status_chip()
         self._update_required_field_indicators()
         self._set_advanced_visible(False)
+
+    def _column_header_label(self, text: str) -> QtWidgets.QLabel:
+        label = QtWidgets.QLabel(text)
+        label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        label.setMinimumHeight(22)
+        label.setStyleSheet(
+            "QLabel { color: #4f5963; font-size: 11px; font-weight: 600; padding: 0 6px; }"
+        )
+        return label
 
     def _add_arc_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
         label_arc_num = QtWidgets.QLabel("ARC Number:")
