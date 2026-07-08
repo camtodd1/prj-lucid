@@ -2,7 +2,7 @@
 
 from typing import Dict, List, Optional
 
-from qgis.PyQt import QtGui, QtWidgets  # type: ignore
+from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
 from qgis.PyQt.QtWidgets import QComboBox, QTableWidgetItem  # type: ignore
 
 try:
@@ -36,6 +36,26 @@ class AglOptionsMixin:
         tab_layout = QtWidgets.QVBoxLayout(self.tab_lighting)
         tab_layout.setContentsMargins(8, 8, 8, 8)
         tab_layout.setSpacing(8)
+        tab_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+
+        scroll_area = QtWidgets.QScrollArea(self.tab_lighting)
+        scroll_area.setObjectName("scrollArea_agl_options")
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+        scroll_area.setMinimumHeight(0)
+        scroll_area.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Expanding,
+        )
+        self.scrollArea_agl_options = scroll_area
+
+        scroll_content = QtWidgets.QWidget(scroll_area)
+        scroll_content.setObjectName("widget_agl_options_scroll_content")
+        scroll_content.setMinimumHeight(0)
+        content_layout = QtWidgets.QVBoxLayout(scroll_content)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(8)
+        content_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
         group = QtWidgets.QGroupBox("Airfield Ground Lighting (optional)")
         group.setObjectName("groupBox_agl_options")
@@ -174,8 +194,10 @@ class AglOptionsMixin:
         approach_layout.addLayout(button_layout)
         group_layout.addWidget(approach_group)
 
-        tab_layout.addWidget(group)
-        tab_layout.addStretch(1)
+        content_layout.addWidget(group)
+        content_layout.addStretch(1)
+        scroll_area.setWidget(scroll_content)
+        tab_layout.addWidget(scroll_area)
 
         output_tab = getattr(self, "tab_output", None)
         output_index = tab_widget.indexOf(output_tab) if output_tab is not None else -1

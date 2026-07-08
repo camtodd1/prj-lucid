@@ -311,6 +311,8 @@ class SafeguardingBuilderDialog(
         )
         if airport_name:
             airport_name.setFixedWidth(152)
+            airport_name.setMinimumHeight(28)
+            airport_name.setMaximumHeight(28)
             airport_name.setMaxLength(4)
 
         iata_code = getattr(
@@ -320,6 +322,8 @@ class SafeguardingBuilderDialog(
         )
         if iata_code:
             iata_code.setFixedWidth(152)
+            iata_code.setMinimumHeight(28)
+            iata_code.setMaximumHeight(28)
             iata_code.setMaxLength(3)
 
     def _style_airport_tab(self) -> None:
@@ -389,8 +393,8 @@ class SafeguardingBuilderDialog(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
-            airport_lookup.setMinimumHeight(22)
-            airport_lookup.setMaximumHeight(22)
+            airport_lookup.setMinimumHeight(18)
+            airport_lookup.setMaximumHeight(18)
             airport_lookup.setStyleSheet("color: #666666; font-size: 11px;")
             airport_lookup.setText("")
 
@@ -400,8 +404,8 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QVBoxLayout, "verticalLayout_airportIdentity"),
         )
         if isinstance(airport_identity_layout, QtWidgets.QVBoxLayout):
-            airport_identity_layout.setContentsMargins(12, 14, 12, 8)
-            airport_identity_layout.setSpacing(4)
+            airport_identity_layout.setContentsMargins(12, 12, 12, 6)
+            airport_identity_layout.setSpacing(3)
 
         airport_name_layout = getattr(
             self,
@@ -469,6 +473,36 @@ class SafeguardingBuilderDialog(
         )
         if met_description:
             met_description.setText("Optional coordinates for MET safeguarding.")
+
+    def _style_global_context_groupbox(self, groupbox: Optional[QtWidgets.QGroupBox]) -> None:
+        """Apply identical title and border geometry to the top setup cards."""
+        if groupbox is None:
+            return
+        object_name = groupbox.objectName()
+        if not object_name:
+            return
+        groupbox.setFlat(False)
+        groupbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
+        groupbox.setStyleSheet(
+            f"""
+            QGroupBox#{object_name} {{
+                border: 1px solid #dcdcdc;
+                border-radius: 4px;
+                margin-top: 10px;
+                background: #ffffff;
+            }}
+            QGroupBox#{object_name}::title {{
+                subcontrol-origin: margin;
+                subcontrol-position: top left;
+                left: 12px;
+                top: 0px;
+                padding: 0 4px;
+                color: #232323;
+                font-size: 13px;
+                font-weight: 700;
+            }}
+            """
+        )
 
     def _setup_global_context_block(self) -> None:
         """Move airport identity and ruleset into the persistent title block."""
@@ -555,25 +589,7 @@ class SafeguardingBuilderDialog(
                 return
 
         if airport_identity_frame is not None and airport_identity_frame.parent() is not left_slot_layout.parentWidget():
-            airport_identity_frame.setStyleSheet(
-                """
-                QGroupBox#frame_airport_identity {
-                    border: 1px solid #dcdcdc;
-                    border-radius: 4px;
-                    margin-top: 10px;
-                    background: #ffffff;
-                }
-                QGroupBox#frame_airport_identity::title {
-                    subcontrol-origin: margin;
-                    subcontrol-position: top left;
-                    left: 12px;
-                    padding: 0 4px;
-                    color: #232323;
-                    font-size: 13px;
-                    font-weight: 700;
-                }
-                """
-            )
+            self._style_global_context_groupbox(airport_identity_frame)
             airport_identity_frame.setSizePolicy(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
@@ -582,26 +598,7 @@ class SafeguardingBuilderDialog(
             left_slot_layout.addWidget(airport_identity_frame)
 
         if ruleset_group is not None and ruleset_group.parent() is not right_slot_layout.parentWidget():
-            ruleset_group.setFlat(False)
-            ruleset_group.setStyleSheet(
-                """
-                QGroupBox#groupBox_ruleset {
-                    border: 1px solid #dcdcdc;
-                    border-radius: 4px;
-                    margin-top: 10px;
-                    background: #ffffff;
-                }
-                QGroupBox#groupBox_ruleset::title {
-                    subcontrol-origin: margin;
-                    subcontrol-position: top left;
-                    left: 12px;
-                    padding: 0 4px;
-                    color: #232323;
-                    font-size: 13px;
-                    font-weight: 700;
-                }
-                """
-            )
+            self._style_global_context_groupbox(ruleset_group)
             ruleset_group.setSizePolicy(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
@@ -633,11 +630,11 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_lookup"),
         )
         if airport_lookup is not None:
-            airport_lookup.setMinimumHeight(22)
-            airport_lookup.setMaximumHeight(22)
+            airport_lookup.setMinimumHeight(18)
+            airport_lookup.setMaximumHeight(18)
 
         global_frame = getattr(self, "frame_global_context", None)
-        header_widget_height = 120
+        header_widget_height = 116
         if global_frame is not None:
             global_frame.setFixedHeight(header_widget_height)
         airport_identity_frame.setFixedHeight(header_widget_height)
@@ -707,8 +704,8 @@ class SafeguardingBuilderDialog(
         for state, color in {
             "ready": "#247a45",
             "warning": "#9a6200",
-            "blocked": "#8a95a3",
-            "optional": "#6e7f91",
+            "blocked": "#9a6200",
+            "optional": "#8a95a3",
             "neutral": "#8a95a3",
         }.items():
             self._workflow_tab_icons[state] = self._make_tab_state_icon(color)
@@ -716,9 +713,9 @@ class SafeguardingBuilderDialog(
         self._workflow_tab_text_colors = {
             "ready": QtGui.QColor("#1f6b32"),
             "warning": QtGui.QColor("#8a5200"),
-            "blocked": QtGui.QColor("#66717d"),
-            "optional": QtGui.QColor("#4f5f70"),
-            "neutral": QtGui.QColor("#333333"),
+            "blocked": QtGui.QColor("#8a5200"),
+            "optional": QtGui.QColor("#66717d"),
+            "neutral": QtGui.QColor("#66717d"),
         }
 
     def _make_tab_state_icon(self, color: str) -> QtGui.QIcon:
@@ -735,6 +732,7 @@ class SafeguardingBuilderDialog(
 
     def _set_workflow_tab_state(self, tab_name: str, state: str, tooltip: str) -> None:
         """Apply a dynamic state icon, text color, and tooltip to a tab."""
+        visual_state = "warning" if state == "blocked" else state
         tab_widget = getattr(self, "tabWidget_workflow", None)
         tab_page = getattr(self, tab_name, None)
         if tab_widget is None or tab_page is None:
@@ -742,10 +740,10 @@ class SafeguardingBuilderDialog(
         index = tab_widget.indexOf(tab_page)
         if index < 0:
             return
-        icon = getattr(self, "_workflow_tab_icons", {}).get(state)
+        icon = getattr(self, "_workflow_tab_icons", {}).get(visual_state)
         if icon is not None:
             tab_widget.setTabIcon(index, icon)
-        color = getattr(self, "_workflow_tab_text_colors", {}).get(state, QtGui.QColor("#333333"))
+        color = getattr(self, "_workflow_tab_text_colors", {}).get(visual_state, QtGui.QColor("#333333"))
         tab_widget.tabBar().setTabTextColor(index, color)
         tab_widget.setTabToolTip(index, tooltip)
 
@@ -1118,6 +1116,8 @@ class SafeguardingBuilderDialog(
         self.ruleset_combo.setEnabled(True)
         self.ruleset_combo.setToolTip("Aerodrome design standard. Select EASA for current development testing.")
         self.ruleset_combo.setMinimumWidth(190)
+        self.ruleset_combo.setMinimumHeight(28)
+        self.ruleset_combo.setMaximumHeight(28)
 
         self.framework_combo = QtWidgets.QComboBox()
         self.framework_combo.setObjectName("comboBox_safeguarding_framework")
@@ -1131,6 +1131,8 @@ class SafeguardingBuilderDialog(
         )
         self.framework_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.framework_combo.setMinimumWidth(190)
+        self.framework_combo.setMinimumHeight(28)
+        self.framework_combo.setMaximumHeight(28)
 
         self.protected_airspace_policy_combo = QtWidgets.QComboBox()
         self.protected_airspace_policy_combo.setObjectName("comboBox_protected_airspace_policy")
@@ -1148,13 +1150,15 @@ class SafeguardingBuilderDialog(
             "overlay the future Annex 14 OFS/OES model, or compare both against the selected baseline."
         )
         self.protected_airspace_policy_combo.setMinimumWidth(190)
+        self.protected_airspace_policy_combo.setMinimumHeight(28)
+        self.protected_airspace_policy_combo.setMaximumHeight(28)
 
         ruleset_group = QtWidgets.QGroupBox("Policy Settings")
         ruleset_group.setObjectName("groupBox_ruleset")
         ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
-        ruleset_layout.setContentsMargins(12, 14, 12, 8)
+        ruleset_layout.setContentsMargins(12, 12, 12, 6)
         ruleset_layout.setHorizontalSpacing(10)
-        ruleset_layout.setVerticalSpacing(6)
+        ruleset_layout.setVerticalSpacing(4)
         ruleset_layout.setColumnStretch(0, 2)
         ruleset_layout.setColumnStretch(1, 1)
         ruleset_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
@@ -2267,7 +2271,7 @@ class SafeguardingBuilderDialog(
             runway_tab_state = "warning"
             runway_tab_tip = "; ".join(runway_dependencies["issues"] or [f"{incomplete} incomplete runway(s)"])
         else:
-            runway_tab_state = "neutral"
+            runway_tab_state = "warning"
             runway_tab_tip = "No runways defined."
         self._set_workflow_tab_state("tab_runways", runway_tab_state, runway_tab_tip)
 
@@ -2565,13 +2569,19 @@ class SafeguardingBuilderDialog(
         """Adjusts the dialog height to fit its contents."""
         def _apply_size():
             current_width = self.width()
+            current_height = self.height()
             self.adjustSize()
+            preferred_height = 760
+            screen = self.screen() or QtWidgets.QApplication.primaryScreen()
+            if screen is not None:
+                preferred_height = min(preferred_height, int(screen.availableGeometry().height() * 0.86))
             if initial:
                 target_width = 1000
-                target_height = self.height()
+                target_height = min(self.height(), preferred_height)
                 self.resize(target_width, target_height)
             else:
-                self.resize(current_width, self.height())
+                max_auto_height = preferred_height if current_height <= preferred_height else current_height
+                self.resize(current_width, min(self.height(), max_auto_height))
         QtCore.QTimer.singleShot(0, _apply_size)
 
     def _focus_runway_group(self, group_widget: RunwayWidgetGroup) -> None:
