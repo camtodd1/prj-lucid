@@ -30,6 +30,7 @@ COMPARISON_SPIKE_BASE_MAX_M = 175.0
 COMPARISON_SPIKE_HEIGHT_MIN_M = 25.0
 COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO = 0.01
 COMPARISON_SPIKE_MAX_AREA_CHANGE_M2 = 25.0
+COMPARISON_DELTA_DECIMALS = 3
 
 
 class OlsEnvelopeComparisonEngine:
@@ -165,16 +166,17 @@ class OlsEnvelopeComparisonEngine:
         geometry: QgsGeometry,
         baseline_candidate: ControllingOlsCandidate,
         future_candidate: ControllingOlsCandidate,
+        change: Optional[str] = None,
     ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
         values: List[float] = []
-        for point in self._sample_points(geometry):
+        for point in self._sample_points(geometry, baseline_candidate, future_candidate, change):
             baseline_z = baseline_candidate.elevation_at_xy(point)
             future_z = future_candidate.elevation_at_xy(point)
             if baseline_z is None or future_z is None:
                 continue
             delta = float(future_z) - float(baseline_z)
             if math.isfinite(delta):
-                values.append(delta)
+                values.append(self._round_delta(delta))
         if not values:
             return None, None, None
         # The first sample is pointOnSurface(), giving a stable representative
@@ -212,10 +214,7 @@ class OlsEnvelopeComparisonEngine:
         for part in self.baseline_engine._polygon_parts(geometry):
             if not self._has_area(part):
                 continue
-            part = self._clean_comparison_part(part, baseline, future, change)
-            if not self._has_area(part):
-                continue
-            delta_min, delta_max, delta_representative = self.delta_range(part, baseline, future)
+            delta_min, delta_max, delta_representative = self.delta_range(part, baseline, future, change)
             if delta_representative is None:
                 continue
             if change == "gain":
@@ -337,6 +336,7 @@ class OlsEnvelopeComparisonEngine:
             geometry,
             baseline_candidate,
             future_candidate,
+            change,
         )
         if delta_representative is None:
             return None
@@ -357,7 +357,13 @@ class OlsEnvelopeComparisonEngine:
             return "loss"
         return "no_change"
 
-    def _sample_points(self, geometry: QgsGeometry) -> List[QgsPointXY]:
+    def _sample_points(
+        self,
+        geometry: QgsGeometry,
+        baseline: Optional[ControllingOlsCandidate] = None,
+        future: Optional[ControllingOlsCandidate] = None,
+        change: Optional[str] = None,
+    ) -> List[QgsPointXY]:
         points: List[QgsPointXY] = []
         try:
             representative = geometry.pointOnSurface()
@@ -366,6 +372,11 @@ class OlsEnvelopeComparisonEngine:
                 points.append(QgsPointXY(point.x(), point.y()))
         except Exception:
             pass
+        if baseline is not None and future is not None and change:
+            comparison_vertices = self._comparison_sample_vertices(geometry, baseline, future, change)
+            if comparison_vertices:
+                points.extend(comparison_vertices)
+                return points
         try:
             vertices = list(geometry.vertices())
             if len(vertices) > 48:
@@ -375,6 +386,83 @@ class OlsEnvelopeComparisonEngine:
         except Exception:
             pass
         return points
+
+    def _comparison_sample_vertices(
+        self,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        change: str,
+    ) -> List[QgsPointXY]:
+        try:
+            if QgsWkbTypes.geometryType(geometry.wkbType()) != Qgis.GeometryType.Polygon:
+                return []
+            rings = []
+            if geometry.isMultipart():
+                for polygon in geometry.asMultiPolygon():
+                    for ring_index, ring in enumerate(polygon):
+                        rings.append((ring, ring_index == 0))
+            else:
+                for ring_index, ring in enumerate(geometry.asPolygon()):
+                    rings.append((ring, ring_index == 0))
+            vertices: List[QgsPointXY] = []
+            for ring, is_exterior in rings:
+                if not ring:
+                    continue
+                filtered = self._filtered_comparison_sample_ring(
+                    ring,
+                    is_exterior,
+                    baseline,
+                    future,
+                    change,
+                )
+                vertices.extend(filtered)
+            if len(vertices) > 48:
+                step = max(1, len(vertices) // 48)
+                vertices = vertices[::step]
+            return vertices
+        except Exception:
+            return []
+
+    def _filtered_comparison_sample_ring(
+        self,
+        ring,
+        exterior: bool,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        change: str,
+    ) -> List[QgsPointXY]:
+        points = [QgsPointXY(point) for point in ring]
+        if len(points) >= 2 and self._same_point(points[0], points[-1]):
+            points = points[:-1]
+        if len(points) < 3:
+            return []
+        if not exterior:
+            return points
+        filtered = list(points)
+        for _ in range(24):
+            removed = False
+            count = len(filtered)
+            if count < 4:
+                break
+            for index in range(count):
+                previous_point = filtered[(index - 1) % count]
+                current_point = filtered[index]
+                next_point = filtered[(index + 1) % count]
+                if self._is_comparison_spike_vertex(
+                    previous_point,
+                    current_point,
+                    next_point,
+                    baseline,
+                    future,
+                    change,
+                ):
+                    filtered.pop(index)
+                    removed = True
+                    break
+            if not removed:
+                break
+        return filtered
 
     @staticmethod
     def _bounding_boxes_intersect(first: QgsGeometry, second: QgsGeometry) -> bool:
@@ -449,112 +537,6 @@ class OlsEnvelopeComparisonEngine:
         except Exception:
             pass
         return normalised
-
-    def _clean_comparison_part(
-        self,
-        geometry: QgsGeometry,
-        baseline: ControllingOlsCandidate,
-        future: ControllingOlsCandidate,
-        change: str,
-    ) -> QgsGeometry:
-        """Remove split-boundary spikes before gain/loss delta attribution."""
-        if geometry is None or geometry.isEmpty():
-            return geometry
-        original_area = geometry.area()
-        if original_area < COMPARISON_MIN_AREA_M2:
-            return QgsGeometry()
-        cleaned = self._remove_comparison_ring_spikes(geometry, baseline, future, change)
-        if cleaned is None or cleaned.isEmpty():
-            return geometry
-        area_change = abs(cleaned.area() - original_area)
-        allowed_change = max(
-            COMPARISON_SPIKE_MAX_AREA_CHANGE_M2,
-            original_area * COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO,
-        )
-        if area_change <= allowed_change:
-            return cleaned
-        return geometry
-
-    def _remove_comparison_ring_spikes(
-        self,
-        geometry: QgsGeometry,
-        baseline: ControllingOlsCandidate,
-        future: ControllingOlsCandidate,
-        change: str,
-    ) -> Optional[QgsGeometry]:
-        try:
-            if QgsWkbTypes.geometryType(geometry.wkbType()) != Qgis.GeometryType.Polygon:
-                return geometry
-            if geometry.isMultipart():
-                polygons = geometry.asMultiPolygon()
-                cleaned_polygons = []
-                for polygon in polygons:
-                    cleaned = self._clean_comparison_polygon_rings(polygon, baseline, future, change)
-                    if cleaned:
-                        cleaned_polygons.append(cleaned)
-                return QgsGeometry.fromMultiPolygonXY(cleaned_polygons) if cleaned_polygons else QgsGeometry()
-            polygon = geometry.asPolygon()
-            cleaned_polygon = self._clean_comparison_polygon_rings(polygon, baseline, future, change)
-            return QgsGeometry.fromPolygonXY(cleaned_polygon) if cleaned_polygon else QgsGeometry()
-        except Exception:
-            return geometry
-
-    def _clean_comparison_polygon_rings(
-        self,
-        polygon,
-        baseline: ControllingOlsCandidate,
-        future: ControllingOlsCandidate,
-        change: str,
-    ) -> list:
-        if not polygon:
-            return []
-        cleaned = [self._clean_comparison_ring(polygon[0], True, baseline, future, change)]
-        for ring in polygon[1:]:
-            cleaned_ring = self._clean_comparison_ring(ring, False, baseline, future, change)
-            if len(cleaned_ring) >= 4:
-                cleaned.append(cleaned_ring)
-        return cleaned if len(cleaned[0]) >= 4 else []
-
-    def _clean_comparison_ring(
-        self,
-        ring,
-        exterior: bool,
-        baseline: ControllingOlsCandidate,
-        future: ControllingOlsCandidate,
-        change: str,
-    ) -> list:
-        if not ring:
-            return []
-        points = [QgsPointXY(point) for point in ring]
-        if len(points) >= 2 and self._same_point(points[0], points[-1]):
-            points = points[:-1]
-        if len(points) < 3:
-            return []
-        if not exterior:
-            return points + [points[0]]
-        for _ in range(24):
-            removed = False
-            count = len(points)
-            if count < 4:
-                break
-            for index in range(count):
-                previous_point = points[(index - 1) % count]
-                current_point = points[index]
-                next_point = points[(index + 1) % count]
-                if self._is_comparison_spike_vertex(
-                    previous_point,
-                    current_point,
-                    next_point,
-                    baseline,
-                    future,
-                    change,
-                ):
-                    points.pop(index)
-                    removed = True
-                    break
-            if not removed:
-                break
-        return points + [points[0]]
 
     def _clean_no_overlay_part(self, geometry: QgsGeometry) -> QgsGeometry:
         """Remove small overlay artefacts without materially changing real no-overlay areas."""
@@ -771,6 +753,11 @@ class OlsEnvelopeComparisonEngine:
         return delta if math.isfinite(delta) else None
 
     @staticmethod
+    def _round_delta(delta: float) -> float:
+        rounded = round(float(delta), COMPARISON_DELTA_DECIMALS)
+        return 0.0 if rounded == 0 else rounded
+
+    @staticmethod
     def _union_geometries(geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
         non_empty = [QgsGeometry(geometry) for geometry in geometries if geometry is not None and not geometry.isEmpty()]
         if not non_empty:
@@ -937,7 +924,7 @@ class OlsModernisationComparisonMixin:
             else:
                 meaning = "Future aeronautical-study trigger is effectively unchanged; this is not an approval limit"
         for baseline, future, geometry in parts:
-            delta_min, delta_max, delta_representative = comparison.delta_range(geometry, baseline, future)
+            delta_min, delta_max, delta_representative = comparison.delta_range(geometry, baseline, future, change)
             feature = QgsFeature(fields)
             feature.setGeometry(geometry)
             feature.setAttributes([

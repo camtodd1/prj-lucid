@@ -111,7 +111,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         )
         self.assertEqual(engine.baseline_only_parts(), [])
 
-    def test_loss_delta_range_ignores_wrong_side_boundary_spike(self):
+    def test_loss_delta_range_ignores_wrong_side_boundary_spike_samples(self):
         baseline = self.plane("baseline", 1.0, 0.0, 0.0)
         future = self.constant("future", 50.0)
         engine = OlsEnvelopeComparisonEngine(
@@ -135,11 +135,23 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(raw_min, -50.0, places=3)
         self.assertAlmostEqual(raw_max, 10.0, places=3)
 
-        cleaned = engine._clean_comparison_part(spiked_loss, baseline, future, "loss")
-        cleaned_min, cleaned_max, cleaned_rep = engine.delta_range(cleaned, baseline, future)
-        self.assertAlmostEqual(cleaned_min, -50.0, places=3)
-        self.assertLessEqual(cleaned_max, engine.tolerance_m)
-        self.assertLess(cleaned_rep, 0.0)
+        loss_min, loss_max, loss_rep = engine.delta_range(spiked_loss, baseline, future, "loss")
+        self.assertAlmostEqual(loss_min, -50.0, places=3)
+        self.assertEqual(loss_max, 0.0)
+        self.assertLess(loss_rep, 0.0)
+
+    def test_delta_range_rounds_to_published_precision(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 100.000000523)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        delta_min, delta_max, delta_rep = engine.delta_range(self.domain, baseline, future)
+        self.assertEqual(delta_min, 0.0)
+        self.assertEqual(delta_max, 0.0)
+        self.assertEqual(delta_rep, 0.0)
 
 
 if __name__ == "__main__":
