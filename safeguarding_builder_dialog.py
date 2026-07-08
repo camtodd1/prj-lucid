@@ -2216,11 +2216,15 @@ class SafeguardingBuilderDialog(
         review_items.extend(airport_dependencies["review_items"])
         review_items.extend(runway_dependencies["issues"])
         if cns_dependencies["state"] == "warning":
-            review_items.append("CNS rows")
+            review_items.append(cns_dependencies["summary"].rstrip("."))
         if agl_dependencies["state"] == "warning":
-            review_items.append("Lighting settings")
+            review_items.append(agl_dependencies["summary"].rstrip("."))
         if ols_dependencies["state"] == "warning":
-            review_items.append("OLS prerequisites")
+            ols_review = ols_dependencies["summary"].strip().rstrip(".")
+            ols_review_prefix = "Runway OLS ready; review "
+            if ols_review.startswith(ols_review_prefix):
+                ols_review = ols_review[len(ols_review_prefix):]
+            review_items.append(ols_review)
 
         if blockers:
             count = len(blockers)
