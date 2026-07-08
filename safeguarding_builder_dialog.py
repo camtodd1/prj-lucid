@@ -310,7 +310,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_name"),
         )
         if airport_name:
-            airport_name.setFixedWidth(152)
+            airport_name.setFixedWidth(116)
             airport_name.setMinimumHeight(28)
             airport_name.setMaximumHeight(28)
             airport_name.setMaxLength(4)
@@ -321,7 +321,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"),
         )
         if iata_code:
-            iata_code.setFixedWidth(152)
+            iata_code.setFixedWidth(116)
             iata_code.setMinimumHeight(28)
             iata_code.setMaximumHeight(28)
             iata_code.setMaxLength(3)
@@ -362,7 +362,7 @@ class SafeguardingBuilderDialog(
         if airport_name_input:
             airport_name_input.setToolTip("Enter the ICAO airport code.")
             airport_name_input.setPlaceholderText("e.g., YPAD")
-            airport_name_input.setFixedWidth(152)
+            airport_name_input.setFixedWidth(116)
 
         iata_input = getattr(
             self,
@@ -372,7 +372,7 @@ class SafeguardingBuilderDialog(
         if iata_input:
             iata_input.setToolTip("Enter an IATA airport code to look up and populate ICAO.")
             iata_input.setPlaceholderText("e.g., ADL")
-            iata_input.setFixedWidth(152)
+            iata_input.setFixedWidth(116)
 
         airport_status = getattr(
             self,
@@ -634,7 +634,7 @@ class SafeguardingBuilderDialog(
             airport_lookup.setMaximumHeight(18)
 
         global_frame = getattr(self, "frame_global_context", None)
-        header_widget_height = 116
+        header_widget_height = 136
         if global_frame is not None:
             global_frame.setFixedHeight(header_widget_height)
         airport_identity_frame.setFixedHeight(header_widget_height)
@@ -1156,7 +1156,7 @@ class SafeguardingBuilderDialog(
         ruleset_group = QtWidgets.QGroupBox("Policy Settings")
         ruleset_group.setObjectName("groupBox_ruleset")
         ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
-        ruleset_layout.setContentsMargins(12, 12, 12, 6)
+        ruleset_layout.setContentsMargins(12, 12, 12, 12)
         ruleset_layout.setHorizontalSpacing(10)
         ruleset_layout.setVerticalSpacing(4)
         ruleset_layout.setColumnStretch(0, 2)
@@ -2576,7 +2576,7 @@ class SafeguardingBuilderDialog(
             if screen is not None:
                 preferred_height = min(preferred_height, int(screen.availableGeometry().height() * 0.86))
             if initial:
-                target_width = 1000
+                target_width = 800
                 target_height = min(self.height(), preferred_height)
                 self.resize(target_width, target_height)
             else:
