@@ -216,6 +216,9 @@ class CnsTableMixin:
             combo_type.addItems([""] + self.CNS_FACILITY_TYPES)
             combo_type.setCurrentIndex(0)
             combo_type.setToolTip("Select the type of CNS facility.")
+            combo_type.currentIndexChanged.connect(self._update_cns_view_state)
+            if hasattr(self, "update_dialog_status"):
+                combo_type.currentIndexChanged.connect(self.update_dialog_status)
             cns_table.setCellWidget(row_position, 0, combo_type)
 
             item_x = QTableWidgetItem("")

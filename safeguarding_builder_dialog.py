@@ -52,7 +52,7 @@ try:
     from .dialog.agl_options import AglOptionsMixin
     from .dialog.persistence import PersistenceMixin
     from .frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles
-    from .rulesets.registry import DEFAULT_RULESET_ID, iter_ruleset_profiles
+    from .rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile, iter_ruleset_profiles
 except ImportError:
     from dialog.dialog_constants import (  # type: ignore
         CALC_PLACEHOLDER,
@@ -75,7 +75,7 @@ except ImportError:
     from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
     from frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles  # type: ignore
-    from rulesets.registry import DEFAULT_RULESET_ID, iter_ruleset_profiles  # type: ignore
+    from rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile, iter_ruleset_profiles  # type: ignore
 
 # Load the UI class from the .ui file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), "safeguarding_builder_dialog_base.ui"))
@@ -767,6 +767,346 @@ class SafeguardingBuilderDialog(
         if detail_label is not None:
             detail_label.setText(detail)
 
+    def _line_value(self, widget_name: str) -> str:
+        widget = getattr(self, widget_name, self.findChild(QtWidgets.QLineEdit, widget_name))
+        return widget.text().strip() if widget is not None else ""
+
+    def _parse_status_float(self, value: Any, minimum: Optional[float] = None) -> Optional[float]:
+        try:
+            numeric = float(str(value).strip())
+        except (TypeError, ValueError):
+            return None
+        if minimum is not None and numeric < minimum:
+            return None
+        return numeric
+
+    def _current_policy_ids(self) -> Tuple[str, str]:
+        ruleset_combo = self._ruleset_combo_widget()
+        active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
+        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
+        protected_airspace_policy = (
+            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+        )
+        return str(active_ruleset_id or DEFAULT_RULESET_ID), str(protected_airspace_policy or "ruleset_aligned")
+
+    def _airport_dependency_status(self, icao: str, iata: str) -> Dict[str, Any]:
+        arp_values = [
+            self._line_value("lineEdit_arp_easting"),
+            self._line_value("lineEdit_arp_northing"),
+            self._line_value("lineEdit_arp_elevation"),
+        ]
+        met_values = [
+            self._line_value("lineEdit_met_easting"),
+            self._line_value("lineEdit_met_northing"),
+            self._line_value("lineEdit_met_elevation"),
+        ]
+        crs_text = self._line_value("lineEdit_airport_crs")
+
+        identity_present = bool(icao or iata)
+        identity_ready = bool(icao)
+        arp_pair_ready = bool(arp_values[0] and arp_values[1])
+        arp_partial = bool(arp_values[0] or arp_values[1]) and not arp_pair_ready
+        arp_elev_ready = bool(arp_values[2])
+        met_pair_ready = bool(met_values[0] and met_values[1])
+        met_partial = bool(met_values[0] or met_values[1]) and not met_pair_ready
+        met_elev_without_coords = bool(met_values[2]) and not met_pair_ready
+
+        crs_issue = ""
+        if crs_text:
+            project_crs = QgsProject.instance().crs()
+            if project_crs and project_crs.isValid() and project_crs.authid() and project_crs.authid() != crs_text:
+                crs_issue = f"project CRS is {project_crs.authid()}, suggested {crs_text}"
+
+        issues = []
+        review_items = []
+        if not identity_present:
+            issues.append("airport identifier")
+        elif not identity_ready:
+            issues.append("resolved ICAO")
+        if arp_partial:
+            review_items.append("complete both ARP easting and northing")
+        elif not arp_pair_ready:
+            review_items.append("ARP coordinates for airport-wide safeguards")
+        if arp_pair_ready and not arp_elev_ready:
+            review_items.append("ARP elevation for RED/secondary OLS")
+        if met_partial or met_elev_without_coords:
+            review_items.append("complete MET coordinates or clear MET fields")
+        if not crs_text:
+            review_items.append("suggested CRS")
+        elif crs_issue:
+            review_items.append(crs_issue)
+
+        return {
+            "identity_present": identity_present,
+            "identity_ready": identity_ready,
+            "arp_values": arp_values,
+            "arp_pair_ready": arp_pair_ready,
+            "arp_elev_ready": arp_elev_ready,
+            "met_values": met_values,
+            "met_pair_ready": met_pair_ready,
+            "met_partial": met_partial or met_elev_without_coords,
+            "crs_text": crs_text,
+            "issues": issues,
+            "review_items": review_items,
+        }
+
+    def _runway_dependency_status(self, active_ruleset_id: str, protected_airspace_policy: str) -> Dict[str, Any]:
+        total = len(self._runway_groups)
+        complete = 0
+        incomplete = 0
+        invalid = 0
+        missing_elevations = 0
+        missing_adg = 0
+        runway_end_elevation_count = 0
+        requires_adg = (
+            active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
+            or protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}
+        )
+
+        for group in self._runway_groups.values():
+            data = group.get_input_data()
+            missing_required = False
+            designator = self._parse_status_float(data.get("designator_str"), minimum=1)
+            if designator is None or int(designator) > 36:
+                missing_required = True
+            width = self._parse_status_float(data.get("width"), minimum=0.01)
+            if width is None:
+                missing_required = True
+
+            coords = [
+                self._parse_status_float(data.get("thr_easting")),
+                self._parse_status_float(data.get("thr_northing")),
+                self._parse_status_float(data.get("rec_easting")),
+                self._parse_status_float(data.get("rec_northing")),
+            ]
+            if any(value is None for value in coords):
+                missing_required = True
+            elif math.isclose(coords[0], coords[2], abs_tol=1e-6) and math.isclose(coords[1], coords[3], abs_tol=1e-6):
+                invalid += 1
+                missing_required = True
+
+            adg = str(data.get("adg", data.get("design_group", "")) or "").strip().upper()
+            if requires_adg and not adg:
+                missing_adg += 1
+                missing_required = True
+
+            end_elevations = [
+                self._parse_status_float(data.get("runway_end_elev_1")),
+                self._parse_status_float(data.get("runway_end_elev_2")),
+            ]
+            runway_end_elevation_count += sum(1 for value in end_elevations if value is not None)
+            if any(value is None for value in end_elevations):
+                missing_elevations += 1
+
+            if missing_required:
+                incomplete += 1
+            else:
+                complete += 1
+
+        ready = total > 0 and incomplete == 0
+        issues = []
+        if total == 0:
+            issues.append("no runway definitions")
+        elif incomplete:
+            issues.append(f"{incomplete} incomplete runway{'s' if incomplete != 1 else ''}")
+        if invalid:
+            issues.append("threshold coordinates must not be identical")
+        if missing_adg:
+            issues.append(f"ADG required for {missing_adg} runway{'s' if missing_adg != 1 else ''}")
+
+        return {
+            "total": total,
+            "complete": complete,
+            "incomplete": incomplete,
+            "invalid": invalid,
+            "ready": ready,
+            "runway_end_elevation_count": runway_end_elevation_count,
+            "missing_elevations": missing_elevations,
+            "red_elevation_ready": total > 0 and missing_elevations == 0,
+            "issues": issues,
+        }
+
+    def _cns_dependency_status(self) -> Dict[str, Any]:
+        cns_table = getattr(self, "table_cns_facility", self.findChild(QtWidgets.QTableWidget, "table_cns_facility"))
+        if cns_table is None:
+            return {"rows": 0, "valid": 0, "incomplete": 0, "invalid": 0, "state": "blocked", "summary": "CNS table missing"}
+
+        valid = 0
+        incomplete = 0
+        invalid = 0
+        for row in range(cns_table.rowCount()):
+            combo_box = cns_table.cellWidget(row, 0)
+            facility_type = combo_box.currentText().strip() if isinstance(combo_box, QtWidgets.QComboBox) else ""
+            x_item, y_item, elev_item = cns_table.item(row, 1), cns_table.item(row, 2), cns_table.item(row, 3)
+            x_text = x_item.text().strip() if x_item else ""
+            y_text = y_item.text().strip() if y_item else ""
+            elev_text = elev_item.text().strip() if elev_item else ""
+            if not any([facility_type, x_text, y_text, elev_text]):
+                incomplete += 1
+                continue
+            if not facility_type or not x_text or not y_text:
+                incomplete += 1
+                continue
+            if self._parse_status_float(x_text) is None or self._parse_status_float(y_text) is None:
+                invalid += 1
+                continue
+            if elev_text and self._parse_status_float(elev_text) is None:
+                invalid += 1
+                continue
+            valid += 1
+
+        rows = cns_table.rowCount()
+        project_crs = QgsProject.instance().crs()
+        crs_ready = bool(project_crs and project_crs.isValid())
+        if rows == 0:
+            state = "optional"
+            summary = "Optional: no CNS facilities configured."
+        elif invalid:
+            state = "warning"
+            summary = f"{valid} valid, {invalid} invalid CNS row(s)."
+        elif incomplete:
+            state = "warning"
+            summary = f"{valid} valid, {incomplete} incomplete CNS row(s)."
+        elif not crs_ready:
+            state = "blocked"
+            summary = "CNS rows need a valid project CRS."
+        else:
+            state = "ready"
+            summary = f"{valid} CNS facilit{'y' if valid == 1 else 'ies'} ready."
+        return {"rows": rows, "valid": valid, "incomplete": incomplete, "invalid": invalid, "state": state, "summary": summary}
+
+    def _output_dependency_status(self) -> Dict[str, Any]:
+        if not all(hasattr(self, name) for name in ["radioMemoryOutput", "radioFileOutput", "fileWidgetOutputPath", "comboOutputFormat"]):
+            return {"ready": False, "state": "blocked", "summary": "Output controls are missing.", "path": ""}
+        if self.radioMemoryOutput.isChecked():
+            controlling_note = ""
+            if hasattr(self, "checkBox_generateControllingOls") and not self.checkBox_generateControllingOls.isChecked():
+                controlling_note = " | controlling OLS off"
+            return {"ready": True, "state": "ready", "summary": "Memory layers" + controlling_note, "path": ""}
+        if not self.radioFileOutput.isChecked():
+            return {"ready": False, "state": "blocked", "summary": "Select memory or file output.", "path": ""}
+
+        raw_path = self.fileWidgetOutputPath.filePath().strip()
+        selected_format = self.comboOutputFormat.currentText()
+        if not raw_path:
+            return {"ready": False, "state": "warning", "summary": f"{selected_format} files - directory required", "path": ""}
+        output_path = os.path.dirname(raw_path) if os.path.isfile(raw_path) else raw_path
+        if not os.path.isdir(output_path):
+            return {"ready": False, "state": "warning", "summary": f"Output directory not found: {output_path}", "path": output_path}
+        if selected_format not in OUTPUT_FORMATS:
+            return {"ready": False, "state": "warning", "summary": f"Invalid output format: {selected_format}", "path": output_path}
+        return {"ready": True, "state": "ready", "summary": f"{selected_format} files ready", "path": output_path}
+
+    def _agl_dependency_status(self, runway_status: Dict[str, Any]) -> Dict[str, Any]:
+        enabled = bool(getattr(self, "checkBox_agl_enabled", None) and self.checkBox_agl_enabled.isChecked())
+        table = getattr(self, "table_agl_approach", None)
+        rows = table.rowCount() if table is not None else 0
+        if not enabled:
+            return {"enabled": False, "ready": True, "state": "optional", "summary": "Optional: lighting generation is disabled.", "rows": rows}
+        if not runway_status.get("ready"):
+            return {"enabled": True, "ready": False, "state": "blocked", "summary": "Lighting needs complete runway geometry.", "rows": rows}
+
+        errors: List[str] = []
+        for widget_name, label, minimum in [
+            ("lineEdit_agl_edge_spacing", "edge spacing", 0.01),
+            ("lineEdit_agl_threshold_spacing", "threshold spacing", 0.01),
+            ("lineEdit_agl_threshold_inset", "threshold inset", 0.0),
+            ("lineEdit_agl_approach_spacing", "approach spacing", 0.01),
+            ("lineEdit_agl_centreline_offset", "centreline offset", 0.0),
+        ]:
+            if self._parse_status_float(self._line_value(widget_name), minimum=minimum) is None:
+                errors.append(label)
+        try:
+            centreline_max_offset_m = self._agl_ruleset().agl_value("RUNWAY_CENTRELINE_MAX_OFFSET_M")
+            centreline_offset = self._parse_status_float(self._line_value("lineEdit_agl_centreline_offset"), minimum=0.0)
+            if centreline_offset is not None and centreline_offset > centreline_max_offset_m:
+                errors.append("centreline offset exceeds ruleset maximum")
+        except Exception:
+            pass
+
+        valid_rows = 0
+        incomplete_rows = 0
+        invalid_rows = 0
+        if table is not None:
+            for row in range(table.rowCount()):
+                runway_combo = table.cellWidget(row, 0)
+                end_combo = table.cellWidget(row, 1)
+                runway_index = runway_combo.currentData() if isinstance(runway_combo, QtWidgets.QComboBox) else None
+                end_role = end_combo.currentData() if isinstance(end_combo, QtWidgets.QComboBox) else "primary"
+                length_text = self._table_text(table, row, 2).strip() if hasattr(self, "_table_text") else ""
+                spacing_text = self._table_text(table, row, 3).strip() if hasattr(self, "_table_text") else ""
+                if not runway_index and not length_text and not spacing_text:
+                    incomplete_rows += 1
+                    continue
+                if not runway_index or int(runway_index) not in self._runway_groups:
+                    invalid_rows += 1
+                    continue
+                runway_type = self._agl_runway_end_type(int(runway_index), str(end_role))
+                profile = self._agl_ruleset().approach_profile_for_end(runway_type)
+                if length_text and self._parse_status_float(length_text, minimum=0.01) is None:
+                    invalid_rows += 1
+                    continue
+                if spacing_text and self._parse_status_float(spacing_text, minimum=0.01) is None:
+                    invalid_rows += 1
+                    continue
+                if not length_text and float(profile.get("length_m") or 0.0) <= 0:
+                    invalid_rows += 1
+                    continue
+                valid_rows += 1
+
+        element_options = self._get_agl_element_options() if hasattr(self, "_get_agl_element_options") else {}
+        any_element_enabled = any(bool(value) for value in element_options.values())
+        if errors:
+            return {"enabled": True, "ready": False, "state": "warning", "summary": "Lighting numeric fields need review: " + ", ".join(errors) + ".", "rows": rows}
+        if invalid_rows:
+            return {"enabled": True, "ready": False, "state": "warning", "summary": f"{invalid_rows} invalid approach-light row(s).", "rows": rows}
+        if not any_element_enabled and valid_rows == 0:
+            return {"enabled": True, "ready": False, "state": "warning", "summary": "Lighting is enabled but no lighting outputs are selected.", "rows": rows}
+        if incomplete_rows and valid_rows == 0:
+            return {"enabled": True, "ready": True, "state": "ready", "summary": "Lighting ready; blank approach rows will be ignored.", "rows": rows}
+        if incomplete_rows:
+            return {"enabled": True, "ready": True, "state": "warning", "summary": f"Lighting ready; {incomplete_rows} blank approach row(s) will be ignored.", "rows": rows}
+        return {"enabled": True, "ready": True, "state": "ready", "summary": f"Lighting ready: {valid_rows} approach row(s).", "rows": rows}
+
+    def _ols_dependency_status(
+        self,
+        airport_status: Dict[str, Any],
+        runway_status: Dict[str, Any],
+        active_ruleset_id: str,
+        protected_airspace_policy: str,
+    ) -> Dict[str, Any]:
+        if protected_airspace_policy == "modernisation_comparison" and active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes":
+            return {"state": "blocked", "summary": "Modernisation comparison needs a current baseline ruleset."}
+        if not airport_status.get("identity_ready"):
+            return {"state": "blocked", "summary": "OLS needs a resolved ICAO airport identity."}
+        if not runway_status.get("ready"):
+            return {"state": "blocked", "summary": "OLS needs complete runway geometry and classification inputs."}
+
+        try:
+            ruleset_profile = get_ruleset_profile(active_ruleset_id)
+            airport_wide_capability = ruleset_profile.capability_status("ols.airport_wide")
+            controlling_capability = ruleset_profile.capability_status("ols.controlling_lower_envelope")
+        except Exception:
+            airport_wide_capability = None
+            controlling_capability = None
+
+        needs_red = airport_wide_capability not in {None, "unsupported"}
+        red_ready = airport_status.get("arp_elev_ready") and runway_status.get("red_elevation_ready")
+        review = []
+        if needs_red and not red_ready and protected_airspace_policy != "future_annex14_ofs_oes":
+            review.append("airport-wide/secondary OLS needs ARP elevation and runway-end elevations")
+        if not airport_status.get("arp_pair_ready") and airport_wide_capability not in {None, "unsupported"}:
+            review.append("ARP coordinates needed for airport-wide safeguarding references")
+        if hasattr(self, "checkBox_generateControllingOls") and self.checkBox_generateControllingOls.isChecked():
+            if controlling_capability == "unsupported":
+                review.append("controlling OLS is unsupported for this ruleset")
+            elif controlling_capability == "experimental":
+                review.append("controlling OLS is experimental")
+
+        if review:
+            return {"state": "warning", "summary": "Runway OLS ready; review " + "; ".join(review) + "."}
+        return {"state": "ready", "summary": "OLS inputs are ready for the selected policy."}
+
     def _setup_ruleset_selector_ui(self) -> None:
         """Create global policy selectors."""
         self.ruleset_combo = QtWidgets.QComboBox()
@@ -1108,6 +1448,7 @@ class SafeguardingBuilderDialog(
             "warning": ("#fff5e6", "#8a5200", "#f0d6a8"),
             "info": ("#eaf2ff", "#1f4f99", "#c7d7f5"),
             "error": ("#fdecec", "#9b1c1c", "#f3b5b5"),
+            "blocked": ("#f3f5f7", "#66717d", "#d7dde4"),
             "neutral": ("#f4f4f4", "#555555", "#d6d6d6"),
         }
         background, foreground, border = colors.get(state, colors["neutral"])
@@ -1763,6 +2104,7 @@ class SafeguardingBuilderDialog(
         icao = self.lineEdit_airport_name.text().strip().upper()
         iata_widget = getattr(self, "lineEdit_iata_code", self.findChild(QtWidgets.QLineEdit, "lineEdit_iata_code"))
         iata = iata_widget.text().strip().upper() if iata_widget else ""
+        airport_dependencies = self._airport_dependency_status(icao, iata)
         if hasattr(self, "label_airport_status"):
             current_signature = self._airport_signature(icao, iata)
             if current_signature == self._airport_resolved_signature and self._airport_resolved_summary:
@@ -1792,53 +2134,24 @@ class SafeguardingBuilderDialog(
             if airport_status_changed:
                 self._resize_airport_identity_card()
 
-        arp_values = [
-            self.lineEdit_arp_easting.text().strip() if hasattr(self, "lineEdit_arp_easting") else "",
-            self.lineEdit_arp_northing.text().strip() if hasattr(self, "lineEdit_arp_northing") else "",
-            self.lineEdit_arp_elevation.text().strip() if hasattr(self, "lineEdit_arp_elevation") else "",
-        ]
+        arp_values = airport_dependencies["arp_values"]
         self._set_small_status_chip(
             "label_arp_status",
             "ARP located" if all(arp_values[:2]) else "ARP incomplete" if any(arp_values) else "ARP not set",
             "ready" if all(arp_values[:2]) else "warning" if any(arp_values) else "neutral",
         )
 
-        met_values = [
-            self.lineEdit_met_easting.text().strip() if hasattr(self, "lineEdit_met_easting") else "",
-            self.lineEdit_met_northing.text().strip() if hasattr(self, "lineEdit_met_northing") else "",
-            self.lineEdit_met_elevation.text().strip() if hasattr(self, "lineEdit_met_elevation") else "",
-        ]
+        met_values = airport_dependencies["met_values"]
         self._set_small_status_chip(
             "label_met_status",
             "MET located" if all(met_values[:2]) else "MET incomplete" if any(met_values) else "MET not used",
             "ready" if all(met_values[:2]) else "warning" if any(met_values) else "neutral",
         )
 
-        runway_count = len(self._runway_groups)
-        incomplete = 0
-        ruleset_combo = self._ruleset_combo_widget()
-        active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
-        protected_airspace_policy = (
-            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
-        )
-        for group in self._runway_groups.values():
-            data = group.get_input_data()
-            required_values = [
-                data.get("designator_str", ""),
-                data.get("thr_easting", ""),
-                data.get("thr_northing", ""),
-                data.get("rec_easting", ""),
-                data.get("rec_northing", ""),
-                data.get("width", ""),
-            ]
-            if (
-                active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
-                or protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}
-            ):
-                required_values.append(data.get("adg", data.get("design_group", "")))
-            if not all(str(value).strip() for value in required_values):
-                incomplete += 1
+        active_ruleset_id, protected_airspace_policy = self._current_policy_ids()
+        runway_dependencies = self._runway_dependency_status(active_ruleset_id, protected_airspace_policy)
+        runway_count = runway_dependencies["total"]
+        incomplete = runway_dependencies["incomplete"]
         if hasattr(self, "label_runway_status"):
             if runway_count == 0:
                 runway_status = "Runways: none defined"
@@ -1851,71 +2164,63 @@ class SafeguardingBuilderDialog(
                 runway_state = "ready"
             self._set_small_status_chip("label_runway_status", runway_status, runway_state)
 
-        cns_count = self.table_cns_facility.rowCount() if hasattr(self, "table_cns_facility") else 0
-        if hasattr(self, "label_cns_status"):
-            self.label_cns_status.setText(f"CNS facilities: {cns_count}" if cns_count else "CNS facilities: none")
         if hasattr(self, "_update_cns_view_state"):
             self._update_cns_view_state()
+        cns_dependencies = self._cns_dependency_status()
+        cns_count = cns_dependencies["valid"]
+        if hasattr(self, "label_cns_status"):
+            self._set_small_status_chip(
+                "label_cns_status",
+                cns_dependencies["summary"],
+                "neutral" if cns_dependencies["state"] == "optional" else cns_dependencies["state"],
+            )
 
-        agl_enabled = bool(hasattr(self, "checkBox_agl_enabled") and self.checkBox_agl_enabled.isChecked())
         agl_rows = self.table_agl_approach.rowCount() if hasattr(self, "table_agl_approach") else 0
+        agl_dependencies = self._agl_dependency_status(runway_dependencies)
+        agl_enabled = bool(agl_dependencies["enabled"])
         if hasattr(self, "label_agl_status"):
             self._set_small_status_chip(
                 "label_agl_status",
-                f"AGL enabled: {agl_rows} approach row(s)" if agl_enabled else "AGL disabled",
-                "ready" if agl_enabled else "neutral",
+                agl_dependencies["summary"],
+                "neutral" if agl_dependencies["state"] == "optional" else agl_dependencies["state"],
             )
 
-        output_text = "Memory layers"
-        output_state = "ready"
-        output_path = ""
-        if hasattr(self, "radioFileOutput") and self.radioFileOutput.isChecked():
-            output_format = self.comboOutputFormat.currentText()
-            output_path = self.fileWidgetOutputPath.filePath().strip()
-            output_text = (
-                f"{output_format} files ready"
-                if output_path
-                else f"{output_format} files - directory required"
-            )
-            output_state = "ready" if output_path else "warning"
+        output_dependencies = self._output_dependency_status()
+        output_text = output_dependencies["summary"]
+        output_state = output_dependencies["state"]
+        output_path = output_dependencies["path"]
         if hasattr(self, "label_output_status"):
-            if hasattr(self, "checkBox_generateControllingOls") and not self.checkBox_generateControllingOls.isChecked():
-                output_text += " | controlling OLS off"
             self._set_small_status_chip("label_output_status", output_text, output_state)
             self.label_output_status.setToolTip(output_path)
 
-        crs_text = ""
-        crs_field = getattr(
-            self,
-            "lineEdit_airport_crs",
-            self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_crs"),
+        ols_dependencies = self._ols_dependency_status(
+            airport_dependencies,
+            runway_dependencies,
+            active_ruleset_id,
+            protected_airspace_policy,
         )
-        if crs_field is not None:
-            crs_text = crs_field.text().strip()
 
-        identity_present = bool(icao or iata)
-        identity_generation_ready = bool(icao)
-        arp_ready = all(arp_values[:2])
-        runway_ready = runway_count > 0 and incomplete == 0
-        output_ready = output_state == "ready"
+        identity_generation_ready = bool(airport_dependencies["identity_ready"])
+        runway_ready = bool(runway_dependencies["ready"])
+        output_ready = bool(output_dependencies["ready"])
 
         blockers = []
-        if not identity_present:
+        if not airport_dependencies["identity_present"]:
             blockers.append("airport identifier")
         elif not identity_generation_ready:
             blockers.append("resolved ICAO")
         if not output_ready:
-            blockers.append("output directory")
+            blockers.append(output_text)
 
         review_items = []
-        if not arp_ready:
-            review_items.append("ARP coordinates")
-        if not crs_text:
-            review_items.append("suggested CRS")
-        if runway_count == 0:
-            review_items.append("runway definition")
-        elif incomplete:
-            review_items.append("runway fields")
+        review_items.extend(airport_dependencies["review_items"])
+        review_items.extend(runway_dependencies["issues"])
+        if cns_dependencies["state"] == "warning":
+            review_items.append("CNS rows")
+        if agl_dependencies["state"] == "warning":
+            review_items.append("Lighting settings")
+        if ols_dependencies["state"] == "warning":
+            review_items.append("OLS prerequisites")
 
         if blockers:
             count = len(blockers)
@@ -1940,12 +2245,12 @@ class SafeguardingBuilderDialog(
                 "Required airport, output, runway, CRS, and ARP inputs are complete.",
             )
 
-        if identity_generation_ready and arp_ready:
+        if identity_generation_ready and airport_dependencies["arp_pair_ready"] and not airport_dependencies["met_partial"]:
             airport_tab_state = "ready"
             airport_tab_tip = "Airport identity and ARP are ready."
-        elif identity_present:
+        elif airport_dependencies["identity_present"]:
             airport_tab_state = "warning"
-            airport_tab_tip = "Review airport setup: ARP or resolved ICAO is incomplete."
+            airport_tab_tip = "Review airport setup: " + ", ".join(airport_dependencies["review_items"] or ["resolved ICAO"])
         else:
             airport_tab_state = "warning"
             airport_tab_tip = "Airport identifier is required."
@@ -1956,7 +2261,7 @@ class SafeguardingBuilderDialog(
             runway_tab_tip = f"{runway_count} runway(s) ready."
         elif runway_count:
             runway_tab_state = "warning"
-            runway_tab_tip = f"{runway_count} runway(s) defined, {incomplete} incomplete."
+            runway_tab_tip = "; ".join(runway_dependencies["issues"] or [f"{incomplete} incomplete runway(s)"])
         else:
             runway_tab_state = "neutral"
             runway_tab_tip = "No runways defined."
@@ -1964,25 +2269,16 @@ class SafeguardingBuilderDialog(
 
         self._set_workflow_tab_state(
             "tab_cns",
-            "ready" if cns_count else "optional",
-            f"{cns_count} CNS facilit{'y' if cns_count == 1 else 'ies'} configured." if cns_count else "Optional: no CNS facilities configured.",
+            cns_dependencies["state"],
+            cns_dependencies["summary"],
         )
 
-        if not identity_generation_ready or not runway_ready:
-            ols_tab_state = "blocked"
-            ols_tab_tip = "Waiting for airport identity and complete runway inputs."
-        elif not arp_ready:
-            ols_tab_state = "warning"
-            ols_tab_tip = "Runway OLS can be reviewed; airport-wide ARP-dependent surfaces need ARP coordinates."
-        else:
-            ols_tab_state = "ready"
-            ols_tab_tip = "OLS inputs are ready."
-        self._set_workflow_tab_state("tab_ols", ols_tab_state, ols_tab_tip)
+        self._set_workflow_tab_state("tab_ols", ols_dependencies["state"], ols_dependencies["summary"])
 
         self._set_workflow_tab_state(
             "tab_lighting",
-            "ready" if agl_enabled else "optional",
-            f"Lighting enabled: {agl_rows} approach row(s)." if agl_enabled else "Optional: lighting generation is disabled.",
+            agl_dependencies["state"],
+            agl_dependencies["summary"],
         )
 
         if not identity_generation_ready:
