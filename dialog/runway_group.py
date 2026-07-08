@@ -13,6 +13,11 @@ from .dialog_constants import (
 )
 
 
+RUNWAY_FORM_LABEL_WIDTH = 230
+RUNWAY_FORM_FIELD_WIDTH = 240
+RUNWAY_FORM_COLUMN_GAP = 12
+
+
 class NoWheelComboBox(QtWidgets.QComboBox):
     """Combo box that ignores mouse-wheel changes unless the popup is open."""
 
@@ -166,17 +171,12 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         core_widget = QtWidgets.QWidget(self)
         core_layout = QtWidgets.QGridLayout(core_widget)
         core_layout.setContentsMargins(0, 0, 0, 0)
-        core_layout.setHorizontalSpacing(10)
+        core_layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
         core_layout.setVerticalSpacing(8)
 
         gridLayout_Coords = core_layout
         gridLayout_Coords.setObjectName(f"gridLayout_Coords_{self.index}")
-        gridLayout_Coords.setColumnStretch(0, 0)
-        gridLayout_Coords.setColumnStretch(1, 1)
-        gridLayout_Coords.setColumnStretch(2, 1)
-        gridLayout_Coords.setColumnMinimumWidth(0, 170)
-        gridLayout_Coords.setColumnMinimumWidth(1, 190)
-        gridLayout_Coords.setColumnMinimumWidth(2, 190)
+        self._configure_runway_form_grid(gridLayout_Coords)
 
         label_designation_row = QtWidgets.QLabel("Designation:")
         label_designation_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -211,13 +211,13 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.desig_le.setMaxLength(2)
         self.desig_le.setToolTip("Enter 2-digit primary designation (01-36).")
         self.desig_le.setValidator(QtGui.QIntValidator(1, 36, self))
-        self.desig_le.setMinimumWidth(96)
+        self.desig_le.setFixedWidth(RUNWAY_FORM_FIELD_WIDTH - 86)
         self.suffix_combo = NoWheelComboBox()
         self.suffix_combo.setObjectName(f"comboBox_rwy_suffix_{self.index}")
         self.suffix_combo.addItems(["", "L", "C", "R"])
         self.suffix_combo.setToolTip("Runway suffix (Leave blank if none)")
         self.suffix_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self.suffix_combo.setMinimumWidth(70)
+        self.suffix_combo.setFixedWidth(80)
         h_layout_desig_inputs.addWidget(self.desig_le)
         h_layout_desig_inputs.addWidget(self.suffix_combo)
 
@@ -229,7 +229,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.rec_desig_hdr_lbl.setStyleSheet(
             "QLabel { color: #555555; border: 1px solid #cfcfcf; border-radius: 4px; padding: 4px 8px; }"
         )
-        self._set_control_width(self.rec_desig_hdr_lbl, 170, 280)
+        self._set_control_width(self.rec_desig_hdr_lbl)
 
         label_runway_width = QtWidgets.QLabel("Runway Width (m):")
         label_runway_width.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -240,7 +240,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         width_validator = QtGui.QDoubleValidator(0.01, 9999.99, 2, self)
         width_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
         self.width_le.setValidator(width_validator)
-        self._set_control_width(self.width_le, 150, 240)
+        self._set_control_width(self.width_le)
 
         self.thr_east_le = QtWidgets.QLineEdit()
         self.thr_east_le.setObjectName(f"lineEdit_thr_easting_{self.index}")
@@ -379,12 +379,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         threshold_group.setObjectName(f"groupBox_threshold_details_{self.index}")
         self._style_section_groupbox(threshold_group)
         threshold_layout = QtWidgets.QGridLayout(threshold_group)
-        threshold_layout.setColumnStretch(0, 0)
-        threshold_layout.setColumnStretch(1, 1)
-        threshold_layout.setColumnStretch(2, 1)
-        threshold_layout.setColumnMinimumWidth(0, 170)
-        threshold_layout.setColumnMinimumWidth(1, 190)
-        threshold_layout.setColumnMinimumWidth(2, 190)
+        self._configure_runway_form_grid(threshold_layout)
 
         threshold_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
         threshold_layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
@@ -400,7 +395,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         threshold_layout.addWidget(label_pre_threshold_area_row, 4, 0)
         threshold_layout.addWidget(self.thr_pre_area_1_le, 4, 1)
         threshold_layout.addWidget(self.thr_pre_area_2_le, 4, 2)
-        self._add_runway_type_controls(threshold_layout, 5, 0, 1, reciprocal_input_col=2)
+        self._add_runway_availability_controls(threshold_layout, 5)
+        self._add_runway_type_controls(threshold_layout, 7, 0, 1, reciprocal_input_col=2)
+        self._add_lahso_controls(threshold_layout, 8)
 
         advanced_body_layout.addWidget(threshold_group)
 
@@ -419,15 +416,15 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         classification_outer_layout.setContentsMargins(0, 0, 0, 0)
         classification_outer_layout.setSpacing(0)
         classification_form = QtWidgets.QWidget(classification_group)
-        classification_form.setMaximumWidth(460)
+        classification_form.setMaximumWidth(RUNWAY_FORM_LABEL_WIDTH + RUNWAY_FORM_COLUMN_GAP + RUNWAY_FORM_FIELD_WIDTH)
         classification_layout = QtWidgets.QGridLayout(classification_form)
         classification_layout.setContentsMargins(0, 0, 0, 0)
-        classification_layout.setHorizontalSpacing(10)
+        classification_layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
         classification_layout.setVerticalSpacing(6)
         classification_layout.setColumnStretch(0, 0)
         classification_layout.setColumnStretch(1, 0)
-        classification_layout.setColumnMinimumWidth(0, 170)
-        classification_layout.setColumnMinimumWidth(1, 220)
+        classification_layout.setColumnMinimumWidth(0, RUNWAY_FORM_LABEL_WIDTH)
+        classification_layout.setColumnMinimumWidth(1, RUNWAY_FORM_FIELD_WIDTH)
         classification_outer_layout.addWidget(
             classification_form,
             0,
@@ -444,7 +441,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.shoulder_le.setObjectName(f"lineEdit_rwy_shoulder_{self.index}")
         self.shoulder_le.setToolTip("Enter width of runway shoulder (each side, if applicable).")
         self.shoulder_le.setValidator(self.distance_validator)
-        self._set_control_width(self.shoulder_le, 150, 240)
+        self._set_control_width(self.shoulder_le)
         classification_layout.addWidget(label_runway_shoulder, 1, 0)
         classification_layout.addWidget(self.shoulder_le, 1, 1)
         self._add_arc_controls(classification_layout, 2)
@@ -480,11 +477,21 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _set_control_width(
         self,
         widget: QtWidgets.QWidget,
-        min_width: int = 170,
-        max_width: int = 280,
+        width: int = RUNWAY_FORM_FIELD_WIDTH,
     ) -> None:
-        widget.setMinimumWidth(min_width)
-        widget.setMaximumWidth(max_width)
+        widget.setFixedWidth(width)
+
+    def _configure_runway_form_grid(self, layout: QtWidgets.QGridLayout) -> None:
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
+        layout.setColumnStretch(0, 0)
+        layout.setColumnStretch(1, 0)
+        layout.setColumnStretch(2, 0)
+        layout.setColumnStretch(3, 1)
+        layout.setColumnMinimumWidth(0, RUNWAY_FORM_LABEL_WIDTH)
+        layout.setColumnMinimumWidth(1, RUNWAY_FORM_FIELD_WIDTH)
+        layout.setColumnMinimumWidth(2, RUNWAY_FORM_FIELD_WIDTH)
+        layout.setColumnMinimumWidth(3, 0)
 
     def _add_arc_controls(
         self,
@@ -631,19 +638,61 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         else:
             layout.addWidget(self.type2_combo, row, reciprocal_input_col)
 
+    def _add_runway_availability_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
+        takeoff_label = QtWidgets.QLabel("Takeoff available:")
+        self.takeoff_available_1_cb = QtWidgets.QCheckBox()
+        self.takeoff_available_1_cb.setObjectName(f"checkBox_takeoff_available_1_{self.index}")
+        self.takeoff_available_1_cb.setChecked(True)
+        self.takeoff_available_1_cb.setToolTip("Takeoff is available in the primary runway direction.")
+
+        self.takeoff_available_2_cb = QtWidgets.QCheckBox()
+        self.takeoff_available_2_cb.setObjectName(f"checkBox_takeoff_available_2_{self.index}")
+        self.takeoff_available_2_cb.setChecked(True)
+        self.takeoff_available_2_cb.setToolTip("Takeoff is available in the reciprocal runway direction.")
+        layout.addWidget(takeoff_label, row, 0)
+        layout.addWidget(self.takeoff_available_1_cb, row, 1)
+        layout.addWidget(self.takeoff_available_2_cb, row, 2)
+
+        landing_label = QtWidgets.QLabel("Landing available:")
+        self.landing_available_1_cb = QtWidgets.QCheckBox()
+        self.landing_available_1_cb.setObjectName(f"checkBox_landing_available_1_{self.index}")
+        self.landing_available_1_cb.setChecked(True)
+        self.landing_available_1_cb.setToolTip("Landing is available toward the primary runway threshold.")
+
+        self.landing_available_2_cb = QtWidgets.QCheckBox()
+        self.landing_available_2_cb.setObjectName(f"checkBox_landing_available_2_{self.index}")
+        self.landing_available_2_cb.setChecked(True)
+        self.landing_available_2_cb.setToolTip("Landing is available toward the reciprocal runway threshold.")
+        layout.addWidget(landing_label, row + 1, 0)
+        layout.addWidget(self.landing_available_1_cb, row + 1, 1)
+        layout.addWidget(self.landing_available_2_cb, row + 1, 2)
+
+    def _add_lahso_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
+        lahso_label = QtWidgets.QLabel("LAHSO applied:")
+        self.lahso_applied_1_cb = QtWidgets.QCheckBox()
+        self.lahso_applied_1_cb.setObjectName(f"checkBox_lahso_applied_1_{self.index}")
+        self.lahso_applied_1_cb.setChecked(False)
+        self.lahso_applied_1_cb.setToolTip(
+            "Indicates that a LAHSO holding position marking is required for the primary runway direction."
+        )
+
+        self.lahso_applied_2_cb = QtWidgets.QCheckBox()
+        self.lahso_applied_2_cb.setObjectName(f"checkBox_lahso_applied_2_{self.index}")
+        self.lahso_applied_2_cb.setChecked(False)
+        self.lahso_applied_2_cb.setToolTip(
+            "Indicates that a LAHSO holding position marking is required for the reciprocal runway direction."
+        )
+        layout.addWidget(lahso_label, row, 0)
+        layout.addWidget(self.lahso_applied_1_cb, row, 1)
+        layout.addWidget(self.lahso_applied_2_cb, row, 2)
+
     def _add_declared_distance_controls(self, parent_layout: QtWidgets.QVBoxLayout):
         declared_group = QtWidgets.QGroupBox("Declared Distances")
         declared_group.setObjectName(f"groupBox_declared_distances_{self.index}")
         self._style_section_groupbox(declared_group)
         declared_layout = QtWidgets.QGridLayout(declared_group)
-        declared_layout.setHorizontalSpacing(10)
         declared_layout.setVerticalSpacing(5)
-        declared_layout.setColumnStretch(0, 0)
-        declared_layout.setColumnStretch(1, 1)
-        declared_layout.setColumnStretch(2, 1)
-        declared_layout.setColumnMinimumWidth(0, 150)
-        declared_layout.setColumnMinimumWidth(1, 190)
-        declared_layout.setColumnMinimumWidth(2, 190)
+        self._configure_runway_form_grid(declared_layout)
 
         declared_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
         declared_layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
@@ -684,93 +733,47 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         declared_layout.addWidget(self.stopway1_len_le, 2, 1)
         declared_layout.addWidget(self.stopway2_len_le, 2, 2)
 
-        takeoff_label = QtWidgets.QLabel("Takeoff available:")
-        self.takeoff_available_1_cb = QtWidgets.QCheckBox()
-        self.takeoff_available_1_cb.setObjectName(f"checkBox_takeoff_available_1_{self.index}")
-        self.takeoff_available_1_cb.setChecked(True)
-        self.takeoff_available_1_cb.setToolTip("Takeoff is available in the primary runway direction.")
-
-        self.takeoff_available_2_cb = QtWidgets.QCheckBox()
-        self.takeoff_available_2_cb.setObjectName(f"checkBox_takeoff_available_2_{self.index}")
-        self.takeoff_available_2_cb.setChecked(True)
-        self.takeoff_available_2_cb.setToolTip("Takeoff is available in the reciprocal runway direction.")
-        declared_layout.addWidget(takeoff_label, 3, 0)
-        declared_layout.addWidget(self.takeoff_available_1_cb, 3, 1)
-        declared_layout.addWidget(self.takeoff_available_2_cb, 3, 2)
-
-        landing_label = QtWidgets.QLabel("Landing available:")
-        self.landing_available_1_cb = QtWidgets.QCheckBox()
-        self.landing_available_1_cb.setObjectName(f"checkBox_landing_available_1_{self.index}")
-        self.landing_available_1_cb.setChecked(True)
-        self.landing_available_1_cb.setToolTip("Landing is available toward the primary runway threshold.")
-
-        self.landing_available_2_cb = QtWidgets.QCheckBox()
-        self.landing_available_2_cb.setObjectName(f"checkBox_landing_available_2_{self.index}")
-        self.landing_available_2_cb.setChecked(True)
-        self.landing_available_2_cb.setToolTip("Landing is available toward the reciprocal runway threshold.")
-        declared_layout.addWidget(landing_label, 4, 0)
-        declared_layout.addWidget(self.landing_available_1_cb, 4, 1)
-        declared_layout.addWidget(self.landing_available_2_cb, 4, 2)
-
-        lahso_label = QtWidgets.QLabel("LAHSO applied:")
-        self.lahso_applied_1_cb = QtWidgets.QCheckBox()
-        self.lahso_applied_1_cb.setObjectName(f"checkBox_lahso_applied_1_{self.index}")
-        self.lahso_applied_1_cb.setChecked(False)
-        self.lahso_applied_1_cb.setToolTip(
-            "Indicates that a LAHSO holding position marking is required for the primary runway direction."
-        )
-
-        self.lahso_applied_2_cb = QtWidgets.QCheckBox()
-        self.lahso_applied_2_cb.setObjectName(f"checkBox_lahso_applied_2_{self.index}")
-        self.lahso_applied_2_cb.setChecked(False)
-        self.lahso_applied_2_cb.setToolTip(
-            "Indicates that a LAHSO holding position marking is required for the reciprocal runway direction."
-        )
-        declared_layout.addWidget(lahso_label, 5, 0)
-        declared_layout.addWidget(self.lahso_applied_1_cb, 5, 1)
-        declared_layout.addWidget(self.lahso_applied_2_cb, 5, 2)
-
         override_header = QtWidgets.QLabel("Published Overrides (m)")
         override_header.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        declared_layout.addWidget(override_header, 6, 0)
+        declared_layout.addWidget(override_header, 3, 0)
 
         self.tora_override_1_le = self._declared_override_line_edit("tora_override_1", "Primary TORA override.")
         self.tora_override_2_le = self._declared_override_line_edit("tora_override_2", "Reciprocal TORA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("TORA:"), 7, 0)
-        declared_layout.addWidget(self.tora_override_1_le, 7, 1)
-        declared_layout.addWidget(self.tora_override_2_le, 7, 2)
+        declared_layout.addWidget(QtWidgets.QLabel("TORA:"), 4, 0)
+        declared_layout.addWidget(self.tora_override_1_le, 4, 1)
+        declared_layout.addWidget(self.tora_override_2_le, 4, 2)
 
         self.toda_override_1_le = self._declared_override_line_edit("toda_override_1", "Primary TODA override.")
         self.toda_override_2_le = self._declared_override_line_edit("toda_override_2", "Reciprocal TODA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("TODA:"), 8, 0)
-        declared_layout.addWidget(self.toda_override_1_le, 8, 1)
-        declared_layout.addWidget(self.toda_override_2_le, 8, 2)
+        declared_layout.addWidget(QtWidgets.QLabel("TODA:"), 5, 0)
+        declared_layout.addWidget(self.toda_override_1_le, 5, 1)
+        declared_layout.addWidget(self.toda_override_2_le, 5, 2)
 
         self.asda_override_1_le = self._declared_override_line_edit("asda_override_1", "Primary ASDA override.")
         self.asda_override_2_le = self._declared_override_line_edit("asda_override_2", "Reciprocal ASDA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("ASDA:"), 9, 0)
-        declared_layout.addWidget(self.asda_override_1_le, 9, 1)
-        declared_layout.addWidget(self.asda_override_2_le, 9, 2)
+        declared_layout.addWidget(QtWidgets.QLabel("ASDA:"), 6, 0)
+        declared_layout.addWidget(self.asda_override_1_le, 6, 1)
+        declared_layout.addWidget(self.asda_override_2_le, 6, 2)
 
         self.lda_override_1_le = self._declared_override_line_edit("lda_override_1", "Primary LDA override.")
         self.lda_override_2_le = self._declared_override_line_edit("lda_override_2", "Reciprocal LDA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("LDA:"), 10, 0)
-        declared_layout.addWidget(self.lda_override_1_le, 10, 1)
-        declared_layout.addWidget(self.lda_override_2_le, 10, 2)
+        declared_layout.addWidget(QtWidgets.QLabel("LDA:"), 7, 0)
+        declared_layout.addWidget(self.lda_override_1_le, 7, 1)
+        declared_layout.addWidget(self.lda_override_2_le, 7, 2)
 
         self.declared_distance_source_le = QtWidgets.QLineEdit()
         self.declared_distance_source_le.setObjectName(f"lineEdit_declared_distance_source_{self.index}")
         self.declared_distance_source_le.setPlaceholderText("Published source")
         self.declared_distance_source_le.setToolTip("Source for published declared-distance overrides.")
-        declared_layout.addWidget(QtWidgets.QLabel("Source:"), 11, 0)
-        declared_layout.addWidget(self.declared_distance_source_le, 11, 1, 1, 2)
+        declared_layout.addWidget(QtWidgets.QLabel("Source:"), 8, 0)
+        declared_layout.addWidget(self.declared_distance_source_le, 8, 1, 1, 2)
 
         self.declared_distance_notes_le = QtWidgets.QLineEdit()
         self.declared_distance_notes_le.setObjectName(f"lineEdit_declared_distance_notes_{self.index}")
         self.declared_distance_notes_le.setPlaceholderText("Notes")
         self.declared_distance_notes_le.setToolTip("Notes for published declared-distance overrides.")
-        declared_layout.addWidget(QtWidgets.QLabel("Notes:"), 12, 0)
-        declared_layout.addWidget(self.declared_distance_notes_le, 12, 1, 1, 2)
+        declared_layout.addWidget(QtWidgets.QLabel("Notes:"), 9, 0)
+        declared_layout.addWidget(self.declared_distance_notes_le, 9, 1, 1, 2)
 
         parent_layout.addWidget(declared_group)
 
@@ -1128,12 +1131,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             )
 
     def _mark_required_label(self, label: QtWidgets.QLabel) -> None:
-        """Annotate a label so required runway fields are visually obvious."""
-        base_text = label.text()
-        if "*" not in base_text:
-            label.setText(f"{base_text} *")
-        label.setToolTip("Required for Ready status")
-        label.setStyleSheet("font-weight: 600;")
+        """Keep required labels visually plain; field state carries the validation cue."""
+        label.setText(label.text().replace(" *", ""))
+        label.setToolTip("")
+        label.setStyleSheet("")
 
     def _update_required_field_indicators(self) -> None:
         """Highlight the fields that must be completed for a runway to be ready."""
