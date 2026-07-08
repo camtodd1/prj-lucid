@@ -214,18 +214,17 @@ class OlsEnvelopeComparisonEngine:
         for part in self.baseline_engine._polygon_parts(geometry):
             if not self._has_area(part):
                 continue
+            part = self._clean_comparison_part(part, baseline, future, change)
+            if not self._has_area(part):
+                continue
             delta_min, delta_max, delta_representative = self.delta_range(part, baseline, future, change)
             if delta_representative is None:
                 continue
             if change == "gain":
                 if delta_representative <= self.tolerance_m:
                     continue
-                if delta_min is not None and delta_min < -self.tolerance_m:
-                    continue
             if change == "loss":
                 if delta_representative >= -self.tolerance_m:
-                    continue
-                if delta_max is not None and delta_max > self.tolerance_m:
                     continue
             if change == "no_change":
                 if delta_min is None or delta_max is None:
@@ -536,6 +535,115 @@ class OlsEnvelopeComparisonEngine:
         except Exception:
             pass
         return normalised
+
+    def _clean_comparison_part(
+        self,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        change: str,
+    ) -> QgsGeometry:
+        """Remove wrong-side split spikes without treating removed area as classified."""
+        if geometry is None or geometry.isEmpty():
+            return geometry
+        original_area = geometry.area()
+        if original_area < COMPARISON_MIN_AREA_M2:
+            return QgsGeometry()
+        cleaned = self._remove_comparison_ring_spikes(geometry, baseline, future, change)
+        if cleaned is None or cleaned.isEmpty():
+            return geometry
+        area_change = abs(cleaned.area() - original_area)
+        allowed_change = max(
+            COMPARISON_SPIKE_MAX_AREA_CHANGE_M2,
+            original_area * COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO,
+        )
+        if area_change <= allowed_change:
+            return cleaned
+        return geometry
+
+    def _remove_comparison_ring_spikes(
+        self,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        change: str,
+    ) -> Optional[QgsGeometry]:
+        try:
+            if QgsWkbTypes.geometryType(geometry.wkbType()) != Qgis.GeometryType.Polygon:
+                return geometry
+            if geometry.isMultipart():
+                cleaned_polygons = []
+                for polygon in geometry.asMultiPolygon():
+                    cleaned = self._clean_comparison_polygon_rings(polygon, baseline, future, change)
+                    if cleaned:
+                        cleaned_polygons.append(cleaned)
+                return QgsGeometry.fromMultiPolygonXY(cleaned_polygons) if cleaned_polygons else QgsGeometry()
+            cleaned_polygon = self._clean_comparison_polygon_rings(
+                geometry.asPolygon(),
+                baseline,
+                future,
+                change,
+            )
+            return QgsGeometry.fromPolygonXY(cleaned_polygon) if cleaned_polygon else QgsGeometry()
+        except Exception:
+            return geometry
+
+    def _clean_comparison_polygon_rings(
+        self,
+        polygon,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        change: str,
+    ) -> list:
+        if not polygon:
+            return []
+        cleaned = [self._clean_comparison_ring(polygon[0], True, baseline, future, change)]
+        for ring in polygon[1:]:
+            cleaned_ring = self._clean_comparison_ring(ring, False, baseline, future, change)
+            if len(cleaned_ring) >= 4:
+                cleaned.append(cleaned_ring)
+        return cleaned if len(cleaned[0]) >= 4 else []
+
+    def _clean_comparison_ring(
+        self,
+        ring,
+        exterior: bool,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        change: str,
+    ) -> list:
+        if not ring:
+            return []
+        points = [QgsPointXY(point) for point in ring]
+        if len(points) >= 2 and self._same_point(points[0], points[-1]):
+            points = points[:-1]
+        if len(points) < 3:
+            return []
+        if not exterior:
+            return points + [points[0]]
+        for _ in range(24):
+            removed = False
+            count = len(points)
+            if count < 4:
+                break
+            for index in range(count):
+                previous_point = points[(index - 1) % count]
+                current_point = points[index]
+                next_point = points[(index + 1) % count]
+                if self._is_comparison_spike_vertex(
+                    previous_point,
+                    current_point,
+                    next_point,
+                    baseline,
+                    future,
+                    change,
+                ):
+                    points.pop(index)
+                    removed = True
+                    break
+            if not removed:
+                break
+        return points + [points[0]]
 
     def _clean_no_overlay_part(self, geometry: QgsGeometry) -> QgsGeometry:
         """Remove small overlay artefacts without materially changing real no-overlay areas."""

@@ -140,6 +140,14 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(loss_max, 0.0)
         self.assertLess(loss_rep, 0.0)
 
+        cleaned = engine._clean_comparison_part(spiked_loss, baseline, future, "loss")
+        cleaned_vertices = [(round(vertex.x(), 3), round(vertex.y(), 3)) for vertex in cleaned.vertices()]
+        self.assertNotIn((40.0, 50.0), cleaned_vertices)
+        cleaned_min, cleaned_max, cleaned_rep = engine.delta_range(cleaned, baseline, future, "loss")
+        self.assertAlmostEqual(cleaned_min, -50.0, places=3)
+        self.assertEqual(cleaned_max, 0.0)
+        self.assertLess(cleaned_rep, 0.0)
+
     def test_delta_range_rounds_to_published_precision(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 100.000000523)
