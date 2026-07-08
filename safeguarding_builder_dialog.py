@@ -199,6 +199,8 @@ class SafeguardingBuilderDialog(
         self._setup_output_options_ui_connections()
         self._setup_agl_options_ui_connections()
         self._setup_global_context_block()
+        self._setup_readiness_strip()
+        self._setup_workflow_tab_state()
         self._style_workflow_panels()
 
         if self.scroll_area_layout is not None:
@@ -254,7 +256,6 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QPushButton, "pushButton_Generate"),
         )
         if generate_button:
-            generate_button.setEnabled(True)
             generate_button.setText("Generate Airport Layers")
         self.update_dialog_status()
 
@@ -443,25 +444,8 @@ class SafeguardingBuilderDialog(
                     group.setTitle("Aerodrome Reference Point (ARP)")
                     group.setStyleSheet(airport_card_style)
                 else:
-                    group.setTitle("Meteorological Instrument Station (optional)")
-                    group.setStyleSheet(
-                        """
-                        QGroupBox {
-                            border: 1px solid #e5e5e5;
-                            border-radius: 4px;
-                            margin-top: 12px;
-                            padding: 8px;
-                            background: #fafafa;
-                        }
-                        QGroupBox::title {
-                            subcontrol-origin: margin;
-                            left: 8px;
-                            padding: 0 4px;
-                            font-weight: 500;
-                            color: #666666;
-                        }
-                        """
-                    )
+                    group.setTitle("Meteorological Instrument Station")
+                    group.setStyleSheet(airport_card_style)
                 group.setSizePolicy(
                     QtWidgets.QSizePolicy.Policy.Expanding,
                     QtWidgets.QSizePolicy.Policy.Fixed,
@@ -478,6 +462,13 @@ class SafeguardingBuilderDialog(
             label = getattr(self, name, self.findChild(QtWidgets.QLabel, name))
             if label:
                 label.setStyleSheet("color: #666666; font-size: 11px;")
+        met_description = getattr(
+            self,
+            "label_met_description",
+            self.findChild(QtWidgets.QLabel, "label_met_description"),
+        )
+        if met_description:
+            met_description.setText("Optional coordinates for MET safeguarding.")
 
     def _setup_global_context_block(self) -> None:
         """Move airport identity and ruleset into the persistent title block."""
@@ -652,6 +643,130 @@ class SafeguardingBuilderDialog(
         airport_identity_frame.setFixedHeight(header_widget_height)
         ruleset_group.setFixedHeight(header_widget_height)
 
+    def _setup_readiness_strip(self) -> None:
+        """Insert the cross-tab generation readiness summary below the setup cards."""
+        main_layout = getattr(self, "verticalLayout", None)
+        tab_widget = getattr(self, "tabWidget_workflow", None)
+        if not isinstance(main_layout, QtWidgets.QVBoxLayout) or tab_widget is None:
+            return
+        if getattr(self, "frame_readiness_strip", None) is not None:
+            return
+
+        readiness_frame = QtWidgets.QFrame(self)
+        readiness_frame.setObjectName("frame_readiness_strip")
+        readiness_frame.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        readiness_frame.setStyleSheet(
+            """
+            QFrame#frame_readiness_strip {
+                background: #ffffff;
+                border: 1px solid #d4d8dd;
+                border-radius: 4px;
+            }
+            """
+        )
+
+        readiness_layout = QtWidgets.QHBoxLayout(readiness_frame)
+        readiness_layout.setContentsMargins(10, 8, 10, 8)
+        readiness_layout.setSpacing(10)
+
+        badge = QtWidgets.QLabel(readiness_frame)
+        badge.setObjectName("label_generation_readiness_badge")
+        title = QtWidgets.QLabel(readiness_frame)
+        title.setObjectName("label_generation_readiness_title")
+        title.setStyleSheet("QLabel { color: #232323; font-size: 12px; font-weight: 700; }")
+        detail = QtWidgets.QLabel(readiness_frame)
+        detail.setObjectName("label_generation_readiness_detail")
+        detail.setStyleSheet("QLabel { color: #555555; font-size: 11px; }")
+        detail.setWordWrap(False)
+
+        text_block = QtWidgets.QFrame(readiness_frame)
+        text_block_layout = QtWidgets.QVBoxLayout(text_block)
+        text_block_layout.setContentsMargins(0, 0, 0, 0)
+        text_block_layout.setSpacing(0)
+        text_block_layout.addWidget(title)
+        text_block_layout.addWidget(detail)
+
+        readiness_layout.addWidget(badge, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+        readiness_layout.addWidget(text_block, 1)
+
+        self.frame_readiness_strip = readiness_frame
+        self.label_generation_readiness_badge = badge
+        self.label_generation_readiness_title = title
+        self.label_generation_readiness_detail = detail
+
+        tab_index = main_layout.indexOf(tab_widget)
+        insert_index = tab_index if tab_index >= 0 else main_layout.count()
+        main_layout.insertWidget(insert_index, readiness_frame)
+
+    def _setup_workflow_tab_state(self) -> None:
+        """Prepare tab-level readiness icons and tooltips."""
+        self._workflow_tab_icons: Dict[str, QtGui.QIcon] = {}
+        for state, color in {
+            "ready": "#247a45",
+            "warning": "#9a6200",
+            "blocked": "#8a95a3",
+            "optional": "#6e7f91",
+            "neutral": "#8a95a3",
+        }.items():
+            self._workflow_tab_icons[state] = self._make_tab_state_icon(color)
+
+        self._workflow_tab_text_colors = {
+            "ready": QtGui.QColor("#1f6b32"),
+            "warning": QtGui.QColor("#8a5200"),
+            "blocked": QtGui.QColor("#66717d"),
+            "optional": QtGui.QColor("#4f5f70"),
+            "neutral": QtGui.QColor("#333333"),
+        }
+
+    def _make_tab_state_icon(self, color: str) -> QtGui.QIcon:
+        """Create a small colored status dot for a workflow tab."""
+        pixmap = QtGui.QPixmap(14, 14)
+        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
+        painter = QtGui.QPainter(pixmap)
+        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 2))
+        painter.setBrush(QtGui.QColor(color))
+        painter.drawEllipse(3, 3, 8, 8)
+        painter.end()
+        return QtGui.QIcon(pixmap)
+
+    def _set_workflow_tab_state(self, tab_name: str, state: str, tooltip: str) -> None:
+        """Apply a dynamic state icon, text color, and tooltip to a tab."""
+        tab_widget = getattr(self, "tabWidget_workflow", None)
+        tab_page = getattr(self, tab_name, None)
+        if tab_widget is None or tab_page is None:
+            return
+        index = tab_widget.indexOf(tab_page)
+        if index < 0:
+            return
+        icon = getattr(self, "_workflow_tab_icons", {}).get(state)
+        if icon is not None:
+            tab_widget.setTabIcon(index, icon)
+        color = getattr(self, "_workflow_tab_text_colors", {}).get(state, QtGui.QColor("#333333"))
+        tab_widget.tabBar().setTabTextColor(index, color)
+        tab_widget.setTabToolTip(index, tooltip)
+
+    def _set_readiness_strip_state(
+        self,
+        badge_text: str,
+        badge_state: str,
+        title: str,
+        detail: str,
+    ) -> None:
+        """Update the generation readiness summary."""
+        badge = getattr(self, "label_generation_readiness_badge", None)
+        title_label = getattr(self, "label_generation_readiness_title", None)
+        detail_label = getattr(self, "label_generation_readiness_detail", None)
+        if badge is not None:
+            self._apply_status_chip(badge, badge_text, badge_state, prominent=False)
+        if title_label is not None:
+            title_label.setText(title)
+        if detail_label is not None:
+            detail_label.setText(detail)
+
     def _setup_ruleset_selector_ui(self) -> None:
         """Create global policy selectors."""
         self.ruleset_combo = QtWidgets.QComboBox()
@@ -786,7 +901,7 @@ class SafeguardingBuilderDialog(
             crs_field.setStyleSheet(
                 "QLineEdit { background: #ffffff; color: #333333; border: 1px solid #c8c8c8; "
                 "border-radius: 8px; padding: 4px 10px; font-size: 13px; font-weight: 600; }"
-                "QLineEdit:read-only { background: #ffffff; color: #333333; }"
+                "QLineEdit[readOnly=\"true\"] { background: #ffffff; color: #333333; }"
             )
             crs_field.setText("")
             crs_field.setToolTip("Suggested projected CRS derived from the airport latitude/longitude.")
@@ -811,6 +926,7 @@ class SafeguardingBuilderDialog(
 
         tab_widget = getattr(self, "tabWidget_workflow", self.findChild(QtWidgets.QTabWidget, "tabWidget_workflow"))
         if tab_widget:
+            tab_widget.setIconSize(QtCore.QSize(12, 12))
             tab_widget.setStyleSheet(
                 """
                 QTabWidget::pane {
@@ -819,7 +935,7 @@ class SafeguardingBuilderDialog(
                 }
                 QTabBar::tab {
                     min-width: 82px;
-                    padding: 5px 10px;
+                    padding: 6px 12px;
                     margin-right: 1px;
                     background: #eeeeee;
                     border: 1px solid #bcbcbc;
@@ -830,6 +946,9 @@ class SafeguardingBuilderDialog(
                 QTabBar::tab:selected {
                     background: #ffffff;
                     font-weight: 600;
+                }
+                QTabBar::tab:hover {
+                    background: #f6f8fa;
                 }
                 """
             )
@@ -1044,8 +1163,8 @@ class SafeguardingBuilderDialog(
         crs_field._crs_status_signature = signature
         crs_field.setStyleSheet(
             f"QLineEdit {{ background: {background}; color: {foreground}; border: 1px solid {border}; "
-            "border-radius: 8px; padding: 4px 10px; font-size: 13px; font-weight: 600; }}"
-            f"QLineEdit:read-only {{ background: {background}; color: {foreground}; }}"
+            "border-radius: 8px; padding: 4px 10px; font-size: 13px; font-weight: 600; }"
+            f"QLineEdit[readOnly=\"true\"] {{ background: {background}; color: {foreground}; }}"
         )
         crs_field.setToolTip(tooltip)
 
@@ -1764,6 +1883,131 @@ class SafeguardingBuilderDialog(
                 output_text += " | controlling OLS off"
             self._set_small_status_chip("label_output_status", output_text, output_state)
             self.label_output_status.setToolTip(output_path)
+
+        crs_text = ""
+        crs_field = getattr(
+            self,
+            "lineEdit_airport_crs",
+            self.findChild(QtWidgets.QLineEdit, "lineEdit_airport_crs"),
+        )
+        if crs_field is not None:
+            crs_text = crs_field.text().strip()
+
+        identity_present = bool(icao or iata)
+        identity_generation_ready = bool(icao)
+        arp_ready = all(arp_values[:2])
+        runway_ready = runway_count > 0 and incomplete == 0
+        output_ready = output_state == "ready"
+
+        blockers = []
+        if not identity_present:
+            blockers.append("airport identifier")
+        elif not identity_generation_ready:
+            blockers.append("resolved ICAO")
+        if not output_ready:
+            blockers.append("output directory")
+
+        review_items = []
+        if not arp_ready:
+            review_items.append("ARP coordinates")
+        if not crs_text:
+            review_items.append("suggested CRS")
+        if runway_count == 0:
+            review_items.append("runway definition")
+        elif incomplete:
+            review_items.append("runway fields")
+
+        if blockers:
+            count = len(blockers)
+            self._set_readiness_strip_state(
+                "Needs input",
+                "warning",
+                f"{count} item{'s' if count != 1 else ''} before generation",
+                "Missing: " + ", ".join(blockers) + ".",
+            )
+        elif review_items:
+            self._set_readiness_strip_state(
+                "Ready",
+                "info",
+                "Ready to generate, with review items",
+                "Review: " + ", ".join(review_items) + ".",
+            )
+        else:
+            self._set_readiness_strip_state(
+                "Ready",
+                "ready",
+                "Ready to generate",
+                "Required airport, output, runway, CRS, and ARP inputs are complete.",
+            )
+
+        if identity_generation_ready and arp_ready:
+            airport_tab_state = "ready"
+            airport_tab_tip = "Airport identity and ARP are ready."
+        elif identity_present:
+            airport_tab_state = "warning"
+            airport_tab_tip = "Review airport setup: ARP or resolved ICAO is incomplete."
+        else:
+            airport_tab_state = "warning"
+            airport_tab_tip = "Airport identifier is required."
+        self._set_workflow_tab_state("tab_airport", airport_tab_state, airport_tab_tip)
+
+        if runway_ready:
+            runway_tab_state = "ready"
+            runway_tab_tip = f"{runway_count} runway(s) ready."
+        elif runway_count:
+            runway_tab_state = "warning"
+            runway_tab_tip = f"{runway_count} runway(s) defined, {incomplete} incomplete."
+        else:
+            runway_tab_state = "neutral"
+            runway_tab_tip = "No runways defined."
+        self._set_workflow_tab_state("tab_runways", runway_tab_state, runway_tab_tip)
+
+        self._set_workflow_tab_state(
+            "tab_cns",
+            "ready" if cns_count else "optional",
+            f"{cns_count} CNS facilit{'y' if cns_count == 1 else 'ies'} configured." if cns_count else "Optional: no CNS facilities configured.",
+        )
+
+        if not identity_generation_ready or not runway_ready:
+            ols_tab_state = "blocked"
+            ols_tab_tip = "Waiting for airport identity and complete runway inputs."
+        elif not arp_ready:
+            ols_tab_state = "warning"
+            ols_tab_tip = "Runway OLS can be reviewed; airport-wide ARP-dependent surfaces need ARP coordinates."
+        else:
+            ols_tab_state = "ready"
+            ols_tab_tip = "OLS inputs are ready."
+        self._set_workflow_tab_state("tab_ols", ols_tab_state, ols_tab_tip)
+
+        self._set_workflow_tab_state(
+            "tab_lighting",
+            "ready" if agl_enabled else "optional",
+            f"Lighting enabled: {agl_rows} approach row(s)." if agl_enabled else "Optional: lighting generation is disabled.",
+        )
+
+        if not identity_generation_ready:
+            output_tab_state = "blocked"
+            output_tab_tip = "Waiting for airport identity."
+        elif output_ready:
+            output_tab_state = "ready"
+            output_tab_tip = output_text
+        else:
+            output_tab_state = "warning"
+            output_tab_tip = output_text
+        self._set_workflow_tab_state("tab_output", output_tab_state, output_tab_tip)
+
+        generate_button = getattr(
+            self,
+            "pushButton_Generate",
+            self.findChild(QtWidgets.QPushButton, "pushButton_Generate"),
+        )
+        if generate_button and not self._processing_status_active:
+            can_generate = identity_generation_ready and output_ready
+            generate_button.setEnabled(can_generate)
+            if can_generate:
+                generate_button.setToolTip("Generate airport safeguarding layers with the current inputs.")
+            else:
+                generate_button.setToolTip("Complete required inputs before generating: " + ", ".join(blockers) + ".")
 
         if hasattr(self, "label_footer_status") and not self._processing_status_active:
             footer_parts = []
