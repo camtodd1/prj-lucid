@@ -17,6 +17,7 @@ Runway Type Abbreviations Used:
 import logging
 from typing import Optional, Dict, Any, Tuple, List
 
+from ..ols_utils import detached_params, is_valid_arc_number, lookup_detached, normalize_surface_type
 from .classification import PRECISION_APPROACH_TYPES, RUNWAY_TYPE_MAP, get_runway_type_abbr
 from .physical_data import (
     PAVEMENT_MOS_REF,
@@ -702,7 +703,7 @@ def get_baulked_landing_params(
     arc_let: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Return MOS139 baulked landing parameters with Table 7.15(1) notes applied."""
-    if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
+    if not is_valid_arc_number(arc_num):
         LOGGER.warning("Invalid ARC Number %r for Baulked Landing lookup.", arc_num)
         return None
 
@@ -711,7 +712,7 @@ def get_baulked_landing_params(
     if not params:
         return None
 
-    result = params.copy()
+    result = detached_params(params)
     if (arc_let or "").strip().upper() == "F" and result.get("code_letter_f_width") is not None:
         result["width"] = result["code_letter_f_width"]
         result["width_ref"] = result.get("code_letter_f_width_ref")
@@ -725,7 +726,7 @@ def get_inner_approach_params(
     arc_let: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
     """Return MOS139 inner approach parameters with Table 7.15(1) notes applied."""
-    if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
+    if not is_valid_arc_number(arc_num):
         LOGGER.warning("Invalid ARC Number %r for Inner Approach lookup.", arc_num)
         return None
 
@@ -734,7 +735,7 @@ def get_inner_approach_params(
     if not params:
         return None
 
-    result = params.copy()
+    result = detached_params(params)
     if (arc_let or "").strip().upper() == "F" and result.get("code_letter_f_width") is not None:
         result["width"] = result["code_letter_f_width"]
         result["width_ref"] = result.get("code_letter_f_width_ref")
@@ -742,13 +743,13 @@ def get_inner_approach_params(
     return result
 
 
-def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: str) -> Optional[Dict[str, Any]]:
+def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: str):
     """
     Retrieves OLS parameters based on ARC number, runway type, and surface type.
     Returns None if parameters are not found for the specific combination.
     Handles simplified runway type mapping and potential fallbacks for Approach.
     """
-    if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
+    if not is_valid_arc_number(arc_num):
         LOGGER.warning("Invalid ARC Number %r for OLS lookup.", arc_num)
         return None
 
@@ -756,12 +757,12 @@ def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: s
     # Default key is (arc_num, rwy_abbr), used for most surfaces
     # Some surfaces like TOCS might only use arc_num.
     key_arc_type = (arc_num, rwy_abbr)
-    surface_type_upper = surface_type.upper()
+    surface_type_upper = normalize_surface_type(surface_type)
 
     params_dict: Optional[Dict] = None
     lookup_key: Any = key_arc_type
 
-    if surface_type_upper == "APPROACH":
+    if surface_type_upper in {"APPROACH", "APPROACHSURFACE"}:
         params_dict = APPROACH_PARAMS
         # Fallback logic specifically for Approach
         params = params_dict.get(key_arc_type)
@@ -771,35 +772,35 @@ def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: s
             if not params:
                 key_ni = (arc_num, "NI")
                 params = params_dict.get(key_ni)
-        return params.copy() if params else None
+        return detached_params(params) if params else None
 
-    elif surface_type_upper == "INNERAPPROACH":
+    elif surface_type_upper in {"INNERAPPROACH", "INNERAPPROACHSURFACE"}:
         return get_inner_approach_params(arc_num, runway_type_str)
 
-    elif surface_type_upper == "BAULKEDLANDING":
+    elif surface_type_upper in {"BALKEDLANDING", "BALKEDLANDINGSURFACE", "BAULKEDLANDING", "BAULKEDLANDINGSURFACE"}:
         return get_baulked_landing_params(arc_num, runway_type_str)
 
-    elif surface_type_upper == "TOCS":
+    elif surface_type_upper in {"TOCS", "TAKEOFFCLIMB", "TAKEOFFCLIMBSURFACE"}:
         params_dict = TOCS_PARAMS
         lookup_key = arc_num  # TOCS params keyed only by ARC number
 
-    elif surface_type_upper == "IHS":
+    elif surface_type_upper in {"IHS", "INNERHORIZONTAL", "INNERHORIZONTALSURFACE"}:
         params_dict = IHS_PARAMS
         # lookup_key remains key_arc_type
 
-    elif surface_type_upper == "CONICAL":
+    elif surface_type_upper in {"CONICAL", "CONICALSURFACE"}:
         params_dict = CONICAL_PARAMS
         # lookup_key remains key_arc_type
 
-    elif surface_type_upper == "OHS":
+    elif surface_type_upper in {"OHS", "OUTERHORIZONTAL", "OUTERHORIZONTALSURFACE"}:
         params_dict = OHS_PARAMS
         # lookup_key remains key_arc_type
 
-    elif surface_type_upper == "TRANSITIONAL":  # Main Transitional
+    elif surface_type_upper in {"TRANSITIONAL", "TRANSITIONALSURFACE"}:  # Main Transitional
         params_dict = TRANSITIONAL_PARAMS
         # lookup_key remains key_arc_type
 
-    elif surface_type_upper == "INNERTRANSITIONAL":  # Placeholder for specific Inner Transitional params
+    elif surface_type_upper in {"INNERTRANSITIONAL", "INNERTRANSITIONALSURFACE"}:
         params_dict = INNER_TRANSITIONAL_PARAMS  # If you have specific params for it
         # lookup_key remains key_arc_type
 
@@ -809,8 +810,7 @@ def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: s
 
     # Common lookup for most types (except Approach which returned earlier)
     if params_dict is not None:
-        params = params_dict.get(lookup_key)
-        return params.copy() if params else None
+        return lookup_detached(params_dict, lookup_key)
     else:
         # This path should ideally not be reached if surface_type_upper matched a known type
         # and params_dict was assigned. Could happen if a params_dict (e.g. BAULKED_LANDING_PARAMS)

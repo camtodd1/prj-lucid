@@ -3,12 +3,27 @@
 """EASA CS-ADR-DSN OLS surface parameters."""
 
 import logging
-import re
 from typing import Any, Dict, List, Optional, Tuple
 
 try:
+    from ..ols_utils import detached_params, is_valid_arc_number, lookup_detached, normalize_surface_type
     from .classification import get_runway_type_abbr
 except Exception:  # pragma: no cover - allows standalone inspection/testing
+    from copy import deepcopy
+
+    def detached_params(params: Any) -> Any:
+        return deepcopy(params)
+
+    def is_valid_arc_number(arc_num: Any) -> bool:
+        return isinstance(arc_num, int) and arc_num in {1, 2, 3, 4}
+
+    def lookup_detached(mapping: Dict[Any, Any], key: Any) -> Any:
+        params = mapping.get(key)
+        return detached_params(params) if params is not None else None
+
+    def normalize_surface_type(surface_type: Optional[str]) -> str:
+        return "".join(char for char in str(surface_type or "").upper() if char.isalnum())
+
     def get_runway_type_abbr(runway_type_str: Optional[str]) -> str:
         """Fallback runway type classifier for standalone use."""
         value = (runway_type_str or "").upper().replace("-", "_").replace(" ", "_")
@@ -36,7 +51,7 @@ LOGGER = logging.getLogger(__name__)
 
 def _normalize_surface_type(surface_type: str) -> str:
     """Normalize caller surface labels to compact lookup keys."""
-    return re.sub(r"[^A-Z0-9]", "", (surface_type or "").upper())
+    return normalize_surface_type(surface_type)
 
 # =========================================================================
 # Basic constants and references
@@ -697,7 +712,7 @@ def get_ihs_base_height() -> Optional[float]:
 
 def get_ols_traceability() -> Dict[str, Any]:
     """Return source traceability metadata for EASA OLS rules."""
-    return OLS_TRACEABILITY.copy()
+    return detached_params(OLS_TRACEABILITY)
 
 
 def get_tocs_params(
@@ -718,13 +733,13 @@ def get_tocs_params(
             intended track includes heading changes greater than 15 degrees for
             operations in IMC or VMC by night.
     """
-    if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
+    if not is_valid_arc_number(arc_num):
         LOGGER.warning("Invalid ARC Number %r for TOCS lookup.", arc_num)
         return None
     params = TOCS_PARAMS.get(arc_num)
     if not params:
         return None
-    result = params.copy()
+    result = detached_params(params)
     if clearway_provided:
         result["inner_edge_width"] = result.get("inner_edge_width_clearway", result["inner_edge_width"])
     if turning_track_gt_15_deg and arc_num in [3, 4]:
@@ -744,7 +759,7 @@ def get_ols_params(
     surface, the return value is a list of section dictionaries, consistent
     with the MOS139 template.
     """
-    if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
+    if not is_valid_arc_number(arc_num):
         LOGGER.warning("Invalid ARC Number %r for OLS lookup.", arc_num)
         return None
 
@@ -752,21 +767,21 @@ def get_ols_params(
     key_arc_type = (arc_num, rwy_abbr)
     surface_type_upper = _normalize_surface_type(surface_type)
 
-    if surface_type_upper == "APPROACH":
+    if surface_type_upper in {"APPROACH", "APPROACHSURFACE"}:
         params = APPROACH_PARAMS.get(key_arc_type)
         if not params and rwy_abbr.startswith("PA"):
             params = APPROACH_PARAMS.get((arc_num, "NPA")) or APPROACH_PARAMS.get((arc_num, "NI"))
-        return [section.copy() for section in params] if params else None
+        return detached_params(params) if params else None
 
-    if surface_type_upper == "INNERAPPROACH":
+    if surface_type_upper in {"INNERAPPROACH", "INNERAPPROACHSURFACE"}:
         params_dict = INNER_APPROACH_PARAMS
         lookup_key: Any = key_arc_type
-    elif surface_type_upper in {"BALKEDLANDING", "BAULKEDLANDING"}:
+    elif surface_type_upper in {"BALKEDLANDING", "BALKEDLANDINGSURFACE", "BAULKEDLANDING", "BAULKEDLANDINGSURFACE"}:
         params_dict = BALKED_LANDING_PARAMS
         lookup_key = key_arc_type
     elif surface_type_upper in {"TOCS", "TAKEOFFCLIMB", "TAKEOFFCLIMBSURFACE"}:
         return get_tocs_params(arc_num)
-    elif surface_type_upper == "IHS":
+    elif surface_type_upper in {"IHS", "INNERHORIZONTAL", "INNERHORIZONTALSURFACE"}:
         params_dict = IHS_PARAMS
         lookup_key = key_arc_type
     elif surface_type_upper in {"CONICAL", "CONICALSURFACE"}:
@@ -778,15 +793,14 @@ def get_ols_params(
     elif surface_type_upper in {"TRANSITIONAL", "TRANSITIONALSURFACE"}:
         params_dict = TRANSITIONAL_PARAMS
         lookup_key = key_arc_type
-    elif surface_type_upper == "INNERTRANSITIONAL":
+    elif surface_type_upper in {"INNERTRANSITIONAL", "INNERTRANSITIONALSURFACE"}:
         params_dict = INNER_TRANSITIONAL_PARAMS
         lookup_key = key_arc_type
     else:
         LOGGER.warning("Unknown OLS surface type %r requested.", surface_type)
         return None
 
-    params = params_dict.get(lookup_key)
-    return params.copy() if params else None
+    return lookup_detached(params_dict, lookup_key)
 
 
 __all__ = [

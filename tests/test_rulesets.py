@@ -189,6 +189,25 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(code_3_f["width"], 140.0)
         self.assertEqual(code_3_f["width_ref"], "MOS 7.12 Table 7.15(1) note g")
 
+    def test_mos139_ols_lookup_normalizes_aliases_and_detaches_results(self):
+        first = ols_surfaces.get_ols_params(3, "Precision Approach CAT I", "approach surface")
+        self.assertIsNotNone(first)
+        first[0]["length"] = -1.0
+
+        second = ols_surfaces.get_ols_params(3, "Precision Approach CAT I", "APPROACH")
+        self.assertEqual(second[0]["length"], 3000.0)
+
+        self.assertEqual(
+            ols_surfaces.get_ols_params(3, "Precision Approach CAT I", "take-off climb surface")["length"],
+            ols_surfaces.TOCS_PARAMS[3]["length"],
+        )
+        self.assertEqual(
+            ols_surfaces.get_ols_params(3, "Precision Approach CAT I", "Balked Landing")["width"],
+            120.0,
+        )
+        with self.assertLogs("rulesets.mos139.ols_surfaces", level="WARNING"):
+            self.assertIsNone(ols_surfaces.get_ols_params(3, "Precision Approach CAT I", None))
+
     def test_mos139_threshold_marking_params(self):
         profile = get_ruleset_profile("mos139_2019")
         self.assertEqual(profile.threshold_marking_params(30.0), (8, 1.5))
@@ -1016,6 +1035,13 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(traceability["items"]["outer_horizontal_surface"]["status"], "guidance_only")
         self.assertEqual(traceability["items"]["pa_cat_i_ofz_family_applicability"]["status"], "interpretive")
 
+    def test_easa_ols_traceability_is_detached_from_constants(self):
+        traceability = easa_ols_surfaces.get_ols_traceability()
+        traceability["items"]["approach_surface"]["status"] = "mutated"
+
+        fresh_traceability = easa_ols_surfaces.get_ols_traceability()
+        self.assertEqual(fresh_traceability["items"]["approach_surface"]["status"], "operational_verified")
+
     def test_easa_ols_table_j1_approach_values_are_regression_checked(self):
         expected_approach_sections = {
             (1, "NI"): [
@@ -1216,6 +1242,25 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(easa_ols_surfaces.get_tocs_params(3)["slope_reduced_guidance"], 0.016)
         with self.assertLogs("rulesets.easa.ols_surfaces", level="WARNING"):
             self.assertIsNone(easa_ols_surfaces.get_tocs_params(5))
+
+    def test_easa_ols_lookup_normalizes_aliases_and_detaches_results(self):
+        first = easa_ols_surfaces.get_ols_params(3, "Precision Approach CAT I", "approach surface")
+        self.assertIsNotNone(first)
+        first[0]["length"] = -1.0
+
+        second = easa_ols_surfaces.get_ols_params(3, "Precision Approach CAT I", "APPROACH")
+        self.assertEqual(second[0]["length"], 3000.0)
+
+        self.assertEqual(
+            easa_ols_surfaces.get_ols_params(3, "Precision Approach CAT I", "take-off climb surface")["length"],
+            easa_ols_surfaces.TOCS_PARAMS[3]["length"],
+        )
+        self.assertEqual(
+            easa_ols_surfaces.get_ols_params(3, "Precision Approach CAT I", "Baulked Landing")["width"],
+            120.0,
+        )
+        with self.assertLogs("rulesets.easa.ols_surfaces", level="WARNING"):
+            self.assertIsNone(easa_ols_surfaces.get_ols_params(3, "Precision Approach CAT I", None))
 
     def test_easa_marking_traceability_marks_verified_and_interpretive_items(self):
         traceability = easa_markings.get_marking_traceability()
