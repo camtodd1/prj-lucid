@@ -201,6 +201,7 @@ class SafeguardingBuilderDialog(
         self._setup_global_context_block()
         self._setup_readiness_strip()
         self._setup_workflow_tab_state()
+        self._setup_workflow_context_strips()
         self._style_workflow_panels()
 
         if self.scroll_area_layout is not None:
@@ -717,6 +718,231 @@ class SafeguardingBuilderDialog(
             "optional": QtGui.QColor("#66717d"),
             "neutral": QtGui.QColor("#66717d"),
         }
+        self._workflow_tab_order = [
+            ("tab_airport", "1 Airport"),
+            ("tab_runways", "2 Runways"),
+            ("tab_cns", "3 CNS"),
+            ("tab_ols", "4 OLS"),
+            ("tab_lighting", "5 Lighting"),
+            ("tab_output", "6 Output"),
+        ]
+        tab_widget = getattr(self, "tabWidget_workflow", None)
+        if tab_widget is not None:
+            for tab_name, tab_text in self._workflow_tab_order:
+                tab_page = getattr(self, tab_name, None)
+                index = tab_widget.indexOf(tab_page) if tab_page is not None else -1
+                if index >= 0:
+                    tab_widget.setTabText(index, tab_text)
+            tab_widget.currentChanged.connect(self._sync_workflow_context)
+
+    def _workflow_tab_specs(self) -> List[Dict[str, Any]]:
+        """Describe each workflow tab and the generation functions it feeds."""
+        return [
+            {
+                "tab": "tab_airport",
+                "step": "1",
+                "title": "Airport setup",
+                "summary": "Identity, ARP, MET, and project CRS",
+                "feeds": ["Reference data", "RED", "Airport-wide safeguards"],
+                "functions": [
+                    "get_all_input_data()",
+                    "create_arp_layer()",
+                    "process_met_station_surfaces()",
+                    "_calculate_reference_elevation_datum()",
+                ],
+            },
+            {
+                "tab": "tab_runways",
+                "step": "2",
+                "title": "Runway definitions",
+                "summary": "Geometry, classification, elevations, and declared distances",
+                "feeds": ["Centrelines", "Physical surfaces", "OLS"],
+                "functions": [
+                    "_validate_runway_data()",
+                    "create_runway_centreline_layer()",
+                    "_process_physical_and_protection_layers()",
+                    "_process_runways_part2()",
+                ],
+            },
+            {
+                "tab": "tab_cns",
+                "step": "3",
+                "title": "CNS facilities",
+                "summary": "Optional technical facility coordinates",
+                "feeds": ["CNS references", "NASF CNS guidelines"],
+                "functions": [
+                    "_get_cns_manual_data()",
+                    "create_cns_source_facility_layer()",
+                    "_process_airport_safeguarding()",
+                ],
+            },
+            {
+                "tab": "tab_ols",
+                "step": "4",
+                "title": "Protected airspace",
+                "summary": "Contour intervals and controlling OLS output",
+                "feeds": ["Runway OLS", "Airport-wide OLS", "Controlling surfaces"],
+                "functions": [
+                    "get_contour_interval_options()",
+                    "_process_airport_wide_ols_if_possible()",
+                    "_create_controlling_ols_planar_poc_layers()",
+                    "_create_annex14_controlling_surface_layers()",
+                ],
+            },
+            {
+                "tab": "tab_lighting",
+                "step": "5",
+                "title": "Airfield lighting",
+                "summary": "Optional AGL elements and approach-light rows",
+                "feeds": ["AGL points", "Aerodrome infrastructure"],
+                "functions": [
+                    "_get_agl_options()",
+                    "process_airfield_ground_lighting()",
+                ],
+            },
+            {
+                "tab": "tab_output",
+                "step": "6",
+                "title": "Output destination",
+                "summary": "Memory layers or persistent file outputs",
+                "feeds": ["Layer tree", "Files", "Final report"],
+                "functions": [
+                    "_output_dependency_status()",
+                    "_create_and_add_layer()",
+                    "_final_feedback()",
+                ],
+            },
+        ]
+
+    def _workflow_tab_layout(self, tab_name: str) -> Optional[QtWidgets.QVBoxLayout]:
+        explicit_layout_names = {
+            "tab_airport": "verticalLayout_airportTab",
+            "tab_runways": "verticalLayout_runwaysTab",
+            "tab_cns": "verticalLayout_cnsTab",
+            "tab_ols": "verticalLayout_olsTab",
+            "tab_output": "verticalLayout_outputTab",
+        }
+        layout_name = explicit_layout_names.get(tab_name)
+        layout = getattr(self, layout_name, None) if layout_name else None
+        if isinstance(layout, QtWidgets.QVBoxLayout):
+            return layout
+        tab_page = getattr(self, tab_name, None)
+        page_layout = tab_page.layout() if tab_page is not None else None
+        return page_layout if isinstance(page_layout, QtWidgets.QVBoxLayout) else None
+
+    def _setup_workflow_context_strips(self) -> None:
+        """Add compact tab-local context showing how each tab contributes to generation."""
+        self._workflow_context_widgets: Dict[str, Dict[str, QtWidgets.QWidget]] = {}
+        for spec in self._workflow_tab_specs():
+            tab_name = str(spec["tab"])
+            layout = self._workflow_tab_layout(tab_name)
+            if layout is None or getattr(self, f"_workflow_context_ready_{tab_name}", False):
+                continue
+
+            frame = QtWidgets.QFrame(self)
+            frame.setObjectName(f"frame_workflow_context_{tab_name}")
+            frame.setProperty("workflowContext", True)
+            frame.setProperty("active", False)
+            frame.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+
+            row = QtWidgets.QHBoxLayout(frame)
+            row.setContentsMargins(10, 8, 10, 8)
+            row.setSpacing(10)
+            row.setAlignment(QtCore.Qt.AlignmentFlag.AlignVCenter)
+
+            step = QtWidgets.QLabel(str(spec["step"]), frame)
+            step.setObjectName(f"label_workflow_step_{tab_name}")
+            step.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            step.setFixedSize(24, 24)
+            step.setStyleSheet(
+                "QLabel { background: #2f6fbd; color: #ffffff; border-radius: 12px; "
+                "font-size: 11px; font-weight: 700; }"
+            )
+            row.addWidget(step, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+
+            title_stack = QtWidgets.QVBoxLayout()
+            title_stack.setContentsMargins(0, 0, 0, 0)
+            title_stack.setSpacing(0)
+            title = QtWidgets.QLabel(str(spec["title"]), frame)
+            title.setObjectName(f"label_workflow_title_{tab_name}")
+            title.setStyleSheet("QLabel { color: #232323; font-size: 12px; font-weight: 700; }")
+            summary = QtWidgets.QLabel(str(spec["summary"]), frame)
+            summary.setObjectName(f"label_workflow_summary_{tab_name}")
+            summary.setStyleSheet("QLabel { color: #56616d; font-size: 11px; }")
+            summary.setWordWrap(False)
+            title_stack.addWidget(title)
+            title_stack.addWidget(summary)
+            row.addLayout(title_stack, 1)
+
+            feeds_layout = QtWidgets.QHBoxLayout()
+            feeds_layout.setContentsMargins(0, 0, 0, 0)
+            feeds_layout.setSpacing(5)
+            for feed in spec.get("feeds", []):
+                chip = QtWidgets.QLabel(str(feed), frame)
+                chip.setSizePolicy(
+                    QtWidgets.QSizePolicy.Policy.Maximum,
+                    QtWidgets.QSizePolicy.Policy.Fixed,
+                )
+                chip.setMinimumHeight(22)
+                chip.setStyleSheet(
+                    "QLabel { background: #ffffff; color: #45505b; border: 1px solid #d5dde6; "
+                    "border-radius: 9px; padding: 2px 8px; font-size: 10px; font-weight: 600; }"
+                )
+                feeds_layout.addWidget(chip)
+            row.addLayout(feeds_layout, 0)
+
+            status = QtWidgets.QLabel("", frame)
+            status.setObjectName(f"label_workflow_context_status_{tab_name}")
+            functions = ", ".join(str(name) for name in spec.get("functions", []))
+            frame.setToolTip(f"Connected functions: {functions}")
+            status.setToolTip(f"Connected functions: {functions}")
+            row.addWidget(status, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+
+            layout.insertWidget(0, frame)
+            self._workflow_context_widgets[tab_name] = {
+                "frame": frame,
+                "status": status,
+                "summary": summary,
+            }
+            setattr(self, f"_workflow_context_ready_{tab_name}", True)
+
+        self._sync_workflow_context()
+
+    def _style_workflow_context_frame(self, frame: QtWidgets.QFrame, active: bool) -> None:
+        border = "#88aede" if active else "#d5dde6"
+        background = "#f7fafc" if active else "#ffffff"
+        frame.setStyleSheet(
+            f"""
+            QFrame#{frame.objectName()} {{
+                background: {background};
+                border: 1px solid {border};
+                border-radius: 4px;
+            }}
+            """
+        )
+
+    def _sync_workflow_context(self, *_args: Any) -> None:
+        tab_widget = getattr(self, "tabWidget_workflow", None)
+        current_widget = tab_widget.currentWidget() if tab_widget is not None else None
+        current_name = current_widget.objectName() if current_widget is not None else ""
+        for tab_name, widgets in getattr(self, "_workflow_context_widgets", {}).items():
+            frame = widgets.get("frame")
+            if isinstance(frame, QtWidgets.QFrame):
+                self._style_workflow_context_frame(frame, tab_name == current_name)
+
+    def _update_workflow_context_statuses(self, statuses: Dict[str, Tuple[str, str]]) -> None:
+        for tab_name, (text, state) in statuses.items():
+            widgets = getattr(self, "_workflow_context_widgets", {}).get(tab_name, {})
+            status_label = widgets.get("status")
+            if isinstance(status_label, QtWidgets.QLabel):
+                self._apply_status_chip(
+                    status_label,
+                    text,
+                    "neutral" if state == "optional" else state,
+                )
 
     def _make_tab_state_icon(self, color: str) -> QtGui.QIcon:
         """Create a small colored status dot for a workflow tab."""
@@ -2299,6 +2525,47 @@ class SafeguardingBuilderDialog(
             output_tab_state = "warning"
             output_tab_tip = output_text
         self._set_workflow_tab_state("tab_output", output_tab_state, output_tab_tip)
+
+        airport_context_text = (
+            "Ready"
+            if airport_tab_state == "ready"
+            else "Review"
+            if airport_dependencies["identity_present"]
+            else "Needed"
+        )
+        runway_context_text = (
+            f"{runway_count} ready" if runway_ready else f"{incomplete} incomplete" if runway_count else "Needed"
+        )
+        cns_context_text = (
+            f"{cns_count} ready"
+            if cns_dependencies["state"] == "ready"
+            else "Optional"
+            if cns_dependencies["state"] == "optional"
+            else "Review"
+        )
+        ols_context_text = "Ready" if ols_dependencies["state"] == "ready" else "Review"
+        output_context_text = (
+            "Memory"
+            if output_ready
+            and bool(getattr(self, "radioMemoryOutput", None) and self.radioMemoryOutput.isChecked())
+            else "Files"
+            if output_ready
+            else "Review"
+        )
+        self._update_workflow_context_statuses(
+            {
+                "tab_airport": (airport_context_text, airport_tab_state),
+                "tab_runways": (runway_context_text, runway_tab_state),
+                "tab_cns": (cns_context_text, cns_dependencies["state"]),
+                "tab_ols": (ols_context_text, ols_dependencies["state"]),
+                "tab_lighting": (
+                    "Enabled" if agl_dependencies["enabled"] else "Off",
+                    agl_dependencies["state"],
+                ),
+                "tab_output": (output_context_text, output_tab_state),
+            }
+        )
+        self._sync_workflow_context()
 
         generate_button = getattr(
             self,
