@@ -1,6 +1,6 @@
 import unittest
 
-from qgis.core import QgsGeometry, QgsRectangle
+from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle
 
 from guidelines.controlling_ols_engine import (
     ControllingOlsCandidate,
@@ -110,6 +110,36 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             PlanarControllingOlsEngine([future]),
         )
         self.assertEqual(engine.baseline_only_parts(), [])
+
+    def test_loss_delta_range_ignores_wrong_side_boundary_spike(self):
+        baseline = self.plane("baseline", 1.0, 0.0, 0.0)
+        future = self.constant("future", 50.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        spiked_loss = QgsGeometry.fromPolygonXY([
+            [
+                QgsPointXY(50.0, 0.0),
+                QgsPointXY(100.0, 0.0),
+                QgsPointXY(100.0, 100.0),
+                QgsPointXY(50.0, 100.0),
+                QgsPointXY(50.0, 51.0),
+                QgsPointXY(40.0, 50.0),
+                QgsPointXY(50.0, 49.0),
+                QgsPointXY(50.0, 0.0),
+            ]
+        ])
+
+        raw_min, raw_max, _raw_rep = engine.delta_range(spiked_loss, baseline, future)
+        self.assertAlmostEqual(raw_min, -50.0, places=3)
+        self.assertAlmostEqual(raw_max, 10.0, places=3)
+
+        cleaned = engine._clean_comparison_part(spiked_loss, baseline, future, "loss")
+        cleaned_min, cleaned_max, cleaned_rep = engine.delta_range(cleaned, baseline, future)
+        self.assertAlmostEqual(cleaned_min, -50.0, places=3)
+        self.assertLessEqual(cleaned_max, engine.tolerance_m)
+        self.assertLess(cleaned_rep, 0.0)
 
 
 if __name__ == "__main__":
