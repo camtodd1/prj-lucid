@@ -2022,9 +2022,12 @@ class SafeguardingBuilderDialog(
 
     # --- Runway Group Management ---
     def _get_next_runway_id(self) -> int:
-        """Generates the next unique ID for a new runway group."""
-        self._runway_id_counter += 1
-        return self._runway_id_counter
+        """Return the lowest available runway ID and remember it as last allocated."""
+        runway_id = 1
+        while runway_id in self._runway_groups:
+            runway_id += 1
+        self._runway_id_counter = runway_id
+        return runway_id
 
     def update_all_runway_calculations(self):
         """Calls update_runway_calculations for all runway groups."""
