@@ -496,6 +496,11 @@ class SafeguardingBuilderDialog(
         if global_frame is None:
             global_frame = QtWidgets.QFrame(self)
             global_frame.setObjectName("frame_global_context")
+            global_frame.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            global_frame.setFixedHeight(110)
             global_frame.setStyleSheet(
                 """
                 QFrame#frame_global_context {
@@ -504,33 +509,12 @@ class SafeguardingBuilderDialog(
                 }
                 """
             )
-            global_layout = QtWidgets.QHBoxLayout(global_frame)
-            global_layout.setContentsMargins(0, 0, 0, 0)
-            global_layout.setSpacing(14)
-            global_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-
-            left_column = QtWidgets.QVBoxLayout()
-            left_column.setContentsMargins(0, 0, 0, 0)
-            left_column.setSpacing(0)
-            left_column.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-            global_layout.addLayout(left_column, 1)
-
-            right_column = QtWidgets.QVBoxLayout()
-            right_column.setContentsMargins(0, 0, 0, 0)
-            right_column.setSpacing(0)
-            right_column.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-            global_layout.addLayout(right_column, 1)
 
             self.frame_global_context = global_frame
-            self._global_context_left_layout = left_column
-            self._global_context_right_layout = right_column
             global_frame.installEventFilter(self)
             header_layout.insertWidget(2, global_frame)
         else:
-            left_column = getattr(self, "_global_context_left_layout", None)
-            right_column = getattr(self, "_global_context_right_layout", None)
-            if left_column is None or right_column is None:
-                return
+            global_frame.setFixedHeight(110)
 
         if airport_identity_frame is not None and airport_identity_frame.parent() is not global_frame:
             airport_identity_frame.setStyleSheet(
@@ -556,7 +540,9 @@ class SafeguardingBuilderDialog(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
-            left_column.addWidget(airport_identity_frame)
+            airport_identity_frame.setMinimumWidth(0)
+            airport_identity_frame.setParent(global_frame)
+            airport_identity_frame.show()
 
         if ruleset_group is not None and ruleset_group.parent() is not global_frame:
             ruleset_group.setFlat(True)
@@ -564,8 +550,9 @@ class SafeguardingBuilderDialog(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
-            right_column.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-            right_column.addWidget(ruleset_group)
+            ruleset_group.setMinimumWidth(0)
+            ruleset_group.setParent(global_frame)
+            ruleset_group.show()
             self.groupBox_ruleset = ruleset_group
 
         self._sync_global_context_box_geometry()
@@ -594,20 +581,36 @@ class SafeguardingBuilderDialog(
             airport_lookup.setMinimumHeight(22)
             airport_lookup.setMaximumHeight(22)
 
-        airport_identity_frame.setFixedHeight(112)
-        ruleset_group.setFixedHeight(112)
+        airport_identity_frame.setFixedHeight(110)
+        ruleset_group.setFixedHeight(110)
+        self._layout_global_context_boxes()
 
+    def _layout_global_context_boxes(self) -> None:
+        """Place the global airport and policy boxes as equal-width siblings."""
         global_frame = getattr(self, "frame_global_context", None)
-        global_layout = global_frame.layout() if global_frame is not None else None
-        if isinstance(global_layout, QtWidgets.QHBoxLayout):
-            available_width = global_frame.contentsRect().width()
-            target_width = max(1, (available_width - global_layout.spacing()) // 2)
-            airport_identity_frame.setFixedWidth(target_width)
-            ruleset_group.setFixedWidth(target_width)
+        airport_identity_frame = getattr(
+            self,
+            "frame_airport_identity",
+            self.findChild(QtWidgets.QGroupBox, "frame_airport_identity"),
+        )
+        ruleset_group = getattr(
+            self,
+            "groupBox_ruleset",
+            self.findChild(QtWidgets.QGroupBox, "groupBox_ruleset"),
+        )
+        if global_frame is None or airport_identity_frame is None or ruleset_group is None:
+            return
+
+        gap = 14
+        box_height = 110
+        available_width = max(0, global_frame.contentsRect().width() - gap)
+        box_width = max(1, available_width // 2)
+        airport_identity_frame.setGeometry(0, 0, box_width, box_height)
+        ruleset_group.setGeometry(box_width + gap, 0, box_width, box_height)
 
     def eventFilter(self, watched, event):
         if watched is getattr(self, "frame_global_context", None) and event.type() == QtCore.QEvent.Type.Resize:
-            QtCore.QTimer.singleShot(0, self._sync_global_context_box_geometry)
+            self._layout_global_context_boxes()
         return super().eventFilter(watched, event)
 
     def _setup_ruleset_selector_ui(self) -> None:
