@@ -1,6 +1,6 @@
 """Output option setup and validation helpers for the dialog."""
 
-from qgis.PyQt import QtWidgets  # type: ignore
+from qgis.PyQt import QtCore, QtWidgets  # type: ignore
 from qgis.core import QgsMessageLog, Qgis  # type: ignore
 
 from .dialog_constants import (
@@ -111,6 +111,11 @@ class OutputOptionsMixin:
             group.setObjectName("groupBox_contourIntervals")
             parent_layout.addWidget(group)
         group.setTitle(self.tr("Protected Airspace Contour Intervals"))
+        group.setToolTip(
+            self.tr(
+                "Adjust contour spacing for protected-airspace outputs. Family rows override the matching surface rows."
+            )
+        )
 
         grid = group.layout()
         if grid is None:
@@ -128,11 +133,25 @@ class OutputOptionsMixin:
             primary_header = QtWidgets.QLabel(self.tr("Primary"))
             primary_header.setObjectName("labelContourPrimaryHeader")
             grid.addWidget(primary_header, 0, 1)
+        primary_header.setToolTip(self.tr("Interval used to classify major contours."))
         intermediate_header = getattr(self, "labelContourIntermediateHeader", None)
         if intermediate_header is None:
             intermediate_header = QtWidgets.QLabel(self.tr("Intermediate"))
             intermediate_header.setObjectName("labelContourIntermediateHeader")
             grid.addWidget(intermediate_header, 0, 2)
+        intermediate_header.setToolTip(self.tr("Interval used to generate regular contour lines."))
+
+        reset_button = getattr(self, "toolButtonResetContourIntervals", None)
+        if reset_button is None:
+            reset_button = QtWidgets.QToolButton()
+            reset_button.setObjectName("toolButtonResetContourIntervals")
+            reset_button.setText(self.tr("Reset"))
+            reset_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            reset_button.setIcon(reset_button.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_BrowserReload))
+            reset_button.clicked.connect(self._reset_contour_interval_controls)
+            self.toolButtonResetContourIntervals = reset_button
+            grid.addWidget(reset_button, 0, 3)
+        reset_button.setToolTip(self.tr("Reset all contour intervals to the default values."))
 
         self._contour_primary_interval_spinboxes = {}
         self._contour_interval_spinboxes = {}
@@ -141,6 +160,7 @@ class OutputOptionsMixin:
             default_label = QtWidgets.QLabel(self.tr("Default contour interval"))
             default_label.setObjectName("labelContourDefault")
             grid.addWidget(default_label, 1, 0)
+        default_label.setToolTip(self.tr("Fallback used when a surface or family does not have a specific override."))
         self.doubleSpinBoxContourDefaultPrimary = getattr(
             self,
             "doubleSpinBoxContourDefaultPrimary",
@@ -154,6 +174,8 @@ class OutputOptionsMixin:
             "doubleSpinBoxContourDefault",
             None,
         ) or self._create_contour_interval_spinbox("doubleSpinBoxContourDefault")
+        self.doubleSpinBoxContourDefaultPrimary.setToolTip(self.tr("Default major-contour interval."))
+        self.doubleSpinBoxContourDefault.setToolTip(self.tr("Default regular contour interval."))
         grid.addWidget(self.doubleSpinBoxContourDefaultPrimary, 1, 1)
         grid.addWidget(self.doubleSpinBoxContourDefault, 1, 2)
 
@@ -166,6 +188,7 @@ class OutputOptionsMixin:
                 label = QtWidgets.QLabel(self.tr(CONTOUR_INTERVAL_LABELS[key]))
                 label.setObjectName(label_name)
                 grid.addWidget(label, row, 0)
+            label.setToolTip(self._contour_interval_tooltip(key))
             primary_spinbox = getattr(self, primary_spin_name, None)
             if primary_spinbox is None:
                 primary_spinbox = self._create_contour_interval_spinbox(
@@ -175,6 +198,8 @@ class OutputOptionsMixin:
             intermediate_spinbox = getattr(self, intermediate_spin_name, None)
             if intermediate_spinbox is None:
                 intermediate_spinbox = self._create_contour_interval_spinbox(intermediate_spin_name)
+            primary_spinbox.setToolTip(self._contour_interval_tooltip(key, role="primary"))
+            intermediate_spinbox.setToolTip(self._contour_interval_tooltip(key, role="intermediate"))
             self._contour_primary_interval_spinboxes[key] = primary_spinbox
             self._contour_interval_spinboxes[key] = intermediate_spinbox
             grid.addWidget(primary_spinbox, row, 1)
@@ -200,6 +225,29 @@ class OutputOptionsMixin:
         spinbox.setSuffix(" m")
         spinbox.setValue(default_value)
         return spinbox
+
+    def _contour_interval_tooltip(self, key: str, role: str = "label") -> str:
+        label = CONTOUR_INTERVAL_LABELS.get(key, key.replace("_", " ").title())
+        family_note = ""
+        if key == "annex14_ofs":
+            family_note = " Overrides Annex 14 obstacle free surface contours after surface-level defaults."
+        elif key == "annex14_oes":
+            family_note = " Overrides Annex 14 obstacle evaluation surface contours after surface-level defaults."
+        elif key.startswith("inner_") or key == "baulked_landing":
+            family_note = " Used by precision inner-surface and OFZ-style outputs where available."
+        if role == "primary":
+            return self.tr(f"{label}: major-contour classification interval.{family_note}")
+        if role == "intermediate":
+            return self.tr(f"{label}: regular contour generation interval.{family_note}")
+        return self.tr(f"Contour interval override for {label}.{family_note}")
+
+    def _reset_contour_interval_controls(self):
+        if hasattr(self, "doubleSpinBoxContourDefaultPrimary"):
+            self.doubleSpinBoxContourDefaultPrimary.setValue(DEFAULT_PRIMARY_CONTOUR_INTERVAL)
+        if hasattr(self, "doubleSpinBoxContourDefault"):
+            self.doubleSpinBoxContourDefault.setValue(DEFAULT_CONTOUR_INTERVAL)
+        self._apply_default_contour_interval("primary", DEFAULT_PRIMARY_CONTOUR_INTERVAL)
+        self._apply_default_contour_interval("intermediate", DEFAULT_CONTOUR_INTERVAL)
 
     def _apply_default_contour_interval(self, role: str, value: float):
         attr_name = (
