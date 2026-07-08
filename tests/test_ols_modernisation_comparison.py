@@ -156,6 +156,40 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         engine._append_parts(repaired_parts, baseline, future, spike_remainder, "gain", clean_spikes=False)
         self.assertEqual(len(repaired_parts), 1)
 
+    def test_final_cleanup_removes_same_side_severe_boundary_spike(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 90.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        spiked_loss = QgsGeometry.fromPolygonXY([
+            [
+                QgsPointXY(0.0, 0.0),
+                QgsPointXY(100.0, 0.0),
+                QgsPointXY(100.0, 100.0),
+                QgsPointXY(51.0, 100.0),
+                QgsPointXY(50.0, 400.0),
+                QgsPointXY(49.0, 100.0),
+                QgsPointXY(0.0, 100.0),
+                QgsPointXY(0.0, 0.0),
+            ]
+        ])
+
+        cleaned = engine._clean_comparison_part(spiked_loss, baseline, future, "loss")
+        cleaned_vertices = [(round(vertex.x(), 3), round(vertex.y(), 3)) for vertex in cleaned.vertices()]
+        self.assertNotIn((50.0, 400.0), cleaned_vertices)
+        self.assertAlmostEqual(cleaned.area(), 10000.0, places=3)
+
+        parts = {"gain": [], "loss": [(baseline, future, spiked_loss)], "no_change": []}
+        engine._finalise_comparison_parts(parts)
+        final_vertices = [
+            (round(vertex.x(), 3), round(vertex.y(), 3))
+            for vertex in parts["loss"][0][2].vertices()
+        ]
+        self.assertNotIn((50.0, 400.0), final_vertices)
+        self.assertAlmostEqual(parts["loss"][0][2].area(), 10000.0, places=3)
+
     def test_delta_range_rounds_to_published_precision(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 100.000000523)

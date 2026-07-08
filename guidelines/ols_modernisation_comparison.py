@@ -28,6 +28,8 @@ COMPARISON_SPIKE_ANGLE_DEGREES = 12.0
 COMPARISON_SPIKE_DETOUR_RATIO = 1.8
 COMPARISON_SPIKE_BASE_MAX_M = 175.0
 COMPARISON_SPIKE_HEIGHT_MIN_M = 25.0
+COMPARISON_SEVERE_SPIKE_DETOUR_RATIO = 8.0
+COMPARISON_SEVERE_SPIKE_ANGLE_DEGREES = 15.0
 COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO = 0.01
 COMPARISON_SPIKE_MAX_AREA_CHANGE_M2 = 25.0
 COMPARISON_DELTA_DECIMALS = 3
@@ -126,6 +128,7 @@ class OlsEnvelopeComparisonEngine:
                     future_lower,
                 )
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
+        self._finalise_comparison_parts(result)
         return result
 
     def baseline_only_parts(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
@@ -330,6 +333,34 @@ class OlsEnvelopeComparisonEngine:
                 clean_spikes=False,
             )
 
+    def _finalise_comparison_parts(self, result) -> None:
+        """Apply final geometry hygiene after gap repair has finished."""
+        for change in ("gain", "loss", "no_change"):
+            final_parts = []
+            for baseline, future, geometry in result.get(change, []):
+                cleaned = self._clean_comparison_part(geometry, baseline, future, change)
+                if not self._has_area(cleaned):
+                    continue
+                delta_min, delta_max, delta_representative = self.delta_range(
+                    cleaned,
+                    baseline,
+                    future,
+                    change,
+                )
+                if delta_representative is None:
+                    continue
+                if change == "gain" and delta_representative <= self.tolerance_m:
+                    continue
+                if change == "loss" and delta_representative >= -self.tolerance_m:
+                    continue
+                if change == "no_change":
+                    if delta_min is None or delta_max is None:
+                        continue
+                    if abs(delta_min) > self.tolerance_m or abs(delta_max) > self.tolerance_m:
+                        continue
+                final_parts.append((baseline, future, cleaned))
+            result[change] = final_parts
+
     def _controllers_for_gap_part(
         self,
         geometry: QgsGeometry,
@@ -463,7 +494,7 @@ class OlsEnvelopeComparisonEngine:
                 previous_point = filtered[(index - 1) % count]
                 current_point = filtered[index]
                 next_point = filtered[(index + 1) % count]
-                if self._is_comparison_spike_vertex(
+                if self._comparison_spike_vertex_kind(
                     previous_point,
                     current_point,
                     next_point,
@@ -559,13 +590,18 @@ class OlsEnvelopeComparisonEngine:
         future: ControllingOlsCandidate,
         change: str,
     ) -> QgsGeometry:
-        """Remove wrong-side split spikes without treating removed area as classified."""
+        """Remove split artefact spikes without treating removed area as classified."""
         if geometry is None or geometry.isEmpty():
             return geometry
         original_area = geometry.area()
         if original_area < COMPARISON_MIN_AREA_M2:
             return QgsGeometry()
-        cleaned = self._remove_comparison_ring_spikes(geometry, baseline, future, change)
+        cleaned, removed_severe_spike = self._remove_comparison_ring_spikes(
+            geometry,
+            baseline,
+            future,
+            change,
+        )
         if cleaned is None or cleaned.isEmpty():
             return geometry
         area_change = abs(cleaned.area() - original_area)
@@ -573,7 +609,7 @@ class OlsEnvelopeComparisonEngine:
             COMPARISON_SPIKE_MAX_AREA_CHANGE_M2,
             original_area * COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO,
         )
-        if area_change <= allowed_change:
+        if removed_severe_spike or area_change <= allowed_change:
             return cleaned
         return geometry
 
@@ -583,26 +619,39 @@ class OlsEnvelopeComparisonEngine:
         baseline: ControllingOlsCandidate,
         future: ControllingOlsCandidate,
         change: str,
-    ) -> Optional[QgsGeometry]:
+    ) -> Tuple[Optional[QgsGeometry], bool]:
         try:
             if QgsWkbTypes.geometryType(geometry.wkbType()) != Qgis.GeometryType.Polygon:
-                return geometry
+                return geometry, False
+            removed_severe_spike = False
             if geometry.isMultipart():
                 cleaned_polygons = []
                 for polygon in geometry.asMultiPolygon():
-                    cleaned = self._clean_comparison_polygon_rings(polygon, baseline, future, change)
+                    cleaned, removed = self._clean_comparison_polygon_rings(
+                        polygon,
+                        baseline,
+                        future,
+                        change,
+                    )
+                    removed_severe_spike = removed_severe_spike or removed
                     if cleaned:
                         cleaned_polygons.append(cleaned)
-                return QgsGeometry.fromMultiPolygonXY(cleaned_polygons) if cleaned_polygons else QgsGeometry()
-            cleaned_polygon = self._clean_comparison_polygon_rings(
+                geometry = (
+                    QgsGeometry.fromMultiPolygonXY(cleaned_polygons)
+                    if cleaned_polygons
+                    else QgsGeometry()
+                )
+                return geometry, removed_severe_spike
+            cleaned_polygon, removed_severe_spike = self._clean_comparison_polygon_rings(
                 geometry.asPolygon(),
                 baseline,
                 future,
                 change,
             )
-            return QgsGeometry.fromPolygonXY(cleaned_polygon) if cleaned_polygon else QgsGeometry()
+            geometry = QgsGeometry.fromPolygonXY(cleaned_polygon) if cleaned_polygon else QgsGeometry()
+            return geometry, removed_severe_spike
         except Exception:
-            return geometry
+            return geometry, False
 
     def _clean_comparison_polygon_rings(
         self,
@@ -610,15 +659,29 @@ class OlsEnvelopeComparisonEngine:
         baseline: ControllingOlsCandidate,
         future: ControllingOlsCandidate,
         change: str,
-    ) -> list:
+    ) -> Tuple[list, bool]:
         if not polygon:
-            return []
-        cleaned = [self._clean_comparison_ring(polygon[0], True, baseline, future, change)]
+            return [], False
+        exterior, removed_severe_spike = self._clean_comparison_ring(
+            polygon[0],
+            True,
+            baseline,
+            future,
+            change,
+        )
+        cleaned = [exterior]
         for ring in polygon[1:]:
-            cleaned_ring = self._clean_comparison_ring(ring, False, baseline, future, change)
+            cleaned_ring, removed = self._clean_comparison_ring(
+                ring,
+                False,
+                baseline,
+                future,
+                change,
+            )
+            removed_severe_spike = removed_severe_spike or removed
             if len(cleaned_ring) >= 4:
                 cleaned.append(cleaned_ring)
-        return cleaned if len(cleaned[0]) >= 4 else []
+        return (cleaned if len(cleaned[0]) >= 4 else []), removed_severe_spike
 
     def _clean_comparison_ring(
         self,
@@ -627,16 +690,17 @@ class OlsEnvelopeComparisonEngine:
         baseline: ControllingOlsCandidate,
         future: ControllingOlsCandidate,
         change: str,
-    ) -> list:
+    ) -> Tuple[list, bool]:
         if not ring:
-            return []
+            return [], False
         points = [QgsPointXY(point) for point in ring]
         if len(points) >= 2 and self._same_point(points[0], points[-1]):
             points = points[:-1]
         if len(points) < 3:
-            return []
+            return [], False
         if not exterior:
-            return points + [points[0]]
+            return points + [points[0]], False
+        removed_severe_spike = False
         for _ in range(24):
             removed = False
             count = len(points)
@@ -646,20 +710,22 @@ class OlsEnvelopeComparisonEngine:
                 previous_point = points[(index - 1) % count]
                 current_point = points[index]
                 next_point = points[(index + 1) % count]
-                if self._is_comparison_spike_vertex(
+                spike_kind = self._comparison_spike_vertex_kind(
                     previous_point,
                     current_point,
                     next_point,
                     baseline,
                     future,
                     change,
-                ):
+                )
+                if spike_kind:
+                    removed_severe_spike = removed_severe_spike or spike_kind == "severe"
                     points.pop(index)
                     removed = True
                     break
             if not removed:
                 break
-        return points + [points[0]]
+        return points + [points[0]], removed_severe_spike
 
     def _clean_no_overlay_part(self, geometry: QgsGeometry) -> QgsGeometry:
         """Remove small overlay artefacts without materially changing real no-overlay areas."""
@@ -790,7 +856,7 @@ class OlsEnvelopeComparisonEngine:
         height = (2.0 * triangle_area / base_length) if base_length > 0.0 else 0.0
         return height >= COMPARISON_SPIKE_HEIGHT_MIN_M or angle_degrees <= 2.0
 
-    def _is_comparison_spike_vertex(
+    def _comparison_spike_vertex_kind(
         self,
         previous_point: QgsPointXY,
         current_point: QgsPointXY,
@@ -798,12 +864,17 @@ class OlsEnvelopeComparisonEngine:
         baseline: ControllingOlsCandidate,
         future: ControllingOlsCandidate,
         change: str,
-    ) -> bool:
-        if not self._is_comparison_spike_shape(previous_point, current_point, next_point):
-            return False
+    ) -> Optional[str]:
+        metrics = self._comparison_spike_metrics(previous_point, current_point, next_point)
+        if metrics is None:
+            return None
+        if self._is_severe_comparison_spike_shape(metrics):
+            return "severe"
+        if not self._is_delta_comparison_spike_shape(metrics):
+            return None
         current_delta = self._delta_at_point(current_point, baseline, future)
         if current_delta is None:
-            return False
+            return None
         previous_delta = self._delta_at_point(previous_point, baseline, future)
         next_delta = self._delta_at_point(next_point, baseline, future)
         neighbour_values = [
@@ -811,30 +882,30 @@ class OlsEnvelopeComparisonEngine:
             if value is not None and math.isfinite(value)
         ]
         if not neighbour_values:
-            return False
+            return None
         if change == "loss":
-            return (
+            return "delta" if (
                 current_delta > self.tolerance_m
                 and any(value <= self.tolerance_m for value in neighbour_values)
-            )
+            ) else None
         if change == "gain":
-            return (
+            return "delta" if (
                 current_delta < -self.tolerance_m
                 and any(value >= -self.tolerance_m for value in neighbour_values)
-            )
+            ) else None
         if change == "no_change":
-            return (
+            return "delta" if (
                 abs(current_delta) > self.tolerance_m
                 and any(abs(value) <= self.tolerance_m for value in neighbour_values)
-            )
-        return False
+            ) else None
+        return None
 
     @staticmethod
-    def _is_comparison_spike_shape(
+    def _comparison_spike_metrics(
         previous_point: QgsPointXY,
         current_point: QgsPointXY,
         next_point: QgsPointXY,
-    ) -> bool:
+    ) -> Optional[Tuple[float, float, float, float]]:
         first_length = math.hypot(
             previous_point.x() - current_point.x(),
             previous_point.y() - current_point.y(),
@@ -848,19 +919,48 @@ class OlsEnvelopeComparisonEngine:
             previous_point.y() - next_point.y(),
         )
         if first_length <= 1e-9 or second_length <= 1e-9 or base_length <= 1e-9:
-            return False
-        if base_length > COMPARISON_SPIKE_BASE_MAX_M:
-            return False
+            return None
         detour_ratio = (first_length + second_length) / base_length
-        if detour_ratio < COMPARISON_SPIKE_DETOUR_RATIO:
-            return False
         cosine = (
             (first_length * first_length)
             + (second_length * second_length)
             - (base_length * base_length)
         ) / (2.0 * first_length * second_length)
         angle_degrees = math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
-        return angle_degrees <= COMPARISON_SPIKE_ANGLE_DEGREES
+        semi_perimeter = (first_length + second_length + base_length) / 2.0
+        triangle_area = math.sqrt(
+            max(
+                0.0,
+                semi_perimeter
+                * (semi_perimeter - first_length)
+                * (semi_perimeter - second_length)
+                * (semi_perimeter - base_length),
+            )
+        )
+        height = (2.0 * triangle_area / base_length) if base_length > 0.0 else 0.0
+        return detour_ratio, angle_degrees, height, base_length
+
+    @staticmethod
+    def _is_delta_comparison_spike_shape(metrics: Tuple[float, float, float, float]) -> bool:
+        detour_ratio, angle_degrees, _height, base_length = metrics
+        return (
+            base_length <= COMPARISON_SPIKE_BASE_MAX_M
+            and detour_ratio >= COMPARISON_SPIKE_DETOUR_RATIO
+            and angle_degrees <= COMPARISON_SPIKE_ANGLE_DEGREES
+        )
+
+    @staticmethod
+    def _is_severe_comparison_spike_shape(metrics: Tuple[float, float, float, float]) -> bool:
+        detour_ratio, angle_degrees, height, _base_length = metrics
+        if (
+            detour_ratio >= COMPARISON_SEVERE_SPIKE_DETOUR_RATIO
+            and height >= COMPARISON_SPIKE_HEIGHT_MIN_M
+            and angle_degrees <= COMPARISON_SEVERE_SPIKE_ANGLE_DEGREES
+        ):
+            return True
+        if detour_ratio >= 20.0:
+            return height >= 10.0 and angle_degrees <= COMPARISON_SPIKE_ANGLE_DEGREES
+        return detour_ratio >= 50.0 and angle_degrees <= 2.0
 
     @staticmethod
     def _delta_at_point(
