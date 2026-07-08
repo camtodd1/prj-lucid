@@ -519,11 +519,12 @@ class SafeguardingBuilderDialog(
             right_column.setContentsMargins(0, 0, 0, 0)
             right_column.setSpacing(0)
             right_column.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-            global_layout.addLayout(right_column, 0)
+            global_layout.addLayout(right_column, 1)
 
             self.frame_global_context = global_frame
             self._global_context_left_layout = left_column
             self._global_context_right_layout = right_column
+            global_frame.installEventFilter(self)
             header_layout.insertWidget(2, global_frame)
         else:
             left_column = getattr(self, "_global_context_left_layout", None)
@@ -567,10 +568,10 @@ class SafeguardingBuilderDialog(
             right_column.addWidget(ruleset_group)
             self.groupBox_ruleset = ruleset_group
 
-        self._sync_global_context_box_heights()
+        self._sync_global_context_box_geometry()
 
-    def _sync_global_context_box_heights(self) -> None:
-        """Keep the airport identity and policy boxes locked to the same height."""
+    def _sync_global_context_box_geometry(self) -> None:
+        """Keep the airport identity and policy boxes locked to matching geometry."""
         airport_identity_frame = getattr(
             self,
             "frame_airport_identity",
@@ -593,9 +594,21 @@ class SafeguardingBuilderDialog(
             airport_lookup.setMinimumHeight(22)
             airport_lookup.setMaximumHeight(22)
 
-        target_height = max(airport_identity_frame.sizeHint().height(), ruleset_group.sizeHint().height())
-        airport_identity_frame.setFixedHeight(target_height)
-        ruleset_group.setFixedHeight(target_height)
+        airport_identity_frame.setFixedHeight(112)
+        ruleset_group.setFixedHeight(112)
+
+        global_frame = getattr(self, "frame_global_context", None)
+        global_layout = global_frame.layout() if global_frame is not None else None
+        if isinstance(global_layout, QtWidgets.QHBoxLayout):
+            available_width = global_frame.contentsRect().width()
+            target_width = max(1, (available_width - global_layout.spacing()) // 2)
+            airport_identity_frame.setFixedWidth(target_width)
+            ruleset_group.setFixedWidth(target_width)
+
+    def eventFilter(self, watched, event):
+        if watched is getattr(self, "frame_global_context", None) and event.type() == QtCore.QEvent.Type.Resize:
+            QtCore.QTimer.singleShot(0, self._sync_global_context_box_geometry)
+        return super().eventFilter(watched, event)
 
     def _setup_ruleset_selector_ui(self) -> None:
         """Create global policy selectors."""
@@ -1531,7 +1544,7 @@ class SafeguardingBuilderDialog(
 
     def _resize_airport_identity_card(self) -> None:
         """Keep the top airport and policy cards aligned after status text changes."""
-        self._sync_global_context_box_heights()
+        self._sync_global_context_box_geometry()
 
     def _setup_dialog_status_connections(self):
         """Connect lightweight status labels to high-level input changes."""
