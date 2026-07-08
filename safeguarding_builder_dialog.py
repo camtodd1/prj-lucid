@@ -393,6 +393,23 @@ class SafeguardingBuilderDialog(
             airport_lookup.setStyleSheet("color: #666666; font-size: 11px;")
             airport_lookup.setText("")
 
+        airport_identity_layout = getattr(
+            self,
+            "verticalLayout_airportIdentity",
+            self.findChild(QtWidgets.QVBoxLayout, "verticalLayout_airportIdentity"),
+        )
+        if isinstance(airport_identity_layout, QtWidgets.QVBoxLayout):
+            airport_identity_layout.setContentsMargins(12, 14, 12, 8)
+            airport_identity_layout.setSpacing(4)
+
+        airport_name_layout = getattr(
+            self,
+            "horizontalLayout_airportName",
+            self.findChild(QtWidgets.QHBoxLayout, "horizontalLayout_airportName"),
+        )
+        if isinstance(airport_name_layout, QtWidgets.QHBoxLayout):
+            airport_name_layout.setSpacing(8)
+
         coord_info = getattr(
             self,
             "coord_info",
@@ -500,7 +517,6 @@ class SafeguardingBuilderDialog(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
-            global_frame.setFixedHeight(110)
             global_frame.setStyleSheet(
                 """
                 QFrame#frame_global_context {
@@ -509,14 +525,45 @@ class SafeguardingBuilderDialog(
                 }
                 """
             )
+            global_layout = QtWidgets.QHBoxLayout(global_frame)
+            global_layout.setContentsMargins(0, 0, 0, 0)
+            global_layout.setSpacing(14)
+            global_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+
+            left_slot = QtWidgets.QFrame(global_frame)
+            left_slot.setObjectName("frame_global_context_airport_slot")
+            left_slot.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Ignored,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            left_slot_layout = QtWidgets.QVBoxLayout(left_slot)
+            left_slot_layout.setContentsMargins(0, 0, 0, 0)
+            left_slot_layout.setSpacing(0)
+
+            right_slot = QtWidgets.QFrame(global_frame)
+            right_slot.setObjectName("frame_global_context_policy_slot")
+            right_slot.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Ignored,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            right_slot_layout = QtWidgets.QVBoxLayout(right_slot)
+            right_slot_layout.setContentsMargins(0, 0, 0, 0)
+            right_slot_layout.setSpacing(0)
+
+            global_layout.addWidget(left_slot, 1)
+            global_layout.addWidget(right_slot, 1)
 
             self.frame_global_context = global_frame
-            global_frame.installEventFilter(self)
+            self._global_context_left_slot_layout = left_slot_layout
+            self._global_context_right_slot_layout = right_slot_layout
             header_layout.insertWidget(2, global_frame)
         else:
-            global_frame.setFixedHeight(110)
+            left_slot_layout = getattr(self, "_global_context_left_slot_layout", None)
+            right_slot_layout = getattr(self, "_global_context_right_slot_layout", None)
+            if left_slot_layout is None or right_slot_layout is None:
+                return
 
-        if airport_identity_frame is not None and airport_identity_frame.parent() is not global_frame:
+        if airport_identity_frame is not None and airport_identity_frame.parent() is not left_slot_layout.parentWidget():
             airport_identity_frame.setStyleSheet(
                 """
                 QGroupBox#frame_airport_identity {
@@ -541,18 +588,35 @@ class SafeguardingBuilderDialog(
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
             airport_identity_frame.setMinimumWidth(0)
-            airport_identity_frame.setParent(global_frame)
-            airport_identity_frame.show()
+            left_slot_layout.addWidget(airport_identity_frame)
 
-        if ruleset_group is not None and ruleset_group.parent() is not global_frame:
-            ruleset_group.setFlat(True)
+        if ruleset_group is not None and ruleset_group.parent() is not right_slot_layout.parentWidget():
+            ruleset_group.setFlat(False)
+            ruleset_group.setStyleSheet(
+                """
+                QGroupBox#groupBox_ruleset {
+                    border: 1px solid #dcdcdc;
+                    border-radius: 4px;
+                    margin-top: 10px;
+                    background: #ffffff;
+                }
+                QGroupBox#groupBox_ruleset::title {
+                    subcontrol-origin: margin;
+                    subcontrol-position: top left;
+                    left: 12px;
+                    padding: 0 4px;
+                    color: #232323;
+                    font-size: 13px;
+                    font-weight: 700;
+                }
+                """
+            )
             ruleset_group.setSizePolicy(
                 QtWidgets.QSizePolicy.Policy.Expanding,
                 QtWidgets.QSizePolicy.Policy.Fixed,
             )
             ruleset_group.setMinimumWidth(0)
-            ruleset_group.setParent(global_frame)
-            ruleset_group.show()
+            right_slot_layout.addWidget(ruleset_group)
             self.groupBox_ruleset = ruleset_group
 
         self._sync_global_context_box_geometry()
@@ -581,37 +645,12 @@ class SafeguardingBuilderDialog(
             airport_lookup.setMinimumHeight(22)
             airport_lookup.setMaximumHeight(22)
 
-        airport_identity_frame.setFixedHeight(110)
-        ruleset_group.setFixedHeight(110)
-        self._layout_global_context_boxes()
-
-    def _layout_global_context_boxes(self) -> None:
-        """Place the global airport and policy boxes as equal-width siblings."""
         global_frame = getattr(self, "frame_global_context", None)
-        airport_identity_frame = getattr(
-            self,
-            "frame_airport_identity",
-            self.findChild(QtWidgets.QGroupBox, "frame_airport_identity"),
-        )
-        ruleset_group = getattr(
-            self,
-            "groupBox_ruleset",
-            self.findChild(QtWidgets.QGroupBox, "groupBox_ruleset"),
-        )
-        if global_frame is None or airport_identity_frame is None or ruleset_group is None:
-            return
-
-        gap = 14
-        box_height = 110
-        available_width = max(0, global_frame.contentsRect().width() - gap)
-        box_width = max(1, available_width // 2)
-        airport_identity_frame.setGeometry(0, 0, box_width, box_height)
-        ruleset_group.setGeometry(box_width + gap, 0, box_width, box_height)
-
-    def eventFilter(self, watched, event):
-        if watched is getattr(self, "frame_global_context", None) and event.type() == QtCore.QEvent.Type.Resize:
-            self._layout_global_context_boxes()
-        return super().eventFilter(watched, event)
+        header_widget_height = 120
+        if global_frame is not None:
+            global_frame.setFixedHeight(header_widget_height)
+        airport_identity_frame.setFixedHeight(header_widget_height)
+        ruleset_group.setFixedHeight(header_widget_height)
 
     def _setup_ruleset_selector_ui(self) -> None:
         """Create global policy selectors."""
@@ -658,6 +697,9 @@ class SafeguardingBuilderDialog(
         ruleset_group = QtWidgets.QGroupBox("Policy Settings")
         ruleset_group.setObjectName("groupBox_ruleset")
         ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
+        ruleset_layout.setContentsMargins(12, 14, 12, 8)
+        ruleset_layout.setHorizontalSpacing(10)
+        ruleset_layout.setVerticalSpacing(6)
         ruleset_layout.setColumnStretch(0, 2)
         ruleset_layout.setColumnStretch(1, 1)
         ruleset_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
@@ -1978,7 +2020,7 @@ class SafeguardingBuilderDialog(
             current_width = self.width()
             self.adjustSize()
             if initial:
-                target_width = 721
+                target_width = 1000
                 target_height = self.height()
                 self.resize(target_width, target_height)
             else:
