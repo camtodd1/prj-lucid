@@ -952,6 +952,12 @@ class OlsEnvelopeComparisonEngine:
     @staticmethod
     def _is_severe_comparison_spike_shape(metrics: Tuple[float, float, float, float]) -> bool:
         detour_ratio, angle_degrees, height, _base_length = metrics
+        if detour_ratio >= 1.5 and height >= 250.0 and angle_degrees <= 75.0:
+            return True
+        if detour_ratio >= 1.25 and height >= 250.0 and angle_degrees <= 60.0:
+            return True
+        if detour_ratio >= 4.0 and height >= 50.0 and angle_degrees <= 25.0:
+            return True
         if (
             detour_ratio >= COMPARISON_SEVERE_SPIKE_DETOUR_RATIO
             and height >= COMPARISON_SPIKE_HEIGHT_MIN_M
