@@ -153,10 +153,72 @@ class Annex14GeometryMixin:
         fraction = max(0.0, min(1.0, float(distance_from_start_m or 0.0) / float(runway_length_m)))
         return float(start_z) + ((float(end_z) - float(start_z)) * fraction)
 
-    def _annex14_contour_interval(self, surface_key: str = "default") -> float:
+    def _annex14_family_contour_key(self, family: Optional[str]) -> Optional[str]:
+        family_key = str(family or "").strip().lower()
+        if family_key in {"ofs", "obstacle_free_surfaces"}:
+            return "annex14_ofs"
+        if family_key in {"oes", "obstacle_evaluation_surfaces"}:
+            return "annex14_oes"
+        return None
+
+    def _annex14_contour_interval(self, surface_key: str = "default", family: Optional[str] = None) -> float:
         if hasattr(self, "_get_contour_interval"):
-            return self._get_contour_interval(surface_key, 10.0)
+            surface_interval = self._get_contour_interval(surface_key, 10.0)
+            family_key = self._annex14_family_contour_key(family)
+            if family_key:
+                return self._get_contour_interval(family_key, surface_interval)
+            return surface_interval
         return 10.0
+
+    def _annex14_apply_contour_metadata(
+        self,
+        feature: QgsFeature,
+        contour_fields: QgsFields,
+        family: str,
+        surface: str,
+        contour_elev_am: float,
+    ) -> None:
+        contour_metadata = getattr(self, "_apply_contour_metadata", None)
+        if not callable(contour_metadata):
+            return
+        surface_key = str(surface or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if surface_key == "balked_landing":
+            surface_key = "baulked_landing"
+        contour_metadata(feature, contour_fields, surface_key, contour_elev_am)
+
+        family_key = self._annex14_family_contour_key(family)
+        if not family_key or not hasattr(self, "_get_contour_interval"):
+            return
+
+        generic_interval = None
+        generic_primary = None
+        try:
+            generic_attrs = self._contour_attribute_values(surface_key, contour_elev_am)
+            generic_interval = generic_attrs.get("contour_interval_m")
+            generic_primary = generic_attrs.get("primary_interval_m")
+        except Exception:
+            generic_interval = None
+            generic_primary = None
+
+        family_interval = self._get_contour_interval(family_key, float(generic_interval or 10.0))
+        family_primary = self._get_primary_contour_interval(family_key, float(generic_primary or 50.0))
+        contour_class = "intermediate"
+        try:
+            elevation = float(contour_elev_am)
+            ratio = elevation / family_primary
+            if family_primary > 0 and math.isfinite(elevation) and abs(ratio - round(ratio)) <= 0.001:
+                contour_class = "primary"
+        except (TypeError, ValueError):
+            pass
+
+        for name, value in {
+            "contour_class": contour_class,
+            "contour_interval_m": family_interval,
+            "primary_interval_m": family_primary,
+        }.items():
+            idx = contour_fields.indexFromName(name)
+            if idx != -1:
+                feature.setAttribute(idx, value)
 
     def _annex14_contour_elevations(
         self,
@@ -213,12 +275,7 @@ class Annex14GeometryMixin:
                 None,
             ]
         )
-        contour_metadata = getattr(self, "_apply_contour_metadata", None)
-        if callable(contour_metadata):
-            surface_key = str(surface or "").strip().lower().replace("-", "_").replace(" ", "_")
-            if surface_key == "balked_landing":
-                surface_key = "baulked_landing"
-            contour_metadata(feature, contour_fields, surface_key, contour_elev_am)
+        self._annex14_apply_contour_metadata(feature, contour_fields, family, surface, contour_elev_am)
         contour_features.append(feature)
 
     def _annex14_add_quad_contour_feature(
@@ -1376,9 +1433,11 @@ class Annex14GeometryMixin:
         oes_features: List[QgsFeature] = []
         ofs_contour_features: List[QgsFeature] = []
         oes_contour_features: List[QgsFeature] = []
-        approach_contour_interval = self._annex14_contour_interval("approach")
-        tocs_contour_interval = self._annex14_contour_interval("tocs")
-        transitional_contour_interval = self._annex14_contour_interval("transitional")
+        ofs_approach_contour_interval = self._annex14_contour_interval("approach", "OFS")
+        ofs_transitional_contour_interval = self._annex14_contour_interval("transitional", "OFS")
+        oes_approach_contour_interval = self._annex14_contour_interval("approach", "OES")
+        oes_tocs_contour_interval = self._annex14_contour_interval("tocs", "OES")
+        oes_transitional_contour_interval = self._annex14_contour_interval("transitional", "OES")
         code_f_no_digital = bool(runway_data.get("code_letter_f_without_digital_avionics", False))
         strip_adjacent_transitional_created = False
 
@@ -1459,7 +1518,7 @@ class Annex14GeometryMixin:
                         end_desig,
                         design_group,
                         approach.get("ref", ""),
-                        approach_contour_interval,
+                        ofs_approach_contour_interval,
                     )
                     approach_start = start
                     approach_length_m = length_m
@@ -1506,7 +1565,7 @@ class Annex14GeometryMixin:
                             upper_end_z=upper_edge_z,
                             contour_features=ofs_contour_features,
                             contour_fields=contour_fields,
-                            contour_interval=transitional_contour_interval,
+                            contour_interval=ofs_transitional_contour_interval,
                         )
                         strip_adjacent_transitional_created = True
                 elif strip_dims is None:
@@ -1540,7 +1599,7 @@ class Annex14GeometryMixin:
                     upper_end_z=upper_edge_z,
                     contour_features=ofs_contour_features,
                     contour_fields=contour_fields,
-                    contour_interval=transitional_contour_interval,
+                    contour_interval=ofs_transitional_contour_interval,
                     reverse_side_labels=True,
                 )
 
@@ -1603,7 +1662,7 @@ class Annex14GeometryMixin:
                         end_desig,
                         design_group,
                         inner_approach.get("ref", ""),
-                        approach_contour_interval,
+                        ofs_approach_contour_interval,
                     )
                     inner_approach_start = start
 
@@ -1675,7 +1734,7 @@ class Annex14GeometryMixin:
                             end_desig,
                             design_group,
                             balked.get("ref", ""),
-                            approach_contour_interval,
+                            ofs_approach_contour_interval,
                         )
                         balked_start = start
                         balked_length_m = length_m
@@ -1720,7 +1779,7 @@ class Annex14GeometryMixin:
                     upper_end_z=upper_edge_z,
                     contour_features=ofs_contour_features,
                     contour_fields=contour_fields,
-                    contour_interval=transitional_contour_interval,
+                    contour_interval=ofs_transitional_contour_interval,
                     reverse_side_labels=True,
                 )
                 if balked_start is not None and balked_inner_width is not None:
@@ -1755,7 +1814,7 @@ class Annex14GeometryMixin:
                             upper_end_z=upper_edge_z,
                             contour_features=ofs_contour_features,
                             contour_fields=contour_fields,
-                            contour_interval=transitional_contour_interval,
+                            contour_interval=ofs_transitional_contour_interval,
                         )
                     self._annex14_add_side_panels_for_trapezoid(
                         ofs_features,
@@ -1781,7 +1840,7 @@ class Annex14GeometryMixin:
                         upper_end_z=upper_edge_z,
                         contour_features=ofs_contour_features,
                         contour_fields=contour_fields,
-                        contour_interval=transitional_contour_interval,
+                        contour_interval=ofs_transitional_contour_interval,
                     )
 
             precision = ruleset.precision_approach_surface_parameters()
@@ -1810,7 +1869,7 @@ class Annex14GeometryMixin:
                     start_z=threshold_z,
                     contour_features=oes_contour_features,
                     contour_fields=contour_fields,
-                    contour_interval=approach_contour_interval,
+                    contour_interval=oes_approach_contour_interval,
                 )
             missed = precision["components"]["missed_approach"]
             missed_start = (
@@ -1837,7 +1896,7 @@ class Annex14GeometryMixin:
                     start_z=missed_start_z,
                     contour_features=oes_contour_features,
                     contour_fields=contour_fields,
-                    contour_interval=approach_contour_interval,
+                    contour_interval=oes_approach_contour_interval,
                 )
             transitional_component = precision["components"].get("transitional", {})
             transitional_slope = float(transitional_component.get("slope") or 0.0)
@@ -1907,7 +1966,7 @@ class Annex14GeometryMixin:
                             upper_end_z=self._annex14_surface_z(threshold_z, transitional_upper_height, 1.0),
                             contour_features=oes_contour_features,
                             contour_fields=contour_fields,
-                            contour_interval=transitional_contour_interval,
+                            contour_interval=oes_transitional_contour_interval,
                         )
             if pa_start is not None and transitional_extent > 0:
                 self._annex14_append_side_panels_for_approach_like_sections(
@@ -1931,7 +1990,7 @@ class Annex14GeometryMixin:
                     upper_edge_z=self._annex14_surface_z(threshold_z, transitional_upper_height, 1.0),
                     contour_features=oes_contour_features,
                     contour_fields=contour_fields,
-                    contour_interval=transitional_contour_interval,
+                    contour_interval=oes_transitional_contour_interval,
                     reverse_side_labels=True,
                 )
             if missed_start is not None and transitional_extent > 0:
@@ -1956,7 +2015,7 @@ class Annex14GeometryMixin:
                     upper_edge_z=self._annex14_surface_z(threshold_z, transitional_upper_height, 1.0),
                     contour_features=oes_contour_features,
                     contour_fields=contour_fields,
-                    contour_interval=transitional_contour_interval,
+                    contour_interval=oes_transitional_contour_interval,
                 )
 
             departure = ruleset.instrument_departure_surface_parameters()
@@ -1984,7 +2043,7 @@ class Annex14GeometryMixin:
                     start_z=departure_start_z,
                     contour_features=oes_contour_features,
                     contour_fields=contour_fields,
-                    contour_interval=tocs_contour_interval,
+                    contour_interval=oes_tocs_contour_interval,
                 )
 
             mass = end_config.get("takeoff_mass_kg")
@@ -2010,7 +2069,7 @@ class Annex14GeometryMixin:
                     start_z=takeoff_start_z,
                     contour_features=oes_contour_features,
                     contour_fields=contour_fields,
-                    contour_interval=tocs_contour_interval,
+                    contour_interval=oes_tocs_contour_interval,
                 )
 
         straight_in = ruleset.straight_in_instrument_approach_surface_parameters()

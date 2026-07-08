@@ -24,6 +24,8 @@ class FrameworkRegistryTest(unittest.TestCase):
             "inner_approach": "Inner approach",
             "inner_transitional": "Inner transitional",
             "baulked_landing": "Balked / baulked landing",
+            "annex14_ofs": "Annex 14 obstacle free surfaces",
+            "annex14_oes": "Annex 14 obstacle evaluation surfaces",
         }
         for key, label in expected.items():
             self.assertIn(key, CONTOUR_INTERVAL_KEYS)

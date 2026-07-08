@@ -35,6 +35,8 @@ CONTOUR_INTERVAL_KEYS = (
     "inner_approach",
     "inner_transitional",
     "baulked_landing",
+    "annex14_ofs",
+    "annex14_oes",
 )
 CONTOUR_INTERVAL_LABELS = {
     "approach": "Approach",
@@ -44,4 +46,6 @@ CONTOUR_INTERVAL_LABELS = {
     "inner_approach": "Inner approach",
     "inner_transitional": "Inner transitional",
     "baulked_landing": "Balked / baulked landing",
+    "annex14_ofs": "Annex 14 obstacle free surfaces",
+    "annex14_oes": "Annex 14 obstacle evaluation surfaces",
 }
