@@ -76,10 +76,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
                 padding-right: 6px;
                 background: #ffffff;
             }
-            QLineEdit[requiredEmpty="true"] {
-                background: #ffffff;
-                border: 1px solid #d39800;
-            }
             """
         )
 
@@ -198,11 +194,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         label_pre_threshold_area_row.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
-        self._required_field_pairs = []
-        self._mark_required_label(label_designation_row)
-        self._mark_required_label(label_easting_row)
-        self._mark_required_label(label_northing_row)
-
         h_layout_desig_inputs = QtWidgets.QHBoxLayout()
         h_layout_desig_inputs.setContentsMargins(0, 0, 0, 0)
         h_layout_desig_inputs.setSpacing(6)
@@ -233,7 +224,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         label_runway_width = QtWidgets.QLabel("Runway Width (m):")
         label_runway_width.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        self._mark_required_label(label_runway_width)
         self.width_le = QtWidgets.QLineEdit()
         self.width_le.setObjectName(f"lineEdit_runway_width_{self.index}")
         self.width_le.setToolTip("Enter actual runway width (meters).")
@@ -346,14 +336,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         gridLayout_Coords.addWidget(label_designation_row, current_coord_row, 0)
         gridLayout_Coords.addLayout(h_layout_desig_inputs, current_coord_row, 1)
         gridLayout_Coords.addWidget(self.rec_desig_hdr_lbl, current_coord_row, 2)
-        current_coord_row += 1
-        gridLayout_Coords.addWidget(label_easting_row, current_coord_row, 0)
-        gridLayout_Coords.addWidget(self.thr_east_le, current_coord_row, 1)
-        gridLayout_Coords.addWidget(self.rec_east_le, current_coord_row, 2)
-        current_coord_row += 1
-        gridLayout_Coords.addWidget(label_northing_row, current_coord_row, 0)
-        gridLayout_Coords.addWidget(self.thr_north_le, current_coord_row, 1)
-        gridLayout_Coords.addWidget(self.rec_north_le, current_coord_row, 2)
 
         core_widget.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
@@ -383,20 +365,26 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         threshold_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
         threshold_layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
-        threshold_layout.addWidget(label_runway_end_elevation_row, 1, 0)
-        threshold_layout.addWidget(self.runway_end_elev_1_le, 1, 1)
-        threshold_layout.addWidget(self.runway_end_elev_2_le, 1, 2)
-        threshold_layout.addWidget(label_threshold_elevation_row, 2, 0)
-        threshold_layout.addWidget(self.threshold_elev_1_le, 2, 1)
-        threshold_layout.addWidget(self.threshold_elev_2_le, 2, 2)
-        threshold_layout.addWidget(label_displaced_row, 3, 0)
-        threshold_layout.addWidget(self.thr_displaced_1_le, 3, 1)
-        threshold_layout.addWidget(self.thr_displaced_2_le, 3, 2)
-        threshold_layout.addWidget(label_pre_threshold_area_row, 4, 0)
-        threshold_layout.addWidget(self.thr_pre_area_1_le, 4, 1)
-        threshold_layout.addWidget(self.thr_pre_area_2_le, 4, 2)
-        self._add_runway_type_controls(threshold_layout, 5, 0, 1, reciprocal_input_col=2)
-        self._add_lahso_controls(threshold_layout, 6)
+        threshold_layout.addWidget(label_easting_row, 1, 0)
+        threshold_layout.addWidget(self.thr_east_le, 1, 1)
+        threshold_layout.addWidget(self.rec_east_le, 1, 2)
+        threshold_layout.addWidget(label_northing_row, 2, 0)
+        threshold_layout.addWidget(self.thr_north_le, 2, 1)
+        threshold_layout.addWidget(self.rec_north_le, 2, 2)
+        threshold_layout.addWidget(label_runway_end_elevation_row, 3, 0)
+        threshold_layout.addWidget(self.runway_end_elev_1_le, 3, 1)
+        threshold_layout.addWidget(self.runway_end_elev_2_le, 3, 2)
+        threshold_layout.addWidget(label_threshold_elevation_row, 4, 0)
+        threshold_layout.addWidget(self.threshold_elev_1_le, 4, 1)
+        threshold_layout.addWidget(self.threshold_elev_2_le, 4, 2)
+        threshold_layout.addWidget(label_displaced_row, 5, 0)
+        threshold_layout.addWidget(self.thr_displaced_1_le, 5, 1)
+        threshold_layout.addWidget(self.thr_displaced_2_le, 5, 2)
+        threshold_layout.addWidget(label_pre_threshold_area_row, 6, 0)
+        threshold_layout.addWidget(self.thr_pre_area_1_le, 6, 1)
+        threshold_layout.addWidget(self.thr_pre_area_2_le, 6, 2)
+        self._add_runway_type_controls(threshold_layout, 7, 0, 1, reciprocal_input_col=2)
+        self._add_lahso_controls(threshold_layout, 8)
 
         self.dist_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.dist_lbl.setObjectName(f"label_rwy_distance_{self.index}")
@@ -445,22 +433,13 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._add_adg_controls(classification_layout, 4)
         self._add_surface_controls(classification_layout, 5)
 
-        advanced_body_layout.addWidget(classification_group)
         advanced_body_layout.addWidget(threshold_group)
+        advanced_body_layout.addWidget(classification_group)
         self._add_declared_distance_controls(advanced_body_layout)
         advanced_layout.addWidget(advanced_body)
         groupBox_layout.addWidget(self.advanced_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
-        self._required_field_pairs = [
-            (label_designation_row, self.desig_le),
-            (label_easting_row, self.thr_east_le),
-            (label_northing_row, self.thr_north_le),
-            (label_easting_row, self.rec_east_le),
-            (label_northing_row, self.rec_north_le),
-            (label_runway_width, self.width_le),
-        ]
         self._update_status_chip()
-        self._update_required_field_indicators()
         self._set_advanced_visible(False)
 
     def _column_header_label(self, text: str) -> QtWidgets.QLabel:
@@ -803,15 +782,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.lda_override_2_le,
         ]:
             widget.textChanged.connect(self.inputChanged.emit)
-            if widget in [
-                self.desig_le,
-                self.thr_east_le,
-                self.thr_north_le,
-                self.rec_east_le,
-                self.rec_north_le,
-                self.width_le,
-            ]:
-                widget.textChanged.connect(self._update_required_field_indicators)
         for checkbox in [
             self.takeoff_available_1_cb,
             self.takeoff_available_2_cb,
@@ -831,7 +801,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.type2_combo,
         ]:
             combo.currentIndexChanged.connect(self.inputChanged.emit)
-        self.suffix_combo.currentIndexChanged.connect(self._update_required_field_indicators)
         self.surface_category_combo.currentIndexChanged.connect(self._handle_surface_category_changed)
         self.remove_button.clicked.connect(self._emit_remove_request)
         self.expand_button.toggled.connect(self._update_expand_button_icon)
@@ -974,7 +943,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             f"ARC: {arc_code} | ADG: {adg} | Length: {self.dist_lbl.text()} | Azimuth: {self.azim_lbl.text()}"
         )
         self._update_status_chip()
-        self._update_required_field_indicators()
 
     def _input_widgets(self):
         return [
@@ -1107,34 +1075,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.status_chip_lbl.setStyleSheet(
                 "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
             )
-
-    def _mark_required_label(self, label: QtWidgets.QLabel) -> None:
-        """Keep required labels visually plain; field state carries the validation cue."""
-        label.setText(label.text().replace(" *", ""))
-        label.setToolTip("")
-        label.setStyleSheet("")
-
-    def _update_required_field_indicators(self) -> None:
-        """Highlight the fields that must be completed for a runway to be ready."""
-        required_texts = {
-            "desig_le": self.desig_le.text().strip(),
-            "thr_east_le": self.thr_east_le.text().strip(),
-            "thr_north_le": self.thr_north_le.text().strip(),
-            "rec_east_le": self.rec_east_le.text().strip(),
-            "rec_north_le": self.rec_north_le.text().strip(),
-            "width_le": self.width_le.text().strip(),
-        }
-        for widget_name, value in required_texts.items():
-            widget = getattr(self, widget_name, None)
-            if not widget:
-                continue
-            required_empty = not bool(value)
-            if bool(widget.property("requiredEmpty")) == required_empty:
-                continue
-            widget.setProperty("requiredEmpty", required_empty)
-            widget.style().unpolish(widget)
-            widget.style().polish(widget)
-            widget.update()
 
     def _sync_height_constraint(self) -> None:
         """Let the card hug visible content without clipping styled controls."""
