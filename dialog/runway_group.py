@@ -344,7 +344,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
-        groupBox_layout.addWidget(core_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
         self.advanced_widget = QtWidgets.QWidget(self)
         advanced_layout = QtWidgets.QVBoxLayout(self.advanced_widget)
@@ -359,6 +358,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         advanced_body_layout = QtWidgets.QVBoxLayout(advanced_body)
         advanced_body_layout.setContentsMargins(0, 0, 0, 0)
         advanced_body_layout.setSpacing(6)
+        advanced_body_layout.addWidget(core_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
         threshold_group = QtWidgets.QGroupBox("Threshold Details")
         threshold_group.setObjectName(f"groupBox_threshold_details_{self.index}")
