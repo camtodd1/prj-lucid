@@ -1,7 +1,6 @@
 import unittest
 
 from reports.declared_distances import annotate_declared_distance_warnings, apply_declared_distance_overrides
-from reports.runway_summary import build_runway_summaries
 
 
 class DeclaredDistanceWarningTest(unittest.TestCase):
@@ -30,8 +29,6 @@ class DeclaredDistanceWarningTest(unittest.TestCase):
             "short_name": "05/23",
             "tora_override_1": 1950.0,
             "asda_override_1": 2025.0,
-            "declared_distance_source": "AIP AD 2 YSMK",
-            "declared_distance_notes": "Reduced due to obstacle assessment",
         }
         records = [
             {
@@ -53,23 +50,8 @@ class DeclaredDistanceWarningTest(unittest.TestCase):
         self.assertEqual(records[0]["calc_asda_m"], 2050.0)
         self.assertEqual(records[0]["calc_src"], "override")
         self.assertEqual(records[0]["override_fields"], "TORA, ASDA")
-        self.assertIn("Source: AIP AD 2 YSMK", records[0]["notes"])
-        self.assertIn("Reduced due to obstacle assessment", records[0]["notes"])
 
-    def test_summary_includes_declared_distance_provenance(self):
-        runway = {
-            "short_name": "05/23",
-            "declared_distance_source": "AIP AD 2 YSMK",
-            "declared_distance_notes": "Published values verified",
-            "declared_distances": [],
-        }
-
-        summary = build_runway_summaries([runway])[0]
-
-        self.assertIn("Declared-distance source: AIP AD 2 YSMK", summary["warnings"])
-        self.assertIn("Declared-distance notes: Published values verified", summary["warnings"])
-
-    def test_overrides_without_source_warn(self):
+    def test_overrides_without_source_do_not_warn(self):
         runway = {
             "short_name": "05/23",
             "tora_override_1": 1950.0,
@@ -92,15 +74,14 @@ class DeclaredDistanceWarningTest(unittest.TestCase):
         apply_declared_distance_overrides(runway, records)
         warnings = annotate_declared_distance_warnings(runway, records)
 
-        self.assertIn("05/23 05: declared-distance overrides are used but no source is recorded.", warnings)
-        self.assertIn("no source is recorded", records[0]["notes"])
+        self.assertEqual(warnings, [])
+        self.assertEqual(records[0]["notes"], "")
 
     def test_override_relationship_warnings_use_effective_values(self):
         runway = {
             "short_name": "05/23",
             "toda_override_1": 1900.0,
             "asda_override_1": 1800.0,
-            "declared_distance_source": "Manual test source",
         }
         records = [
             {

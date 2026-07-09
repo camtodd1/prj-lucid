@@ -76,11 +76,10 @@
   Notes:
   - Per-direction optional overrides for `TORA`, `TODA`, `ASDA`, and `LDA`
     are captured on each runway.
-  - Shared source/notes fields capture published data provenance.
   - Override values are used as effective declared distances while calculated
     values are retained on the records as `calc_*` fields.
-  - Missing provenance and inconsistent override relationships are surfaced as
-    declared-distance warnings.
+  - Inconsistent override relationships are surfaced as declared-distance
+    warnings.
 
 - [x] Feed declared-distance outputs into the runway summary report.
 

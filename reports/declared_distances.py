@@ -20,8 +20,6 @@ def apply_declared_distance_overrides(
 ) -> List[Dict[str, Any]]:
     """Apply optional published declared-distance overrides to calculated records."""
     record_list = list(records)
-    source = str(runway_data.get("declared_distance_source") or "").strip()
-    notes = str(runway_data.get("declared_distance_notes") or "").strip()
 
     for record in record_list:
         direction_suffix = _direction_suffix(record)
@@ -39,14 +37,8 @@ def apply_declared_distance_overrides(
         if overridden_keys:
             record["calc_src"] = "override"
             record["override_fields"] = ", ".join(overridden_keys)
-            record["declared_distance_source"] = source
-            record["declared_distance_notes"] = notes
-            _merge_record_notes(record, _provenance_notes(source, notes))
         else:
             record.setdefault("calc_src", "calculated")
-            if source or notes:
-                record["declared_distance_source"] = source
-                record["declared_distance_notes"] = notes
 
     return record_list
 
@@ -108,12 +100,6 @@ def _record_warnings(runway_name: str, record: Dict[str, Any]) -> List[str]:
     clearway_entered = _number_or_zero(record.get("clearway_input_m", record.get("clearway_m")))
     stopway_entered = _number_or_zero(record.get("stopway_input_m", record.get("stopway_m")))
     physical_length = _number_or_none(record.get("physical_len_m"))
-    has_overrides = str(record.get("calc_src") or "") == "override"
-    source = str(record.get("declared_distance_source") or "").strip()
-
-    if has_overrides and not source:
-        warnings.append(f"{label}: declared-distance overrides are used but no source is recorded.")
-
     if takeoff_available:
         if not _positive(tora):
             warnings.append(f"{label}: takeoff is available but TORA is missing or non-positive.")
@@ -150,15 +136,6 @@ def _merge_record_notes(record: Dict[str, Any], warnings: List[str]) -> None:
 
 def _direction_suffix(record: Dict[str, Any]) -> str:
     return "1" if record.get("direction") == "primary" else "2"
-
-
-def _provenance_notes(source: str, notes: str) -> List[str]:
-    result = []
-    if source:
-        result.append(f"Source: {source}")
-    if notes:
-        result.append(f"Notes: {notes}")
-    return result
 
 
 def _first_number(values: Iterable[Any]) -> Optional[float]:

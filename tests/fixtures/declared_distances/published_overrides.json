@@ -1,13 +1,11 @@
 {
-  "name": "published_overrides_with_provenance",
+  "name": "published_overrides",
   "runway_data": {
     "short_name": "05/23",
     "tora_override_1": 1950,
     "toda_override_1": 2050,
     "asda_override_1": 2000,
-    "lda_override_1": 1880,
-    "declared_distance_source": "AIP AD 2 YSMK 05",
-    "declared_distance_notes": "Published values verified against effective date."
+    "lda_override_1": 1880
   },
   "records": [
     {
@@ -41,12 +39,7 @@
         "calc_asda_m": 2050,
         "calc_lda_m": 1900,
         "calc_src": "override",
-        "override_fields": "TORA, TODA, ASDA, LDA",
-        "declared_distance_source": "AIP AD 2 YSMK 05",
-        "notes_contains": [
-          "Source: AIP AD 2 YSMK 05",
-          "Notes: Published values verified against effective date."
-        ]
+        "override_fields": "TORA, TODA, ASDA, LDA"
       }
     ]
   }

@@ -100,8 +100,6 @@ Optional, but recommended for real airport data:
 - `toda_override_1`, `toda_override_2`
 - `asda_override_1`, `asda_override_2`
 - `lda_override_1`, `lda_override_2`
-- `declared_distance_source`
-- `declared_distance_notes`
 
 Overrides are needed because published declared distances can be reduced by
 operational constraints that are not inferable from geometry alone.
@@ -153,12 +151,11 @@ stopway inputs, persistence, validation, declared-distance calculation,
 generated output records, centreline field population, and TOCS clearway reuse.
 
 The second-pass declared-distance implementation is complete for optional
-published-distance overrides, source/notes provenance, warning annotations,
-effective declared-distance output, and unit coverage for override and warning
-behaviour.
+published-distance overrides, warning annotations, effective declared-distance
+output, and unit coverage for override and warning behaviour.
 
 Synthetic fixture-backed regression scenarios cover representative calculated,
-override, unavailable-operation, provenance, and invalid-relationship cases.
+override, unavailable-operation, and invalid-relationship cases.
 
 Remaining declared-distance consolidation work is tracked centrally in
 `docs/TODO.md` and `docs/development_milestones.md`.

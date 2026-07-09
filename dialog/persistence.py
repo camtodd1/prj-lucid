@@ -557,8 +557,6 @@ class PersistenceMixin:
         runway_data.setdefault("asda_override_2", "")
         runway_data.setdefault("lda_override_1", "")
         runway_data.setdefault("lda_override_2", "")
-        runway_data.setdefault("declared_distance_source", "")
-        runway_data.setdefault("declared_distance_notes", "")
         runway_data.setdefault("adg", runway_data.get("design_group", ""))
         runway_data.setdefault("design_group", runway_data.get("adg", ""))
         runway_data.setdefault("surface_category", "")

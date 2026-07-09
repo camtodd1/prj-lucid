@@ -178,12 +178,6 @@ def _collect_mos_refs(runway_data: Dict[str, Any]) -> List[str]:
 
 def _collect_warnings(runway_data: Dict[str, Any], feature_counts: Dict[str, int]) -> List[str]:
     warnings = list(runway_data.get("summary_warnings") or [])
-    source = str(runway_data.get("declared_distance_source") or "").strip()
-    notes = str(runway_data.get("declared_distance_notes") or "").strip()
-    if source:
-        warnings.append(f"Declared-distance source: {source}")
-    if notes:
-        warnings.append(f"Declared-distance notes: {notes}")
     if (
         _number_or_zero(runway_data.get("effective_clearway1_len")) > 0
         or _number_or_zero(runway_data.get("effective_clearway2_len")) > 0

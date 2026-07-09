@@ -2,8 +2,7 @@
   "name": "landing_unavailable_with_lda_override",
   "runway_data": {
     "short_name": "05/23",
-    "lda_override_2": 1800,
-    "declared_distance_source": "Airport declared-distance table"
+    "lda_override_2": 1800
   },
   "records": [
     {
@@ -35,7 +34,6 @@
         "calc_src": "override",
         "override_fields": "LDA",
         "notes_contains": [
-          "Source: Airport declared-distance table",
           "landing is unavailable but LDA is populated"
         ]
       }

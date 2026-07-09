@@ -48,10 +48,10 @@ Last reviewed: 2026-07-07.
   - Stopway geometry generation is implemented when stopway length and runway
     width are present, with QGIS smoke-test evidence recorded in
     `docs/mos139_smoke_test_2026-07-07.md`.
-  - Stronger consistency warnings, published-distance overrides, and provenance
-    fields are implemented as the declared-distance second pass.
+  - Stronger consistency warnings and published-distance overrides are
+    implemented as the declared-distance second pass.
   - Synthetic fixture-backed regression scenarios cover representative
-    declared-distance calculations, overrides, provenance, and warnings.
+    declared-distance calculations, overrides, and warnings.
   - Real/sample-airport validation scenarios remain future consolidation work.
 
 - [x] AGL has a documented MOS-backed implementation surface.
@@ -102,8 +102,7 @@ Last reviewed: 2026-07-07.
   Test checklist:
   - Synthetic regression fixtures now cover no displaced thresholds,
     displaced-threshold/clearway/stopway combinations, unavailable operations,
-    published overrides, missing provenance, and invalid distance
-    relationships.
+    published overrides, and invalid distance relationships.
   - Add source-backed sample-airport fixtures with authoritative published
     values.
   - Compare calculated and override values against known sample inputs.
@@ -213,10 +212,9 @@ Last reviewed: 2026-07-07.
 
   Work items:
   - [x] Optional `TORA`, `TODA`, `ASDA`, and `LDA` override fields.
-  - [x] Source and notes fields for published data provenance.
   - [x] Stronger validation for impossible or inconsistent declared distances.
-  - [x] Unit tests for calculated distances, override application, provenance,
-    summary warnings, and synthetic fixture-backed regression scenarios.
+  - [x] Unit tests for calculated distances, override application, warning
+    annotations, and synthetic fixture-backed regression scenarios.
 
 - [ ] Resolve CNS partial implementation.
 

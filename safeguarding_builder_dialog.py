@@ -3268,9 +3268,6 @@ class SafeguardingBuilderDialog(
                 current_errors += 1
                 validated[field_name] = None
 
-        validated["declared_distance_source"] = str(inputs.get("declared_distance_source", "") or "").strip()
-        validated["declared_distance_notes"] = str(inputs.get("declared_distance_notes", "") or "").strip()
-
         for field_name in [
             "takeoff_available_1",
             "takeoff_available_2",

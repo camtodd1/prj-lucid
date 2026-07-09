@@ -1,5 +1,5 @@
 {
-  "name": "invalid_relationships_missing_source",
+  "name": "invalid_override_relationships",
   "runway_data": {
     "short_name": "05/23",
     "thr_displaced_1": 1100,
@@ -30,7 +30,6 @@
     "warnings": [
       "05/23: threshold-to-threshold length is not positive.",
       "05/23: combined displaced thresholds (2050 m) leave no positive threshold-to-threshold landing length.",
-      "05/23 05: declared-distance overrides are used but no source is recorded.",
       "05/23 05: TODA is less than TORA.",
       "05/23 05: ASDA is less than TORA.",
       "05/23 05: LDA exceeds physical runway length."
@@ -45,7 +44,6 @@
         "calc_src": "override",
         "override_fields": "TORA, TODA, ASDA",
         "notes_contains": [
-          "declared-distance overrides are used but no source is recorded",
           "TODA is less than TORA",
           "ASDA is less than TORA",
           "LDA exceeds physical runway length"
