@@ -2827,7 +2827,7 @@ class SafeguardingBuilderDialog(
             if screen is not None:
                 preferred_height = min(preferred_height, int(screen.availableGeometry().height() * 0.86))
             if initial:
-                target_width = 800
+                target_width = 860
                 target_height = min(self.height(), preferred_height)
                 self.resize(target_width, target_height)
             else:
