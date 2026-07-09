@@ -374,21 +374,19 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         threshold_layout.addWidget(label_northing_row, 2, 0)
         threshold_layout.addWidget(self.thr_north_le, 2, 1)
         threshold_layout.addWidget(self.rec_north_le, 2, 2)
-        threshold_layout.addWidget(label_runway_end_elevation_row, 3, 0)
-        threshold_layout.addWidget(self.runway_end_elev_1_le, 3, 1)
-        threshold_layout.addWidget(self.runway_end_elev_2_le, 3, 2)
-        threshold_layout.addWidget(label_threshold_elevation_row, 4, 0)
-        threshold_layout.addWidget(self.threshold_elev_1_le, 4, 1)
-        threshold_layout.addWidget(self.threshold_elev_2_le, 4, 2)
+        threshold_layout.addWidget(label_threshold_elevation_row, 3, 0)
+        threshold_layout.addWidget(self.threshold_elev_1_le, 3, 1)
+        threshold_layout.addWidget(self.threshold_elev_2_le, 3, 2)
+        threshold_layout.addWidget(label_runway_end_elevation_row, 4, 0)
+        threshold_layout.addWidget(self.runway_end_elev_1_le, 4, 1)
+        threshold_layout.addWidget(self.runway_end_elev_2_le, 4, 2)
         threshold_layout.addWidget(label_displaced_row, 5, 0)
         threshold_layout.addWidget(self.thr_displaced_1_le, 5, 1)
         threshold_layout.addWidget(self.thr_displaced_2_le, 5, 2)
         threshold_layout.addWidget(label_pre_threshold_area_row, 6, 0)
         threshold_layout.addWidget(self.thr_pre_area_1_le, 6, 1)
         threshold_layout.addWidget(self.thr_pre_area_2_le, 6, 2)
-        self._add_runway_type_controls(threshold_layout, 7, 0, 1, reciprocal_input_col=2)
-        self._add_lahso_controls(threshold_layout, 8)
-        self._standardize_form_rows(threshold_layout, 9)
+        self._standardize_form_rows(threshold_layout, 7)
 
         self.dist_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.dist_lbl.setObjectName(f"label_rwy_distance_{self.index}")
@@ -398,32 +396,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.azim_lbl.setObjectName(f"label_rwy_azimuth_{self.index}")
         self.azim_lbl.hide()
 
-        classification_group = QtWidgets.QGroupBox("Runway Characteristics")
-        classification_group.setObjectName(f"groupBox_classification_{self.index}")
-        self._style_section_groupbox(classification_group)
-        classification_outer_layout = QtWidgets.QHBoxLayout(classification_group)
-        classification_outer_layout.setContentsMargins(0, 0, 0, 0)
-        classification_outer_layout.setSpacing(0)
-        classification_form = QtWidgets.QWidget(classification_group)
-        classification_form.setMaximumWidth(RUNWAY_FORM_LABEL_WIDTH + RUNWAY_FORM_COLUMN_GAP + RUNWAY_FORM_FIELD_WIDTH)
-        classification_layout = QtWidgets.QGridLayout(classification_form)
-        classification_layout.setContentsMargins(0, 0, 0, 0)
-        classification_layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
-        classification_layout.setVerticalSpacing(RUNWAY_FORM_VERTICAL_GAP)
-        classification_layout.setColumnStretch(0, 0)
-        classification_layout.setColumnStretch(1, 0)
-        classification_layout.setColumnMinimumWidth(0, RUNWAY_FORM_LABEL_WIDTH)
-        classification_layout.setColumnMinimumWidth(1, RUNWAY_FORM_FIELD_WIDTH)
-        classification_outer_layout.addWidget(
-            classification_form,
-            0,
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop,
-        )
-        classification_outer_layout.addStretch(1)
-
-        classification_layout.addWidget(label_runway_width, 0, 0)
-        classification_layout.addWidget(self.width_le, 0, 1)
-
         label_runway_shoulder = QtWidgets.QLabel("Runway Shoulder (m):")
         label_runway_shoulder.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.shoulder_le = QtWidgets.QLineEdit()
@@ -431,15 +403,11 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.shoulder_le.setToolTip("Enter width of runway shoulder (each side, if applicable).")
         self.shoulder_le.setValidator(self.distance_validator)
         self._set_control_width(self.shoulder_le)
-        classification_layout.addWidget(label_runway_shoulder, 1, 0)
-        classification_layout.addWidget(self.shoulder_le, 1, 1)
-        self._add_arc_controls(classification_layout, 2)
-        self._add_adg_controls(classification_layout, 4)
-        self._add_surface_controls(classification_layout, 5)
-        self._standardize_form_rows(classification_layout, 7)
 
         advanced_body_layout.addWidget(threshold_group)
-        advanced_body_layout.addWidget(classification_group)
+        self._add_runway_dimensions_controls(advanced_body_layout, label_runway_width, label_runway_shoulder)
+        self._add_runway_operations_controls(advanced_body_layout)
+        self._add_runway_characteristics_controls(advanced_body_layout)
         self._add_declared_distance_controls(advanced_body_layout)
         advanced_layout.addWidget(advanced_body)
         groupBox_layout.addWidget(self.advanced_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
@@ -673,15 +641,24 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         layout.addWidget(self.lahso_applied_1_cb, row, 1)
         layout.addWidget(self.lahso_applied_2_cb, row, 2)
 
-    def _add_declared_distance_controls(self, parent_layout: QtWidgets.QVBoxLayout):
-        declared_group = QtWidgets.QGroupBox("Declared Distances")
-        declared_group.setObjectName(f"groupBox_declared_distances_{self.index}")
-        self._style_section_groupbox(declared_group)
-        declared_layout = QtWidgets.QGridLayout(declared_group)
-        self._configure_runway_form_grid(declared_layout)
+    def _add_runway_dimensions_controls(
+        self,
+        parent_layout: QtWidgets.QVBoxLayout,
+        label_runway_width: QtWidgets.QLabel,
+        label_runway_shoulder: QtWidgets.QLabel,
+    ) -> None:
+        dimensions_group = QtWidgets.QGroupBox("Runway Dimensions")
+        dimensions_group.setObjectName(f"groupBox_runway_dimensions_{self.index}")
+        self._style_section_groupbox(dimensions_group)
+        dimensions_layout = QtWidgets.QGridLayout(dimensions_group)
+        self._configure_runway_form_grid(dimensions_layout)
 
-        declared_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
-        declared_layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
+        dimensions_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
+        dimensions_layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
+        dimensions_layout.addWidget(label_runway_width, 1, 0)
+        dimensions_layout.addWidget(self.width_le, 1, 1)
+        dimensions_layout.addWidget(label_runway_shoulder, 2, 0)
+        dimensions_layout.addWidget(self.shoulder_le, 2, 1)
 
         clearway_label = QtWidgets.QLabel("Clearway (m):")
         self.clearway1_len_le = QtWidgets.QLineEdit()
@@ -697,11 +674,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.clearway2_len_le.setToolTip("Clearway length beyond the reciprocal physical runway end.")
         self.clearway2_len_le.setValidator(self.distance_validator)
         self._set_control_width(self.clearway2_len_le)
-        self._add_runway_availability_controls(declared_layout, 1)
-
-        declared_layout.addWidget(clearway_label, 3, 0)
-        declared_layout.addWidget(self.clearway1_len_le, 3, 1)
-        declared_layout.addWidget(self.clearway2_len_le, 3, 2)
+        dimensions_layout.addWidget(clearway_label, 3, 0)
+        dimensions_layout.addWidget(self.clearway1_len_le, 3, 1)
+        dimensions_layout.addWidget(self.clearway2_len_le, 3, 2)
 
         stopway_label = QtWidgets.QLabel("Stopway (m):")
         self.stopway1_len_le = QtWidgets.QLineEdit()
@@ -717,38 +692,94 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.stopway2_len_le.setToolTip("Stopway length beyond the reciprocal physical runway end.")
         self.stopway2_len_le.setValidator(self.distance_validator)
         self._set_control_width(self.stopway2_len_le)
-        declared_layout.addWidget(stopway_label, 4, 0)
-        declared_layout.addWidget(self.stopway1_len_le, 4, 1)
-        declared_layout.addWidget(self.stopway2_len_le, 4, 2)
+        dimensions_layout.addWidget(stopway_label, 4, 0)
+        dimensions_layout.addWidget(self.stopway1_len_le, 4, 1)
+        dimensions_layout.addWidget(self.stopway2_len_le, 4, 2)
+        self._standardize_form_rows(dimensions_layout, 5)
 
-        override_header = QtWidgets.QLabel("Published Overrides (m)")
-        override_header.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        declared_layout.addWidget(override_header, 5, 0)
+        parent_layout.addWidget(dimensions_group)
+
+    def _add_runway_operations_controls(self, parent_layout: QtWidgets.QVBoxLayout) -> None:
+        operations_group = QtWidgets.QGroupBox("Runway Operations")
+        operations_group.setObjectName(f"groupBox_runway_operations_{self.index}")
+        self._style_section_groupbox(operations_group)
+        operations_layout = QtWidgets.QGridLayout(operations_group)
+        self._configure_runway_form_grid(operations_layout)
+
+        operations_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
+        operations_layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
+        self._add_runway_availability_controls(operations_layout, 1)
+        self._add_lahso_controls(operations_layout, 3)
+        self._add_runway_type_controls(operations_layout, 4, 0, 1, reciprocal_input_col=2)
+        self._standardize_form_rows(operations_layout, 5)
+
+        parent_layout.addWidget(operations_group)
+
+    def _add_runway_characteristics_controls(self, parent_layout: QtWidgets.QVBoxLayout) -> None:
+        classification_group = QtWidgets.QGroupBox("Runway Characteristics")
+        classification_group.setObjectName(f"groupBox_classification_{self.index}")
+        self._style_section_groupbox(classification_group)
+        classification_outer_layout = QtWidgets.QHBoxLayout(classification_group)
+        classification_outer_layout.setContentsMargins(0, 0, 0, 0)
+        classification_outer_layout.setSpacing(0)
+        classification_form = QtWidgets.QWidget(classification_group)
+        classification_form.setMaximumWidth(RUNWAY_FORM_LABEL_WIDTH + RUNWAY_FORM_COLUMN_GAP + RUNWAY_FORM_FIELD_WIDTH)
+        classification_layout = QtWidgets.QGridLayout(classification_form)
+        classification_layout.setContentsMargins(0, 0, 0, 0)
+        classification_layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
+        classification_layout.setVerticalSpacing(RUNWAY_FORM_VERTICAL_GAP)
+        classification_layout.setColumnStretch(0, 0)
+        classification_layout.setColumnStretch(1, 0)
+        classification_layout.setColumnMinimumWidth(0, RUNWAY_FORM_LABEL_WIDTH)
+        classification_layout.setColumnMinimumWidth(1, RUNWAY_FORM_FIELD_WIDTH)
+        classification_outer_layout.addWidget(
+            classification_form,
+            0,
+            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop,
+        )
+        classification_outer_layout.addStretch(1)
+
+        self._add_arc_controls(classification_layout, 0)
+        self._add_adg_controls(classification_layout, 2)
+        self._add_surface_controls(classification_layout, 3)
+        self._standardize_form_rows(classification_layout, 5)
+
+        parent_layout.addWidget(classification_group)
+
+    def _add_declared_distance_controls(self, parent_layout: QtWidgets.QVBoxLayout):
+        declared_group = QtWidgets.QGroupBox("Declared Distances")
+        declared_group.setObjectName(f"groupBox_declared_distances_{self.index}")
+        self._style_section_groupbox(declared_group)
+        declared_layout = QtWidgets.QGridLayout(declared_group)
+        self._configure_runway_form_grid(declared_layout)
+
+        declared_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
+        declared_layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
 
         self.tora_override_1_le = self._declared_override_line_edit("tora_override_1", "Primary TORA override.")
         self.tora_override_2_le = self._declared_override_line_edit("tora_override_2", "Reciprocal TORA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("TORA:"), 6, 0)
-        declared_layout.addWidget(self.tora_override_1_le, 6, 1)
-        declared_layout.addWidget(self.tora_override_2_le, 6, 2)
+        declared_layout.addWidget(QtWidgets.QLabel("TORA:"), 1, 0)
+        declared_layout.addWidget(self.tora_override_1_le, 1, 1)
+        declared_layout.addWidget(self.tora_override_2_le, 1, 2)
 
         self.toda_override_1_le = self._declared_override_line_edit("toda_override_1", "Primary TODA override.")
         self.toda_override_2_le = self._declared_override_line_edit("toda_override_2", "Reciprocal TODA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("TODA:"), 7, 0)
-        declared_layout.addWidget(self.toda_override_1_le, 7, 1)
-        declared_layout.addWidget(self.toda_override_2_le, 7, 2)
+        declared_layout.addWidget(QtWidgets.QLabel("TODA:"), 2, 0)
+        declared_layout.addWidget(self.toda_override_1_le, 2, 1)
+        declared_layout.addWidget(self.toda_override_2_le, 2, 2)
 
         self.asda_override_1_le = self._declared_override_line_edit("asda_override_1", "Primary ASDA override.")
         self.asda_override_2_le = self._declared_override_line_edit("asda_override_2", "Reciprocal ASDA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("ASDA:"), 8, 0)
-        declared_layout.addWidget(self.asda_override_1_le, 8, 1)
-        declared_layout.addWidget(self.asda_override_2_le, 8, 2)
+        declared_layout.addWidget(QtWidgets.QLabel("ASDA:"), 3, 0)
+        declared_layout.addWidget(self.asda_override_1_le, 3, 1)
+        declared_layout.addWidget(self.asda_override_2_le, 3, 2)
 
         self.lda_override_1_le = self._declared_override_line_edit("lda_override_1", "Primary LDA override.")
         self.lda_override_2_le = self._declared_override_line_edit("lda_override_2", "Reciprocal LDA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("LDA:"), 9, 0)
-        declared_layout.addWidget(self.lda_override_1_le, 9, 1)
-        declared_layout.addWidget(self.lda_override_2_le, 9, 2)
-        self._standardize_form_rows(declared_layout, 10)
+        declared_layout.addWidget(QtWidgets.QLabel("LDA:"), 4, 0)
+        declared_layout.addWidget(self.lda_override_1_le, 4, 1)
+        declared_layout.addWidget(self.lda_override_2_le, 4, 2)
+        self._standardize_form_rows(declared_layout, 5)
 
         parent_layout.addWidget(declared_group)
 
