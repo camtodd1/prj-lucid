@@ -16,6 +16,8 @@ from .dialog_constants import (
 RUNWAY_FORM_LABEL_WIDTH = 230
 RUNWAY_FORM_FIELD_WIDTH = 240
 RUNWAY_FORM_COLUMN_GAP = 12
+RUNWAY_FORM_ROW_HEIGHT = 28
+RUNWAY_FORM_VERTICAL_GAP = 6
 
 
 class NoWheelComboBox(QtWidgets.QComboBox):
@@ -168,7 +170,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         core_layout = QtWidgets.QGridLayout(core_widget)
         core_layout.setContentsMargins(0, 0, 0, 0)
         core_layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
-        core_layout.setVerticalSpacing(8)
+        core_layout.setVerticalSpacing(RUNWAY_FORM_VERTICAL_GAP)
 
         gridLayout_Coords = core_layout
         gridLayout_Coords.setObjectName(f"gridLayout_Coords_{self.index}")
@@ -336,6 +338,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         gridLayout_Coords.addWidget(label_designation_row, current_coord_row, 0)
         gridLayout_Coords.addLayout(h_layout_desig_inputs, current_coord_row, 1)
         gridLayout_Coords.addWidget(self.rec_desig_hdr_lbl, current_coord_row, 2)
+        self._standardize_form_rows(gridLayout_Coords, 2)
 
         core_widget.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
@@ -385,6 +388,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         threshold_layout.addWidget(self.thr_pre_area_2_le, 6, 2)
         self._add_runway_type_controls(threshold_layout, 7, 0, 1, reciprocal_input_col=2)
         self._add_lahso_controls(threshold_layout, 8)
+        self._standardize_form_rows(threshold_layout, 9)
 
         self.dist_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.dist_lbl.setObjectName(f"label_rwy_distance_{self.index}")
@@ -405,7 +409,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         classification_layout = QtWidgets.QGridLayout(classification_form)
         classification_layout.setContentsMargins(0, 0, 0, 0)
         classification_layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
-        classification_layout.setVerticalSpacing(6)
+        classification_layout.setVerticalSpacing(RUNWAY_FORM_VERTICAL_GAP)
         classification_layout.setColumnStretch(0, 0)
         classification_layout.setColumnStretch(1, 0)
         classification_layout.setColumnMinimumWidth(0, RUNWAY_FORM_LABEL_WIDTH)
@@ -432,6 +436,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._add_arc_controls(classification_layout, 2)
         self._add_adg_controls(classification_layout, 4)
         self._add_surface_controls(classification_layout, 5)
+        self._standardize_form_rows(classification_layout, 7)
 
         advanced_body_layout.addWidget(threshold_group)
         advanced_body_layout.addWidget(classification_group)
@@ -445,7 +450,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _column_header_label(self, text: str) -> QtWidgets.QLabel:
         label = QtWidgets.QLabel(text)
         label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        label.setMinimumHeight(22)
+        label.setMinimumHeight(RUNWAY_FORM_ROW_HEIGHT)
         label.setStyleSheet(
             "QLabel { color: #4f5963; font-size: 11px; font-weight: 600; padding: 0 6px; }"
         )
@@ -461,6 +466,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _configure_runway_form_grid(self, layout: QtWidgets.QGridLayout) -> None:
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
+        layout.setVerticalSpacing(RUNWAY_FORM_VERTICAL_GAP)
         layout.setColumnStretch(0, 0)
         layout.setColumnStretch(1, 0)
         layout.setColumnStretch(2, 0)
@@ -469,6 +475,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         layout.setColumnMinimumWidth(1, RUNWAY_FORM_FIELD_WIDTH)
         layout.setColumnMinimumWidth(2, RUNWAY_FORM_FIELD_WIDTH)
         layout.setColumnMinimumWidth(3, 0)
+
+    def _standardize_form_rows(self, layout: QtWidgets.QGridLayout, row_count: int) -> None:
+        for row in range(row_count):
+            layout.setRowMinimumHeight(row, RUNWAY_FORM_ROW_HEIGHT)
 
     def _add_arc_controls(
         self,
@@ -668,7 +678,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         declared_group.setObjectName(f"groupBox_declared_distances_{self.index}")
         self._style_section_groupbox(declared_group)
         declared_layout = QtWidgets.QGridLayout(declared_group)
-        declared_layout.setVerticalSpacing(5)
         self._configure_runway_form_grid(declared_layout)
 
         declared_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
@@ -739,6 +748,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         declared_layout.addWidget(QtWidgets.QLabel("LDA:"), 9, 0)
         declared_layout.addWidget(self.lda_override_1_le, 9, 1)
         declared_layout.addWidget(self.lda_override_2_le, 9, 2)
+        self._standardize_form_rows(declared_layout, 10)
 
         parent_layout.addWidget(declared_group)
 
