@@ -16,6 +16,7 @@ from .dialog_constants import (
 RUNWAY_FORM_LABEL_WIDTH = 230
 RUNWAY_FORM_FIELD_WIDTH = 240
 RUNWAY_FORM_COLUMN_GAP = 12
+RUNWAY_FORM_WIDE_FIELD_WIDTH = RUNWAY_FORM_FIELD_WIDTH * 2 + RUNWAY_FORM_COLUMN_GAP
 RUNWAY_FORM_ROW_HEIGHT = 28
 RUNWAY_FORM_VERTICAL_GAP = 6
 
@@ -77,6 +78,12 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
                 padding-left: 6px;
                 padding-right: 6px;
                 background: #ffffff;
+            }
+            QComboBox QAbstractItemView {
+                background: #ffffff;
+                color: #202124;
+                selection-background-color: #e8f0fe;
+                selection-color: #202124;
             }
             """
         )
@@ -454,6 +461,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         row: int,
         label_col: int = 0,
         input_col: int = 1,
+        input_col_span: int = 1,
+        input_width: int = RUNWAY_FORM_FIELD_WIDTH,
     ) -> None:
         label_arc_num = QtWidgets.QLabel("ARC Number:")
         label_arc_num.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -469,9 +478,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.arc_num_combo.addItem(label, userData=value)
         self.arc_num_combo.setToolTip("Select Aerodrome Reference Code Number")
         self.arc_num_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.arc_num_combo)
+        self._set_control_width(self.arc_num_combo, input_width)
         layout.addWidget(label_arc_num, row, label_col)
-        layout.addWidget(self.arc_num_combo, row, input_col)
+        layout.addWidget(self.arc_num_combo, row, input_col, 1, input_col_span)
 
         label_arc_let = QtWidgets.QLabel("ARC Letter:")
         label_arc_let.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -489,9 +498,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.arc_let_combo.addItem(label, userData=value)
         self.arc_let_combo.setToolTip("Select Aerodrome Reference Code Letter")
         self.arc_let_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.arc_let_combo)
+        self._set_control_width(self.arc_let_combo, input_width)
         layout.addWidget(label_arc_let, row + 1, label_col)
-        layout.addWidget(self.arc_let_combo, row + 1, input_col)
+        layout.addWidget(self.arc_let_combo, row + 1, input_col, 1, input_col_span)
 
     def _add_surface_controls(
         self,
@@ -499,6 +508,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         row: int,
         label_col: int = 0,
         input_col: int = 1,
+        input_col_span: int = 1,
+        input_width: int = RUNWAY_FORM_FIELD_WIDTH,
     ) -> None:
         label_surface_category = QtWidgets.QLabel("Surface Category:")
         label_surface_category.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -507,9 +518,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.surface_category_combo.addItems([""] + list(RUNWAY_SURFACE_MATERIALS))
         self.surface_category_combo.setToolTip("Select runway surface category.")
         self.surface_category_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.surface_category_combo)
+        self._set_control_width(self.surface_category_combo, input_width)
         layout.addWidget(label_surface_category, row, label_col)
-        layout.addWidget(self.surface_category_combo, row, input_col)
+        layout.addWidget(self.surface_category_combo, row, input_col, 1, input_col_span)
 
         label_surface_material = QtWidgets.QLabel("Surface Material:")
         label_surface_material.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -517,10 +528,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.surface_material_combo.setObjectName(f"comboBox_surface_material_{self.index}")
         self.surface_material_combo.setToolTip("Select runway surface material for the chosen category.")
         self.surface_material_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.surface_material_combo)
+        self._set_control_width(self.surface_material_combo, input_width)
         self._refresh_surface_material_options("")
         layout.addWidget(label_surface_material, row + 1, label_col)
-        layout.addWidget(self.surface_material_combo, row + 1, input_col)
+        layout.addWidget(self.surface_material_combo, row + 1, input_col, 1, input_col_span)
 
     def _add_adg_controls(
         self,
@@ -528,6 +539,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         row: int,
         label_col: int = 0,
         input_col: int = 1,
+        input_col_span: int = 1,
+        input_width: int = RUNWAY_FORM_FIELD_WIDTH,
     ) -> None:
         label_adg = QtWidgets.QLabel("ADG:")
         label_adg.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -546,9 +559,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.adg_combo.addItem(label, userData=value)
         self.adg_combo.setToolTip("Select Annex 14 Aeroplane Design Group for OFS/OES generation.")
         self.adg_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.adg_combo)
+        self._set_control_width(self.adg_combo, input_width)
         layout.addWidget(label_adg, row, label_col)
-        layout.addWidget(self.adg_combo, row, input_col)
+        layout.addWidget(self.adg_combo, row, input_col, 1, input_col_span)
 
     def _add_runway_type_controls(
         self,
@@ -656,9 +669,11 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         dimensions_layout.addWidget(self._column_header_label("Primary End"), 0, 1)
         dimensions_layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
         dimensions_layout.addWidget(label_runway_width, 1, 0)
-        dimensions_layout.addWidget(self.width_le, 1, 1)
+        self._set_control_width(self.width_le, RUNWAY_FORM_WIDE_FIELD_WIDTH)
+        dimensions_layout.addWidget(self.width_le, 1, 1, 1, 2)
         dimensions_layout.addWidget(label_runway_shoulder, 2, 0)
-        dimensions_layout.addWidget(self.shoulder_le, 2, 1)
+        self._set_control_width(self.shoulder_le, RUNWAY_FORM_WIDE_FIELD_WIDTH)
+        dimensions_layout.addWidget(self.shoulder_le, 2, 1, 1, 2)
 
         clearway_label = QtWidgets.QLabel("Clearway (m):")
         self.clearway1_len_le = QtWidgets.QLineEdit()
@@ -719,29 +734,27 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         classification_group = QtWidgets.QGroupBox("Runway Characteristics")
         classification_group.setObjectName(f"groupBox_classification_{self.index}")
         self._style_section_groupbox(classification_group)
-        classification_outer_layout = QtWidgets.QHBoxLayout(classification_group)
-        classification_outer_layout.setContentsMargins(0, 0, 0, 0)
-        classification_outer_layout.setSpacing(0)
-        classification_form = QtWidgets.QWidget(classification_group)
-        classification_form.setMaximumWidth(RUNWAY_FORM_LABEL_WIDTH + RUNWAY_FORM_COLUMN_GAP + RUNWAY_FORM_FIELD_WIDTH)
-        classification_layout = QtWidgets.QGridLayout(classification_form)
-        classification_layout.setContentsMargins(0, 0, 0, 0)
-        classification_layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
-        classification_layout.setVerticalSpacing(RUNWAY_FORM_VERTICAL_GAP)
-        classification_layout.setColumnStretch(0, 0)
-        classification_layout.setColumnStretch(1, 0)
-        classification_layout.setColumnMinimumWidth(0, RUNWAY_FORM_LABEL_WIDTH)
-        classification_layout.setColumnMinimumWidth(1, RUNWAY_FORM_FIELD_WIDTH)
-        classification_outer_layout.addWidget(
-            classification_form,
-            0,
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignTop,
-        )
-        classification_outer_layout.addStretch(1)
+        classification_layout = QtWidgets.QGridLayout(classification_group)
+        self._configure_runway_form_grid(classification_layout)
 
-        self._add_arc_controls(classification_layout, 0)
-        self._add_adg_controls(classification_layout, 2)
-        self._add_surface_controls(classification_layout, 3)
+        self._add_arc_controls(
+            classification_layout,
+            0,
+            input_col_span=2,
+            input_width=RUNWAY_FORM_WIDE_FIELD_WIDTH,
+        )
+        self._add_adg_controls(
+            classification_layout,
+            2,
+            input_col_span=2,
+            input_width=RUNWAY_FORM_WIDE_FIELD_WIDTH,
+        )
+        self._add_surface_controls(
+            classification_layout,
+            3,
+            input_col_span=2,
+            input_width=RUNWAY_FORM_WIDE_FIELD_WIDTH,
+        )
         self._standardize_form_rows(classification_layout, 5)
 
         parent_layout.addWidget(classification_group)
