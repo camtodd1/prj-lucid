@@ -667,6 +667,37 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertGreater(first_call_count, 0)
         self.assertEqual(controller_probe.call_count, first_call_count)
 
+    def test_candidate_spatial_index_is_an_exact_query_prefilter(self):
+        near = self.constant("near", 90.0)
+        far_footprint = QgsGeometry.fromRect(QgsRectangle(1000.0, 1000.0, 1100.0, 1100.0))
+        far = ControllingOlsCandidate(
+            surface_id="far",
+            surface_type="Test",
+            footprint=far_footprint,
+            elevation_at_xy=constant_elevation_evaluator(10.0),
+            model="constant",
+            metadata={"elevation_m": 10.0},
+        )
+        engine = PlanarControllingOlsEngine([far, near])
+
+        candidates = engine._candidates_intersecting_rectangle(
+            QgsRectangle(49.0, 49.0, 51.0, 51.0)
+        )
+        controller = engine.controlling_candidate_at_xy(QgsPointXY(50.0, 50.0))
+
+        self.assertEqual([candidate.surface_id for candidate in candidates], ["near"])
+        self.assertIsNotNone(controller)
+        self.assertEqual(controller[0].surface_id, "near")
+
+    def test_candidate_spatial_index_keeps_exact_footprint_boundary_points(self):
+        candidate = self.constant("boundary", 90.0)
+        engine = PlanarControllingOlsEngine([candidate])
+
+        controller = engine.controlling_candidate_at_xy(QgsPointXY(100.0, 50.0))
+
+        self.assertIsNotNone(controller)
+        self.assertEqual(controller[0].surface_id, "boundary")
+
     def test_comparison_reuses_supplied_solved_engines(self):
         baseline = self.constant("baseline", 100.0)
         future = ControllingOlsCandidate(

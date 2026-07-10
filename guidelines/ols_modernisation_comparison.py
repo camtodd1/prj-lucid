@@ -611,6 +611,12 @@ class OlsEnvelopeComparisonEngine:
             triangles = QgsGeometry.fromMultiPointXY(points).delaunayTriangulation(0.0, False)
         except Exception:
             return []
+        prepared_geometry = None
+        try:
+            prepared_geometry = QgsGeometry.createGeometryEngine(geometry.constGet())
+            prepared_geometry.prepareGeometry()
+        except Exception:
+            prepared_geometry = None
         segments_by_level: Dict[float, List[QgsGeometry]] = {level: [] for level in levels}
         for triangle in self.baseline_engine._polygon_parts(triangles):
             try:
@@ -635,9 +641,16 @@ class OlsEnvelopeComparisonEngine:
                     level,
                 ):
                     try:
-                        clipped = segment.intersection(geometry)
+                        wholly_inside = bool(
+                            prepared_geometry is not None
+                            and prepared_geometry.contains(segment.constGet())
+                        )
+                        clipped = segment if wholly_inside else segment.intersection(geometry)
                     except Exception:
-                        clipped = segment
+                        try:
+                            clipped = segment.intersection(geometry)
+                        except Exception:
+                            clipped = segment
                     if clipped is not None and not clipped.isEmpty():
                         segments_by_level[level].append(clipped)
         contours: List[Tuple[float, QgsGeometry]] = []

@@ -19,6 +19,7 @@ from qgis.core import (  # type: ignore
     QgsPoint,
     QgsPointXY,
     QgsRectangle,
+    QgsSpatialIndex,
     QgsWkbTypes,
 )
 
@@ -179,6 +180,8 @@ class PlanarControllingOlsEngine:
         ]
         self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
         self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
+        self._candidate_spatial_index: Optional[QgsSpatialIndex] = None
+        self._candidate_by_spatial_id: Dict[int, ControllingOlsCandidate] = {}
         self._controlling_region_geometries_cache: Optional[List[Tuple[ControllingOlsCandidate, QgsGeometry]]] = None
         self._region_boundary_records_cache: Optional[List[Tuple[QgsGeometry, List[object]]]] = None
         self._region_solve_stats: Dict[str, float] = {}
@@ -188,9 +191,19 @@ class PlanarControllingOlsEngine:
     def controlling_candidate_at_xy(self, point_xy: QgsPointXY) -> Optional[Tuple[ControllingOlsCandidate, float]]:
         """Return the lowest applicable planar candidate at a point."""
         evaluated: List[Tuple[ControllingOlsCandidate, float]] = []
-        for candidate in self.candidates:
+        point_geometry = QgsGeometry.fromPointXY(point_xy)
+        query_tolerance = 1e-6
+        candidates = self._candidates_intersecting_rectangle(
+            QgsRectangle(
+                point_xy.x() - query_tolerance,
+                point_xy.y() - query_tolerance,
+                point_xy.x() + query_tolerance,
+                point_xy.y() + query_tolerance,
+            )
+        )
+        for candidate in candidates:
             footprint = self._effective_footprint(candidate)
-            if footprint is None or footprint.isEmpty() or not footprint.intersects(QgsGeometry.fromPointXY(point_xy)):
+            if footprint is None or footprint.isEmpty() or not footprint.intersects(point_geometry):
                 continue
             elevation = candidate.elevation_at_xy(point_xy)
             if elevation is None or not math.isfinite(elevation):
@@ -216,6 +229,48 @@ class PlanarControllingOlsEngine:
             return tied[0]
         evaluated.sort(key=lambda item: item[1])
         return evaluated[0]
+
+    def _ensure_candidate_spatial_index(self) -> QgsSpatialIndex:
+        """Build a lazy footprint index used only as an exact-query prefilter."""
+        if self._candidate_spatial_index is not None:
+            return self._candidate_spatial_index
+
+        spatial_index = QgsSpatialIndex()
+        candidates_by_id: Dict[int, ControllingOlsCandidate] = {}
+        for spatial_id, candidate in enumerate(self.candidates, start=1):
+            footprint = self._effective_footprint(candidate)
+            if footprint is None or footprint.isEmpty():
+                continue
+            feature = QgsFeature()
+            feature.setId(spatial_id)
+            feature.setGeometry(footprint)
+            if spatial_index.addFeature(feature):
+                candidates_by_id[spatial_id] = candidate
+        self._candidate_by_spatial_id = candidates_by_id
+        self._candidate_spatial_index = spatial_index
+        return spatial_index
+
+    def _candidates_intersecting_rectangle(
+        self,
+        rectangle: QgsRectangle,
+    ) -> List[ControllingOlsCandidate]:
+        """Return bbox candidates in their original deterministic solve order."""
+        if rectangle is None or rectangle.isEmpty():
+            return []
+        spatial_ids = set(self._ensure_candidate_spatial_index().intersects(rectangle))
+        return [
+            candidate
+            for spatial_id, candidate in self._candidate_by_spatial_id.items()
+            if spatial_id in spatial_ids
+        ]
+
+    def _candidates_intersecting_geometry(
+        self,
+        geometry: Optional[QgsGeometry],
+    ) -> List[ControllingOlsCandidate]:
+        if geometry is None or geometry.isEmpty():
+            return []
+        return self._candidates_intersecting_rectangle(geometry.boundingBox())
 
     @staticmethod
     def _candidate_tie_priority(candidate: ControllingOlsCandidate) -> Tuple[int, int, str]:
@@ -496,7 +551,7 @@ class PlanarControllingOlsEngine:
         region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
             region = self._effective_footprint(candidate)
-            for competitor in self.candidates:
+            for competitor in self._candidates_intersecting_geometry(region):
                 if competitor.surface_id == candidate.surface_id:
                     continue
                 self._region_solve_stats["pair_checks"] += 1.0
