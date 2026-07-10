@@ -264,8 +264,8 @@ class OlsEnvelopeComparisonEngine:
                 values.append(self._round_delta(delta))
         if not values:
             return None, None, None
-        # The first sample is pointOnSurface(), giving a stable representative
-        # value without presenting a vertex sample as an area-weighted mean.
+        # The first sample is pointOnSurface().  It is an interior classification
+        # sample only; it is not an area-weighted or otherwise representative value.
         return min(values), max(values), values[0]
 
     def _append_sampled_whole_overlap(
@@ -276,8 +276,8 @@ class OlsEnvelopeComparisonEngine:
         overlap,
         clean_spikes: bool = True,
     ) -> None:
-        delta_min, delta_max, delta_representative = self.delta_range(overlap, baseline, future)
-        if delta_representative is None:
+        delta_min, delta_max, delta_sample = self.delta_range(overlap, baseline, future)
+        if delta_sample is None:
             return
         if delta_min is not None and delta_min > self.tolerance_m:
             self._append_parts(result["gain"], baseline, future, overlap, "gain", clean_spikes)
@@ -299,7 +299,7 @@ class OlsEnvelopeComparisonEngine:
         overlap,
         clean_spikes: bool = True,
     ) -> bool:
-        delta_min, delta_max, _delta_representative = self.delta_range(overlap, baseline, future)
+        delta_min, delta_max, _delta_sample = self.delta_range(overlap, baseline, future)
         if delta_min is None or delta_max is None:
             return False
         if abs(delta_min) > self.tolerance_m or abs(delta_max) > self.tolerance_m:
@@ -325,14 +325,14 @@ class OlsEnvelopeComparisonEngine:
                 part = self._clean_comparison_part(part, baseline, future, change)
             if not self._has_area(part):
                 continue
-            delta_min, delta_max, delta_representative = self.delta_range(part, baseline, future, change)
-            if delta_representative is None:
+            delta_min, delta_max, delta_sample = self.delta_range(part, baseline, future, change)
+            if delta_sample is None:
                 continue
             if change == "gain":
-                if delta_representative <= self.tolerance_m:
+                if delta_sample <= self.tolerance_m:
                     continue
             if change == "loss":
-                if delta_representative >= -self.tolerance_m:
+                if delta_sample >= -self.tolerance_m:
                     continue
             if change == "no_change":
                 if delta_min is None or delta_max is None:
@@ -443,17 +443,17 @@ class OlsEnvelopeComparisonEngine:
                     for classified_part in self.baseline_engine._polygon_parts(classified):
                         if not self._has_area(classified_part):
                             continue
-                        delta_min, delta_max, delta_representative = self.delta_range(
+                        delta_min, delta_max, delta_sample = self.delta_range(
                             classified_part,
                             baseline,
                             future,
                             change,
                         )
-                        if delta_representative is None:
+                        if delta_sample is None:
                             continue
-                        if change == "gain" and delta_representative <= self.tolerance_m:
+                        if change == "gain" and delta_sample <= self.tolerance_m:
                             continue
-                        if change == "loss" and delta_representative >= -self.tolerance_m:
+                        if change == "loss" and delta_sample >= -self.tolerance_m:
                             continue
                         if change == "no_change" and (
                             delta_min is None
@@ -538,17 +538,17 @@ class OlsEnvelopeComparisonEngine:
                 cleaned = self._clean_comparison_part(geometry, baseline, future, change)
                 if not self._has_area(cleaned):
                     continue
-                delta_min, delta_max, delta_representative = self.delta_range(
+                delta_min, delta_max, delta_sample = self.delta_range(
                     cleaned,
                     baseline,
                     future,
                     change,
                 )
-                if delta_representative is None:
+                if delta_sample is None:
                     continue
-                if change == "gain" and delta_representative <= self.tolerance_m:
+                if change == "gain" and delta_sample <= self.tolerance_m:
                     continue
-                if change == "loss" and delta_representative >= -self.tolerance_m:
+                if change == "loss" and delta_sample >= -self.tolerance_m:
                     continue
                 if change == "no_change":
                     if delta_min is None or delta_max is None:
@@ -575,12 +575,12 @@ class OlsEnvelopeComparisonEngine:
         baseline_candidate: ControllingOlsCandidate,
         future_candidate: ControllingOlsCandidate,
     ) -> Optional[str]:
-        delta_min, delta_max, delta_representative = self.delta_range(
+        delta_min, delta_max, delta_sample = self.delta_range(
             geometry,
             baseline_candidate,
             future_candidate,
         )
-        if delta_representative is None:
+        if delta_sample is None:
             return None
         if delta_min is not None and delta_min > self.tolerance_m:
             return "gain"
@@ -593,9 +593,9 @@ class OlsEnvelopeComparisonEngine:
             and abs(delta_max) <= self.tolerance_m
         ):
             return "no_change"
-        if delta_representative > self.tolerance_m:
+        if delta_sample > self.tolerance_m:
             return "gain"
-        if delta_representative < -self.tolerance_m:
+        if delta_sample < -self.tolerance_m:
             return "loss"
         return "no_change"
 
@@ -1431,14 +1431,28 @@ class OlsModernisationComparisonMixin:
             ) or created
         return created
 
-    def _comparison_label(self, change: str, delta_representative: Optional[float]) -> str:
-        if delta_representative is None:
+    @staticmethod
+    def _comparison_label_delta(value: float) -> str:
+        rounded = round(float(value), 1)
+        if rounded == 0:
+            rounded = 0.0
+        sign = "+" if rounded > 0 else ""
+        return f"{sign}{rounded:.1f}"
+
+    def _comparison_label(
+        self,
+        change: str,
+        delta_min: Optional[float],
+        delta_max: Optional[float],
+    ) -> str:
+        if delta_min is None or delta_max is None:
             return ""
-        if change == "no_change":
-            return f"{delta_representative:.1f} m no change"
-        sign = "+" if delta_representative > 0 else ""
-        suffix = "gain" if change == "gain" else "loss"
-        return f"{sign}{delta_representative:.1f} m {suffix}"
+        suffix = "no change" if change == "no_change" else change
+        minimum = self._comparison_label_delta(delta_min)
+        maximum = self._comparison_label_delta(delta_max)
+        if minimum == maximum:
+            return f"{minimum} m {suffix}"
+        return f"{minimum} to {maximum} m {suffix}"
 
     def _create_modernisation_change_layer(
         self,
@@ -1457,14 +1471,14 @@ class OlsModernisationComparisonMixin:
             QgsField("future_family", QVariant.String, self.tr("Future Family"), 8),
             QgsField("delta_min_m", QVariant.Double, self.tr("Minimum Change (m)"), 12, 3),
             QgsField("delta_max_m", QVariant.Double, self.tr("Maximum Change (m)"), 12, 3),
-            QgsField("delta_rep_m", QVariant.Double, self.tr("Representative Change (m)"), 12, 3),
+            QgsField("delta_sample_m", QVariant.Double, self.tr("Interior Sample Change (m)"), 12, 3),
             QgsField("baseline_ruleset", QVariant.String, self.tr("Baseline Ruleset"), 80),
             QgsField("baseline_id", QVariant.String, self.tr("Baseline Surface ID"), 160),
             QgsField("baseline_surface", QVariant.String, self.tr("Baseline Surface"), 50),
             QgsField("future_id", QVariant.String, self.tr("Future Surface ID"), 160),
             QgsField("future_surface", QVariant.String, self.tr("Future Surface"), 50),
             QgsField("meaning", QVariant.String, self.tr("Regulatory Meaning"), 160),
-            QgsField("label_txt", QVariant.String, self.tr("Map Label"), 32),
+            QgsField("label_txt", QVariant.String, self.tr("Map Label"), 48),
         ])
         features: List[QgsFeature] = []
         if family == "OFS":
@@ -1482,7 +1496,12 @@ class OlsModernisationComparisonMixin:
             else:
                 meaning = "Future aeronautical-study trigger is effectively unchanged; this is not an approval limit"
         for sequence, (baseline, future, geometry) in enumerate(parts, start=1):
-            delta_min, delta_max, delta_representative = comparison.delta_range(geometry, baseline, future, change)
+            delta_min, delta_max, delta_sample = comparison.delta_range(
+                geometry,
+                baseline,
+                future,
+                change,
+            )
             feature = QgsFeature(fields)
             feature.setGeometry(geometry)
             feature.setAttributes([
@@ -1491,14 +1510,14 @@ class OlsModernisationComparisonMixin:
                 family,
                 delta_min,
                 delta_max,
-                delta_representative,
+                delta_sample,
                 baseline_ruleset_id,
                 baseline.surface_id,
                 baseline.surface_type,
                 future.surface_id,
                 future.surface_type,
                 meaning,
-                self._comparison_label(change, delta_representative),
+                self._comparison_label(change, delta_min, delta_max),
             ])
             features.append(feature)
         layer = self._create_and_add_layer(

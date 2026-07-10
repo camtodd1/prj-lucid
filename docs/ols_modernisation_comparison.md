@@ -34,9 +34,10 @@ OES layers are assessment-trigger comparisons, not development approval limits.
 Every comparison output feature has a readable, layer-qualified `comparison_id`
 (for example `OFS-GAIN-000001`) for reporting a specific test issue. Each change
 feature also retains the baseline and future controlling surface identifiers,
-surface types, ruleset identifier, sampled minimum and maximum change, and a
-representative interior-point change. Gain/loss polygons are labelled with the
-representative change value on larger map features. Areas outside the common
+surface types, ruleset identifier, sampled minimum and maximum change, and the
+interior classification sample as `delta_sample_m`. The interior sample is not
+an average or representative value. Gain/loss polygons are labelled with their
+minimum-to-maximum change range on larger map features. Areas outside the common
 domains are not classified as gains or losses; baseline-only areas are shown
 separately as **No Future OLS Overlay**.
 

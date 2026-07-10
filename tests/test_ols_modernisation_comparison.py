@@ -148,22 +148,27 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             ]
         ])
 
-        raw_min, raw_max, _raw_rep = engine.delta_range(spiked_loss, baseline, future)
+        raw_min, raw_max, _raw_sample = engine.delta_range(spiked_loss, baseline, future)
         self.assertAlmostEqual(raw_min, -50.0, places=3)
         self.assertAlmostEqual(raw_max, 10.0, places=3)
 
-        loss_min, loss_max, loss_rep = engine.delta_range(spiked_loss, baseline, future, "loss")
+        loss_min, loss_max, loss_sample = engine.delta_range(spiked_loss, baseline, future, "loss")
         self.assertAlmostEqual(loss_min, -50.0, places=3)
         self.assertEqual(loss_max, 0.0)
-        self.assertLess(loss_rep, 0.0)
+        self.assertLess(loss_sample, 0.0)
 
         cleaned = engine._clean_comparison_part(spiked_loss, baseline, future, "loss")
         cleaned_vertices = [(round(vertex.x(), 3), round(vertex.y(), 3)) for vertex in cleaned.vertices()]
         self.assertNotIn((40.0, 50.0), cleaned_vertices)
-        cleaned_min, cleaned_max, cleaned_rep = engine.delta_range(cleaned, baseline, future, "loss")
+        cleaned_min, cleaned_max, cleaned_sample = engine.delta_range(
+            cleaned,
+            baseline,
+            future,
+            "loss",
+        )
         self.assertAlmostEqual(cleaned_min, -50.0, places=3)
         self.assertEqual(cleaned_max, 0.0)
-        self.assertLess(cleaned_rep, 0.0)
+        self.assertLess(cleaned_sample, 0.0)
 
         spike_remainder = QgsGeometry.fromPolygonXY([
             [QgsPointXY(50.0, 51.0), QgsPointXY(40.0, 50.0), QgsPointXY(50.0, 49.0), QgsPointXY(50.0, 51.0)]
@@ -435,10 +440,26 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             PlanarControllingOlsEngine([future]),
         )
 
-        delta_min, delta_max, delta_rep = engine.delta_range(self.domain, baseline, future)
+        delta_min, delta_max, delta_sample = engine.delta_range(self.domain, baseline, future)
         self.assertEqual(delta_min, 0.0)
         self.assertEqual(delta_max, 0.0)
-        self.assertEqual(delta_rep, 0.0)
+        self.assertEqual(delta_sample, 0.0)
+
+    def test_comparison_labels_report_the_delta_range_not_the_interior_sample(self):
+        capture = _ComparisonLayerCapture()
+
+        self.assertEqual(
+            capture._comparison_label("loss", -1.43, 0.0),
+            "-1.4 to 0.0 m loss",
+        )
+        self.assertEqual(
+            capture._comparison_label("gain", 0.0, 1.43),
+            "0.0 to +1.4 m gain",
+        )
+        self.assertEqual(
+            capture._comparison_label("no_change", -0.005, 0.005),
+            "0.0 m no change",
+        )
 
     def test_gap_part_classification_does_not_require_preselected_change(self):
         baseline = self.constant("baseline", 100.0)
@@ -538,6 +559,12 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             features = layer_args[4]
             self.assertIn("comparison_id", fields.names())
             comparison_ids.extend(feature["comparison_id"] for feature in features)
+        change_fields = capture.layers[0][3]
+        change_feature = capture.layers[0][4][0]
+        self.assertIn("delta_sample_m", change_fields.names())
+        self.assertNotIn("delta_rep_m", change_fields.names())
+        self.assertEqual(change_feature["delta_sample_m"], 10.0)
+        self.assertEqual(change_feature["label_txt"], "+10.0 m gain")
         self.assertEqual(len(comparison_ids), 4)
         self.assertEqual(len(set(comparison_ids)), 4)
         self.assertIn("OFS-GAIN-000001", comparison_ids)
