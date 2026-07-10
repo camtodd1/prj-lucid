@@ -207,6 +207,115 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertNotIn((50.0, 400.0), final_vertices)
         self.assertAlmostEqual(parts["loss"][0][2].area(), 10000.0, places=3)
 
+    def test_cleanup_removes_long_collinear_wrong_side_backtracks(self):
+        """Regression for the zero-area tendrils observed in the YSWS OES loss output."""
+        footprint = QgsGeometry.fromRect(QgsRectangle(-400.0, 0.0, 400.0, 700.0))
+        baseline = ControllingOlsCandidate(
+            surface_id="baseline-transitional",
+            surface_type="Transitional",
+            footprint=footprint,
+            elevation_at_xy=constant_elevation_evaluator(0.0),
+            model="constant",
+            metadata={"elevation_m": 0.0},
+        )
+        future = ControllingOlsCandidate(
+            surface_id="future-transitional",
+            surface_type="Precision Approach",
+            footprint=footprint,
+            elevation_at_xy=plane_elevation_evaluator(
+                0.00430694973574651,
+                0.00264455906691988,
+                -0.9112100789025135,
+            ),
+            model="plane",
+            metadata={
+                "plane_a": 0.00430694973574651,
+                "plane_b": 0.00264455906691988,
+                "plane_c": -0.9112100789025135,
+            },
+        )
+        spiked_loss = QgsGeometry.fromPolygonXY([[
+            QgsPointXY(76.6874097953, 219.6665851884),
+            QgsPointXY(166.0694389999, 274.5490589999),
+            QgsPointXY(-164.4281789796, 71.6164670130),
+            QgsPointXY(-276.9461980000, 254.8641999997),
+            QgsPointXY(293.0971557299, 633.2413809653),
+            QgsPointXY(-41.0631547095, 411.4360824255),
+            QgsPointXY(76.6874097953, 219.6665851884),
+        ]])
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        raw_deltas = [
+            future.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+            - baseline.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+            for vertex in spiked_loss.vertices()
+        ]
+        self.assertGreater(max(raw_deltas), engine.tolerance_m)
+
+        cleaned = engine._clean_comparison_part(spiked_loss, baseline, future, "loss")
+        cleaned_deltas = [
+            future.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+            - baseline.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+            for vertex in cleaned.vertices()
+        ]
+        self.assertTrue(cleaned.isGeosValid())
+        self.assertLessEqual(max(cleaned_deltas), engine.tolerance_m)
+        self.assertAlmostEqual(cleaned.area(), spiked_loss.area(), places=3)
+
+    def test_final_merge_clips_non_collinear_wrong_side_loss_area(self):
+        """A final loss feature must satisfy its height sign, regardless of spike shape."""
+        footprint = QgsGeometry.fromRect(QgsRectangle(-30.0, -5.0, 20.0, 15.0))
+        baseline = ControllingOlsCandidate(
+            surface_id="baseline",
+            surface_type="Baseline",
+            footprint=footprint,
+            elevation_at_xy=constant_elevation_evaluator(0.0),
+            model="constant",
+            metadata={"elevation_m": 0.0},
+        )
+        future = ControllingOlsCandidate(
+            surface_id="future",
+            surface_type="Future",
+            footprint=footprint,
+            elevation_at_xy=plane_elevation_evaluator(1.0, 0.0, 0.0),
+            model="plane",
+            metadata={"plane_a": 1.0, "plane_b": 0.0, "plane_c": 0.0},
+        )
+        mixed_loss = QgsGeometry.fromPolygonXY([[
+            QgsPointXY(-20.0, 0.0),
+            QgsPointXY(-10.0, 0.0),
+            QgsPointXY(10.0, 5.0),
+            QgsPointXY(-10.0, 10.0),
+            QgsPointXY(-20.0, 10.0),
+            QgsPointXY(-20.0, 0.0),
+        ]])
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        result = {
+            "gain": [],
+            "loss": [(baseline, future, mixed_loss)],
+            "no_change": [],
+            "transition": [],
+        }
+
+        engine._merge_classified_parts(result)
+
+        self.assertEqual(len(result["loss"]), 1)
+        corrected = result["loss"][0][2]
+        self.assertTrue(corrected.isGeosValid())
+        self.assertLess(corrected.area(), mixed_loss.area())
+        deltas = [
+            future.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+            - baseline.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+            for vertex in corrected.vertices()
+        ]
+        self.assertLessEqual(max(deltas), engine.tolerance_m)
+
     def test_comparison_cleanup_cannot_expand_a_concave_part(self):
         concave_part = QgsGeometry.fromPolygonXY([
             [

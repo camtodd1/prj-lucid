@@ -30,6 +30,7 @@ COMPARISON_SPIKE_BASE_MAX_M = 175.0
 COMPARISON_SPIKE_HEIGHT_MIN_M = 25.0
 COMPARISON_SEVERE_SPIKE_DETOUR_RATIO = 8.0
 COMPARISON_SEVERE_SPIKE_ANGLE_DEGREES = 15.0
+COMPARISON_COLLINEAR_BACKTRACK_ANGLE_DEGREES = 0.1
 COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO = 0.01
 COMPARISON_SPIKE_MAX_AREA_CHANGE_M2 = 25.0
 COMPARISON_DELTA_DECIMALS = 3
@@ -438,27 +439,96 @@ class OlsEnvelopeComparisonEngine:
                 for part in self.baseline_engine._polygon_parts(merged):
                     if not self._has_area(part):
                         continue
-                    delta_min, delta_max, delta_representative = self.delta_range(
-                        part,
-                        baseline,
-                        future,
-                        change,
-                    )
-                    if delta_representative is None:
-                        continue
-                    if change == "gain" and delta_representative <= self.tolerance_m:
-                        continue
-                    if change == "loss" and delta_representative >= -self.tolerance_m:
-                        continue
-                    if change == "no_change" and (
-                        delta_min is None
-                        or delta_max is None
-                        or abs(delta_min) > self.tolerance_m
-                        or abs(delta_max) > self.tolerance_m
-                    ):
-                        continue
-                    merged_parts.append((baseline, future, QgsGeometry(part)))
+                    classified = self._clip_geometry_to_change(part, baseline, future, change)
+                    for classified_part in self.baseline_engine._polygon_parts(classified):
+                        if not self._has_area(classified_part):
+                            continue
+                        delta_min, delta_max, delta_representative = self.delta_range(
+                            classified_part,
+                            baseline,
+                            future,
+                            change,
+                        )
+                        if delta_representative is None:
+                            continue
+                        if change == "gain" and delta_representative <= self.tolerance_m:
+                            continue
+                        if change == "loss" and delta_representative >= -self.tolerance_m:
+                            continue
+                        if change == "no_change" and (
+                            delta_min is None
+                            or delta_max is None
+                            or abs(delta_min) > self.tolerance_m
+                            or abs(delta_max) > self.tolerance_m
+                        ):
+                            continue
+                        merged_parts.append((baseline, future, QgsGeometry(classified_part)))
             result[change] = merged_parts
+
+    def _clip_geometry_to_change(
+        self,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        change: str,
+    ) -> QgsGeometry:
+        """Enforce the height-sign invariant on a final gain or loss polygon."""
+        if geometry is None or geometry.isEmpty() or change not in {"gain", "loss"}:
+            return geometry
+        lower_candidate, upper_candidate = (
+            (baseline, future) if change == "gain" else (future, baseline)
+        )
+        pair_engine = PlanarControllingOlsEngine([lower_candidate, upper_candidate])
+        try:
+            decision = pair_engine._sampled_lower_decision(
+                lower_candidate,
+                upper_candidate,
+                geometry,
+                dense=True,
+            )
+        except Exception:
+            decision = None
+        if decision == "all_lower":
+            return geometry
+        if decision == "all_higher":
+            return QgsGeometry()
+
+        try:
+            lower_region = pair_engine._candidate_lower_region(
+                lower_candidate,
+                upper_candidate,
+                geometry,
+            )
+        except Exception:
+            lower_region = None
+        if lower_region is not None:
+            if lower_region.isEmpty():
+                return QgsGeometry()
+            clipped = self._safe_intersection(geometry, lower_region)
+            if self._has_area(clipped):
+                # The direct lower-region solver is exact for supported linear
+                # and conical pairings. Trust that equation-based clip instead
+                # of densifying it through an unnecessary triangulation pass.
+                return clipped
+        else:
+            clipped = None
+
+        # Curved or topologically awkward rings can remain mixed after an
+        # unresolved analytic comparison. Rebuild only that residual part from
+        # locally clipped triangles; this is independent of map scale/CRS.
+        source = geometry
+        try:
+            triangulated = pair_engine._triangulated_candidate_lower_region(
+                lower_candidate,
+                upper_candidate,
+                source,
+            )
+        except Exception:
+            triangulated = None
+        triangulated = self._safe_intersection(source, triangulated) if triangulated is not None else None
+        if self._has_area(triangulated):
+            return triangulated
+        return clipped if clipped is not None else geometry
 
     def _finalise_comparison_parts(self, result) -> None:
         """Apply final geometry hygiene before common-domain coverage repair."""
@@ -1004,19 +1074,41 @@ class OlsEnvelopeComparisonEngine:
         metrics = self._comparison_spike_metrics(previous_point, current_point, next_point)
         if metrics is None:
             return None
-        if self._is_severe_comparison_spike_shape(metrics):
-            return "severe"
-        if not self._is_delta_comparison_spike_shape(metrics):
-            return None
+        _detour_ratio, angle_degrees, _height, _base_length = metrics
         current_delta = self._delta_at_point(current_point, baseline, future)
-        if current_delta is None:
-            return None
         previous_delta = self._delta_at_point(previous_point, baseline, future)
         next_delta = self._delta_at_point(next_point, baseline, future)
         neighbour_values = [
             value for value in (previous_delta, next_delta)
             if value is not None and math.isfinite(value)
         ]
+        # GEOS polygon differences can retain a zero-area boundary tendril: the
+        # ring overshoots onto the wrong side of the equality boundary and then
+        # reverses along the same line.  Its 0-degree turn is definitive, so it
+        # must not be constrained by the general spike base-length thresholds.
+        if (
+            angle_degrees <= COMPARISON_COLLINEAR_BACKTRACK_ANGLE_DEGREES
+            and current_delta is not None
+            and neighbour_values
+        ):
+            if change == "loss" and current_delta > self.tolerance_m and any(
+                value <= self.tolerance_m for value in neighbour_values
+            ):
+                return "backtrack"
+            if change == "gain" and current_delta < -self.tolerance_m and any(
+                value >= -self.tolerance_m for value in neighbour_values
+            ):
+                return "backtrack"
+            if change == "no_change" and abs(current_delta) > self.tolerance_m and any(
+                abs(value) <= self.tolerance_m for value in neighbour_values
+            ):
+                return "backtrack"
+        if self._is_severe_comparison_spike_shape(metrics):
+            return "severe"
+        if not self._is_delta_comparison_spike_shape(metrics):
+            return None
+        if current_delta is None:
+            return None
         if not neighbour_values:
             return None
         if change == "loss":
