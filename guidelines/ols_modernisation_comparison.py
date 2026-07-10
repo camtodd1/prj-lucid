@@ -607,6 +607,15 @@ class OlsEnvelopeComparisonEngine:
         )
         if cleaned is None or cleaned.isEmpty():
             return geometry
+        try:
+            source_geometry = QgsGeometry(geometry)
+            if not source_geometry.isGeosValid():
+                source_geometry = source_geometry.makeValid()
+            cleaned = cleaned.intersection(source_geometry)
+            if cleaned is not None and not cleaned.isEmpty() and not cleaned.isGeosValid():
+                cleaned = cleaned.makeValid()
+        except Exception:
+            return geometry
         area_change = abs(cleaned.area() - original_area)
         allowed_change = max(
             COMPARISON_SPIKE_MAX_AREA_CHANGE_M2,
@@ -983,21 +992,30 @@ class OlsEnvelopeComparisonEngine:
         rounded = round(float(delta), COMPARISON_DELTA_DECIMALS)
         return 0.0 if rounded == 0 else rounded
 
-    @staticmethod
-    def _union_geometries(geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
-        non_empty = [QgsGeometry(geometry) for geometry in geometries if geometry is not None and not geometry.isEmpty()]
+    def _union_geometries(self, geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
+        """Union valid polygon parts, repairing invalid inputs before coverage tests."""
+        non_empty: List[QgsGeometry] = []
+        for geometry in geometries:
+            if geometry is None or geometry.isEmpty():
+                continue
+            non_empty.extend(self.baseline_engine._polygon_parts(QgsGeometry(geometry)))
         if not non_empty:
             return None
         try:
-            return QgsGeometry.unaryUnion(non_empty)
+            merged = QgsGeometry.unaryUnion(non_empty)
+            if merged is not None and not merged.isEmpty():
+                return merged
         except Exception:
-            merged = QgsGeometry(non_empty[0])
-            for geometry in non_empty[1:]:
-                try:
-                    merged = merged.combine(geometry)
-                except Exception:
-                    pass
-            return merged
+            pass
+        merged = QgsGeometry(non_empty[0])
+        for geometry in non_empty[1:]:
+            try:
+                combined = merged.combine(geometry)
+                if combined is not None and not combined.isEmpty():
+                    merged = combined
+            except Exception:
+                pass
+        return merged
 
     @staticmethod
     def _line_parts(geometry: QgsGeometry) -> List[QgsGeometry]:

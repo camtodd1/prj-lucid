@@ -190,6 +190,50 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertNotIn((50.0, 400.0), final_vertices)
         self.assertAlmostEqual(parts["loss"][0][2].area(), 10000.0, places=3)
 
+    def test_comparison_cleanup_cannot_expand_a_concave_part(self):
+        concave_part = QgsGeometry.fromPolygonXY([
+            [
+                QgsPointXY(0.0, 0.0),
+                QgsPointXY(100.0, 0.0),
+                QgsPointXY(100.0, 100.0),
+                QgsPointXY(51.0, 100.0),
+                QgsPointXY(50.0, 20.0),
+                QgsPointXY(49.0, 100.0),
+                QgsPointXY(0.0, 100.0),
+                QgsPointXY(0.0, 0.0),
+            ]
+        ])
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 90.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        cleaned = engine._clean_comparison_part(concave_part, baseline, future, "loss")
+        self.assertLessEqual(cleaned.difference(concave_part).area(), 0.01)
+
+    def test_union_geometries_repairs_invalid_polygon_parts(self):
+        invalid = QgsGeometry.fromPolygonXY([
+            [
+                QgsPointXY(0.0, 0.0),
+                QgsPointXY(100.0, 100.0),
+                QgsPointXY(0.0, 100.0),
+                QgsPointXY(100.0, 0.0),
+                QgsPointXY(0.0, 0.0),
+            ]
+        ])
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([self.constant("baseline", 100.0)]),
+            PlanarControllingOlsEngine([self.constant("future", 90.0)]),
+        )
+
+        union = engine._union_geometries([self.domain, invalid])
+        self.assertIsNotNone(union)
+        self.assertFalse(union.isEmpty())
+        self.assertTrue(union.isGeosValid())
+        self.assertGreaterEqual(union.area(), self.domain.area() - 0.01)
+
     def test_gap_repair_keeps_valid_collinear_base_taper_after_final_cleanup(self):
         """A cleaned tapered overlap is restored after final cleanup."""
         tapered_domain = QgsGeometry.fromPolygonXY([[
