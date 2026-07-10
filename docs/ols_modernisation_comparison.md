@@ -31,7 +31,9 @@ Outputs are grouped as follows:
   - **Planar Transition / Equal Height** and **No Future OLS Overlay**.
 
 OES layers are assessment-trigger comparisons, not development approval limits.
-Each feature retains the baseline and future controlling surface identifiers,
+Every comparison output feature has a readable, layer-qualified `comparison_id`
+(for example `OFS-GAIN-000001`) for reporting a specific test issue. Each change
+feature also retains the baseline and future controlling surface identifiers,
 surface types, ruleset identifier, sampled minimum and maximum change, and a
 representative interior-point change. Gain/loss polygons are labelled with the
 representative change value on larger map features. Areas outside the common

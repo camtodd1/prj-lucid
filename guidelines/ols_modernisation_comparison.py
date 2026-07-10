@@ -60,79 +60,159 @@ class OlsEnvelopeComparisonEngine:
             for future_candidate, future_region in future_regions:
                 if not self._bounding_boxes_intersect(baseline_region, future_region):
                     continue
-                try:
-                    overlap = baseline_region.intersection(future_region)
-                except Exception:
-                    continue
+                overlap = self._safe_intersection(baseline_region, future_region)
                 if not self._has_area(overlap):
                     continue
-
-                if self._append_no_change_if_equal(
-                    result["no_change"],
+                self._append_classified_overlap(
+                    result,
                     baseline_candidate,
                     future_candidate,
                     overlap,
-                ):
-                    continue
-
-                pair_engine = PlanarControllingOlsEngine([baseline_candidate, future_candidate])
-                # A higher future surface is a gain, so the baseline is the lower
-                # candidate on the gain side of the equality boundary.
-                baseline_lower = pair_engine._candidate_lower_region(
-                    baseline_candidate,
-                    future_candidate,
-                    overlap,
-                )
-                if baseline_lower is None:
-                    self._append_sampled_whole_overlap(
-                        result, baseline_candidate, future_candidate, overlap
-                    )
-                    continue
-                try:
-                    if baseline_lower.isEmpty():
-                        future_lower = QgsGeometry(overlap)
-                    else:
-                        baseline_lower = pair_engine._clip_lower_region_to_overlap(baseline_lower, overlap)
-                        if baseline_lower is None:
-                            raise ValueError("comparison lower region could not be clipped")
-                        future_lower = overlap.difference(baseline_lower)
-                except Exception:
-                    self._append_sampled_whole_overlap(
-                        result, baseline_candidate, future_candidate, overlap
-                    )
-                    continue
-
-                self._append_parts(result["gain"], baseline_candidate, future_candidate, baseline_lower, "gain")
-                self._append_parts(result["loss"], baseline_candidate, future_candidate, future_lower, "loss")
-                self._append_parts(
-                    result["no_change"],
-                    baseline_candidate,
-                    future_candidate,
-                    baseline_lower,
-                    "no_change",
-                )
-                self._append_parts(
-                    result["no_change"],
-                    baseline_candidate,
-                    future_candidate,
-                    future_lower,
-                    "no_change",
-                )
-                self._append_transition_parts(
-                    result["transition"],
-                    pair_engine,
-                    baseline_candidate,
-                    future_candidate,
-                    overlap,
-                    baseline_lower,
-                    future_lower,
                 )
         self._finalise_comparison_parts(result)
         # Final cleanup can legitimately remove split artefacts.  Repair the
         # remaining common domain afterwards so that cleanup cannot leave a
         # valid comparison region unclassified.
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
+        self._merge_classified_parts(result)
         return result
+
+    def _append_classified_overlap(
+        self,
+        result,
+        baseline_candidate: ControllingOlsCandidate,
+        future_candidate: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+        clean_spikes: bool = True,
+        include_transition: bool = True,
+    ) -> None:
+        """Classify one controller-pair overlap without losing mixed fallback areas."""
+        if not self._has_area(overlap):
+            return
+        if self._append_no_change_if_equal(
+            result["no_change"],
+            baseline_candidate,
+            future_candidate,
+            overlap,
+            clean_spikes=clean_spikes,
+        ):
+            return
+
+        pair_engine = PlanarControllingOlsEngine([baseline_candidate, future_candidate])
+        # A higher future surface is a gain, so the baseline is the lower
+        # candidate on the gain side of the equality boundary.
+        try:
+            baseline_lower = pair_engine._candidate_lower_region(
+                baseline_candidate,
+                future_candidate,
+                overlap,
+            )
+        except Exception:
+            baseline_lower = None
+        if baseline_lower is None:
+            baseline_lower = self._fallback_lower_region(
+                pair_engine,
+                baseline_candidate,
+                future_candidate,
+                overlap,
+            )
+        if baseline_lower is None:
+            self._append_sampled_whole_overlap(
+                result,
+                baseline_candidate,
+                future_candidate,
+                overlap,
+                clean_spikes=clean_spikes,
+            )
+            return
+
+        if baseline_lower.isEmpty():
+            future_lower = QgsGeometry(overlap)
+        else:
+            baseline_lower = self._safe_intersection(baseline_lower, overlap)
+            if baseline_lower is None:
+                self._append_sampled_whole_overlap(
+                    result,
+                    baseline_candidate,
+                    future_candidate,
+                    overlap,
+                    clean_spikes=clean_spikes,
+                )
+                return
+            future_lower = self._safe_difference(overlap, baseline_lower)
+            if future_lower is None:
+                self._append_sampled_whole_overlap(
+                    result,
+                    baseline_candidate,
+                    future_candidate,
+                    overlap,
+                    clean_spikes=clean_spikes,
+                )
+                return
+
+        self._append_parts(
+            result["gain"], baseline_candidate, future_candidate, baseline_lower, "gain", clean_spikes
+        )
+        self._append_parts(
+            result["loss"], baseline_candidate, future_candidate, future_lower, "loss", clean_spikes
+        )
+        self._append_parts(
+            result["no_change"],
+            baseline_candidate,
+            future_candidate,
+            baseline_lower,
+            "no_change",
+            clean_spikes,
+        )
+        self._append_parts(
+            result["no_change"],
+            baseline_candidate,
+            future_candidate,
+            future_lower,
+            "no_change",
+            clean_spikes,
+        )
+        if include_transition:
+            self._append_transition_parts(
+                result["transition"],
+                pair_engine,
+                baseline_candidate,
+                future_candidate,
+                overlap,
+                baseline_lower,
+                future_lower,
+            )
+
+    def _fallback_lower_region(
+        self,
+        pair_engine: PlanarControllingOlsEngine,
+        baseline_candidate: ControllingOlsCandidate,
+        future_candidate: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        """Resolve an otherwise unresolved overlap with dense tests and a local TIN."""
+        try:
+            decision = pair_engine._sampled_lower_decision(
+                baseline_candidate,
+                future_candidate,
+                overlap,
+                dense=True,
+            )
+        except Exception:
+            decision = None
+        if decision == "all_lower":
+            return QgsGeometry(overlap)
+        if decision == "all_higher":
+            return QgsGeometry()
+        try:
+            triangulated = pair_engine._triangulated_candidate_lower_region(
+                baseline_candidate,
+                future_candidate,
+                overlap,
+            )
+        except Exception:
+            triangulated = None
+        return self._safe_intersection(triangulated, overlap) if triangulated is not None else None
 
     def baseline_only_parts(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
         """Return baseline controlling regions outside the future envelope."""
@@ -145,17 +225,15 @@ class OlsEnvelopeComparisonEngine:
                 remaining = QgsGeometry(baseline_region)
                 tolerant_remaining = QgsGeometry(baseline_region)
             else:
-                try:
-                    remaining = baseline_region.difference(future_union)
-                except Exception:
+                remaining = self._safe_difference(baseline_region, future_union)
+                if remaining is None:
                     continue
-                try:
-                    tolerant_remaining = (
-                        baseline_region.difference(future_coverage)
-                        if future_coverage is not None and not future_coverage.isEmpty()
-                        else QgsGeometry(remaining)
-                    )
-                except Exception:
+                tolerant_remaining = (
+                    self._safe_difference(baseline_region, future_coverage)
+                    if future_coverage is not None and not future_coverage.isEmpty()
+                    else QgsGeometry(remaining)
+                )
+                if tolerant_remaining is None:
                     tolerant_remaining = QgsGeometry(remaining)
             remaining = self._normalise_no_overlay_geometry(remaining)
             tolerant_remaining = self._normalise_no_overlay_geometry(tolerant_remaining)
@@ -189,29 +267,43 @@ class OlsEnvelopeComparisonEngine:
         # value without presenting a vertex sample as an area-weighted mean.
         return min(values), max(values), values[0]
 
-    def _append_sampled_whole_overlap(self, result, baseline, future, overlap) -> None:
+    def _append_sampled_whole_overlap(
+        self,
+        result,
+        baseline,
+        future,
+        overlap,
+        clean_spikes: bool = True,
+    ) -> None:
         delta_min, delta_max, delta_representative = self.delta_range(overlap, baseline, future)
         if delta_representative is None:
             return
         if delta_min is not None and delta_min > self.tolerance_m:
-            self._append_parts(result["gain"], baseline, future, overlap, "gain")
+            self._append_parts(result["gain"], baseline, future, overlap, "gain", clean_spikes)
         elif delta_max is not None and delta_max < -self.tolerance_m:
-            self._append_parts(result["loss"], baseline, future, overlap, "loss")
+            self._append_parts(result["loss"], baseline, future, overlap, "loss", clean_spikes)
         elif (
             delta_min is not None
             and delta_max is not None
             and abs(delta_min) <= self.tolerance_m
             and abs(delta_max) <= self.tolerance_m
         ):
-            self._append_parts(result["no_change"], baseline, future, overlap, "no_change")
+            self._append_parts(result["no_change"], baseline, future, overlap, "no_change", clean_spikes)
 
-    def _append_no_change_if_equal(self, destination, baseline, future, overlap) -> bool:
+    def _append_no_change_if_equal(
+        self,
+        destination,
+        baseline,
+        future,
+        overlap,
+        clean_spikes: bool = True,
+    ) -> bool:
         delta_min, delta_max, _delta_representative = self.delta_range(overlap, baseline, future)
         if delta_min is None or delta_max is None:
             return False
         if abs(delta_min) > self.tolerance_m or abs(delta_max) > self.tolerance_m:
             return False
-        self._append_parts(destination, baseline, future, overlap, "no_change")
+        self._append_parts(destination, baseline, future, overlap, "no_change", clean_spikes)
         return True
 
     def _append_parts(
@@ -289,17 +381,6 @@ class OlsEnvelopeComparisonEngine:
         baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
         future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
     ) -> None:
-        baseline_union = self._union_geometries([geometry for _candidate, geometry in baseline_regions])
-        future_union = self._union_geometries([geometry for _candidate, geometry in future_regions])
-        if baseline_union is None or future_union is None or baseline_union.isEmpty() or future_union.isEmpty():
-            return
-        try:
-            common_domain = baseline_union.intersection(future_union)
-        except Exception:
-            return
-        if not self._has_area(common_domain):
-            return
-
         classified_geometries = [
             geometry
             for change in ("gain", "loss", "no_change")
@@ -307,34 +388,77 @@ class OlsEnvelopeComparisonEngine:
             if geometry is not None and not geometry.isEmpty()
         ]
         classified_union = self._union_geometries(classified_geometries)
-        if classified_union is None or classified_union.isEmpty():
-            remainder = common_domain
-        else:
-            try:
-                remainder = common_domain.difference(classified_union)
-            except Exception:
-                return
-        if not self._has_area(remainder):
-            return
+        # Repair within each original controller-pair overlap.  A union-wide
+        # remainder may span several controlling regions; assigning one sampled
+        # controller pair to that whole polygon is the source of dropped and
+        # incorrectly attributed comparison features.
+        for baseline_candidate, baseline_region in baseline_regions:
+            for future_candidate, future_region in future_regions:
+                if not self._bounding_boxes_intersect(baseline_region, future_region):
+                    continue
+                pair_domain = self._safe_intersection(baseline_region, future_region)
+                if not self._has_area(pair_domain):
+                    continue
+                pair_remainder = (
+                    self._safe_difference(pair_domain, classified_union)
+                    if classified_union is not None and not classified_union.isEmpty()
+                    else QgsGeometry(pair_domain)
+                )
+                if not self._has_area(pair_remainder):
+                    continue
+                for part in self.baseline_engine._polygon_parts(pair_remainder):
+                    if not self._has_area(part):
+                        continue
+                    self._append_classified_overlap(
+                        result,
+                        baseline_candidate,
+                        future_candidate,
+                        part,
+                        clean_spikes=False,
+                        include_transition=False,
+                    )
 
-        for part in self.baseline_engine._polygon_parts(remainder):
-            if not self._has_area(part):
-                continue
-            controllers = self._controllers_for_gap_part(part)
-            if controllers is None:
-                continue
-            baseline_candidate, future_candidate = controllers
-            change = self._classify_change_for_part(part, baseline_candidate, future_candidate)
-            if change is None:
-                continue
-            self._append_parts(
-                result[change],
-                baseline_candidate,
-                future_candidate,
-                part,
-                change,
-                clean_spikes=False,
-            )
+    def _merge_classified_parts(self, result) -> None:
+        """Dissolve repaired fragments so spike remainders join their proper side."""
+        for change in ("gain", "loss", "no_change"):
+            grouped: Dict[Tuple[str, str], list] = {}
+            controllers: Dict[Tuple[str, str], Tuple[ControllingOlsCandidate, ControllingOlsCandidate]] = {}
+            for baseline, future, geometry in result.get(change, []):
+                if not self._has_area(geometry):
+                    continue
+                key = (baseline.surface_id, future.surface_id)
+                grouped.setdefault(key, []).append(geometry)
+                controllers[key] = (baseline, future)
+            merged_parts = []
+            for key, geometries in grouped.items():
+                merged = self._union_geometries(geometries)
+                if not self._has_area(merged):
+                    continue
+                baseline, future = controllers[key]
+                for part in self.baseline_engine._polygon_parts(merged):
+                    if not self._has_area(part):
+                        continue
+                    delta_min, delta_max, delta_representative = self.delta_range(
+                        part,
+                        baseline,
+                        future,
+                        change,
+                    )
+                    if delta_representative is None:
+                        continue
+                    if change == "gain" and delta_representative <= self.tolerance_m:
+                        continue
+                    if change == "loss" and delta_representative >= -self.tolerance_m:
+                        continue
+                    if change == "no_change" and (
+                        delta_min is None
+                        or delta_max is None
+                        or abs(delta_min) > self.tolerance_m
+                        or abs(delta_max) > self.tolerance_m
+                    ):
+                        continue
+                    merged_parts.append((baseline, future, QgsGeometry(part)))
+            result[change] = merged_parts
 
     def _finalise_comparison_parts(self, result) -> None:
         """Apply final geometry hygiene before common-domain coverage repair."""
@@ -992,6 +1116,97 @@ class OlsEnvelopeComparisonEngine:
         rounded = round(float(delta), COMPARISON_DELTA_DECIMALS)
         return 0.0 if rounded == 0 else rounded
 
+    def _prepare_overlay_geometry(self, geometry: Optional[QgsGeometry]) -> Optional[QgsGeometry]:
+        """Return valid polygonal geometry suitable for a retrying GEOS overlay."""
+        if geometry is None or geometry.isEmpty():
+            return geometry
+        prepared = QgsGeometry(geometry)
+        try:
+            if not prepared.isGeosValid():
+                prepared = prepared.makeValid()
+        except Exception:
+            pass
+        parts = self.baseline_engine._polygon_parts(prepared)
+        if not parts:
+            return None
+        try:
+            prepared = QgsGeometry.unaryUnion(parts) if len(parts) > 1 else QgsGeometry(parts[0])
+        except Exception:
+            prepared = QgsGeometry(parts[0])
+            for part in parts[1:]:
+                try:
+                    combined = prepared.combine(part)
+                    if combined is not None and not combined.isEmpty():
+                        prepared = combined
+                except Exception:
+                    continue
+        try:
+            if prepared is not None and not prepared.isEmpty() and not prepared.isGeosValid():
+                prepared = prepared.makeValid()
+        except Exception:
+            pass
+        return prepared
+
+    def _safe_intersection(
+        self,
+        first: Optional[QgsGeometry],
+        second: Optional[QgsGeometry],
+    ) -> Optional[QgsGeometry]:
+        if first is None or second is None or first.isEmpty() or second.isEmpty():
+            return QgsGeometry()
+        intersection = None
+        try:
+            inputs_valid = first.isGeosValid() and second.isGeosValid()
+        except Exception:
+            inputs_valid = False
+        if inputs_valid:
+            try:
+                intersection = first.intersection(second)
+                if intersection is not None and (intersection.isEmpty() or intersection.isGeosValid()):
+                    return intersection
+            except Exception:
+                intersection = None
+        prepared_first = self._prepare_overlay_geometry(first)
+        prepared_second = self._prepare_overlay_geometry(second)
+        if prepared_first is None or prepared_second is None:
+            return intersection
+        try:
+            return prepared_first.intersection(prepared_second)
+        except Exception:
+            return intersection
+
+    def _safe_difference(
+        self,
+        first: Optional[QgsGeometry],
+        second: Optional[QgsGeometry],
+    ) -> Optional[QgsGeometry]:
+        if first is None or first.isEmpty():
+            return QgsGeometry()
+        if second is None or second.isEmpty():
+            return QgsGeometry(first)
+        difference = None
+        try:
+            inputs_valid = first.isGeosValid() and second.isGeosValid()
+        except Exception:
+            inputs_valid = False
+        if inputs_valid:
+            try:
+                difference = first.difference(second)
+                if difference is not None and (difference.isEmpty() or difference.isGeosValid()):
+                    return difference
+            except Exception:
+                difference = None
+        prepared_first = self._prepare_overlay_geometry(first)
+        prepared_second = self._prepare_overlay_geometry(second)
+        if prepared_first is None:
+            return difference
+        if prepared_second is None:
+            return QgsGeometry(prepared_first)
+        try:
+            return prepared_first.difference(prepared_second)
+        except Exception:
+            return difference
+
     def _union_geometries(self, geometries: Sequence[QgsGeometry]) -> Optional[QgsGeometry]:
         """Union valid polygon parts, repairing invalid inputs before coverage tests."""
         non_empty: List[QgsGeometry] = []
@@ -1040,6 +1255,12 @@ class OlsEnvelopeComparisonEngine:
 
 class OlsModernisationComparisonMixin:
     """Create user-facing OFS/OES modernisation comparison layers."""
+
+    @staticmethod
+    def _modernisation_feature_id(family: str, output_kind: str, sequence: int) -> str:
+        """Return a readable ID unique across all modernisation output layers."""
+        safe_kind = str(output_kind).strip().upper().replace("_", "-")
+        return f"{str(family).strip().upper()}-{safe_kind}-{int(sequence):06d}"
 
     def _create_ols_modernisation_comparison_layers(
         self,
@@ -1139,6 +1360,7 @@ class OlsModernisationComparisonMixin:
         output_group,
     ) -> bool:
         fields = QgsFields([
+            QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
             QgsField("change", QVariant.String, self.tr("Change"), 24),
             QgsField("future_family", QVariant.String, self.tr("Future Family"), 8),
             QgsField("delta_min_m", QVariant.Double, self.tr("Minimum Change (m)"), 12, 3),
@@ -1167,11 +1389,12 @@ class OlsModernisationComparisonMixin:
                 meaning = "Future aeronautical-study trigger is lowered; this is not an approval limit"
             else:
                 meaning = "Future aeronautical-study trigger is effectively unchanged; this is not an approval limit"
-        for baseline, future, geometry in parts:
+        for sequence, (baseline, future, geometry) in enumerate(parts, start=1):
             delta_min, delta_max, delta_representative = comparison.delta_range(geometry, baseline, future, change)
             feature = QgsFeature(fields)
             feature.setGeometry(geometry)
             feature.setAttributes([
+                self._modernisation_feature_id(family, change, sequence),
                 change,
                 family,
                 delta_min,
@@ -1212,6 +1435,7 @@ class OlsModernisationComparisonMixin:
         output_group,
     ) -> bool:
         fields = QgsFields([
+            QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
             QgsField("source", QVariant.String, self.tr("Source"), 24),
             QgsField("family", QVariant.String, self.tr("Family"), 8),
             QgsField("baseline_ruleset", QVariant.String, self.tr("Baseline Ruleset"), 80),
@@ -1219,13 +1443,16 @@ class OlsModernisationComparisonMixin:
             QgsField("surface", QVariant.String, self.tr("Surface"), 50),
         ])
         features: List[QgsFeature] = []
+        sequence = 0
         for candidate, geometry in candidate_regions:
             for part in self._modernisation_polygon_parts(geometry):
                 if not OlsEnvelopeComparisonEngine._has_area(part):
                     continue
+                sequence += 1
                 feature = QgsFeature(fields)
                 feature.setGeometry(part)
                 feature.setAttributes([
+                    self._modernisation_feature_id(family, f"{source_kind}_wireframe", sequence),
                     source_kind,
                     family,
                     baseline_ruleset_id,
@@ -1275,6 +1502,7 @@ class OlsModernisationComparisonMixin:
         output_group,
     ) -> bool:
         fields = QgsFields([
+            QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
             QgsField("future_family", QVariant.String, self.tr("Future Family"), 8),
             QgsField("baseline_ruleset", QVariant.String, self.tr("Baseline Ruleset"), 80),
             QgsField("baseline_id", QVariant.String, self.tr("Baseline Surface ID"), 160),
@@ -1284,10 +1512,11 @@ class OlsModernisationComparisonMixin:
             QgsField("meaning", QVariant.String, self.tr("Regulatory Meaning"), 160),
         ])
         features: List[QgsFeature] = []
-        for baseline, future, geometry in parts:
+        for sequence, (baseline, future, geometry) in enumerate(parts, start=1):
             feature = QgsFeature(fields)
             feature.setGeometry(geometry)
             feature.setAttributes([
+                self._modernisation_feature_id(family, "transition", sequence),
                 family,
                 baseline_ruleset_id,
                 baseline.surface_id,
@@ -1317,6 +1546,7 @@ class OlsModernisationComparisonMixin:
         output_group,
     ) -> bool:
         fields = QgsFields([
+            QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
             QgsField("change", QVariant.String, self.tr("Change"), 32),
             QgsField("future_family", QVariant.String, self.tr("Future Family"), 8),
             QgsField("baseline_ruleset", QVariant.String, self.tr("Baseline Ruleset"), 80),
@@ -1326,10 +1556,11 @@ class OlsModernisationComparisonMixin:
             QgsField("label_txt", QVariant.String, self.tr("Map Label"), 32),
         ])
         features: List[QgsFeature] = []
-        for baseline, geometry in parts:
+        for sequence, (baseline, geometry) in enumerate(parts, start=1):
             feature = QgsFeature(fields)
             feature.setGeometry(geometry)
             feature.setAttributes([
+                self._modernisation_feature_id(family, "no_future_overlay", sequence),
                 "no_future_overlay",
                 family,
                 baseline_ruleset_id,

@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle
 
@@ -8,7 +9,23 @@ from guidelines.controlling_ols_engine import (
     constant_elevation_evaluator,
     plane_elevation_evaluator,
 )
-from guidelines.ols_modernisation_comparison import OlsEnvelopeComparisonEngine
+from guidelines.ols_modernisation_comparison import (
+    OlsEnvelopeComparisonEngine,
+    OlsModernisationComparisonMixin,
+)
+
+
+class _ComparisonLayerCapture(OlsModernisationComparisonMixin):
+    def __init__(self):
+        self.layers = []
+
+    @staticmethod
+    def tr(value):
+        return value
+
+    def _create_and_add_layer(self, *args):
+        self.layers.append(args)
+        return object()
 
 
 class OlsModernisationComparisonTests(unittest.TestCase):
@@ -234,6 +251,28 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertTrue(union.isGeosValid())
         self.assertGreaterEqual(union.area(), self.domain.area() - 0.01)
 
+    def test_comparison_repairs_invalid_controller_region_before_overlay(self):
+        invalid_region = QgsGeometry.fromPolygonXY([[
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(100.0, 100.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(100.0, 0.0),
+            QgsPointXY(0.0, 0.0),
+        ]])
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        baseline_engine = PlanarControllingOlsEngine([baseline])
+        future_engine = PlanarControllingOlsEngine([future])
+        baseline_engine._controlling_region_geometries_cache = [(baseline, invalid_region)]
+        future_engine._controlling_region_geometries_cache = [(future, self.domain)]
+
+        result = OlsEnvelopeComparisonEngine(baseline_engine, future_engine).comparison_parts()
+
+        gain_union = QgsGeometry.unaryUnion([item[2] for item in result["gain"]])
+        self.assertFalse(gain_union.isEmpty())
+        self.assertTrue(gain_union.isGeosValid())
+        self.assertAlmostEqual(gain_union.area(), 5000.0, places=3)
+
     def test_gap_repair_keeps_valid_collinear_base_taper_after_final_cleanup(self):
         """A cleaned tapered overlap is restored after final cleanup."""
         tapered_domain = QgsGeometry.fromPolygonXY([[
@@ -301,6 +340,98 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         )
 
         self.assertEqual(engine._classify_change_for_part(self.domain, baseline, future), "loss")
+
+    def test_gap_repair_partitions_remainder_by_controller_pair(self):
+        left_domain = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        right_domain = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))
+        baseline_left = ControllingOlsCandidate(
+            surface_id="baseline-left",
+            surface_type="Left",
+            footprint=left_domain,
+            elevation_at_xy=constant_elevation_evaluator(100.0),
+            model="constant",
+        )
+        baseline_right = ControllingOlsCandidate(
+            surface_id="baseline-right",
+            surface_type="Right",
+            footprint=right_domain,
+            elevation_at_xy=constant_elevation_evaluator(120.0),
+            model="constant",
+        )
+        future = self.constant("future", 110.0)
+        baseline_engine = PlanarControllingOlsEngine([baseline_left, baseline_right])
+        future_engine = PlanarControllingOlsEngine([future])
+        baseline_regions = [
+            (baseline_left, left_domain),
+            (baseline_right, right_domain),
+        ]
+        future_regions = [(future, self.domain)]
+        baseline_engine._controlling_region_geometries_cache = baseline_regions
+        future_engine._controlling_region_geometries_cache = future_regions
+        engine = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
+        result = {"gain": [], "loss": [], "no_change": [], "transition": []}
+
+        engine._append_common_domain_gap_parts(result, baseline_regions, future_regions)
+        engine._merge_classified_parts(result)
+
+        self.assertAlmostEqual(sum(item[2].area() for item in result["gain"]), 5000.0, places=3)
+        self.assertAlmostEqual(sum(item[2].area() for item in result["loss"]), 5000.0, places=3)
+        self.assertEqual(len(result["no_change"]), 0)
+        self.assertEqual(result["gain"][0][0].surface_id, "baseline-left")
+        self.assertEqual(result["loss"][0][0].surface_id, "baseline-right")
+
+    def test_unresolved_mixed_overlap_uses_triangulated_fallback(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.2, 0.0, 90.0)
+        baseline_engine = PlanarControllingOlsEngine([baseline])
+        future_engine = PlanarControllingOlsEngine([future])
+        baseline_engine._controlling_region_geometries_cache = [(baseline, self.domain)]
+        future_engine._controlling_region_geometries_cache = [(future, self.domain)]
+        engine = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
+
+        with patch.object(PlanarControllingOlsEngine, "_candidate_lower_region", return_value=None):
+            result = engine.comparison_parts()
+
+        gain_area = sum(item[2].area() for item in result["gain"])
+        loss_area = sum(item[2].area() for item in result["loss"])
+        self.assertAlmostEqual(gain_area, 5000.0, delta=2.0)
+        self.assertAlmostEqual(loss_area, 5000.0, delta=2.0)
+        self.assertAlmostEqual(gain_area + loss_area, self.domain.area(), delta=2.0)
+
+    def test_all_comparison_output_features_receive_unique_ids(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        capture = _ComparisonLayerCapture()
+        change_parts = [(baseline, future, self.domain)]
+
+        capture._create_modernisation_change_layer(
+            "TEST", "baseline-rules", "OFS", "gain", "Height Gain",
+            change_parts, comparison, object(),
+        )
+        capture._create_modernisation_wireframe_layer(
+            "TEST", "baseline-rules", "OFS", "baseline", "Baseline OLS Wireframe",
+            [(baseline, self.domain)], object(),
+        )
+        capture._create_modernisation_transition_layer(
+            "TEST", "baseline-rules", "OFS", change_parts, comparison, object(),
+        )
+        capture._create_modernisation_baseline_only_layer(
+            "TEST", "baseline-rules", "OFS", [(baseline, self.domain)], object(),
+        )
+
+        comparison_ids = []
+        for layer_args in capture.layers:
+            fields = layer_args[3]
+            features = layer_args[4]
+            self.assertIn("comparison_id", fields.names())
+            comparison_ids.extend(feature["comparison_id"] for feature in features)
+        self.assertEqual(len(comparison_ids), 4)
+        self.assertEqual(len(set(comparison_ids)), 4)
+        self.assertIn("OFS-GAIN-000001", comparison_ids)
 
 
 if __name__ == "__main__":
