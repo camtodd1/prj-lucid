@@ -190,6 +190,51 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertNotIn((50.0, 400.0), final_vertices)
         self.assertAlmostEqual(parts["loss"][0][2].area(), 10000.0, places=3)
 
+    def test_gap_repair_keeps_valid_collinear_base_taper_after_final_cleanup(self):
+        """A cleaned tapered overlap is restored after final cleanup."""
+        tapered_domain = QgsGeometry.fromPolygonXY([[
+            QgsPointXY(0.0, 300.0),
+            QgsPointXY(-100.0, 0.0),
+            QgsPointXY(-90.0, 10.0),
+            QgsPointXY(-80.0, 20.0),
+            QgsPointXY(-70.0, 30.0),
+            QgsPointXY(0.0, 300.0),
+        ]])
+        baseline = ControllingOlsCandidate(
+            surface_id="baseline-transitional",
+            surface_type="Transitional",
+            footprint=QgsGeometry(tapered_domain),
+            elevation_at_xy=constant_elevation_evaluator(100.0),
+            model="constant",
+        )
+        future = ControllingOlsCandidate(
+            surface_id="future-transitional",
+            surface_type="Transitional",
+            footprint=QgsGeometry(tapered_domain),
+            elevation_at_xy=constant_elevation_evaluator(110.0),
+            model="constant",
+        )
+        baseline_engine = PlanarControllingOlsEngine([baseline])
+        future_engine = PlanarControllingOlsEngine([future])
+        baseline_engine._controlling_region_geometries_cache = [
+            (baseline, QgsGeometry(tapered_domain))
+        ]
+        future_engine._controlling_region_geometries_cache = [
+            (future, QgsGeometry(tapered_domain))
+        ]
+        engine = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
+
+        self.assertTrue(tapered_domain.isGeosValid())
+        self.assertFalse(engine._has_area(
+            engine._clean_comparison_part(tapered_domain, baseline, future, "gain")
+        ))
+        parts = engine.comparison_parts()
+
+        self.assertEqual(len(parts["gain"]), 1)
+        self.assertEqual(len(parts["loss"]), 0)
+        self.assertEqual(len(parts["no_change"]), 0)
+        self.assertAlmostEqual(parts["gain"][0][2].area(), tapered_domain.area(), places=3)
+
     def test_delta_range_rounds_to_published_precision(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 100.000000523)

@@ -127,8 +127,11 @@ class OlsEnvelopeComparisonEngine:
                     baseline_lower,
                     future_lower,
                 )
-        self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
         self._finalise_comparison_parts(result)
+        # Final cleanup can legitimately remove split artefacts.  Repair the
+        # remaining common domain afterwards so that cleanup cannot leave a
+        # valid comparison region unclassified.
+        self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
         return result
 
     def baseline_only_parts(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
@@ -334,7 +337,7 @@ class OlsEnvelopeComparisonEngine:
             )
 
     def _finalise_comparison_parts(self, result) -> None:
-        """Apply final geometry hygiene after gap repair has finished."""
+        """Apply final geometry hygiene before common-domain coverage repair."""
         for change in ("gain", "loss", "no_change"):
             final_parts = []
             for baseline, future, geometry in result.get(change, []):
