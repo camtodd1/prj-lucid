@@ -1,0 +1,176 @@
+{
+    "icao_code": "YSWS",
+    "iata_code": "WSI",
+    "arp_easting": "289003.181",
+    "arp_northing": "6247585.884",
+    "arp_elevation": "85.63",
+    "met_easting": "",
+    "met_northing": "",
+    "met_elevation": "",
+    "design_standard": "mos139_2019",
+    "ruleset": "mos139_2019",
+    "safeguarding_framework": "nasf_aus",
+    "protected_airspace_policy": "modernisation_comparison",
+    "runways": [
+        {
+            "designator_str": "05",
+            "suffix": "L",
+            "thr_easting": "286914.06",
+            "thr_northing": "6247443.79",
+            "rec_easting": "290067.11",
+            "rec_northing": "6249379.83",
+            "runway_end_elev_1": "93.82",
+            "runway_end_elev_2": "75.12",
+            "threshold_elev_1": "",
+            "threshold_elev_2": "",
+            "thr_elev_1": "93.82",
+            "thr_elev_2": "75.12",
+            "thr_displaced_1": "",
+            "thr_displaced_2": "",
+            "thr_pre_area_1": "30",
+            "thr_pre_area_2": "30",
+            "width": "45",
+            "shoulder": "15",
+            "clearway1_len": "",
+            "clearway2_len": "",
+            "stopway1_len": "",
+            "stopway2_len": "",
+            "tora_override_1": "",
+            "tora_override_2": "",
+            "toda_override_1": "",
+            "toda_override_2": "",
+            "asda_override_1": "",
+            "asda_override_2": "",
+            "lda_override_1": "",
+            "lda_override_2": "",
+            "takeoff_available_1": true,
+            "takeoff_available_2": true,
+            "landing_available_1": true,
+            "landing_available_2": true,
+            "lahso_applied_1": false,
+            "lahso_applied_2": false,
+            "arc_num": "4",
+            "arc_let": "F",
+            "adg": "V",
+            "design_group": "V",
+            "surface_category": "Sealed",
+            "surface_material": "Asphalt",
+            "type1": "Precision Approach CAT II/III",
+            "type2": "Precision Approach CAT II/III"
+        },
+        {
+            "designator_str": "05",
+            "suffix": "R",
+            "thr_easting": "287916.77",
+            "thr_northing": "6245829.84",
+            "rec_easting": "291069.83",
+            "rec_northing": "6247765.88",
+            "runway_end_elev_1": "84.58",
+            "runway_end_elev_2": "71.65",
+            "threshold_elev_1": "",
+            "threshold_elev_2": "",
+            "thr_elev_1": "84.58",
+            "thr_elev_2": "71.65",
+            "thr_displaced_1": "",
+            "thr_displaced_2": "",
+            "thr_pre_area_1": "30",
+            "thr_pre_area_2": "30",
+            "width": "45",
+            "shoulder": "15",
+            "clearway1_len": "",
+            "clearway2_len": "",
+            "stopway1_len": "",
+            "stopway2_len": "",
+            "tora_override_1": "",
+            "tora_override_2": "",
+            "toda_override_1": "",
+            "toda_override_2": "",
+            "asda_override_1": "",
+            "asda_override_2": "",
+            "lda_override_1": "",
+            "lda_override_2": "",
+            "takeoff_available_1": true,
+            "takeoff_available_2": true,
+            "landing_available_1": true,
+            "landing_available_2": true,
+            "lahso_applied_1": false,
+            "lahso_applied_2": false,
+            "arc_num": "4",
+            "arc_let": "F",
+            "adg": "V",
+            "design_group": "V",
+            "surface_category": "Sealed",
+            "surface_material": "Asphalt",
+            "type1": "Precision Approach CAT II/III",
+            "type2": "Precision Approach CAT II/III"
+        }
+    ],
+    "cns_facilities": [],
+    "agl_options": {
+        "enabled": false,
+        "edge_spacing_m": "60",
+        "threshold_spacing_m": "3",
+        "threshold_inset_m": "0",
+        "approach_spacing_m": "30",
+        "centreline_offset_m": "0",
+        "approach_lighting": [],
+        "runway_end_lights": true,
+        "threshold_wing_bars": false,
+        "rtil": false,
+        "temp_displaced_threshold": false,
+        "stopway_lights": true,
+        "centreline_lights": true,
+        "centreline_low_visibility": false,
+        "cat_i_centreline_lights": false,
+        "tdz_lights": true,
+        "cat_i_tdz_lights": false
+    },
+    "output_options": {
+        "mode": "memory",
+        "path": "",
+        "format": "ESRI Shapefile",
+        "generate_controlling_ols": true,
+        "contour_intervals": {
+            "default": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "tocs": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "conical": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "inner_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "inner_transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "baulked_landing": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_ofs": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_oes": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            }
+        }
+    }
+}

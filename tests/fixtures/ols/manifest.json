@@ -1,0 +1,38 @@
+{
+  "cases": [
+    {
+      "file": "ybbn_single.json",
+      "description": "Single-runway modernisation comparison baseline",
+      "icao_code": "YBBN",
+      "runway_count": 1,
+      "project_crs": "EPSG:28356"
+    },
+    {
+      "file": "yssy_dual_intersecting.json",
+      "description": "Two intersecting runways",
+      "icao_code": "YSSY",
+      "runway_count": 2,
+      "project_crs": "EPSG:28356"
+    },
+    {
+      "file": "ysws_dual_parallel.json",
+      "description": "Two parallel runways",
+      "icao_code": "YSWS",
+      "runway_count": 2,
+      "project_crs": "EPSG:28356"
+    },
+    {
+      "file": "yssy_multiple_stress.json",
+      "description": "Three-runway controlling-envelope stress case",
+      "icao_code": "YSSY",
+      "runway_count": 3,
+      "project_crs": "EPSG:28356"
+    }
+  ],
+  "accuracy_tolerances": {
+    "minimum_area_m2": 0.1,
+    "relative_area": 1e-7,
+    "maximum_invalid_geometries": 0,
+    "maximum_empty_geometries": 0
+  }
+}

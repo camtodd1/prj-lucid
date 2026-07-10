@@ -844,6 +844,7 @@ class SafeguardingBuilder(
                 any_guideline_processed_ok,
                 airport_wide_ols_group,
             )
+            solved_ols_engines: Dict[str, Any] = {}
             if guideline_groups.get("F") is not None and self.generate_controlling_ols:
                 if self._is_future_annex14_protected_airspace():
                     self._set_processing_status(self.tr("Solving controlling Annex 14 OFS/OES surfaces..."))
@@ -852,6 +853,7 @@ class SafeguardingBuilder(
                         runway_ols_group,
                         airport_wide_ols_group,
                         debug_group,
+                        solved_engines=solved_ols_engines,
                     )
                 else:
                     self._set_processing_status(self.tr("Solving controlling OLS lower envelope..."))
@@ -860,6 +862,7 @@ class SafeguardingBuilder(
                         debug_group,
                         controlling_ols_surfaces_group,
                         controlling_contours_group,
+                        solved_engines=solved_ols_engines,
                     )
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
                 if self._is_modernisation_comparison() and not self._is_future_annex14_protected_airspace():
@@ -869,6 +872,7 @@ class SafeguardingBuilder(
                         processed_runway_data_list,
                         output_groups,
                         debug_group,
+                        solved_baseline_engine=solved_ols_engines.get("baseline"),
                     )
                     any_guideline_processed_ok = any_guideline_processed_ok or comparison_ok
             elif guideline_groups.get("F") is not None:
@@ -1537,6 +1541,7 @@ class SafeguardingBuilder(
         processed_runway_data_list: List[dict],
         output_groups: Dict[str, Optional[QgsLayerTreeGroup]],
         debug_group: QgsLayerTreeGroup,
+        solved_baseline_engine=None,
     ) -> bool:
         """Generate future OFS/OES beside the selected baseline and compare envelopes."""
         baseline_candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
@@ -1575,11 +1580,13 @@ class SafeguardingBuilder(
                     "Check ADG and runway operational inputs."
                 )
                 return False
+            solved_future_engines: Dict[str, Any] = {}
             future_controlling_created = self._create_annex14_controlling_surface_layers(
                 icao_code,
                 future_ofs_group,
                 future_oes_group,
                 debug_group,
+                solved_engines=solved_future_engines,
             )
             comparison_created = self._create_ols_modernisation_comparison_layers(
                 icao_code,
@@ -1589,6 +1596,8 @@ class SafeguardingBuilder(
                 future_candidates,
                 comparison_ofs_group,
                 comparison_oes_group,
+                solved_baseline_engine=solved_baseline_engine,
+                solved_future_engines=solved_future_engines,
             )
             return future_controlling_created or comparison_created
         finally:

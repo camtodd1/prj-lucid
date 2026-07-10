@@ -180,6 +180,7 @@ class PlanarControllingOlsEngine:
         self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
         self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
         self._controlling_region_geometries_cache: Optional[List[Tuple[ControllingOlsCandidate, QgsGeometry]]] = None
+        self._region_boundary_records_cache: Optional[List[Tuple[QgsGeometry, List[object]]]] = None
         self._region_solve_stats: Dict[str, float] = {}
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
@@ -275,8 +276,21 @@ class PlanarControllingOlsEngine:
 
     def region_boundary_features(self, fields: QgsFields) -> List[QgsFeature]:
         """Return line features where solved controlling region boundaries change controller."""
-        region_parts = self._controlling_region_geometries()
         features: List[QgsFeature] = []
+        for geometry, attributes in self._region_boundary_records():
+            feature = QgsFeature(fields)
+            feature.setGeometry(QgsGeometry(geometry))
+            feature.setAttributes(list(attributes))
+            features.append(feature)
+        return features
+
+    def _region_boundary_records(self) -> List[Tuple[QgsGeometry, List[object]]]:
+        """Cache field-independent transition geometry for all output consumers."""
+        if self._region_boundary_records_cache is not None:
+            return self._region_boundary_records_cache
+
+        region_parts = self._controlling_region_geometries()
+        records: List[Tuple[QgsGeometry, List[object]]] = []
         seen_keys = set()
         for region_candidate, region in region_parts:
             for line_points in self._polygon_boundary_parts(region):
@@ -300,20 +314,21 @@ class PlanarControllingOlsEngine:
                     z_line = self._line_points_to_z_geometry(segment_points, z_values)
                     if z_line is None or z_line.isEmpty():
                         continue
-                    feature = QgsFeature(fields)
-                    feature.setGeometry(z_line)
-                    feature.setAttributes(
-                        [
-                            f"{first_controller.surface_id}|{second_controller.surface_id}"[:160],
-                            "Transition",
-                            min(z_values),
-                            max(z_values),
-                            f"{first_controller.surface_id}|{second_controller.surface_id}"[:254],
-                            "region_boundary",
-                        ]
+                    records.append(
+                        (
+                            QgsGeometry(z_line),
+                            [
+                                f"{first_controller.surface_id}|{second_controller.surface_id}"[:160],
+                                "Transition",
+                                min(z_values),
+                                max(z_values),
+                                f"{first_controller.surface_id}|{second_controller.surface_id}"[:254],
+                                "region_boundary",
+                            ],
+                        )
                     )
-                    features.append(feature)
-        return features
+        self._region_boundary_records_cache = records
+        return records
 
     def _polygon_boundary_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
         """Return exterior and interior polygon rings as line point lists."""
@@ -4209,6 +4224,7 @@ class ControllingOlsEngineMixin:
         debug_group: QgsLayerTreeGroup,
         controlling_surfaces_group: Optional[QgsLayerTreeGroup] = None,
         controlling_contours_group: Optional[QgsLayerTreeGroup] = None,
+        solved_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
     ) -> bool:
         overall_start = time.perf_counter()
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
@@ -4231,6 +4247,8 @@ class ControllingOlsEngineMixin:
         region_output_group = controlling_surfaces_group if controlling_surfaces_group is not None else output_group
         contour_output_group = controlling_contours_group if controlling_contours_group is not None else output_group
         engine = PlanarControllingOlsEngine(planar_candidates, exclusion_geometries=exclusion_geometries)
+        if solved_engines is not None:
+            solved_engines["baseline"] = engine
         timing_splits: Dict[str, float] = {}
 
         step_start = time.perf_counter()
@@ -4274,6 +4292,7 @@ class ControllingOlsEngineMixin:
         ofs_group: QgsLayerTreeGroup,
         oes_group: QgsLayerTreeGroup,
         debug_group: QgsLayerTreeGroup,
+        solved_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
     ) -> bool:
         """Create independent future Annex 14 OFS and OES lower envelopes."""
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
@@ -4294,6 +4313,8 @@ class ControllingOlsEngineMixin:
                 )
                 continue
             engine = PlanarControllingOlsEngine(family_candidates)
+            if solved_engines is not None:
+                solved_engines[family] = engine
             family_debug_group = self._ensure_layer_group(debug_group, f"Annex 14 {family} Controlling")
             self._create_controlling_candidate_layer(
                 icao_code,
@@ -4779,6 +4800,18 @@ class ControllingOlsEngineMixin:
         # Geometry normalisation can very slightly expand a repaired boundary.
         # Repartition once so the delivered lower envelope remains exclusive.
         valid_features = self._partition_controlling_region_features(valid_features)
+        polygon_features: List[QgsFeature] = []
+        for feature in valid_features:
+            polygon_parts = engine._polygon_parts(feature.geometry())
+            polygons = [part.asPolygon() for part in polygon_parts if part.asPolygon()]
+            if not polygons:
+                continue
+            geometry = QgsGeometry.fromMultiPolygonXY(polygons)
+            if geometry is None or geometry.isNull() or geometry.isEmpty():
+                continue
+            feature.setGeometry(geometry)
+            polygon_features.append(feature)
+        valid_features = polygon_features
         valid_features.sort(key=lambda feature: str(feature.attribute("surface_id") or ""))
         for region_id, feature in enumerate(valid_features, start=1):
             feature.setAttribute("region_id", region_id)

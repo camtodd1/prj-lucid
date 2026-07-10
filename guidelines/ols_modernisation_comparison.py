@@ -79,6 +79,12 @@ class OlsEnvelopeComparisonEngine:
         # valid comparison region unclassified.
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
         self._merge_classified_parts(result)
+        # Pair-level dissolves re-check the height-sign invariant and can trim
+        # narrow residual strips. Repair once more after that destructive pass;
+        # do not merge again, because doing so would repeat the same clipping.
+        self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
+        self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
+        self._partition_classified_parts(result)
         return result
 
     def _append_classified_overlap(
@@ -103,6 +109,40 @@ class OlsEnvelopeComparisonEngine:
             return
 
         pair_engine = PlanarControllingOlsEngine([baseline_candidate, future_candidate])
+        affine_regions = self._affine_change_regions(
+            pair_engine,
+            baseline_candidate,
+            future_candidate,
+            overlap,
+        )
+        if affine_regions is not None:
+            gain_geometry, loss_geometry, no_change_geometry = affine_regions
+            self._append_parts(
+                result["gain"], baseline_candidate, future_candidate, gain_geometry, "gain", clean_spikes
+            )
+            self._append_parts(
+                result["loss"], baseline_candidate, future_candidate, loss_geometry, "loss", clean_spikes
+            )
+            self._append_parts(
+                result["no_change"],
+                baseline_candidate,
+                future_candidate,
+                no_change_geometry,
+                "no_change",
+                clean_spikes,
+            )
+            if include_transition:
+                self._append_transition_parts(
+                    result["transition"],
+                    pair_engine,
+                    baseline_candidate,
+                    future_candidate,
+                    overlap,
+                    gain_geometry,
+                    loss_geometry,
+                )
+            return
+
         # A higher future surface is a gain, so the baseline is the lower
         # candidate on the gain side of the equality boundary.
         try:
@@ -186,6 +226,79 @@ class OlsEnvelopeComparisonEngine:
                 baseline_lower,
                 future_lower,
             )
+
+    def _affine_change_regions(
+        self,
+        pair_engine: PlanarControllingOlsEngine,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+    ) -> Optional[Tuple[QgsGeometry, QgsGeometry, QgsGeometry]]:
+        """Split an affine comparison exactly into gain, loss and tolerance band."""
+        baseline_plane = self._candidate_affine_coefficients(baseline)
+        future_plane = self._candidate_affine_coefficients(future)
+        if baseline_plane is None or future_plane is None:
+            return None
+        delta_min, delta_max, _delta_sample = self.delta_range(overlap, baseline, future)
+        if delta_min is None or delta_max is None:
+            return None
+        if delta_min > self.tolerance_m:
+            return QgsGeometry(overlap), QgsGeometry(), QgsGeometry()
+        if delta_max < -self.tolerance_m:
+            return QgsGeometry(), QgsGeometry(overlap), QgsGeometry()
+        if delta_min >= -self.tolerance_m and delta_max <= self.tolerance_m:
+            return QgsGeometry(), QgsGeometry(), QgsGeometry(overlap)
+
+        coefficients = tuple(
+            future_plane[index] - baseline_plane[index]
+            for index in range(3)
+        )
+        threshold_lines = []
+        for level in (-self.tolerance_m, self.tolerance_m):
+            line = self._affine_change_contour(overlap, coefficients, level)
+            if line is not None and not line.isEmpty():
+                threshold_lines.append(line)
+        if not threshold_lines:
+            return None
+        try:
+            thresholds = (
+                QgsGeometry.unaryUnion(threshold_lines)
+                if len(threshold_lines) > 1
+                else threshold_lines[0]
+            )
+            split_parts = pair_engine._split_overlap_by_transition_curve(overlap, thresholds)
+        except Exception:
+            return None
+        if len(split_parts) <= 1:
+            return None
+
+        classified = {"gain": [], "loss": [], "no_change": []}
+        for part in split_parts:
+            point = part.pointOnSurface().asPoint()
+            delta = self._delta_at_point(QgsPointXY(point.x(), point.y()), baseline, future)
+            if delta is None:
+                continue
+            change = (
+                "gain"
+                if delta > self.tolerance_m
+                else "loss"
+                if delta < -self.tolerance_m
+                else "no_change"
+            )
+            classified[change].append(part)
+        gain_geometry = self._union_geometries(classified["gain"])
+        loss_geometry = self._union_geometries(classified["loss"])
+        no_change_geometry = self._union_geometries(classified["no_change"])
+        gain = gain_geometry if gain_geometry is not None else QgsGeometry()
+        loss = loss_geometry if loss_geometry is not None else QgsGeometry()
+        no_change = no_change_geometry if no_change_geometry is not None else QgsGeometry()
+        coverage = self._union_geometries([gain, loss, no_change])
+        if coverage is None:
+            return None
+        remainder = self._safe_difference(overlap, coverage)
+        if remainder is not None and self._has_area(remainder):
+            return None
+        return gain, loss, no_change
 
     def _fallback_lower_region(
         self,
@@ -761,6 +874,85 @@ class OlsEnvelopeComparisonEngine:
                         clean_spikes=False,
                         include_transition=False,
                     )
+
+    def _append_final_common_domain_remainders(
+        self,
+        result,
+        baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+        future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> None:
+        """Assign numerical residuals after all destructive cleanup has finished."""
+        baseline_union = self._union_geometries([geometry for _candidate, geometry in baseline_regions])
+        future_union = self._union_geometries([geometry for _candidate, geometry in future_regions])
+        if baseline_union is None or future_union is None:
+            return
+        common_domain = self._safe_intersection(baseline_union, future_union)
+        classified_union = self._union_geometries(
+            [
+                geometry
+                for change in ("gain", "loss", "no_change")
+                for _baseline, _future, geometry in result.get(change, [])
+            ]
+        )
+        remaining = (
+            self._safe_difference(common_domain, classified_union)
+            if classified_union is not None
+            else common_domain
+        )
+        if not self._has_area(remaining):
+            return
+
+        for baseline, baseline_region in baseline_regions:
+            if not self._has_area(remaining):
+                break
+            for future, future_region in future_regions:
+                if not self._has_area(remaining):
+                    break
+                if not self._bounding_boxes_intersect(baseline_region, future_region):
+                    continue
+                pair_domain = self._safe_intersection(baseline_region, future_region)
+                pair_remaining = self._safe_intersection(remaining, pair_domain)
+                if not self._has_area(pair_remaining):
+                    continue
+                assigned_parts = []
+                for part in self.baseline_engine._polygon_parts(pair_remaining):
+                    change = self._classify_change_for_part(part, baseline, future)
+                    if change is None:
+                        continue
+                    result[change].append((baseline, future, QgsGeometry(part)))
+                    assigned_parts.append(part)
+                assigned = self._union_geometries(assigned_parts)
+                if assigned is not None:
+                    remaining = self._safe_difference(remaining, assigned)
+
+    def _partition_classified_parts(self, result) -> None:
+        """Remove repair overlap without changing the combined classified coverage."""
+        assigned = QgsGeometry()
+        # No-change is inclusive at +/- tolerance, so it owns numerical overlap
+        # on those boundaries before the strict gain/loss classes are applied.
+        for change in ("no_change", "gain", "loss"):
+            partitioned = []
+            for baseline, future, geometry in result.get(change, []):
+                if not self._has_area(geometry):
+                    continue
+                unique = (
+                    self._safe_difference(geometry, assigned)
+                    if not assigned.isEmpty()
+                    else QgsGeometry(geometry)
+                )
+                if not self._has_area(unique):
+                    continue
+                for part in self.baseline_engine._polygon_parts(unique):
+                    if not self._has_area(part):
+                        continue
+                    partitioned.append((baseline, future, QgsGeometry(part)))
+                if assigned.isEmpty():
+                    assigned = QgsGeometry(unique)
+                else:
+                    merged_assigned = self._union_geometries([assigned, unique])
+                    if merged_assigned is not None:
+                        assigned = merged_assigned
+            result[change] = partitioned
 
     def _merge_classified_parts(self, result) -> None:
         """Dissolve repaired fragments so spike remainders join their proper side."""
@@ -1706,6 +1898,8 @@ class OlsModernisationComparisonMixin:
         future_candidates: Sequence[ControllingOlsCandidate],
         ofs_group,
         oes_group,
+        solved_baseline_engine: Optional[PlanarControllingOlsEngine] = None,
+        solved_future_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
     ) -> bool:
         baseline_planar = [
             candidate for candidate in baseline_candidates
@@ -1719,10 +1913,17 @@ class OlsModernisationComparisonMixin:
             )
             return False
 
-        baseline_engine = PlanarControllingOlsEngine(
-            baseline_planar,
-            exclusion_geometries=list(baseline_exclusions or []),
-        )
+        baseline_ids = {candidate.surface_id for candidate in baseline_planar}
+        if (
+            solved_baseline_engine is None
+            or {candidate.surface_id for candidate in solved_baseline_engine.candidates} != baseline_ids
+        ):
+            baseline_engine = PlanarControllingOlsEngine(
+                baseline_planar,
+                exclusion_geometries=list(baseline_exclusions or []),
+            )
+        else:
+            baseline_engine = solved_baseline_engine
         created = False
         for family, family_group in (("OFS", ofs_group), ("OES", oes_group)):
             family_candidates = [
@@ -1737,7 +1938,13 @@ class OlsModernisationComparisonMixin:
                     Qgis.Warning,
                 )
                 continue
-            future_engine = PlanarControllingOlsEngine(family_candidates)
+            future_engine = (solved_future_engines or {}).get(family)
+            if (
+                future_engine is None
+                or {candidate.surface_id for candidate in future_engine.candidates}
+                != {candidate.surface_id for candidate in family_candidates}
+            ):
+                future_engine = PlanarControllingOlsEngine(family_candidates)
             comparison = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
             parts = comparison.comparison_parts()
             created = self._create_modernisation_wireframe_layer(

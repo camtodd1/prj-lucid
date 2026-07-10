@@ -77,8 +77,10 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         parts = self.compare(self.constant("baseline", 100.0), self.plane("future", 0.2, 0.0, 90.0))
         gain_area = sum(part[2].area() for part in parts["gain"])
         loss_area = sum(part[2].area() for part in parts["loss"])
-        self.assertAlmostEqual(gain_area, 5000.0, delta=1.0)
-        self.assertAlmostEqual(loss_area, 5000.0, delta=1.0)
+        no_change_area = sum(part[2].area() for part in parts["no_change"])
+        self.assertAlmostEqual(gain_area, 4995.0, delta=1.0)
+        self.assertAlmostEqual(loss_area, 4995.0, delta=1.0)
+        self.assertAlmostEqual(no_change_area, 10.0, delta=1.0)
         self.assertGreater(sum(part[2].length() for part in parts["transition"]), 0.0)
 
     def test_equal_surfaces_emit_no_change(self):
@@ -88,6 +90,69 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(parts["transition"]), 0)
         self.assertEqual(len(parts["no_change"]), 1)
         self.assertAlmostEqual(parts["no_change"][0][2].area(), 10000.0, places=3)
+
+    def test_post_merge_coverage_repair_restores_trimmed_domain(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        original_merge = engine._merge_classified_parts
+
+        def trim_after_merge(result):
+            original_merge(result)
+            result["gain"] = []
+
+        with patch.object(engine, "_merge_classified_parts", side_effect=trim_after_merge):
+            parts = engine.comparison_parts()
+
+        self.assertAlmostEqual(
+            sum(part[2].area() for part in parts["gain"]),
+            self.domain.area(),
+            places=3,
+        )
+
+    def test_same_class_repair_overlap_is_partitioned(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        result = {
+            "gain": [
+                (baseline, future, QgsGeometry(self.domain)),
+                (baseline, future, QgsGeometry(self.domain)),
+            ],
+            "loss": [],
+            "no_change": [],
+            "transition": [],
+        }
+
+        engine._partition_classified_parts(result)
+
+        self.assertEqual(len(result["gain"]), 1)
+        self.assertAlmostEqual(result["gain"][0][2].area(), self.domain.area(), places=3)
+
+    def test_tolerance_band_owns_numerical_cross_class_overlap(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        result = {
+            "gain": [(baseline, future, QgsGeometry(self.domain))],
+            "loss": [],
+            "no_change": [(baseline, future, QgsGeometry(self.domain))],
+            "transition": [],
+        }
+
+        engine._partition_classified_parts(result)
+
+        self.assertEqual(len(result["no_change"]), 1)
+        self.assertEqual(result["gain"], [])
 
     def test_nearly_equal_surfaces_emit_no_change(self):
         parts = self.compare(self.constant("baseline", 100.0), self.constant("future", 100.005))
@@ -573,14 +638,74 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         future_engine._controlling_region_geometries_cache = [(future, self.domain)]
         engine = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
 
-        with patch.object(PlanarControllingOlsEngine, "_candidate_lower_region", return_value=None):
-            result = engine.comparison_parts()
+        with patch.object(engine, "_affine_change_regions", return_value=None):
+            with patch.object(PlanarControllingOlsEngine, "_candidate_lower_region", return_value=None):
+                result = engine.comparison_parts()
 
         gain_area = sum(item[2].area() for item in result["gain"])
         loss_area = sum(item[2].area() for item in result["loss"])
         self.assertAlmostEqual(gain_area, 5000.0, delta=2.0)
         self.assertAlmostEqual(loss_area, 5000.0, delta=2.0)
         self.assertAlmostEqual(gain_area + loss_area, self.domain.area(), delta=2.0)
+
+    def test_region_boundary_records_are_reused_across_output_layers(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.2, 0.0, 90.0)
+        engine = PlanarControllingOlsEngine([baseline, future])
+
+        with patch.object(
+            engine,
+            "_controllers_across_segment",
+            wraps=engine._controllers_across_segment,
+        ) as controller_probe:
+            first = engine._region_boundary_records()
+            first_call_count = controller_probe.call_count
+            second = engine._region_boundary_records()
+
+        self.assertTrue(first)
+        self.assertIs(first, second)
+        self.assertGreater(first_call_count, 0)
+        self.assertEqual(controller_probe.call_count, first_call_count)
+
+    def test_comparison_reuses_supplied_solved_engines(self):
+        baseline = self.constant("baseline", 100.0)
+        future = ControllingOlsCandidate(
+            surface_id="future-ofs",
+            surface_type="Future OFS",
+            footprint=QgsGeometry(self.domain),
+            elevation_at_xy=constant_elevation_evaluator(110.0),
+            model="constant",
+            metadata={"elevation_m": 110.0, "annex14_family": "OFS"},
+        )
+        baseline_engine = PlanarControllingOlsEngine([baseline])
+        future_engine = PlanarControllingOlsEngine([future])
+        capture = _ComparisonLayerCapture()
+        created_engine_sizes = []
+        real_engine = PlanarControllingOlsEngine
+
+        def create_engine(candidates, *args, **kwargs):
+            candidate_list = list(candidates)
+            created_engine_sizes.append(len(candidate_list))
+            return real_engine(candidate_list, *args, **kwargs)
+
+        with patch(
+            "guidelines.ols_modernisation_comparison.PlanarControllingOlsEngine",
+            side_effect=create_engine,
+        ):
+            created = capture._create_ols_modernisation_comparison_layers(
+                "TEST",
+                "baseline-rules",
+                [baseline],
+                [],
+                [future],
+                object(),
+                object(),
+                solved_baseline_engine=baseline_engine,
+                solved_future_engines={"OFS": future_engine},
+            )
+
+        self.assertTrue(created)
+        self.assertNotIn(1, created_engine_sizes)
 
     def test_all_comparison_output_features_receive_unique_ids(self):
         baseline = self.constant("baseline", 100.0)
