@@ -133,6 +133,28 @@ def _comparison_metrics(engine, result) -> Dict[str, object]:
         ),
         "UNKNOWN",
     )
+    no_change_parts = []
+    for baseline, future, geometry in result["no_change"]:
+        delta_min, delta_max, delta_sample = engine.delta_range(
+            geometry,
+            baseline,
+            future,
+            "no_change",
+        )
+        perimeter = geometry.length()
+        no_change_parts.append(
+            {
+                "area_m2": _area(geometry),
+                "strip_width_proxy_m": (
+                    (2.0 * _area(geometry) / perimeter) if perimeter > 0.0 else None
+                ),
+                "delta_min_m": delta_min,
+                "delta_max_m": delta_max,
+                "delta_sample_m": delta_sample,
+                "baseline_surface_id": baseline.surface_id,
+                "future_surface_id": future.surface_id,
+            }
+        )
     return {
         "family": family,
         "baseline_regions": len(baseline_regions),
@@ -157,6 +179,10 @@ def _comparison_metrics(engine, result) -> Dict[str, object]:
         "gain_no_change_overlap_m2": _area(change_unions["gain"].intersection(change_unions["no_change"])),
         "loss_no_change_overlap_m2": _area(change_unions["loss"].intersection(change_unions["no_change"])),
         "feature_counts": {change: len(result[change]) for change in result},
+        "no_change_parts": sorted(
+            no_change_parts,
+            key=lambda item: item["area_m2"],
+        ),
     }
 
 

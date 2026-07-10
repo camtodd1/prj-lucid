@@ -78,10 +78,42 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         gain_area = sum(part[2].area() for part in parts["gain"])
         loss_area = sum(part[2].area() for part in parts["loss"])
         no_change_area = sum(part[2].area() for part in parts["no_change"])
-        self.assertAlmostEqual(gain_area, 4995.0, delta=1.0)
-        self.assertAlmostEqual(loss_area, 4995.0, delta=1.0)
-        self.assertAlmostEqual(no_change_area, 10.0, delta=1.0)
+        self.assertAlmostEqual(gain_area, 5000.0, delta=1.0)
+        self.assertAlmostEqual(loss_area, 5000.0, delta=1.0)
+        self.assertAlmostEqual(no_change_area, 0.0, delta=1e-6)
         self.assertGreater(sum(part[2].length() for part in parts["transition"]), 0.0)
+
+    def test_equal_height_line_does_not_create_a_no_change_strip(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.142857, 0.0, 92.85715)
+
+        parts = self.compare(baseline, future)
+
+        self.assertEqual(parts["no_change"], [])
+        self.assertAlmostEqual(
+            sum(part[2].area() for part in parts["gain"]),
+            5000.0,
+            delta=1.0,
+        )
+        self.assertAlmostEqual(
+            sum(part[2].area() for part in parts["loss"]),
+            5000.0,
+            delta=1.0,
+        )
+
+    def test_one_sided_surface_with_tolerance_edge_is_entirely_gain(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.001, 0.0, 100.005)
+
+        parts = self.compare(baseline, future)
+
+        self.assertEqual(parts["no_change"], [])
+        self.assertEqual(parts["loss"], [])
+        self.assertAlmostEqual(
+            sum(part[2].area() for part in parts["gain"]),
+            self.domain.area(),
+            places=3,
+        )
 
     def test_equal_surfaces_emit_no_change(self):
         parts = self.compare(self.constant("baseline", 100.0), self.constant("future", 100.0))

@@ -109,7 +109,10 @@ class OlsEnvelopeComparisonEngine:
         ):
             return
 
-        pair_engine = PlanarControllingOlsEngine([baseline_candidate, future_candidate])
+        pair_engine = PlanarControllingOlsEngine(
+            [baseline_candidate, future_candidate],
+            tie_tolerance_m=0.0,
+        )
         affine_regions = self._affine_change_regions(
             pair_engine,
             baseline_candidate,
@@ -201,22 +204,6 @@ class OlsEnvelopeComparisonEngine:
         self._append_parts(
             result["loss"], baseline_candidate, future_candidate, future_lower, "loss", clean_spikes
         )
-        self._append_parts(
-            result["no_change"],
-            baseline_candidate,
-            future_candidate,
-            baseline_lower,
-            "no_change",
-            clean_spikes,
-        )
-        self._append_parts(
-            result["no_change"],
-            baseline_candidate,
-            future_candidate,
-            future_lower,
-            "no_change",
-            clean_spikes,
-        )
         if include_transition:
             self._append_transition_parts(
                 result["transition"],
@@ -235,7 +222,7 @@ class OlsEnvelopeComparisonEngine:
         future: ControllingOlsCandidate,
         overlap: QgsGeometry,
     ) -> Optional[Tuple[QgsGeometry, QgsGeometry, QgsGeometry]]:
-        """Split an affine comparison exactly into gain, loss and tolerance band."""
+        """Split a mixed affine comparison at equality without creating a tolerance strip."""
         baseline_plane = self._candidate_affine_coefficients(baseline)
         future_plane = self._candidate_affine_coefficients(future)
         if baseline_plane is None or future_plane is None:
@@ -243,31 +230,22 @@ class OlsEnvelopeComparisonEngine:
         delta_min, delta_max, _delta_sample = self.delta_range(overlap, baseline, future)
         if delta_min is None or delta_max is None:
             return None
-        if delta_min > self.tolerance_m:
-            return QgsGeometry(overlap), QgsGeometry(), QgsGeometry()
-        if delta_max < -self.tolerance_m:
-            return QgsGeometry(), QgsGeometry(overlap), QgsGeometry()
         if delta_min >= -self.tolerance_m and delta_max <= self.tolerance_m:
             return QgsGeometry(), QgsGeometry(), QgsGeometry(overlap)
+        if delta_min >= 0.0:
+            return QgsGeometry(overlap), QgsGeometry(), QgsGeometry()
+        if delta_max <= 0.0:
+            return QgsGeometry(), QgsGeometry(overlap), QgsGeometry()
 
         coefficients = tuple(
             future_plane[index] - baseline_plane[index]
             for index in range(3)
         )
-        threshold_lines = []
-        for level in (-self.tolerance_m, self.tolerance_m):
-            line = self._affine_change_contour(overlap, coefficients, level)
-            if line is not None and not line.isEmpty():
-                threshold_lines.append(line)
-        if not threshold_lines:
+        threshold = self._affine_change_contour(overlap, coefficients, 0.0)
+        if threshold is None or threshold.isEmpty():
             return None
         try:
-            thresholds = (
-                QgsGeometry.unaryUnion(threshold_lines)
-                if len(threshold_lines) > 1
-                else threshold_lines[0]
-            )
-            split_parts = pair_engine._split_overlap_by_transition_curve(overlap, thresholds)
+            split_parts = pair_engine._split_overlap_by_transition_curve(overlap, threshold)
         except Exception:
             return None
         if len(split_parts) <= 1:
@@ -279,13 +257,9 @@ class OlsEnvelopeComparisonEngine:
             delta = self._delta_at_point(QgsPointXY(point.x(), point.y()), baseline, future)
             if delta is None:
                 continue
-            change = (
-                "gain"
-                if delta > self.tolerance_m
-                else "loss"
-                if delta < -self.tolerance_m
-                else "no_change"
-            )
+            change = "gain" if delta > 0.0 else "loss" if delta < 0.0 else None
+            if change is None:
+                continue
             classified[change].append(part)
         gain_geometry = self._union_geometries(classified["gain"])
         loss_geometry = self._union_geometries(classified["loss"])
@@ -800,17 +774,17 @@ class OlsEnvelopeComparisonEngine:
         delta_min, delta_max, delta_sample = self.delta_range(overlap, baseline, future)
         if delta_sample is None:
             return
-        if delta_min is not None and delta_min > self.tolerance_m:
-            self._append_parts(result["gain"], baseline, future, overlap, "gain", clean_spikes)
-        elif delta_max is not None and delta_max < -self.tolerance_m:
-            self._append_parts(result["loss"], baseline, future, overlap, "loss", clean_spikes)
-        elif (
+        if (
             delta_min is not None
             and delta_max is not None
             and abs(delta_min) <= self.tolerance_m
             and abs(delta_max) <= self.tolerance_m
         ):
             self._append_parts(result["no_change"], baseline, future, overlap, "no_change", clean_spikes)
+        elif delta_sample > 0.0:
+            self._append_parts(result["gain"], baseline, future, overlap, "gain", clean_spikes)
+        elif delta_sample < 0.0:
+            self._append_parts(result["loss"], baseline, future, overlap, "loss", clean_spikes)
 
     def _append_no_change_if_equal(
         self,
@@ -850,10 +824,10 @@ class OlsEnvelopeComparisonEngine:
             if delta_sample is None:
                 continue
             if change == "gain":
-                if delta_sample <= self.tolerance_m:
+                if delta_sample <= 0.0:
                     continue
             if change == "loss":
-                if delta_sample >= -self.tolerance_m:
+                if delta_sample >= 0.0:
                     continue
             if change == "no_change":
                 if delta_min is None or delta_max is None:
@@ -1051,9 +1025,9 @@ class OlsEnvelopeComparisonEngine:
                         )
                         if delta_sample is None:
                             continue
-                        if change == "gain" and delta_sample <= self.tolerance_m:
+                        if change == "gain" and delta_sample <= 0.0:
                             continue
-                        if change == "loss" and delta_sample >= -self.tolerance_m:
+                        if change == "loss" and delta_sample >= 0.0:
                             continue
                         if change == "no_change" and (
                             delta_min is None
@@ -1078,7 +1052,10 @@ class OlsEnvelopeComparisonEngine:
         lower_candidate, upper_candidate = (
             (baseline, future) if change == "gain" else (future, baseline)
         )
-        pair_engine = PlanarControllingOlsEngine([lower_candidate, upper_candidate])
+        pair_engine = PlanarControllingOlsEngine(
+            [lower_candidate, upper_candidate],
+            tie_tolerance_m=0.0,
+        )
         try:
             decision = pair_engine._sampled_lower_decision(
                 lower_candidate,
@@ -1146,9 +1123,9 @@ class OlsEnvelopeComparisonEngine:
                 )
                 if delta_sample is None:
                     continue
-                if change == "gain" and delta_sample <= self.tolerance_m:
+                if change == "gain" and delta_sample <= 0.0:
                     continue
-                if change == "loss" and delta_sample >= -self.tolerance_m:
+                if change == "loss" and delta_sample >= 0.0:
                     continue
                 if change == "no_change":
                     if delta_min is None or delta_max is None:
@@ -1182,10 +1159,6 @@ class OlsEnvelopeComparisonEngine:
         )
         if delta_sample is None:
             return None
-        if delta_min is not None and delta_min > self.tolerance_m:
-            return "gain"
-        if delta_max is not None and delta_max < -self.tolerance_m:
-            return "loss"
         if (
             delta_min is not None
             and delta_max is not None
@@ -1193,9 +1166,13 @@ class OlsEnvelopeComparisonEngine:
             and abs(delta_max) <= self.tolerance_m
         ):
             return "no_change"
-        if delta_sample > self.tolerance_m:
+        if delta_sample > 0.0:
             return "gain"
-        if delta_sample < -self.tolerance_m:
+        if delta_sample < 0.0:
+            return "loss"
+        if delta_max is not None and delta_max > 0.0:
+            return "gain"
+        if delta_min is not None and delta_min < 0.0:
             return "loss"
         return "no_change"
 
