@@ -13,6 +13,7 @@ from qgis.core import (  # type: ignore
     QgsGeometry,
     QgsMessageLog,
     QgsPointXY,
+    QgsRectangle,
     QgsWkbTypes,
 )
 
@@ -412,7 +413,17 @@ class OlsEnvelopeComparisonEngine:
             return []
 
         contours = []
+        affine_line_cache: Dict[
+            Tuple[str, str, float],
+            QgsGeometry,
+        ] = {}
+        affine_bounds_cache: Dict[Tuple[str, str], QgsRectangle] = {}
+        curved_value_caches: Dict[
+            Tuple[str, str],
+            Dict[Tuple[float, float], Optional[float]],
+        ] = {}
         for parent_sequence, (baseline, future, geometry) in enumerate(parts, start=1):
+            pair_key = (baseline.surface_id, future.surface_id)
             baseline_plane = self._candidate_affine_coefficients(baseline)
             future_plane = self._candidate_affine_coefficients(future)
             generated: List[Tuple[float, QgsGeometry]] = []
@@ -430,15 +441,27 @@ class OlsEnvelopeComparisonEngine:
                     for index in range(3)
                 )
                 for delta_m in self._change_contour_levels(delta_min, delta_max, interval_m):
-                    contour = self._affine_change_contour(geometry, coefficients, delta_m)
+                    line_key = (*pair_key, delta_m)
+                    line = affine_line_cache.get(line_key)
+                    if line is None:
+                        bounds = affine_bounds_cache.get(pair_key)
+                        if bounds is None:
+                            bounds = self._candidate_pair_bounds(baseline, future)
+                            affine_bounds_cache[pair_key] = bounds
+                        line = self._affine_change_line(bounds, coefficients, delta_m)
+                        if line is not None:
+                            affine_line_cache[line_key] = line
+                    contour = self._clip_change_contour_line(line, geometry)
                     if contour is not None:
                         generated.append((delta_m, contour))
             else:
+                value_cache = curved_value_caches.setdefault(pair_key, {})
                 generated = self._triangulated_change_contours(
                     geometry,
                     baseline,
                     future,
                     interval_m=interval_m,
+                    value_cache=value_cache,
                 )
 
             for delta_m, contour in generated:
@@ -454,6 +477,15 @@ class OlsEnvelopeComparisonEngine:
                     (baseline, future, contour, delta_m, contour_class, parent_sequence)
                 )
         return contours
+
+    @staticmethod
+    def _candidate_pair_bounds(
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+    ) -> QgsRectangle:
+        bounds = QgsRectangle(baseline.footprint.boundingBox())
+        bounds.combineExtentWith(future.footprint.boundingBox())
+        return bounds
 
     def _change_contour_levels(
         self,
@@ -533,11 +565,19 @@ class OlsEnvelopeComparisonEngine:
         coefficients: Tuple[float, float, float],
         delta_m: float,
     ) -> Optional[QgsGeometry]:
+        line = self._affine_change_line(geometry.boundingBox(), coefficients, delta_m)
+        return self._clip_change_contour_line(line, geometry)
+
+    @staticmethod
+    def _affine_change_line(
+        bbox: QgsRectangle,
+        coefficients: Tuple[float, float, float],
+        delta_m: float,
+    ) -> Optional[QgsGeometry]:
         a, b, c = coefficients
         gradient_squared = (a * a) + (b * b)
         if gradient_squared <= 1e-18:
             return None
-        bbox = geometry.boundingBox()
         centre_x = (bbox.xMinimum() + bbox.xMaximum()) / 2.0
         centre_y = (bbox.yMinimum() + bbox.yMaximum()) / 2.0
         displacement = (float(delta_m) - ((a * centre_x) + (b * centre_y) + c)) / gradient_squared
@@ -552,11 +592,21 @@ class OlsEnvelopeComparisonEngine:
                 QgsPointXY(origin.x() + (direction_x * extent), origin.y() + (direction_y * extent)),
             ]
         )
+        return line
+
+    @classmethod
+    def _clip_change_contour_line(
+        cls,
+        line: Optional[QgsGeometry],
+        geometry: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        if line is None or line.isEmpty() or geometry is None or geometry.isEmpty():
+            return None
         try:
             clipped = line.intersection(geometry)
         except Exception:
             return None
-        return self._merged_change_contour_lines([clipped])
+        return cls._merged_change_contour_lines([clipped])
 
     def _triangulated_change_contour(
         self,
@@ -580,12 +630,14 @@ class OlsEnvelopeComparisonEngine:
         future: ControllingOlsCandidate,
         interval_m: float = COMPARISON_CONTOUR_INTERVAL_M,
         requested_levels: Optional[Sequence[float]] = None,
+        value_cache: Optional[Dict[Tuple[float, float], Optional[float]]] = None,
     ) -> List[Tuple[float, QgsGeometry]]:
         points = self.baseline_engine._triangulation_sample_points(geometry)
         if len(points) < 3:
             return []
 
-        value_cache: Dict[Tuple[float, float], Optional[float]] = {}
+        if value_cache is None:
+            value_cache = {}
 
         def _value(point: QgsPointXY) -> Optional[float]:
             key = (round(point.x(), 3), round(point.y(), 3))

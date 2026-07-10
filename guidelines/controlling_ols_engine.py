@@ -346,11 +346,23 @@ class PlanarControllingOlsEngine:
 
         region_parts = self._controlling_region_geometries()
         records: List[Tuple[QgsGeometry, List[object]]] = []
+        segment_controller_cache: Dict[
+            Tuple[Tuple[float, float], Tuple[float, float]],
+            Optional[Tuple[ControllingOlsCandidate, ControllingOlsCandidate]],
+        ] = {}
         seen_keys = set()
         for region_candidate, region in region_parts:
             for line_points in self._polygon_boundary_parts(region):
                 for start_point, end_point in zip(line_points[:-1], line_points[1:]):
-                    controllers = self._controllers_across_segment(start_point, end_point)
+                    segment_key = self._undirected_segment_key(start_point, end_point)
+                    if segment_key not in segment_controller_cache:
+                        segment_controller_cache[segment_key] = self._controllers_across_segment(
+                            start_point,
+                            end_point,
+                            known_candidate=region_candidate,
+                            known_region=region,
+                        )
+                    controllers = segment_controller_cache[segment_key]
                     if controllers is None:
                         continue
                     first_controller, second_controller = controllers
@@ -385,6 +397,16 @@ class PlanarControllingOlsEngine:
         self._region_boundary_records_cache = records
         return records
 
+    @staticmethod
+    def _undirected_segment_key(
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+    ) -> Tuple[Tuple[float, float], Tuple[float, float]]:
+        """Return a direction-independent key for reusing shared-edge probes."""
+        start = (round(start_point.x(), 9), round(start_point.y(), 9))
+        end = (round(end_point.x(), 9), round(end_point.y(), 9))
+        return (start, end) if start <= end else (end, start)
+
     def _polygon_boundary_parts(self, geometry: QgsGeometry) -> List[List[QgsPointXY]]:
         """Return exterior and interior polygon rings as line point lists."""
         if geometry is None or geometry.isEmpty():
@@ -406,6 +428,8 @@ class PlanarControllingOlsEngine:
         self,
         start_point: QgsPointXY,
         end_point: QgsPointXY,
+        known_candidate: Optional[ControllingOlsCandidate] = None,
+        known_region: Optional[QgsGeometry] = None,
     ) -> Optional[Tuple[ControllingOlsCandidate, ControllingOlsCandidate]]:
         dx = end_point.x() - start_point.x()
         dy = end_point.y() - start_point.y()
@@ -416,12 +440,23 @@ class PlanarControllingOlsEngine:
         nx = -dy / length
         ny = dx / length
         for offset in [0.05, 0.1, 0.25, 0.5, 1.0, max(min(length * 0.02, 5.0), 0.25), 10.0]:
-            left = self.controlling_candidate_at_xy(
-                QgsPointXY(mid_point.x() + (nx * offset), mid_point.y() + (ny * offset))
-            )
-            right = self.controlling_candidate_at_xy(
-                QgsPointXY(mid_point.x() - (nx * offset), mid_point.y() - (ny * offset))
-            )
+            left_point = QgsPointXY(mid_point.x() + (nx * offset), mid_point.y() + (ny * offset))
+            right_point = QgsPointXY(mid_point.x() - (nx * offset), mid_point.y() - (ny * offset))
+            if known_candidate is not None and known_region is not None and not known_region.isEmpty():
+                try:
+                    left_inside = known_region.intersects(QgsGeometry.fromPointXY(left_point))
+                    right_inside = known_region.intersects(QgsGeometry.fromPointXY(right_point))
+                except Exception:
+                    left_inside = right_inside = False
+                if left_inside != right_inside:
+                    outside_point = right_point if left_inside else left_point
+                    outside = self.controlling_candidate_at_xy(outside_point)
+                    if outside is not None and outside[0].surface_id != known_candidate.surface_id:
+                        return known_candidate, outside[0]
+                    continue
+
+            left = self.controlling_candidate_at_xy(left_point)
+            right = self.controlling_candidate_at_xy(right_point)
             if left is None or right is None:
                 continue
             if left[0].surface_id != right[0].surface_id:

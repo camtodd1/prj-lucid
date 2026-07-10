@@ -532,6 +532,30 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             for vertex in geometry.vertices():
                 self.assertAlmostEqual(vertex.x(), delta_m / 0.02, places=5)
 
+    def test_affine_change_contour_lines_are_reused_by_pair_and_level(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.02, 0.0, 100.0)
+        lower = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 50.0))
+        upper = QgsGeometry.fromRect(QgsRectangle(0.0, 50.0, 100.0, 100.0))
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        with patch.object(
+            engine,
+            "_affine_change_line",
+            wraps=engine._affine_change_line,
+        ) as line_builder:
+            contours = engine.change_contour_parts(
+                [(baseline, future, lower), (baseline, future, upper)],
+                "gain",
+            )
+
+        self.assertEqual(line_builder.call_count, 4)
+        self.assertEqual(len(contours), 8)
+        self.assertEqual({item[5] for item in contours}, {1, 2})
+
     def test_curved_change_contour_uses_surface_evaluators(self):
         base = QgsGeometry.fromRect(QgsRectangle(40.0, 40.0, 60.0, 60.0))
         baseline = ControllingOlsCandidate(
@@ -666,6 +690,68 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertIs(first, second)
         self.assertGreater(first_call_count, 0)
         self.assertEqual(controller_probe.call_count, first_call_count)
+
+    def test_shared_region_edge_controller_probe_is_reused(self):
+        left_geometry = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        right_geometry = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))
+        left = ControllingOlsCandidate(
+            surface_id="left",
+            surface_type="Test",
+            footprint=left_geometry,
+            elevation_at_xy=constant_elevation_evaluator(90.0),
+            model="constant",
+            metadata={"elevation_m": 90.0},
+        )
+        right = ControllingOlsCandidate(
+            surface_id="right",
+            surface_type="Test",
+            footprint=right_geometry,
+            elevation_at_xy=constant_elevation_evaluator(100.0),
+            model="constant",
+            metadata={"elevation_m": 100.0},
+        )
+        engine = PlanarControllingOlsEngine([left, right])
+        engine._controlling_region_geometries_cache = [
+            (left, left_geometry),
+            (right, right_geometry),
+        ]
+
+        with patch.object(
+            engine,
+            "_controllers_across_segment",
+            return_value=(left, right),
+        ) as controller_probe:
+            records = engine._region_boundary_records()
+
+        self.assertEqual(controller_probe.call_count, 7)
+        self.assertEqual(len(records), 7)
+
+    def test_region_owned_edge_only_probes_the_opposite_side(self):
+        left_geometry = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        left = ControllingOlsCandidate(
+            surface_id="left",
+            surface_type="Test",
+            footprint=left_geometry,
+            elevation_at_xy=constant_elevation_evaluator(90.0),
+            model="constant",
+        )
+        right = self.constant("right", 100.0)
+        engine = PlanarControllingOlsEngine([left, right])
+
+        with patch.object(
+            engine,
+            "controlling_candidate_at_xy",
+            return_value=(right, 100.0),
+        ) as controller_probe:
+            controllers = engine._controllers_across_segment(
+                QgsPointXY(50.0, 0.0),
+                QgsPointXY(50.0, 100.0),
+                known_candidate=left,
+                known_region=left_geometry,
+            )
+
+        self.assertEqual(controllers, (left, right))
+        self.assertEqual(controller_probe.call_count, 1)
 
     def test_candidate_spatial_index_is_an_exact_query_prefilter(self):
         near = self.constant("near", 90.0)
