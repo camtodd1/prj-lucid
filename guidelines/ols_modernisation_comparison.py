@@ -34,6 +34,9 @@ COMPARISON_COLLINEAR_BACKTRACK_ANGLE_DEGREES = 0.1
 COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO = 0.01
 COMPARISON_SPIKE_MAX_AREA_CHANGE_M2 = 25.0
 COMPARISON_DELTA_DECIMALS = 3
+COMPARISON_CONTOUR_INTERVAL_M = 0.5
+COMPARISON_PRIMARY_CONTOUR_INTERVAL_M = 1.0
+COMPARISON_CONTOUR_MIN_LENGTH_M = 0.01
 
 
 class OlsEnvelopeComparisonEngine:
@@ -267,6 +270,346 @@ class OlsEnvelopeComparisonEngine:
         # The first sample is pointOnSurface().  It is an interior classification
         # sample only; it is not an area-weighted or otherwise representative value.
         return min(values), max(values), values[0]
+
+    def change_contour_parts(
+        self,
+        parts: Sequence[Tuple[ControllingOlsCandidate, ControllingOlsCandidate, QgsGeometry]],
+        change: str,
+        interval_m: float = COMPARISON_CONTOUR_INTERVAL_M,
+        primary_interval_m: float = COMPARISON_PRIMARY_CONTOUR_INTERVAL_M,
+    ) -> List[
+        Tuple[
+            ControllingOlsCandidate,
+            ControllingOlsCandidate,
+            QgsGeometry,
+            float,
+            str,
+            int,
+        ]
+    ]:
+        """Return signed change isolines clipped to finalized gain/loss polygons."""
+        if change not in {"gain", "loss"}:
+            return []
+        try:
+            interval_m = float(interval_m)
+            primary_interval_m = float(primary_interval_m)
+        except (TypeError, ValueError):
+            return []
+        if interval_m <= 0.0 or primary_interval_m <= 0.0:
+            return []
+
+        contours = []
+        for parent_sequence, (baseline, future, geometry) in enumerate(parts, start=1):
+            baseline_plane = self._candidate_affine_coefficients(baseline)
+            future_plane = self._candidate_affine_coefficients(future)
+            generated: List[Tuple[float, QgsGeometry]] = []
+            if baseline_plane is not None and future_plane is not None:
+                delta_min, delta_max, _delta_sample = self.delta_range(
+                    geometry,
+                    baseline,
+                    future,
+                    change,
+                )
+                if delta_min is None or delta_max is None:
+                    continue
+                coefficients = tuple(
+                    future_plane[index] - baseline_plane[index]
+                    for index in range(3)
+                )
+                for delta_m in self._change_contour_levels(delta_min, delta_max, interval_m):
+                    contour = self._affine_change_contour(geometry, coefficients, delta_m)
+                    if contour is not None:
+                        generated.append((delta_m, contour))
+            else:
+                generated = self._triangulated_change_contours(
+                    geometry,
+                    baseline,
+                    future,
+                    interval_m=interval_m,
+                )
+
+            for delta_m, contour in generated:
+                if contour is None or contour.isEmpty() or contour.length() <= COMPARISON_CONTOUR_MIN_LENGTH_M:
+                    continue
+                ratio = delta_m / primary_interval_m
+                contour_class = (
+                    "primary"
+                    if abs(ratio - round(ratio)) <= 10 ** (-COMPARISON_DELTA_DECIMALS)
+                    else "intermediate"
+                )
+                contours.append(
+                    (baseline, future, contour, delta_m, contour_class, parent_sequence)
+                )
+        return contours
+
+    def _change_contour_levels(
+        self,
+        delta_min: float,
+        delta_max: float,
+        interval_m: float,
+    ) -> List[float]:
+        lower = min(float(delta_min), float(delta_max))
+        upper = max(float(delta_min), float(delta_max))
+        start = int(math.ceil((lower - self.tolerance_m) / interval_m))
+        end = int(math.floor((upper + self.tolerance_m) / interval_m))
+        levels: List[float] = []
+        for multiple in range(start, end + 1):
+            level = self._round_delta(multiple * interval_m)
+            if abs(level) <= self.tolerance_m:
+                continue
+            if level < lower - self.tolerance_m or level > upper + self.tolerance_m:
+                continue
+            levels.append(level)
+        return levels
+
+    def _change_contour_geometry(
+        self,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        delta_m: float,
+    ) -> Optional[QgsGeometry]:
+        baseline_plane = self._candidate_affine_coefficients(baseline)
+        future_plane = self._candidate_affine_coefficients(future)
+        if baseline_plane is not None and future_plane is not None:
+            coefficients = tuple(
+                future_plane[index] - baseline_plane[index]
+                for index in range(3)
+            )
+            return self._affine_change_contour(geometry, coefficients, delta_m)
+        return self._triangulated_change_contour(geometry, baseline, future, delta_m)
+
+    @staticmethod
+    def _candidate_affine_coefficients(
+        candidate: ControllingOlsCandidate,
+    ) -> Optional[Tuple[float, float, float]]:
+        metadata = candidate.metadata or {}
+        try:
+            if candidate.model == "plane":
+                return (
+                    float(metadata["plane_a"]),
+                    float(metadata["plane_b"]),
+                    float(metadata["plane_c"]),
+                )
+            if candidate.model == "axis":
+                azimuth = math.radians(float(metadata["azimuth_degrees"]))
+                slope = float(metadata["slope"])
+                a = slope * math.sin(azimuth)
+                b = slope * math.cos(azimuth)
+                origin_x = float(metadata["origin_x"])
+                origin_y = float(metadata["origin_y"])
+                origin_z = float(metadata["origin_elevation_m"])
+                return a, b, origin_z - (a * origin_x) - (b * origin_y)
+            if candidate.model == "constant":
+                elevation = metadata.get("elevation_m")
+                if elevation is None:
+                    point_geometry = candidate.footprint.pointOnSurface()
+                    if point_geometry is None or point_geometry.isEmpty():
+                        return None
+                    point = point_geometry.asPoint()
+                    elevation = candidate.elevation_at_xy(QgsPointXY(point.x(), point.y()))
+                if elevation is not None and math.isfinite(float(elevation)):
+                    return 0.0, 0.0, float(elevation)
+        except (KeyError, TypeError, ValueError, RuntimeError):
+            return None
+        return None
+
+    def _affine_change_contour(
+        self,
+        geometry: QgsGeometry,
+        coefficients: Tuple[float, float, float],
+        delta_m: float,
+    ) -> Optional[QgsGeometry]:
+        a, b, c = coefficients
+        gradient_squared = (a * a) + (b * b)
+        if gradient_squared <= 1e-18:
+            return None
+        bbox = geometry.boundingBox()
+        centre_x = (bbox.xMinimum() + bbox.xMaximum()) / 2.0
+        centre_y = (bbox.yMinimum() + bbox.yMaximum()) / 2.0
+        displacement = (float(delta_m) - ((a * centre_x) + (b * centre_y) + c)) / gradient_squared
+        origin = QgsPointXY(centre_x + (a * displacement), centre_y + (b * displacement))
+        gradient_length = math.sqrt(gradient_squared)
+        direction_x = -b / gradient_length
+        direction_y = a / gradient_length
+        extent = max(math.hypot(bbox.width(), bbox.height()) * 2.0, 1.0)
+        line = QgsGeometry.fromPolylineXY(
+            [
+                QgsPointXY(origin.x() - (direction_x * extent), origin.y() - (direction_y * extent)),
+                QgsPointXY(origin.x() + (direction_x * extent), origin.y() + (direction_y * extent)),
+            ]
+        )
+        try:
+            clipped = line.intersection(geometry)
+        except Exception:
+            return None
+        return self._merged_change_contour_lines([clipped])
+
+    def _triangulated_change_contour(
+        self,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        delta_m: float,
+    ) -> Optional[QgsGeometry]:
+        contours = self._triangulated_change_contours(
+            geometry,
+            baseline,
+            future,
+            requested_levels=[float(delta_m)],
+        )
+        return contours[0][1] if contours else None
+
+    def _triangulated_change_contours(
+        self,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        interval_m: float = COMPARISON_CONTOUR_INTERVAL_M,
+        requested_levels: Optional[Sequence[float]] = None,
+    ) -> List[Tuple[float, QgsGeometry]]:
+        points = self.baseline_engine._triangulation_sample_points(geometry)
+        if len(points) < 3:
+            return []
+
+        value_cache: Dict[Tuple[float, float], Optional[float]] = {}
+
+        def _value(point: QgsPointXY) -> Optional[float]:
+            key = (round(point.x(), 3), round(point.y(), 3))
+            if key not in value_cache:
+                value_cache[key] = self._delta_at_point(point, baseline, future)
+            return value_cache[key]
+
+        if requested_levels is None:
+            sampled_values = [value for value in (_value(point) for point in points) if value is not None]
+            if not sampled_values:
+                return []
+            levels = self._change_contour_levels(
+                min(sampled_values),
+                max(sampled_values),
+                interval_m,
+            )
+        else:
+            levels = sorted({self._round_delta(level) for level in requested_levels})
+        if not levels:
+            return []
+
+        try:
+            triangles = QgsGeometry.fromMultiPointXY(points).delaunayTriangulation(0.0, False)
+        except Exception:
+            return []
+        segments_by_level: Dict[float, List[QgsGeometry]] = {level: [] for level in levels}
+        for triangle in self.baseline_engine._polygon_parts(triangles):
+            try:
+                ring = triangle.asPolygon()[0]
+            except (IndexError, TypeError):
+                continue
+            triangle_points = [QgsPointXY(point) for point in ring[:3]]
+            if len(triangle_points) < 3:
+                continue
+            values = [_value(point) for point in triangle_points]
+            if any(value is None for value in values):
+                continue
+            numeric_values = [float(value) for value in values]
+            triangle_min = min(numeric_values)
+            triangle_max = max(numeric_values)
+            for level in levels:
+                if level < triangle_min - 1e-9 or level > triangle_max + 1e-9:
+                    continue
+                for segment in self._triangle_change_contour_segments(
+                    triangle_points,
+                    numeric_values,
+                    level,
+                ):
+                    try:
+                        clipped = segment.intersection(geometry)
+                    except Exception:
+                        clipped = segment
+                    if clipped is not None and not clipped.isEmpty():
+                        segments_by_level[level].append(clipped)
+        contours: List[Tuple[float, QgsGeometry]] = []
+        for level in levels:
+            merged = self._merged_change_contour_lines(segments_by_level[level])
+            if merged is not None and not merged.isEmpty():
+                contours.append((level, merged))
+        return contours
+
+    @staticmethod
+    def _triangle_change_contour_segments(
+        points: Sequence[QgsPointXY],
+        values: Sequence[float],
+        delta_m: float,
+    ) -> List[QgsGeometry]:
+        epsilon = 1e-9
+        crossings: List[QgsPointXY] = []
+        coincident: List[QgsGeometry] = []
+
+        def _add_crossing(point: QgsPointXY) -> None:
+            if any(point.distance(existing) <= 1e-7 for existing in crossings):
+                return
+            crossings.append(QgsPointXY(point))
+
+        for start_index, end_index in ((0, 1), (1, 2), (2, 0)):
+            start_point = points[start_index]
+            end_point = points[end_index]
+            start_difference = values[start_index] - delta_m
+            end_difference = values[end_index] - delta_m
+            start_is_level = abs(start_difference) <= epsilon
+            end_is_level = abs(end_difference) <= epsilon
+            if start_is_level and end_is_level:
+                coincident.append(QgsGeometry.fromPolylineXY([start_point, end_point]))
+                continue
+            if start_is_level:
+                _add_crossing(start_point)
+            elif end_is_level:
+                _add_crossing(end_point)
+            elif start_difference * end_difference < 0.0:
+                denominator = abs(start_difference) + abs(end_difference)
+                fraction = 0.5 if denominator <= epsilon else abs(start_difference) / denominator
+                _add_crossing(
+                    QgsPointXY(
+                        start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+                        start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+                    )
+                )
+        if coincident:
+            return coincident
+        if len(crossings) < 2:
+            return []
+        if len(crossings) > 2:
+            crossings = max(
+                (
+                    [first, second]
+                    for first_index, first in enumerate(crossings)
+                    for second in crossings[first_index + 1 :]
+                ),
+                key=lambda pair: pair[0].distance(pair[1]),
+            )
+        return [QgsGeometry.fromPolylineXY(crossings[:2])]
+
+    @classmethod
+    def _merged_change_contour_lines(
+        cls,
+        geometries: Sequence[QgsGeometry],
+    ) -> Optional[QgsGeometry]:
+        line_parts: List[QgsGeometry] = []
+        for geometry in geometries:
+            for part in cls._line_parts(geometry):
+                if part.length() > COMPARISON_CONTOUR_MIN_LENGTH_M:
+                    line_parts.append(part)
+        if not line_parts:
+            return None
+        try:
+            merged = QgsGeometry.unaryUnion(line_parts) if len(line_parts) > 1 else line_parts[0]
+        except Exception:
+            merged = line_parts[0]
+        try:
+            line_merged = merged.mergeLines()
+            if line_merged is not None and not line_merged.isEmpty():
+                merged = line_merged
+        except Exception:
+            pass
+        return merged
 
     def _append_sampled_whole_overlap(
         self,
@@ -1422,6 +1765,19 @@ class OlsModernisationComparisonMixin:
                 icao_code, baseline_ruleset_id, family, "no_change", no_change_name,
                 parts["no_change"], comparison, family_group,
             ) or created
+            contour_parts = []
+            for change in ("gain", "loss"):
+                contour_parts.extend(
+                    (change, *contour_part)
+                    for contour_part in comparison.change_contour_parts(parts[change], change)
+                )
+            created = self._create_modernisation_change_contour_layer(
+                icao_code,
+                baseline_ruleset_id,
+                family,
+                contour_parts,
+                family_group,
+            ) or created
             created = self._create_modernisation_transition_layer(
                 icao_code, baseline_ruleset_id, family, parts["transition"], comparison, family_group,
             ) or created
@@ -1532,6 +1888,71 @@ class OlsModernisationComparisonMixin:
                 "loss": "OLS Modernisation Loss",
                 "no_change": "OLS Modernisation No Change",
             }.get(change, "OLS Modernisation No Change"),
+        )
+        return layer is not None
+
+    def _create_modernisation_change_contour_layer(
+        self,
+        icao_code,
+        baseline_ruleset_id,
+        family,
+        contour_parts,
+        output_group,
+    ) -> bool:
+        fields = QgsFields([
+            QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
+            QgsField("parent_id", QVariant.String, self.tr("Parent Comparison ID"), 48),
+            QgsField("change", QVariant.String, self.tr("Change"), 24),
+            QgsField("future_family", QVariant.String, self.tr("Future Family"), 8),
+            QgsField("delta_m", QVariant.Double, self.tr("Change Contour (m)"), 12, 3),
+            QgsField("contour_class", QVariant.String, self.tr("Contour Class"), 20),
+            QgsField("contour_interval_m", QVariant.Double, self.tr("Intermediate Interval (m)"), 10, 2),
+            QgsField("primary_interval_m", QVariant.Double, self.tr("Primary Interval (m)"), 10, 2),
+            QgsField("baseline_ruleset", QVariant.String, self.tr("Baseline Ruleset"), 80),
+            QgsField("baseline_id", QVariant.String, self.tr("Baseline Surface ID"), 160),
+            QgsField("baseline_surface", QVariant.String, self.tr("Baseline Surface"), 50),
+            QgsField("future_id", QVariant.String, self.tr("Future Surface ID"), 160),
+            QgsField("future_surface", QVariant.String, self.tr("Future Surface"), 50),
+            QgsField("label_txt", QVariant.String, self.tr("Map Label"), 24),
+        ])
+        features: List[QgsFeature] = []
+        for sequence, contour_part in enumerate(contour_parts, start=1):
+            (
+                change,
+                baseline,
+                future,
+                geometry,
+                delta_m,
+                contour_class,
+                parent_sequence,
+            ) = contour_part
+            feature = QgsFeature(fields)
+            feature.setGeometry(geometry)
+            feature.setAttributes([
+                self._modernisation_feature_id(family, "change_contour", sequence),
+                self._modernisation_feature_id(family, change, parent_sequence),
+                change,
+                family,
+                delta_m,
+                contour_class,
+                COMPARISON_CONTOUR_INTERVAL_M,
+                COMPARISON_PRIMARY_CONTOUR_INTERVAL_M,
+                baseline_ruleset_id,
+                baseline.surface_id,
+                baseline.surface_type,
+                future.surface_id,
+                future.surface_type,
+                f"{self._comparison_label_delta(delta_m)} m",
+            ])
+            features.append(feature)
+        layer = self._create_and_add_layer(
+            "MultiLineString",
+            f"OLS_Modernisation_{family}_change_contours_{icao_code}",
+            "Change Contours",
+            fields,
+            features,
+            output_group,
+            "OLS Modernisation Change Contour",
         )
         return layer is not None
 

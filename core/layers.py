@@ -415,6 +415,8 @@ class LayerMixin:
                         self._apply_modernisation_wireframe_style(layer, str(style_key))
                     if str(style_key) == "OLS Modernisation Transition":
                         self._apply_modernisation_transition_style(layer)
+                    if str(style_key) == "OLS Modernisation Change Contour":
+                        self._apply_modernisation_change_contour_style(layer)
                     if str(style_key) in {"OLS IHS", "OLS OHS"}:
                         self._apply_horizontal_surface_labels(layer, decimal_places=1)
                     if str(style_key) == "OLS Approach":
@@ -512,8 +514,81 @@ class LayerMixin:
         )
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
 
+    def _apply_modernisation_change_contour_style(self, layer: QgsVectorLayer) -> None:
+        """Render signed change contours by direction and primary/intermediate class."""
+        root = QgsRuleBasedRenderer.Rule(None)
+        symbol_definitions = (
+            ("gain", "primary", "27,112,52,245", "0.42", "Raised — primary"),
+            ("gain", "intermediate", "55,168,82,205", "0.22", "Raised — intermediate"),
+            ("loss", "primary", "155,32,32,245", "0.42", "Lowered — primary"),
+            ("loss", "intermediate", "214,63,63,205", "0.22", "Lowered — intermediate"),
+        )
+        for change, contour_class, color, width, label in symbol_definitions:
+            symbol = QgsLineSymbol.createSimple(
+                {
+                    "line_color": color,
+                    "line_width": width,
+                    "line_width_unit": "MM",
+                    "line_style": "solid",
+                }
+            )
+            rule = QgsRuleBasedRenderer.Rule(symbol)
+            rule.setFilterExpression(
+                f'"change" = \'{change}\' AND "contour_class" = \'{contour_class}\''
+            )
+            rule.setLabel(label)
+            root.appendChild(rule)
+        layer.setRenderer(QgsRuleBasedRenderer(root))
+        self._apply_modernisation_change_contour_labels(layer)
+
+    def _apply_modernisation_change_contour_labels(self, layer: QgsVectorLayer) -> None:
+        """Label signed change isolines while allowing QGIS to suppress collisions."""
+        if layer.fields().indexFromName("label_txt") < 0:
+            return
+        try:
+            settings = QgsPalLayerSettings()
+            settings.fieldName = "label_txt"
+            settings.placement = QgsPalLayerSettings.Line
+            try:
+                line_settings = settings.lineSettings()
+                if hasattr(line_settings, "setMergeLines"):
+                    line_settings.setMergeLines(True)
+                if hasattr(settings, "labelPerPart"):
+                    settings.labelPerPart = False
+            except Exception:
+                pass
+            settings.priority = 7
+            settings.obstacle = False
+
+            text_format = QgsTextFormat()
+            text_format.setFont(QFont("Helvetica", 8))
+            text_format.setSize(8)
+            text_format.setColor(QColor(47, 52, 55))
+            buffer = QgsTextBufferSettings()
+            buffer.setEnabled(True)
+            buffer.setSize(0.8)
+            buffer.setColor(QColor(255, 255, 255))
+            text_format.setBuffer(buffer)
+            settings.setFormat(text_format)
+
+            root = QgsRuleBasedLabeling.Rule(None)
+            rule = QgsRuleBasedLabeling.Rule(settings)
+            rule.setFilterExpression(
+                '"contour_class" = \'primary\' AND '
+                '"label_txt" IS NOT NULL AND "label_txt" <> \'\''
+            )
+            root.appendChild(rule)
+            layer.setLabeling(QgsRuleBasedLabeling(root))
+            layer.setLabelsEnabled(True)
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Warning: failed to apply OLS modernisation change-contour labels: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
     def _apply_modernisation_comparison_labels(self, layer: QgsVectorLayer, style_key: str) -> None:
-        """Label larger comparison polygons with representative height change."""
+        """Label larger comparison polygons with their sampled height-change range."""
         if layer.fields().indexFromName("label_txt") < 0:
             return
         try:

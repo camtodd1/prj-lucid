@@ -67,6 +67,7 @@ DEFAULT_STYLE_MAP = {
     "OLS Modernisation Baseline Wireframe": "default_ols_polygon.qml",
     "OLS Modernisation Future Wireframe": "default_ols_polygon.qml",
     "OLS Modernisation Transition": "default_ols_line.qml",
+    "OLS Modernisation Change Contour": "default_ols_line.qml",
     "CNS Circle Zone": "default_cns_zone_polygon.qml",
     "CNS Donut Zone": "default_cns_zone_polygon.qml",
     "Default CNS": "default_cns_zone_polygon.qml",

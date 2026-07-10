@@ -16,6 +16,9 @@ Outputs are grouped as follows:
   - **Height Gain** (green): future OFS is higher than the baseline OLS.
   - **Height Loss** (red): future OFS is lower than the baseline OLS.
   - **No Height Change** (neutral): future OFS and baseline OLS are effectively equal.
+  - **Change Contours**: signed `future - baseline` isolines at 0.5 m intervals,
+    with primary contours every 1.0 m. Positive values indicate gain and negative
+    values indicate loss.
   - **Planar Transition / Equal Height** (dashed): approximate breakline where
     the two controlling elevations are equal.
   - **No Future OLS Overlay** (grey): baseline controlling OLS area with no
@@ -28,7 +31,8 @@ Outputs are grouped as follows:
     lower than the baseline OLS.
   - **Trigger Height Unchanged** (neutral): the future aeronautical-study trigger
     is effectively equal to the baseline OLS.
-  - **Planar Transition / Equal Height** and **No Future OLS Overlay**.
+  - **Change Contours**, **Planar Transition / Equal Height**, and
+    **No Future OLS Overlay**.
 
 OES layers are assessment-trigger comparisons, not development approval limits.
 Every comparison output feature has a readable, layer-qualified `comparison_id`
@@ -40,6 +44,15 @@ an average or representative value. Gain/loss polygons are labelled with their
 minimum-to-maximum change range on larger map features. Areas outside the common
 domains are not classified as gains or losses; baseline-only areas are shown
 separately as **No Future OLS Overlay**.
+
+Change contours are generated from the same baseline/future elevation functions
+and finalized controller-pair polygons used by the comparison. Affine candidate
+pairs use exact isolines; curved pairs use a clipped triangulated approximation.
+The zero contour is omitted because it is already represented by the separate
+equal-height transition layer, and only primary contours are labelled to limit
+map clutter. Each contour has a unique `comparison_id`, its
+source polygon `parent_id`, signed `delta_m`, contour class and both controlling
+surface identifiers.
 
 The comparison requires:
 

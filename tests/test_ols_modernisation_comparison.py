@@ -6,6 +6,7 @@ from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle
 from guidelines.controlling_ols_engine import (
     ControllingOlsCandidate,
     PlanarControllingOlsEngine,
+    conical_elevation_evaluator,
     constant_elevation_evaluator,
     plane_elevation_evaluator,
 )
@@ -445,6 +446,59 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(delta_max, 0.0)
         self.assertEqual(delta_sample, 0.0)
 
+    def test_change_contours_are_signed_clipped_isolines_and_omit_zero(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.02, 0.0, 100.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        contours = engine.change_contour_parts(
+            [(baseline, future, self.domain)],
+            "gain",
+        )
+
+        self.assertEqual([item[3] for item in contours], [0.5, 1.0, 1.5, 2.0])
+        self.assertEqual([item[4] for item in contours], ["intermediate", "primary", "intermediate", "primary"])
+        for _baseline, _future, geometry, delta_m, _contour_class, parent_sequence in contours:
+            self.assertEqual(parent_sequence, 1)
+            self.assertGreater(geometry.length(), 99.9)
+            for vertex in geometry.vertices():
+                self.assertAlmostEqual(vertex.x(), delta_m / 0.02, places=5)
+
+    def test_curved_change_contour_uses_surface_evaluators(self):
+        base = QgsGeometry.fromRect(QgsRectangle(40.0, 40.0, 60.0, 60.0))
+        baseline = ControllingOlsCandidate(
+            surface_id="baseline-conical",
+            surface_type="Conical",
+            footprint=QgsGeometry(self.domain),
+            elevation_at_xy=conical_elevation_evaluator(base, 100.0, 0.05),
+            model="conical",
+            metadata={
+                "base_footprint": base,
+                "base_elevation_m": 100.0,
+                "slope": 0.05,
+            },
+        )
+        future = self.constant("future", 102.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        contour = engine._change_contour_geometry(self.domain, baseline, future, 0.5)
+
+        self.assertIsNotNone(contour)
+        self.assertFalse(contour.isEmpty())
+        self.assertGreater(contour.length(), 100.0)
+        sampled_deltas = [
+            future.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+            - baseline.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+            for vertex in contour.vertices()
+        ]
+        self.assertLessEqual(max(abs(value - 0.5) for value in sampled_deltas), 0.05)
+
     def test_comparison_labels_report_the_delta_range_not_the_interior_sample(self):
         capture = _ComparisonLayerCapture()
 
@@ -546,6 +600,16 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             "TEST", "baseline-rules", "OFS", "baseline", "Baseline OLS Wireframe",
             [(baseline, self.domain)], object(),
         )
+        contour_geometry = QgsGeometry.fromPolylineXY(
+            [QgsPointXY(0.0, 50.0), QgsPointXY(100.0, 50.0)]
+        )
+        capture._create_modernisation_change_contour_layer(
+            "TEST",
+            "baseline-rules",
+            "OFS",
+            [("gain", baseline, future, contour_geometry, 10.0, "primary", 1)],
+            object(),
+        )
         capture._create_modernisation_transition_layer(
             "TEST", "baseline-rules", "OFS", change_parts, comparison, object(),
         )
@@ -565,8 +629,18 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertNotIn("delta_rep_m", change_fields.names())
         self.assertEqual(change_feature["delta_sample_m"], 10.0)
         self.assertEqual(change_feature["label_txt"], "+10.0 m gain")
-        self.assertEqual(len(comparison_ids), 4)
-        self.assertEqual(len(set(comparison_ids)), 4)
+        contour_layer_args = next(
+            layer_args for layer_args in capture.layers
+            if "delta_m" in layer_args[3].names()
+        )
+        contour_fields = contour_layer_args[3]
+        contour_feature = contour_layer_args[4][0]
+        self.assertIn("delta_m", contour_fields.names())
+        self.assertEqual(contour_feature["comparison_id"], "OFS-CHANGE-CONTOUR-000001")
+        self.assertEqual(contour_feature["parent_id"], "OFS-GAIN-000001")
+        self.assertEqual(contour_feature["label_txt"], "+10.0 m")
+        self.assertEqual(len(comparison_ids), 5)
+        self.assertEqual(len(set(comparison_ids)), 5)
         self.assertIn("OFS-GAIN-000001", comparison_ids)
 
 
