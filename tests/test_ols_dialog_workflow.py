@@ -88,6 +88,28 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertNotIn("experimental", self.dialog.label_olsModeDescription.text().lower())
 
+    def test_partial_controlling_capability_is_not_a_readiness_warning(self):
+        with patch(
+            "safeguarding_builder.safeguarding_builder_dialog.get_ruleset_profile"
+        ) as get_profile:
+            get_profile.return_value.capability_status.side_effect = lambda key: {
+                "ols.airport_wide": "supported",
+                "ols.controlling_lower_envelope": "partial",
+            }.get(key)
+            status = self.dialog._ols_dependency_status(
+                airport_status={
+                    "identity_ready": True,
+                    "arp_pair_ready": True,
+                    "arp_elev_ready": True,
+                },
+                runway_status={"ready": True, "red_elevation_ready": True},
+                active_ruleset_id="mos139_2019",
+                protected_airspace_policy="ruleset_aligned",
+            )
+
+        self.assertEqual(status["state"], "ready")
+        self.assertNotIn("partial", status["summary"].lower())
+
     def test_legacy_comparison_payload_cannot_disable_required_controlling_output(self):
         self.select_mode("modernisation_comparison")
 

@@ -185,44 +185,89 @@
   Completed:
   - Output selection is grouped under a stable Generated Outputs heading.
   - Mode, runway count, and workload are presented in one concise summary.
-  - OFS/OES guidance is retained in a compact note, while ready-state and
-    repeated warning text are suppressed from the inline validation area.
+  - OFS/OES guidance is retained in the detailed two-row explanation box,
+    while ready-state and repeated warning text are suppressed from the inline
+    validation area.
 
-- [ ] Add release-oriented OLS performance regression thresholds.
+- [ ] Complete the Controlling OLS production-readiness workstream.
 
-  Notes:
-  - Use the four committed fixtures as the benchmark matrix.
-  - A QGIS 4.0.2 reference checkpoint is stored in
-    `tests/fixtures/ols/performance_baseline_qgis4_2026-07-11.json`.
-  - Geometry validity, coverage, and class exclusivity remain hard gates.
-  - Runtime thresholds should detect material regression while allowing normal
-    machine and GEOS variability.
+  Objective:
+  - Promote each ruleset's controlling-envelope capability from `partial` to
+    `supported` only after its topology, source-validation, performance, and
+    release gates below pass. Promotion is per ruleset; MOS139 readiness does
+    not automatically promote the modernised Annex 14 OFS/OES model.
 
-- [ ] Root-cause remaining controlling-region geometry cleanup safeguards.
+  Topology hardening:
+  - [ ] Prevent invalid, self-returning, and out-and-back rings during primary
+        region construction instead of relying on post-processing repair.
+  - [ ] Root-cause every normal-fixture coverage gap and make the primary
+        lower-envelope solve complete without local gap filling.
+  - [ ] Reduce `buffer(0)`, ring-despiking, geometry-collection extraction, and
+        other broad repair fallbacks to exceptional, instrumented safeguards.
+  - [ ] Decide and document whether same-controller dissolves are canonical
+        output normalisation or a temporary fragmentation workaround.
+  - [ ] Replace coordinate-rounded transition de-duplication with
+        adjacency-derived topology before transition boundaries are considered
+        user-facing outputs.
+  - [ ] Rationalise equality, minimum-area, boundary snap, and contour-clipping
+        tolerances, with units, justification, and regression tests for each.
+  - [ ] Preserve explicit OFS/OES and Inner Approach/Approach tie priorities and
+        define a deterministic fallback for otherwise equivalent candidates.
 
-  Notes:
-  - Reduce reliance on ring despiking and `buffer(0)` fallback by preventing invalid or out-and-back rings during subtraction.
-  - Identify why any coverage gaps are produced by the primary lower-envelope solve.
-  - Make the primary solve complete enough that local gap repair is not required for normal cases.
-  - Decide whether same-candidate dissolves are permanent output normalisation or a workaround for region fragmentation.
+  Comparison-constructor hardening:
+  - [ ] Keep lower-region comparison constructors domain-limited so
+        `_clip_lower_region_to_overlap(...)` remains a safety check.
+  - [ ] Reduce unresolved axis/conical and curved-surface comparisons to cases
+        that are explicitly identified, logged, and covered by tests.
+  - [ ] Retain tests distinguishing unresolved `None` from a resolved empty
+        `QgsGeometry()` result.
+  - [ ] Prove gain, loss, no-change, transition, and baseline-only outputs are
+        valid, mutually exclusive, and complete over their declared domains.
 
-- [ ] Harden controlling OLS comparison constructors.
+  Broader source-backed validation:
+  - [ ] Add authoritative, traceable source references for every OLS/OFS/OES
+        dimension, slope, applicability rule, elevation datum, and tie priority
+        used by a production candidate family.
+  - [ ] Add representative source-backed airport/runway fixtures covering
+        single, parallel, converging, intersecting, displaced-threshold,
+        clearway/stopway, precision, non-precision, and non-instrument cases.
+  - [ ] Add targeted cases for conical/axis intersections, transitional panels,
+        OFZ/inner surfaces, equal-height boundaries, nested surfaces, and
+        near-coincident runway geometry.
+  - [ ] Compare elevations and controlling-surface identity at independently
+        calculated checkpoints, cross-sections, and boundary intersections;
+        do not validate solely by comparing generated polygons with themselves.
+  - [ ] Record provenance, source edition/date, input assumptions, expected
+        values, numerical tolerance, and reviewer sign-off with every promoted
+        fixture.
+  - [ ] Keep the future Annex 14 applicability date and OES assessment-trigger
+        meaning explicit in validation evidence and user documentation.
 
-  Notes:
-  - Keep lower-region comparison constructors domain-limited so `_clip_lower_region_to_overlap(...)` remains a safety check.
-  - Extend source-backed axis/conical validation beyond the current fixture
-    matrix and reduce any remaining unresolved comparisons.
-  - Add tests around the `None` versus empty-`QgsGeometry()` comparison contract.
+  Performance and determinism:
+  - [ ] Turn the four committed QGIS 4 fixtures into release-oriented timing
+        thresholds using three-run medians on the same environment.
+  - [ ] Use
+        `tests/fixtures/ols/performance_baseline_qgis4_2026-07-11.json` as the
+        initial checkpoint and investigate median regressions above 20 percent.
+  - [ ] Confirm repeated runs produce stable feature IDs, controller identity,
+        feature counts, and equivalent geometry independent of registration
+        order wherever order is not an explicit tie-break rule.
+  - [ ] Treat geometry validity, domain coverage, class exclusivity, elevation
+        accuracy, contour containment, and duplicate IDs as hard failures;
+        performance thresholds must never relax those gates.
 
-- [ ] Rationalise controlling OLS geometry tolerances and topology keys.
-
-  Notes:
-  - Reduce geometry collections created by upstream overlay operations where practical.
-  - Decide whether minimum-area thresholds should be fixed numerical tolerances or configurable QA parameters.
-  - Replace coordinate-key transition de-duplication with adjacency-derived
-    topology if transition diagnostics become promoted outputs.
-  - Preserve the explicit OFS/OES and Inner Approach/Approach tie priorities;
-    define the fallback policy for otherwise equivalent candidates.
+  Production promotion gate:
+  - [ ] Run the complete unit, integration, source-backed fixture, memory-output,
+        and file-output matrix on the supported QGIS release(s).
+  - [ ] Require zero unexplained invalid geometries, coverage gaps, overlaps,
+        unresolved comparisons, or repair fallbacks in the production fixture
+        matrix.
+  - [ ] Document any deliberately retained numerical safeguard, including when
+        it activates and why it cannot alter controlling elevation or coverage.
+  - [ ] Complete independent technical review of regulatory traceability and
+        geometry evidence before changing capability metadata to `supported`.
+  - [ ] Publish a release note defining supported rulesets, surface families,
+        known exclusions, numerical tolerances, and validation evidence.
 
 ## Runway Markings
 

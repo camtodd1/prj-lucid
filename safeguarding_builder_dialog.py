@@ -1385,8 +1385,6 @@ class SafeguardingBuilderDialog(
         if hasattr(self, "checkBox_generateControllingOls") and self.checkBox_generateControllingOls.isChecked():
             if controlling_capability == "unsupported":
                 review.append("controlling OLS is unsupported for this ruleset")
-            elif controlling_capability == "partial":
-                review.append("controlling OLS has defined partial surface coverage")
             elif controlling_capability == "experimental":
                 review.append("controlling OLS is experimental")
 
