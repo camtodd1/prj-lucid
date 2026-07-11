@@ -1,5 +1,16 @@
 # Controlling OLS Global Cell Solver Plan
 
+## Status — 11 July 2026
+
+Implemented and adopted as the primary region-construction path. The pairwise
+subtract solver remains available as a guarded fallback when global linework
+cannot form a usable partition.
+
+The current QGIS 4 regression baseline covers single, intersecting, parallel,
+and three-runway stress configurations. Remaining work in this plan is
+consolidation: add the historical YMEN split-plane case, reduce downstream
+geometry-repair safeguards, and decide the promoted transition-layer contract.
+
 ## Objective
 
 Generate controlling OLS regions by constructing one airport-wide partition of
@@ -53,6 +64,5 @@ artefacts or require buffer-based welding that moves regulatory boundaries.
 - Same-controller internal seams are not present in the controlling region
   geometry.
 - OHS does not backfill no-OLS runway strip-core exclusions.
-- The existing pairwise solver remains available as a fallback until the global
-  solver is validated across representative aerodromes.
-
+- The existing pairwise solver remains available as a guarded fallback after
+  adoption of the global solver.

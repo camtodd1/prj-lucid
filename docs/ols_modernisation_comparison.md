@@ -45,6 +45,12 @@ minimum-to-maximum change range on larger map features. Areas outside the common
 domains are not classified as gains or losses; baseline-only areas are shown
 separately as **No Future OLS Overlay**.
 
+The 0.01 m numerical comparison tolerance applies when a complete
+controller-pair region is effectively equivalent. It does not create a buffer
+or polygon band around an equal-height transition. Where future and baseline
+surfaces cross, gain and loss meet directly at the zero-height line; the line
+itself is represented by the transition output and has no polygonal area.
+
 Change contours are generated from the same baseline/future elevation functions
 and finalized controller-pair polygons used by the comparison. Affine candidate
 pairs use exact isolines; curved pairs use a clipped triangulated approximation.
@@ -60,3 +66,24 @@ The comparison requires:
 - an existing ruleset selected as the baseline;
 - an Aeroplane Design Group for every runway used by future Annex 14 generation;
 - complete runway operational and elevation inputs needed by both rulesets.
+
+## Stability checkpoint — 11 July 2026
+
+The calculation and output workflow is considered mostly stable for continued
+product work. The current regression matrix contains:
+
+- YBBN single-runway;
+- YSSY dual intersecting;
+- YSWS dual parallel; and
+- YSSY three-runway stress inputs.
+
+The QGIS 4.0.2 end-to-end runner validates geometry, candidate and controlling
+coverage, comparison-domain coverage, mutually exclusive change classes,
+comparison IDs, and staged runtime. The 11 July run passed all four cases with
+no invalid or empty geometry and no duplicate comparison IDs. The accompanying
+unit suite passed 110 tests.
+
+Remaining work is primarily productisation rather than a calculation rewrite:
+OLS-tab clarity, phase-based progress/cancellation, release performance gates,
+regulatory-scope documentation, and the promoted-versus-diagnostic layer
+contract.

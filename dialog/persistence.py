@@ -469,6 +469,8 @@ class PersistenceMixin:
             self.checkBox_generateControllingOls.setChecked(bool(output_options.get("generate_controlling_ols", True)))
         if hasattr(self, "set_contour_interval_options"):
             self.set_contour_interval_options(output_options.get("contour_intervals", {}))
+        if hasattr(self, "_update_ols_workflow_ui"):
+            self._update_ols_workflow_ui()
         self._on_output_option_changed()
 
     def _reset_output_options(self) -> None:

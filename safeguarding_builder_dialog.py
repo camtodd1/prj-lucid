@@ -776,8 +776,8 @@ class SafeguardingBuilderDialog(
             {
                 "tab": "tab_ols",
                 "title": "Protected airspace",
-                "summary": "Contour intervals and controlling OLS output",
-                "feeds": ["Runway OLS", "Airport-wide OLS", "Controlling surfaces"],
+                "summary": "Workflow mode, readiness, contours, and controlling output",
+                "feeds": ["Baseline OLS", "Future OFS/OES", "Modernisation comparison"],
                 "functions": [
                     "get_contour_interval_options()",
                     "_process_airport_wide_ols_if_possible()",
@@ -1288,6 +1288,17 @@ class SafeguardingBuilderDialog(
         if not airport_status.get("identity_ready"):
             return {"state": "blocked", "summary": "OLS needs a resolved ICAO airport identity."}
         if not runway_status.get("ready"):
+            if protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}:
+                adg_issues = [
+                    str(issue)
+                    for issue in runway_status.get("issues", [])
+                    if "ADG" in str(issue).upper()
+                ]
+                if adg_issues:
+                    return {
+                        "state": "blocked",
+                        "summary": "Future Annex 14 OFS/OES needs an Aeroplane Design Group for every runway.",
+                    }
             return {"state": "blocked", "summary": "OLS needs complete runway geometry and classification inputs."}
 
         try:
@@ -1382,11 +1393,13 @@ class SafeguardingBuilderDialog(
         ruleset_layout.addWidget(framework_label, 1, 0)
         ruleset_layout.addWidget(self.framework_combo, 1, 1)
         protected_airspace_label = QtWidgets.QLabel("OLS / Airspace:")
+        protected_airspace_label.setObjectName("label_protected_airspace_policy")
         protected_airspace_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         ruleset_layout.addWidget(protected_airspace_label, 2, 0)
         ruleset_layout.addWidget(self.protected_airspace_policy_combo, 2, 1)
 
         self.groupBox_ruleset = ruleset_group
+        self.label_protected_airspace_policy = protected_airspace_label
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.protected_airspace_policy_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.framework_combo.currentIndexChanged.connect(self.update_dialog_status)
@@ -1524,6 +1537,7 @@ class SafeguardingBuilderDialog(
         panel_names = [
             "groupBox_ruleset",
             "groupBox_CNS",
+            "groupBox_olsWorkflow",
             "groupBox_controllingOls",
             "groupBox_contourIntervals",
             "groupBox_outputOptions",
@@ -2413,6 +2427,11 @@ class SafeguardingBuilderDialog(
             active_ruleset_id,
             protected_airspace_policy,
         )
+        if hasattr(self, "_update_ols_workflow_ui"):
+            self._update_ols_workflow_ui(
+                dependency_status=ols_dependencies,
+                runway_count=runway_count,
+            )
 
         identity_generation_ready = bool(airport_dependencies["identity_ready"])
         runway_ready = bool(runway_dependencies["ready"])

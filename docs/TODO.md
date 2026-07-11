@@ -121,14 +121,69 @@
 
 ## Controlling OLS
 
-- [ ] Validate and promote the global cell-solver region construction.
+- [x] Validate and adopt the global cell-solver region construction for the
+      current regression baseline.
 
   Notes:
   - See `docs/controlling_ols_global_cell_solver_plan.md`.
-  - Use YMEN as the first regression case for same-surface split-plane
-    artefacts across OHS, Conical, TOCS, Approach, and Transitional outputs.
-  - Compare candidate footprints, solved regions, transition diagnostics, and
-    clipped contours before replacing the legacy pairwise subtract fallback.
+  - The global solver is active, with the pairwise subtract solver retained as
+    a fallback when global linework cannot produce a usable partition.
+  - QGIS 4 end-to-end fixtures cover YBBN single, YSSY intersecting, YSWS
+    parallel, and a three-runway YSSY stress configuration.
+  - The regression runner compares candidate/controlling coverage, region and
+    class overlap, common-domain coverage, validity, IDs, and performance stages.
+  - YMEN remains a useful additional targeted case for historical same-surface
+    split-plane artefacts; it is no longer the only gate for the adopted solver.
+
+- [x] Stabilise the OLS modernisation comparison geometry contract.
+
+  Notes:
+  - Baseline and future solved engines are reused rather than solved again for
+    each comparison family.
+  - Affine comparisons split exactly at the zero-height line. The 0.01 m
+    tolerance identifies a wholly equivalent region but does not create a
+    polygonal no-change strip between gain and loss.
+  - Gain, loss, and no-change outputs are partitioned to be mutually exclusive,
+    with final common-domain residual repair and stable comparison IDs.
+  - Signed contours retain parent IDs; affine contours are exact and curved
+    contours use the existing clipped triangulated approximation.
+  - The 2026-07-11 suite passed 110 unit tests and all four end-to-end fixtures.
+
+- [x] Complete the first OLS performance hardening pass.
+
+  Notes:
+  - Reuse solved lower envelopes and cached transition records.
+  - Use lazy candidate spatial indexing as an exact-query prefilter.
+  - Reuse shared/owned boundary probes without changing controller evaluation.
+  - Use prepared-geometry containment before exact contour intersection and
+    cache compatible affine lines and curved elevation samples.
+  - The three-runway stress workflow reduced from approximately 56.6 seconds at
+    the start of profiling to approximately 27–29 seconds on the current local
+    QGIS 4.0.2 environment.
+
+- [x] Improve the OLS tab workflow selection and validation.
+
+  Completed:
+  - Baseline, future Annex 14, and modernisation-comparison modes are explicit
+    on the OLS tab while retaining the existing persisted policy identifiers.
+  - OFS versus OES meaning is explained in future/comparison modes.
+  - Mode-specific contour rows replace the previous always-expanded table.
+  - OLS readiness and ADG requirements are shown inline beside the workflow.
+  - Workload guidance reflects the selected mode and runway count.
+
+- [ ] Add long-running OLS workflow feedback and cancellation.
+
+  Work items:
+  - Report phase-based progress and allow safe cancellation between major
+    construction phases.
+
+- [ ] Add release-oriented OLS performance regression thresholds.
+
+  Notes:
+  - Use the four committed fixtures as the benchmark matrix.
+  - Geometry validity, coverage, and class exclusivity remain hard gates.
+  - Runtime thresholds should detect material regression while allowing normal
+    machine and GEOS variability.
 
 - [ ] Root-cause remaining controlling-region geometry cleanup safeguards.
 
@@ -142,7 +197,8 @@
 
   Notes:
   - Keep lower-region comparison constructors domain-limited so `_clip_lower_region_to_overlap(...)` remains a safety check.
-  - Complete axis/conical comparison handling enough that unresolved axis-vs-conical overlaps no longer require candidate removal and coverage repair.
+  - Extend source-backed axis/conical validation beyond the current fixture
+    matrix and reduce any remaining unresolved comparisons.
   - Add tests around the `None` versus empty-`QgsGeometry()` comparison contract.
 
 - [ ] Rationalise controlling OLS geometry tolerances and topology keys.
@@ -150,8 +206,10 @@
   Notes:
   - Reduce geometry collections created by upstream overlay operations where practical.
   - Decide whether minimum-area thresholds should be fixed numerical tolerances or configurable QA parameters.
-  - Replace WKT-based transition de-duplication with a topology/keying strategy if transition diagnostics become promoted outputs.
-  - Define an explicit equal-elevation tie-break policy instead of relying on candidate registration order.
+  - Replace coordinate-key transition de-duplication with adjacency-derived
+    topology if transition diagnostics become promoted outputs.
+  - Preserve the explicit OFS/OES and Inner Approach/Approach tie priorities;
+    define the fallback policy for otherwise equivalent candidates.
 
 ## Runway Markings
 

@@ -5,7 +5,7 @@ ruleset metadata, implementation notes, tests, and TODO ledger. It is intended
 as a practical working list for deciding what to validate, consolidate, and
 build next.
 
-Last reviewed: 2026-07-07.
+Last reviewed: 2026-07-11.
 
 ## High Confidence Delivery
 
@@ -63,7 +63,7 @@ Last reviewed: 2026-07-07.
 
 ## Needs Testing And Consolidation
 
-- [ ] Validate the modernised Annex 14 OFS/OES workflow in QGIS 4.
+- [x] Validate the modernised Annex 14 OFS/OES workflow in QGIS 4.
 
   Current implementation:
   - OFS and OES are generated as separate, styled layer families with runway
@@ -74,18 +74,25 @@ Last reviewed: 2026-07-07.
   - The integration audit checks layer structure, styles, labels, geometry
     validity, candidate coverage, region overlap, contour containment, and
     small interior rings.
-  - Recent corrections cover contour clipping and dual-runway competition.
+  - Committed regression fixtures cover YBBN single-runway, YSSY intersecting
+    dual-runway, YSWS parallel dual-runway, and a three-runway YSSY stress case.
+  - `tests/run_ols_workflow_regression.py` exercises the complete dialog-to-layer
+    workflow under QGIS 4 and checks candidate coverage, controlling-region
+    overlap, comparison-domain coverage, class overlap, geometry validity,
+    duplicate IDs, and performance stages.
+  - The 2026-07-11 QGIS 4.0.2 run passed all four cases with no invalid or empty
+    geometry and no duplicate comparison IDs.
+  - Modernisation comparison gain/loss regions now meet directly at the
+    zero-height line. The comparison tolerance is retained only for controller
+    pairs that are wholly equivalent, preventing narrow no-change border strips.
 
-  Validation work:
-  - Recover or create committed single-runway and dual-runway input fixtures
-    for `tests/run_annex14_integration.py`.
-  - Run the audit under QGIS 4 and retain its JSON audit and preview image as
-    review evidence.
-  - Add intersecting, parallel, and converging runway regression scenarios.
-  - Confirm that candidate and transition layers remain diagnostic-only.
-  - Reconcile `ols.controlling_lower_envelope` capability metadata, which still
-    reports `unsupported`, after runtime validation establishes the appropriate
-    promoted status.
+  Remaining promotion work:
+  - Confirm whether candidate and transition layers remain diagnostic-only in
+    the promoted output contract.
+  - Reconcile `ols.controlling_lower_envelope` capability metadata after that
+    output-contract decision.
+  - Retain JSON benchmark evidence for release candidates rather than committing
+    every local profiling run.
 
 - [x] Run a QGIS smoke-test pass for MOS139 default generation.
 
@@ -120,24 +127,27 @@ Last reviewed: 2026-07-07.
   - Remaining consolidation work is source-backed sample-airport validation
     for representative runway configurations.
 
-- [ ] Promote or contain Controlling OLS POC outputs.
+- [ ] Promote or contain Controlling OLS outputs.
 
   Notes:
-  - The lower-envelope engine has proof-of-concept coverage for planar,
-    transitional, conical, transition-edge, and clipped-contour diagnostics.
-  - It remains marked experimental and should stay in the debug/development
-    output group until QGIS geometry validation is complete.
+  - The lower-envelope engine now has repeatable QGIS 4 regression coverage for
+    planar, transitional, conical, transition-edge, clipped-contour, OFS/OES,
+    and modernisation-comparison outputs.
+  - Runtime behaviour is mostly stable, but promotion still requires a deliberate
+    layer contract: which candidate, transition, and QA products are user-facing
+    and which remain diagnostic.
   - Treat the established MOS/NASF controlling OLS POC separately from the new
     modernised Annex 14 OFS/OES lower-envelope workflow.
 
-- [ ] Add tests around Controlling OLS geometry contracts where possible outside
-      QGIS.
+- [x] Add automated tests around Controlling OLS geometry contracts.
 
   Focus:
-  - `None` means unresolved/unknown.
-  - Empty `QgsGeometry()` means resolved and losing the overlap.
-  - Equal-elevation ties are currently deterministic by candidate registration
-    order, not by an explicit policy.
+  - Unit coverage distinguishes unresolved `None` from resolved empty geometry.
+  - Comparison tests cover affine equality splitting, curved fallback contours,
+    common-domain repair, class exclusivity, solved-engine reuse, spatial
+    prefiltering, transition-boundary caching, and contour cache reuse.
+  - Explicit family and nested-surface priorities exist for relevant ties;
+    registration order remains the fallback for otherwise equivalent candidates.
 
 - [ ] Review runway marking assumptions in QGIS.
 
@@ -175,16 +185,20 @@ Last reviewed: 2026-07-07.
 
 ## In Development
 
-- [ ] Consolidate modernised Annex 14 OFS/OES controlling output.
+- [x] Consolidate modernised Annex 14 OFS/OES controlling output.
 
   Work items:
-  - Complete the QGIS 4 integration pass for single- and multi-runway cases.
-  - Confirm complete candidate coverage with no material overlap or contour
-    leakage for each OFS/OES family.
-  - Document which complex transitional and inner-transitional components are
-    complete, approximated, or still pending.
-  - Align ruleset capability metadata and `rulesets/annex14/README.md` with the
-    verified implementation state.
+  - [x] Complete the QGIS 4 integration pass for single- and multi-runway cases.
+  - [x] Confirm candidate coverage with no material controlling or comparison
+    class overlap for each OFS/OES family.
+  - [x] Reuse solved baseline/future envelopes in the comparison workflow.
+  - [x] Add exact affine gain/loss splitting and retain no-change only for wholly
+    equivalent regions.
+  - [x] Add stable, layer-qualified comparison IDs and parent-linked contours.
+  - [ ] Document which complex transitional and inner-transitional components
+    are complete, approximated, or still pending.
+  - [ ] Align capability metadata and `rulesets/annex14/README.md` with the
+    verified implementation and promotion boundary.
   - Keep the ruleset gated as a draft future standard and retain the
     21 November 2030 applicability warning.
 
@@ -192,10 +206,15 @@ Last reviewed: 2026-07-07.
 
   Work items:
   - Reduce reliance on ring despiking, `buffer(0)`, and local coverage repair.
-  - Complete axis/conical comparison handling.
-  - Replace WKT-based transition de-duplication with a topology-aware key if
-    transition diagnostics are promoted.
-  - Define an explicit equal-elevation tie-break policy.
+  - Expand source-backed validation of axis/conical equality handling beyond the
+    current four-airport regression set.
+  - Replace coordinate-key transition de-duplication with adjacency-derived
+    topology if transition diagnostics are promoted.
+  - Define the general fallback policy for equal candidates not covered by the
+    explicit family and nested-surface priorities.
+  - Preserve current performance checkpoints: solved-envelope reuse, lazy
+    candidate spatial indexing, cached boundary probes, prepared contour
+    clipping, and pair/level contour caches.
 
 - [x] Finish MOS139 stopway geometry.
 
@@ -300,10 +319,13 @@ Last reviewed: 2026-07-07.
   - Planar components participate in independent OFS and OES controlling
     lower-envelope solves, including controlling regions, transition
     diagnostics, and clipped contours.
-  - Layer grouping and dual-runway controlling behaviour received targeted
-    corrections in the latest development branch.
-  - The headless QGIS integration audit exists but still needs reproducible
-    input fixtures and a recorded QGIS 4 validation run before promotion.
+  - The modernisation comparison produces mutually exclusive gain, loss, and
+    genuinely unchanged polygons over the common baseline/future domain, plus
+    parent-linked signed change contours and equal-height transitions.
+  - Four committed end-to-end fixtures now cover single, intersecting, parallel,
+    and stress configurations under QGIS 4.
+  - The workflow is mostly stable computationally; it remains a draft future
+    standard and is not promoted as enforceable before 2030-11-21.
   - Full complex transitional and inner-transitional geometry, plus
     TODA/clearway-aware departure starts, remain incomplete.
   - Physical, taxiway, markings, lighting, declared-distance, and current OLS
@@ -332,12 +354,10 @@ Last reviewed: 2026-07-07.
       issues before adding new capability.
 - [x] 2. Consolidate declared distances around warning/override behaviour,
       because the first and second passes are implemented and user-facing.
-- [ ] 3. Re-establish a reproducible Annex 14 baseline when advanced-module
-      work resumes: add representative fixtures and run the headless QGIS 4
-      integration audit.
-- [ ] 4. Close the modernised Annex 14 branch by addressing audit findings,
-      reconciling capability metadata and documentation, and preserving the
-      results as regression evidence.
+- [x] 3. Establish a reproducible Annex 14 baseline with representative fixtures
+      and a headless QGIS 4 end-to-end regression runner.
+- [ ] 4. Close the modernised Annex 14 branch by reconciling capability metadata,
+      regulatory-scope documentation, and the promoted/diagnostic layer contract.
 - [ ] 5. Decide whether the established MOS/NASF Controlling OLS remains
       diagnostic-only or moves toward promoted output; then harden accordingly.
 - [ ] 6. Close the highest-value AGL and marking gaps that depend on missing UI
@@ -346,6 +366,17 @@ Last reviewed: 2026-07-07.
       service and wire it into design-aircraft nomination.
 - [ ] 8. Continue EASA and Annex 14 expansion only with clear capability gating
       so draft/scaffolded outputs cannot be mistaken for complete coverage.
+
+Immediate OLS working order after the 2026-07-11 stability checkpoint:
+
+- [x] Improve the OLS dialog mode selection, OFS/OES explanation, validation
+      placement, and workload explanation.
+- [ ] Add phase-based progress and safe cancellation between candidate creation,
+      envelope solving, transition generation, comparison, and contours.
+- [ ] Add release-oriented performance regression thresholds using the four
+      committed fixtures; retain geometry and coverage gates as hard failures.
+- [ ] Decide the user-facing versus diagnostic layer contract before changing
+      capability metadata from experimental/draft.
 
 ## Verification Snapshot
 
@@ -360,8 +391,15 @@ Last reviewed: 2026-07-07.
 - [x] 2026-07-07: `python3 -m unittest tests.test_declared_distances
       tests.test_rulesets tests.test_frameworks` passed 72 tests with 1
       expected QGIS-runtime skip.
-- [ ] 2026-07-07: the broader unittest command including
-      `tests.test_ols_modernisation_comparison` could not complete outside the
-      QGIS runtime because `qgis` Python bindings were unavailable.
-- [ ] Run `tests/run_annex14_integration.py` under QGIS 4 with committed
-      single-runway and dual-runway fixtures; record audit JSON and previews.
+- [x] 2026-07-07: recorded that the broader unittest command including
+      `tests.test_ols_modernisation_comparison` requires the QGIS Python runtime;
+      the limitation is superseded by the successful QGIS 4 runs below.
+- [x] 2026-07-11: QGIS 4.0.2 unittest discovery passed 110 tests.
+- [x] 2026-07-11: `tests/run_ols_workflow_regression.py` passed YBBN single,
+      YSSY intersecting, YSWS parallel, and YSSY three-runway stress fixtures.
+      The run reported zero invalid/empty geometries, zero duplicate comparison
+      IDs, and no material unclassified or overlapping comparison area.
+- [x] 2026-07-11: YBBN no-change regression confirmed OFS has no unchanged
+      polygons and OES retains only four broad, exactly equal regions. Across
+      the four fixtures the narrowest legitimate unchanged region had a
+      74.5 m area/perimeter width proxy.
