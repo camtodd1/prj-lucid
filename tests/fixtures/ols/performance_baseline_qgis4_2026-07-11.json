@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-11",
+  "source_revision_base": "4d7886c",
+  "working_tree_note": "Recorded after phase-based progress and safe-boundary cancellation were implemented.",
+  "environment": {
+    "qgis_version": "4.0.2-Norrkoping",
+    "qgis_runtime": "/Applications/QGIS-4.0.app/Contents/MacOS/python",
+    "qt_platform": "offscreen",
+    "project_crs": "EPSG:28356",
+    "output_mode": "memory"
+  },
+  "interpretation": {
+    "purpose": "Reference checkpoint for detecting material OLS performance regressions after further refinement.",
+    "timing_units": "seconds",
+    "timings_are_hard_gates": false,
+    "recommended_comparison": "Use at least three runs on the same machine/runtime and compare medians. Treat geometry, coverage and ID failures as hard failures; investigate timing changes above 20 percent.",
+    "stage_overlap_note": "Instrumented stage timings are nested and must not be added together. total_seconds is wall-clock workflow time."
+  },
+  "fixtures": {
+    "ybbn_single.json": {
+      "runways": 1,
+      "total_seconds": 11.458,
+      "stages": {
+        "region_solve": 2.138,
+        "boundary_generation": 0.821,
+        "comparison": 1.675,
+        "change_contours": 6.574,
+        "modernisation_layers": 8.502
+      },
+      "output": {
+        "layers": 125,
+        "features": 7810,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {"gain": 26, "loss": 0, "no_change": 0, "transition": 0},
+          "common_domain_area_m2": 8981676.986777,
+          "unclassified_common_area_m2": 0.003169,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {"gain": 46, "loss": 85, "no_change": 4, "transition": 18},
+          "common_domain_area_m2": 471236499.469713,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "yssy_dual_intersecting.json": {
+      "runways": 2,
+      "total_seconds": 18.358,
+      "stages": {
+        "region_solve": 4.284,
+        "boundary_generation": 2.586,
+        "comparison": 3.541,
+        "change_contours": 7.816,
+        "modernisation_layers": 11.944
+      },
+      "output": {
+        "layers": 185,
+        "features": 17717,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {"gain": 66, "loss": 12, "no_change": 0, "transition": 4},
+          "common_domain_area_m2": 17241007.624212,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {"gain": 122, "loss": 224, "no_change": 4, "transition": 38},
+          "common_domain_area_m2": 543678572.259436,
+          "unclassified_common_area_m2": 0.001565,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "ysws_dual_parallel.json": {
+      "runways": 2,
+      "total_seconds": 17.304,
+      "stages": {
+        "region_solve": 4.091,
+        "boundary_generation": 2.285,
+        "comparison": 3.421,
+        "change_contours": 8.057,
+        "modernisation_layers": 11.945
+      },
+      "output": {
+        "layers": 182,
+        "features": 16225,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {"gain": 60, "loss": 8, "no_change": 0, "transition": 8},
+          "common_domain_area_m2": 19697815.022770,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {"gain": 117, "loss": 170, "no_change": 8, "transition": 45},
+          "common_domain_area_m2": 533646197.854093,
+          "unclassified_common_area_m2": 0.010893,
+          "classified_overlap_area_m2": 0.000577
+        }
+      }
+    },
+    "yssy_multiple_stress.json": {
+      "runways": 3,
+      "total_seconds": 28.620,
+      "stages": {
+        "region_solve": 11.082,
+        "boundary_generation": 7.547,
+        "comparison": 4.729,
+        "change_contours": 8.448,
+        "modernisation_layers": 13.867
+      },
+      "output": {
+        "layers": 249,
+        "features": 24987,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {"gain": 109, "loss": 16, "no_change": 0, "transition": 8},
+          "common_domain_area_m2": 25047005.402526,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {"gain": 183, "loss": 355, "no_change": 8, "transition": 56},
+          "common_domain_area_m2": 566541202.901255,
+          "unclassified_common_area_m2": 0.000958,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    }
+  }
+}

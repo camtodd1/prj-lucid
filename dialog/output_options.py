@@ -78,7 +78,7 @@ class OutputOptionsMixin:
         self._on_output_option_changed()
 
     def _setup_ols_workflow_control(self):
-        """Move the persisted OLS policy selector into an explanatory workflow card."""
+        """Move the persisted OLS policy selector into a compact workflow card."""
         parent_layout = getattr(self, "verticalLayout_olsTab", None)
         combo = getattr(self, "protected_airspace_policy_combo", None)
         if parent_layout is None or combo is None:
@@ -91,7 +91,7 @@ class OutputOptionsMixin:
 
         group = getattr(self, "groupBox_olsWorkflow", None)
         if group is None:
-            group = QtWidgets.QGroupBox(self.tr("Protected Airspace Workflow"))
+            group = QtWidgets.QGroupBox(self.tr("Workflow"))
             group.setObjectName("groupBox_olsWorkflow")
             parent_layout.insertWidget(0, group)
             self.groupBox_olsWorkflow = group
@@ -135,47 +135,33 @@ class OutputOptionsMixin:
 
         family_frame = QtWidgets.QFrame()
         family_frame.setObjectName("frame_olsFamilyExplanation")
-        family_frame.setMinimumHeight(82)
+        family_frame.setMinimumHeight(44)
         family_frame.setStyleSheet(
             "QFrame#frame_olsFamilyExplanation { background: #f5f8fb; border: 1px solid #d9e2ea; border-radius: 4px; }"
         )
         family_layout = QtWidgets.QGridLayout(family_frame)
         family_layout.setContentsMargins(10, 8, 10, 8)
         family_layout.setHorizontalSpacing(12)
-        family_layout.setVerticalSpacing(3)
-        ofs_title = QtWidgets.QLabel(self.tr("OFS — protected airspace"))
-        ofs_title.setStyleSheet("font-weight: 600; color: #234b68;")
-        ofs_detail = QtWidgets.QLabel(
-            self.tr("Obstacle-free surface used to describe the future protected-airspace envelope.")
+        family_summary = QtWidgets.QLabel(
+            self.tr(
+                "OFS defines protected airspace. OES identifies where aeronautical assessment may be required; it is not an approval limit."
+            )
         )
-        ofs_detail.setWordWrap(True)
-        oes_title = QtWidgets.QLabel(self.tr("OES — assessment trigger"))
-        oes_title.setStyleSheet("font-weight: 600; color: #234b68;")
-        oes_detail = QtWidgets.QLabel(
-            self.tr("Obstacle evaluation surface indicating where aeronautical assessment may be required; not an approval limit.")
-        )
-        oes_detail.setWordWrap(True)
-        family_layout.addWidget(ofs_title, 0, 0)
-        family_layout.addWidget(ofs_detail, 0, 1)
-        family_layout.addWidget(oes_title, 1, 0)
-        family_layout.addWidget(oes_detail, 1, 1)
+        family_summary.setObjectName("label_olsFamilySummary")
+        family_summary.setWordWrap(True)
+        family_summary.setStyleSheet("color: #234b68;")
+        family_layout.addWidget(family_summary, 0, 0)
         grid.addWidget(family_frame, 2, 0, 1, 2)
-
-        workload = QtWidgets.QLabel()
-        workload.setObjectName("label_olsWorkload")
-        workload.setWordWrap(True)
-        workload.setStyleSheet("color: #5b6570; font-size: 11px;")
-        grid.addWidget(workload, 3, 0, 1, 2)
 
         status = QtWidgets.QLabel()
         status.setObjectName("label_olsInlineStatus")
         status.setWordWrap(True)
         status.setMinimumHeight(30)
-        grid.addWidget(status, 4, 0, 1, 2)
+        grid.addWidget(status, 3, 0, 1, 2)
 
         self.label_olsModeDescription = description
         self.frame_olsFamilyExplanation = family_frame
-        self.label_olsWorkload = workload
+        self.label_olsFamilySummary = family_summary
         self.label_olsInlineStatus = status
         combo.currentIndexChanged.connect(self._update_ols_workflow_ui)
 
@@ -185,37 +171,22 @@ class OutputOptionsMixin:
         if combo is None:
             return
         mode = str(combo.currentData() or "ruleset_aligned")
+        count = len(getattr(self, "_runway_groups", {})) if runway_count is None else int(runway_count)
         descriptions = {
             "ruleset_aligned": self.tr(
-                "Generate protected airspace using the selected design standard as the active baseline."
+                f"Selected-standard protected airspace for {count} runway(s). Standard workload."
             ),
             "future_annex14_ofs_oes": self.tr(
-                "Generate the future Annex 14 OFS and OES model without baseline comparison layers."
+                f"Future Annex 14 OFS/OES for {count} runway(s), without baseline comparison layers. Moderate workload."
             ),
             "modernisation_comparison": self.tr(
-                "Generate the selected baseline, future Annex 14 OFS/OES, and mapped gain/loss comparison products."
+                f"Baseline, future OFS/OES, and gain/loss comparison products for {count} runway(s). Highest workload."
             ),
         }
         if hasattr(self, "label_olsModeDescription"):
             self.label_olsModeDescription.setText(descriptions.get(mode, descriptions["ruleset_aligned"]))
         if hasattr(self, "frame_olsFamilyExplanation"):
             self.frame_olsFamilyExplanation.setVisible(mode != "ruleset_aligned")
-
-        count = len(getattr(self, "_runway_groups", {})) if runway_count is None else int(runway_count)
-        if mode == "modernisation_comparison":
-            workload_text = self.tr(
-                f"Highest workload: baseline and future envelopes plus comparison contours. Current runway count: {count}."
-            )
-        elif mode == "future_annex14_ofs_oes":
-            workload_text = self.tr(
-                f"Moderate workload: independent OFS and OES controlling envelopes. Current runway count: {count}."
-            )
-        else:
-            workload_text = self.tr(
-                f"Standard workload for the selected design standard. Current runway count: {count}."
-            )
-        if hasattr(self, "label_olsWorkload"):
-            self.label_olsWorkload.setText(workload_text)
 
         checkbox = getattr(self, "checkBox_generateControllingOls", None)
         if checkbox is not None:
@@ -229,9 +200,9 @@ class OutputOptionsMixin:
                 else ""
             )
             checkbox.setText(
-                self.tr("Generate controlling surfaces and comparison (required)")
+                self.tr("Controlling envelopes and comparison layers")
                 if comparison_required
-                else self.tr("Generate controlling lower-envelope surfaces")
+                else self.tr("Controlling envelope layers")
             )
             checkbox.setToolTip(
                 self.tr("Required because comparison polygons use the solved baseline and future controlling envelopes.")
@@ -240,21 +211,15 @@ class OutputOptionsMixin:
             )
         controlling_group = getattr(self, "groupBox_controllingOls", None)
         if controlling_group is not None:
-            controlling_group.setTitle(
-                self.tr("Comparison Envelope Output")
-                if mode == "modernisation_comparison"
-                else self.tr("Controlling OFS/OES Output")
-                if mode == "future_annex14_ofs_oes"
-                else self.tr("Controlling OLS Output")
-            )
+            controlling_group.setTitle(self.tr("Generated Outputs"))
         contour_group = getattr(self, "groupBox_contourIntervals", None)
         if contour_group is not None:
             contour_group.setTitle(
-                self.tr("Baseline and Future Contour Intervals")
+                self.tr("Contours — Baseline and Future")
                 if mode == "modernisation_comparison"
-                else self.tr("Future OFS/OES Contour Intervals")
+                else self.tr("Contours — Future OFS/OES")
                 if mode == "future_annex14_ofs_oes"
-                else self.tr("Baseline OLS Contour Intervals")
+                else self.tr("Contours — Baseline OLS")
             )
 
         annex_keys = {"annex14_ofs", "annex14_oes"}
@@ -288,6 +253,7 @@ class OutputOptionsMixin:
         background, border, foreground = colors.get(state, colors["neutral"])
         if hasattr(self, "label_olsInlineStatus"):
             self.label_olsInlineStatus.setText(str(status_data.get("summary") or ""))
+            self.label_olsInlineStatus.setVisible(state in {"warning", "blocked"})
             self.label_olsInlineStatus.setStyleSheet(
                 f"QLabel {{ background: {background}; border: 1px solid {border}; border-radius: 4px; "
                 f"color: {foreground}; padding: 6px 8px; font-weight: 600; }}"

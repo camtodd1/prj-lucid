@@ -4341,18 +4341,26 @@ class ControllingOlsEngineMixin:
             solved_engines["baseline"] = engine
         timing_splits: Dict[str, float] = {}
 
+        if not self._controlling_ols_subphase("Controlling OLS: preparing candidate surfaces..."):
+            return False
         step_start = time.perf_counter()
         candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, output_group, planar_candidates)
         timing_splits["candidates"] = time.perf_counter() - step_start
 
+        if not self._controlling_ols_subphase("Controlling OLS: solving lower-envelope regions..."):
+            return candidate_layer_ok
         step_start = time.perf_counter()
         region_layer_ok = self._create_controlling_region_layer(icao_code, region_output_group, engine)
         timing_splits["regions"] = time.perf_counter() - step_start
 
+        if not self._controlling_ols_subphase("Controlling OLS: constructing transition boundaries..."):
+            return candidate_layer_ok or region_layer_ok
         step_start = time.perf_counter()
         transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, engine)
         timing_splits["transitions"] = time.perf_counter() - step_start
 
+        if not self._controlling_ols_subphase("Controlling OLS: clipping source contours..."):
+            return candidate_layer_ok or region_layer_ok or transition_layer_ok
         step_start = time.perf_counter()
         contour_layer_ok = self._create_controlling_contour_layer(
             icao_code,
@@ -4406,6 +4414,10 @@ class ControllingOlsEngineMixin:
             if solved_engines is not None:
                 solved_engines[family] = engine
             family_debug_group = self._ensure_layer_group(debug_group, f"Annex 14 {family} Controlling")
+            if not self._controlling_ols_subphase(
+                f"Controlling {family}: preparing candidates and transition boundaries..."
+            ):
+                return created
             self._create_controlling_candidate_layer(
                 icao_code,
                 family_debug_group,
@@ -4422,6 +4434,8 @@ class ControllingOlsEngineMixin:
                 display_name=f"{family} — Planar Transitions",
                 style_key=f"Annex 14 Transition {family}",
             )
+            if not self._controlling_ols_subphase(f"Controlling {family}: writing solved regions..."):
+                return created
             region_created = self._create_controlling_region_layer(
                 icao_code,
                 output_group,
@@ -4435,6 +4449,8 @@ class ControllingOlsEngineMixin:
             family_contours = [
                 contour for contour in contours if contour.surface_id in family_surface_ids
             ]
+            if not self._controlling_ols_subphase(f"Controlling {family}: clipping contours..."):
+                return region_created or created
             contour_created = self._create_controlling_contour_layer(
                 icao_code,
                 output_group,
@@ -5315,3 +5331,11 @@ class ControllingOlsEngineMixin:
             if elevation is not None and math.isfinite(elevation):
                 values.append(float(elevation))
         return (min(values), max(values)) if values else (None, None)
+
+    def _controlling_ols_subphase(self, message: str) -> bool:
+        """Report an internal OLS phase and return false after a queued cancellation."""
+        status = getattr(self, "_set_processing_status", None)
+        if callable(status):
+            status(self.tr(message))
+        cancelled = getattr(self, "_processing_cancel_requested", None)
+        return not (callable(cancelled) and cancelled())

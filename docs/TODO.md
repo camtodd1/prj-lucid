@@ -171,16 +171,29 @@
   - OLS readiness and ADG requirements are shown inline beside the workflow.
   - Workload guidance reflects the selected mode and runway count.
 
-- [ ] Add long-running OLS workflow feedback and cancellation.
+- [x] Add long-running OLS workflow feedback and cancellation.
 
-  Work items:
-  - Report phase-based progress and allow safe cancellation between major
-    construction phases.
+  Completed:
+  - The footer reports determinate major-phase progress and elapsed time.
+  - Users can request cancellation while a phase is active; processing stops at
+    the next safe phase boundary and retains completed layers.
+  - Partial output groups are repaired and empty groups removed before control
+    returns to the dialog.
+
+- [x] Consolidate OLS output controls and guidance.
+
+  Completed:
+  - Output selection is grouped under a stable Generated Outputs heading.
+  - Mode, runway count, and workload are presented in one concise summary.
+  - OFS/OES guidance is retained in a compact note, while ready-state and
+    repeated warning text are suppressed from the inline validation area.
 
 - [ ] Add release-oriented OLS performance regression thresholds.
 
   Notes:
   - Use the four committed fixtures as the benchmark matrix.
+  - A QGIS 4.0.2 reference checkpoint is stored in
+    `tests/fixtures/ols/performance_baseline_qgis4_2026-07-11.json`.
   - Geometry validity, coverage, and class exclusivity remain hard gates.
   - Runtime thresholds should detect material regression while allowing normal
     machine and GEOS variability.

@@ -104,6 +104,9 @@ class SafeguardingBuilderDialog(
         self.scroll_area_layout: Optional[QtWidgets.QVBoxLayout] = None
         self._processing_status_active = False
         self._processing_progress_bar: Optional[QtWidgets.QProgressBar] = None
+        self._processing_cancel_button: Optional[QtWidgets.QPushButton] = None
+        self._processing_cancel_requested = False
+        self._processing_elapsed_timer = QtCore.QElapsedTimer()
         self._airport_lookup_cache: Dict[str, Dict[str, str]] = {}
         self._airport_iata_cache: Dict[str, Dict[str, str]] = {}
         self._airport_dataset_loaded = False
@@ -217,25 +220,81 @@ class SafeguardingBuilderDialog(
         QtCore.QTimer.singleShot(0, self.update_dialog_status)
 
     def _setup_processing_status_widgets(self) -> None:
-        """Add a compact indeterminate progress indicator to the dialog footer."""
+        """Add phase progress and safe-cancellation controls to the dialog footer."""
         footer_layout = getattr(self, "horizontalLayout_dialogFooter", None)
         if footer_layout is None:
             return
         progress_bar = QtWidgets.QProgressBar(self)
         progress_bar.setObjectName("progressBar_processing")
-        progress_bar.setRange(0, 0)
-        progress_bar.setTextVisible(False)
-        progress_bar.setFixedWidth(180)
+        progress_bar.setRange(0, 1)
+        progress_bar.setValue(0)
+        progress_bar.setFormat("%v / %m")
+        progress_bar.setTextVisible(True)
+        progress_bar.setFixedWidth(150)
         progress_bar.setVisible(False)
         footer_layout.insertWidget(1, progress_bar)
         self._processing_progress_bar = progress_bar
 
-    def set_processing_status(self, message: str) -> None:
-        """Show brief generation progress feedback while synchronous processing runs."""
+        cancel_button = QtWidgets.QPushButton(self.tr("Cancel after current phase"), self)
+        cancel_button.setObjectName("pushButton_cancel_processing")
+        cancel_button.setToolTip(
+            self.tr("Finish the active geometry phase, then stop before the next phase. Completed layers are kept.")
+        )
+        cancel_button.setVisible(False)
+        cancel_button.clicked.connect(self.request_processing_cancel)
+        footer_layout.insertWidget(2, cancel_button)
+        self._processing_cancel_button = cancel_button
+
+    def begin_processing(self, total_steps: int = 1) -> None:
+        """Reset cancellation and start a determinate generation run."""
         self._processing_status_active = True
-        if hasattr(self, "label_footer_status"):
-            self.label_footer_status.setText(message)
+        self._processing_cancel_requested = False
+        self._processing_elapsed_timer.start()
         if self._processing_progress_bar is not None:
+            self._processing_progress_bar.setRange(0, max(1, int(total_steps)))
+            self._processing_progress_bar.setValue(0)
+            self._processing_progress_bar.setVisible(True)
+        if self._processing_cancel_button is not None:
+            self._processing_cancel_button.setEnabled(True)
+            self._processing_cancel_button.setVisible(True)
+
+    def request_processing_cancel(self) -> None:
+        """Request cancellation at the next safe phase boundary."""
+        if not self._processing_status_active:
+            return
+        self._processing_cancel_requested = True
+        if self._processing_cancel_button is not None:
+            self._processing_cancel_button.setEnabled(False)
+            self._processing_cancel_button.setText(self.tr("Cancellation requested"))
+        if hasattr(self, "label_footer_status"):
+            self.label_footer_status.setText(
+                self.tr("Cancellation requested — finishing the current phase safely...")
+            )
+
+    def is_processing_cancel_requested(self) -> bool:
+        return bool(self._processing_cancel_requested)
+
+    def set_processing_status(
+        self,
+        message: str,
+        step: Optional[int] = None,
+        total_steps: Optional[int] = None,
+    ) -> None:
+        """Show brief generation progress feedback while synchronous processing runs."""
+        if not self._processing_status_active:
+            self.begin_processing(total_steps or 1)
+        elapsed_seconds = (
+            self._processing_elapsed_timer.elapsed() / 1000.0
+            if self._processing_elapsed_timer.isValid()
+            else 0.0
+        )
+        if hasattr(self, "label_footer_status"):
+            self.label_footer_status.setText(f"{message}  •  {elapsed_seconds:.1f}s")
+        if self._processing_progress_bar is not None:
+            if total_steps is not None:
+                self._processing_progress_bar.setRange(0, max(1, int(total_steps)))
+            if step is not None:
+                self._processing_progress_bar.setValue(max(0, int(step)))
             self._processing_progress_bar.setVisible(True)
         generate_button = getattr(
             self,
@@ -246,11 +305,16 @@ class SafeguardingBuilderDialog(
             generate_button.setEnabled(False)
             generate_button.setText("Generating...")
 
-    def clear_processing_status(self) -> None:
+    def clear_processing_status(self, final_message: Optional[str] = None) -> None:
         """Restore normal footer status after generation finishes or aborts."""
         self._processing_status_active = False
+        self._processing_cancel_requested = False
         if self._processing_progress_bar is not None:
             self._processing_progress_bar.setVisible(False)
+        if self._processing_cancel_button is not None:
+            self._processing_cancel_button.setVisible(False)
+            self._processing_cancel_button.setEnabled(True)
+            self._processing_cancel_button.setText(self.tr("Cancel after current phase"))
         generate_button = getattr(
             self,
             "pushButton_Generate",
@@ -259,6 +323,8 @@ class SafeguardingBuilderDialog(
         if generate_button:
             generate_button.setText("Generate Airport Layers")
         self.update_dialog_status()
+        if final_message and hasattr(self, "label_footer_status"):
+            self.label_footer_status.setText(final_message)
 
     # --- Initialization Helpers ---
     def _setup_arp_validators(

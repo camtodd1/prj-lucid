@@ -371,10 +371,10 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
 
 - [x] Improve the OLS dialog mode selection, OFS/OES explanation, validation
       placement, and workload explanation.
-- [ ] Add phase-based progress and safe cancellation between candidate creation,
+- [x] Add phase-based progress and safe cancellation between candidate creation,
       envelope solving, transition generation, comparison, and contours.
-- [ ] Add release-oriented performance regression thresholds using the four
-      committed fixtures; retain geometry and coverage gates as hard failures.
+- [ ] Turn the saved QGIS 4.0.2 performance checkpoint into release-oriented
+      regression thresholds; retain geometry and coverage gates as hard failures.
 - [ ] Decide the user-facing versus diagnostic layer contract before changing
       capability metadata from experimental/draft.
 

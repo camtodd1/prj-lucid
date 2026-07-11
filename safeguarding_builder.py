@@ -518,12 +518,19 @@ class SafeguardingBuilder(
         self.generate_controlling_ols = True
         self.protected_airspace_policy = "ruleset_aligned"
         self.debug_logging = False
+        self._processing_main_group = None
+        self._processing_total_steps = 10
 
         if self.dlg is None:
             self._log_critical("Processing aborted: dialog reference missing.")
             return
 
-        self._set_processing_status(self.tr("Starting safeguarding generation..."))
+        self._begin_processing_progress(self._processing_total_steps)
+        self._set_processing_status(
+            self.tr("Starting safeguarding generation..."),
+            step=0,
+            total_steps=self._processing_total_steps,
+        )
 
         project = QgsProject.instance()
         target_crs = project.crs()
@@ -571,7 +578,12 @@ class SafeguardingBuilder(
 
         input_data = None
         try:
-            self._set_processing_status(self.tr("Reading and validating inputs..."))
+            if not self._processing_checkpoint(
+                self.tr("Reading and validating inputs..."),
+                1,
+                self._processing_total_steps,
+            ):
+                return
             input_data = self.dlg.get_all_input_data()
             if input_data is None:
                 self._log_warning(
@@ -601,6 +613,7 @@ class SafeguardingBuilder(
         self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
         protected_airspace_policy = input_data.get("protected_airspace_policy", "ruleset_aligned")
         self.protected_airspace_policy = protected_airspace_policy
+        self._processing_total_steps = 10 if protected_airspace_policy == "modernisation_comparison" else 9
         if protected_airspace_policy == "future_annex14_ofs_oes":
             self.protected_airspace_ruleset = get_ruleset_profile("icao_annex14_vol1_modernised_ofs_oes")
         else:
@@ -649,7 +662,12 @@ class SafeguardingBuilder(
 
         if runway_input_list:
             self.style_map = dict(DEFAULT_STYLE_MAP)
-            self._set_processing_status(self.tr("Preparing output layer groups..."))
+            if not self._processing_checkpoint(
+                self.tr("Preparing output groups and reference layers..."),
+                2,
+                self._processing_total_steps,
+            ):
+                return
 
             root = project.layerTreeRoot()
             main_group_name = f"{icao_code} {self.tr('Safeguarding Builder')}"
@@ -663,6 +681,7 @@ class SafeguardingBuilder(
                 )
                 self._clear_processing_status()
                 return
+            self._processing_main_group = main_group
 
             output_groups = self._create_output_layer_groups(main_group, bool(agl_options.get("enabled")))
             reference_group = output_groups.get("reference_data")
@@ -735,7 +754,12 @@ class SafeguardingBuilder(
                 else:
                     self._log_warning("[skip] CNS source facilities: failed to create reference group.")
 
-            self._set_processing_status(self.tr("Generating runway reference geometry..."))
+            if not self._processing_checkpoint(
+                self.tr("Generating runway reference geometry..."),
+                3,
+                self._processing_total_steps,
+            ):
+                return
             processed_runway_data_list, any_runway_base_data_ok = self._process_runways_part1(
                 runway_centreline_group, project, target_crs, icao_code, runway_input_list
             )
@@ -752,7 +776,12 @@ class SafeguardingBuilder(
                 if agl_group is not None:
                     self._stage_layer_tree_node(agl_group)
 
-            self._set_processing_status(self.tr("Generating physical and protection surfaces..."))
+            if not self._processing_checkpoint(
+                self.tr("Generating physical and protection surfaces..."),
+                4,
+                self._processing_total_steps,
+            ):
+                return
             (
                 specialised_safeguarding_group,
                 any_physical_or_protection_ok,
@@ -770,8 +799,18 @@ class SafeguardingBuilder(
             )
 
             agl_processed_ok = False
+            if not self._processing_checkpoint(
+                self.tr("Generating supporting safeguarding layers..."),
+                5,
+                self._processing_total_steps,
+            ):
+                return
             if agl_options.get("enabled"):
-                self._set_processing_status(self.tr("Generating airfield ground lighting layers..."))
+                self._set_processing_status(
+                    self.tr("Generating airfield ground lighting layers..."),
+                    step=5,
+                    total_steps=self._processing_total_steps,
+                )
                 if agl_group is not None:
                     agl_processed_ok = self.process_airfield_ground_lighting(
                         processed_runway_data_list,
@@ -783,7 +822,12 @@ class SafeguardingBuilder(
             else:
                 self._log_skip("Airfield ground lighting: option not enabled.")
 
-            self._set_processing_status(self.tr(self.get_active_framework().generation_status_message()))
+            if not self._processing_checkpoint(
+                self.tr(self.get_active_framework().generation_status_message()),
+                5,
+                self._processing_total_steps,
+            ):
+                return
             guideline_groups = self._create_guideline_groups(external_safeguarding_group, bool(cns_input_list))
             guideline_groups["F"] = ols_surfaces_group
             self._reset_controlling_ols_engine()
@@ -826,7 +870,12 @@ class SafeguardingBuilder(
                 guideline_groups,
             )
 
-            self._set_processing_status(self.tr("Generating runway OLS surfaces..."))
+            if not self._processing_checkpoint(
+                self.tr("Generating runway OLS surfaces..."),
+                6,
+                self._processing_total_steps,
+            ):
+                return
             any_guideline_processed_ok = self._process_runways_part2(
                 processed_runway_data_list,
                 guideline_groups,
@@ -836,7 +885,12 @@ class SafeguardingBuilder(
                 airport_wide_ols_group,
             )
 
-            self._set_processing_status(self.tr("Generating airport-wide OLS surfaces..."))
+            if not self._processing_checkpoint(
+                self.tr("Generating airport-wide OLS surfaces..."),
+                7,
+                self._processing_total_steps,
+            ):
+                return
             any_guideline_processed_ok = self._process_airport_wide_ols_if_possible(
                 guideline_groups,
                 processed_runway_data_list,
@@ -845,9 +899,19 @@ class SafeguardingBuilder(
                 airport_wide_ols_group,
             )
             solved_ols_engines: Dict[str, Any] = {}
+            if not self._processing_checkpoint(
+                self.tr("Solving controlling protected-airspace envelopes..."),
+                8,
+                self._processing_total_steps,
+            ):
+                return
             if guideline_groups.get("F") is not None and self.generate_controlling_ols:
                 if self._is_future_annex14_protected_airspace():
-                    self._set_processing_status(self.tr("Solving controlling Annex 14 OFS/OES surfaces..."))
+                    self._set_processing_status(
+                        self.tr("Solving controlling Annex 14 OFS/OES surfaces..."),
+                        step=8,
+                        total_steps=self._processing_total_steps,
+                    )
                     controlling_ols_ok = self._create_annex14_controlling_surface_layers(
                         icao_code,
                         runway_ols_group,
@@ -856,7 +920,11 @@ class SafeguardingBuilder(
                         solved_engines=solved_ols_engines,
                     )
                 else:
-                    self._set_processing_status(self.tr("Solving controlling OLS lower envelope..."))
+                    self._set_processing_status(
+                        self.tr("Solving controlling OLS lower envelope..."),
+                        step=8,
+                        total_steps=self._processing_total_steps,
+                    )
                     controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
                         icao_code,
                         debug_group,
@@ -864,9 +932,17 @@ class SafeguardingBuilder(
                         controlling_contours_group,
                         solved_engines=solved_ols_engines,
                     )
+                if self._processing_cancel_requested():
+                    self._finish_processing_cancelled()
+                    return
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
                 if self._is_modernisation_comparison() and not self._is_future_annex14_protected_airspace():
-                    self._set_processing_status(self.tr("Comparing baseline OLS with future Annex 14..."))
+                    if not self._processing_checkpoint(
+                        self.tr("Comparing baseline OLS with future Annex 14..."),
+                        9,
+                        self._processing_total_steps,
+                    ):
+                        return
                     comparison_ok = self._run_modernisation_comparison(
                         icao_code,
                         processed_runway_data_list,
@@ -874,12 +950,20 @@ class SafeguardingBuilder(
                         debug_group,
                         solved_baseline_engine=solved_ols_engines.get("baseline"),
                     )
+                    if self._processing_cancel_requested():
+                        self._finish_processing_cancelled()
+                        return
                     any_guideline_processed_ok = any_guideline_processed_ok or comparison_ok
             elif guideline_groups.get("F") is not None:
                 self._log_skip("Controlling OLS: output option disabled.")
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
-            self._set_processing_status(self.tr("Finalising generated layers..."))
+            if not self._processing_checkpoint(
+                self.tr("Finalising generated layers and report..."),
+                self._processing_total_steps,
+                self._processing_total_steps,
+            ):
+                return
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
             self._repair_output_layer_tree(main_group)
             self._remove_empty_generated_groups(main_group)
@@ -910,19 +994,75 @@ class SafeguardingBuilder(
 
             if self.successfully_generated_layers:
                 if self.dlg:
-                    self._set_processing_status(self.tr("Generation complete. Closing dialog..."))
+                    self._set_processing_status(
+                        self.tr("Generation complete. Closing dialog..."),
+                        step=self._processing_total_steps,
+                        total_steps=self._processing_total_steps,
+                    )
                     self.dlg.accept()
             else:
                 self._clear_processing_status()
 
-    def _set_processing_status(self, message: str) -> None:
-        if self.dlg is not None and hasattr(self.dlg, "set_processing_status"):
-            self.dlg.set_processing_status(message)
+    def _begin_processing_progress(self, total_steps: int) -> None:
+        if self.dlg is not None and hasattr(self.dlg, "begin_processing"):
+            self.dlg.begin_processing(total_steps)
         QCoreApplication.processEvents()
 
-    def _clear_processing_status(self) -> None:
+    def _processing_cancel_requested(self) -> bool:
+        return bool(
+            self.dlg is not None
+            and hasattr(self.dlg, "is_processing_cancel_requested")
+            and self.dlg.is_processing_cancel_requested()
+        )
+
+    def _processing_checkpoint(
+        self,
+        message: str,
+        step: int,
+        total_steps: int,
+    ) -> bool:
+        """Enter a phase unless cancellation was requested during the previous phase."""
+        QCoreApplication.processEvents()
+        if self._processing_cancel_requested():
+            self._finish_processing_cancelled()
+            return False
+        self._set_processing_status(message, step=step, total_steps=total_steps)
+        return True
+
+    def _finish_processing_cancelled(self) -> None:
+        """Keep completed layers and make a partial run safe to inspect or restart."""
+        main_group = getattr(self, "_processing_main_group", None)
+        if main_group is not None:
+            try:
+                self._repair_output_layer_tree(main_group)
+                self._remove_empty_generated_groups(main_group)
+            except Exception as exc:
+                self._log_warning(f"Cancellation cleanup warning: {exc}")
+        self._log_warning("Safeguarding generation cancelled at a safe phase boundary; completed layers were kept.")
+        if self.iface is not None:
+            self.iface.messageBar().pushMessage(
+                self.tr("Cancelled"),
+                self.tr("Generation stopped after the current phase. Completed layers were kept."),
+                level=Qgis.Info,
+                duration=6,
+            )
+        self._clear_processing_status(
+            self.tr("Generation cancelled — completed layers were kept.")
+        )
+
+    def _set_processing_status(
+        self,
+        message: str,
+        step: Optional[int] = None,
+        total_steps: Optional[int] = None,
+    ) -> None:
+        if self.dlg is not None and hasattr(self.dlg, "set_processing_status"):
+            self.dlg.set_processing_status(message, step=step, total_steps=total_steps)
+        QCoreApplication.processEvents()
+
+    def _clear_processing_status(self, final_message: Optional[str] = None) -> None:
         if self.dlg is not None and hasattr(self.dlg, "clear_processing_status"):
-            self.dlg.clear_processing_status()
+            self.dlg.clear_processing_status(final_message=final_message)
         QCoreApplication.processEvents()
 
     # ============================================================
@@ -1567,7 +1707,15 @@ class SafeguardingBuilder(
             )
             self._reset_controlling_ols_engine()
             future_geometry_created = False
-            for runway_data in processed_runway_data_list:
+            runway_total = len(processed_runway_data_list)
+            for runway_index, runway_data in enumerate(processed_runway_data_list, start=1):
+                self._set_processing_status(
+                    self.tr(
+                        f"Modernisation: creating future Annex 14 candidates ({runway_index}/{runway_total})..."
+                    )
+                )
+                if self._processing_cancel_requested():
+                    return future_geometry_created
                 future_geometry_created = self.process_annex14_geometry(
                     runway_data,
                     future_ofs_group,
@@ -1588,6 +1736,8 @@ class SafeguardingBuilder(
                 debug_group,
                 solved_engines=solved_future_engines,
             )
+            if self._processing_cancel_requested():
+                return future_controlling_created
             comparison_created = self._create_ols_modernisation_comparison_layers(
                 icao_code,
                 self.ruleset.id,

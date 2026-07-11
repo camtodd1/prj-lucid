@@ -1925,6 +1925,14 @@ class OlsEnvelopeComparisonEngine:
 class OlsModernisationComparisonMixin:
     """Create user-facing OFS/OES modernisation comparison layers."""
 
+    def _modernisation_subphase(self, message: str) -> bool:
+        """Report a comparison subphase and honour cancellation between outputs."""
+        status = getattr(self, "_set_processing_status", None)
+        if callable(status):
+            status(self.tr(message))
+        cancelled = getattr(self, "_processing_cancel_requested", None)
+        return not (callable(cancelled) and cancelled())
+
     @staticmethod
     def _modernisation_feature_id(family: str, output_kind: str, sequence: int) -> str:
         """Return a readable ID unique across all modernisation output layers."""
@@ -1987,6 +1995,10 @@ class OlsModernisationComparisonMixin:
                 != {candidate.surface_id for candidate in family_candidates}
             ):
                 future_engine = PlanarControllingOlsEngine(family_candidates)
+            if not self._modernisation_subphase(
+                f"Modernisation {family}: classifying gain, loss, and unchanged regions..."
+            ):
+                return created
             comparison = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
             parts = comparison.comparison_parts()
             created = self._create_modernisation_wireframe_layer(
@@ -2014,12 +2026,20 @@ class OlsModernisationComparisonMixin:
                 icao_code, baseline_ruleset_id, family, "no_change", no_change_name,
                 parts["no_change"], comparison, family_group,
             ) or created
+            if not self._modernisation_subphase(
+                f"Modernisation {family}: generating signed change contours..."
+            ):
+                return created
             contour_parts = []
             for change in ("gain", "loss"):
                 contour_parts.extend(
                     (change, *contour_part)
                     for contour_part in comparison.change_contour_parts(parts[change], change)
                 )
+            if not self._modernisation_subphase(
+                f"Modernisation {family}: finalising transitions and baseline-only areas..."
+            ):
+                return created
             created = self._create_modernisation_change_contour_layer(
                 icao_code,
                 baseline_ruleset_id,
