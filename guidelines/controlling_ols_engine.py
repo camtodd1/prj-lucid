@@ -166,9 +166,10 @@ class PlanarControllingOlsEngine:
         tie_tolerance_m: float = 0.01,
         exclusion_geometries: Optional[Sequence[QgsGeometry]] = None,
     ):
+        input_candidates = list(candidates)
         self.candidates = [
             candidate
-            for candidate in candidates
+            for candidate in input_candidates
             if candidate.model in {"constant", "axis", "plane", "conical"}
             and candidate.footprint is not None
             and not candidate.footprint.isEmpty()
@@ -185,8 +186,86 @@ class PlanarControllingOlsEngine:
         self._controlling_region_geometries_cache: Optional[List[Tuple[ControllingOlsCandidate, QgsGeometry]]] = None
         self._region_boundary_records_cache: Optional[List[Tuple[QgsGeometry, List[object]]]] = None
         self._region_solve_stats: Dict[str, float] = {}
+        self._final_partition_repair_by_surface: Dict[str, Dict[str, object]] = {}
+        self._invalid_input_candidate_count = len(input_candidates) - len(self.candidates)
         self.tie_tolerance_m = max(0.0, float(tie_tolerance_m))
         self.bounds = self._combined_bounds(self.candidates)
+
+    def solver_diagnostics(self) -> Dict[str, object]:
+        """Return stable, structured diagnostics without exposing timing as correctness data."""
+        stats = self._region_solve_stats or {}
+        cells = int(stats.get("global_cell_count", 0.0))
+        return {
+            "solver": "global_cell" if stats.get("global_cell_solver_used", 0.0) else "pairwise_subtract",
+            "cells": {
+                "total": cells,
+                "unassigned": int(stats.get("global_unassigned_cell_count", 0.0)),
+                "refined": int(stats.get("global_refined_cell_count", 0.0)),
+                "unanimous_gap_parts": int(stats.get("global_unanimous_gap_part_count", 0.0)),
+                "unanimous_gap_area_m2": stats.get("global_unanimous_gap_area_m2", 0.0),
+                "ambiguous_gap_parts": int(stats.get("global_ambiguous_gap_part_count", 0.0)),
+                "ambiguous_gap_area_m2": stats.get("global_ambiguous_gap_area_m2", 0.0),
+            },
+            "comparisons": {
+                "unresolved": int(stats.get("axis_exact_unresolved", 0.0)),
+                "axis_conical_fallback": int(stats.get("axis_exact_fallback", 0.0)),
+            },
+            "topology": {
+                "transition_method": (
+                    "cell_adjacency"
+                    if stats.get("adjacency_transition_record_count", 0.0)
+                    else "rounded_probe_fallback"
+                ),
+                "transition_records": int(stats.get("adjacency_transition_record_count", 0.0)),
+                "merged_overlap_resolved": int(stats.get("merged_overlap_resolved_count", 0.0)),
+                "merged_overlap_resolved_area_m2": stats.get("merged_overlap_resolved_area_m2", 0.0),
+                "merged_overlap_unresolved": int(stats.get("merged_overlap_unresolved_count", 0.0)),
+                "merged_overlap_unanimous": int(stats.get("merged_overlap_unanimous_count", 0.0)),
+                "merged_overlap_triangulated": int(stats.get("merged_overlap_triangulated_count", 0.0)),
+                "merged_overlap_representative": int(stats.get("merged_overlap_representative_count", 0.0)),
+            },
+            "approximations": {
+                "triangulation_calls": int(stats.get("triangulation_calls", 0.0)),
+                "zero_contour_calls": int(stats.get("axis_zero_contour_calls", 0.0)),
+                "horizontal_chord_tolerance_m": AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M,
+                "vertical_error_bound_m": None,
+            },
+            "geometry": {
+                "invalid_input_candidates": self._invalid_input_candidate_count,
+                "invalid_output_regions": int(stats.get("invalid_output_region_count", 0.0)),
+                "raw_output_union_area_m2": stats.get("raw_output_union_area_m2", 0.0),
+                "partitioned_output_union_area_m2": stats.get("partitioned_output_union_area_m2", 0.0),
+                "dissolved_output_union_area_m2": stats.get("dissolved_output_union_area_m2", 0.0),
+            },
+            "exceptional_recovery": {
+                "pairwise_solver_fallbacks": int(stats.get("pairwise_solver_fallback_count", 0.0)),
+                "coverage_repair_parts": int(stats.get("coverage_repair_part_count", 0.0)),
+                "coverage_repair_area_m2": stats.get("coverage_repair_area_m2", 0.0),
+                "final_partition_repair_parts": int(stats.get("final_partition_repair_part_count", 0.0)),
+                "final_partition_repair_area_m2": stats.get("final_partition_repair_area_m2", 0.0),
+                "partition_make_valid_calls": int(stats.get("partition_make_valid_count", 0.0)),
+                "dissolve_geometry_repair_calls": int(stats.get("dissolve_geometry_repair_count", 0.0)),
+                "final_partition_by_surface": dict(sorted(self._final_partition_repair_by_surface.items())),
+            },
+            "operation_classes": {
+                "same_controller_dissolve": "canonical_normalisation",
+                "unanimous_gap_audit": "qa_diagnostic",
+                "merged_conical_overlap_assignment": "accepted_compatibility_correction",
+                "axis_conical_isoline": "bounded_curved_approximation",
+                "pairwise_solver_fallback": "exceptional_recovery",
+                "coverage_gap_fill": "exceptional_recovery",
+                "final_partition_gap_fill": "exceptional_recovery",
+            },
+        }
+
+    def ensure_adjacency_diagnostics(self) -> None:
+        """Build authoritative adjacency QA separately from diagnostic layer output."""
+        if self._region_solve_stats.get("adjacency_transition_record_count", 0.0):
+            return
+        records = self._adjacency_region_boundary_records(
+            self._controlling_region_geometries()
+        )
+        self._region_solve_stats["adjacency_transition_record_count"] = float(len(records))
 
     def controlling_candidate_at_xy(self, point_xy: QgsPointXY) -> Optional[Tuple[ControllingOlsCandidate, float]]:
         """Return the lowest applicable planar candidate at a point."""
@@ -397,6 +476,111 @@ class PlanarControllingOlsEngine:
         self._region_boundary_records_cache = records
         return records
 
+    def _adjacency_region_boundary_records(
+        self,
+        region_parts: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> List[Tuple[QgsGeometry, List[object]]]:
+        """Derive controller transitions from exact shared region edges."""
+        records: List[Tuple[QgsGeometry, List[object]]] = []
+        boundaries = []
+        for candidate, region in region_parts:
+            linework = [
+                QgsGeometry.fromPolylineXY(points)
+                for points in self._polygon_boundary_parts(region)
+                if len(points) >= 2
+            ]
+            try:
+                boundary = QgsGeometry.unaryUnion(linework) if linework else None
+            except Exception:
+                boundary = linework[0] if linework else None
+            boundaries.append((candidate, region, boundary))
+        for index, (first, first_region, first_boundary) in enumerate(boundaries):
+            if first_boundary is None or first_boundary.isEmpty():
+                continue
+            for second, second_region, second_boundary in boundaries[index + 1 :]:
+                if first.surface_id == second.surface_id:
+                    continue
+                try:
+                    first_box = first_region.boundingBox()
+                    second_box = second_region.boundingBox()
+                    separated = (
+                        first_box.xMaximum() < second_box.xMinimum()
+                        or second_box.xMaximum() < first_box.xMinimum()
+                        or first_box.yMaximum() < second_box.yMinimum()
+                        or second_box.yMaximum() < first_box.yMinimum()
+                    )
+                except Exception:
+                    separated = False
+                if separated:
+                    continue
+                if second_boundary is None or second_boundary.isEmpty():
+                    continue
+                try:
+                    shared = first_boundary.intersection(second_boundary)
+                except Exception:
+                    continue
+                source_vertices = [
+                    point
+                    for region in (first_region, second_region)
+                    for ring in self._polygon_boundary_parts(region)
+                    for point in ring
+                ]
+                for line_points in self._line_parts(shared):
+                    for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+                        split_points = self._source_vertices_on_segment(
+                            start_point, end_point, source_vertices
+                        )
+                        for segment_start, segment_end in zip(split_points[:-1], split_points[1:]):
+                            if segment_start.distance(segment_end) <= 1e-6:
+                                continue
+                            segment_points = [segment_start, segment_end]
+                            z_values = self._transition_z_values(segment_points, first, second)
+                            z_line = self._line_points_to_z_geometry(segment_points, z_values)
+                            if z_line is None or z_line.isEmpty():
+                                continue
+                            records.append(
+                                (
+                                    QgsGeometry(z_line),
+                                    [
+                                        f"{first.surface_id}|{second.surface_id}"[:160],
+                                        "Transition",
+                                        min(z_values),
+                                        max(z_values),
+                                        f"{first.surface_id}|{second.surface_id}"[:254],
+                                        "cell_adjacency_boundary",
+                                    ],
+                                )
+                            )
+        return records
+
+    @staticmethod
+    def _source_vertices_on_segment(
+        start: QgsPointXY,
+        end: QgsPointXY,
+        source_vertices: Sequence[QgsPointXY],
+    ) -> List[QgsPointXY]:
+        dx = end.x() - start.x()
+        dy = end.y() - start.y()
+        length_squared = (dx * dx) + (dy * dy)
+        if length_squared <= 1e-12:
+            return [start, end]
+        located = [(0.0, start), (1.0, end)]
+        seen = {(start.x(), start.y()), (end.x(), end.y())}
+        for point in source_vertices:
+            key = (point.x(), point.y())
+            if key in seen:
+                continue
+            t = (((point.x() - start.x()) * dx) + ((point.y() - start.y()) * dy)) / length_squared
+            if t <= 1e-12 or t >= 1.0 - 1e-12:
+                continue
+            projected = QgsPointXY(start.x() + (t * dx), start.y() + (t * dy))
+            if projected.distance(point) > 1e-7:
+                continue
+            seen.add(key)
+            located.append((t, point))
+        located.sort(key=lambda item: item[0])
+        return [point for _t, point in located]
+
     @staticmethod
     def _undirected_segment_key(
         start_point: QgsPointXY,
@@ -580,8 +764,10 @@ class PlanarControllingOlsEngine:
             global_region_parts = self._build_global_cell_region_geometries()
             self._region_solve_stats["global_cell_time_s"] = time.perf_counter() - global_start
             if global_region_parts:
+                self._region_solve_stats["global_cell_solver_used"] = 1.0
                 self._region_solve_stats["total_time_s"] = time.perf_counter() - solve_start
                 return global_region_parts
+            self._region_solve_stats["pairwise_solver_fallback_count"] = 1.0
 
         region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         for candidate in self.candidates:
@@ -766,6 +952,7 @@ class PlanarControllingOlsEngine:
         cell_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
         cell_count = 0
         assigned_count = 0
+        unassigned_count = 0
         refined_count = 0
         for cell in self._polygon_parts(polygonized):
             if not self._has_polygon_area(cell, min_area=1.0):
@@ -773,6 +960,7 @@ class PlanarControllingOlsEngine:
             cell_count += 1
             controller = self._controlling_candidate_for_cell(cell)
             if controller is None:
+                unassigned_count += 1
                 continue
             candidate, _elevation = controller
             refinement_candidates = self._global_cell_refinement_candidates(cell, candidate)
@@ -798,15 +986,239 @@ class PlanarControllingOlsEngine:
 
         self._region_solve_stats["global_cell_count"] = float(cell_count)
         self._region_solve_stats["global_assigned_cell_count"] = float(assigned_count)
+        self._region_solve_stats["global_unassigned_cell_count"] = float(unassigned_count)
         self._region_solve_stats["global_refined_cell_count"] = float(refined_count)
         if not cell_parts:
             return []
 
+        self._global_subdivision_completion_parts(cell_parts)
+
         merge_start = time.perf_counter()
         merged_parts = self._merge_region_parts_by_candidate(cell_parts)
+        merged_parts = self._enforce_exclusive_merged_regions(merged_parts)
         self._region_solve_stats["merge_time_s"] = time.perf_counter() - merge_start
         self._region_solve_stats["global_region_count"] = float(len(merged_parts))
+        self._region_solve_stats["invalid_output_region_count"] = float(sum(
+            1 for _candidate, geometry in merged_parts if not geometry.isGeosValid()
+        ))
         return merged_parts
+
+    def _enforce_exclusive_merged_regions(
+        self,
+        regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        """Assign every merged overlap from one shared lower-envelope solution."""
+        exclusive = [(candidate, QgsGeometry(geometry)) for candidate, geometry in regions]
+        for first_index in range(len(exclusive)):
+            first_candidate, first_geometry = exclusive[first_index]
+            if not self._has_polygon_area(first_geometry):
+                continue
+            for second_index in range(first_index + 1, len(exclusive)):
+                second_candidate, second_geometry = exclusive[second_index]
+                families = {
+                    str((candidate.metadata or {}).get("annex14_family") or "").strip().upper()
+                    for candidate in (first_candidate, second_candidate)
+                }
+                if families != {""} or "conical" not in {
+                    first_candidate.model,
+                    second_candidate.model,
+                }:
+                    continue
+                if not self._has_polygon_area(second_geometry):
+                    continue
+                if not self._bounding_boxes_intersect(first_geometry, second_geometry):
+                    continue
+                try:
+                    overlap = first_geometry.intersection(second_geometry)
+                except Exception:
+                    overlap = None
+                if not self._has_polygon_area(overlap):
+                    continue
+                lower = self._unanimous_pair_lower_region(
+                    first_candidate, second_candidate, overlap
+                )
+                if lower is None:
+                    lower = self._candidate_lower_region(
+                        first_candidate,
+                        second_candidate,
+                        overlap,
+                    )
+                lower = self._clip_lower_region_to_overlap(lower, overlap) if lower is not None else None
+                if lower is None:
+                    try:
+                        lower = self._triangulated_candidate_lower_region(
+                            first_candidate,
+                            second_candidate,
+                            overlap,
+                        )
+                    except Exception:
+                        lower = None
+                    lower = (
+                        self._clip_lower_region_to_overlap(lower, overlap)
+                        if lower is not None
+                        else None
+                    )
+                    if lower is not None:
+                        self._region_solve_stats["merged_overlap_triangulated_count"] = (
+                            self._region_solve_stats.get("merged_overlap_triangulated_count", 0.0)
+                            + 1.0
+                        )
+                if lower is None:
+                    try:
+                        point = overlap.pointOnSurface().asPoint()
+                        point_xy = QgsPointXY(point.x(), point.y())
+                        first_z = first_candidate.elevation_at_xy(point_xy)
+                        second_z = second_candidate.elevation_at_xy(point_xy)
+                    except Exception:
+                        first_z = second_z = None
+                    if first_z is not None and second_z is not None:
+                        lower = (
+                            QgsGeometry(overlap)
+                            if first_z <= second_z
+                            else QgsGeometry()
+                        )
+                        self._region_solve_stats["merged_overlap_representative_count"] = (
+                            self._region_solve_stats.get("merged_overlap_representative_count", 0.0)
+                            + 1.0
+                        )
+                if lower is None:
+                    self._region_solve_stats["merged_overlap_unresolved_count"] = (
+                        self._region_solve_stats.get("merged_overlap_unresolved_count", 0.0) + 1.0
+                    )
+                    self._region_solve_stats["merged_overlap_unresolved_area_m2"] = (
+                        self._region_solve_stats.get("merged_overlap_unresolved_area_m2", 0.0)
+                        + overlap.area()
+                    )
+                    continue
+                try:
+                    first_losing = overlap if lower.isEmpty() else overlap.difference(lower)
+                    second_losing = lower
+                    if self._has_polygon_area(first_losing):
+                        first_geometry = first_geometry.difference(first_losing)
+                    if self._has_polygon_area(second_losing):
+                        second_geometry = second_geometry.difference(second_losing)
+                except Exception:
+                    self._region_solve_stats["merged_overlap_unresolved_count"] = (
+                        self._region_solve_stats.get("merged_overlap_unresolved_count", 0.0) + 1.0
+                    )
+                    continue
+                exclusive[first_index] = (first_candidate, first_geometry)
+                exclusive[second_index] = (second_candidate, second_geometry)
+                self._region_solve_stats["merged_overlap_resolved_count"] = (
+                    self._region_solve_stats.get("merged_overlap_resolved_count", 0.0) + 1.0
+                )
+                self._region_solve_stats["merged_overlap_resolved_area_m2"] = (
+                    self._region_solve_stats.get("merged_overlap_resolved_area_m2", 0.0)
+                    + overlap.area()
+                )
+        return [
+            (candidate, geometry)
+            for candidate, geometry in exclusive
+            if self._has_polygon_area(geometry)
+        ]
+
+    def _unanimous_pair_lower_region(
+        self,
+        first: ControllingOlsCandidate,
+        second: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        """Resolve a wholly one-sided overlap without rebuilding its equality curve."""
+        differences = []
+        for point in self._geometry_sample_points(overlap):
+            first_z = first.elevation_at_xy(point)
+            second_z = second.elevation_at_xy(point)
+            if first_z is None or second_z is None:
+                continue
+            differences.append(float(first_z) - float(second_z))
+        if not differences:
+            return None
+        if max(differences) < -1e-9:
+            self._region_solve_stats["merged_overlap_unanimous_count"] = (
+                self._region_solve_stats.get("merged_overlap_unanimous_count", 0.0) + 1.0
+            )
+            return QgsGeometry(overlap)
+        if min(differences) > 1e-9:
+            self._region_solve_stats["merged_overlap_unanimous_count"] = (
+                self._region_solve_stats.get("merged_overlap_unanimous_count", 0.0) + 1.0
+            )
+            return QgsGeometry()
+        return None
+
+
+    def _global_subdivision_completion_parts(
+        self,
+        cell_parts: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        """Complete polygonize omissions only when all topology checkpoints agree."""
+        coverage_parts = [
+            self._effective_footprint(candidate)
+            for candidate in self.candidates
+            if self._has_polygon_area(self._effective_footprint(candidate))
+        ]
+        solved_parts = [geometry for _candidate, geometry in cell_parts if self._has_polygon_area(geometry)]
+        try:
+            coverage = QgsGeometry.unaryUnion(coverage_parts)
+            solved = QgsGeometry.unaryUnion(solved_parts)
+            gaps = coverage.difference(solved)
+        except Exception:
+            return []
+
+        completed = []
+        for gap in self._polygon_parts(gaps):
+            if not self._has_polygon_area(gap, min_area=1e-3):
+                continue
+            controller = self._unanimous_controller_for_cell(gap)
+            if controller is None:
+                self._region_solve_stats["global_ambiguous_gap_part_count"] = (
+                    self._region_solve_stats.get("global_ambiguous_gap_part_count", 0.0) + 1.0
+                )
+                self._region_solve_stats["global_ambiguous_gap_area_m2"] = (
+                    self._region_solve_stats.get("global_ambiguous_gap_area_m2", 0.0) + gap.area()
+                )
+                continue
+            try:
+                owned = gap.intersection(self._effective_footprint(controller))
+            except Exception:
+                owned = None
+            if not self._has_polygon_area(owned) or not self._areas_match(owned, gap, tolerance_m2=1e-3):
+                self._region_solve_stats["global_ambiguous_gap_part_count"] = (
+                    self._region_solve_stats.get("global_ambiguous_gap_part_count", 0.0) + 1.0
+                )
+                self._region_solve_stats["global_ambiguous_gap_area_m2"] = (
+                    self._region_solve_stats.get("global_ambiguous_gap_area_m2", 0.0) + gap.area()
+                )
+                continue
+            completed.append((controller, owned))
+            self._region_solve_stats["global_unanimous_gap_part_count"] = (
+                self._region_solve_stats.get("global_unanimous_gap_part_count", 0.0) + 1.0
+            )
+            self._region_solve_stats["global_unanimous_gap_area_m2"] = (
+                self._region_solve_stats.get("global_unanimous_gap_area_m2", 0.0) + owned.area()
+            )
+        return completed
+
+    def _unanimous_controller_for_cell(
+        self,
+        cell: QgsGeometry,
+    ) -> Optional[ControllingOlsCandidate]:
+        points = self._global_cell_validation_points(cell)
+        try:
+            vertices = [QgsPointXY(vertex.x(), vertex.y()) for vertex in cell.vertices()]
+        except Exception:
+            vertices = []
+        points.extend(vertices)
+        for first, second in zip(vertices, vertices[1:]):
+            points.append(QgsPointXY((first.x() + second.x()) / 2.0, (first.y() + second.y()) / 2.0))
+        controller_by_id = {}
+        for point in points:
+            result = self.controlling_candidate_at_xy(point)
+            if result is None:
+                return None
+            controller_by_id[result[0].surface_id] = result[0]
+            if len(controller_by_id) > 1:
+                return None
+        return next(iter(controller_by_id.values()), None)
 
     def _global_cell_refinement_candidates(
         self,
@@ -1405,6 +1817,12 @@ class PlanarControllingOlsEngine:
                 continue
             for candidate, clean_part in repaired_parts:
                 region_parts.append((candidate, clean_part))
+                self._region_solve_stats["coverage_repair_part_count"] = (
+                    self._region_solve_stats.get("coverage_repair_part_count", 0.0) + 1.0
+                )
+                self._region_solve_stats["coverage_repair_area_m2"] = (
+                    self._region_solve_stats.get("coverage_repair_area_m2", 0.0) + clean_part.area()
+                )
 
     def _gap_lower_envelope_parts(
         self,
@@ -4611,8 +5029,10 @@ class ControllingOlsEngineMixin:
             ]:
                 fields.append(field)
         features = engine.region_features(fields)
+        engine._region_solve_stats["raw_output_union_area_m2"] = self._feature_union_area(features)
         if partition_overlaps:
-            features = self._partition_controlling_region_features(features)
+            features = self._partition_controlling_region_features(features, engine)
+            engine._region_solve_stats["partitioned_output_union_area_m2"] = self._feature_union_area(features)
         if display_name is not None:
             candidates_by_id = {candidate.surface_id: candidate for candidate in engine.candidates}
             for feature in features:
@@ -4631,8 +5051,22 @@ class ControllingOlsEngineMixin:
                 feature.setAttribute("plane_c", metadata.get("plane_c"))
         if partition_overlaps:
             features = self._dissolve_coplanar_controlling_regions(features, engine)
+            engine._region_solve_stats["dissolved_output_union_area_m2"] = self._feature_union_area(features)
             features = self._repair_final_controlling_partition(features, engine)
         solve_summary = engine.region_solve_timing_summary()
+        diagnostics = engine.solver_diagnostics()
+        recovery = diagnostics["exceptional_recovery"]
+        QgsMessageLog.logMessage(
+            "[diagnostics] Controlling OLS solver: "
+            f"cells={diagnostics['cells']['total']}, "
+            f"unassigned={diagnostics['cells']['unassigned']}, "
+            f"refined={diagnostics['cells']['refined']}, "
+            f"unresolved={diagnostics['comparisons']['unresolved']}, "
+            "recovery_activations="
+            f"{sum(1 for value in recovery.values() if isinstance(value, (int, float)) and float(value) > 0.0)}.",
+            PLUGIN_TAG,
+            Qgis.Info,
+        )
         if not features:
             QgsMessageLog.logMessage(
                 "[skip] Controlling OLS regions layer: no controlling planar regions were produced "
@@ -4667,7 +5101,26 @@ class ControllingOlsEngineMixin:
             return True
         return False
 
-    def _partition_controlling_region_features(self, features: List[QgsFeature]) -> List[QgsFeature]:
+    @staticmethod
+    def _feature_union_area(features: Sequence[QgsFeature]) -> float:
+        geometries = [
+            QgsGeometry(feature.geometry())
+            for feature in features
+            if feature.geometry() is not None and not feature.geometry().isEmpty()
+        ]
+        if not geometries:
+            return 0.0
+        try:
+            union = QgsGeometry.unaryUnion(geometries)
+            return union.area() if union is not None and not union.isEmpty() else 0.0
+        except Exception:
+            return 0.0
+
+    def _partition_controlling_region_features(
+        self,
+        features: List[QgsFeature],
+        engine: Optional[PlanarControllingOlsEngine] = None,
+    ) -> List[QgsFeature]:
         """Remove tied-region overlaps while preserving the complete envelope domain."""
         partitioned: List[QgsFeature] = []
         assigned = QgsGeometry()
@@ -4690,6 +5143,10 @@ class ControllingOlsEngineMixin:
             if geometry.isNull() or geometry.isEmpty():
                 continue
             if not geometry.isGeosValid():
+                if engine is not None:
+                    engine._region_solve_stats["partition_make_valid_count"] = (
+                        engine._region_solve_stats.get("partition_make_valid_count", 0.0) + 1.0
+                    )
                 geometry = geometry.makeValid()
             if geometry.isNull() or geometry.isEmpty():
                 continue
@@ -4724,6 +5181,9 @@ class ControllingOlsEngineMixin:
             if geometry.isNull() or geometry.isEmpty():
                 continue
             if not geometry.isGeosValid():
+                engine._region_solve_stats["dissolve_geometry_repair_count"] = (
+                    engine._region_solve_stats.get("dissolve_geometry_repair_count", 0.0) + 1.0
+                )
                 repair_candidates: List[QgsGeometry] = []
                 try:
                     repair_candidates.append(geometry.makeValid())
@@ -4891,8 +5351,23 @@ class ControllingOlsEngineMixin:
                 target.setAttribute("elev_max", elev_max)
                 repaired_count += 1
                 repaired_area += repair.area()
+                surface_key = f"{candidate.surface_type}:{candidate.surface_id}"
+                surface_stats = engine._final_partition_repair_by_surface.setdefault(
+                    surface_key,
+                    {"parts": 0, "area_m2": 0.0},
+                )
+                surface_stats["parts"] = int(surface_stats["parts"]) + 1
+                surface_stats["area_m2"] = float(surface_stats["area_m2"]) + repair.area()
 
         if repaired_count:
+            engine._region_solve_stats["final_partition_repair_part_count"] = (
+                engine._region_solve_stats.get("final_partition_repair_part_count", 0.0)
+                + float(repaired_count)
+            )
+            engine._region_solve_stats["final_partition_repair_area_m2"] = (
+                engine._region_solve_stats.get("final_partition_repair_area_m2", 0.0)
+                + repaired_area
+            )
             QgsMessageLog.logMessage(
                 f"[repair] Controlling output partition: restored {repaired_area:.6f} m² "
                 f"across {repaired_count} lower-envelope gap part(s).",
@@ -4906,7 +5381,7 @@ class ControllingOlsEngineMixin:
         ]
         # Geometry normalisation can very slightly expand a repaired boundary.
         # Repartition once so the delivered lower envelope remains exclusive.
-        valid_features = self._partition_controlling_region_features(valid_features)
+        valid_features = self._partition_controlling_region_features(valid_features, engine)
         polygon_features: List[QgsFeature] = []
         for feature in valid_features:
             polygon_parts = engine._polygon_parts(feature.geometry())

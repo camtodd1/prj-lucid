@@ -113,3 +113,9 @@ python3 -m py_compile dimensions/*.py rulesets/*.py rulesets/mos139/*.py tests/*
 
 For plugin-wide confidence, also run the broader compile command documented in
 the root `README.md`.
+
+## Controlling OLS lock
+
+`ols.controlling_lower_envelope` is supported and frozen to the QGIS 4
+compatibility evidence documented in `docs/mos139_controlling_ols_lock.md`.
+Annex 14 controlling products remain a separate partial capability.

@@ -101,6 +101,62 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             delta=1.0,
         )
 
+    def test_diagnostics_classify_recovery_and_normalisation(self):
+        engine = PlanarControllingOlsEngine([self.constant("surface", 100.0)])
+        engine._controlling_region_geometries()
+
+        diagnostics = engine.solver_diagnostics()
+
+        self.assertEqual(diagnostics["solver"], "global_cell")
+        self.assertEqual(diagnostics["cells"]["unassigned"], 0)
+        self.assertEqual(
+            diagnostics["operation_classes"]["same_controller_dissolve"],
+            "canonical_normalisation",
+        )
+
+    def test_transition_topology_uses_shared_region_adjacency(self):
+        left_domain = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        right_domain = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))
+        left = ControllingOlsCandidate(
+            "left", "Left", left_domain, constant_elevation_evaluator(100.0), "constant"
+        )
+        right = ControllingOlsCandidate(
+            "right", "Right", right_domain, constant_elevation_evaluator(100.0), "constant"
+        )
+        engine = PlanarControllingOlsEngine([left, right])
+        engine._controlling_region_geometries_cache = [
+            (left, QgsGeometry(left_domain)),
+            (right, QgsGeometry(right_domain)),
+        ]
+
+        with patch.object(engine, "_controllers_across_segment", side_effect=AssertionError):
+            records = engine._adjacency_region_boundary_records(
+                engine._controlling_region_geometries_cache
+            )
+
+        self.assertTrue(records)
+        self.assertTrue(all(record[1][-1] == "cell_adjacency_boundary" for record in records))
+
+    def test_mos_tocs_conical_overlap_is_assigned_once(self):
+        conical = ControllingOlsCandidate(
+            "conical", "Conical", QgsGeometry.fromRect(QgsRectangle(40, 0, 100, 100)),
+            constant_elevation_evaluator(110.0), "conical",
+        )
+        tocs = ControllingOlsCandidate(
+            "tocs", "TOCS", QgsGeometry.fromRect(QgsRectangle(0, 0, 60, 100)),
+            constant_elevation_evaluator(100.0), "axis",
+        )
+        engine = PlanarControllingOlsEngine([tocs, conical])
+        regions = engine._enforce_exclusive_merged_regions([
+            (tocs, QgsGeometry(tocs.footprint)),
+            (conical, QgsGeometry(conical.footprint)),
+        ])
+
+        self.assertEqual(len(regions), 2)
+        self.assertAlmostEqual(regions[0][1].intersection(regions[1][1]).area(), 0.0, places=6)
+        self.assertAlmostEqual(regions[0][1].area(), 6000.0, places=6)
+        self.assertAlmostEqual(regions[1][1].area(), 4000.0, places=6)
+
     def test_one_sided_surface_with_tolerance_edge_is_entirely_gain(self):
         baseline = self.constant("baseline", 100.0)
         future = self.plane("future", 0.001, 0.0, 100.005)

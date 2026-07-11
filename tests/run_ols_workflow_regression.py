@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
+import statistics
 import sys
 import time
 from collections import defaultdict
@@ -27,6 +29,7 @@ from qgis.core import (
 
 FIXTURE_DIR = Path(__file__).parent / "fixtures" / "ols"
 MANIFEST_PATH = FIXTURE_DIR / "manifest.json"
+MOS139_LOCK_PATH = FIXTURE_DIR / "mos139_controlling_lock_qgis4_2026-07-12.json"
 
 
 class _MessageBar:
@@ -59,6 +62,31 @@ def _geometry_union(geometries: Iterable[QgsGeometry]) -> QgsGeometry:
 
 def _area(geometry: Optional[QgsGeometry]) -> float:
     return 0.0 if geometry is None or geometry.isEmpty() else geometry.area()
+
+
+def _engine_lock_signature(engine) -> Dict[str, object]:
+    """Fingerprint exact controller identity and geometry for a locked ruleset."""
+    records = []
+    controller_ids = []
+    total_area = 0.0
+    for candidate, geometry in engine._controlling_region_geometries():
+        controller_ids.append(candidate.surface_id)
+        total_area += geometry.area()
+        record_hash = hashlib.sha256()
+        record_hash.update(candidate.surface_id.encode("utf-8"))
+        record_hash.update(b"\0")
+        record_hash.update(bytes(geometry.asWkb()))
+        records.append(record_hash.hexdigest())
+    return {
+        "regions": len(records),
+        "controller_ids_digest": hashlib.sha256(
+            "\0".join(sorted(controller_ids)).encode("utf-8")
+        ).hexdigest(),
+        "area_m2": total_area,
+        "geometry_digest": hashlib.sha256(
+            "".join(sorted(records)).encode("ascii")
+        ).hexdigest(),
+    }
 
 
 def _comparison_metrics(engine, result) -> Dict[str, object]:
@@ -194,6 +222,8 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
     comparison_ids: List[str] = []
     layer_count = 0
     feature_count = 0
+    deterministic_records = []
+    controlling_region_layers = []
     for node in project.layerTreeRoot().findLayers():
         layer = node.layer()
         if layer is None:
@@ -201,6 +231,7 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
         layer_count += 1
         style_key = str(layer.customProperty("safeguarding_style_key") or "")
         fields = layer.fields().names()
+        layer_regions = []
         for feature in layer.getFeatures():
             feature_count += 1
             geometry = feature.geometry()
@@ -216,6 +247,54 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
                 comparison_id = str(feature.attribute("comparison_id") or "")
                 if comparison_id:
                     comparison_ids.append(comparison_id)
+            if "surface_id" in fields or "comparison_id" in fields:
+                identifiers = tuple(
+                    str(feature.attribute(name) or "")
+                    for name in ("surface_id", "comparison_id", "region_id")
+                    if name in fields
+                )
+                record_hash = hashlib.sha256()
+                record_hash.update(style_key.encode("utf-8"))
+                record_hash.update(b"\0")
+                record_hash.update("\0".join(identifiers).encode("utf-8"))
+                record_hash.update(b"\0")
+                record_hash.update(bytes(geometry.asWkb()))
+                deterministic_records.append(record_hash.hexdigest())
+            if "region_id" in fields and "surface" in fields:
+                layer_regions.append((
+                    int(feature.attribute("region_id") or 0),
+                    str(feature.attribute("surface") or ""),
+                    str(feature.attribute("surface_id") or ""),
+                    QgsGeometry(geometry),
+                ))
+
+        if layer_regions:
+            overlap_pairs = []
+            overlap_area = 0.0
+            for index, first in enumerate(layer_regions):
+                for second in layer_regions[index + 1 :]:
+                    if not first[3].boundingBox().intersects(second[3].boundingBox()):
+                        continue
+                    overlap = first[3].intersection(second[3])
+                    area = _area(overlap)
+                    if area <= 1e-3:
+                        continue
+                    overlap_area += area
+                    overlap_pairs.append({
+                        "first_region_id": first[0],
+                        "first_surface": first[1],
+                        "first_surface_id": first[2],
+                        "second_region_id": second[0],
+                        "second_surface": second[1],
+                        "second_surface_id": second[2],
+                        "area_m2": area,
+                    })
+            controlling_region_layers.append({
+                "layer": layer.name(),
+                "regions": len(layer_regions),
+                "overlap_area_m2": overlap_area,
+                "overlap_pairs": overlap_pairs,
+            })
 
     controlling = {}
     for family in ("OFS", "OES"):
@@ -248,7 +327,11 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
         "style_feature_counts": dict(sorted(style_counts.items())),
         "comparison_ids": len(comparison_ids),
         "duplicate_comparison_ids": len(comparison_ids) - len(set(comparison_ids)),
+        "determinism_digest": hashlib.sha256(
+            "".join(sorted(deterministic_records)).encode("ascii")
+        ).hexdigest(),
         "controlling": controlling,
+        "controlling_region_layers": controlling_region_layers,
     }
 
 
@@ -263,6 +346,12 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
         failures.append(f"{layers['empty_geometries']} empty geometries")
     if layers["duplicate_comparison_ids"]:
         failures.append(f"{layers['duplicate_comparison_ids']} duplicate comparison IDs")
+    for region_layer in layers.get("controlling_region_layers", []):
+        if float(region_layer["overlap_area_m2"]) > 1e-3:
+            failures.append(
+                f"{region_layer['layer']} has {region_layer['overlap_area_m2']:.6f} m2 "
+                "of cross-controller overlap"
+            )
     if set(comparisons) != {"OFS", "OES"}:
         failures.append(f"comparison families were {sorted(comparisons)}")
 
@@ -296,7 +385,10 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
     return failures
 
 
-def _run_case(case, manifest, builder_cls, dialog_cls, controlling_cls, comparison_cls):
+def _run_case(
+    case, manifest, builder_cls, dialog_cls, controlling_cls, comparison_cls,
+    production_gates=False,
+):
     fixture_path = FIXTURE_DIR / case["file"]
     payload = json.loads(fixture_path.read_text(encoding="utf-8"))
     case = {**case, "payload_runway_count": len(payload.get("runways", []))}
@@ -315,6 +407,7 @@ def _run_case(case, manifest, builder_cls, dialog_cls, controlling_cls, comparis
 
     stage_totals = defaultdict(lambda: {"calls": 0, "seconds": 0.0})
     comparison_results = {}
+    engine_instances = {}
 
     def timed(name, original):
         def wrapper(*args, **kwargs):
@@ -330,6 +423,10 @@ def _run_case(case, manifest, builder_cls, dialog_cls, controlling_cls, comparis
                     stage_totals[name].setdefault("item_counts", []).append(
                         {"input": input_count, "output": len(result)}
                     )
+                if name == "_build_controlling_region_geometries" and args:
+                    engine_instances[id(args[0])] = args[0]
+                elif name == "_repair_final_controlling_partition" and len(args) > 2:
+                    engine_instances[id(args[2])] = args[2]
                 return result
             finally:
                 item = stage_totals[name]
@@ -344,7 +441,10 @@ def _run_case(case, manifest, builder_cls, dialog_cls, controlling_cls, comparis
         result = original_comparison_parts(engine)
         elapsed = time.perf_counter() - start
         metrics = _comparison_metrics(engine, result)
+        metrics["diagnostics"] = engine.comparison_diagnostics()
         comparison_results[metrics["family"]] = metrics
+        engine_instances[id(engine.baseline_engine)] = engine.baseline_engine
+        engine_instances[id(engine.future_engine)] = engine.future_engine
         item = stage_totals["comparison_parts"]
         item["calls"] += 1
         item["seconds"] += elapsed
@@ -403,7 +503,71 @@ def _run_case(case, manifest, builder_cls, dialog_cls, controlling_cls, comparis
     QgsApplication.messageLog().messageReceived.disconnect(capture_log)
 
     layers = _layer_metrics(project)
+    solver_diagnostics = []
+    for engine in engine_instances.values():
+        engine.ensure_adjacency_diagnostics()
+        families = sorted({
+            str((candidate.metadata or {}).get("annex14_family") or "MOS139")
+            for candidate in engine.candidates
+        })
+        diagnostics = {
+            "families": families,
+            "candidate_count": len(engine.candidates),
+            **engine.solver_diagnostics(),
+        }
+        if families == ["MOS139"]:
+            diagnostics["mos139_lock"] = _engine_lock_signature(engine)
+        solver_diagnostics.append(diagnostics)
     failures = _case_failures(case, manifest, comparison_results, layers)
+    if production_gates:
+        for index, diagnostics in enumerate(solver_diagnostics, start=1):
+            exceptional = diagnostics["exceptional_recovery"]
+            if any(
+                float(value) > 0.0
+                for value in exceptional.values()
+                if isinstance(value, (int, float))
+            ):
+                failures.append(f"solver {index} activated exceptional recovery: {exceptional}")
+            if diagnostics["comparisons"]["unresolved"]:
+                failures.append(f"solver {index} has unresolved candidate comparisons")
+            if diagnostics["cells"]["unassigned"]:
+                failures.append(f"solver {index} has unassigned global cells")
+            if diagnostics["cells"]["ambiguous_gap_parts"]:
+                failures.append(f"solver {index} has ambiguous subdivision coverage gaps")
+            if diagnostics["cells"]["unanimous_gap_parts"]:
+                failures.append(f"solver {index} has unapplied unanimous subdivision gaps")
+            if diagnostics["topology"]["transition_method"] != "cell_adjacency":
+                failures.append(f"solver {index} did not derive transitions from adjacency")
+            if (
+                diagnostics["geometry"]["invalid_input_candidates"]
+                or diagnostics["geometry"]["invalid_output_regions"]
+            ):
+                failures.append(f"solver {index} has invalid input/output geometry")
+            approximation = diagnostics["approximations"]
+            approximation_calls = (
+                int(approximation["triangulation_calls"])
+                + int(approximation["zero_contour_calls"])
+            )
+            if approximation_calls and approximation["vertical_error_bound_m"] is None:
+                failures.append(f"solver {index} used an approximation without a vertical error bound")
+        for family, metrics in comparison_results.items():
+            diagnostics = metrics["diagnostics"]
+            exceptional = diagnostics["exceptional_recovery"]
+            if any(
+                float(value) > 0.0
+                for value in exceptional.values()
+                if isinstance(value, (int, float))
+            ):
+                failures.append(f"{family} comparison activated exceptional recovery: {exceptional}")
+            if diagnostics["unresolved_comparisons"]:
+                failures.append(f"{family} comparison has unresolved comparisons")
+            approximation = diagnostics["bounded_approximations"]
+            approximation_calls = (
+                int(approximation["fallback_lower_region_calls"])
+                + int(approximation["sampled_whole_overlap_calls"])
+            )
+            if approximation_calls and approximation["vertical_error_bound_m"] is None:
+                failures.append(f"{family} comparison used an unbounded approximation")
     result = {
         "fixture": case["file"],
         "description": case["description"],
@@ -415,6 +579,16 @@ def _run_case(case, manifest, builder_cls, dialog_cls, controlling_cls, comparis
         "layers": layers,
         "messages": iface.bar.messages,
         "qgis_logs": qgis_logs,
+        "solver_diagnostics": solver_diagnostics,
+        "mos139_lock": next(
+            (
+                diagnostics["mos139_lock"]
+                for diagnostics in solver_diagnostics
+                if "mos139_lock" in diagnostics
+            ),
+            None,
+        ),
+        "production_gates": production_gates,
         "failures": failures,
         "passed": not failures,
     }
@@ -431,12 +605,100 @@ def _parse_args():
         help="Fixture filename from tests/fixtures/ols; repeat to select multiple cases.",
     )
     parser.add_argument("--output", type=Path, help="Optional JSON report path.")
+    parser.add_argument("--repeat", type=int, default=1, help="Runs per fixture; use 3 or more for release gates.")
+    parser.add_argument("--baseline", type=Path, help="Performance baseline JSON used for release gates.")
+    parser.add_argument(
+        "--production-gates",
+        action="store_true",
+        help="Fail on any exceptional recovery repair or unresolved comparison.",
+    )
+    parser.add_argument(
+        "--maximum-runtime-regression",
+        type=float,
+        default=0.20,
+        help="Maximum permitted median runtime regression as a fraction.",
+    )
     return parser.parse_args()
+
+
+def _stable_signature(result: Dict[str, object]) -> Dict[str, object]:
+    """Accuracy-sensitive metrics which must remain identical across runs."""
+    layers = result["layers"]
+    return {
+        key: layers[key]
+        for key in (
+            "layers", "features", "invalid_geometries", "empty_geometries",
+            "duplicate_comparison_ids", "style_feature_counts", "controlling",
+            "determinism_digest",
+        )
+    } | {
+        "solver_diagnostics": result.get("solver_diagnostics", []),
+        "comparisons": {
+            family: {
+                key: metrics[key]
+                for key in (
+                    "feature_counts", "common_domain_area_m2",
+                    "unclassified_common_area_m2", "classified_overlap_area_m2", "diagnostics",
+                )
+            }
+            for family, metrics in sorted(result["comparisons"].items())
+        }
+    }
+
+
+def _release_gate_failures(fixture, runs, baseline, maximum_regression):
+    failures = []
+    signatures = [_stable_signature(run) for run in runs]
+    if any(signature != signatures[0] for signature in signatures[1:]):
+        failures.append("repeated runs produced non-deterministic accuracy/output metrics")
+    if baseline is None:
+        return failures
+    expected = baseline.get("fixtures", {}).get(fixture)
+    if expected is None:
+        return failures + ["fixture is missing from the selected baseline"]
+    median_seconds = statistics.median(float(run["total_seconds"]) for run in runs)
+    limit = float(expected["total_seconds"]) * (1.0 + maximum_regression)
+    if median_seconds > limit:
+        failures.append(f"median runtime {median_seconds:.3f}s exceeds {limit:.3f}s gate")
+    actual = runs[0]["layers"]
+    for key, value in expected.get("output", {}).items():
+        if key in actual and actual[key] != value:
+            failures.append(f"{key} changed from {value} to {actual[key]}")
+    for family, expected_metrics in expected.get("comparisons", {}).items():
+        metrics = runs[0]["comparisons"].get(family)
+        if metrics is None:
+            failures.append(f"comparison family {family} is missing")
+        elif metrics["feature_counts"] != expected_metrics.get("feature_counts"):
+            failures.append(f"{family} feature counts changed from baseline")
+        else:
+            domain_tolerance = max(
+                0.1, float(expected_metrics["common_domain_area_m2"]) * 1e-9
+            )
+            domain_delta = abs(
+                float(metrics["common_domain_area_m2"])
+                - float(expected_metrics["common_domain_area_m2"])
+            )
+            if domain_delta > domain_tolerance:
+                failures.append(f"{family} common-domain area changed by {domain_delta:.6f} m2")
+            for key in ("unclassified_common_area_m2", "classified_overlap_area_m2"):
+                if float(metrics[key]) > float(expected_metrics[key]) + 0.1:
+                    failures.append(f"{family} {key} regressed from baseline")
+    return failures
 
 
 def main() -> int:
     args = _parse_args()
+    if args.repeat < 1:
+        raise SystemExit("--repeat must be at least 1")
+    if args.maximum_runtime_regression < 0.0:
+        raise SystemExit("--maximum-runtime-regression must be non-negative")
     manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
+    baseline = json.loads(args.baseline.read_text(encoding="utf-8")) if args.baseline else None
+    mos139_lock = (
+        json.loads(MOS139_LOCK_PATH.read_text(encoding="utf-8"))
+        if MOS139_LOCK_PATH.exists()
+        else None
+    )
     cases = manifest["cases"]
     if args.fixture:
         requested = set(args.fixture)
@@ -457,10 +719,13 @@ def main() -> int:
     app.initQgis()
     report = {
         "qgis_version": Qgis.QGIS_VERSION,
+        "repeat": args.repeat,
+        "baseline": str(args.baseline) if args.baseline else None,
+        "maximum_runtime_regression": args.maximum_runtime_regression,
         "fixtures": [],
     }
     for case in cases:
-        report["fixtures"].append(
+        runs = [
             _run_case(
                 case,
                 manifest,
@@ -468,8 +733,33 @@ def main() -> int:
                 SafeguardingBuilderDialog,
                 PlanarControllingOlsEngine,
                 OlsEnvelopeComparisonEngine,
+                production_gates=args.production_gates,
             )
+            for _run_number in range(args.repeat)
+        ]
+        gate_failures = _release_gate_failures(
+            case["file"], runs, baseline, args.maximum_runtime_regression
         )
+        if mos139_lock is not None:
+            expected_lock = mos139_lock.get("fixtures", {}).get(case["file"])
+            for run in runs:
+                if expected_lock is None:
+                    run["failures"].append("fixture is missing from the MOS139 controlling lock")
+                elif run.get("mos139_lock") != expected_lock:
+                    run["failures"].append(
+                        "MOS139 controlling geometry differs from the locked contract"
+                    )
+                run["passed"] = not run["failures"]
+        if args.repeat == 1 and baseline is None:
+            report["fixtures"].append(runs[0])
+        else:
+            report["fixtures"].append({
+                "fixture": case["file"],
+                "median_total_seconds": statistics.median(run["total_seconds"] for run in runs),
+                "runs": runs,
+                "gate_failures": gate_failures,
+                "passed": all(run["passed"] for run in runs) and not gate_failures,
+            })
     report["passed"] = all(case["passed"] for case in report["fixtures"])
     if args.output:
         args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")

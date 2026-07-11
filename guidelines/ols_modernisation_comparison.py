@@ -52,11 +52,31 @@ class OlsEnvelopeComparisonEngine:
         self.baseline_engine = baseline_engine
         self.future_engine = future_engine
         self.tolerance_m = max(0.0, float(tolerance_m))
+        self._comparison_diagnostics: Dict[str, float] = {}
+
+    def comparison_diagnostics(self) -> Dict[str, object]:
+        """Return structured attribution for approximation and recovery operations."""
+        stats = self._comparison_diagnostics
+        return {
+            "unresolved_comparisons": int(stats.get("unresolved_comparisons", 0.0)),
+            "bounded_approximations": {
+                "fallback_lower_region_calls": int(stats.get("fallback_lower_region_calls", 0.0)),
+                "sampled_whole_overlap_calls": int(stats.get("sampled_whole_overlap_calls", 0.0)),
+                "vertical_error_bound_m": None,
+            },
+            "exceptional_recovery": {
+                "common_domain_gap_parts": int(stats.get("common_domain_gap_parts", 0.0)),
+                "common_domain_gap_area_m2": stats.get("common_domain_gap_area_m2", 0.0),
+                "final_remainder_parts": int(stats.get("final_remainder_parts", 0.0)),
+                "final_remainder_area_m2": stats.get("final_remainder_area_m2", 0.0),
+            },
+        }
 
     def comparison_parts(
         self,
     ) -> Dict[str, List[Tuple[ControllingOlsCandidate, ControllingOlsCandidate, QgsGeometry]]]:
         """Return gain/loss/no-change polygons and transition lines for the common domain."""
+        self._comparison_diagnostics = {}
         result = {"gain": [], "loss": [], "no_change": [], "transition": []}
         baseline_regions = self.baseline_engine._controlling_region_geometries()
         future_regions = self.future_engine._controlling_region_geometries()
@@ -86,6 +106,17 @@ class OlsEnvelopeComparisonEngine:
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
         self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
         self._partition_classified_parts(result)
+        diagnostics = self.comparison_diagnostics()
+        recovery = diagnostics["exceptional_recovery"]
+        QgsMessageLog.logMessage(
+            "[diagnostics] OLS comparison: "
+            f"unresolved={diagnostics['unresolved_comparisons']}, "
+            f"fallbacks={diagnostics['bounded_approximations']['fallback_lower_region_calls']}, "
+            f"recovery_parts={int(recovery['common_domain_gap_parts']) + int(recovery['final_remainder_parts'])}, "
+            f"recovery_area_m2={float(recovery['common_domain_gap_area_m2']) + float(recovery['final_remainder_area_m2']):.6f}.",
+            PLUGIN_TAG,
+            Qgis.Info,
+        )
         return result
 
     def _append_classified_overlap(
@@ -283,6 +314,9 @@ class OlsEnvelopeComparisonEngine:
         overlap: QgsGeometry,
     ) -> Optional[QgsGeometry]:
         """Resolve an otherwise unresolved overlap with dense tests and a local TIN."""
+        self._comparison_diagnostics["fallback_lower_region_calls"] = (
+            self._comparison_diagnostics.get("fallback_lower_region_calls", 0.0) + 1.0
+        )
         try:
             decision = pair_engine._sampled_lower_decision(
                 baseline_candidate,
@@ -771,6 +805,9 @@ class OlsEnvelopeComparisonEngine:
         overlap,
         clean_spikes: bool = True,
     ) -> None:
+        self._comparison_diagnostics["sampled_whole_overlap_calls"] = (
+            self._comparison_diagnostics.get("sampled_whole_overlap_calls", 0.0) + 1.0
+        )
         delta_min, delta_max, delta_sample = self.delta_range(overlap, baseline, future)
         if delta_sample is None:
             return
@@ -905,6 +942,12 @@ class OlsEnvelopeComparisonEngine:
                 for part in self.baseline_engine._polygon_parts(pair_remainder):
                     if not self._has_area(part):
                         continue
+                    self._comparison_diagnostics["common_domain_gap_parts"] = (
+                        self._comparison_diagnostics.get("common_domain_gap_parts", 0.0) + 1.0
+                    )
+                    self._comparison_diagnostics["common_domain_gap_area_m2"] = (
+                        self._comparison_diagnostics.get("common_domain_gap_area_m2", 0.0) + part.area()
+                    )
                     self._append_classified_overlap(
                         result,
                         baseline_candidate,
@@ -957,7 +1000,16 @@ class OlsEnvelopeComparisonEngine:
                 for part in self.baseline_engine._polygon_parts(pair_remaining):
                     change = self._classify_change_for_part(part, baseline, future)
                     if change is None:
+                        self._comparison_diagnostics["unresolved_comparisons"] = (
+                            self._comparison_diagnostics.get("unresolved_comparisons", 0.0) + 1.0
+                        )
                         continue
+                    self._comparison_diagnostics["final_remainder_parts"] = (
+                        self._comparison_diagnostics.get("final_remainder_parts", 0.0) + 1.0
+                    )
+                    self._comparison_diagnostics["final_remainder_area_m2"] = (
+                        self._comparison_diagnostics.get("final_remainder_area_m2", 0.0) + part.area()
+                    )
                     result[change].append((baseline, future, QgsGeometry(part)))
                     assigned_parts.append(part)
                 assigned = self._union_geometries(assigned_parts)

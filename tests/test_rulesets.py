@@ -124,7 +124,7 @@ class RulesetRegistryTest(unittest.TestCase):
     def test_profiles_expose_capabilities(self):
         profile = get_ruleset_profile("mos139_2019")
         self.assertTrue(profile.supports("ols.airport_wide"))
-        self.assertEqual(profile.capability_status("ols.controlling_lower_envelope"), "partial")
+        self.assertEqual(profile.capability_status("ols.controlling_lower_envelope"), "supported")
 
     def test_registered_profiles_expose_ruleset_contract(self):
         for profile in iter_ruleset_profiles():

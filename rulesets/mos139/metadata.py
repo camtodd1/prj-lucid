@@ -21,7 +21,7 @@ CAPABILITY_STATUS_BY_KEY = {
     "ols.runway_approach": "supported",
     "ols.takeoff_climb": "supported",
     "ols.ofz": "supported",
-    "ols.controlling_lower_envelope": "partial",
+    "ols.controlling_lower_envelope": "supported",
     "markings.runway": "supported",
     "lighting.runway": "supported",
     "lighting.approach": "supported",

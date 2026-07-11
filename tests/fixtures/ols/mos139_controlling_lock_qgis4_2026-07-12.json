@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "ruleset_id": "mos139_2019",
+  "qgis_version": "4.0.2-Norrk\u00f6ping",
+  "accepted_at": "2026-07-12",
+  "acceptance": "User-approved compatibility lock",
+  "fixtures": {
+    "ybbn_single.json": {
+      "regions": 21,
+      "area_m2": 721831565.1690618,
+      "geometry_digest": "0769a6b37f85b44059a42745ff6bdca58f6742a1e3f5ac108949765c121d4eb4",
+      "controller_ids_digest": "61dbbce4fdcc07736e3575943c79fbbd6e4179da72e213c6c24ea8ed42fa9450"
+    },
+    "yssy_dual_intersecting.json": {
+      "regions": 41,
+      "area_m2": 736390339.74797,
+      "geometry_digest": "929e1aeb3c81aa77a89eaaf667d75bf8992348002ce3bebc3d089eecc448ee84",
+      "controller_ids_digest": "9058cf56c8eef341961a4ab329382ce5c3383cfa5b9ed1fd9c347a45d337c990"
+    },
+    "ysws_dual_parallel.json": {
+      "regions": 39,
+      "area_m2": 730403862.7891805,
+      "geometry_digest": "7f4f01c52a779590c318f6d6fe1f02fb932a462fd55699d6e34e10e876981d2b",
+      "controller_ids_digest": "0106316fcdb69893a723b546cd653d9c4d1099eff93275ae3a81bd4e1bec3f28"
+    },
+    "yssy_multiple_stress.json": {
+      "regions": 59,
+      "area_m2": 742334550.5709803,
+      "geometry_digest": "09d5e6f60eb76fb9fb35ca90768525f81d1f1747e8b7d3cf74ec90110780cdde",
+      "controller_ids_digest": "00ec702d04330c205fba0fd305f96685d5cf4f9fe605a2e6acb184eb9eba94f2"
+    }
+  }
+}
