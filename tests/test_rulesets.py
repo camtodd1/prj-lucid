@@ -124,7 +124,7 @@ class RulesetRegistryTest(unittest.TestCase):
     def test_profiles_expose_capabilities(self):
         profile = get_ruleset_profile("mos139_2019")
         self.assertTrue(profile.supports("ols.airport_wide"))
-        self.assertEqual(profile.capability_status("ols.controlling_lower_envelope"), "experimental")
+        self.assertEqual(profile.capability_status("ols.controlling_lower_envelope"), "partial")
 
     def test_registered_profiles_expose_ruleset_contract(self):
         for profile in iter_ruleset_profiles():
@@ -1469,6 +1469,7 @@ class RulesetRegistryTest(unittest.TestCase):
         current_profile = get_ruleset_profile("icao_annex14_vol1_current_ols")
         self.assertEqual(current_profile.protected_airspace_model, "annex14_current_ols")
         self.assertEqual(current_profile.capability_status("ols.obstacle_free_surfaces"), "unsupported")
+        self.assertEqual(current_profile.capability_status("ols.controlling_lower_envelope"), "unsupported")
         self.assertEqual(current_profile.capability_status("oes.horizontal"), "unsupported")
 
         profile = get_ruleset_profile("icao_annex14_vol1_modernised_ofs_oes")
@@ -1476,6 +1477,7 @@ class RulesetRegistryTest(unittest.TestCase):
         self.assertEqual(profile.protected_airspace_model, "annex14_modernised_ofs_oes")
         self.assertEqual(profile.capability_status("classification.reference_code"), "partial")
         self.assertEqual(profile.capability_status("classification.design_group"), "partial")
+        self.assertEqual(profile.capability_status("ols.controlling_lower_envelope"), "partial")
         self.assertEqual(profile.capability_status("oes.airport_wide"), "partial")
         self.assertEqual(profile.capability_status("oes.horizontal"), "supported")
         self.assertEqual(profile.capability_status("oes.straight_in_instrument_approach"), "supported")

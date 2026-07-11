@@ -925,7 +925,7 @@ class SafeguardingBuilder(
                         step=8,
                         total_steps=self._processing_total_steps,
                     )
-                    controlling_ols_ok = self._create_controlling_ols_planar_poc_layers(
+                    controlling_ols_ok = self._create_controlling_ols_layers(
                         icao_code,
                         debug_group,
                         controlling_ols_surfaces_group,
@@ -2010,8 +2010,8 @@ class SafeguardingBuilder(
         )
         self._repair_debug_development_layer_tree(main_group, debug_group)
 
-    def _is_development_poc_layer(self, node: QgsLayerTreeLayer) -> bool:
-        """Return True for proof-of-concept output layers."""
+    def _is_legacy_diagnostic_layer(self, node: QgsLayerTreeLayer) -> bool:
+        """Return True for legacy proof-of-concept layers that still need migration."""
         layer = node.layer()
         layer_name = layer.name() if layer is not None else node.name()
         style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
@@ -2027,14 +2027,14 @@ class SafeguardingBuilder(
         root_group: QgsLayerTreeGroup,
         debug_group: QgsLayerTreeGroup,
     ) -> None:
-        """Move proof-of-concept layers into the debug/development group."""
+        """Move legacy proof-of-concept layers into the diagnostic group."""
         if root_group is None or debug_group is None:
             return
 
         def visit(group: QgsLayerTreeGroup) -> None:
             for child in list(group.children()):
                 if isinstance(child, QgsLayerTreeLayer):
-                    if group != debug_group and self._is_development_poc_layer(child):
+                    if group != debug_group and self._is_legacy_diagnostic_layer(child):
                         self._move_layer_tree_node(child, debug_group)
                 elif isinstance(child, QgsLayerTreeGroup) and child != debug_group:
                     visit(child)
@@ -2073,7 +2073,7 @@ class SafeguardingBuilder(
         }
 
         def ols_destination_for_node(node: QgsLayerTreeLayer) -> Optional[QgsLayerTreeGroup]:
-            if self._is_development_poc_layer(node):
+            if self._is_legacy_diagnostic_layer(node):
                 return None
             layer = node.layer()
             layer_name = layer.name() if layer is not None else node.name()

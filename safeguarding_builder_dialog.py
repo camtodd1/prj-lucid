@@ -847,7 +847,7 @@ class SafeguardingBuilderDialog(
                 "functions": [
                     "get_contour_interval_options()",
                     "_process_airport_wide_ols_if_possible()",
-                    "_create_controlling_ols_planar_poc_layers()",
+                    "_create_controlling_ols_layers()",
                     "_create_annex14_controlling_surface_layers()",
                 ],
             },
@@ -1385,6 +1385,8 @@ class SafeguardingBuilderDialog(
         if hasattr(self, "checkBox_generateControllingOls") and self.checkBox_generateControllingOls.isChecked():
             if controlling_capability == "unsupported":
                 review.append("controlling OLS is unsupported for this ruleset")
+            elif controlling_capability == "partial":
+                review.append("controlling OLS has defined partial surface coverage")
             elif controlling_capability == "experimental":
                 review.append("controlling OLS is experimental")
 

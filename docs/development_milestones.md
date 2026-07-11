@@ -127,17 +127,20 @@ Last reviewed: 2026-07-11.
   - Remaining consolidation work is source-backed sample-airport validation
     for representative runway configurations.
 
-- [ ] Promote or contain Controlling OLS outputs.
+- [x] Consolidate Controlling OLS outputs and remove proof-of-concept notation.
 
-  Notes:
+  Completed:
   - The lower-envelope engine now has repeatable QGIS 4 regression coverage for
     planar, transitional, conical, transition-edge, clipped-contour, OFS/OES,
     and modernisation-comparison outputs.
-  - Runtime behaviour is mostly stable, but promotion still requires a deliberate
-    layer contract: which candidate, transition, and QA products are user-facing
-    and which remain diagnostic.
-  - Treat the established MOS/NASF controlling OLS POC separately from the new
-    modernised Annex 14 OFS/OES lower-envelope workflow.
+  - Solved regions and clipped contours are user-facing outputs under
+    `Controlling Surfaces`; candidate surfaces and transition boundaries remain
+    diagnostics under `99 Debug / Development`.
+  - Legacy POC-labelled layers are still migrated into diagnostics when an old
+    project tree is repaired. New output names contain no POC notation.
+  - The MOS139 and modernised Annex 14 lower-envelope capabilities are marked
+    `partial`, reflecting defined generated coverage rather than regulatory
+    completion. Remaining topology hardening stays tracked below.
 
 - [x] Add automated tests around Controlling OLS geometry contracts.
 
@@ -375,8 +378,14 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
       envelope solving, transition generation, comparison, and contours.
 - [ ] Turn the saved QGIS 4.0.2 performance checkpoint into release-oriented
       regression thresholds; retain geometry and coverage gates as hard failures.
-- [ ] Decide the user-facing versus diagnostic layer contract before changing
-      capability metadata from experimental/draft.
+- [x] Consolidate the user-facing versus diagnostic layer contract and remove
+      proof-of-concept nomenclature.
+
+  - Solved controlling regions and clipped contours are published under
+    `Controlling Surfaces`; solver candidates and transition boundaries stay in
+    `99 Debug / Development`.
+  - Capability metadata now records lower-envelope coverage as `partial`; it
+    does not imply complete regulatory or topology coverage.
 
 ## Verification Snapshot
 

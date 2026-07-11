@@ -97,8 +97,8 @@ Add transitional candidates before declaring the planar engine complete.
 
 Implementation status: initial integration complete. Generated transitional
 strip-adjacent and approach-adjacent panels are registered as generic planar
-candidates and participate in the Controlling OLS POC candidate, region, and
-transition-edge layers.
+candidates and participate in controlling candidate, region, and
+transition-boundary layers.
 
 Transitional surfaces must include:
 
@@ -182,8 +182,10 @@ Expected layers during development:
 - clipped controlling contours;
 - optional QA samples.
 
-All development outputs should remain under a dedicated `Controlling OLS POC`
-group until promoted.
+The output contract separates user-facing solved products from diagnostics:
+solved regions and clipped contours are published under `Controlling Surfaces`,
+while candidate surfaces and transition boundaries remain in
+`99 Debug / Development`.
 
 ## First Implementation Target
 
@@ -200,17 +202,14 @@ next milestone.
 
 ## Planar And Conical Milestone Status
 
-Status: validated as a proof-of-concept for controlling regions with planar,
-transitional, and conical candidates.
+Status: implemented with defined partial coverage for controlling regions with
+planar, transitional, and conical candidates.
 
-The current implementation generates a derived `Controlling OLS POC` output
-group containing:
+The current implementation generates:
 
-- candidate surface diagnostics;
-- solved controlling planar region polygons;
-- solved controlling transition edge diagnostics;
-- clipped controlling contour diagnostics for Approach, TOCS, Conical, and
-  Transitional.
+- user-facing solved controlling region polygons and clipped controlling
+  contours for Approach, TOCS, Conical, and Transitional;
+- diagnostic candidate surface and solved transition-boundary layers.
 
 The controlling lower-envelope model currently includes:
 
@@ -312,7 +311,7 @@ Several implementation details are important to preserve this behaviour:
 
 The current engine contains several post-construction geometry defenders. These
 are deliberate safeguards around QGIS/GEOS overlay behaviour and around known
-places where the proof-of-concept solver can produce slivers, gaps, internal
+places where the solver can produce slivers, gaps, internal
 seams, or invalid polygon artefacts.
 
 The main safeguards are region polygon cleanup, coverage repair, local
@@ -330,9 +329,9 @@ Known remaining limitations:
 
 ### Contour Clipping Checkpoint
 
-Contour clipping is implemented for the solved `Controlling OLS POC` regions.
+Contour clipping is implemented for the solved controlling regions.
 Approach, TOCS, Conical, and Transitional source contours carry/register the
-same stable `surface_id` used by their controlling candidate surface. The POC
+same stable `surface_id` used by their controlling candidate surface. The
 contour output clips each registered contour to the solved region for its
 matching parent surface and emits only the retained contour geometry. Retained
 parts from the same source contour are collected into one multipart feature so

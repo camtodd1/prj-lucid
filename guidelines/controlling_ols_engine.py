@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Planar lower-envelope engine for controlling OLS proof-of-concept outputs."""
+"""Planar lower-envelope engine for controlling OLS outputs."""
 
 import math
 import time
@@ -4308,7 +4308,7 @@ class ControllingOlsEngineMixin:
             )
         )
 
-    def _create_controlling_ols_planar_poc_layers(
+    def _create_controlling_ols_layers(
         self,
         icao_code: str,
         debug_group: QgsLayerTreeGroup,
@@ -4333,9 +4333,9 @@ class ControllingOlsEngineMixin:
             )
             return False
 
-        output_group = self._controlling_ols_poc_group(debug_group)
-        region_output_group = controlling_surfaces_group if controlling_surfaces_group is not None else output_group
-        contour_output_group = controlling_contours_group if controlling_contours_group is not None else output_group
+        diagnostic_group = self._controlling_ols_diagnostic_group(debug_group)
+        region_output_group = controlling_surfaces_group if controlling_surfaces_group is not None else diagnostic_group
+        contour_output_group = controlling_contours_group if controlling_contours_group is not None else diagnostic_group
         engine = PlanarControllingOlsEngine(planar_candidates, exclusion_geometries=exclusion_geometries)
         if solved_engines is not None:
             solved_engines["baseline"] = engine
@@ -4344,7 +4344,7 @@ class ControllingOlsEngineMixin:
         if not self._controlling_ols_subphase("Controlling OLS: preparing candidate surfaces..."):
             return False
         step_start = time.perf_counter()
-        candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, output_group, planar_candidates)
+        candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, diagnostic_group, planar_candidates)
         timing_splits["candidates"] = time.perf_counter() - step_start
 
         if not self._controlling_ols_subphase("Controlling OLS: solving lower-envelope regions..."):
@@ -4356,7 +4356,7 @@ class ControllingOlsEngineMixin:
         if not self._controlling_ols_subphase("Controlling OLS: constructing transition boundaries..."):
             return candidate_layer_ok or region_layer_ok
         step_start = time.perf_counter()
-        transition_layer_ok = self._create_controlling_transition_layer(icao_code, output_group, engine)
+        transition_layer_ok = self._create_controlling_transition_layer(icao_code, diagnostic_group, engine)
         timing_splits["transitions"] = time.perf_counter() - step_start
 
         if not self._controlling_ols_subphase("Controlling OLS: clipping source contours..."):
@@ -4464,18 +4464,19 @@ class ControllingOlsEngineMixin:
             created = region_created or contour_created or created
         return created
 
-    def _controlling_ols_poc_group(self, layer_group: QgsLayerTreeGroup) -> QgsLayerTreeGroup:
+    def _controlling_ols_diagnostic_group(self, layer_group: QgsLayerTreeGroup) -> QgsLayerTreeGroup:
+        """Return the dedicated diagnostic group for non-user-facing solver products."""
         group_name = self.tr(output_structure.DEBUG_DEVELOPMENT)
         if layer_group is not None and layer_group.name() == group_name:
             return layer_group
-        return self._ensure_controlling_ols_poc_group(layer_group, group_name) or layer_group
+        return self._ensure_controlling_ols_diagnostic_group(layer_group, group_name) or layer_group
 
-    def _ensure_controlling_ols_poc_group(
+    def _ensure_controlling_ols_diagnostic_group(
         self,
         parent_group: QgsLayerTreeGroup,
         group_name: str,
     ) -> Optional[QgsLayerTreeGroup]:
-        """Keep the debug/development group at the end of generated outputs."""
+        """Keep the diagnostic group at the end of generated outputs."""
         if parent_group is None:
             return None
 
@@ -4559,7 +4560,7 @@ class ControllingOlsEngineMixin:
         layer = self._create_and_add_layer(
             "Polygon",
             internal_name or f"OLS_Controlling_Planar_Candidates_{icao_code}",
-            display_name or f"{self.tr('OLS')} Controlling Planar Candidates POC {icao_code}",
+            display_name or f"{self.tr('OLS')} Controlling Candidate Surfaces {icao_code}",
             fields,
             features,
             output_group,
@@ -4647,7 +4648,7 @@ class ControllingOlsEngineMixin:
         layer = self._create_and_add_layer(
             "MultiPolygon",
             internal_name or f"OLS_Controlling_Planar_Regions_{icao_code}",
-            display_name or f"{self.tr('OLS')} Controlling Planar Regions POC {icao_code}",
+            display_name or f"{self.tr('OLS')} Controlling Regions {icao_code}",
             fields,
             features,
             output_group,
@@ -4957,7 +4958,7 @@ class ControllingOlsEngineMixin:
         layer = self._create_and_add_layer(
             "LineStringZ",
             internal_name or f"OLS_Controlling_Planar_Transitions_{icao_code}",
-            display_name or f"{self.tr('OLS')} Controlling Planar Transitions POC {icao_code}",
+            display_name or f"{self.tr('OLS')} Controlling Transition Boundaries {icao_code}",
             fields,
             features,
             output_group,
@@ -5196,7 +5197,7 @@ class ControllingOlsEngineMixin:
         layer = self._create_and_add_layer(
             "MultiLineString",
             internal_name or f"OLS_Controlling_Contours_{icao_code}",
-            display_name or f"{self.tr('OLS')} Controlling Contours POC {icao_code}",
+            display_name or f"{self.tr('OLS')} Controlling Contours {icao_code}",
             fields,
             features,
             output_group,

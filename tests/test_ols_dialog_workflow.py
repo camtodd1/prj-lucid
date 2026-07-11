@@ -54,6 +54,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.select_mode("future_annex14_ofs_oes")
 
         self.assertFalse(self.dialog.frame_olsFamilyExplanation.isHidden())
+        self.assertEqual(self.dialog.label_olsOfsTitle.text(), "OFS — protected airspace")
+        self.assertIn("Obstacle-free surface", self.dialog.label_olsOfsDetail.text())
+        self.assertEqual(self.dialog.label_olsOesTitle.text(), "OES — assessment trigger")
+        self.assertIn("not an approval limit", self.dialog.label_olsOesDetail.text())
         self.assertTrue(self.dialog._contour_interval_labels["approach"].isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["annex14_oes"].isHidden())

@@ -135,22 +135,34 @@ class OutputOptionsMixin:
 
         family_frame = QtWidgets.QFrame()
         family_frame.setObjectName("frame_olsFamilyExplanation")
-        family_frame.setMinimumHeight(44)
+        family_frame.setMinimumHeight(82)
         family_frame.setStyleSheet(
             "QFrame#frame_olsFamilyExplanation { background: #f5f8fb; border: 1px solid #d9e2ea; border-radius: 4px; }"
         )
         family_layout = QtWidgets.QGridLayout(family_frame)
         family_layout.setContentsMargins(10, 8, 10, 8)
         family_layout.setHorizontalSpacing(12)
-        family_summary = QtWidgets.QLabel(
-            self.tr(
-                "OFS defines protected airspace. OES identifies where aeronautical assessment may be required; it is not an approval limit."
-            )
+        family_layout.setVerticalSpacing(3)
+        ofs_title = QtWidgets.QLabel(self.tr("OFS — protected airspace"))
+        ofs_title.setObjectName("label_olsOfsTitle")
+        ofs_title.setStyleSheet("font-weight: 600; color: #234b68;")
+        ofs_detail = QtWidgets.QLabel(
+            self.tr("Obstacle-free surface used to describe the future protected-airspace envelope.")
         )
-        family_summary.setObjectName("label_olsFamilySummary")
-        family_summary.setWordWrap(True)
-        family_summary.setStyleSheet("color: #234b68;")
-        family_layout.addWidget(family_summary, 0, 0)
+        ofs_detail.setObjectName("label_olsOfsDetail")
+        ofs_detail.setWordWrap(True)
+        oes_title = QtWidgets.QLabel(self.tr("OES — assessment trigger"))
+        oes_title.setObjectName("label_olsOesTitle")
+        oes_title.setStyleSheet("font-weight: 600; color: #234b68;")
+        oes_detail = QtWidgets.QLabel(
+            self.tr("Obstacle evaluation surface indicating where aeronautical assessment may be required; not an approval limit.")
+        )
+        oes_detail.setObjectName("label_olsOesDetail")
+        oes_detail.setWordWrap(True)
+        family_layout.addWidget(ofs_title, 0, 0)
+        family_layout.addWidget(ofs_detail, 0, 1)
+        family_layout.addWidget(oes_title, 1, 0)
+        family_layout.addWidget(oes_detail, 1, 1)
         grid.addWidget(family_frame, 2, 0, 1, 2)
 
         status = QtWidgets.QLabel()
@@ -161,7 +173,10 @@ class OutputOptionsMixin:
 
         self.label_olsModeDescription = description
         self.frame_olsFamilyExplanation = family_frame
-        self.label_olsFamilySummary = family_summary
+        self.label_olsOfsTitle = ofs_title
+        self.label_olsOfsDetail = ofs_detail
+        self.label_olsOesTitle = oes_title
+        self.label_olsOesDetail = oes_detail
         self.label_olsInlineStatus = status
         combo.currentIndexChanged.connect(self._update_ols_workflow_ui)
 

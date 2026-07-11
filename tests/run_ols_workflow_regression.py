@@ -351,7 +351,7 @@ def _run_case(case, manifest, builder_cls, dialog_cls, controlling_cls, comparis
         return result
 
     builder_methods = (
-        "_create_controlling_ols_planar_poc_layers",
+        "_create_controlling_ols_layers",
         "_create_annex14_controlling_surface_layers",
         "_create_controlling_region_layer",
         "_partition_controlling_region_features",

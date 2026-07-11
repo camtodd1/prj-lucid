@@ -49,7 +49,7 @@ Required output coverage confirmed:
   distances, stopways, clearways, strips, and RESA.
 - Detailed runway markings and marking QA.
 - Airfield Ground Lighting.
-- MOS OLS, contours, airport-wide OLS, and controlling OLS POC layers.
+- MOS OLS, contours, airport-wide OLS, and controlling OLS layers.
 - NASF windshear, wildlife, wind turbine, lighting/glare, and public safety
   area outputs.
 - Specialised runway safeguarding and taxiway separation outputs.
