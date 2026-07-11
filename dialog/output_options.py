@@ -401,7 +401,55 @@ class OutputOptionsMixin:
         grid.addWidget(self.doubleSpinBoxContourDefaultPrimary, 1, 1)
         grid.addWidget(self.doubleSpinBoxContourDefault, 1, 2)
 
-        for row, key in enumerate(CONTOUR_INTERVAL_KEYS, start=2):
+        overrides_button = getattr(self, "toolButtonContourOverrides", None)
+        if overrides_button is None:
+            overrides_button = QtWidgets.QToolButton()
+            overrides_button.setObjectName("toolButtonContourOverrides")
+            overrides_button.setText(self.tr("Individual contour settings"))
+            overrides_button.setCheckable(True)
+            overrides_button.setChecked(False)
+            overrides_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+            overrides_button.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            overrides_button.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            overrides_button.setStyleSheet(
+                "QToolButton { border: 1px solid #d4dbe2; border-radius: 4px; "
+                "background: #f6f8fa; padding: 6px 8px; text-align: left; font-weight: 600; }"
+                "QToolButton:hover { background: #eef3f7; }"
+            )
+            grid.addWidget(overrides_button, 2, 0, 1, 4)
+            self.toolButtonContourOverrides = overrides_button
+
+        overrides_widget = getattr(self, "widgetContourOverrides", None)
+        if overrides_widget is None:
+            overrides_widget = QtWidgets.QWidget(group)
+            overrides_widget.setObjectName("widgetContourOverrides")
+            overrides_grid = QtWidgets.QGridLayout(overrides_widget)
+            overrides_grid.setObjectName("gridLayoutContourOverrides")
+            overrides_grid.setContentsMargins(8, 6, 8, 4)
+            overrides_grid.setHorizontalSpacing(12)
+            overrides_grid.setVerticalSpacing(6)
+            overrides_grid.setColumnStretch(0, 1)
+            overrides_grid.setColumnStretch(1, 0)
+            overrides_grid.setColumnStretch(2, 0)
+            detail_primary_header = QtWidgets.QLabel(self.tr("Primary"))
+            detail_primary_header.setStyleSheet("color: #59636e; font-size: 11px;")
+            detail_intermediate_header = QtWidgets.QLabel(self.tr("Intermediate"))
+            detail_intermediate_header.setStyleSheet("color: #59636e; font-size: 11px;")
+            overrides_grid.addWidget(detail_primary_header, 0, 1)
+            overrides_grid.addWidget(detail_intermediate_header, 0, 2)
+            grid.addWidget(overrides_widget, 3, 0, 1, 4)
+            self.widgetContourOverrides = overrides_widget
+            self.gridLayoutContourOverrides = overrides_grid
+        else:
+            overrides_grid = overrides_widget.layout()
+
+        overrides_button.toggled.connect(self._toggle_contour_overrides)
+        self._toggle_contour_overrides(overrides_button.isChecked())
+
+        for row, key in enumerate(CONTOUR_INTERVAL_KEYS, start=1):
             label_name = f"labelContour{key.title()}"
             primary_spin_name = f"doubleSpinBoxContour{key.title()}Primary"
             intermediate_spin_name = f"doubleSpinBoxContour{key.title()}Intermediate"
@@ -409,7 +457,7 @@ class OutputOptionsMixin:
             if label is None:
                 label = QtWidgets.QLabel(self.tr(CONTOUR_INTERVAL_LABELS[key]))
                 label.setObjectName(label_name)
-                grid.addWidget(label, row, 0)
+                overrides_grid.addWidget(label, row, 0)
             self._contour_interval_labels[key] = label
             label.setToolTip(self._contour_interval_tooltip(key))
             primary_spinbox = getattr(self, primary_spin_name, None)
@@ -425,8 +473,8 @@ class OutputOptionsMixin:
             intermediate_spinbox.setToolTip(self._contour_interval_tooltip(key, role="intermediate"))
             self._contour_primary_interval_spinboxes[key] = primary_spinbox
             self._contour_interval_spinboxes[key] = intermediate_spinbox
-            grid.addWidget(primary_spinbox, row, 1)
-            grid.addWidget(intermediate_spinbox, row, 2)
+            overrides_grid.addWidget(primary_spinbox, row, 1)
+            overrides_grid.addWidget(intermediate_spinbox, row, 2)
 
         self.doubleSpinBoxContourDefaultPrimary.valueChanged.connect(
             lambda value: self._apply_default_contour_interval("primary", value)
@@ -438,6 +486,22 @@ class OutputOptionsMixin:
             spinbox.valueChanged.connect(self._on_contour_interval_changed)
         for spinbox in self._contour_interval_spinboxes.values():
             spinbox.valueChanged.connect(self._on_contour_interval_changed)
+
+    def _toggle_contour_overrides(self, expanded: bool):
+        """Show or hide individual contour overrides while defaults stay visible."""
+        button = getattr(self, "toolButtonContourOverrides", None)
+        widget = getattr(self, "widgetContourOverrides", None)
+        if button is not None:
+            button.setArrowType(
+                QtCore.Qt.ArrowType.DownArrow if expanded else QtCore.Qt.ArrowType.RightArrow
+            )
+            button.setToolTip(
+                self.tr("Hide individual surface and family contour intervals.")
+                if expanded
+                else self.tr("Show individual surface and family contour intervals.")
+            )
+        if widget is not None:
+            widget.setVisible(bool(expanded))
 
     def _create_contour_interval_spinbox(self, object_name: str, default_value: float = DEFAULT_CONTOUR_INTERVAL):
         spinbox = QtWidgets.QDoubleSpinBox()
@@ -471,6 +535,8 @@ class OutputOptionsMixin:
             self.doubleSpinBoxContourDefault.setValue(DEFAULT_CONTOUR_INTERVAL)
         self._apply_default_contour_interval("primary", DEFAULT_PRIMARY_CONTOUR_INTERVAL)
         self._apply_default_contour_interval("intermediate", DEFAULT_CONTOUR_INTERVAL)
+        if hasattr(self, "toolButtonContourOverrides"):
+            self.toolButtonContourOverrides.setChecked(False)
 
     def _apply_default_contour_interval(self, role: str, value: float):
         attr_name = (
@@ -558,6 +624,14 @@ class OutputOptionsMixin:
                 primary_spinboxes[key].setValue(primary_value)
             if key in intermediate_spinboxes:
                 intermediate_spinboxes[key].setValue(intermediate_value)
+        has_overrides = any(
+            abs(primary_spinboxes[key].value() - default_primary) > 1e-9
+            or abs(intermediate_spinboxes[key].value() - default_intermediate) > 1e-9
+            for key in CONTOUR_INTERVAL_KEYS
+            if key in primary_spinboxes and key in intermediate_spinboxes
+        )
+        if hasattr(self, "toolButtonContourOverrides"):
+            self.toolButtonContourOverrides.setChecked(has_overrides)
 
     def _coerce_contour_interval_value(
         self,

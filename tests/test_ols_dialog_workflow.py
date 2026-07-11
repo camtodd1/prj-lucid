@@ -75,6 +75,34 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertTrue(self.dialog.checkBox_generateControllingOls.isChecked())
         self.assertFalse(self.dialog.checkBox_generateControllingOls.isEnabled())
 
+    def test_contour_defaults_remain_visible_outside_collapsed_overrides(self):
+        self.assertTrue(self.dialog.widgetContourOverrides.isHidden())
+        self.assertFalse(self.dialog.doubleSpinBoxContourDefaultPrimary.isHidden())
+        self.assertFalse(self.dialog.doubleSpinBoxContourDefault.isHidden())
+        self.assertIs(
+            self.dialog._contour_interval_labels["approach"].parentWidget(),
+            self.dialog.widgetContourOverrides,
+        )
+
+        self.dialog.toolButtonContourOverrides.setChecked(True)
+
+        self.assertFalse(self.dialog.widgetContourOverrides.isHidden())
+
+    def test_saved_individual_contour_override_expands_section(self):
+        self.dialog.set_contour_interval_options(
+            {
+                "default": {"primary": 50.0, "intermediate": 10.0},
+                "approach": {"primary": 25.0, "intermediate": 5.0},
+            }
+        )
+
+        self.assertTrue(self.dialog.toolButtonContourOverrides.isChecked())
+        self.assertFalse(self.dialog.widgetContourOverrides.isHidden())
+        self.assertEqual(
+            self.dialog._contour_primary_interval_spinboxes["approach"].value(),
+            25.0,
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
