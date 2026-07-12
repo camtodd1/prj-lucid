@@ -30,7 +30,7 @@
       },
       "output": {
         "layers": 125,
-        "features": 7803,
+        "features": 6425,
         "invalid_geometries": 0,
         "empty_geometries": 0,
         "duplicate_comparison_ids": 0

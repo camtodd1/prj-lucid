@@ -7,8 +7,8 @@
   "fixtures": {
     "ybbn_single.json": {
       "regions": 21,
-      "area_m2": 721831565.1690618,
-      "geometry_digest": "0769a6b37f85b44059a42745ff6bdca58f6742a1e3f5ac108949765c121d4eb4",
+      "area_m2": 721831580.7204291,
+      "geometry_digest": "f4a5fe2455ae2f04e3d4f4058c8e58a23e87b17e837b58e39c2ab70db11978d0",
       "controller_ids_digest": "61dbbce4fdcc07736e3575943c79fbbd6e4179da72e213c6c24ea8ed42fa9450"
     },
     "yssy_dual_intersecting.json": {

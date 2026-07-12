@@ -100,16 +100,20 @@ Put changes in the domain module that owns the rule:
 
 Keep `profile.py` focused on delegation and public API stability. If a new
 policy area is added, add it to `services.py`, expose it through `profile.py`,
-and extend `tests/test_rulesets.py` contract tests.
+and validate the new contract with a focused test while it is under active
+development.
 
 ## Testing
 
 After ruleset edits, run:
 
 ```bash
-python3 -m unittest tests.test_rulesets
-python3 -m py_compile dimensions/*.py rulesets/*.py rulesets/mos139/*.py tests/*.py
+python3 -m py_compile dimensions/*.py rulesets/*.py rulesets/mos139/*.py
 ```
+
+Recheck affected values against the cited MOS source whenever a rule or source
+edition changes. Stable source-table regression tests are intentionally not
+part of the routine suite; see `tests/README.md`.
 
 For plugin-wide confidence, also run the broader compile command documented in
 the root `README.md`.

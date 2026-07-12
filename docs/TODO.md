@@ -66,8 +66,8 @@
     generated declared-distance values before output.
   - Warnings are stored on runway summaries and per-direction declared-distance
     records so they can appear in summary reports and generated layer notes.
-  - Synthetic fixture-backed regression validation is covered by
-    `tests/test_declared_distance_fixtures.py`.
+  - Synthetic fixture-backed regression validation was completed during
+    implementation; routine coverage was retired after the component stabilised.
   - Real/sample-airport validation remains tracked in
     `docs/development_milestones.md`.
 

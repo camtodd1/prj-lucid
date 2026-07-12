@@ -41,6 +41,7 @@ CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_STRICT_BOUNDARY_TOLERANCE_M = 0.001
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
+CONTROLLING_GLOBAL_CELL_MAX_CHORD_GAP_AREA_M2 = 10.0
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
@@ -54,6 +55,7 @@ AXIS_CONICAL_ZERO_CONTOUR_MIN_GRID_M = 20.0
 AXIS_CONICAL_ZERO_CONTOUR_MAX_GRID_M = 75.0
 AXIS_CONICAL_ZERO_CONTOUR_TARGET_STEPS = 160.0
 AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS = 80000
+AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M = 0.10
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -217,6 +219,8 @@ class PlanarControllingOlsEngine:
                     else "rounded_probe_fallback"
                 ),
                 "transition_records": int(stats.get("adjacency_transition_record_count", 0.0)),
+                "chord_gap_parts_absorbed": int(stats.get("global_chord_gap_part_count", 0.0)),
+                "chord_gap_area_m2": stats.get("global_chord_gap_area_m2", 0.0),
                 "merged_overlap_resolved": int(stats.get("merged_overlap_resolved_count", 0.0)),
                 "merged_overlap_resolved_area_m2": stats.get("merged_overlap_resolved_area_m2", 0.0),
                 "merged_overlap_unresolved": int(stats.get("merged_overlap_unresolved_count", 0.0)),
@@ -227,8 +231,16 @@ class PlanarControllingOlsEngine:
             "approximations": {
                 "triangulation_calls": int(stats.get("triangulation_calls", 0.0)),
                 "zero_contour_calls": int(stats.get("axis_zero_contour_calls", 0.0)),
+                "chord_refinements_suppressed": int(
+                    stats.get("axis_conical_chord_refinement_suppressed", 0.0)
+                ),
                 "horizontal_chord_tolerance_m": AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M,
-                "vertical_error_bound_m": None,
+                "vertical_error_bound_m": (
+                    AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M
+                    if stats.get("axis_zero_contour_calls", 0.0)
+                    and not stats.get("triangulation_calls", 0.0)
+                    else None
+                ),
             },
             "geometry": {
                 "invalid_input_candidates": self._invalid_input_candidate_count,
@@ -425,6 +437,10 @@ class PlanarControllingOlsEngine:
 
         region_parts = self._controlling_region_geometries()
         records: List[Tuple[QgsGeometry, List[object]]] = []
+        pair_segments: Dict[
+            Tuple[str, str],
+            Tuple[ControllingOlsCandidate, ControllingOlsCandidate, List[QgsGeometry]],
+        ] = {}
         segment_controller_cache: Dict[
             Tuple[Tuple[float, float], Tuple[float, float]],
             Optional[Tuple[ControllingOlsCandidate, ControllingOlsCandidate]],
@@ -456,23 +472,46 @@ class PlanarControllingOlsEngine:
                     if key in seen_keys:
                         continue
                     seen_keys.add(key)
-                    z_values = self._transition_z_values(segment_points, first_controller, second_controller)
-                    z_line = self._line_points_to_z_geometry(segment_points, z_values)
-                    if z_line is None or z_line.isEmpty():
+                    segment = QgsGeometry.fromPolylineXY(segment_points)
+                    if segment is None or segment.isEmpty():
                         continue
-                    records.append(
-                        (
-                            QgsGeometry(z_line),
-                            [
-                                f"{first_controller.surface_id}|{second_controller.surface_id}"[:160],
-                                "Transition",
-                                min(z_values),
-                                max(z_values),
-                                f"{first_controller.surface_id}|{second_controller.surface_id}"[:254],
-                                "region_boundary",
-                            ],
-                        )
+                    ordered = sorted(
+                        (first_controller, second_controller),
+                        key=lambda candidate: candidate.surface_id,
                     )
+                    pair_key = (ordered[0].surface_id, ordered[1].surface_id)
+                    pair_segments.setdefault(pair_key, (ordered[0], ordered[1], []))[2].append(segment)
+
+        for pair_key in sorted(pair_segments):
+            first_controller, second_controller, segments = pair_segments[pair_key]
+            try:
+                merged = QgsGeometry.unaryUnion(segments) if len(segments) > 1 else segments[0]
+                line_merged = merged.mergeLines()
+                if line_merged is not None and not line_merged.isEmpty():
+                    merged = line_merged
+            except Exception:
+                merged = segments[0]
+            for line_points in self._line_parts(merged):
+                if len(line_points) < 2:
+                    continue
+                z_values = self._transition_z_values(line_points, first_controller, second_controller)
+                z_line = self._line_points_to_z_geometry(line_points, z_values)
+                if z_line is None or z_line.isEmpty():
+                    continue
+                pair_id = f"{first_controller.surface_id}|{second_controller.surface_id}"
+                records.append(
+                    (
+                        QgsGeometry(z_line),
+                        [
+                            pair_id[:160],
+                            "Transition",
+                            min(z_values),
+                            max(z_values),
+                            pair_id[:254],
+                            "region_boundary_merged",
+                        ],
+                    )
+                )
         self._region_boundary_records_cache = records
         return records
 
@@ -991,7 +1030,7 @@ class PlanarControllingOlsEngine:
         if not cell_parts:
             return []
 
-        self._global_subdivision_completion_parts(cell_parts)
+        cell_parts.extend(self._global_subdivision_completion_parts(cell_parts))
 
         merge_start = time.perf_counter()
         merged_parts = self._merge_region_parts_by_candidate(cell_parts)
@@ -1169,6 +1208,23 @@ class PlanarControllingOlsEngine:
             if not self._has_polygon_area(gap, min_area=1e-3):
                 continue
             controller = self._unanimous_controller_for_cell(gap)
+            chord_gap_assignment = False
+            if (
+                controller is None
+                and gap.area() <= CONTROLLING_GLOBAL_CELL_MAX_CHORD_GAP_AREA_M2
+            ):
+                # Polygonize can leave a hairline face between noded chords.
+                # Boundary vertices are tied by definition, so classify only
+                # genuine interior checkpoints before absorbing the face into
+                # its single neighbouring controller.
+                interior_controllers: Dict[str, ControllingOlsCandidate] = {}
+                for point_xy in self._global_cell_validation_points(gap):
+                    result = self.controlling_candidate_at_xy(point_xy)
+                    if result is not None:
+                        interior_controllers[result[0].surface_id] = result[0]
+                if len(interior_controllers) == 1:
+                    controller = next(iter(interior_controllers.values()))
+                    chord_gap_assignment = True
             if controller is None:
                 self._region_solve_stats["global_ambiguous_gap_part_count"] = (
                     self._region_solve_stats.get("global_ambiguous_gap_part_count", 0.0) + 1.0
@@ -1190,12 +1246,20 @@ class PlanarControllingOlsEngine:
                 )
                 continue
             completed.append((controller, owned))
-            self._region_solve_stats["global_unanimous_gap_part_count"] = (
-                self._region_solve_stats.get("global_unanimous_gap_part_count", 0.0) + 1.0
-            )
-            self._region_solve_stats["global_unanimous_gap_area_m2"] = (
-                self._region_solve_stats.get("global_unanimous_gap_area_m2", 0.0) + owned.area()
-            )
+            if chord_gap_assignment:
+                self._region_solve_stats["global_chord_gap_part_count"] = (
+                    self._region_solve_stats.get("global_chord_gap_part_count", 0.0) + 1.0
+                )
+                self._region_solve_stats["global_chord_gap_area_m2"] = (
+                    self._region_solve_stats.get("global_chord_gap_area_m2", 0.0) + owned.area()
+                )
+            else:
+                self._region_solve_stats["global_unanimous_gap_part_count"] = (
+                    self._region_solve_stats.get("global_unanimous_gap_part_count", 0.0) + 1.0
+                )
+                self._region_solve_stats["global_unanimous_gap_area_m2"] = (
+                    self._region_solve_stats.get("global_unanimous_gap_area_m2", 0.0) + owned.area()
+                )
         return completed
 
     def _unanimous_controller_for_cell(
@@ -1234,6 +1298,7 @@ class PlanarControllingOlsEngine:
             boundary = None
 
         candidates_by_id: Dict[str, ControllingOlsCandidate] = {assigned_candidate.surface_id: assigned_candidate}
+        disagreement_magnitudes: List[float] = []
         for point_xy in self._global_cell_validation_points(cell):
             try:
                 if boundary is not None and not boundary.isEmpty():
@@ -1247,7 +1312,39 @@ class PlanarControllingOlsEngine:
             candidate, _elevation = controller
             if candidate.surface_id != assigned_candidate.surface_id:
                 candidates_by_id[candidate.surface_id] = candidate
-        return list(candidates_by_id.values()) if len(candidates_by_id) > 1 else []
+                difference = self._candidate_difference(
+                    assigned_candidate,
+                    candidate,
+                    point_xy,
+                )
+                if difference is not None and math.isfinite(difference):
+                    disagreement_magnitudes.append(abs(float(difference)))
+
+        candidates = list(candidates_by_id.values())
+        if len(candidates) <= 1:
+            return []
+        if (
+            len(candidates) == 2
+            and {candidate.model for candidate in candidates} == {"axis", "conical"}
+            and any(
+                candidate.model == "axis"
+                and self._axis_conical_zero_contour_applies(candidate)
+                for candidate in candidates
+            )
+            and disagreement_magnitudes
+            and max(disagreement_magnitudes) <= AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M
+        ):
+            # The cell was already split by the shared sampled zero contour. A
+            # second TIN solve follows a slightly different chord and creates
+            # narrow, non-contiguous wedges along stronger conical curvature.
+            # Keep the one polygonization boundary when the sampled elevation
+            # residual is within its explicit chord-error allowance.
+            self._region_solve_stats["axis_conical_chord_refinement_suppressed"] = (
+                self._region_solve_stats.get("axis_conical_chord_refinement_suppressed", 0.0)
+                + 1.0
+            )
+            return []
+        return candidates
 
     def _lower_envelope_parts_for_candidates(
         self,
