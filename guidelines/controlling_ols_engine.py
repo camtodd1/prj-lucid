@@ -41,7 +41,7 @@ CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_STRICT_BOUNDARY_TOLERANCE_M = 0.001
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
-CONTROLLING_GLOBAL_CELL_MAX_CHORD_GAP_AREA_M2 = 10.0
+CONTROLLING_GLOBAL_CELL_MIN_AREA_M2 = 1e-3
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
@@ -219,8 +219,6 @@ class PlanarControllingOlsEngine:
                     else "rounded_probe_fallback"
                 ),
                 "transition_records": int(stats.get("adjacency_transition_record_count", 0.0)),
-                "chord_gap_parts_absorbed": int(stats.get("global_chord_gap_part_count", 0.0)),
-                "chord_gap_area_m2": stats.get("global_chord_gap_area_m2", 0.0),
                 "merged_overlap_resolved": int(stats.get("merged_overlap_resolved_count", 0.0)),
                 "merged_overlap_resolved_area_m2": stats.get("merged_overlap_resolved_area_m2", 0.0),
                 "merged_overlap_unresolved": int(stats.get("merged_overlap_unresolved_count", 0.0)),
@@ -994,7 +992,7 @@ class PlanarControllingOlsEngine:
         unassigned_count = 0
         refined_count = 0
         for cell in self._polygon_parts(polygonized):
-            if not self._has_polygon_area(cell, min_area=1.0):
+            if not self._has_polygon_area(cell, min_area=CONTROLLING_GLOBAL_CELL_MIN_AREA_M2):
                 continue
             cell_count += 1
             controller = self._controlling_candidate_for_cell(cell)
@@ -1007,7 +1005,10 @@ class PlanarControllingOlsEngine:
                 refined_parts = self._lower_envelope_parts_for_candidates(cell, refinement_candidates)
                 if refined_parts:
                     for refined_candidate, refined_geometry in refined_parts:
-                        if not self._has_polygon_area(refined_geometry, min_area=1.0):
+                        if not self._has_polygon_area(
+                            refined_geometry,
+                            min_area=CONTROLLING_GLOBAL_CELL_MIN_AREA_M2,
+                        ):
                             continue
                         cell_parts.append((refined_candidate, refined_geometry))
                         assigned_count += 1
@@ -1018,7 +1019,10 @@ class PlanarControllingOlsEngine:
             except Exception:
                 clipped_cell = QgsGeometry(cell)
             for part in self._polygon_parts(clipped_cell):
-                if not self._has_polygon_area(part, min_area=1.0):
+                if not self._has_polygon_area(
+                    part,
+                    min_area=CONTROLLING_GLOBAL_CELL_MIN_AREA_M2,
+                ):
                     continue
                 cell_parts.append((candidate, part))
                 assigned_count += 1
@@ -1208,23 +1212,6 @@ class PlanarControllingOlsEngine:
             if not self._has_polygon_area(gap, min_area=1e-3):
                 continue
             controller = self._unanimous_controller_for_cell(gap)
-            chord_gap_assignment = False
-            if (
-                controller is None
-                and gap.area() <= CONTROLLING_GLOBAL_CELL_MAX_CHORD_GAP_AREA_M2
-            ):
-                # Polygonize can leave a hairline face between noded chords.
-                # Boundary vertices are tied by definition, so classify only
-                # genuine interior checkpoints before absorbing the face into
-                # its single neighbouring controller.
-                interior_controllers: Dict[str, ControllingOlsCandidate] = {}
-                for point_xy in self._global_cell_validation_points(gap):
-                    result = self.controlling_candidate_at_xy(point_xy)
-                    if result is not None:
-                        interior_controllers[result[0].surface_id] = result[0]
-                if len(interior_controllers) == 1:
-                    controller = next(iter(interior_controllers.values()))
-                    chord_gap_assignment = True
             if controller is None:
                 self._region_solve_stats["global_ambiguous_gap_part_count"] = (
                     self._region_solve_stats.get("global_ambiguous_gap_part_count", 0.0) + 1.0
@@ -1246,20 +1233,12 @@ class PlanarControllingOlsEngine:
                 )
                 continue
             completed.append((controller, owned))
-            if chord_gap_assignment:
-                self._region_solve_stats["global_chord_gap_part_count"] = (
-                    self._region_solve_stats.get("global_chord_gap_part_count", 0.0) + 1.0
-                )
-                self._region_solve_stats["global_chord_gap_area_m2"] = (
-                    self._region_solve_stats.get("global_chord_gap_area_m2", 0.0) + owned.area()
-                )
-            else:
-                self._region_solve_stats["global_unanimous_gap_part_count"] = (
-                    self._region_solve_stats.get("global_unanimous_gap_part_count", 0.0) + 1.0
-                )
-                self._region_solve_stats["global_unanimous_gap_area_m2"] = (
-                    self._region_solve_stats.get("global_unanimous_gap_area_m2", 0.0) + owned.area()
-                )
+            self._region_solve_stats["global_unanimous_gap_part_count"] = (
+                self._region_solve_stats.get("global_unanimous_gap_part_count", 0.0) + 1.0
+            )
+            self._region_solve_stats["global_unanimous_gap_area_m2"] = (
+                self._region_solve_stats.get("global_unanimous_gap_area_m2", 0.0) + owned.area()
+            )
         return completed
 
     def _unanimous_controller_for_cell(

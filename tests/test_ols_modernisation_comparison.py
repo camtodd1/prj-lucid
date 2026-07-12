@@ -834,21 +834,6 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(candidates, [])
         self.assertEqual(engine._region_solve_stats["axis_conical_chord_refinement_suppressed"], 1.0)
 
-    def test_small_polygonize_chord_gap_is_absorbed_by_its_interior_controller(self):
-        lower = self.constant("lower", 90.0)
-        engine = PlanarControllingOlsEngine([lower])
-        gap = QgsGeometry.fromRect(QgsRectangle(49.99, 0.0, 50.01, 100.0))
-        solved = self.domain.difference(gap)
-        point = QgsPointXY(50.0, 50.0)
-
-        with patch.object(engine, "_unanimous_controller_for_cell", return_value=None):
-            with patch.object(engine, "_global_cell_validation_points", return_value=[point]):
-                completed = engine._global_subdivision_completion_parts([(lower, solved)])
-
-        self.assertEqual(len(completed), 1)
-        self.assertEqual(completed[0][0].surface_id, "lower")
-        self.assertAlmostEqual(completed[0][1].area(), gap.area(), places=6)
-
     def test_region_owned_edge_only_probes_the_opposite_side(self):
         left_geometry = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
         left = ControllingOlsCandidate(
