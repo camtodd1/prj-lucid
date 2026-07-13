@@ -181,7 +181,7 @@
 - [ ] Evaluate vertex-count reduction for smoothed axis/conical intersections.
 
   Notes:
-  - The accepted endpoint-clamped, equality-projected curves are intentionally
+  - The accepted endpoint-clamped, partial-equality curves are intentionally
     dense enough to keep their chorded representation within the current error
     bounds, but the extra vertices may add polygonization, clipping, storage,
     and rendering cost.
@@ -191,24 +191,23 @@
   - The direct 40 m control-spacing trial was superseded by an endpoint-fixed,
     regularised least-squares B-spline fit. The first fit was still visually
     restrained because full equality projection erased most of the fitted
-    displacement. The current aggressive YMML inspection profile uses a 10x
+    displacement. The accepted YMML profile uses a 10x
     stronger fairing penalty and retains 75% of the fitted position while
     blending 25% towards equality.
-  - The aggressive profile represented 745 observed vertices with 127 controls.
+  - The accepted profile represented 745 observed vertices with 127 controls.
     All eight curves were accepted with zero endpoint shift, reversals, duplicate
     segments, short components, or topology excess. Maximum displacement was
     1.212 m and maximum elevation-equality residual was 0.0328 m. Its diagnostic
     transition layer contains 1,490 vertices because it preserves the actual
     polygon split edge rather than constructing a separately reprojected line.
     Review this density in the later simplification/performance pass.
-  - Preserve exact endpoints, the 0.5 m symmetric Hausdorff bound, the 0.01 m
-    equality-residual bound, local peak and RMS curvature improvement, overlap
-    domain containment, zero reversals/duplicates/short components, and all
-    accepted geometry locks.
-  - Treat this as a measured performance optimization. Retain the accepted 15 m
-    curve unless the trial passes visual review and broader regression evidence;
-    the aggressive profile's 4 m/0.10 m experimental gates are not production
-    acceptance limits.
+  - Preserve exact endpoints, the 1.5 m symmetric Hausdorff bound, the 0.04 m
+    equality-residual bound, whole-output curvature regression, overlap-domain
+    containment, zero reversals/duplicates/short components, and all accepted
+    geometry locks.
+  - Treat simplification as a measured performance optimization. The smoothed
+    construction itself is accepted; do not independently simplify final
+    neighbouring polygons or replace their shared edge.
 
 - [x] Improve the OLS tab workflow selection and validation.
 

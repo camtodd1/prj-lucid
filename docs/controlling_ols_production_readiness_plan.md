@@ -130,3 +130,6 @@ MOS139 controller identities or geometry digests. Final acceptance included
 YBBN, YSSY intersecting, YSWS parallel, and YSSY stress machine locks, plus
 manual visual confirmation of YMML in EPSG:32755. The committed MOS139 cases
 have zero unassigned or ambiguous cells and zero normal-path recovery activation.
+The 13 July smoothing revision adopts the user-approved bounded least-squares
+partial-equality curve, with 1.5 m displacement and 0.04 m elevation-residual
+limits, and refreshes all five MOS139 geometry signatures.

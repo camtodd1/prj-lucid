@@ -431,12 +431,13 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
       endpoint, displacement, residual, domain, and topology gates pass. The
       five-fixture regression and 55 focused unit tests passed. Vertex-density
       reduction remains a separately gated future performance experiment.
-- [ ] 2026-07-13 visual trial: endpoint-constrained regularised least-squares
+- [x] 2026-07-13: endpoint-constrained regularised least-squares
       B-spline fitting now approximates all ordered intersection observations
       without interpolating their local jitter. The stronger inspection profile
       retains 75% of the fitted position and blends 25% towards equality because
       full reprojection removed most visible smoothing. On YMML, peak and RMS
       curvature change improved by about 65% and 68% respectively versus the
       first fitted trial, with zero endpoint shift and a maximum 0.0328 m
-      elevation-equality residual. Export and diagnostics are ready for review;
-      the accepted MOS139 geometry lock is intentionally unchanged.
+      elevation-equality residual. The user accepted the visual result and
+      tolerance. All five MOS139 fixtures passed structural gates, and the
+      compatibility lock was updated to the approved geometry.

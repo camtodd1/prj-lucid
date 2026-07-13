@@ -64,9 +64,9 @@ AXIS_CONICAL_CURVE_FIT_OUTPUT_SPACING_M = 5.0
 AXIS_CONICAL_CURVE_FIT_FAIRING_WEIGHT = 0.1
 AXIS_CONICAL_CURVE_FIT_EQUALITY_PROJECTION_FRACTION = 0.25
 AXIS_CONICAL_CURVE_FIT_MIN_CONTROL_POINTS = 4
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M = 4.0
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.10
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M = 0.10
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M = 1.5
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.04
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M = 0.04
 AXIS_CONICAL_CURVE_SMOOTHING_MIN_CURVATURE_IMPROVEMENT = 0.01
 AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT = False
 AXIS_CONICAL_CURVE_SMOOTHING_DOMAIN_TOLERANCE_M = 0.05
@@ -274,7 +274,7 @@ class PlanarControllingOlsEngine:
                     else "disabled"
                 ),
                 "zero_contour_smoothing_profile": (
-                    "aggressive_least_squares_bspline_visual_trial"
+                    "accepted_least_squares_bspline_partial_equality"
                     if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
                     else "disabled"
                 ),
@@ -365,10 +365,9 @@ class PlanarControllingOlsEngine:
                 "unanimous_gap_audit": "qa_diagnostic",
                 "merged_conical_overlap_assignment": "accepted_compatibility_correction",
                 "axis_conical_isoline": (
-                    "experimental_least_squares_bspline_partial_equality_projection"
+                    "accepted_bounded_least_squares_bspline_partial_equality_projection"
                     if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
-                    and not AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT
-                    else "bounded_c2_guide_equality_projection"
+                    else "disabled"
                 ),
                 "pairwise_solver_fallback": "exceptional_recovery",
                 "coverage_gap_fill": "exceptional_recovery",

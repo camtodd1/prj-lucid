@@ -29,9 +29,9 @@ small polygonized faces are retained rather than dropped and later filled as
 false wedges. The five-fixture matrix has stable controller identities and zero
 invalid MOS139 output regions.
 
-Visual acceptance covered YBBN, YSSY, and YSWS in the committed projected-metre
-test environment, plus YMML in EPSG:32755. YMML is manual cross-CRS evidence and
-does not add an unreviewed generated fixture to the machine lock.
+Visual acceptance covered YBBN, YSSY, YSWS, and the final least-squares profile
+on YMML in EPSG:32755. The machine lock contains the normalized fixtures for all
+five cases, while the supplied YMML source remains additional cross-CRS evidence.
 
 ## Supported families and retained behaviour
 
@@ -58,33 +58,38 @@ For MOS139 Approach/TOCS-to-Conical competition:
 6. derive diagnostic transitions from final shared adjacency, merging connected
    segments by canonical controller pair.
 
-Before polygonization, eligible sampled curves are now processed through an
-endpoint-clamped uniform cubic B-spline guide. Interior guide vertices are
-projected laterally back onto `z_axis - z_conical = 0`; this projection is
-essential because smoothing the 2D line alone does not preserve surface
-equality. A component is accepted only when peak and RMS curvature change both
-improve, endpoints remain fixed, symmetric densified Hausdorff displacement is
-no more than 0.5 m, equality residual is no more than 0.01 m, and the result is
-simple and remains inside the overlap domain. Failure of any check retains the
-projected unsmoothed curve.
+Before polygonization, every ordered sampled-intersection vertex contributes to
+an endpoint-constrained regularised least-squares cubic B-spline. The accepted
+profile uses controls spaced at approximately 120 m, a `0.1` second-difference
+fairing weight, and 5 m output evaluation. It retains 75% of each fitted
+interior position and blends 25% towards the exact lateral root of
+`z_axis - z_conical = 0`. Full equality projection was rejected because it
+restored most of the numerical undulation after fitting.
 
-The experiment established that curvature change is a more useful acceptance
-metric than vertex turn alone. On YMML, smoothing reduced peak curvature change
-by 22.0% and RMS curvature change by 4.7%, reduced peak vertex turn by 9.0%, and
-reduced the maximum measured equality residual from 0.00792 m to 0.00515 m.
-Maximum symmetric curve displacement was 0.355 m and endpoint displacement was
-zero. The three-run median workflow time was 21.41 seconds, 10.1% above the
-previous projected output and below the 20% investigation threshold. The full
-YBBN/YSSY/YSWS/YMML/stress matrix passed with no transition reversals, duplicate
-segments, short components, or invalid output regions.
+A component is accepted only when endpoints remain exact, symmetric densified
+Hausdorff displacement is no more than 1.5 m, elevation-equality residual is no
+more than 0.04 m, and the result is simple, non-backtracking, and contained by
+the overlap domain. Curvature remains a whole-output regression measurement.
+A local peak-and-RMS gate was tested but rejected one visually smooth YMML
+component and reinstated a worse raw contour, so it is not an acceptance gate.
 
-The smoothed curves intentionally retain fairly dense vertices so their chorded
-representation satisfies the equality and curvature bounds. Vertex-count
-reduction is a deferred performance opportunity, not part of this acceptance.
-Any later simplification must be benchmarked after equality projection and
-before polygon splitting, and must preserve the same endpoint, 0.5 m Hausdorff,
-0.01 m equality, curvature-improvement, overlap-domain, topology, and geometry
-lock gates. The detailed before/after evidence is recorded in
+On YMML, the accepted fit reduced peak curvature change from `0.001449` to
+`0.000506` per m² and RMS curvature change from `0.000185` to `0.000059` per m²
+relative to the first fitted trial. Maximum symmetric displacement was 1.212 m,
+maximum elevation-equality residual was 0.0328 m, and endpoint displacement was
+zero. The complete YBBN/YSSY/YSWS/YMML/stress matrix passed with zero smoothing
+fallbacks, unresolved comparisons, unassigned or ambiguous MOS139 cells,
+repairs, transition reversals, duplicate segments, short components, or invalid
+output regions.
+
+The diagnostic transition layer preserves the actual fitted polygon split edge
+rather than constructing a separately reprojected display line. It is therefore
+coincident with both controlling polygons but intentionally vertex-dense; YMML
+contains 1,490 axis/conical transition vertices. Vertex-count reduction is a
+deferred performance opportunity. Any later simplification must operate on the
+single shared edge before polygon splitting and preserve the endpoint, 1.5 m
+Hausdorff, 0.04 m equality, whole-output curvature, overlap-domain, topology,
+and geometry-lock gates. Detailed before/after evidence is recorded in
 `tests/fixtures/ols/ymml_axis_conical_benchmark_qgis4_2026-07-13.json`.
 
 A first YMML trial increasing spline control spacing from 15 m to 40 m was
@@ -94,28 +99,8 @@ result had 187 rather than 183 interior axis/conical vertices, peak curvature
 change regressed from 0.001515 to 0.001943 per m², and the adopted geometry lock
 did not match.
 
-The direct 40 m-control experiment has been superseded by user-requested
-least-squares B-spline visual trials. All ordered sampled-intersection vertices
-contribute to one endpoint-constrained fit, while a second-difference penalty
-fairs the solved interior controls. Full equality projection proved to be the
-dominant limiter: it removed most visible influence from even extreme fitted
-guides and could cause fallback or endpoint artefacts when controls were made
-too sparse.
-
-The current aggressive YMML inspection profile keeps the 120 m control spacing,
-raises the fairing weight from 0.01 to 0.1, retains 75% of each fitted interior
-position, and blends 25% towards the equality root. It represented 745 observed
-vertices with 127 fitted controls. All eight curves were emitted with zero
-endpoint shift, reversals, duplicate segments, short components, or topology
-excess. Maximum symmetric displacement was 1.212 m and maximum accepted-curve
-elevation-equality residual was 0.0328 m. Peak curvature change fell from
-0.001449 to 0.000506 per m² and RMS curvature change from 0.000185 to 0.000059
-per m² relative to the first fitted trial.
-
-The diagnostic transition layer now preserves the actual fitted polygon split
-edge rather than constructing a separate fully reprojected display line. It is
-therefore coincident with the controlling polygons but contains 1,490 vertices;
-bounded shared-edge simplification remains a later performance task. The trial
-uses deliberately wide 4 m displacement and 0.10 m equality-residual gates.
-This profile intentionally differs from the accepted geometry lock and must not
-update that lock until visual review and broader fixture testing are complete.
+The direct 40 m-control experiment and the first fully reprojected least-squares
+trial are retained as historical evidence. They were superseded by the accepted
+partial-equality profile above after explicit user visual approval and complete
+fixture-matrix validation. The five geometry digests in the compatibility lock
+were refreshed to that approved output on 13 July 2026.

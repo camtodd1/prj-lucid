@@ -24,7 +24,7 @@
     "elevation_semantics": "elev_min and elev_max are the shared AMSL elevation range along the line. They are not a surface-to-surface error and need not be equal on a sloping equality curve.",
     "equality_metric": "maximum_equality_residual_m is max(abs(z_axis - z_conical)) sampled at no more than 5 m spacing.",
     "smoothness_metric": "maximum_vertex_turn_degrees measures the largest local heading change at a line vertex. maximum_abs_curvature_change_per_m2 measures the largest change in discrete curvature between adjacent vertices and is the primary curvature-continuity metric. Lower is smoother.",
-    "smoothing_acceptance": "The endpoint-clamped C2 guide is accepted only when both peak and RMS curvature change improve, endpoint shift is zero, symmetric densified Hausdorff displacement is no more than 0.5 m, and the projected surface-equality residual is no more than 0.01 m. Rejected components retain the unsmoothed equality curve.",
+    "smoothing_acceptance": "The accepted endpoint-constrained regularized least-squares guide retains 75 percent of the fit and blends 25 percent towards equality. Endpoint shift must be zero, symmetric densified Hausdorff displacement must be no more than 1.5 m, surface-equality residual must be no more than 0.04 m, and domain, simplicity, backtracking, and topology checks must pass. Curvature is a whole-output regression metric rather than a local rejection gate.",
     "topology_metrics": "reversal_count, duplicate_segment_count, short_component_count, and topology_excess_length_m must all be zero for projected axis/conical output."
   },
   "sampled_baseline": {
@@ -205,5 +205,68 @@
     "controller_assignments_unchanged": true,
     "three_run_determinism_gate_passed": true,
     "full_fixture_regression_gate_passed": true
+  },
+  "adopted_regularized_least_squares_partial_equality_output": {
+    "method": "endpoint_constrained_regularized_least_squares_cubic_bspline_with_25_percent_equality_projection",
+    "acceptance": "User visually approved the YMML output and accepted the measured equality tolerance on 2026-07-13.",
+    "timing": {
+      "runs": [22.4392344999942],
+      "median_total_seconds": 22.4392344999942,
+      "note": "One accepted-profile run recorded during the complete five-fixture matrix; retain the established 20 percent investigation threshold."
+    },
+    "smoothing": {
+      "candidate_curves": 8,
+      "accepted_curves": 8,
+      "rejected_curves": 0,
+      "source_vertices": 745,
+      "control_points": 127,
+      "control_spacing_m": 120.0,
+      "output_spacing_m": 5.0,
+      "fairing_weight": 0.1,
+      "equality_projection_fraction": 0.25,
+      "maximum_allowed_deviation_m": 1.5,
+      "maximum_observed_deviation_m": 1.2122284065468885,
+      "maximum_allowed_equality_residual_m": 0.04,
+      "maximum_observed_smoothed_equality_residual_m": 0.03277123724862463,
+      "maximum_endpoint_shift_m": 0.0
+    },
+    "interior_axis_conical_quality": {
+      "features": 12,
+      "pairs": 8,
+      "vertices": 1490,
+      "length_m": 7361.523449035911,
+      "sample_points": 2136,
+      "shared_elevation_min_m": 190.04799703058433,
+      "shared_elevation_max_m": 266.39589537696156,
+      "shared_elevation_range_m": 76.34789834637724,
+      "maximum_equality_residual_m": 0.03271354834376439,
+      "rms_equality_residual_m": 0.010488835275485907,
+      "maximum_vertex_turn_degrees": 0.9405511945834673,
+      "rms_vertex_turn_degrees": 0.1348052231920075,
+      "maximum_abs_curvature_per_m": 0.003237400776636797,
+      "rms_curvature_per_m": 0.00043293238632589187,
+      "maximum_abs_curvature_change_per_m2": 0.000505767492014944,
+      "rms_curvature_change_per_m2": 0.000059436924922072395,
+      "reversal_count": 0,
+      "duplicate_segment_count": 0,
+      "short_component_count": 0,
+      "topology_excess_length_m": 2.2737367544323206e-13
+    },
+    "workflow_output": {
+      "layers": 189,
+      "features": 15744,
+      "invalid_geometries": 0,
+      "empty_geometries": 0,
+      "determinism_digest": "255309f3855352d4764b3c88b4b0188c713e486459417f49a24a3615be377f91"
+    },
+    "controlling_geometry_lock": {
+      "regions": 41,
+      "area_m2": 734359700.8357975,
+      "geometry_digest": "99ed24623672cfafbe7235d6f15ee167957586a0f40ef76976f033b0d7aeffc0",
+      "controller_ids_digest": "61717c210bcdbd3c780c85362ff844440c2a82ed9c3173a0248219c412e79866"
+    },
+    "controller_assignments_unchanged": true,
+    "full_fixture_mos139_structural_gate_passed": true,
+    "full_fixture_geometry_lock_updated": true
   }
 }

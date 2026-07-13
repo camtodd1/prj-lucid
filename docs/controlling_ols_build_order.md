@@ -269,31 +269,31 @@ crossings along grid-cell edges, and uses that curve as preferred linework for
 the global cell solver and region splitting. The older analytical
 axis-vs-conical curve remains as a fallback.
 
-The preferred curve is smoothed before it is used for polygonization. An
-endpoint-clamped cubic B-spline supplies a curvature-continuous guide, then its
-interior vertices are projected back onto the axis/conical equality locus. The
-guide is accepted selectively: peak and RMS curvature change must improve,
-endpoints must remain fixed, symmetric displacement must remain within 0.5 m,
-surface-equality residual must remain within 0.01 m, and topology/domain checks
-must pass. Otherwise the projected unsmoothed zero contour remains authoritative.
-This order is important: unconstrained 2D smoothing can create an attractive
-line that is no longer an equal-elevation intersection.
+The preferred curve is smoothed before it is used for polygonization. The
+accepted `accepted_least_squares_bspline_partial_equality` profile fits an
+endpoint-constrained cubic B-spline to every ordered sampled-intersection
+vertex, using controls spaced at approximately 120 m and a `0.1`
+second-difference fairing weight. It evaluates the fit at 5 m spacing, retains
+75% of each fitted interior position, and blends 25% towards the exact
+axis/conical equality root. Full equality projection was not retained because
+it restored most of the numerical undulation that the fit was intended to
+remove.
 
-An explicit `aggressive_least_squares_bspline_visual_trial` profile is
-temporarily available for visual evaluation. It fits an endpoint-constrained
-cubic B-spline to all ordered sampled-intersection vertices using substantially
-fewer solved controls and a stronger control-fairing penalty. Full equality
-projection was found to erase most visible influence from the fitted curve, so
-this trial retains 75% of the fitted position and blends 25% towards the exact
-equality root. The fitted curve is evaluated at 5 m spacing. Its deliberately
-wide exploratory bounds are 4 m displacement and 0.10 m elevation-equality
-residual, while endpoints remain exact and domain, simplicity and topology
-checks still apply. The output transition extractor uses the same temporary
-0.04 m observed-residual envelope so the intentionally approximate curve is
-not split back into short fragments. The diagnostic transition layer retains
-the fitted split edge instead of reprojecting a second display-only line, so it
-remains coincident with the controlling polygons. This is an aggressive
-inspection profile, not part of the accepted MOS139 compatibility lock.
+Every component must keep its endpoints exact, remain simple and inside the
+overlap domain, avoid backtracking, stay within 1.5 m symmetric displacement,
+and remain within 0.04 m elevation-equality residual. Curvature is measured as
+a whole-output regression signal rather than a local rejection gate: the local
+gate rejected one visually smooth YMML component and reintroduced a worse raw
+contour. The output transition extractor uses the same 0.04 m residual envelope
+and retains the actual fitted split edge rather than constructing a second
+display-only line, so the transition layer remains coincident with both
+controlling polygons.
+
+The user visually accepted the profile on YMML. The complete five-fixture
+MOS139 matrix then passed with zero curve fallbacks, unresolved comparisons,
+unassigned or ambiguous cells, repairs, reversals, duplicate segments, short
+components, or invalid output regions. Across the matrix, maximum observed
+displacement was 1.212 m and maximum equality residual was 0.0328 m.
 
 The zero contour is the single construction boundary. The solver must not
 subsequently triangulate the same MOS139 cell onto a different chord when the
@@ -304,11 +304,11 @@ Approach/Conical wedge. Both owning polygons now inherit the identical noded
 curve. Adjacent diagnostic edge segments are line-merged by canonical
 controller pair after region construction.
 
-The accepted YBBN intersection had a measured equal-elevation residual between
-approximately 0.00002 m and 0.00446 m along the reviewed shared edge. The same
-construction was visually accepted for YSSY, YSWS, and YMML; YMML used
-EPSG:32755, demonstrating that the metric projected-CRS implementation is not
-tied to the EPSG:28356 fixture environment.
+The accepted profile's maximum transition equality residuals were 0.0273 m for
+YBBN, 0.0245 m for intersecting YSSY, 0.0240 m for YSWS, 0.0327 m for YMML,
+and 0.0261 m for the YSSY stress case. YMML used EPSG:32755, demonstrating that
+the metric projected-CRS implementation is not tied to the EPSG:28356 fixture
+environment.
 
 The accepted smoothed linework is relatively vertex-dense. A future performance
 pass may test fewer spline samples or a bounded post-projection simplification,
