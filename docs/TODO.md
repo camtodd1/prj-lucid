@@ -28,7 +28,16 @@
   Notes:
   - Registered ruleset id is `uk_caa_cap168_edition_13`.
   - Initial tranches cover reference code, runway minimum width, runway strips, runway markings, runway lighting, declared distances, clearway, stopway, parallel runway separation, and taxiway separation tables.
-  - Remaining tranches: RESA and OLS.
+  - Remaining source tranche: RESA. CAP 168 Chapter 4 OLS parameters are now
+    source-loaded in `rulesets/cap168/ols_surfaces.py` and traced in
+    `rulesets/cap168/source_matrix.md`, but OLS capability remains gated pending
+    constructor adaptation and generated-geometry validation.
+  - CAP168 OLS integration must honour lowest-threshold IHS elevation, short-
+    runway circle/racetrack selection, subsidiary-runway joins, actual-runway-
+    length OHS applicability, and conditional TOCS widths.
+  - Confirmed source corrections are encoded as `6 m` -> `60 m`, `360 m` ->
+    `3600 m`, and the paragraph 4.50 NI Code 2 short-runway IHS radius
+    `250 m` -> `2500 m` (user confirmation, 13 July 2026).
   - Keep CAP 168 modules parameter-first, matching the MOS139 style rather than prose summaries.
 
 ## Placeholder Guidelines
@@ -245,6 +254,15 @@
     release gates below pass. Promotion is per ruleset; MOS139 readiness does
     not automatically promote the modernised Annex 14 OFS/OES model.
 
+  Accepted contour dispositions:
+  - [x] Contour clipping is resolved. Published controlling contours are
+        intersected with the exact owning-region geometry; predicate tolerances
+        do not expand emitted linework.
+  - [x] Primary/intermediate interval compatibility validation is not
+        implemented or tested and is accepted as a supported limitation.
+        Generated intermediate levels are classified as primary only where
+        they coincide with a primary-interval multiple.
+
   Topology hardening:
   - [ ] Prevent invalid, self-returning, and out-and-back rings during primary
         region construction instead of relying on post-processing repair.
@@ -291,6 +309,23 @@
         fixture.
   - [ ] Keep the future Annex 14 applicability date and OES assessment-trigger
         meaning explicit in validation evidence and user documentation.
+
+  Progress — 13 July 2026:
+  - The first production-independent analytical oracle is committed in
+    `tests/ols_source_oracle.py`, with cited inputs and hand-calculated expected
+    values in `tests/fixtures/ols/source_validation_v1.json`.
+  - Nine portable tests and five QGIS-facing checks pass for MOS and CAP168
+    approach/TOCS/conical/transitional contours,
+    a closed-form curved axis/conical equality line, future Annex OFS/OES
+    elevations and contours, comparison delta contours and controlling identity;
+    the QGIS checks bind the independent expected values to production
+    evaluators and transition/controller logic.
+  - The evidence records the supplied source editions, hashes, clauses, tables,
+    pages, assumptions and tolerances; see
+    `docs/ols_source_validation_2026-07-13.md`.
+  - Full code/type/ADG option coverage, source-backed airport fixtures and
+    independent technical reviewer sign-off remain open, so the broader gate is
+    not yet marked complete.
 
   Performance and determinism:
   - [ ] Turn the four committed QGIS 4 fixtures into release-oriented timing

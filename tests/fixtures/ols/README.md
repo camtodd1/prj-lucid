@@ -19,6 +19,27 @@ The runner treats spatial indexes and other future optimizations only as filters
 Exact geometry containment, elevation evaluation, tie-breaking, common-domain
 coverage, and mutually exclusive gain/loss/no-change outputs remain mandatory.
 
+## Source-backed analytical fixture
+
+`source_validation_v1.json` records authoritative MOS139, CAP168 and Annex 14
+source provenance, cited
+numeric facts, explicit assumptions, independent expected elevations, contour
+locations, controller identities and a curved axis/conical intersection. It is
+used by `tests/test_ols_source_validation.py` with the production-independent
+math in `tests/ols_source_oracle.py`. A second QGIS-facing layer in
+`tests/test_ols_source_validation_qgis.py` checks those independent values
+against the actual production evaluators, affine transition builder and
+controller selection.
+
+This fixture is intentionally portable and runs without QGIS:
+
+```bash
+python3 -m unittest tests.test_ols_source_validation -v
+```
+
+See `docs/ols_source_validation_2026-07-13.md` for the evidence scope and
+remaining production-promotion exclusions.
+
 ## YMML axis/conical benchmark
 
 `ymml_axis_conical_benchmark_qgis4_2026-07-13.json` records three-run timing,

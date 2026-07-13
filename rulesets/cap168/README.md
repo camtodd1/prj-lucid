@@ -14,7 +14,18 @@ Implemented parameters:
 - Stopway width policy from CAP 168 3.186-3.195.
 - Parallel runway separation from CAP 168 3.21 and 3.24-3.25.
 - Taxiway-to-runway, taxiway-to-taxiway/object, stand taxilane, and object-height restriction parameters from CAP 168 3.163-3.167.
+- Current OLS source parameters from CAP 168 Chapter 4 and Tables 4.1-4.2,
+  applicable until 20 November 2030. Approach, take-off climb, transitional,
+  OFZ, inner-horizontal, conical, and outer-horizontal source rules are loaded.
 
 Placeholder areas:
 
-- RESA and OLS are scaffolded but not yet source-loaded.
+- RESA remains scaffolded and not yet source-loaded.
+- CAP 168 OLS remains capability-gated while the shared constructor is adapted
+  for its lowest-threshold elevation datum, short-runway circular IHS,
+  subsidiary-runway IHS joins, runway-length-driven OHS applicability, and
+  conditional TOCS widths. The `250 m` Code 2 non-instrument IHS radius printed
+  by paragraph 4.50 is recorded as the user-confirmed corrected value `2500 m`.
+
+See `source_matrix.md` for clause-level scope, the three user-confirmed numeric
+corrections, and the two retained source/cross-reference interpretations.

@@ -66,6 +66,13 @@ the primary interval controls contour classification and labelling. Both default
 to 1.0 m intermediate and 5.0 m primary values, are persisted
 with the input file, and are written to each change-contour feature.
 
+Primary/intermediate interval compatibility validation is intentionally not
+implemented or tested and is accepted as a supported limitation. Contour levels
+are generated on the selected intermediate interval; a generated level is
+classified as primary only when it is also an exact multiple of the selected
+primary interval. The dialog does not require the primary interval to be an
+integer multiple of the intermediate interval.
+
 The comparison requires:
 
 - controlling OLS generation to be enabled;

@@ -1,0 +1,652 @@
+{
+  "schema_version": 1,
+  "validation_id": "ols-source-validation-v1-2026-07-13",
+  "scope": "Independent analytical contour, controller and boundary checkpoints plus representative production-parameter traceability for CASA MOS139, UK CAA CAP168 and future ICAO Annex 14 OFS/OES.",
+  "review_status": "calculation evidence prepared; independent technical reviewer sign-off pending",
+  "documents": {
+    "mos139": {
+      "title": "Part 139 (Aerodromes) Manual of Standards 2019",
+      "authority": "Civil Aviation Safety Authority",
+      "compilation": "Compilation No. 7",
+      "compilation_date": "2026-05-12",
+      "authorised_version": "F2026C00403",
+      "supplied_filename": "Civil Aviation Safety Authority Part 139 Aerodromes - MOS Part 139 Chapter 7.pdf",
+      "sha256": "ecda4ab7171aef3932a35ac631ac8968d5056c616013ae3f452475b4bd513465"
+    },
+    "cap168": {
+      "title": "CAP 168 Licensing of Aerodromes — Chapter 4, The Assessment and Treatment of Obstacles",
+      "authority": "UK Civil Aviation Authority",
+      "edition": "Thirteenth Edition",
+      "edition_date": "2025-07",
+      "amendment": "Amendment 15",
+      "current_ols_applicability_end": "2030-11-20",
+      "confirmed_corrections": [
+        {"source_ref": "Table 4.2 distance before threshold, precision Code 3/4", "printed_m": 6.0, "corrected_m": 60.0},
+        {"source_ref": "Table 4.2 second section length, precision Code 3/4", "printed_m": 360.0, "corrected_m": 3600.0},
+        {"source_ref": "Paragraph 4.50 short-runway NI Code 2 IHS radius", "printed_m": 250.0, "corrected_m": 2500.0}
+      ],
+      "correction_confirmation": "user-confirmed 2026-07-13",
+      "supplied_filename": "CAA Aerodrome Licensing CAP168 - Guidelines_July2025 Chapter 4.pdf",
+      "sha256": "27c1d35fce840caaffeefb898e6fc4df9a4bd4abdb5e8db3f878cfdccce3f649"
+    },
+    "annex14": {
+      "title": "ICAO Annex 14, Aerodromes, Volume I — Aerodrome Design and Operations",
+      "authority": "International Civil Aviation Organization",
+      "edition": "Ninth Edition",
+      "edition_date": "2022-07",
+      "future_chapter_applicability": "2030-11-21",
+      "supplied_filename": "ICAO Annex 14 Aerodrome Design and Operations - Chapter 4.pdf",
+      "sha256": "15a5618515f4c7088eb59b86392b53c24f15a05fa9341484931c421489f39cb9"
+    }
+  },
+  "tolerances": {
+    "source_parameter_absolute": 1e-12,
+    "analytical_elevation_m": 1e-9,
+    "analytical_distance_m": 1e-9,
+    "intersection_equality_residual_m": 1e-9,
+    "production_evaluator_elevation_m": 0.001,
+    "production_transition_distance_m": 1e-6
+  },
+  "production_parameter_checks": [
+    {
+      "id": "mos139-npa-code3-approach",
+      "source_ref": "MOS139 7.08 and Table 7.15(1), printed page 95, supplied PDF page 12",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "APPROACH_PARAMS",
+        "key": [3, "NPA"],
+        "tuple_key": true
+      },
+      "expected": [
+        {"length": 3000.0, "slope": 0.02, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 280.0},
+        {"length": 3600.0, "slope": 0.025, "divergence": 0.15},
+        {"length": 8400.0, "slope": 0.0, "divergence": 0.15}
+      ]
+    },
+    {
+      "id": "mos139-pa-code1-approach",
+      "source_ref": "MOS139 7.08 and Table 7.15(1), printed page 95, supplied PDF page 12",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "APPROACH_PARAMS",
+        "key": [1, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": [
+        {"length": 3000.0, "slope": 0.025, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 140.0},
+        {"length": 12000.0, "slope": 0.03, "divergence": 0.15}
+      ]
+    },
+    {
+      "id": "mos139-npa-code3-inner-horizontal",
+      "source_ref": "MOS139 7.07 and Table 7.15(1), printed page 95, supplied PDF page 12",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "IHS_PARAMS",
+        "key": [3, "NPA"],
+        "tuple_key": true
+      },
+      "expected": {"height_agl": 45.0, "radius": 4000.0}
+    },
+    {
+      "id": "mos139-npa-code3-conical",
+      "source_ref": "MOS139 7.06 and Table 7.15(1), printed page 94, supplied PDF page 11",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "CONICAL_PARAMS",
+        "key": [3, "NPA"],
+        "tuple_key": true
+      },
+      "expected": {"slope": 0.05, "height_extent_agl": 75.0}
+    },
+    {
+      "id": "mos139-npa-code3-transitional",
+      "source_ref": "MOS139 7.09 and Table 7.15(1), printed page 95, supplied PDF page 12",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "TRANSITIONAL_PARAMS",
+        "key": [3, "NPA"],
+        "tuple_key": true
+      },
+      "expected": {"slope": 0.143}
+    },
+    {
+      "id": "mos139-pa-code3-inner-approach",
+      "source_ref": "MOS139 7.10 and Table 7.15(1), printed page 95, supplied PDF page 12",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "INNER_APPROACH_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"width": 120.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.02}
+    },
+    {
+      "id": "mos139-pa-code3-inner-transitional",
+      "source_ref": "MOS139 7.11 and Table 7.15(1), printed page 95, supplied PDF page 12",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "INNER_TRANSITIONAL_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"slope": 0.333}
+    },
+    {
+      "id": "mos139-pa-code3-baulked-landing",
+      "source_ref": "MOS139 7.12 and Table 7.15(1), printed page 95, supplied PDF page 12",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "BAULKED_LANDING_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"width": 120.0, "start_dist_from_thr": 1800.0, "divergence": 0.1, "slope": 0.033}
+    },
+    {
+      "id": "mos139-pa-code3-outer-horizontal",
+      "source_ref": "MOS139 7.05 and Table 7.15(1), printed page 94, supplied PDF page 11",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "OHS_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"height_agl": 150.0, "radius": 15000.0}
+    },
+    {
+      "id": "mos139-code3-take-off-climb",
+      "source_ref": "MOS139 7.14 and Table 7.16(1), printed page 96, supplied PDF page 13",
+      "production": {
+        "module": "rulesets.mos139.ols_surfaces",
+        "symbol": "TOCS_PARAMS",
+        "key": 3
+      },
+      "expected": {"inner_edge_width": 180.0, "origin_offset": 60.0, "divergence": 0.125, "final_width": 1800.0, "length": 15000.0, "slope": 0.02}
+    },
+    {
+      "id": "cap168-pa-code1-approach",
+      "source_ref": "CAP 168 4.23-4.26 and Table 4.2, printed page 234, supplied PDF page 11",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "APPROACH_PARAMS",
+        "key": [1, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": [
+        {"length": 3000.0, "slope": 0.025, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 140.0},
+        {"length": 2500.0, "slope": 0.03, "divergence": 0.15},
+        {"length": 9500.0, "slope": 0.0, "divergence": 0.15}
+      ]
+    },
+    {
+      "id": "cap168-pa-code3-approach-resolved-table-omissions",
+      "source_ref": "CAP 168 4.23, 4.26 and Table 4.2, printed pages 231 and 234, supplied PDF pages 8 and 11",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "APPROACH_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": [
+        {"length": 3000.0, "slope": 0.02, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 280.0},
+        {"length": 3600.0, "slope": 0.025, "divergence": 0.15},
+        {"length": 8400.0, "slope": 0.0, "divergence": 0.15}
+      ]
+    },
+    {
+      "id": "cap168-code3-take-off-climb",
+      "source_ref": "CAP 168 4.8-4.20 and Table 4.1, printed page 229, supplied PDF page 6",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "TOCS_PARAMS",
+        "key": 3
+      },
+      "expected": {"inner_edge_width": 180.0, "origin_offset": 60.0, "divergence": 0.125, "final_width": 1200.0, "heading_change_gt_15_final_width": 1800.0, "length": 15000.0, "slope": 0.02}
+    },
+    {
+      "id": "cap168-take-off-climb-construction-rules",
+      "source_ref": "CAP 168 4.10-4.20, printed pages 227-229, supplied PDF pages 4-6",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "TAKE_OFF_CLIMB_CONSTRUCTION_RULES"
+      },
+      "expected": {"inner_edge_station_rule": "max(clearway_end,tora_plus_code_offset)", "code_3_4_reduced_slope_floor": 0.016, "reduced_slope_protection_height_ft": 1000.0, "maximum_edge_slew_degrees": 15.0, "wide_runway_minimum_width_ratio": 1.1}
+    },
+    {
+      "id": "cap168-approach-construction-rules",
+      "source_ref": "CAP 168 4.23-4.27, printed pages 231-232, supplied PDF pages 8-9",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "APPROACH_CONSTRUCTION_RULES"
+      },
+      "expected": {"inner_edge_elevation_datum": "landing_threshold_midpoint", "instrument_horizontal_height_above_threshold_m": 150.0, "wide_runway_minimum_width_ratio": 1.1}
+    },
+    {
+      "id": "cap168-npa-code1-transitional",
+      "source_ref": "CAP 168 4.34-4.39, especially 4.36, printed page 238, supplied PDF page 15",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "TRANSITIONAL_PARAMS",
+        "key": [1, "NPA"],
+        "tuple_key": true
+      },
+      "expected": {"slope": 0.2}
+    },
+    {
+      "id": "cap168-pa-code3-ofz-components",
+      "source_ref": "CAP 168 4.59-4.71, printed pages 241-243, supplied PDF pages 18-20",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "INNER_APPROACH_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"width": 120.0, "start_dist_from_thr": 60.0, "length": 1500.0, "slope": 0.02}
+    },
+    {
+      "id": "cap168-pa-code3-inner-transitional",
+      "source_ref": "CAP 168 4.70-4.71, printed page 243, supplied PDF page 20",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "INNER_TRANSITIONAL_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"slope": 0.333}
+    },
+    {
+      "id": "cap168-pa-code3-baulked-landing",
+      "source_ref": "CAP 168 4.70-4.71, printed page 243, supplied PDF page 20",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "BAULKED_LANDING_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"width": 120.0, "start_dist_from_thr": 1800.0, "divergence": 0.1, "slope": 0.0333}
+    },
+    {
+      "id": "cap168-ofz-applicability",
+      "source_ref": "CAP 168 4.62-4.73, especially 4.64, 4.68 and 4.69, printed pages 242-244, supplied PDF pages 19-21",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "OFZ_APPLICABILITY_RULES"
+      },
+      "expected": {"precision_cat_ii_iii": "shall_establish_and_maintain_during_operations", "precision_cat_i": "should_establish_and_maintain_during_operations", "code_3_4_design_wingspan_m": 60.0, "code_1_2_design_wingspan_m": 30.0}
+    },
+    {
+      "id": "cap168-inner-horizontal-height-rule",
+      "source_ref": "CAP 168 4.47, printed page 240, supplied PDF page 17",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "IHS_HEIGHT_RULE"
+      },
+      "expected": {"height_m": 45.0, "datum": "lowest_runway_threshold"}
+    },
+    {
+      "id": "cap168-ni-code2-short-runway-inner-horizontal-radius",
+      "source_ref": "CAP 168 4.50, printed page 240, supplied PDF page 17; user-confirmed correction 13 July 2026",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "IHS_PLAN_RULES",
+        "key": "main_runway_below_1800_m_ni_code_2"
+      },
+      "expected": {"shape": "runway_midpoint_circle", "radius": 2500.0, "printed_radius": 250.0, "correction_status": "user_confirmed"}
+    },
+    {
+      "id": "cap168-conical-rules",
+      "source_ref": "CAP 168 4.53-4.55, printed pages 240-241, supplied PDF pages 17-18",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "CONICAL_RULES"
+      },
+      "expected": {"slope": 0.05, "default_height_extent_above_ihs_m": 105.0, "ni_code_2_height_extent_above_ihs_m": 55.0, "ni_code_1_height_extent_above_ihs_m": 35.0}
+    },
+    {
+      "id": "cap168-outer-horizontal-rules",
+      "source_ref": "CAP 168 4.56-4.58, printed page 241, supplied PDF page 18",
+      "production": {
+        "module": "rulesets.cap168.ols_surfaces",
+        "symbol": "OUTER_HORIZONTAL_RULES"
+      },
+      "expected": {"minimum_main_runway_length_m": 1100.0, "radius_if_main_runway_at_least_1860_m": 15000.0, "radius_if_main_runway_1100_to_below_1860_m": 10000.0}
+    },
+    {
+      "id": "annex14-ofs-adg-iii-instrument-approach",
+      "source_ref": "Annex 14 Vol I 4.2.1 and Table 4-2, printed page 4-15, supplied PDF page 18",
+      "production": {
+        "module": "rulesets.annex14.ols_surfaces",
+        "symbol": "INSTRUMENT_APPROACH_SURFACE",
+        "key": "III"
+      },
+      "expected": {"distance_from_threshold_m": 60.0, "inner_edge_length_m": 175.0, "divergence": 0.1, "length_m": 4500.0, "slope": 0.0333}
+    },
+    {
+      "id": "annex14-ofs-adg-i-non-instrument-approach",
+      "source_ref": "Annex 14 Vol I 4.2.1 and Table 4-1, printed page 4-14, supplied PDF page 17",
+      "production": {
+        "module": "rulesets.annex14.ols_surfaces",
+        "symbol": "NON_INSTRUMENT_APPROACH_SURFACE",
+        "key": "I"
+      },
+      "expected": {"distance_from_threshold_m": 30.0, "inner_edge_length_m": 60.0, "divergence": 0.1, "length_m": 1600.0, "slope": 0.05}
+    },
+    {
+      "id": "annex14-ofs-transitional",
+      "source_ref": "Annex 14 Vol I 4.2.2.2 and 4.2.2.5, printed page 4-15, supplied PDF page 18",
+      "production": {
+        "module": "rulesets.annex14.ols_surfaces",
+        "symbol": "TRANSITIONAL_SURFACE"
+      },
+      "expected": {"slope": 0.2, "upper_edge_height_above_highest_threshold_m": 60.0}
+    },
+    {
+      "id": "annex14-ofs-adg-iii-precision-inner-approach",
+      "source_ref": "Annex 14 Vol I 4.2.3 and Table 4-5, printed page 4-18, supplied PDF page 21",
+      "production": {
+        "module": "rulesets.annex14.ols_surfaces",
+        "symbol": "PRECISION_INNER_APPROACH_SURFACE",
+        "key": "III"
+      },
+      "expected": {"inner_edge_length_m": 120.0, "length_m": 1350.0}
+    },
+    {
+      "id": "annex14-ofs-adg-iii-precision-inner-transitional",
+      "source_ref": "Annex 14 Vol I 4.2.4 and Table 4-8, printed page 4-20, supplied PDF page 23",
+      "production": {
+        "module": "rulesets.annex14.ols_surfaces",
+        "symbol": "PRECISION_INNER_TRANSITIONAL_SURFACE",
+        "key": "III"
+      },
+      "expected": {"slope": 0.333, "length_m": null}
+    },
+    {
+      "id": "annex14-ofs-adg-iii-balked-landing",
+      "source_ref": "Annex 14 Vol I 4.2.5 and Table 4-9, printed page 4-21, supplied PDF page 24",
+      "production": {
+        "module": "rulesets.annex14.ols_surfaces",
+        "symbol": "BALKED_LANDING_SURFACE",
+        "key": "III"
+      },
+      "expected": {"distance_from_threshold_m": 1800.0, "inner_edge_length_m": 120.0, "divergence": 0.1, "slope": 0.0333}
+    },
+    {
+      "id": "annex14-oes-adg-iii-horizontal",
+      "source_ref": "Annex 14 Vol I 4.3.2 and Table 4-10, printed page 4-25, supplied PDF page 28",
+      "production": {
+        "module": "rulesets.annex14.oes",
+        "symbol": "HORIZONTAL_SURFACE",
+        "key": "III"
+      },
+      "expected": {"radius_m": 10750.0, "height_above_aerodrome_elevation_m": 90.0}
+    },
+    {
+      "id": "annex14-oes-straight-in-instrument",
+      "source_ref": "Annex 14 Vol I 4.3.3 and Table 4-11, printed page 4-26, supplied PDF page 29",
+      "production": {
+        "module": "rulesets.annex14.oes",
+        "symbol": "STRAIGHT_IN_INSTRUMENT_SURFACE"
+      },
+      "expected": {
+        "lower_section": {"height_above_aerodrome_elevation_m": 45.0},
+        "upper_section": {"height_above_aerodrome_elevation_m": 60.0, "shorter_side_length_m": 7410.0, "longer_side_length_from_threshold_or_thresholds_m": 5350.0}
+      }
+    },
+    {
+      "id": "annex14-oes-precision-approach-components",
+      "source_ref": "Annex 14 Vol I 4.3.4 and Table 4-12, printed page 4-30, supplied PDF page 33",
+      "production": {
+        "module": "rulesets.annex14.oes",
+        "symbol": "PRECISION_APPROACH_SURFACE"
+      },
+      "expected": {
+        "components": {
+          "approach": {
+            "distance_from_threshold_m": 60.0,
+            "inner_edge_length_m": 300.0,
+            "sections": [
+              {"length_m": 3000.0, "divergence": 0.15, "slope": 0.02},
+              {"length_m": 9600.0, "divergence": 0.15, "slope": 0.025}
+            ]
+          },
+          "missed_approach": {
+            "distance_after_threshold_m": 900.0,
+            "inner_edge_length_m": 300.0,
+            "sections": [
+              {"length_m": 1800.0, "divergence": 0.1748, "slope": 0.025},
+              {"length_m": 10200.0, "divergence": 0.25, "slope": 0.025}
+            ]
+          },
+          "transitional": {"slope": 0.143, "upper_edge_height_above_threshold_m": 300.0}
+        }
+      }
+    },
+    {
+      "id": "annex14-oes-instrument-departure",
+      "source_ref": "Annex 14 Vol I 4.3.5 and Table 4-13, printed page 4-32, supplied PDF page 35",
+      "production": {
+        "module": "rulesets.annex14.oes",
+        "symbol": "INSTRUMENT_DEPARTURE_SURFACE"
+      },
+      "expected": {
+        "inner_edge_elevation_offset_m": 5.0,
+        "inner_edge_length_m": 300.0,
+        "slope": 0.025,
+        "sections": [
+          {"length_m": 3500.0, "divergence": 0.268},
+          {"length_m": 8300.0, "divergence": 0.578}
+        ]
+      }
+    },
+    {
+      "id": "annex14-oes-adg-i-light-take-off-climb",
+      "source_ref": "Annex 14 Vol I 4.3.6 and Table 4-14, printed page 4-35, supplied PDF page 38",
+      "production": {
+        "module": "rulesets.annex14.oes",
+        "symbol": "TAKE_OFF_CLIMB_LIGHT_SURFACE",
+        "key": "I"
+      },
+      "expected": {"distance_from_runway_end_m": 30.0, "inner_edge_length_m": 60.0, "divergence": 0.1, "final_width_m": 380.0, "length_m": 1600.0, "slope": 0.05}
+    },
+    {
+      "id": "annex14-oes-adg-iii-heavy-take-off-climb",
+      "source_ref": "Annex 14 Vol I 4.3.6 and Table 4-15, printed page 4-36, supplied PDF page 39",
+      "production": {
+        "module": "rulesets.annex14.oes",
+        "symbol": "TAKE_OFF_CLIMB_HEAVY_SURFACE",
+        "key": "III"
+      },
+      "expected": {"distance_from_toda_m": null, "inner_edge_length_m": 172.0, "divergence": 0.125, "final_width_m": 1800.0, "length_m": 10000.0, "slope": 0.02}
+    }
+  ],
+  "analytical_cases": {
+    "mos139_npa_code3": {
+      "source_refs": [
+        "MOS139 7.04, 7.06 to 7.09, 7.14 to 7.16",
+        "Table 7.15(1), printed pages 94-95, supplied PDF pages 11-12",
+        "Table 7.16(1), printed page 96, supplied PDF page 13"
+      ],
+      "assumptions": {
+        "reference_elevation_datum_m": 100.0,
+        "approach_inner_edge_elevation_m": 110.0,
+        "take_off_inner_edge_elevation_m": 112.0
+      },
+      "approach": {
+        "inner_edge_length_m": 280.0,
+        "sections": [
+          {"length_m": 3000.0, "slope": 0.02, "divergence": 0.15},
+          {"length_m": 3600.0, "slope": 0.025, "divergence": 0.15},
+          {"length_m": 8400.0, "slope": 0.0, "divergence": 0.15}
+        ],
+        "elevation_checkpoints": [
+          {"station_m": 0.0, "expected_elevation_m": 110.0},
+          {"station_m": 1000.0, "expected_elevation_m": 130.0},
+          {"station_m": 3000.0, "expected_elevation_m": 170.0},
+          {"station_m": 5000.0, "expected_elevation_m": 220.0},
+          {"station_m": 6600.0, "expected_elevation_m": 260.0},
+          {"station_m": 10000.0, "expected_elevation_m": 260.0}
+        ],
+        "contour_checkpoints": [
+          {"elevation_m": 120.0, "expected_station_m": 500.0, "expected_half_width_m": 215.0},
+          {"elevation_m": 180.0, "expected_station_m": 3400.0, "expected_half_width_m": 650.0}
+        ]
+      },
+      "take_off_climb": {
+        "sections": [{"length_m": 15000.0, "slope": 0.02, "divergence": 0.125}],
+        "contour_checkpoint": {"elevation_m": 125.0, "expected_station_m": 650.0},
+        "end_checkpoint": {"station_m": 15000.0, "expected_elevation_m": 412.0}
+      },
+      "inner_horizontal_and_conical": {
+        "inner_horizontal_height_above_red_m": 45.0,
+        "inner_horizontal_expected_elevation_m": 145.0,
+        "inner_horizontal_radius_m": 4000.0,
+        "conical_slope": 0.05,
+        "conical_height_extent_m": 75.0,
+        "contour_checkpoints": [
+          {"elevation_m": 170.0, "expected_offset_from_ihs_m": 500.0},
+          {"elevation_m": 220.0, "expected_offset_from_ihs_m": 1500.0}
+        ]
+      },
+      "transitional": {
+        "lower_edge_elevation_m": 110.0,
+        "slope": 0.143,
+        "contour_checkpoint": {"elevation_m": 125.0, "expected_offset_m": 104.89510489510491}
+      }
+    },
+    "mos139_axis_conical_intersection": {
+      "source_refs": [
+        "MOS139 7.06(1)-(2) and 7.08(5)-(6)",
+        "Table 7.15(1), printed pages 94-95, supplied PDF pages 11-12"
+      ],
+      "purpose": "Analytical curved equality line between a sourced code-3 NPA approach slope and a sourced circular-IHS conical slope.",
+      "assumptions": {
+        "circle_centre_x_m": -4000.0,
+        "inner_horizontal_radius_m": 4000.0,
+        "inner_horizontal_elevation_m": 145.0,
+        "conical_slope": 0.05,
+        "axis_base_elevation_m": 145.1,
+        "axis_slope": 0.02
+      },
+      "checkpoints": [
+        {"station_m": 0.0, "expected_y_m": 126.50691680694776, "expected_elevation_m": 145.1},
+        {"station_m": 1.0, "expected_y_m": 105.85253893979889, "expected_elevation_m": 145.12},
+        {"station_m": 3.0, "expected_y_m": 40.01549699801767, "expected_elevation_m": 145.16},
+        {"station_m": 3.3333333333333335, "expected_y_m": 0.0, "expected_elevation_m": 145.16666666666666}
+      ]
+    },
+    "cap168_pa_code1": {
+      "source_refs": [
+        "CAP 168 4.23-4.26 and Table 4.2, printed pages 231 and 234, supplied PDF pages 8 and 11",
+        "CAP 168 4.34-4.39 and 4.47-4.55, printed pages 238 and 240-241, supplied PDF pages 15 and 17-18"
+      ],
+      "assumptions": {
+        "lowest_runway_threshold_elevation_m": 100.0,
+        "approach_inner_edge_elevation_m": 100.0
+      },
+      "approach": {
+        "inner_edge_length_m": 140.0,
+        "sections": [
+          {"length_m": 3000.0, "slope": 0.025, "divergence": 0.15},
+          {"length_m": 2500.0, "slope": 0.03, "divergence": 0.15},
+          {"length_m": 9500.0, "slope": 0.0, "divergence": 0.15}
+        ],
+        "elevation_checkpoints": [
+          {"station_m": 3000.0, "expected_elevation_m": 175.0},
+          {"station_m": 5500.0, "expected_elevation_m": 250.0},
+          {"station_m": 10000.0, "expected_elevation_m": 250.0}
+        ],
+        "contour_checkpoint": {"elevation_m": 200.0, "expected_station_m": 3833.3333333333335, "expected_half_width_m": 645.0}
+      },
+      "inner_horizontal_and_conical": {
+        "inner_horizontal_height_above_lowest_threshold_m": 45.0,
+        "inner_horizontal_expected_elevation_m": 145.0,
+        "conical_slope": 0.05,
+        "conical_height_extent_m": 105.0,
+        "contour_checkpoint": {"elevation_m": 200.0, "expected_offset_from_ihs_m": 1100.0}
+      }
+    },
+    "annex14_future": {
+      "source_refs": [
+        "Annex 14 Vol I Chapter 4, applicable as of 21 November 2030",
+        "Tables 4-2, 4-10 and 4-12 to 4-15"
+      ],
+      "ofs_instrument_approach_adg_iii": {
+        "base_elevation_m": 80.0,
+        "sections": [{"length_m": 4500.0, "slope": 0.0333, "divergence": 0.1}],
+        "elevation_checkpoints": [
+          {"station_m": 1500.0, "expected_elevation_m": 129.95},
+          {"station_m": 4500.0, "expected_elevation_m": 229.85}
+        ],
+        "contour_checkpoint": {"elevation_m": 100.0, "expected_station_m": 600.6006006006005}
+      },
+      "ofs_transitional": {
+        "lower_edge_elevation_m": 80.0,
+        "slope": 0.2,
+        "contour_checkpoint": {"elevation_m": 140.0, "expected_offset_m": 300.0}
+      },
+      "oes_precision_approach": {
+        "base_elevation_m": 80.0,
+        "sections": [
+          {"length_m": 3000.0, "slope": 0.02, "divergence": 0.15},
+          {"length_m": 9600.0, "slope": 0.025, "divergence": 0.15}
+        ],
+        "elevation_checkpoints": [
+          {"station_m": 3000.0, "expected_elevation_m": 140.0},
+          {"station_m": 12600.0, "expected_elevation_m": 380.0}
+        ],
+        "contour_checkpoint": {"elevation_m": 200.0, "expected_station_m": 5400.0}
+      },
+      "oes_instrument_departure": {
+        "runway_elevation_at_toda_m": 75.0,
+        "inner_edge_offset_m": 5.0,
+        "expected_base_elevation_m": 80.0,
+        "sections": [
+          {"length_m": 3500.0, "slope": 0.025, "divergence": 0.268},
+          {"length_m": 8300.0, "slope": 0.025, "divergence": 0.578}
+        ],
+        "elevation_checkpoints": [
+          {"station_m": 3500.0, "expected_elevation_m": 167.5},
+          {"station_m": 11800.0, "expected_elevation_m": 375.0}
+        ]
+      },
+      "oes_take_off_climb_heavy_adg_iii": {
+        "base_elevation_m": 90.0,
+        "sections": [{"length_m": 10000.0, "slope": 0.02, "divergence": 0.125}],
+        "elevation_checkpoints": [
+          {"station_m": 5000.0, "expected_elevation_m": 190.0},
+          {"station_m": 10000.0, "expected_elevation_m": 290.0}
+        ]
+      },
+      "oes_horizontal_adg_iii": {
+        "aerodrome_elevation_m": 80.0,
+        "height_above_aerodrome_m": 90.0,
+        "expected_elevation_m": 170.0
+      }
+    },
+    "comparison": {
+      "derivation": "future Annex 14 elevation minus baseline MOS139 elevation; this is a product calculation, not a regulatory value",
+      "baseline": {"id": "MOS-APPROACH", "base_elevation_m": 100.0, "slope": 0.02},
+      "future": {"id": "ANNEX14-OFS-APPROACH", "base_elevation_m": 98.0, "slope": 0.0333},
+      "delta_contour_checkpoints": [
+        {"delta_m": -1.0, "expected_station_m": 75.18796992481204},
+        {"delta_m": 0.0, "expected_station_m": 150.37593984962407},
+        {"delta_m": 5.0, "expected_station_m": 526.3157894736843}
+      ],
+      "controller_checkpoints": [
+        {"station_m": 100.0, "expected_delta_m": -0.67, "expected_controller_id": "ANNEX14-OFS-APPROACH"},
+        {"station_m": 200.0, "expected_delta_m": 0.66, "expected_controller_id": "MOS-APPROACH"}
+      ]
+    }
+  },
+  "known_exclusions": [
+    "This v1 fixture does not claim full table-by-table traceability for every MOS139 runway code/type combination.",
+    "Airport-specific displaced-threshold, clearway/stopway and multi-runway controller checkpoints remain separate fixture work.",
+    "Source-backed tie-priority and otherwise-equivalent fallback validation is not included in v1; neither supplied source assigns software controller IDs or a complete numerical tie-break order.",
+    "Primary/intermediate contour interval compatibility validation remains intentionally unimplemented and accepted.",
+    "CAP 168 Table 4.1 visibly prints 180 m for the conditional Code 3/4 final width while footnote 4 specifies 1800 m. The parameter follows the unambiguous footnote and records the interpretation.",
+    "CAP 168 4.73(1) points its Code 1/2 balked-landing origin to the Code 3/4 area in 4.70 rather than the immediately preceding Code 1/2 area in 4.72. The loaded start rule follows 4.72 and requires reviewer confirmation.",
+    "CAP 168 airport-wide construction is not promoted: lowest-threshold datum, short-runway circular IHS, subsidiary-runway joins and runway-length-driven OHS applicability still require constructor integration and airport fixtures.",
+    "Independent technical reviewer sign-off is not yet recorded."
+  ]
+}

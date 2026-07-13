@@ -376,7 +376,8 @@ Known remaining limitations:
 
 ### Contour Clipping Checkpoint
 
-Contour clipping is implemented for the solved controlling regions.
+Status: resolved and accepted for promotion. Contour clipping is implemented
+for the solved controlling regions.
 Approach, TOCS, Conical, and Transitional source contours carry/register the
 same stable `surface_id` used by their controlling candidate surface. The
 contour output clips each registered contour to the solved region for its

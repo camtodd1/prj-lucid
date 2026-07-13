@@ -1,4 +1,9 @@
-"""Obstacle limitation placeholders for UK CAA CAP 168."""
+"""Capability-gated UK CAA CAP 168 obstacle-limitation wrappers.
+
+Chapter 4 parameters are source-loaded in :mod:`rulesets.cap168.ols_surfaces`,
+but the public ruleset facade must remain non-generating until the shared
+constructor supports CAP168's elevation datum and runway-length plan rules.
+"""
 
 
 def ihs_base_height():
