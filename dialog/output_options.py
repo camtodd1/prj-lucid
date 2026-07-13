@@ -4,12 +4,15 @@ from qgis.PyQt import QtCore, QtWidgets  # type: ignore
 from qgis.core import QgsMessageLog, Qgis  # type: ignore
 
 from .dialog_constants import (
+    ANNEX14_FAMILY_CONTOUR_KEYS,
     CONTOUR_INTERVAL_KEYS,
+    CONTOUR_INTERVAL_KEY_DEFAULTS,
     CONTOUR_INTERVAL_LABELS,
     DEFAULT_CONTOUR_INTERVAL,
     DEFAULT_PRIMARY_CONTOUR_INTERVAL,
     DEFAULT_OUTPUT_FORMAT,
     DIALOG_LOG_TAG,
+    MODERNISATION_CHANGE_CONTOUR_KEYS,
     OUTPUT_FORMATS,
 )
 
@@ -240,6 +243,14 @@ class OutputOptionsMixin:
         future_family_widget = getattr(self, "widgetModernisationContourIntervals", None)
         if future_family_widget is not None:
             future_family_widget.setVisible(mode != "ruleset_aligned")
+        for header_name in (
+            "labelModernisationChangeIntervals",
+            "labelModernisationChangePrimaryHeader",
+            "labelModernisationChangeIntermediateHeader",
+        ):
+            header = getattr(self, header_name, None)
+            if header is not None:
+                header.setVisible(mode == "modernisation_comparison")
         overrides_button = getattr(self, "toolButtonContourOverrides", None)
         if overrides_button is not None:
             overrides_button.setVisible(mode != "future_annex14_ofs_oes")
@@ -250,10 +261,11 @@ class OutputOptionsMixin:
                 and bool(overrides_button and overrides_button.isChecked())
             )
 
-        annex_keys = {"annex14_ofs", "annex14_oes"}
+        annex_keys = set(ANNEX14_FAMILY_CONTOUR_KEYS)
+        comparison_keys = set(MODERNISATION_CHANGE_CONTOUR_KEYS)
         for key, label in getattr(self, "_contour_interval_labels", {}).items():
             visible = (
-                key not in annex_keys
+                key not in annex_keys | comparison_keys
                 if mode == "ruleset_aligned"
                 else key in annex_keys
                 if mode == "future_annex14_ofs_oes"
@@ -405,29 +417,51 @@ class OutputOptionsMixin:
             )
             modernisation_grid = QtWidgets.QGridLayout(modernisation_widget)
             modernisation_grid.setObjectName("gridLayoutModernisationContourIntervals")
-            modernisation_grid.setContentsMargins(8, 7, 8, 7)
+            modernisation_grid.setContentsMargins(8, 1, 8, 1)
             modernisation_grid.setHorizontalSpacing(12)
-            modernisation_grid.setVerticalSpacing(6)
+            modernisation_grid.setVerticalSpacing(1)
             modernisation_grid.setColumnStretch(0, 1)
             modernisation_grid.setColumnStretch(1, 0)
             modernisation_grid.setColumnStretch(2, 0)
-            family_header = QtWidgets.QLabel(self.tr("Future Annex 14 family intervals"))
+            modernisation_grid.setColumnStretch(3, 1)
+            modernisation_grid.setColumnStretch(4, 0)
+            modernisation_grid.setColumnStretch(5, 0)
+            family_header = QtWidgets.QLabel(self.tr("Future surface contours"))
             family_header.setObjectName("labelModernisationContourIntervals")
-            family_header.setStyleSheet("font-weight: 600; color: #234b68;")
+            family_header.setStyleSheet("font-weight: 600; color: #234b68; font-size: 10px;")
             family_header.setToolTip(
-                self.tr("OFS and OES values override the default and matching surface intervals.")
+                self.tr(
+                    "Future surface intervals control elevation contours; change intervals control signed comparison isolines."
+                )
             )
             family_primary_header = QtWidgets.QLabel(self.tr("Primary"))
-            family_primary_header.setStyleSheet("color: #59636e; font-size: 11px;")
+            family_primary_header.setStyleSheet("color: #59636e; font-size: 9px;")
             family_intermediate_header = QtWidgets.QLabel(self.tr("Intermediate"))
-            family_intermediate_header.setStyleSheet("color: #59636e; font-size: 11px;")
+            family_intermediate_header.setStyleSheet("color: #59636e; font-size: 9px;")
+            change_header = QtWidgets.QLabel(self.tr("Comparison change contours"))
+            change_header.setObjectName("labelModernisationChangeIntervals")
+            change_header.setStyleSheet("font-weight: 600; color: #234b68; font-size: 10px;")
+            change_primary_header = QtWidgets.QLabel(self.tr("Primary"))
+            change_primary_header.setObjectName("labelModernisationChangePrimaryHeader")
+            change_primary_header.setStyleSheet("color: #59636e; font-size: 9px;")
+            change_intermediate_header = QtWidgets.QLabel(self.tr("Intermediate"))
+            change_intermediate_header.setObjectName(
+                "labelModernisationChangeIntermediateHeader"
+            )
+            change_intermediate_header.setStyleSheet("color: #59636e; font-size: 9px;")
             modernisation_grid.addWidget(family_header, 0, 0)
             modernisation_grid.addWidget(family_primary_header, 0, 1)
             modernisation_grid.addWidget(family_intermediate_header, 0, 2)
+            modernisation_grid.addWidget(change_header, 0, 3)
+            modernisation_grid.addWidget(change_primary_header, 0, 4)
+            modernisation_grid.addWidget(change_intermediate_header, 0, 5)
             grid.addWidget(modernisation_widget, 2, 0, 1, 4)
             self.widgetModernisationContourIntervals = modernisation_widget
             self.gridLayoutModernisationContourIntervals = modernisation_grid
             self.labelModernisationContourIntervals = family_header
+            self.labelModernisationChangeIntervals = change_header
+            self.labelModernisationChangePrimaryHeader = change_primary_header
+            self.labelModernisationChangeIntermediateHeader = change_intermediate_header
         else:
             modernisation_grid = modernisation_widget.layout()
 
@@ -480,12 +514,29 @@ class OutputOptionsMixin:
         self._toggle_contour_overrides(overrides_button.isChecked())
 
         regular_row = 1
-        family_row = 1
-        annex_keys = {"annex14_ofs", "annex14_oes"}
+        modernisation_keys = set(ANNEX14_FAMILY_CONTOUR_KEYS) | set(
+            MODERNISATION_CHANGE_CONTOUR_KEYS
+        )
+        modernisation_positions = {
+            "annex14_ofs": (1, 0, 1, 2),
+            "annex14_oes": (2, 0, 1, 2),
+            "modernisation_ofs_change": (1, 3, 4, 5),
+            "modernisation_oes_change": (2, 3, 4, 5),
+        }
         for key in CONTOUR_INTERVAL_KEYS:
-            is_annex_family = key in annex_keys
-            target_grid = modernisation_grid if is_annex_family else overrides_grid
-            row = family_row if is_annex_family else regular_row
+            is_modernisation = key in modernisation_keys
+            target_grid = modernisation_grid if is_modernisation else overrides_grid
+            if is_modernisation:
+                row, label_column, primary_column, intermediate_column = (
+                    modernisation_positions[key]
+                )
+            else:
+                row, label_column, primary_column, intermediate_column = (
+                    regular_row,
+                    0,
+                    1,
+                    2,
+                )
             label_name = f"labelContour{key.title()}"
             primary_spin_name = f"doubleSpinBoxContour{key.title()}Primary"
             intermediate_spin_name = f"doubleSpinBoxContour{key.title()}Intermediate"
@@ -493,27 +544,35 @@ class OutputOptionsMixin:
             if label is None:
                 label = QtWidgets.QLabel(self.tr(CONTOUR_INTERVAL_LABELS[key]))
                 label.setObjectName(label_name)
-                target_grid.addWidget(label, row, 0)
+                target_grid.addWidget(label, row, label_column)
             self._contour_interval_labels[key] = label
             label.setToolTip(self._contour_interval_tooltip(key))
             primary_spinbox = getattr(self, primary_spin_name, None)
             if primary_spinbox is None:
+                key_defaults = CONTOUR_INTERVAL_KEY_DEFAULTS.get(key, {})
                 primary_spinbox = self._create_contour_interval_spinbox(
                     primary_spin_name,
-                    DEFAULT_PRIMARY_CONTOUR_INTERVAL,
+                    key_defaults.get("primary", DEFAULT_PRIMARY_CONTOUR_INTERVAL),
                 )
             intermediate_spinbox = getattr(self, intermediate_spin_name, None)
             if intermediate_spinbox is None:
-                intermediate_spinbox = self._create_contour_interval_spinbox(intermediate_spin_name)
+                intermediate_spinbox = self._create_contour_interval_spinbox(
+                    intermediate_spin_name,
+                    CONTOUR_INTERVAL_KEY_DEFAULTS.get(key, {}).get(
+                        "intermediate",
+                        DEFAULT_CONTOUR_INTERVAL,
+                    ),
+                )
             primary_spinbox.setToolTip(self._contour_interval_tooltip(key, role="primary"))
             intermediate_spinbox.setToolTip(self._contour_interval_tooltip(key, role="intermediate"))
             self._contour_primary_interval_spinboxes[key] = primary_spinbox
             self._contour_interval_spinboxes[key] = intermediate_spinbox
-            target_grid.addWidget(primary_spinbox, row, 1)
-            target_grid.addWidget(intermediate_spinbox, row, 2)
-            if is_annex_family:
-                family_row += 1
-            else:
+            if is_modernisation:
+                primary_spinbox.setFixedHeight(18)
+                intermediate_spinbox.setFixedHeight(18)
+            target_grid.addWidget(primary_spinbox, row, primary_column)
+            target_grid.addWidget(intermediate_spinbox, row, intermediate_column)
+            if not is_modernisation:
                 regular_row += 1
 
         self.doubleSpinBoxContourDefaultPrimary.valueChanged.connect(
@@ -554,7 +613,7 @@ class OutputOptionsMixin:
         spinbox.setObjectName(object_name)
         spinbox.setRange(0.1, 10000.0)
         spinbox.setDecimals(2)
-        spinbox.setSingleStep(1.0)
+        spinbox.setSingleStep(0.1 if default_value < 1.0 else 1.0)
         spinbox.setSuffix(" m")
         spinbox.setValue(default_value)
         return spinbox
@@ -566,6 +625,9 @@ class OutputOptionsMixin:
             family_note = " Overrides Annex 14 obstacle free surface contours after surface-level defaults."
         elif key == "annex14_oes":
             family_note = " Overrides Annex 14 obstacle evaluation surface contours after surface-level defaults."
+        elif key in MODERNISATION_CHANGE_CONTOUR_KEYS:
+            family = "OFS" if key == "modernisation_ofs_change" else "OES"
+            family_note = f" Controls signed height-change isolines for the {family} comparison output."
         elif key.startswith("inner_") or key == "baulked_landing":
             family_note = " Used by precision inner-surface and OFZ-style outputs where available."
         if role == "primary":
@@ -581,6 +643,13 @@ class OutputOptionsMixin:
             self.doubleSpinBoxContourDefault.setValue(DEFAULT_CONTOUR_INTERVAL)
         self._apply_default_contour_interval("primary", DEFAULT_PRIMARY_CONTOUR_INTERVAL)
         self._apply_default_contour_interval("intermediate", DEFAULT_CONTOUR_INTERVAL)
+        for key, defaults in CONTOUR_INTERVAL_KEY_DEFAULTS.items():
+            primary = getattr(self, "_contour_primary_interval_spinboxes", {}).get(key)
+            intermediate = getattr(self, "_contour_interval_spinboxes", {}).get(key)
+            if primary is not None:
+                primary.setValue(defaults["primary"])
+            if intermediate is not None:
+                intermediate.setValue(defaults["intermediate"])
         if hasattr(self, "toolButtonContourOverrides"):
             self.toolButtonContourOverrides.setChecked(False)
 
@@ -590,7 +659,9 @@ class OutputOptionsMixin:
             if role == "primary"
             else "_contour_interval_spinboxes"
         )
-        for spinbox in getattr(self, attr_name, {}).values():
+        for key, spinbox in getattr(self, attr_name, {}).items():
+            if key in MODERNISATION_CHANGE_CONTOUR_KEYS:
+                continue
             spinbox.blockSignals(True)
             spinbox.setValue(value)
             spinbox.blockSignals(False)
@@ -653,18 +724,22 @@ class OutputOptionsMixin:
 
         primary_spinboxes = getattr(self, "_contour_primary_interval_spinboxes", {})
         intermediate_spinboxes = getattr(self, "_contour_interval_spinboxes", {})
+        modernisation_keys = set(ANNEX14_FAMILY_CONTOUR_KEYS) | set(
+            MODERNISATION_CHANGE_CONTOUR_KEYS
+        )
         for key in CONTOUR_INTERVAL_KEYS:
+            key_defaults = CONTOUR_INTERVAL_KEY_DEFAULTS.get(key, {})
             primary_value = self._coerce_contour_interval_value(
                 contour_options,
                 key,
                 "primary",
-                default_primary,
+                key_defaults.get("primary", default_primary),
             )
             intermediate_value = self._coerce_contour_interval_value(
                 contour_options,
                 key,
                 "intermediate",
-                default_intermediate,
+                key_defaults.get("intermediate", default_intermediate),
             )
             if key in primary_spinboxes:
                 primary_spinboxes[key].setValue(primary_value)
@@ -674,7 +749,7 @@ class OutputOptionsMixin:
             abs(primary_spinboxes[key].value() - default_primary) > 1e-9
             or abs(intermediate_spinboxes[key].value() - default_intermediate) > 1e-9
             for key in CONTOUR_INTERVAL_KEYS
-            if key not in {"annex14_ofs", "annex14_oes"}
+            if key not in modernisation_keys
             if key in primary_spinboxes and key in intermediate_spinboxes
         )
         if hasattr(self, "toolButtonContourOverrides"):

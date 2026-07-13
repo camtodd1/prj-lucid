@@ -27,6 +27,18 @@ DEFAULT_OUTPUT_FORMAT = "ESRI Shapefile"
 
 DEFAULT_CONTOUR_INTERVAL = 10.0
 DEFAULT_PRIMARY_CONTOUR_INTERVAL = 50.0
+ANNEX14_FAMILY_CONTOUR_KEYS = (
+    "annex14_ofs",
+    "annex14_oes",
+)
+MODERNISATION_CHANGE_CONTOUR_KEYS = (
+    "modernisation_ofs_change",
+    "modernisation_oes_change",
+)
+CONTOUR_INTERVAL_KEY_DEFAULTS = {
+    "modernisation_ofs_change": {"primary": 5.0, "intermediate": 1.0},
+    "modernisation_oes_change": {"primary": 5.0, "intermediate": 1.0},
+}
 CONTOUR_INTERVAL_KEYS = (
     "approach",
     "tocs",
@@ -37,6 +49,8 @@ CONTOUR_INTERVAL_KEYS = (
     "baulked_landing",
     "annex14_ofs",
     "annex14_oes",
+    "modernisation_ofs_change",
+    "modernisation_oes_change",
 )
 CONTOUR_INTERVAL_LABELS = {
     "approach": "Approach",
@@ -48,4 +62,6 @@ CONTOUR_INTERVAL_LABELS = {
     "baulked_landing": "Balked / baulked landing",
     "annex14_ofs": "Annex 14 obstacle free surfaces",
     "annex14_oes": "Annex 14 obstacle evaluation surfaces",
+    "modernisation_ofs_change": "OFS change contours",
+    "modernisation_oes_change": "OES change contours",
 }

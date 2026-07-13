@@ -35,8 +35,8 @@ COMPARISON_COLLINEAR_BACKTRACK_ANGLE_DEGREES = 0.1
 COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO = 0.01
 COMPARISON_SPIKE_MAX_AREA_CHANGE_M2 = 25.0
 COMPARISON_DELTA_DECIMALS = 3
-COMPARISON_CONTOUR_INTERVAL_M = 0.5
-COMPARISON_PRIMARY_CONTOUR_INTERVAL_M = 1.0
+COMPARISON_CONTOUR_INTERVAL_M = 1.0
+COMPARISON_PRIMARY_CONTOUR_INTERVAL_M = 5.0
 COMPARISON_CONTOUR_MIN_LENGTH_M = 0.01
 
 
@@ -1977,6 +1977,29 @@ class OlsEnvelopeComparisonEngine:
 class OlsModernisationComparisonMixin:
     """Create user-facing OFS/OES modernisation comparison layers."""
 
+    def _modernisation_change_contour_intervals(self, family: str) -> Tuple[float, float]:
+        """Return intermediate and primary signed-change contour intervals."""
+        family_key = str(family or "").strip().upper()
+        contour_key = {
+            "OFS": "modernisation_ofs_change",
+            "OES": "modernisation_oes_change",
+        }.get(family_key)
+        if contour_key is None:
+            return COMPARISON_CONTOUR_INTERVAL_M, COMPARISON_PRIMARY_CONTOUR_INTERVAL_M
+        intermediate_getter = getattr(self, "_get_contour_interval", None)
+        primary_getter = getattr(self, "_get_primary_contour_interval", None)
+        intermediate = (
+            intermediate_getter(contour_key, COMPARISON_CONTOUR_INTERVAL_M)
+            if callable(intermediate_getter)
+            else COMPARISON_CONTOUR_INTERVAL_M
+        )
+        primary = (
+            primary_getter(contour_key, COMPARISON_PRIMARY_CONTOUR_INTERVAL_M)
+            if callable(primary_getter)
+            else COMPARISON_PRIMARY_CONTOUR_INTERVAL_M
+        )
+        return float(intermediate), float(primary)
+
     def _modernisation_subphase(self, message: str) -> bool:
         """Report a comparison subphase and honour cancellation between outputs."""
         status = getattr(self, "_set_processing_status", None)
@@ -2053,6 +2076,9 @@ class OlsModernisationComparisonMixin:
                 return created
             comparison = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
             parts = comparison.comparison_parts()
+            contour_interval_m, primary_contour_interval_m = (
+                self._modernisation_change_contour_intervals(family)
+            )
             created = self._create_modernisation_wireframe_layer(
                 icao_code, baseline_ruleset_id, family, "baseline",
                 "Baseline OLS Wireframe", baseline_engine._controlling_region_geometries(),
@@ -2086,7 +2112,12 @@ class OlsModernisationComparisonMixin:
             for change in ("gain", "loss"):
                 contour_parts.extend(
                     (change, *contour_part)
-                    for contour_part in comparison.change_contour_parts(parts[change], change)
+                    for contour_part in comparison.change_contour_parts(
+                        parts[change],
+                        change,
+                        interval_m=contour_interval_m,
+                        primary_interval_m=primary_contour_interval_m,
+                    )
                 )
             if not self._modernisation_subphase(
                 f"Modernisation {family}: finalising transitions and baseline-only areas..."
@@ -2098,6 +2129,8 @@ class OlsModernisationComparisonMixin:
                 family,
                 contour_parts,
                 family_group,
+                contour_interval_m=contour_interval_m,
+                primary_interval_m=primary_contour_interval_m,
             ) or created
             created = self._create_modernisation_transition_layer(
                 icao_code, baseline_ruleset_id, family, parts["transition"], comparison, family_group,
@@ -2219,6 +2252,8 @@ class OlsModernisationComparisonMixin:
         family,
         contour_parts,
         output_group,
+        contour_interval_m: float = COMPARISON_CONTOUR_INTERVAL_M,
+        primary_interval_m: float = COMPARISON_PRIMARY_CONTOUR_INTERVAL_M,
     ) -> bool:
         fields = QgsFields([
             QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
@@ -2256,8 +2291,8 @@ class OlsModernisationComparisonMixin:
                 family,
                 delta_m,
                 contour_class,
-                COMPARISON_CONTOUR_INTERVAL_M,
-                COMPARISON_PRIMARY_CONTOUR_INTERVAL_M,
+                contour_interval_m,
+                primary_interval_m,
                 baseline_ruleset_id,
                 baseline.surface_id,
                 baseline.surface_type,

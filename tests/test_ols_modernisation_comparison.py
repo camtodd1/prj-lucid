@@ -749,8 +749,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             "gain",
         )
 
-        self.assertEqual([item[3] for item in contours], [0.5, 1.0, 1.5, 2.0])
-        self.assertEqual([item[4] for item in contours], ["intermediate", "primary", "intermediate", "primary"])
+        self.assertEqual([item[3] for item in contours], [1.0, 2.0])
+        self.assertEqual([item[4] for item in contours], ["intermediate", "intermediate"])
         for _baseline, _future, geometry, delta_m, _contour_class, parent_sequence in contours:
             self.assertEqual(parent_sequence, 1)
             self.assertGreater(geometry.length(), 99.9)
@@ -777,8 +777,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                 "gain",
             )
 
-        self.assertEqual(line_builder.call_count, 4)
-        self.assertEqual(len(contours), 8)
+        self.assertEqual(line_builder.call_count, 2)
+        self.assertEqual(len(contours), 4)
         self.assertEqual({item[5] for item in contours}, {1, 2})
 
     def test_curved_change_contour_uses_surface_evaluators(self):
@@ -1312,6 +1312,45 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertTrue(created)
         self.assertNotIn(1, created_engine_sizes)
 
+    def test_comparison_generation_uses_selected_ofs_change_contour_intervals(self):
+        baseline = self.constant("baseline", 100.0)
+        future = ControllingOlsCandidate(
+            surface_id="future-ofs",
+            surface_type="Future OFS",
+            footprint=QgsGeometry(self.domain),
+            elevation_at_xy=constant_elevation_evaluator(110.0),
+            model="constant",
+            metadata={"elevation_m": 110.0, "annex14_family": "OFS"},
+        )
+        capture = _ComparisonLayerCapture()
+        capture._get_contour_interval = lambda key, fallback: (
+            0.25 if key == "modernisation_ofs_change" else fallback
+        )
+        capture._get_primary_contour_interval = lambda key, fallback: (
+            2.0 if key == "modernisation_ofs_change" else fallback
+        )
+
+        with patch.object(
+            OlsEnvelopeComparisonEngine,
+            "change_contour_parts",
+            return_value=[],
+        ) as change_contours:
+            created = capture._create_ols_modernisation_comparison_layers(
+                "TEST",
+                "baseline-rules",
+                [baseline],
+                [],
+                [future],
+                object(),
+                object(),
+            )
+
+        self.assertTrue(created)
+        self.assertEqual(change_contours.call_count, 2)
+        for call in change_contours.call_args_list:
+            self.assertEqual(call.kwargs["interval_m"], 0.25)
+            self.assertEqual(call.kwargs["primary_interval_m"], 2.0)
+
     def test_all_comparison_output_features_receive_unique_ids(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 110.0)
@@ -1339,6 +1378,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             "OFS",
             [("gain", baseline, future, contour_geometry, 10.0, "primary", 1)],
             object(),
+            contour_interval_m=0.25,
+            primary_interval_m=2.0,
         )
         capture._create_modernisation_transition_layer(
             "TEST", "baseline-rules", "OFS", change_parts, comparison, object(),
@@ -1369,6 +1410,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(contour_feature["comparison_id"], "OFS-CHANGE-CONTOUR-000001")
         self.assertEqual(contour_feature["parent_id"], "OFS-GAIN-000001")
         self.assertEqual(contour_feature["label_txt"], "+10.0 m")
+        self.assertEqual(contour_feature["contour_interval_m"], 0.25)
+        self.assertEqual(contour_feature["primary_interval_m"], 2.0)
         self.assertEqual(len(comparison_ids), 5)
         self.assertEqual(len(set(comparison_ids)), 5)
         self.assertIn("OFS-GAIN-000001", comparison_ids)

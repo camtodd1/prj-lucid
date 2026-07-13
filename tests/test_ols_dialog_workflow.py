@@ -64,6 +64,12 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertTrue(self.dialog._contour_interval_labels["approach"].isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["annex14_oes"].isHidden())
+        self.assertTrue(
+            self.dialog._contour_interval_labels["modernisation_ofs_change"].isHidden()
+        )
+        self.assertTrue(
+            self.dialog._contour_interval_labels["modernisation_oes_change"].isHidden()
+        )
 
     def test_future_family_contours_are_directly_editable_and_used_by_generation(self):
         self.select_mode("future_annex14_ofs_oes")
@@ -108,6 +114,61 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(
             self.dialog._contour_interval_spinboxes["annex14_ofs"].value(),
             8.0,
+        )
+
+    def test_comparison_change_contours_are_directly_editable_per_family(self):
+        self.select_mode("modernisation_comparison")
+        ofs_primary = self.dialog._contour_primary_interval_spinboxes[
+            "modernisation_ofs_change"
+        ]
+        ofs_intermediate = self.dialog._contour_interval_spinboxes[
+            "modernisation_ofs_change"
+        ]
+        oes_primary = self.dialog._contour_primary_interval_spinboxes[
+            "modernisation_oes_change"
+        ]
+        oes_intermediate = self.dialog._contour_interval_spinboxes[
+            "modernisation_oes_change"
+        ]
+
+        self.assertEqual((ofs_primary.value(), ofs_intermediate.value()), (5.0, 1.0))
+        self.assertEqual((oes_primary.value(), oes_intermediate.value()), (5.0, 1.0))
+        for spinbox in (ofs_primary, ofs_intermediate, oes_primary, oes_intermediate):
+            self.assertFalse(spinbox.isHidden())
+            self.assertTrue(spinbox.isEnabled())
+
+        ofs_primary.setValue(2.0)
+        ofs_intermediate.setValue(0.25)
+        oes_primary.setValue(1.5)
+        oes_intermediate.setValue(0.2)
+        options = self.dialog.get_contour_interval_options()
+        builder = object.__new__(SafeguardingBuilder)
+        builder.contour_intervals = options
+
+        self.assertEqual(
+            builder._modernisation_change_contour_intervals("OFS"),
+            (0.25, 2.0),
+        )
+        self.assertEqual(
+            builder._modernisation_change_contour_intervals("OES"),
+            (0.2, 1.5),
+        )
+
+    def test_change_contour_defaults_are_not_overwritten_by_surface_default(self):
+        self.dialog.doubleSpinBoxContourDefaultPrimary.setValue(100.0)
+        self.dialog.doubleSpinBoxContourDefault.setValue(20.0)
+
+        self.assertEqual(
+            self.dialog._contour_primary_interval_spinboxes[
+                "modernisation_ofs_change"
+            ].value(),
+            5.0,
+        )
+        self.assertEqual(
+            self.dialog._contour_interval_spinboxes[
+                "modernisation_ofs_change"
+            ].value(),
+            1.0,
         )
 
     def test_comparison_mode_requires_controlling_output_and_shows_all_rows(self):

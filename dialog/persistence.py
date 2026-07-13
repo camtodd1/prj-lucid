@@ -14,6 +14,7 @@ from qgis.PyQt.QtWidgets import (  # type: ignore
 
 from .dialog_constants import (
     CONTOUR_INTERVAL_KEYS,
+    CONTOUR_INTERVAL_KEY_DEFAULTS,
     DEFAULT_CONTOUR_INTERVAL,
     DEFAULT_PRIMARY_CONTOUR_INTERVAL,
     DEFAULT_OUTPUT_FORMAT,
@@ -509,9 +510,12 @@ class PersistenceMixin:
                 value = contour_options.get(key, {})
                 if not isinstance(value, dict):
                     value = {"intermediate": value}
-                if abs(float(value.get("primary", DEFAULT_PRIMARY_CONTOUR_INTERVAL)) - DEFAULT_PRIMARY_CONTOUR_INTERVAL) > 1e-9:
+                key_defaults = CONTOUR_INTERVAL_KEY_DEFAULTS.get(key, {})
+                expected_primary = key_defaults.get("primary", DEFAULT_PRIMARY_CONTOUR_INTERVAL)
+                expected_intermediate = key_defaults.get("intermediate", DEFAULT_CONTOUR_INTERVAL)
+                if abs(float(value.get("primary", expected_primary)) - expected_primary) > 1e-9:
                     return True
-                if abs(float(value.get("intermediate", DEFAULT_CONTOUR_INTERVAL)) - DEFAULT_CONTOUR_INTERVAL) > 1e-9:
+                if abs(float(value.get("intermediate", expected_intermediate)) - expected_intermediate) > 1e-9:
                     return True
         return False
 

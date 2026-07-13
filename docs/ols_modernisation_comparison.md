@@ -16,8 +16,8 @@ Outputs are grouped as follows:
   - **Height Gain** (green): future OFS is higher than the baseline OLS.
   - **Height Loss** (red): future OFS is lower than the baseline OLS.
   - **No Height Change** (neutral): future OFS and baseline OLS are effectively equal.
-  - **Change Contours**: signed `future - baseline` isolines at 0.5 m intervals,
-    with primary contours every 1.0 m. Positive values indicate gain and negative
+  - **Change Contours**: signed `future - baseline` isolines at 1.0 m intervals,
+    with primary contours every 5.0 m. Positive values indicate gain and negative
     values indicate loss.
   - **Planar Transition / Equal Height** (dashed): approximate breakline where
     the two controlling elevations are equal.
@@ -59,6 +59,12 @@ equal-height transition layer, and only primary contours are labelled to limit
 map clutter. Each contour has a unique `comparison_id`, its
 source polygon `parent_id`, signed `delta_m`, contour class and both controlling
 surface identifiers.
+
+Comparison mode exposes independent OFS and OES signed-change contour intervals
+on the OLS tab. The intermediate interval controls generated isoline spacing and
+the primary interval controls contour classification and labelling. Both default
+to 1.0 m intermediate and 5.0 m primary values, are persisted
+with the input file, and are written to each change-contour feature.
 
 The comparison requires:
 
