@@ -23,7 +23,8 @@
     "transition_scope": "Interior Approach/TOCS-to-Conical equality segments only; existing straight footprint-boundary handoffs are excluded from curve-quality metrics.",
     "elevation_semantics": "elev_min and elev_max are the shared AMSL elevation range along the line. They are not a surface-to-surface error and need not be equal on a sloping equality curve.",
     "equality_metric": "maximum_equality_residual_m is max(abs(z_axis - z_conical)) sampled at no more than 5 m spacing.",
-    "smoothness_metric": "maximum_vertex_turn_degrees measures the largest local heading change at a line vertex. Lower is smoother.",
+    "smoothness_metric": "maximum_vertex_turn_degrees measures the largest local heading change at a line vertex. maximum_abs_curvature_change_per_m2 measures the largest change in discrete curvature between adjacent vertices and is the primary curvature-continuity metric. Lower is smoother.",
+    "smoothing_acceptance": "The endpoint-clamped C2 guide is accepted only when both peak and RMS curvature change improve, endpoint shift is zero, symmetric densified Hausdorff displacement is no more than 0.5 m, and the projected surface-equality residual is no more than 0.01 m. Rejected components retain the unsmoothed equality curve.",
     "topology_metrics": "reversal_count, duplicate_segment_count, short_component_count, and topology_excess_length_m must all be zero for projected axis/conical output."
   },
   "sampled_baseline": {
@@ -128,5 +129,81 @@
     },
     "controlling_geometry_unchanged": true,
     "three_run_regression_gate_passed": true
+  },
+  "adopted_smoothed_output": {
+    "method": "endpoint_clamped_uniform_cubic_bspline_guide_with_lateral_zero_equality_projection_and_bounded_acceptance",
+    "timing": {
+      "runs": [21.40519920800216, 21.650690499998746, 20.654741375001322],
+      "median_total_seconds": 21.40519920800216,
+      "median_change_from_projected_output_percent": 10.133082490647194,
+      "median_change_from_sampled_baseline_percent": 8.449673191696006,
+      "median_stages": {
+        "region_solve": 5.49835933400027,
+        "boundary_generation": 3.010651291002432,
+        "comparison": 3.277937207996729,
+        "change_contours": 8.191021791000821,
+        "modernisation_layers": 12.036451834002946
+      }
+    },
+    "smoothing": {
+      "candidate_curves": 9,
+      "accepted_curves": 5,
+      "rejected_curves": 4,
+      "control_spacing_m": 15.0,
+      "maximum_allowed_deviation_m": 0.5,
+      "maximum_observed_deviation_m": 0.355381356565186,
+      "maximum_allowed_equality_residual_m": 0.01,
+      "maximum_observed_smoothed_equality_residual_m": 0.005126922176714288,
+      "maximum_endpoint_shift_m": 0.0
+    },
+    "interior_axis_conical_quality": {
+      "features": 12,
+      "pairs": 8,
+      "vertices": 183,
+      "length_m": 7361.481063174978,
+      "length_change_from_projected_output_percent": -0.01149408998130097,
+      "sample_points": 1570,
+      "shared_elevation_min_m": 190.04799703058433,
+      "shared_elevation_max_m": 266.41943838499213,
+      "shared_elevation_range_m": 76.3714413544078,
+      "maximum_equality_residual_m": 0.005151665383493764,
+      "maximum_equality_residual_change_percent": -34.96345659068204,
+      "rms_equality_residual_m": 0.0005160908734693974,
+      "rms_equality_residual_change_percent": -14.07471266679564,
+      "maximum_analytic_deviation_m": 35.40791868676318,
+      "rms_analytic_deviation_m": 4.204826905077729,
+      "maximum_vertex_turn_degrees": 2.5494418065974203,
+      "maximum_vertex_turn_change_percent": -9.028940418104291,
+      "rms_vertex_turn_degrees": 0.9243445491178334,
+      "rms_vertex_turn_change_percent": -4.197506958890928,
+      "maximum_abs_curvature_per_m": 0.007575429923178066,
+      "maximum_abs_curvature_change_percent": -16.002762876750698,
+      "rms_curvature_per_m": 0.0008767908363887221,
+      "rms_curvature_change_percent": -6.125300415316904,
+      "maximum_abs_curvature_change_per_m2": 0.0015150859772440448,
+      "maximum_abs_curvature_change_change_percent": -22.034762815111485,
+      "rms_curvature_change_per_m2": 0.00019248762238644875,
+      "rms_curvature_change_change_percent": -4.688753762878017,
+      "reversal_count": 0,
+      "duplicate_segment_count": 0,
+      "short_component_count": 0,
+      "topology_excess_length_m": 0.0
+    },
+    "workflow_output": {
+      "layers": 189,
+      "features": 15786,
+      "invalid_geometries": 0,
+      "empty_geometries": 0,
+      "determinism_digest": "27319777dad4e8e196bfd4531074665ecd6c3969a9f6d3200a41deabe3182ae2"
+    },
+    "controlling_geometry_lock": {
+      "regions": 41,
+      "area_m2": 734359700.7261589,
+      "geometry_digest": "c3f4664dc136fda70f69ba77492147c0cacd00b7c08a647ae41128d7d08fee16",
+      "controller_ids_digest": "61717c210bcdbd3c780c85362ff844440c2a82ed9c3173a0248219c412e79866"
+    },
+    "controller_assignments_unchanged": true,
+    "three_run_determinism_gate_passed": true,
+    "full_fixture_regression_gate_passed": true
   }
 }

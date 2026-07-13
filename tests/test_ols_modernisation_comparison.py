@@ -895,20 +895,20 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
     def test_axis_conical_output_uses_smooth_equal_height_curve(self):
         base = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
-        overlap = QgsGeometry.fromRect(QgsRectangle(100.0, 100.0, 150.0, 150.0))
+        overlap = QgsGeometry.fromRect(QgsRectangle(100.0, 100.0, 250.0, 250.0))
         origin = QgsPointXY(100.0, 100.0)
         axis = ControllingOlsCandidate(
             "axis",
             "Approach",
             overlap,
-            axis_elevation_evaluator(origin, 90.0, 101.0, 0.02, 100.0),
+            axis_elevation_evaluator(origin, 90.0, 105.0, 0.02, 150.0),
             "axis",
             {
                 "origin_x": 100.0,
                 "origin_y": 100.0,
-                "origin_elevation_m": 101.0,
+                "origin_elevation_m": 105.0,
                 "slope": 0.02,
-                "max_distance_m": 100.0,
+                "max_distance_m": 150.0,
                 "azimuth_degrees": 90.0,
             },
         )
@@ -916,21 +916,24 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             "conical",
             "Conical",
             overlap,
-            conical_elevation_evaluator(base, 100.0, 0.05, 100.0),
+            conical_elevation_evaluator(base, 100.0, 0.05, 200.0),
             "conical",
             {
                 "base_footprint": base,
                 "base_elevation_m": 100.0,
                 "slope": 0.05,
-                "max_distance_m": 100.0,
+                "max_distance_m": 200.0,
             },
         )
         engine = PlanarControllingOlsEngine([axis, conical])
+        axis_model = engine._axis_model(axis)
+        conical_model = engine._conical_model(conical)
         sampled_reference = engine._axis_conical_transition_curve(
-            engine._axis_model(axis),
-            engine._conical_model(conical),
+            axis_model,
+            conical_model,
             overlap,
         )
+        self.assertIsNotNone(sampled_reference)
         curves = engine._axis_conical_output_transition_lines(
             axis,
             conical,
@@ -974,6 +977,83 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertLess(max(residuals), 0.01)
         self.assertLess(maximum_turn, 15.0)
         self.assertGreater(max(shared_elevations) - min(shared_elevations), 0.1)
+
+        exact_points = []
+        # Span more than two 15 m smoothing intervals so this specifically
+        # exercises the accepted cubic-guide path rather than the short-curve
+        # fallback.
+        stations = list(range(0, 81, 10))
+        for station in stations:
+            required_distance = 100.0 + (0.4 * station)
+            lateral = math.sqrt(
+                (required_distance * required_distance) - (station * station)
+            )
+            exact_points.append(QgsPointXY(100.0 + station, 100.0 + lateral))
+        smoothed_reference = engine._smoothed_axis_conical_zero_contour(
+            QgsGeometry.fromPolylineXY(exact_points),
+            axis,
+            conical,
+            axis_model,
+            conical_model,
+            overlap,
+        )
+        self.assertIsNotNone(
+            smoothed_reference,
+            msg=str(engine._region_solve_stats),
+        )
+        self.assertGreater(
+            engine._region_solve_stats.get("axis_curve_smoothing_accepted", 0.0),
+            0.0,
+        )
+        self.assertEqual(
+            engine._region_solve_stats["axis_curve_smoothing_max_endpoint_shift_m"],
+            0.0,
+        )
+
+    def test_clamped_cubic_bspline_preserves_endpoints_and_reduces_turns(self):
+        controls = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(10.0, 2.0),
+            QgsPointXY(20.0, 0.5),
+            QgsPointXY(30.0, 4.0),
+            QgsPointXY(40.0, 2.5),
+            QgsPointXY(50.0, 5.0),
+        ]
+
+        smoothed = PlanarControllingOlsEngine._clamped_cubic_bspline_points(
+            controls,
+            4,
+        )
+
+        def maximum_turn(points):
+            turns = []
+            for previous, current, following in zip(
+                points[:-2],
+                points[1:-1],
+                points[2:],
+            ):
+                first_heading = math.atan2(
+                    current.y() - previous.y(),
+                    current.x() - previous.x(),
+                )
+                second_heading = math.atan2(
+                    following.y() - current.y(),
+                    following.x() - current.x(),
+                )
+                turns.append(
+                    abs(
+                        math.atan2(
+                            math.sin(second_heading - first_heading),
+                            math.cos(second_heading - first_heading),
+                        )
+                    )
+                )
+            return max(turns)
+
+        self.assertEqual(smoothed[0], controls[0])
+        self.assertEqual(smoothed[-1], controls[-1])
+        self.assertGreater(len(smoothed), len(controls))
+        self.assertLess(maximum_turn(smoothed), maximum_turn(controls))
 
     def test_axis_conical_output_collapses_sliver_loops_and_reverse_segments(self):
         engine = PlanarControllingOlsEngine([self.constant("base", 100.0)])

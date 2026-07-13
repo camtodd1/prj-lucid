@@ -56,6 +56,16 @@ AXIS_CONICAL_ZERO_CONTOUR_MIN_GRID_M = 20.0
 AXIS_CONICAL_ZERO_CONTOUR_MAX_GRID_M = 75.0
 AXIS_CONICAL_ZERO_CONTOUR_TARGET_STEPS = 160.0
 AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS = 80000
+AXIS_CONICAL_CURVE_SMOOTHING_ENABLED = True
+AXIS_CONICAL_CURVE_SMOOTHING_CONTROL_SPACING_M = 15.0
+AXIS_CONICAL_CURVE_SMOOTHING_SAMPLES_PER_SPAN = 2
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M = 0.5
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.01
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M = 1e-3
+AXIS_CONICAL_CURVE_SMOOTHING_MIN_CURVATURE_IMPROVEMENT = 0.01
+AXIS_CONICAL_CURVE_SMOOTHING_DOMAIN_TOLERANCE_M = 0.05
+AXIS_CONICAL_CURVE_SMOOTHING_HAUSDORFF_DENSIFY_FRACTION = 0.25
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_ENDPOINT_SHIFT_M = 1e-9
 AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M = 0.10
 AXIS_CONICAL_OUTPUT_EQUALITY_FILTER_M = 0.01
 AXIS_CONICAL_OUTPUT_SIMPLIFY_TOLERANCE_M = 0.05
@@ -247,6 +257,35 @@ class PlanarControllingOlsEngine:
             "approximations": {
                 "triangulation_calls": int(stats.get("triangulation_calls", 0.0)),
                 "zero_contour_calls": int(stats.get("axis_zero_contour_calls", 0.0)),
+                "smoothed_zero_contours": int(
+                    stats.get("axis_curve_smoothing_accepted", 0.0)
+                ),
+                "zero_contour_smoothing_method": (
+                    "clamped_cubic_bspline_equality_projected"
+                    if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
+                    else "disabled"
+                ),
+                "rejected_zero_contour_smoothing": int(
+                    stats.get("axis_curve_smoothing_rejected", 0.0)
+                ),
+                "smoothing_max_allowed_deviation_m": (
+                    AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M
+                ),
+                "smoothing_max_allowed_equality_residual_m": (
+                    AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M
+                ),
+                "smoothing_max_allowed_endpoint_shift_m": (
+                    AXIS_CONICAL_CURVE_SMOOTHING_MAX_ENDPOINT_SHIFT_M
+                ),
+                "smoothing_max_deviation_m": stats.get(
+                    "axis_curve_smoothing_max_deviation_m", 0.0
+                ),
+                "smoothing_max_equality_residual_m": stats.get(
+                    "axis_curve_smoothing_max_equality_residual_m", 0.0
+                ),
+                "smoothing_max_endpoint_shift_m": stats.get(
+                    "axis_curve_smoothing_max_endpoint_shift_m", 0.0
+                ),
                 "chord_refinements_suppressed": int(
                     stats.get("axis_conical_chord_refinement_suppressed", 0.0)
                 ),
@@ -279,7 +318,7 @@ class PlanarControllingOlsEngine:
                 "same_controller_dissolve": "canonical_normalisation",
                 "unanimous_gap_audit": "qa_diagnostic",
                 "merged_conical_overlap_assignment": "accepted_compatibility_correction",
-                "axis_conical_isoline": "bounded_curved_approximation",
+                "axis_conical_isoline": "bounded_c2_guide_equality_projection",
                 "pairwise_solver_fallback": "exceptional_recovery",
                 "coverage_gap_fill": "exceptional_recovery",
                 "final_partition_gap_fill": "exceptional_recovery",
@@ -3413,14 +3452,363 @@ class PlanarControllingOlsEngine:
                 self._region_solve_stats.get("axis_zero_contour_success", 0.0) + 1.0
             )
             try:
-                return QgsGeometry.unaryUnion(segments) if len(segments) > 1 else segments[0]
+                sampled_curve = (
+                    QgsGeometry.unaryUnion(segments)
+                    if len(segments) > 1
+                    else segments[0]
+                )
             except Exception:
-                return segments[0]
+                sampled_curve = segments[0]
+            if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED:
+                smoothed_curve = self._smoothed_axis_conical_zero_contour(
+                    sampled_curve,
+                    axis_candidate,
+                    conical_candidate,
+                    axis,
+                    conical_model,
+                    overlap,
+                )
+                if smoothed_curve is not None and not smoothed_curve.isEmpty():
+                    return smoothed_curve
+            return sampled_curve
         finally:
             self._region_solve_stats["axis_zero_contour_time_s"] = (
                 self._region_solve_stats.get("axis_zero_contour_time_s", 0.0)
                 + (time.perf_counter() - start_time)
             )
+
+    def _smoothed_axis_conical_zero_contour(
+        self,
+        sampled_curve: QgsGeometry,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+        axis: dict,
+        conical_model: dict,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        """Create an endpoint-clamped C2 guide and project it back to equality."""
+        self._region_solve_stats["axis_curve_smoothing_calls"] = (
+            self._region_solve_stats.get("axis_curve_smoothing_calls", 0.0) + 1.0
+        )
+        source_parts = self._topology_clean_transition_line_parts(sampled_curve)
+        if not source_parts:
+            self._record_axis_curve_smoothing_rejection("topology")
+            return None
+
+        smoothed_parts: List[QgsGeometry] = []
+        maximum_deviation_m = 0.0
+        maximum_residual_m = 0.0
+        maximum_endpoint_shift_m = 0.0
+        for source_points in source_parts:
+            if len(source_points) < 2:
+                self._record_axis_curve_smoothing_rejection("short")
+                return None
+            source_line = QgsGeometry.fromPolylineXY(source_points)
+            source_residual_m = self._maximum_axis_conical_curve_residual(
+                source_line,
+                axis_candidate,
+                conical_candidate,
+            )
+            source_curvature_change, source_rms_curvature_change = (
+                self._curve_curvature_continuity_metrics(source_line)
+            )
+            if source_residual_m is None:
+                self._record_axis_curve_smoothing_rejection("residual")
+                return None
+            control_points = self._uniform_curve_control_points(
+                source_line,
+                AXIS_CONICAL_CURVE_SMOOTHING_CONTROL_SPACING_M,
+            )
+            if len(control_points) < 4:
+                self._record_axis_curve_smoothing_rejection("short")
+                return None
+            guide_points = self._clamped_cubic_bspline_points(
+                control_points,
+                AXIS_CONICAL_CURVE_SMOOTHING_SAMPLES_PER_SPAN,
+            )
+            if len(guide_points) < 2:
+                self._record_axis_curve_smoothing_rejection("short")
+                return None
+
+            projected_points: List[QgsPointXY] = []
+            for index, guide_point in enumerate(guide_points):
+                projected_point = (
+                    QgsPointXY(source_points[0])
+                    if index == 0
+                    else QgsPointXY(source_points[-1])
+                    if index == len(guide_points) - 1
+                    else self._project_axis_conical_point_to_equality(
+                        axis,
+                        conical_model,
+                        guide_point,
+                    )
+                )
+                if not projected_points or projected_point.distance(projected_points[-1]) > 1e-6:
+                    projected_points.append(projected_point)
+            projected_points = self._remove_transition_curve_backtracking(projected_points)
+            if len(projected_points) < 2:
+                self._record_axis_curve_smoothing_rejection("backtracking")
+                return None
+
+            endpoint_shift_m = max(
+                projected_points[0].distance(source_points[0]),
+                projected_points[-1].distance(source_points[-1]),
+            )
+            if endpoint_shift_m > AXIS_CONICAL_CURVE_SMOOTHING_MAX_ENDPOINT_SHIFT_M:
+                self._record_axis_curve_smoothing_rejection("endpoint")
+                return None
+            maximum_endpoint_shift_m = max(maximum_endpoint_shift_m, endpoint_shift_m)
+            smoothed_line = QgsGeometry.fromPolylineXY(projected_points)
+            if smoothed_line is None or smoothed_line.isEmpty() or not smoothed_line.isSimple():
+                self._record_axis_curve_smoothing_rejection("simple")
+                return None
+            try:
+                part_maximum_deviation_m = source_line.hausdorffDistanceDensify(
+                    smoothed_line,
+                    AXIS_CONICAL_CURVE_SMOOTHING_HAUSDORFF_DENSIFY_FRACTION,
+                )
+            except Exception:
+                part_maximum_deviation_m = float("nan")
+            if (
+                not math.isfinite(part_maximum_deviation_m)
+                or part_maximum_deviation_m < 0.0
+                or part_maximum_deviation_m
+                > AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M
+            ):
+                self._record_axis_curve_smoothing_rejection("deviation")
+                return None
+            try:
+                domain = overlap.buffer(
+                    AXIS_CONICAL_CURVE_SMOOTHING_DOMAIN_TOLERANCE_M,
+                    CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS,
+                )
+                outside = smoothed_line.difference(domain)
+            except Exception:
+                outside = None
+            if outside is None or (not outside.isEmpty() and outside.length() > 1e-6):
+                self._record_axis_curve_smoothing_rejection("domain")
+                return None
+
+            part_maximum_residual_m = self._maximum_axis_conical_curve_residual(
+                smoothed_line,
+                axis_candidate,
+                conical_candidate,
+            )
+            if part_maximum_residual_m is None:
+                self._record_axis_curve_smoothing_rejection("residual")
+                return None
+            if (
+                part_maximum_residual_m
+                > AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M
+            ):
+                self._record_axis_curve_smoothing_rejection("residual")
+                return None
+            if (
+                part_maximum_residual_m
+                > source_residual_m
+                + AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M
+            ):
+                self._record_axis_curve_smoothing_rejection("residual_regression")
+                return None
+
+            smoothed_curvature_change, smoothed_rms_curvature_change = (
+                self._curve_curvature_continuity_metrics(smoothed_line)
+            )
+            required_curvature_change = source_curvature_change * (
+                1.0 - AXIS_CONICAL_CURVE_SMOOTHING_MIN_CURVATURE_IMPROVEMENT
+            )
+            required_rms_curvature_change = source_rms_curvature_change * (
+                1.0 - AXIS_CONICAL_CURVE_SMOOTHING_MIN_CURVATURE_IMPROVEMENT
+            )
+            if (
+                source_curvature_change <= 1e-12
+                or smoothed_curvature_change > required_curvature_change
+                or smoothed_rms_curvature_change
+                > required_rms_curvature_change
+            ):
+                self._record_axis_curve_smoothing_rejection("continuity")
+                return None
+
+            maximum_deviation_m = max(
+                maximum_deviation_m,
+                part_maximum_deviation_m,
+            )
+            maximum_residual_m = max(maximum_residual_m, part_maximum_residual_m)
+            smoothed_parts.append(smoothed_line)
+
+        if not smoothed_parts:
+            self._record_axis_curve_smoothing_rejection("short")
+            return None
+        try:
+            smoothed_curve = (
+                QgsGeometry.unaryUnion(smoothed_parts)
+                if len(smoothed_parts) > 1
+                else smoothed_parts[0]
+            )
+        except Exception:
+            self._record_axis_curve_smoothing_rejection("union")
+            return None
+        self._region_solve_stats["axis_curve_smoothing_accepted"] = (
+            self._region_solve_stats.get("axis_curve_smoothing_accepted", 0.0) + 1.0
+        )
+        self._region_solve_stats["axis_curve_smoothing_max_deviation_m"] = max(
+            self._region_solve_stats.get("axis_curve_smoothing_max_deviation_m", 0.0),
+            maximum_deviation_m,
+        )
+        self._region_solve_stats["axis_curve_smoothing_max_equality_residual_m"] = max(
+            self._region_solve_stats.get(
+                "axis_curve_smoothing_max_equality_residual_m",
+                0.0,
+            ),
+            maximum_residual_m,
+        )
+        self._region_solve_stats["axis_curve_smoothing_max_endpoint_shift_m"] = max(
+            self._region_solve_stats.get("axis_curve_smoothing_max_endpoint_shift_m", 0.0),
+            maximum_endpoint_shift_m,
+        )
+        return smoothed_curve
+
+    def _record_axis_curve_smoothing_rejection(self, reason: str) -> None:
+        self._region_solve_stats["axis_curve_smoothing_rejected"] = (
+            self._region_solve_stats.get("axis_curve_smoothing_rejected", 0.0) + 1.0
+        )
+        key = f"axis_curve_smoothing_rejected_{reason}"
+        self._region_solve_stats[key] = self._region_solve_stats.get(key, 0.0) + 1.0
+
+    def _maximum_axis_conical_curve_residual(
+        self,
+        line: QgsGeometry,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+    ) -> Optional[float]:
+        try:
+            sampled_geometry = line.densifyByDistance(
+                AXIS_CONICAL_CURVE_SMOOTHING_CONTROL_SPACING_M / 4.0
+            )
+        except Exception:
+            sampled_geometry = line
+        residuals = []
+        for points in self._line_parts(sampled_geometry):
+            for point_xy in points:
+                difference = self._candidate_difference(
+                    axis_candidate,
+                    conical_candidate,
+                    point_xy,
+                )
+                if difference is None or not math.isfinite(difference):
+                    return None
+                residuals.append(abs(difference))
+        return max(residuals) if residuals else None
+
+    @staticmethod
+    def _curve_curvature_continuity_metrics(
+        line: QgsGeometry,
+        sample_spacing_m: float = 5.0,
+    ) -> Tuple[float, float]:
+        length = line.length() if line is not None and not line.isEmpty() else 0.0
+        if length <= sample_spacing_m * 2.0:
+            return 0.0, 0.0
+        sample_count = max(2, int(math.ceil(length / sample_spacing_m)))
+        sampled_points = []
+        for index in range(sample_count + 1):
+            point_geometry = line.interpolate(length * index / sample_count)
+            if point_geometry is None or point_geometry.isEmpty():
+                continue
+            point = point_geometry.asPoint()
+            sampled_points.append(QgsPointXY(point.x(), point.y()))
+        curvatures = []
+        for previous, current, following in zip(
+            sampled_points[:-2],
+            sampled_points[1:-1],
+            sampled_points[2:],
+        ):
+            first_heading = math.atan2(
+                current.y() - previous.y(),
+                current.x() - previous.x(),
+            )
+            second_heading = math.atan2(
+                following.y() - current.y(),
+                following.x() - current.x(),
+            )
+            heading_change = math.atan2(
+                math.sin(second_heading - first_heading),
+                math.cos(second_heading - first_heading),
+            )
+            local_spacing_m = (
+                previous.distance(current) + current.distance(following)
+            ) / 2.0
+            if local_spacing_m > 1e-9:
+                curvatures.append(heading_change / local_spacing_m)
+        changes = [
+            (second - first) / sample_spacing_m
+            for first, second in zip(curvatures[:-1], curvatures[1:])
+        ]
+        if not changes:
+            return 0.0, 0.0
+        return (
+            max(abs(value) for value in changes),
+            math.sqrt(sum(value * value for value in changes) / len(changes)),
+        )
+
+    def _uniform_curve_control_points(
+        self,
+        line: QgsGeometry,
+        spacing_m: float,
+    ) -> List[QgsPointXY]:
+        if line is None or line.isEmpty() or spacing_m <= 0.0:
+            return []
+        length = line.length()
+        if length <= 1e-9:
+            return []
+        segment_count = max(1, int(math.ceil(length / spacing_m)))
+        controls: List[QgsPointXY] = []
+        for index in range(segment_count + 1):
+            point_geometry = line.interpolate(length * index / segment_count)
+            if point_geometry is None or point_geometry.isEmpty():
+                return []
+            point = point_geometry.asPoint()
+            point_xy = QgsPointXY(point.x(), point.y())
+            if not controls or point_xy.distance(controls[-1]) > 1e-6:
+                controls.append(point_xy)
+        return controls
+
+    @staticmethod
+    def _clamped_cubic_bspline_points(
+        control_points: Sequence[QgsPointXY],
+        samples_per_span: int,
+    ) -> List[QgsPointXY]:
+        """Evaluate an open uniform cubic B-spline with clamped endpoints."""
+        controls = [QgsPointXY(point) for point in control_points]
+        if len(controls) < 4:
+            return controls
+        sample_count = max(1, int(samples_per_span))
+        padded = [QgsPointXY(controls[0]), QgsPointXY(controls[0])]
+        padded.extend(controls)
+        padded.extend([QgsPointXY(controls[-1]), QgsPointXY(controls[-1])])
+        output: List[QgsPointXY] = []
+        for span in range(len(padded) - 3):
+            p0, p1, p2, p3 = padded[span : span + 4]
+            for sample in range(sample_count):
+                t = sample / sample_count
+                one_minus_t = 1.0 - t
+                weights = (
+                    one_minus_t ** 3 / 6.0,
+                    ((3.0 * t ** 3) - (6.0 * t * t) + 4.0) / 6.0,
+                    ((-3.0 * t ** 3) + (3.0 * t * t) + (3.0 * t) + 1.0)
+                    / 6.0,
+                    t ** 3 / 6.0,
+                )
+                point = QgsPointXY(
+                    sum(weight * source.x() for weight, source in zip(weights, (p0, p1, p2, p3))),
+                    sum(weight * source.y() for weight, source in zip(weights, (p0, p1, p2, p3))),
+                )
+                if not output or point.distance(output[-1]) > 1e-6:
+                    output.append(point)
+        if not output or output[-1].distance(controls[-1]) > 1e-6:
+            output.append(QgsPointXY(controls[-1]))
+        output[0] = QgsPointXY(controls[0])
+        output[-1] = QgsPointXY(controls[-1])
+        return output
 
     def _axis_conical_zero_contour_applies(self, axis_candidate: ControllingOlsCandidate) -> bool:
         """Apply the GeoJSON surface-intersection style sampler to runway axis surfaces."""

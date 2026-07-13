@@ -101,6 +101,8 @@ def _axis_conical_transition_metrics(engine) -> Dict[str, object]:
     analytic_deviations = []
     shared_elevations = []
     turn_angles = []
+    curvatures_per_m = []
+    curvature_changes_per_m2 = []
     transition_parts_by_pair = defaultdict(list)
     transition_segment_counts = defaultdict(int)
     short_component_count = 0
@@ -240,6 +242,54 @@ def _axis_conical_transition_metrics(engine) -> Dict[str, object]:
                 )
                 turn_angles.append(math.degrees(math.acos(cosine)))
 
+            part_length = _part.length()
+            if part_length <= 10.0:
+                continue
+            sample_spacing_m = 5.0
+            sample_count = max(2, int(math.ceil(part_length / sample_spacing_m)))
+            sampled_points = []
+            for sample_index in range(sample_count + 1):
+                point_geometry = _part.interpolate(
+                    part_length * sample_index / sample_count
+                )
+                if point_geometry is None or point_geometry.isEmpty():
+                    continue
+                point = point_geometry.asPoint()
+                sampled_points.append(QgsPointXY(point.x(), point.y()))
+            part_curvatures = []
+            for previous, current, following in zip(
+                sampled_points[:-2],
+                sampled_points[1:-1],
+                sampled_points[2:],
+            ):
+                first_heading = math.atan2(
+                    current.y() - previous.y(),
+                    current.x() - previous.x(),
+                )
+                second_heading = math.atan2(
+                    following.y() - current.y(),
+                    following.x() - current.x(),
+                )
+                heading_change = math.atan2(
+                    math.sin(second_heading - first_heading),
+                    math.cos(second_heading - first_heading),
+                )
+                local_spacing_m = (
+                    previous.distance(current) + current.distance(following)
+                ) / 2.0
+                if local_spacing_m <= 1e-9:
+                    continue
+                curvature = heading_change / local_spacing_m
+                part_curvatures.append(curvature)
+                curvatures_per_m.append(curvature)
+            for first_curvature, second_curvature in zip(
+                part_curvatures[:-1],
+                part_curvatures[1:],
+            ):
+                curvature_changes_per_m2.append(
+                    (second_curvature - first_curvature) / sample_spacing_m
+                )
+
         try:
             overlap = axis.footprint.intersection(conical.footprint)
             analytic = engine._axis_conical_transition_curve(
@@ -309,6 +359,18 @@ def _axis_conical_transition_metrics(engine) -> Dict[str, object]:
         "rms_analytic_deviation_m": _rms(analytic_deviations),
         "maximum_vertex_turn_degrees": max(turn_angles) if turn_angles else None,
         "rms_vertex_turn_degrees": _rms(turn_angles),
+        "maximum_abs_curvature_per_m": (
+            max(abs(value) for value in curvatures_per_m)
+            if curvatures_per_m
+            else None
+        ),
+        "rms_curvature_per_m": _rms(curvatures_per_m),
+        "maximum_abs_curvature_change_per_m2": (
+            max(abs(value) for value in curvature_changes_per_m2)
+            if curvature_changes_per_m2
+            else None
+        ),
+        "rms_curvature_change_per_m2": _rms(curvature_changes_per_m2),
         "reversal_count": reversal_count,
         "duplicate_segment_count": duplicate_segment_count,
         "short_component_count": short_component_count,
@@ -781,6 +843,27 @@ def _run_case(
             )
             if approximation_calls and approximation["vertical_error_bound_m"] is None:
                 failures.append(f"solver {index} used an approximation without a vertical error bound")
+            if approximation["smoothed_zero_contours"]:
+                if float(approximation["smoothing_max_endpoint_shift_m"]) > float(
+                    approximation["smoothing_max_allowed_endpoint_shift_m"]
+                ):
+                    failures.append(
+                        f"solver {index} shifted a smoothed transition endpoint"
+                    )
+                if float(approximation["smoothing_max_deviation_m"]) > float(
+                    approximation["smoothing_max_allowed_deviation_m"]
+                ):
+                    failures.append(
+                        f"solver {index} exceeded the smoothing deviation bound"
+                    )
+                if float(
+                    approximation["smoothing_max_equality_residual_m"]
+                ) > float(
+                    approximation["smoothing_max_allowed_equality_residual_m"]
+                ):
+                    failures.append(
+                        f"solver {index} exceeded the smoothing equality bound"
+                    )
             transition_topology = diagnostics.get("axis_conical_transitions")
             if transition_topology:
                 for key in (

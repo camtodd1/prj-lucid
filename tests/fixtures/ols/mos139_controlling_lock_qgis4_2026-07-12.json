@@ -2,37 +2,37 @@
   "schema_version": 1,
   "ruleset_id": "mos139_2019",
   "qgis_version": "4.0.2-Norrk\u00f6ping",
-  "accepted_at": "2026-07-12",
-  "acceptance": "User-approved compatibility lock",
+  "accepted_at": "2026-07-13",
+  "acceptance": "User-requested equality-curve smoothing revision",
   "fixtures": {
     "ybbn_single.json": {
       "regions": 21,
-      "area_m2": 721831580.7202133,
-      "geometry_digest": "f4440d0e55cca59462949120107930aede317e0b874a9656ba6cc4a6ff397314",
+      "area_m2": 721831580.7200094,
+      "geometry_digest": "90be81a4818d3e44689937227a0641d84b7c0aa0dd416e13ddfb1dbae6e2c63f",
       "controller_ids_digest": "61dbbce4fdcc07736e3575943c79fbbd6e4179da72e213c6c24ea8ed42fa9450"
     },
     "yssy_dual_intersecting.json": {
       "regions": 41,
-      "area_m2": 736390346.1837736,
-      "geometry_digest": "91d3714d50ee95e20c45c6a258b2c5f639355aa735e290e0fd1815337efe312a",
+      "area_m2": 736390346.1972965,
+      "geometry_digest": "1029db0e0aca1928135af7c9a12e96943383aabeca3b040625ad2fe9374b5ddf",
       "controller_ids_digest": "9058cf56c8eef341961a4ab329382ce5c3383cfa5b9ed1fd9c347a45d337c990"
     },
     "ysws_dual_parallel.json": {
       "regions": 39,
-      "area_m2": 730403863.7763846,
-      "geometry_digest": "57ee1fefce29f4b07867619930f46cee117e3b43530021e0f63423c456f99197",
+      "area_m2": 730403864.0002873,
+      "geometry_digest": "5558df4100cc989cb505c698f0a03700d18dc7880007a38190d17a515b53b42f",
       "controller_ids_digest": "0106316fcdb69893a723b546cd653d9c4d1099eff93275ae3a81bd4e1bec3f28"
     },
     "ymml_intersecting.json": {
       "regions": 41,
-      "area_m2": 734359700.6967449,
-      "geometry_digest": "a462359e45ab7ce134beb2be1c2d0361defd2dad37389d80d0cb83fb312a48c0",
+      "area_m2": 734359700.7261589,
+      "geometry_digest": "c3f4664dc136fda70f69ba77492147c0cacd00b7c08a647ae41128d7d08fee16",
       "controller_ids_digest": "61717c210bcdbd3c780c85362ff844440c2a82ed9c3173a0248219c412e79866"
     },
     "yssy_multiple_stress.json": {
       "regions": 59,
-      "area_m2": 742334576.1056356,
-      "geometry_digest": "0f37c14b6068c15c22d17839657ee520752dc519ec88aa19dd275654713ace80",
+      "area_m2": 742334576.1834188,
+      "geometry_digest": "f8ceb2b09c60174c85e83ceafe7a46bd41b0c4d725747dd85e6d4b2e37e780b8",
       "controller_ids_digest": "00ec702d04330c205fba0fd305f96685d5cf4f9fe605a2e6acb184eb9eba94f2"
     }
   }

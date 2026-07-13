@@ -22,10 +22,18 @@ coverage, and mutually exclusive gain/loss/no-change outputs remain mandatory.
 ## YMML axis/conical benchmark
 
 `ymml_axis_conical_benchmark_qgis4_2026-07-13.json` records three-run timing,
-geometry, equality-residual, and line-smoothness metrics for both the supplied
-sampled output and the adopted projected zero-contour refinement. The exact
-supplied transition layer is preserved in
+geometry, equality-residual, and line-smoothness metrics for the supplied
+sampled output, the projected zero-contour refinement, and the adopted bounded
+C2 smoothing experiment. The exact supplied transition layer is preserved in
 `baselines/ymml_controlling_transition_boundaries_sampled_2026-07-13.geojson`.
+
+The smoother constructs an endpoint-clamped uniform cubic B-spline guide and
+projects its interior vertices back onto the exact axis/conical equality locus
+before the curve is used for polygonisation. A smoothed component is retained
+only when peak and RMS curvature change improve, the curve remains within the
+surface-overlap domain, symmetric densified Hausdorff displacement is no more
+than 0.5 m, and equality error is no more than 0.01 m. Endpoints remain fixed;
+components that fail any gate fall back to the projected unsmoothed curve.
 
 The benchmark deliberately treats two concepts separately:
 
@@ -36,6 +44,9 @@ The benchmark deliberately treats two concepts separately:
 - `reversal_count`, `duplicate_segment_count`, `short_component_count`, and
   `topology_excess_length_m` detect doubled-back paths, reverse duplicates,
   sub-resolution fragments, and sliver loops. Production gates require zero.
+- `maximum_abs_curvature_change_per_m2` and its RMS counterpart measure
+  curvature continuity. The smoother must improve both values locally before
+  its guide is accepted.
 
 Run the focused three-run benchmark with:
 
