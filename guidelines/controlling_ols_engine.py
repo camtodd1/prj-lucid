@@ -231,6 +231,18 @@ class PlanarControllingOlsEngine:
                 "merged_overlap_unanimous": int(stats.get("merged_overlap_unanimous_count", 0.0)),
                 "merged_overlap_triangulated": int(stats.get("merged_overlap_triangulated_count", 0.0)),
                 "merged_overlap_representative": int(stats.get("merged_overlap_representative_count", 0.0)),
+                "exclusive_boundaries_normalised": int(
+                    stats.get("exclusive_boundary_normalisation_count", 0.0)
+                ),
+                "exclusive_boundary_reassigned_area_m2": stats.get(
+                    "exclusive_boundary_reassigned_area_m2", 0.0
+                ),
+                "exclusive_boundary_coverage_change_m2": stats.get(
+                    "exclusive_boundary_coverage_change_m2", 0.0
+                ),
+                "exclusive_boundary_overlap_change_m2": stats.get(
+                    "exclusive_boundary_overlap_change_m2", 0.0
+                ),
             },
             "approximations": {
                 "triangulation_calls": int(stats.get("triangulation_calls", 0.0)),
@@ -1531,6 +1543,7 @@ class PlanarControllingOlsEngine:
         merge_start = time.perf_counter()
         merged_parts = self._merge_region_parts_by_candidate(cell_parts)
         merged_parts = self._enforce_exclusive_merged_regions(merged_parts)
+        merged_parts = self._normalise_exclusive_region_boundaries(merged_parts)
         self._region_solve_stats["merge_time_s"] = time.perf_counter() - merge_start
         self._region_solve_stats["global_region_count"] = float(len(merged_parts))
         self._region_solve_stats["invalid_output_region_count"] = float(sum(
@@ -1651,6 +1664,73 @@ class PlanarControllingOlsEngine:
             for candidate, geometry in exclusive
             if self._has_polygon_area(geometry)
         ]
+
+    def _normalise_exclusive_region_boundaries(
+        self,
+        regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        """Remove complementary ring hairpins without changing partition coverage."""
+        original = [
+            (candidate, QgsGeometry(geometry))
+            for candidate, geometry in regions
+            if self._has_polygon_area(geometry)
+        ]
+        normalised: List[Tuple[ControllingOlsCandidate, QgsGeometry]] = []
+        changed_count = 0
+        reassigned_area_m2 = 0.0
+        for candidate, geometry in original:
+            opened = self._open_boundary_touching_holes_geometry(geometry)
+            cleaned = self._despiked_polygon_geometry(
+                opened if opened is not None else geometry
+            )
+            if not self._has_polygon_area(cleaned) or not cleaned.isGeosValid():
+                return original
+            length_change = abs(cleaned.length() - geometry.length())
+            area_change = abs(cleaned.area() - geometry.area())
+            if length_change > 1e-6 or area_change > 1e-9:
+                changed_count += 1
+                reassigned_area_m2 += area_change
+            normalised.append((candidate, cleaned))
+
+        if not changed_count:
+            return original
+        original_geometries = [geometry for _candidate, geometry in original]
+        normalised_geometries = [geometry for _candidate, geometry in normalised]
+        try:
+            original_union = QgsGeometry.unaryUnion(original_geometries)
+            normalised_union = QgsGeometry.unaryUnion(normalised_geometries)
+            coverage_change_m2 = original_union.symDifference(normalised_union).area()
+            original_overlap_proxy_m2 = max(
+                0.0,
+                sum(geometry.area() for geometry in original_geometries)
+                - original_union.area(),
+            )
+            normalised_overlap_proxy_m2 = max(
+                0.0,
+                sum(geometry.area() for geometry in normalised_geometries)
+                - normalised_union.area(),
+            )
+        except Exception:
+            return original
+        tolerance_m2 = CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2
+        if coverage_change_m2 > tolerance_m2:
+            return original
+        if normalised_overlap_proxy_m2 > original_overlap_proxy_m2 + tolerance_m2:
+            return original
+
+        self._region_solve_stats["exclusive_boundary_normalisation_count"] = float(
+            changed_count
+        )
+        self._region_solve_stats["exclusive_boundary_reassigned_area_m2"] = float(
+            reassigned_area_m2 / 2.0
+        )
+        self._region_solve_stats["exclusive_boundary_coverage_change_m2"] = float(
+            coverage_change_m2
+        )
+        self._region_solve_stats["exclusive_boundary_overlap_change_m2"] = float(
+            normalised_overlap_proxy_m2 - original_overlap_proxy_m2
+        )
+        return normalised
 
     def _unanimous_pair_lower_region(
         self,

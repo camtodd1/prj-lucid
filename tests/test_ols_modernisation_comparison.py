@@ -159,6 +159,82 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(regions[0][1].area(), 6000.0, places=6)
         self.assertAlmostEqual(regions[1][1].area(), 4000.0, places=6)
 
+    def test_final_exclusive_boundary_normalisation_removes_complementary_hairpins(self):
+        shared_boundary = [
+            QgsPointXY(50.0, 0.0),
+            QgsPointXY(50.0, 40.0),
+            QgsPointXY(49.995, 50.0),
+            QgsPointXY(49.99475, 49.0),
+            QgsPointXY(49.99, 60.0),
+            QgsPointXY(50.0, 100.0),
+        ]
+        left_geometry = QgsGeometry.fromPolygonXY(
+            [[
+                QgsPointXY(0.0, 0.0),
+                *shared_boundary,
+                QgsPointXY(0.0, 100.0),
+                QgsPointXY(0.0, 0.0),
+            ]]
+        )
+        right_geometry = QgsGeometry.fromPolygonXY(
+            [[
+                QgsPointXY(100.0, 0.0),
+                QgsPointXY(100.0, 100.0),
+                *reversed(shared_boundary),
+                QgsPointXY(100.0, 0.0),
+            ]]
+        )
+        left = ControllingOlsCandidate(
+            "left", "TOCS", left_geometry, constant_elevation_evaluator(100.0), "axis"
+        )
+        right = ControllingOlsCandidate(
+            "right", "Conical", right_geometry, constant_elevation_evaluator(110.0), "conical"
+        )
+        engine = PlanarControllingOlsEngine([left, right])
+        original_union = left_geometry.combine(right_geometry)
+
+        normalised = engine._normalise_exclusive_region_boundaries(
+            [(left, left_geometry), (right, right_geometry)]
+        )
+
+        self.assertEqual(len(normalised), 2)
+        self.assertGreater(
+            engine._region_solve_stats["exclusive_boundary_normalisation_count"],
+            0.0,
+        )
+        self.assertLessEqual(
+            engine._region_solve_stats["exclusive_boundary_coverage_change_m2"],
+            0.01,
+        )
+        self.assertAlmostEqual(
+            normalised[0][1].intersection(normalised[1][1]).area(),
+            0.0,
+            places=6,
+        )
+        normalised_union = normalised[0][1].combine(normalised[1][1])
+        self.assertLessEqual(
+            original_union.symDifference(normalised_union).area(),
+            0.01,
+        )
+        for _candidate, geometry in normalised:
+            for ring in engine._polygon_boundary_parts(geometry):
+                for previous, current, following in zip(ring[:-2], ring[1:-1], ring[2:]):
+                    first_dx = current.x() - previous.x()
+                    first_dy = current.y() - previous.y()
+                    second_dx = following.x() - current.x()
+                    second_dy = following.y() - current.y()
+                    denominator = math.hypot(first_dx, first_dy) * math.hypot(
+                        second_dx,
+                        second_dy,
+                    )
+                    if denominator <= 1e-12:
+                        continue
+                    cosine = max(
+                        -1.0,
+                        min(1.0, ((first_dx * second_dx) + (first_dy * second_dy)) / denominator),
+                    )
+                    self.assertLess(math.degrees(math.acos(cosine)), 150.0)
+
     def test_one_sided_surface_with_tolerance_edge_is_entirely_gain(self):
         baseline = self.constant("baseline", 100.0)
         future = self.plane("future", 0.001, 0.0, 100.005)
