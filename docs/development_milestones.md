@@ -227,6 +227,13 @@ Last reviewed: 2026-07-12.
   source-backed validation, complex transitional components, release timing,
   and removal of Annex-specific final partition recovery.
 
+- [ ] Generalise the OLS comparison engine for ruleset-to-ruleset comparisons.
+
+  Allow any supported OLS ruleset to be selected independently as the baseline
+  and comparison ruleset, rather than fixing future Annex 14 as the comparison.
+  Example pairings include MOS 139 against future Annex 14 and CAP 168 against
+  MOS 139.
+
 - [x] Finish MOS139 stopway geometry.
 
   Work items:
