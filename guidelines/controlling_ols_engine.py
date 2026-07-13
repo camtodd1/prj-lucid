@@ -6,6 +6,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
+import numpy as np
+
 from qgis.PyQt.QtCore import QVariant  # type: ignore
 from qgis.core import (  # type: ignore
     Qgis,
@@ -57,12 +59,13 @@ AXIS_CONICAL_ZERO_CONTOUR_MAX_GRID_M = 75.0
 AXIS_CONICAL_ZERO_CONTOUR_TARGET_STEPS = 160.0
 AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS = 80000
 AXIS_CONICAL_CURVE_SMOOTHING_ENABLED = True
-AXIS_CONICAL_CURVE_SMOOTHING_CONTROL_SPACING_M = 40.0
-AXIS_CONICAL_CURVE_SMOOTHING_SAMPLES_PER_SPAN = 2
-AXIS_CONICAL_CURVE_SMOOTHING_MIN_CONTROL_SEGMENTS = 3
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M = 0.75
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.02
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M = 0.02
+AXIS_CONICAL_CURVE_FIT_CONTROL_SPACING_M = 120.0
+AXIS_CONICAL_CURVE_FIT_OUTPUT_SPACING_M = 5.0
+AXIS_CONICAL_CURVE_FIT_FAIRING_WEIGHT = 0.01
+AXIS_CONICAL_CURVE_FIT_MIN_CONTROL_POINTS = 4
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M = 1.5
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.05
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M = 0.05
 AXIS_CONICAL_CURVE_SMOOTHING_MIN_CURVATURE_IMPROVEMENT = 0.01
 AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT = False
 AXIS_CONICAL_CURVE_SMOOTHING_DOMAIN_TOLERANCE_M = 0.05
@@ -263,12 +266,12 @@ class PlanarControllingOlsEngine:
                     stats.get("axis_curve_smoothing_accepted", 0.0)
                 ),
                 "zero_contour_smoothing_method": (
-                    "clamped_cubic_bspline_equality_projected"
+                    "endpoint_constrained_regularized_least_squares_bspline"
                     if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
                     else "disabled"
                 ),
                 "zero_contour_smoothing_profile": (
-                    "aggressive_40m_visual_trial"
+                    "least_squares_bspline_visual_trial"
                     if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
                     else "disabled"
                 ),
@@ -300,6 +303,24 @@ class PlanarControllingOlsEngine:
                 ),
                 "smoothing_max_endpoint_shift_m": stats.get(
                     "axis_curve_smoothing_max_endpoint_shift_m", 0.0
+                ),
+                "fit_control_spacing_m": AXIS_CONICAL_CURVE_FIT_CONTROL_SPACING_M,
+                "fit_output_spacing_m": AXIS_CONICAL_CURVE_FIT_OUTPUT_SPACING_M,
+                "fit_fairing_weight": AXIS_CONICAL_CURVE_FIT_FAIRING_WEIGHT,
+                "fit_source_vertices": int(
+                    stats.get("axis_curve_fit_source_vertices", 0.0)
+                ),
+                "fit_control_points": int(
+                    stats.get("axis_curve_fit_control_points", 0.0)
+                ),
+                "fit_output_vertices": int(
+                    stats.get("axis_curve_fit_output_vertices", 0.0)
+                ),
+                "fit_maximum_point_error_m": stats.get(
+                    "axis_curve_fit_maximum_point_error_m", 0.0
+                ),
+                "fit_rms_point_error_m": stats.get(
+                    "axis_curve_fit_rms_point_error_m", 0.0
                 ),
                 "chord_refinements_suppressed": int(
                     stats.get("axis_conical_chord_refinement_suppressed", 0.0)
@@ -334,7 +355,7 @@ class PlanarControllingOlsEngine:
                 "unanimous_gap_audit": "qa_diagnostic",
                 "merged_conical_overlap_assignment": "accepted_compatibility_correction",
                 "axis_conical_isoline": (
-                    "experimental_aggressive_c2_guide_equality_projection"
+                    "experimental_least_squares_bspline_equality_projection"
                     if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
                     and not AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT
                     else "bounded_c2_guide_equality_projection"
@@ -3535,21 +3556,51 @@ class PlanarControllingOlsEngine:
             if source_residual_m is None:
                 self._record_axis_curve_smoothing_rejection("residual")
                 return None
-            control_points = self._uniform_curve_control_points(
+            fit_result = self._least_squares_bspline_guide_points(
+                source_points,
                 source_line,
-                AXIS_CONICAL_CURVE_SMOOTHING_CONTROL_SPACING_M,
-                AXIS_CONICAL_CURVE_SMOOTHING_MIN_CONTROL_SEGMENTS,
             )
-            if len(control_points) < 4:
-                self._record_axis_curve_smoothing_rejection("short")
+            if fit_result is None:
+                self._record_axis_curve_smoothing_rejection("fit")
                 return None
-            guide_points = self._clamped_cubic_bspline_points(
-                control_points,
-                AXIS_CONICAL_CURVE_SMOOTHING_SAMPLES_PER_SPAN,
-            )
+            guide_points, fit_diagnostics = fit_result
             if len(guide_points) < 2:
                 self._record_axis_curve_smoothing_rejection("short")
                 return None
+            self._region_solve_stats["axis_curve_fit_source_vertices"] = (
+                self._region_solve_stats.get("axis_curve_fit_source_vertices", 0.0)
+                + fit_diagnostics["source_vertices"]
+            )
+            self._region_solve_stats["axis_curve_fit_control_points"] = (
+                self._region_solve_stats.get("axis_curve_fit_control_points", 0.0)
+                + fit_diagnostics["control_points"]
+            )
+            self._region_solve_stats["axis_curve_fit_output_vertices"] = (
+                self._region_solve_stats.get("axis_curve_fit_output_vertices", 0.0)
+                + len(guide_points)
+            )
+            self._region_solve_stats["axis_curve_fit_maximum_point_error_m"] = max(
+                self._region_solve_stats.get(
+                    "axis_curve_fit_maximum_point_error_m",
+                    0.0,
+                ),
+                fit_diagnostics["maximum_point_error_m"],
+            )
+            fit_error_square_sum = self._region_solve_stats.get(
+                "axis_curve_fit_error_square_sum",
+                0.0,
+            ) + fit_diagnostics["error_square_sum"]
+            fit_error_count = self._region_solve_stats.get(
+                "axis_curve_fit_error_count",
+                0.0,
+            ) + fit_diagnostics["source_vertices"]
+            self._region_solve_stats["axis_curve_fit_error_square_sum"] = (
+                fit_error_square_sum
+            )
+            self._region_solve_stats["axis_curve_fit_error_count"] = fit_error_count
+            self._region_solve_stats["axis_curve_fit_rms_point_error_m"] = math.sqrt(
+                fit_error_square_sum / max(1.0, fit_error_count)
+            )
 
             projected_points: List[QgsPointXY] = []
             for index, guide_point in enumerate(guide_points):
@@ -3703,7 +3754,7 @@ class PlanarControllingOlsEngine:
     ) -> Optional[float]:
         try:
             sampled_geometry = line.densifyByDistance(
-                AXIS_CONICAL_CURVE_SMOOTHING_CONTROL_SPACING_M / 4.0
+                min(5.0, AXIS_CONICAL_CURVE_FIT_OUTPUT_SPACING_M / 2.0)
             )
         except Exception:
             sampled_geometry = line
@@ -3769,6 +3820,171 @@ class PlanarControllingOlsEngine:
             max(abs(value) for value in changes),
             math.sqrt(sum(value * value for value in changes) / len(changes)),
         )
+
+    def _least_squares_bspline_guide_points(
+        self,
+        source_points: Sequence[QgsPointXY],
+        source_line: QgsGeometry,
+    ) -> Optional[Tuple[List[QgsPointXY], Dict[str, float]]]:
+        """Fit a fair cubic B-spline to all ordered source points with fixed ends."""
+        length = source_line.length() if source_line is not None else 0.0
+        if length <= 1e-9 or len(source_points) < 2:
+            return None
+
+        fit_points = [QgsPointXY(point) for point in source_points]
+        minimum_fit_vertices = AXIS_CONICAL_CURVE_FIT_MIN_CONTROL_POINTS * 2
+        if len(fit_points) < minimum_fit_vertices:
+            sample_count = max(
+                minimum_fit_vertices - 1,
+                int(math.ceil(length / AXIS_CONICAL_CURVE_FIT_OUTPUT_SPACING_M)),
+            )
+            fit_points = []
+            for index in range(sample_count + 1):
+                point_geometry = source_line.interpolate(length * index / sample_count)
+                if point_geometry is None or point_geometry.isEmpty():
+                    return None
+                point = point_geometry.asPoint()
+                fit_points.append(QgsPointXY(point.x(), point.y()))
+
+        chainages = [0.0]
+        for previous, current in zip(fit_points[:-1], fit_points[1:]):
+            chainages.append(chainages[-1] + previous.distance(current))
+        total_chainage = chainages[-1]
+        if total_chainage <= 1e-9:
+            return None
+        parameters = np.asarray(
+            [chainage / total_chainage for chainage in chainages],
+            dtype=float,
+        )
+        control_count = max(
+            AXIS_CONICAL_CURVE_FIT_MIN_CONTROL_POINTS,
+            int(math.ceil(length / AXIS_CONICAL_CURVE_FIT_CONTROL_SPACING_M)) + 1,
+        )
+        control_count = min(control_count, len(fit_points))
+        if control_count < 4:
+            return None
+
+        knots = self._open_uniform_bspline_knots(control_count, degree=3)
+        basis = np.asarray(
+            [self._bspline_basis_row(value, knots, control_count, 3) for value in parameters],
+            dtype=float,
+        )
+        origin = fit_points[0]
+        data = np.asarray(
+            [
+                [point.x() - origin.x(), point.y() - origin.y()]
+                for point in fit_points
+            ],
+            dtype=float,
+        )
+        controls = np.zeros((control_count, 2), dtype=float)
+        controls[0] = data[0]
+        controls[-1] = data[-1]
+        interior_basis = basis[:, 1:-1]
+        fixed_data = (
+            np.outer(basis[:, 0], controls[0])
+            + np.outer(basis[:, -1], controls[-1])
+        )
+        data_rhs = data - fixed_data
+
+        second_differences = np.zeros((control_count - 2, control_count), dtype=float)
+        for index in range(control_count - 2):
+            second_differences[index, index : index + 3] = (1.0, -2.0, 1.0)
+        penalty_scale = math.sqrt(max(0.0, AXIS_CONICAL_CURVE_FIT_FAIRING_WEIGHT))
+        penalty_basis = second_differences[:, 1:-1]
+        penalty_fixed = (
+            np.outer(second_differences[:, 0], controls[0])
+            + np.outer(second_differences[:, -1], controls[-1])
+        )
+        system = np.vstack((interior_basis, penalty_scale * penalty_basis))
+        right_hand_side = np.vstack((data_rhs, -penalty_scale * penalty_fixed))
+        try:
+            interior_controls, _, _, _ = np.linalg.lstsq(
+                system,
+                right_hand_side,
+                rcond=None,
+            )
+        except (ValueError, np.linalg.LinAlgError):
+            return None
+        controls[1:-1] = interior_controls
+        if not np.isfinite(controls).all():
+            return None
+
+        fitted_source = basis @ controls
+        point_errors = np.linalg.norm(fitted_source - data, axis=1)
+        output_segment_count = max(
+            3,
+            int(math.ceil(length / AXIS_CONICAL_CURVE_FIT_OUTPUT_SPACING_M)),
+        )
+        output_parameters = np.linspace(0.0, 1.0, output_segment_count + 1)
+        output_basis = np.asarray(
+            [
+                self._bspline_basis_row(value, knots, control_count, 3)
+                for value in output_parameters
+            ],
+            dtype=float,
+        )
+        output_coordinates = output_basis @ controls
+        if not np.isfinite(output_coordinates).all():
+            return None
+        guide_points = [
+            QgsPointXY(origin.x() + coordinate[0], origin.y() + coordinate[1])
+            for coordinate in output_coordinates
+        ]
+        guide_points[0] = QgsPointXY(source_points[0])
+        guide_points[-1] = QgsPointXY(source_points[-1])
+        return guide_points, {
+            "source_vertices": float(len(fit_points)),
+            "control_points": float(control_count),
+            "maximum_point_error_m": float(np.max(point_errors)),
+            "error_square_sum": float(np.dot(point_errors, point_errors)),
+        }
+
+    @staticmethod
+    def _open_uniform_bspline_knots(
+        control_count: int,
+        degree: int,
+    ) -> List[float]:
+        interior_count = control_count - degree - 1
+        interior_knots = [
+            index / (interior_count + 1)
+            for index in range(1, interior_count + 1)
+        ]
+        return ([0.0] * (degree + 1)) + interior_knots + ([1.0] * (degree + 1))
+
+    @staticmethod
+    def _bspline_basis_row(
+        parameter: float,
+        knots: Sequence[float],
+        control_count: int,
+        degree: int,
+    ) -> List[float]:
+        value = min(1.0, max(0.0, float(parameter)))
+        if value >= 1.0:
+            return ([0.0] * (control_count - 1)) + [1.0]
+        basis = [
+            1.0 if knots[index] <= value < knots[index + 1] else 0.0
+            for index in range(len(knots) - 1)
+        ]
+        for order in range(1, degree + 1):
+            next_basis = []
+            for index in range(len(basis) - 1):
+                left_denominator = knots[index + order] - knots[index]
+                right_denominator = knots[index + order + 1] - knots[index + 1]
+                left = (
+                    ((value - knots[index]) / left_denominator) * basis[index]
+                    if left_denominator > 0.0
+                    else 0.0
+                )
+                right = (
+                    ((knots[index + order + 1] - value) / right_denominator)
+                    * basis[index + 1]
+                    if right_denominator > 0.0
+                    else 0.0
+                )
+                next_basis.append(left + right)
+            basis = next_basis
+        return basis[:control_count]
 
     def _uniform_curve_control_points(
         self,

@@ -279,11 +279,14 @@ must pass. Otherwise the projected unsmoothed zero contour remains authoritative
 This order is important: unconstrained 2D smoothing can create an attractive
 line that is no longer an equal-elevation intersection.
 
-An explicit `aggressive_40m_visual_trial` profile is temporarily available for
-visual evaluation. It uses 40 m controls, a 0.75 m displacement bound and a
-0.02 m equality bound, and makes curvature improvement advisory. This is an
-experimental geometry variant: it retains endpoint, domain, simplicity and
-topology checks but is not part of the accepted MOS139 compatibility lock.
+An explicit `least_squares_bspline_visual_trial` profile is temporarily
+available for visual evaluation. It fits an endpoint-constrained cubic B-spline
+to all ordered sampled-intersection vertices using substantially fewer solved
+controls and a small control-fairing penalty. The fitted curve is evaluated at
+5 m spacing and projected back towards equality. Its exploratory bounds are
+1.5 m displacement and 0.05 m equality residual, and curvature improvement is
+advisory. It retains endpoint, domain, simplicity and topology checks but is not
+part of the accepted MOS139 compatibility lock.
 
 The zero contour is the single construction boundary. The solver must not
 subsequently triangulate the same MOS139 cell onto a different chord when the

@@ -94,13 +94,20 @@ result had 187 rather than 183 interior axis/conical vertices, peak curvature
 change regressed from 0.001515 to 0.001943 per m², and the adopted geometry lock
 did not match.
 
-At the user's request, the worktree now contains a separate aggressive 40 m
-visual-trial profile. It supplies at least four cubic controls per curve, raises
-the Hausdorff limit to 0.75 m and equality limit to 0.02 m, permits up to 0.02 m
-equality-residual regression, and records curvature improvement as diagnostic
-rather than an acceptance gate. Endpoint, domain, simplicity, backtracking, and
-geometry-validity checks remain mandatory. On the focused YMML run all eight
-evaluated curves were emitted, with 0.511 m maximum displacement, 0.0155 m
-maximum accepted-curve residual, zero endpoint shift, and no topology defects or
-invalid regions. This profile intentionally differs from the accepted geometry
-lock and must not update that lock until visual review is complete.
+The direct 40 m-control experiment has been superseded by a user-requested
+least-squares B-spline visual trial. All ordered sampled-intersection vertices
+contribute to one endpoint-constrained fit, while a small second-difference
+penalty fairs the solved interior controls. The fitted curve is evaluated every
+5 m, projected back towards surface equality, and then subjected to the normal
+endpoint, domain, simplicity, backtracking, and geometry-validity checks.
+
+The YMML trial represented 745 observed vertices with 127 fitted controls. All
+eight evaluated curves were emitted; the final transition output contained 170
+vertices, down from 183 in the accepted 15 m construction. Maximum fit-to-source
+displacement was 1.245 m, maximum accepted-curve equality residual was 0.0326 m,
+endpoint shift was zero, and there were no reversals, duplicate segments, short
+components, or invalid regions. The visual-trial envelope is deliberately wide
+at 1.5 m displacement and 0.05 m equality residual, with curvature improvement
+reported rather than required. This profile intentionally differs from the
+accepted geometry lock and must not update that lock until visual review is
+complete.

@@ -431,3 +431,8 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
       endpoint, displacement, residual, domain, and topology gates pass. The
       five-fixture regression and 55 focused unit tests passed. Vertex-density
       reduction remains a separately gated future performance experiment.
+- [ ] 2026-07-13 visual trial: endpoint-constrained regularised least-squares
+      B-spline fitting now approximates all ordered intersection observations
+      without interpolating their local jitter. YMML export and diagnostics are
+      ready for review; the accepted MOS139 geometry lock is intentionally
+      unchanged pending visual assessment.

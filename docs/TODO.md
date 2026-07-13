@@ -188,10 +188,11 @@
   - Benchmark fewer spline samples per span and a bounded post-projection,
     pre-polygonization simplification; do not simplify final neighbouring
     polygons independently.
-  - The initially bounded 40 m control-spacing trial on YMML accepted none of
-    nine smoothing candidates. A user-requested aggressive visual profile is
-    now active with 0.75 m displacement and 0.02 m equality bounds and curvature
-    improvement made advisory. It remains unaccepted until visual review.
+  - The direct 40 m control-spacing trial was superseded by an endpoint-fixed,
+    regularised least-squares B-spline fit. On YMML it represented 745 observed
+    vertices with 127 controls and produced 170 final transition vertices. Its
+    1.5 m displacement and 0.05 m equality bounds are exploratory; it remains
+    unaccepted until visual review.
   - Preserve exact endpoints, the 0.5 m symmetric Hausdorff bound, the 0.01 m
     equality-residual bound, local peak and RMS curvature improvement, overlap
     domain containment, zero reversals/duplicates/short components, and all

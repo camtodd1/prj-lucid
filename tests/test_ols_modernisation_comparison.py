@@ -1054,6 +1054,34 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertGreater(len(smoothed), len(controls))
         self.assertLess(maximum_turn(smoothed), maximum_turn(controls))
 
+    def test_least_squares_bspline_fairs_noise_without_interpolating_it(self):
+        engine = PlanarControllingOlsEngine([self.constant("base", 100.0)])
+        observations = []
+        for index in range(41):
+            x = float(index * 10)
+            fair_y = 0.002 * x * x
+            noise = 0.0 if index in {0, 40} else (0.45 if index % 2 else -0.45)
+            observations.append(QgsPointXY(x, fair_y + noise))
+        source_line = QgsGeometry.fromPolylineXY(observations)
+
+        result = engine._least_squares_bspline_guide_points(
+            observations,
+            source_line,
+        )
+
+        self.assertIsNotNone(result)
+        guide_points, diagnostics = result
+        self.assertEqual(guide_points[0], observations[0])
+        self.assertEqual(guide_points[-1], observations[-1])
+        self.assertLess(diagnostics["control_points"], diagnostics["source_vertices"])
+        self.assertGreater(diagnostics["maximum_point_error_m"], 0.1)
+        source_peak, source_rms = engine._curve_curvature_continuity_metrics(source_line)
+        fitted_peak, fitted_rms = engine._curve_curvature_continuity_metrics(
+            QgsGeometry.fromPolylineXY(guide_points)
+        )
+        self.assertLess(fitted_peak, source_peak)
+        self.assertLess(fitted_rms, source_rms)
+
     def test_axis_conical_output_collapses_sliver_loops_and_reverse_segments(self):
         engine = PlanarControllingOlsEngine([self.constant("base", 100.0)])
         root = QgsPointXY(0.0, 0.0)
