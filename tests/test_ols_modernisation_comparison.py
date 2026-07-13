@@ -979,9 +979,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertGreater(max(shared_elevations) - min(shared_elevations), 0.1)
 
         exact_points = []
-        # Span more than two 15 m smoothing intervals so this specifically
-        # exercises the accepted cubic-guide path rather than the short-curve
-        # fallback.
+        # Span enough distance to exercise the configured cubic-guide path;
+        # short curves are supplied the minimum three control segments.
         stations = list(range(0, 81, 10))
         for station in stations:
             required_distance = 100.0 + (0.4 * station)

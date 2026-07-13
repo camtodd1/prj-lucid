@@ -269,6 +269,22 @@ crossings along grid-cell edges, and uses that curve as preferred linework for
 the global cell solver and region splitting. The older analytical
 axis-vs-conical curve remains as a fallback.
 
+The preferred curve is smoothed before it is used for polygonization. An
+endpoint-clamped cubic B-spline supplies a curvature-continuous guide, then its
+interior vertices are projected back onto the axis/conical equality locus. The
+guide is accepted selectively: peak and RMS curvature change must improve,
+endpoints must remain fixed, symmetric displacement must remain within 0.5 m,
+surface-equality residual must remain within 0.01 m, and topology/domain checks
+must pass. Otherwise the projected unsmoothed zero contour remains authoritative.
+This order is important: unconstrained 2D smoothing can create an attractive
+line that is no longer an equal-elevation intersection.
+
+An explicit `aggressive_40m_visual_trial` profile is temporarily available for
+visual evaluation. It uses 40 m controls, a 0.75 m displacement bound and a
+0.02 m equality bound, and makes curvature improvement advisory. This is an
+experimental geometry variant: it retains endpoint, domain, simplicity and
+topology checks but is not part of the accepted MOS139 compatibility lock.
+
 The zero contour is the single construction boundary. The solver must not
 subsequently triangulate the same MOS139 cell onto a different chord when the
 sampled residual is within the bounded curved-surface allowance. Polygonized
@@ -283,6 +299,11 @@ approximately 0.00002 m and 0.00446 m along the reviewed shared edge. The same
 construction was visually accepted for YSSY, YSWS, and YMML; YMML used
 EPSG:32755, demonstrating that the metric projected-CRS implementation is not
 tied to the EPSG:28356 fixture environment.
+
+The accepted smoothed linework is relatively vertex-dense. A future performance
+pass may test fewer spline samples or a bounded post-projection simplification,
+but only if the existing equality, displacement, curvature, endpoint, topology,
+and geometry-lock gates continue to pass.
 
 No-OLS strip-core exclusion masks are applied before competition. These masks
 suppress IHS, OHS, Approach, TOCS, and Transitional candidate footprints within

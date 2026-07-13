@@ -1,6 +1,6 @@
 # MOS139 Controlling OLS Compatibility Lock
 
-## Accepted status — 12 July 2026
+## Accepted status — 12 July 2026; smoothing revision — 13 July 2026
 
 MOS139 `ols.controlling_lower_envelope` is supported and locked to the accepted
 QGIS 4 output contract. This promotion applies only to the current CASA Part
@@ -21,12 +21,13 @@ enforced automatically by `tests/run_ols_workflow_regression.py`. Updating that
 file is an explicit compatibility change requiring user approval; it must not
 be refreshed simply to make a failing test pass.
 
-The lock was superseded during its 12 July 2026 acceptance session to correct
-curved MOS139 Conical intersections. Approach/TOCS and Conical now share one
-zero-contour boundary; small polygonized faces are retained rather than dropped
-and later filled as false wedges. The corrected four-fixture matrix has stable
-controller identities and zero unassigned cells, ambiguous gaps, curved-cell
-refinements, solver fallbacks, or MOS139 repair activation.
+The lock was first superseded during its 12 July 2026 acceptance session to
+correct curved MOS139 Conical intersections. It was revised with explicit user
+approval on 13 July 2026 to adopt bounded curvature smoothing of those shared
+edges. Approach/TOCS and Conical now share one smoothed zero-contour boundary;
+small polygonized faces are retained rather than dropped and later filled as
+false wedges. The five-fixture matrix has stable controller identities and zero
+invalid MOS139 output regions.
 
 Visual acceptance covered YBBN, YSSY, and YSWS in the committed projected-metre
 test environment, plus YMML in EPSG:32755. YMML is manual cross-CRS evidence and
@@ -57,7 +58,49 @@ For MOS139 Approach/TOCS-to-Conical competition:
 6. derive diagnostic transitions from final shared adjacency, merging connected
    segments by canonical controller pair.
 
-The reviewed YBBN problem edge had an observed vertical equality residual of
-approximately 0.00002–0.00446 m. The global diagnostics retain the explicit
-curved approximation allowance, while the accepted output remains fixed by the
-geometry digests and zero-gap gates above.
+Before polygonization, eligible sampled curves are now processed through an
+endpoint-clamped uniform cubic B-spline guide. Interior guide vertices are
+projected laterally back onto `z_axis - z_conical = 0`; this projection is
+essential because smoothing the 2D line alone does not preserve surface
+equality. A component is accepted only when peak and RMS curvature change both
+improve, endpoints remain fixed, symmetric densified Hausdorff displacement is
+no more than 0.5 m, equality residual is no more than 0.01 m, and the result is
+simple and remains inside the overlap domain. Failure of any check retains the
+projected unsmoothed curve.
+
+The experiment established that curvature change is a more useful acceptance
+metric than vertex turn alone. On YMML, smoothing reduced peak curvature change
+by 22.0% and RMS curvature change by 4.7%, reduced peak vertex turn by 9.0%, and
+reduced the maximum measured equality residual from 0.00792 m to 0.00515 m.
+Maximum symmetric curve displacement was 0.355 m and endpoint displacement was
+zero. The three-run median workflow time was 21.41 seconds, 10.1% above the
+previous projected output and below the 20% investigation threshold. The full
+YBBN/YSSY/YSWS/YMML/stress matrix passed with no transition reversals, duplicate
+segments, short components, or invalid output regions.
+
+The smoothed curves intentionally retain fairly dense vertices so their chorded
+representation satisfies the equality and curvature bounds. Vertex-count
+reduction is a deferred performance opportunity, not part of this acceptance.
+Any later simplification must be benchmarked after equality projection and
+before polygon splitting, and must preserve the same endpoint, 0.5 m Hausdorff,
+0.01 m equality, curvature-improvement, overlap-domain, topology, and geometry
+lock gates. The detailed before/after evidence is recorded in
+`tests/fixtures/ols/ymml_axis_conical_benchmark_qgis4_2026-07-13.json`.
+
+A first YMML trial increasing spline control spacing from 15 m to 40 m was
+rejected. None of nine candidate curves passed the bounded acceptance checks,
+so the solver correctly fell back to the unsmoothed projected contours. The
+result had 187 rather than 183 interior axis/conical vertices, peak curvature
+change regressed from 0.001515 to 0.001943 per m², and the adopted geometry lock
+did not match.
+
+At the user's request, the worktree now contains a separate aggressive 40 m
+visual-trial profile. It supplies at least four cubic controls per curve, raises
+the Hausdorff limit to 0.75 m and equality limit to 0.02 m, permits up to 0.02 m
+equality-residual regression, and records curvature improvement as diagnostic
+rather than an acceptance gate. Endpoint, domain, simplicity, backtracking, and
+geometry-validity checks remain mandatory. On the focused YMML run all eight
+evaluated curves were emitted, with 0.511 m maximum displacement, 0.0155 m
+maximum accepted-curve residual, zero endpoint shift, and no topology defects or
+invalid regions. This profile intentionally differs from the accepted geometry
+lock and must not update that lock until visual review is complete.

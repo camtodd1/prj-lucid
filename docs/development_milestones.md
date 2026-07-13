@@ -425,3 +425,9 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
       YMML passed in EPSG:32755; the committed YBBN/YSSY/YSWS matrix completed
       with zero MOS139 gaps, refinements, fallbacks, or repairs. The accepted
       signatures are enforced by the MOS139 compatibility lock.
+- [x] 2026-07-13: adopted bounded endpoint-clamped smoothing for MOS139
+      Approach/TOCS-to-Conical equality curves before polygonization. Interior
+      vertices are projected back to equality and accepted only when curvature,
+      endpoint, displacement, residual, domain, and topology gates pass. The
+      five-fixture regression and 55 focused unit tests passed. Vertex-density
+      reduction remains a separately gated future performance experiment.

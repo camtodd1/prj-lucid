@@ -57,12 +57,14 @@ AXIS_CONICAL_ZERO_CONTOUR_MAX_GRID_M = 75.0
 AXIS_CONICAL_ZERO_CONTOUR_TARGET_STEPS = 160.0
 AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS = 80000
 AXIS_CONICAL_CURVE_SMOOTHING_ENABLED = True
-AXIS_CONICAL_CURVE_SMOOTHING_CONTROL_SPACING_M = 15.0
+AXIS_CONICAL_CURVE_SMOOTHING_CONTROL_SPACING_M = 40.0
 AXIS_CONICAL_CURVE_SMOOTHING_SAMPLES_PER_SPAN = 2
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M = 0.5
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.01
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M = 1e-3
+AXIS_CONICAL_CURVE_SMOOTHING_MIN_CONTROL_SEGMENTS = 3
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M = 0.75
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.02
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M = 0.02
 AXIS_CONICAL_CURVE_SMOOTHING_MIN_CURVATURE_IMPROVEMENT = 0.01
+AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT = False
 AXIS_CONICAL_CURVE_SMOOTHING_DOMAIN_TOLERANCE_M = 0.05
 AXIS_CONICAL_CURVE_SMOOTHING_HAUSDORFF_DENSIFY_FRACTION = 0.25
 AXIS_CONICAL_CURVE_SMOOTHING_MAX_ENDPOINT_SHIFT_M = 1e-9
@@ -265,9 +267,22 @@ class PlanarControllingOlsEngine:
                     if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
                     else "disabled"
                 ),
+                "zero_contour_smoothing_profile": (
+                    "aggressive_40m_visual_trial"
+                    if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
+                    else "disabled"
+                ),
+                "smoothing_requires_curvature_improvement": (
+                    AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT
+                ),
                 "rejected_zero_contour_smoothing": int(
                     stats.get("axis_curve_smoothing_rejected", 0.0)
                 ),
+                "zero_contour_smoothing_rejections": {
+                    key.removeprefix("axis_curve_smoothing_rejected_"): int(value)
+                    for key, value in sorted(stats.items())
+                    if key.startswith("axis_curve_smoothing_rejected_")
+                },
                 "smoothing_max_allowed_deviation_m": (
                     AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M
                 ),
@@ -318,7 +333,12 @@ class PlanarControllingOlsEngine:
                 "same_controller_dissolve": "canonical_normalisation",
                 "unanimous_gap_audit": "qa_diagnostic",
                 "merged_conical_overlap_assignment": "accepted_compatibility_correction",
-                "axis_conical_isoline": "bounded_c2_guide_equality_projection",
+                "axis_conical_isoline": (
+                    "experimental_aggressive_c2_guide_equality_projection"
+                    if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
+                    and not AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT
+                    else "bounded_c2_guide_equality_projection"
+                ),
                 "pairwise_solver_fallback": "exceptional_recovery",
                 "coverage_gap_fill": "exceptional_recovery",
                 "final_partition_gap_fill": "exceptional_recovery",
@@ -3518,6 +3538,7 @@ class PlanarControllingOlsEngine:
             control_points = self._uniform_curve_control_points(
                 source_line,
                 AXIS_CONICAL_CURVE_SMOOTHING_CONTROL_SPACING_M,
+                AXIS_CONICAL_CURVE_SMOOTHING_MIN_CONTROL_SEGMENTS,
             )
             if len(control_points) < 4:
                 self._record_axis_curve_smoothing_rejection("short")
@@ -3620,11 +3641,10 @@ class PlanarControllingOlsEngine:
             required_rms_curvature_change = source_rms_curvature_change * (
                 1.0 - AXIS_CONICAL_CURVE_SMOOTHING_MIN_CURVATURE_IMPROVEMENT
             )
-            if (
+            if AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT and (
                 source_curvature_change <= 1e-12
                 or smoothed_curvature_change > required_curvature_change
-                or smoothed_rms_curvature_change
-                > required_rms_curvature_change
+                or smoothed_rms_curvature_change > required_rms_curvature_change
             ):
                 self._record_axis_curve_smoothing_rejection("continuity")
                 return None
@@ -3754,13 +3774,18 @@ class PlanarControllingOlsEngine:
         self,
         line: QgsGeometry,
         spacing_m: float,
+        minimum_segments: int = 1,
     ) -> List[QgsPointXY]:
         if line is None or line.isEmpty() or spacing_m <= 0.0:
             return []
         length = line.length()
         if length <= 1e-9:
             return []
-        segment_count = max(1, int(math.ceil(length / spacing_m)))
+        segment_count = max(
+            1,
+            int(minimum_segments),
+            int(math.ceil(length / spacing_m)),
+        )
         controls: List[QgsPointXY] = []
         for index in range(segment_count + 1):
             point_geometry = line.interpolate(length * index / segment_count)

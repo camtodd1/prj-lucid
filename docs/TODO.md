@@ -178,6 +178,27 @@
     readiness list applies to the separate Annex 14 OFS/OES workflow unless a
     locked MOS139 regression is explicitly approved.
 
+- [ ] Evaluate vertex-count reduction for smoothed axis/conical intersections.
+
+  Notes:
+  - The accepted endpoint-clamped, equality-projected curves are intentionally
+    dense enough to keep their chorded representation within the current error
+    bounds, but the extra vertices may add polygonization, clipping, storage,
+    and rendering cost.
+  - Benchmark fewer spline samples per span and a bounded post-projection,
+    pre-polygonization simplification; do not simplify final neighbouring
+    polygons independently.
+  - The initially bounded 40 m control-spacing trial on YMML accepted none of
+    nine smoothing candidates. A user-requested aggressive visual profile is
+    now active with 0.75 m displacement and 0.02 m equality bounds and curvature
+    improvement made advisory. It remains unaccepted until visual review.
+  - Preserve exact endpoints, the 0.5 m symmetric Hausdorff bound, the 0.01 m
+    equality-residual bound, local peak and RMS curvature improvement, overlap
+    domain containment, zero reversals/duplicates/short components, and all
+    accepted geometry locks.
+  - Treat this as a measured performance optimization. Retain the accepted 15 m
+    curve unless the trial passes visual review and broader regression evidence.
+
 - [x] Improve the OLS tab workflow selection and validation.
 
   Completed:
