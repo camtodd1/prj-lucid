@@ -237,6 +237,19 @@ class OutputOptionsMixin:
                 else self.tr("Contours — Baseline OLS")
             )
 
+        future_family_widget = getattr(self, "widgetModernisationContourIntervals", None)
+        if future_family_widget is not None:
+            future_family_widget.setVisible(mode != "ruleset_aligned")
+        overrides_button = getattr(self, "toolButtonContourOverrides", None)
+        if overrides_button is not None:
+            overrides_button.setVisible(mode != "future_annex14_ofs_oes")
+        overrides_widget = getattr(self, "widgetContourOverrides", None)
+        if overrides_widget is not None:
+            overrides_widget.setVisible(
+                mode != "future_annex14_ofs_oes"
+                and bool(overrides_button and overrides_button.isChecked())
+            )
+
         annex_keys = {"annex14_ofs", "annex14_oes"}
         for key, label in getattr(self, "_contour_interval_labels", {}).items():
             visible = (
@@ -382,11 +395,47 @@ class OutputOptionsMixin:
         grid.addWidget(self.doubleSpinBoxContourDefaultPrimary, 1, 1)
         grid.addWidget(self.doubleSpinBoxContourDefault, 1, 2)
 
+        modernisation_widget = getattr(self, "widgetModernisationContourIntervals", None)
+        if modernisation_widget is None:
+            modernisation_widget = QtWidgets.QFrame(group)
+            modernisation_widget.setObjectName("widgetModernisationContourIntervals")
+            modernisation_widget.setStyleSheet(
+                "QFrame#widgetModernisationContourIntervals { background: #f5f8fb; "
+                "border: 1px solid #d9e2ea; border-radius: 4px; }"
+            )
+            modernisation_grid = QtWidgets.QGridLayout(modernisation_widget)
+            modernisation_grid.setObjectName("gridLayoutModernisationContourIntervals")
+            modernisation_grid.setContentsMargins(8, 7, 8, 7)
+            modernisation_grid.setHorizontalSpacing(12)
+            modernisation_grid.setVerticalSpacing(6)
+            modernisation_grid.setColumnStretch(0, 1)
+            modernisation_grid.setColumnStretch(1, 0)
+            modernisation_grid.setColumnStretch(2, 0)
+            family_header = QtWidgets.QLabel(self.tr("Future Annex 14 family intervals"))
+            family_header.setObjectName("labelModernisationContourIntervals")
+            family_header.setStyleSheet("font-weight: 600; color: #234b68;")
+            family_header.setToolTip(
+                self.tr("OFS and OES values override the default and matching surface intervals.")
+            )
+            family_primary_header = QtWidgets.QLabel(self.tr("Primary"))
+            family_primary_header.setStyleSheet("color: #59636e; font-size: 11px;")
+            family_intermediate_header = QtWidgets.QLabel(self.tr("Intermediate"))
+            family_intermediate_header.setStyleSheet("color: #59636e; font-size: 11px;")
+            modernisation_grid.addWidget(family_header, 0, 0)
+            modernisation_grid.addWidget(family_primary_header, 0, 1)
+            modernisation_grid.addWidget(family_intermediate_header, 0, 2)
+            grid.addWidget(modernisation_widget, 2, 0, 1, 4)
+            self.widgetModernisationContourIntervals = modernisation_widget
+            self.gridLayoutModernisationContourIntervals = modernisation_grid
+            self.labelModernisationContourIntervals = family_header
+        else:
+            modernisation_grid = modernisation_widget.layout()
+
         overrides_button = getattr(self, "toolButtonContourOverrides", None)
         if overrides_button is None:
             overrides_button = QtWidgets.QToolButton()
             overrides_button.setObjectName("toolButtonContourOverrides")
-            overrides_button.setText(self.tr("Individual contour settings"))
+            overrides_button.setText(self.tr("Individual baseline surface settings"))
             overrides_button.setCheckable(True)
             overrides_button.setChecked(False)
             overrides_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
@@ -400,7 +449,7 @@ class OutputOptionsMixin:
                 "background: #f6f8fa; padding: 6px 8px; text-align: left; font-weight: 600; }"
                 "QToolButton:hover { background: #eef3f7; }"
             )
-            grid.addWidget(overrides_button, 2, 0, 1, 4)
+            grid.addWidget(overrides_button, 3, 0, 1, 4)
             self.toolButtonContourOverrides = overrides_button
 
         overrides_widget = getattr(self, "widgetContourOverrides", None)
@@ -421,7 +470,7 @@ class OutputOptionsMixin:
             detail_intermediate_header.setStyleSheet("color: #59636e; font-size: 11px;")
             overrides_grid.addWidget(detail_primary_header, 0, 1)
             overrides_grid.addWidget(detail_intermediate_header, 0, 2)
-            grid.addWidget(overrides_widget, 3, 0, 1, 4)
+            grid.addWidget(overrides_widget, 4, 0, 1, 4)
             self.widgetContourOverrides = overrides_widget
             self.gridLayoutContourOverrides = overrides_grid
         else:
@@ -430,7 +479,13 @@ class OutputOptionsMixin:
         overrides_button.toggled.connect(self._toggle_contour_overrides)
         self._toggle_contour_overrides(overrides_button.isChecked())
 
-        for row, key in enumerate(CONTOUR_INTERVAL_KEYS, start=1):
+        regular_row = 1
+        family_row = 1
+        annex_keys = {"annex14_ofs", "annex14_oes"}
+        for key in CONTOUR_INTERVAL_KEYS:
+            is_annex_family = key in annex_keys
+            target_grid = modernisation_grid if is_annex_family else overrides_grid
+            row = family_row if is_annex_family else regular_row
             label_name = f"labelContour{key.title()}"
             primary_spin_name = f"doubleSpinBoxContour{key.title()}Primary"
             intermediate_spin_name = f"doubleSpinBoxContour{key.title()}Intermediate"
@@ -438,7 +493,7 @@ class OutputOptionsMixin:
             if label is None:
                 label = QtWidgets.QLabel(self.tr(CONTOUR_INTERVAL_LABELS[key]))
                 label.setObjectName(label_name)
-                overrides_grid.addWidget(label, row, 0)
+                target_grid.addWidget(label, row, 0)
             self._contour_interval_labels[key] = label
             label.setToolTip(self._contour_interval_tooltip(key))
             primary_spinbox = getattr(self, primary_spin_name, None)
@@ -454,8 +509,12 @@ class OutputOptionsMixin:
             intermediate_spinbox.setToolTip(self._contour_interval_tooltip(key, role="intermediate"))
             self._contour_primary_interval_spinboxes[key] = primary_spinbox
             self._contour_interval_spinboxes[key] = intermediate_spinbox
-            overrides_grid.addWidget(primary_spinbox, row, 1)
-            overrides_grid.addWidget(intermediate_spinbox, row, 2)
+            target_grid.addWidget(primary_spinbox, row, 1)
+            target_grid.addWidget(intermediate_spinbox, row, 2)
+            if is_annex_family:
+                family_row += 1
+            else:
+                regular_row += 1
 
         self.doubleSpinBoxContourDefaultPrimary.valueChanged.connect(
             lambda value: self._apply_default_contour_interval("primary", value)
@@ -477,12 +536,18 @@ class OutputOptionsMixin:
                 QtCore.Qt.ArrowType.DownArrow if expanded else QtCore.Qt.ArrowType.RightArrow
             )
             button.setToolTip(
-                self.tr("Hide individual surface and family contour intervals.")
+                self.tr("Hide individual baseline surface contour intervals.")
                 if expanded
-                else self.tr("Show individual surface and family contour intervals.")
+                else self.tr("Show individual baseline surface contour intervals.")
             )
         if widget is not None:
-            widget.setVisible(bool(expanded))
+            combo = getattr(self, "protected_airspace_policy_combo", None)
+            mode = (
+                str(combo.currentData() or "ruleset_aligned")
+                if combo is not None
+                else "ruleset_aligned"
+            )
+            widget.setVisible(bool(expanded) and mode != "future_annex14_ofs_oes")
 
     def _create_contour_interval_spinbox(self, object_name: str, default_value: float = DEFAULT_CONTOUR_INTERVAL):
         spinbox = QtWidgets.QDoubleSpinBox()
@@ -605,14 +670,15 @@ class OutputOptionsMixin:
                 primary_spinboxes[key].setValue(primary_value)
             if key in intermediate_spinboxes:
                 intermediate_spinboxes[key].setValue(intermediate_value)
-        has_overrides = any(
+        has_regular_overrides = any(
             abs(primary_spinboxes[key].value() - default_primary) > 1e-9
             or abs(intermediate_spinboxes[key].value() - default_intermediate) > 1e-9
             for key in CONTOUR_INTERVAL_KEYS
+            if key not in {"annex14_ofs", "annex14_oes"}
             if key in primary_spinboxes and key in intermediate_spinboxes
         )
         if hasattr(self, "toolButtonContourOverrides"):
-            self.toolButtonContourOverrides.setChecked(has_overrides)
+            self.toolButtonContourOverrides.setChecked(has_regular_overrides)
 
     def _coerce_contour_interval_value(
         self,

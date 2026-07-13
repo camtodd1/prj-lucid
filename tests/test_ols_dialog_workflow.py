@@ -46,6 +46,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.select_mode("ruleset_aligned")
 
         self.assertTrue(self.dialog.frame_olsFamilyExplanation.isHidden())
+        self.assertTrue(self.dialog.widgetModernisationContourIntervals.isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["approach"].isHidden())
         self.assertTrue(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
         self.assertTrue(self.dialog.checkBox_generateControllingOls.isEnabled())
@@ -58,9 +59,56 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertIn("Obstacle-free surface", self.dialog.label_olsOfsDetail.text())
         self.assertEqual(self.dialog.label_olsOesTitle.text(), "OES — assessment trigger")
         self.assertIn("not an approval limit", self.dialog.label_olsOesDetail.text())
+        self.assertFalse(self.dialog.widgetModernisationContourIntervals.isHidden())
+        self.assertTrue(self.dialog.toolButtonContourOverrides.isHidden())
         self.assertTrue(self.dialog._contour_interval_labels["approach"].isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["annex14_oes"].isHidden())
+
+    def test_future_family_contours_are_directly_editable_and_used_by_generation(self):
+        self.select_mode("future_annex14_ofs_oes")
+        ofs_primary = self.dialog._contour_primary_interval_spinboxes["annex14_ofs"]
+        ofs_intermediate = self.dialog._contour_interval_spinboxes["annex14_ofs"]
+        oes_primary = self.dialog._contour_primary_interval_spinboxes["annex14_oes"]
+        oes_intermediate = self.dialog._contour_interval_spinboxes["annex14_oes"]
+
+        self.assertIs(
+            self.dialog._contour_interval_labels["annex14_ofs"].parentWidget(),
+            self.dialog.widgetModernisationContourIntervals,
+        )
+        for spinbox in (ofs_primary, ofs_intermediate, oes_primary, oes_intermediate):
+            self.assertFalse(spinbox.isHidden())
+            self.assertTrue(spinbox.isEnabled())
+
+        ofs_primary.setValue(40.0)
+        ofs_intermediate.setValue(8.0)
+        oes_primary.setValue(25.0)
+        oes_intermediate.setValue(5.0)
+        options = self.dialog.get_contour_interval_options()
+
+        self.assertEqual(options["annex14_ofs"], {"primary": 40.0, "intermediate": 8.0})
+        self.assertEqual(options["annex14_oes"], {"primary": 25.0, "intermediate": 5.0})
+        builder = object.__new__(SafeguardingBuilder)
+        builder.contour_intervals = options
+        self.assertEqual(builder._annex14_contour_interval("approach", "OFS"), 8.0)
+        self.assertEqual(builder._annex14_contour_interval("approach", "OES"), 5.0)
+
+    def test_saved_future_family_override_does_not_expand_regular_surface_settings(self):
+        self.dialog.set_contour_interval_options(
+            {
+                "default": {"primary": 50.0, "intermediate": 10.0},
+                "annex14_ofs": {"primary": 40.0, "intermediate": 8.0},
+            }
+        )
+        self.select_mode("modernisation_comparison")
+
+        self.assertFalse(self.dialog.toolButtonContourOverrides.isChecked())
+        self.assertTrue(self.dialog.widgetContourOverrides.isHidden())
+        self.assertFalse(self.dialog.widgetModernisationContourIntervals.isHidden())
+        self.assertEqual(
+            self.dialog._contour_interval_spinboxes["annex14_ofs"].value(),
+            8.0,
+        )
 
     def test_comparison_mode_requires_controlling_output_and_shows_all_rows(self):
         self.dialog.checkBox_generateControllingOls.setChecked(False)
@@ -70,6 +118,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertFalse(self.dialog.checkBox_generateControllingOls.isEnabled())
         self.assertFalse(self.dialog._contour_interval_labels["approach"].isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
+        self.assertFalse(self.dialog.widgetModernisationContourIntervals.isHidden())
+        self.assertFalse(self.dialog.toolButtonContourOverrides.isHidden())
         self.assertIn("Highest workload", self.dialog.label_olsModeDescription.text())
         self.assertEqual(self.dialog.label_olsInlineStatus.text(), "OLS ready.")
         self.assertTrue(self.dialog.label_olsInlineStatus.isHidden())
