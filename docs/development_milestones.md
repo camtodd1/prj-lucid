@@ -441,3 +441,8 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
       elevation-equality residual. The user accepted the visual result and
       tolerance. All five MOS139 fixtures passed structural gates, and the
       compatibility lock was updated to the approved geometry.
+- [x] 2026-07-13: removed contour-output tolerance buffers from controlling
+      region clipping. Normal MOS and strict Annex contours now finish on the
+      exact owning-region boundary; a focused regression covers Transitional
+      contours in both modes and the YMML audit measured a maximum sampled
+      outside distance below `7e-10 m`.

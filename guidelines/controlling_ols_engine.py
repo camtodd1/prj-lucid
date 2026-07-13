@@ -39,8 +39,6 @@ CONTROLLING_REGION_DISSOLVE_GRID_M = 1e-6
 CONTROLLING_REGION_DISSOLVE_RETRY_GRID_M = 2e-6
 CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2 = 0.01
 CONTROLLING_REGION_MIN_INTERIOR_RING_AREA_M2 = 0.01
-CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
-CONTROLLING_CONTOUR_STRICT_BOUNDARY_TOLERANCE_M = 0.001
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
 CONTROLLING_GLOBAL_CELL_MIN_AREA_M2 = 1.0
@@ -6830,7 +6828,6 @@ class ControllingOlsEngineMixin:
                 continue
             clipped_line_parts: List[List[QgsPointXY]] = []
             seen_part_keys = set()
-            used_tolerant_clip = False
 
             def _add_clipped_parts(geometry: Optional[QgsGeometry]) -> None:
                 if geometry is None or geometry.isEmpty():
@@ -6849,24 +6846,7 @@ class ControllingOlsEngineMixin:
             except Exception:
                 clipped = None
             _add_clipped_parts(clipped)
-
-            if not strict_clip and contour.surface_type in {"Approach", "Conical", "TOCS", "Transitional"}:
-                try:
-                    tolerant_clip_geometry = clip_geometry.buffer(
-                        CONTROLLING_CONTOUR_CLIP_TOLERANCE_M,
-                        CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS,
-                    )
-                except Exception:
-                    tolerant_clip_geometry = None
-                if tolerant_clip_geometry is not None and not tolerant_clip_geometry.isEmpty():
-                    try:
-                        tolerant_clipped = contour.geometry.intersection(tolerant_clip_geometry)
-                    except Exception:
-                        tolerant_clipped = None
-                    before_tolerant_count = len(clipped_line_parts)
-                    _add_clipped_parts(tolerant_clipped)
-                    used_tolerant_clip = len(clipped_line_parts) > before_tolerant_count
-            method = "clip_to_controlling_region_tolerant" if used_tolerant_clip else "clip_to_controlling_region"
+            method = "clip_to_controlling_region"
             line_geometry = self._controlling_contour_geometry_from_parts(clipped_line_parts)
             if line_geometry is None or line_geometry.isEmpty():
                 continue
@@ -6999,6 +6979,7 @@ class ControllingOlsEngineMixin:
         regions: Sequence[QgsGeometry],
         strict: bool = False,
     ) -> Optional[QgsGeometry]:
+        """Return the exact owning-region union; clip tolerances are never output."""
         valid_regions = [QgsGeometry(region) for region in regions if region is not None and not region.isEmpty()]
         if not valid_regions:
             return None
@@ -7008,23 +6989,6 @@ class ControllingOlsEngineMixin:
             clip_geometry = valid_regions[0]
         if clip_geometry is None or clip_geometry.isEmpty():
             return None
-        if strict:
-            try:
-                buffered = clip_geometry.buffer(
-                    CONTROLLING_CONTOUR_STRICT_BOUNDARY_TOLERANCE_M,
-                    CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS,
-                )
-                if buffered is not None and not buffered.isEmpty():
-                    return buffered
-            except Exception:
-                pass
-        if not strict and surface_type == "Transitional":
-            try:
-                buffered = clip_geometry.buffer(CONTROLLING_CONTOUR_CLIP_TOLERANCE_M, CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS)
-                if buffered is not None and not buffered.isEmpty():
-                    return buffered
-            except Exception:
-                pass
         return clip_geometry
 
     def _controlling_contour_geometry_from_parts(

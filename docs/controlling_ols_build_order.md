@@ -387,11 +387,13 @@ labels are not repeated along region-boundary fragments.
 Transitional contours now use the generated transitional panel `surface_id`,
 including strip-adjacent lower/upper edges, strip interval contours,
 approach-adjacent lower/upper edges, and approach-adjacent interval contours.
-Because transitional lower/top contours can lie exactly on no-OLS strip-core or
-IHS/equality boundaries, the clipping pass uses a small spatial tolerance for
-Transitional contours before intersecting them with the matching controlling
-region. This keeps legitimate shared-edge contours from disappearing due to
-polygon-boundary precision effects.
+Transitional lower/top contours can lie exactly on no-OLS strip-core or
+IHS/equality boundaries. Contour output is nevertheless intersected with the
+exact matching controlling-region union: tolerance buffers must not be written
+into emitted geometry because they extend contours beyond the surface that owns
+them. A previous 0.05 m fallback buffer (and 0.001 m strict buffer) was removed
+after it produced visible boundary overshoot. Any future robustness tolerance
+must be limited to predicates or diagnostics and followed by a final exact clip.
 
 ### Current Non-Overlap Expectation
 

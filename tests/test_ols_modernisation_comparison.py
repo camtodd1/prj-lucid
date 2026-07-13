@@ -6,6 +6,8 @@ from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle
 
 from guidelines.controlling_ols_engine import (
     ControllingOlsCandidate,
+    ControllingOlsContour,
+    ControllingOlsEngineMixin,
     PlanarControllingOlsEngine,
     axis_elevation_evaluator,
     conical_elevation_evaluator,
@@ -19,6 +21,19 @@ from guidelines.ols_modernisation_comparison import (
 
 
 class _ComparisonLayerCapture(OlsModernisationComparisonMixin):
+    def __init__(self):
+        self.layers = []
+
+    @staticmethod
+    def tr(value):
+        return value
+
+    def _create_and_add_layer(self, *args):
+        self.layers.append(args)
+        return object()
+
+
+class _ControllingLayerCapture(ControllingOlsEngineMixin):
     def __init__(self):
         self.layers = []
 
@@ -138,6 +153,50 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
         self.assertTrue(records)
         self.assertTrue(all(record[1][-1] == "cell_adjacency_boundary" for record in records))
+
+    def test_controlling_contours_clip_to_exact_region_without_buffer_overshoot(self):
+        region = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        candidate = ControllingOlsCandidate(
+            "transition",
+            "Transitional",
+            QgsGeometry(region),
+            constant_elevation_evaluator(125.0),
+            "constant",
+        )
+        engine = PlanarControllingOlsEngine([candidate])
+        engine._controlling_region_geometries_cache = [
+            (candidate, QgsGeometry(region))
+        ]
+        source = QgsGeometry.fromPolylineXY(
+            [QgsPointXY(-10.0, 50.0), QgsPointXY(110.0, 50.0)]
+        )
+        contour = ControllingOlsContour(
+            surface_id=candidate.surface_id,
+            surface_type=candidate.surface_type,
+            geometry=source,
+            contour_elevation_m=125.0,
+            source_layer="test",
+        )
+
+        for strict_clip in (False, True):
+            with self.subTest(strict_clip=strict_clip):
+                capture = _ControllingLayerCapture()
+                created = capture._create_controlling_contour_layer(
+                    "TEST",
+                    None,
+                    engine,
+                    [contour],
+                    strict_clip=strict_clip,
+                )
+
+                self.assertTrue(created)
+                feature = capture.layers[0][4][0]
+                clipped = feature.geometry()
+                self.assertEqual(feature["method"], "clip_to_controlling_region")
+                self.assertAlmostEqual(clipped.length(), 100.0, places=9)
+                self.assertAlmostEqual(clipped.boundingBox().xMinimum(), 0.0, places=9)
+                self.assertAlmostEqual(clipped.boundingBox().xMaximum(), 100.0, places=9)
+                self.assertTrue(clipped.difference(region).isEmpty())
 
     def test_mos_tocs_conical_overlap_is_assigned_once(self):
         conical = ControllingOlsCandidate(
