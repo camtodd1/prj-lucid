@@ -30,7 +30,7 @@
       },
       "output": {
         "layers": 125,
-        "features": 6413,
+        "features": 6415,
         "invalid_geometries": 0,
         "empty_geometries": 0,
         "duplicate_comparison_ids": 0
@@ -62,7 +62,7 @@
       },
       "output": {
         "layers": 185,
-        "features": 14971,
+        "features": 14975,
         "invalid_geometries": 0,
         "empty_geometries": 0,
         "duplicate_comparison_ids": 0
@@ -94,7 +94,7 @@
       },
       "output": {
         "layers": 182,
-        "features": 13692,
+        "features": 13696,
         "invalid_geometries": 0,
         "empty_geometries": 0,
         "duplicate_comparison_ids": 0
@@ -116,17 +116,17 @@
     },
     "ymml_intersecting.json": {
       "runways": 2,
-      "total_seconds": 19.069,
+      "total_seconds": 19.436,
       "stages": {
-        "region_solve": 6.297,
-        "boundary_generation": 2.701,
-        "comparison": 3.106,
-        "change_contours": 7.719,
-        "modernisation_layers": 11.357
+        "region_solve": 6.395,
+        "boundary_generation": 2.700,
+        "comparison": 3.270,
+        "change_contours": 7.793,
+        "modernisation_layers": 11.647
       },
       "output": {
         "layers": 189,
-        "features": 15841,
+        "features": 15812,
         "invalid_geometries": 0,
         "empty_geometries": 0,
         "duplicate_comparison_ids": 0
@@ -158,7 +158,7 @@
       },
       "output": {
         "layers": 249,
-        "features": 20428,
+        "features": 20430,
         "invalid_geometries": 0,
         "empty_geometries": 0,
         "duplicate_comparison_ids": 0

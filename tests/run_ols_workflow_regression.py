@@ -101,6 +101,10 @@ def _axis_conical_transition_metrics(engine) -> Dict[str, object]:
     analytic_deviations = []
     shared_elevations = []
     turn_angles = []
+    transition_parts_by_pair = defaultdict(list)
+    transition_segment_counts = defaultdict(int)
+    short_component_count = 0
+    reversal_count = 0
 
     def _boundary(geometry):
         lines = [
@@ -135,6 +139,40 @@ def _axis_conical_transition_metrics(engine) -> Dict[str, object]:
         conical = first if first.model == "conical" else second
         if axis.surface_type not in {"Approach", "TOCS"}:
             continue
+
+        for output_points in engine._line_parts(geometry):
+            if len(output_points) < 2:
+                continue
+            output_part = QgsGeometry.fromPolylineXY(output_points)
+            transition_parts_by_pair[pair_id].append(output_part)
+            if output_part.length() < 1.0:
+                short_component_count += 1
+            for start_point, end_point in zip(output_points[:-1], output_points[1:]):
+                segment = tuple(
+                    sorted(
+                        (
+                            (round(start_point.x(), 3), round(start_point.y(), 3)),
+                            (round(end_point.x(), 3), round(end_point.y(), 3)),
+                        )
+                    )
+                )
+                transition_segment_counts[(pair_id, segment)] += 1
+            for previous, current, following in zip(
+                output_points[:-2], output_points[1:-1], output_points[2:]
+            ):
+                first_dx = current.x() - previous.x()
+                first_dy = current.y() - previous.y()
+                second_dx = following.x() - current.x()
+                second_dy = following.y() - current.y()
+                denominator = math.hypot(first_dx, first_dy) * math.hypot(second_dx, second_dy)
+                if denominator <= 1e-12:
+                    continue
+                cosine = max(
+                    -1.0,
+                    min(1.0, ((first_dx * second_dx) + (first_dy * second_dy)) / denominator),
+                )
+                if math.degrees(math.acos(cosine)) >= 150.0:
+                    reversal_count += 1
 
         axis_boundary = _boundary(axis.footprint)
         conical_boundary = _boundary(conical.footprint)
@@ -238,6 +276,22 @@ def _axis_conical_transition_metrics(engine) -> Dict[str, object]:
     def _rms(values):
         return math.sqrt(sum(value * value for value in values) / len(values)) if values else None
 
+    topology_excess_length_m = 0.0
+    for parts in transition_parts_by_pair.values():
+        original_length = sum(part.length() for part in parts)
+        try:
+            linework = QgsGeometry.unaryUnion(parts) if len(parts) > 1 else parts[0]
+        except Exception:
+            linework = parts[0]
+        cleaned_length = sum(
+            sum(start.distance(end) for start, end in zip(points[:-1], points[1:]))
+            for points in engine._topology_clean_transition_line_parts(linework)
+        )
+        topology_excess_length_m += max(0.0, original_length - cleaned_length)
+    duplicate_segment_count = sum(
+        count - 1 for count in transition_segment_counts.values() if count > 1
+    )
+
     return {
         "features": feature_count,
         "pairs": len(pair_ids),
@@ -255,6 +309,10 @@ def _axis_conical_transition_metrics(engine) -> Dict[str, object]:
         "rms_analytic_deviation_m": _rms(analytic_deviations),
         "maximum_vertex_turn_degrees": max(turn_angles) if turn_angles else None,
         "rms_vertex_turn_degrees": _rms(turn_angles),
+        "reversal_count": reversal_count,
+        "duplicate_segment_count": duplicate_segment_count,
+        "short_component_count": short_component_count,
+        "topology_excess_length_m": topology_excess_length_m,
     }
 
 
@@ -723,6 +781,23 @@ def _run_case(
             )
             if approximation_calls and approximation["vertical_error_bound_m"] is None:
                 failures.append(f"solver {index} used an approximation without a vertical error bound")
+            transition_topology = diagnostics.get("axis_conical_transitions")
+            if transition_topology:
+                for key in (
+                    "reversal_count",
+                    "duplicate_segment_count",
+                    "short_component_count",
+                ):
+                    if int(transition_topology[key]):
+                        failures.append(
+                            f"solver {index} axis/conical transitions have {key}: "
+                            f"{transition_topology[key]}"
+                        )
+                if float(transition_topology["topology_excess_length_m"]) > 1e-6:
+                    failures.append(
+                        f"solver {index} axis/conical transitions retain "
+                        f"{transition_topology['topology_excess_length_m']:.6f} m of excess topology"
+                    )
         for family, metrics in comparison_results.items():
             diagnostics = metrics["diagnostics"]
             exceptional = diagnostics["exceptional_recovery"]

@@ -32,7 +32,10 @@ The benchmark deliberately treats two concepts separately:
 - `elev_min`/`elev_max` describe the range of shared AMSL elevation along a
   sloping transition line and can legitimately differ; and
 - `eq_res_max` describes how closely the two surfaces agree at corresponding
-  points and should be near zero for projected axis/conical transitions.
+  points and should be near zero for projected axis/conical transitions; and
+- `reversal_count`, `duplicate_segment_count`, `short_component_count`, and
+  `topology_excess_length_m` detect doubled-back paths, reverse duplicates,
+  sub-resolution fragments, and sliver loops. Production gates require zero.
 
 Run the focused three-run benchmark with:
 

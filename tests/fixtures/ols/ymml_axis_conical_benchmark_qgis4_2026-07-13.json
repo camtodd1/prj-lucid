@@ -23,7 +23,8 @@
     "transition_scope": "Interior Approach/TOCS-to-Conical equality segments only; existing straight footprint-boundary handoffs are excluded from curve-quality metrics.",
     "elevation_semantics": "elev_min and elev_max are the shared AMSL elevation range along the line. They are not a surface-to-surface error and need not be equal on a sloping equality curve.",
     "equality_metric": "maximum_equality_residual_m is max(abs(z_axis - z_conical)) sampled at no more than 5 m spacing.",
-    "smoothness_metric": "maximum_vertex_turn_degrees measures the largest local heading change at a line vertex. Lower is smoother."
+    "smoothness_metric": "maximum_vertex_turn_degrees measures the largest local heading change at a line vertex. Lower is smoother.",
+    "topology_metrics": "reversal_count, duplicate_segment_count, short_component_count, and topology_excess_length_m must all be zero for projected axis/conical output."
   },
   "sampled_baseline": {
     "method": "sampled_zero_contour_region_boundary",
@@ -77,43 +78,50 @@
     "known_region_layer_overlap_m2": 0.108276
   },
   "adopted_projected_output": {
-    "method": "continuous_sampled_arc_with_lateral_zero_projection_and_0.05_m_simplification",
+    "method": "topology_normalised_sampled_arc_with_lateral_zero_projection_hairpin_removal_and_0.05_m_simplification",
     "timing": {
-      "runs": [19.38427133299956, 19.069295166000302, 18.820469915999638],
-      "median_total_seconds": 19.069295166000302,
-      "median_change_percent": -3.3852,
+      "runs": [19.7411427499992, 18.90464787500059, 19.43575783400047],
+      "median_total_seconds": 19.43575783400047,
+      "median_change_percent": -1.5285,
+      "median_change_from_previous_patch_percent": 1.9217,
       "median_stages": {
-        "region_solve": 6.297117124002398,
-        "boundary_generation": 2.700532208000368,
-        "comparison": 3.105925291998574,
-        "change_contours": 7.7192580419996375,
-        "modernisation_layers": 11.357378000000608
+        "region_solve": 6.394610751000073,
+        "boundary_generation": 2.6995892919985636,
+        "comparison": 3.269633915997474,
+        "change_contours": 7.792792040998393,
+        "modernisation_layers": 11.647167458000695
       }
     },
     "transition_output": {
-      "features": 217,
-      "projected_axis_conical_features": 29
+      "features": 188,
+      "projected_axis_conical_features": 12
     },
     "interior_axis_conical_quality": {
-      "features": 29,
+      "features": 12,
       "pairs": 8,
-      "vertices": 212,
-      "length_m": 7405.649121330596,
-      "length_change_percent": 0.1650,
-      "sample_points": 1608,
+      "vertices": 187,
+      "length_m": 7362.327295699063,
+      "length_change_percent": -0.4210,
+      "sample_points": 1575,
       "shared_elevation_min_m": 190.04799703058433,
       "shared_elevation_max_m": 266.41943838499213,
       "shared_elevation_range_m": 76.3714413544078,
-      "maximum_equality_residual_m": 0.006137155906458247,
-      "rms_equality_residual_m": 0.0005449816330387692,
-      "rms_equality_residual_change_percent": -35.8937,
-      "maximum_vertex_turn_degrees": 1.928739309037189,
-      "maximum_vertex_turn_change_percent": -98.9205,
-      "rms_vertex_turn_degrees": 0.9169624282949665
+      "maximum_equality_residual_m": 0.007921185711040835,
+      "rms_equality_residual_m": 0.0006006274630983549,
+      "rms_equality_residual_change_percent": -29.3481,
+      "maximum_analytic_deviation_m": 35.534733430265455,
+      "rms_analytic_deviation_m": 4.209531224030222,
+      "maximum_vertex_turn_degrees": 2.8024756645846396,
+      "maximum_vertex_turn_change_percent": -98.4315,
+      "rms_vertex_turn_degrees": 0.9648439406698894,
+      "reversal_count": 0,
+      "duplicate_segment_count": 0,
+      "short_component_count": 0,
+      "topology_excess_length_m": 0.0
     },
     "workflow_output": {
       "layers": 189,
-      "features": 15841,
+      "features": 15812,
       "invalid_geometries": 0,
       "empty_geometries": 0,
       "determinism_digest": "b81659d641317b6deee9beac0a94a6434ba5e87f9574827e8e453be59d2501cc"

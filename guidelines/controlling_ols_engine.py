@@ -59,6 +59,9 @@ AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS = 80000
 AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M = 0.10
 AXIS_CONICAL_OUTPUT_EQUALITY_FILTER_M = 0.01
 AXIS_CONICAL_OUTPUT_SIMPLIFY_TOLERANCE_M = 0.05
+AXIS_CONICAL_OUTPUT_TOPOLOGY_SNAP_M = 0.5
+AXIS_CONICAL_OUTPUT_MIN_COMPONENT_LENGTH_M = 1.0
+AXIS_CONICAL_OUTPUT_MIN_CLOSED_LOOP_DIAMETER_M = 2.0
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -573,7 +576,8 @@ class PlanarControllingOlsEngine:
         if sampled_equality is None or sampled_equality.isEmpty():
             return []
         output: List[QgsGeometry] = []
-        for reference_points in self._line_parts(sampled_equality):
+        reference_parts = self._topology_clean_transition_line_parts(sampled_equality)
+        for reference_points in reference_parts:
             if len(reference_points) < 2:
                 continue
             reference = QgsGeometry.fromPolylineXY(reference_points)
@@ -598,50 +602,255 @@ class PlanarControllingOlsEngine:
                 )
                 if not projected or equality_point.distance(projected[-1]) > 1e-6:
                     projected.append(equality_point)
-            for continuous_points in self._split_transition_curve_at_sharp_turns(projected):
-                continuous_points = self._simplify_transition_curve_points(
-                    continuous_points,
-                    AXIS_CONICAL_OUTPUT_SIMPLIFY_TOLERANCE_M,
-                )
-                if len(continuous_points) >= 2:
-                    output.append(QgsGeometry.fromPolylineXY(continuous_points))
+            projected = self._remove_transition_curve_backtracking(projected)
+            projected = self._simplify_transition_curve_points(
+                projected,
+                AXIS_CONICAL_OUTPUT_SIMPLIFY_TOLERANCE_M,
+            )
+            if len(projected) >= 2:
+                output.append(QgsGeometry.fromPolylineXY(projected))
         return output
 
-    def _split_transition_curve_at_sharp_turns(
-        self,
+    @staticmethod
+    def _remove_transition_curve_backtracking(
         points: Sequence[QgsPointXY],
-        maximum_turn_degrees: float = 45.0,
-    ) -> List[List[QgsPointXY]]:
-        """Split union-induced reversals while preserving coincident endpoints."""
-        if len(points) < 3:
-            return [list(points)] if len(points) >= 2 else []
-        parts: List[List[QgsPointXY]] = []
-        current = [QgsPointXY(points[0])]
-        for index in range(1, len(points) - 1):
-            previous = points[index - 1]
-            point = points[index]
-            following = points[index + 1]
-            first_dx = point.x() - previous.x()
-            first_dy = point.y() - previous.y()
-            second_dx = following.x() - point.x()
-            second_dy = following.y() - point.y()
-            denominator = math.hypot(first_dx, first_dy) * math.hypot(second_dx, second_dy)
-            turn_degrees = 0.0
-            if denominator > 1e-12:
+        minimum_reversal_degrees: float = 150.0,
+    ) -> List[QgsPointXY]:
+        """Erase local hairpins without changing ordinary corners or smooth curvature."""
+        cleaned: List[QgsPointXY] = []
+        for point in points:
+            if cleaned and point.distance(cleaned[-1]) <= 1e-6:
+                continue
+            cleaned.append(QgsPointXY(point))
+            while len(cleaned) >= 3:
+                previous, current, following = cleaned[-3:]
+                first_dx = current.x() - previous.x()
+                first_dy = current.y() - previous.y()
+                second_dx = following.x() - current.x()
+                second_dy = following.y() - current.y()
+                denominator = math.hypot(first_dx, first_dy) * math.hypot(second_dx, second_dy)
+                if denominator <= 1e-12:
+                    del cleaned[-2]
+                    continue
                 cosine = max(
                     -1.0,
                     min(1.0, ((first_dx * second_dx) + (first_dy * second_dy)) / denominator),
                 )
                 turn_degrees = math.degrees(math.acos(cosine))
-            current.append(QgsPointXY(point))
-            if turn_degrees > maximum_turn_degrees:
-                if len(current) >= 2:
-                    parts.append(current)
-                current = [QgsPointXY(point)]
-        current.append(QgsPointXY(points[-1]))
-        if len(current) >= 2:
-            parts.append(current)
-        return parts
+                if turn_degrees < minimum_reversal_degrees:
+                    break
+                del cleaned[-2]
+                if len(cleaned) >= 2 and cleaned[-1].distance(cleaned[-2]) <= 1e-6:
+                    cleaned.pop()
+                    break
+        return cleaned
+
+    def _topology_clean_transition_line_parts(
+        self,
+        geometry: QgsGeometry,
+        snap_tolerance_m: float = AXIS_CONICAL_OUTPUT_TOPOLOGY_SNAP_M,
+    ) -> List[List[QgsPointXY]]:
+        """Collapse sliver topology into simple, non-repeating transition paths."""
+        source_parts = self._line_parts(geometry)
+        if not source_parts:
+            return []
+
+        unique_points: List[QgsPointXY] = []
+        point_indexes: Dict[Tuple[float, float], int] = {}
+        indexed_parts: List[List[int]] = []
+        for part in source_parts:
+            indexed_part: List[int] = []
+            for point in part:
+                key = (round(point.x(), 9), round(point.y(), 9))
+                point_index = point_indexes.get(key)
+                if point_index is None:
+                    point_index = len(unique_points)
+                    point_indexes[key] = point_index
+                    unique_points.append(QgsPointXY(point))
+                indexed_part.append(point_index)
+            if len(indexed_part) >= 2:
+                indexed_parts.append(indexed_part)
+        if not indexed_parts:
+            return []
+
+        parents = list(range(len(unique_points)))
+
+        def _find(index: int) -> int:
+            while parents[index] != index:
+                parents[index] = parents[parents[index]]
+                index = parents[index]
+            return index
+
+        def _union(first_index: int, second_index: int) -> None:
+            first_root = _find(first_index)
+            second_root = _find(second_index)
+            if first_root == second_root:
+                return
+            if first_root < second_root:
+                parents[second_root] = first_root
+            else:
+                parents[first_root] = second_root
+
+        tolerance = max(0.0, float(snap_tolerance_m))
+        for first_index, first_point in enumerate(unique_points):
+            for second_index in range(first_index):
+                if first_point.distance(unique_points[second_index]) <= tolerance:
+                    _union(first_index, second_index)
+
+        clusters: Dict[int, List[int]] = {}
+        for point_index in range(len(unique_points)):
+            clusters.setdefault(_find(point_index), []).append(point_index)
+
+        node_points: Dict[int, QgsPointXY] = {}
+        point_nodes: Dict[int, int] = {}
+        for node_index, member_indexes in enumerate(
+            sorted(clusters.values(), key=lambda members: min(members))
+        ):
+            centroid_x = sum(
+                unique_points[index].x() for index in member_indexes
+            ) / len(member_indexes)
+            centroid_y = sum(
+                unique_points[index].y() for index in member_indexes
+            ) / len(member_indexes)
+            representative_index = min(
+                member_indexes,
+                key=lambda index: (
+                    math.hypot(
+                        unique_points[index].x() - centroid_x,
+                        unique_points[index].y() - centroid_y,
+                    ),
+                    unique_points[index].x(),
+                    unique_points[index].y(),
+                ),
+            )
+            node_points[node_index] = QgsPointXY(unique_points[representative_index])
+            for point_index in member_indexes:
+                point_nodes[point_index] = node_index
+
+        edges = set()
+        adjacency: Dict[int, set] = {node_index: set() for node_index in node_points}
+        for part in indexed_parts:
+            for first_index, second_index in zip(part[:-1], part[1:]):
+                first_node = point_nodes[first_index]
+                second_node = point_nodes[second_index]
+                if first_node == second_node:
+                    continue
+                edge = tuple(sorted((first_node, second_node)))
+                if edge in edges:
+                    continue
+                edges.add(edge)
+                adjacency[first_node].add(second_node)
+                adjacency[second_node].add(first_node)
+        if not edges:
+            return []
+
+        components: List[set] = []
+        unvisited = {node for node, neighbours in adjacency.items() if neighbours}
+        while unvisited:
+            start = min(unvisited)
+            component = set()
+            stack = [start]
+            while stack:
+                node = stack.pop()
+                if node in component:
+                    continue
+                component.add(node)
+                stack.extend(sorted(adjacency[node] - component, reverse=True))
+            unvisited -= component
+            components.append(component)
+
+        def _trace_simple_component(component: set) -> List[int]:
+            endpoints = sorted(node for node in component if len(adjacency[node]) == 1)
+            start = endpoints[0] if endpoints else min(component)
+            path = [start]
+            previous = None
+            current = start
+            while True:
+                choices = sorted(
+                    neighbour for neighbour in adjacency[current] if neighbour != previous
+                )
+                if not choices:
+                    break
+                following = choices[0]
+                if following == start:
+                    path.append(following)
+                    break
+                if following in path:
+                    break
+                path.append(following)
+                previous, current = current, following
+            return path
+
+        def _shortest_paths(start: int, component: set):
+            distances = {node: math.inf for node in component}
+            previous: Dict[int, int] = {}
+            distances[start] = 0.0
+            remaining = set(component)
+            while remaining:
+                current = min(remaining, key=lambda node: (distances[node], node))
+                if not math.isfinite(distances[current]):
+                    break
+                remaining.remove(current)
+                for neighbour in adjacency[current]:
+                    if neighbour not in component:
+                        continue
+                    distance = distances[current] + node_points[current].distance(
+                        node_points[neighbour]
+                    )
+                    if distance + 1e-12 < distances[neighbour]:
+                        distances[neighbour] = distance
+                        previous[neighbour] = current
+            return distances, previous
+
+        def _principal_branched_path(component: set) -> List[int]:
+            endpoints = sorted(node for node in component if len(adjacency[node]) == 1)
+            candidates = endpoints if len(endpoints) >= 2 else sorted(component)
+            best = None
+            best_previous = None
+            for start in candidates:
+                distances, previous = _shortest_paths(start, component)
+                for end in candidates:
+                    if end <= start or not math.isfinite(distances[end]):
+                        continue
+                    score = (distances[end], -start, -end)
+                    if best is None or score > best[0]:
+                        best = (score, start, end)
+                        best_previous = previous
+            if best is None or best_previous is None:
+                return []
+            _score, start, end = best
+            reversed_path = [end]
+            current = end
+            while current != start:
+                current = best_previous.get(current)
+                if current is None:
+                    return []
+                reversed_path.append(current)
+            return list(reversed(reversed_path))
+
+        cleaned: List[List[QgsPointXY]] = []
+        for component in sorted(components, key=lambda nodes: min(nodes)):
+            maximum_degree = max(len(adjacency[node]) for node in component)
+            node_path = (
+                _trace_simple_component(component)
+                if maximum_degree <= 2
+                else _principal_branched_path(component)
+            )
+            if len(node_path) < 2:
+                continue
+            points = [QgsPointXY(node_points[node]) for node in node_path]
+            path_length = sum(
+                start.distance(end) for start, end in zip(points[:-1], points[1:])
+            )
+            if path_length < AXIS_CONICAL_OUTPUT_MIN_COMPONENT_LENGTH_M:
+                continue
+            if node_path[0] == node_path[-1]:
+                bounds = QgsGeometry.fromPolylineXY(points).boundingBox()
+                diameter = math.hypot(bounds.width(), bounds.height())
+                if diameter < AXIS_CONICAL_OUTPUT_MIN_CLOSED_LOOP_DIAMETER_M:
+                    continue
+            cleaned.append(points)
+        return cleaned
 
     def _project_axis_conical_point_to_equality(
         self,

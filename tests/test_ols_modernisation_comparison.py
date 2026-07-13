@@ -899,6 +899,60 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertLess(maximum_turn, 15.0)
         self.assertGreater(max(shared_elevations) - min(shared_elevations), 0.1)
 
+    def test_axis_conical_output_collapses_sliver_loops_and_reverse_segments(self):
+        engine = PlanarControllingOlsEngine([self.constant("base", 100.0)])
+        root = QgsPointXY(0.0, 0.0)
+        near_root = QgsPointXY(0.2, 0.1)
+        tip = QgsPointXY(4.0, 1.0)
+        far = QgsPointXY(20.0, 5.0)
+        linework = [
+            QgsGeometry.fromPolylineXY([root, tip]),
+            QgsGeometry.fromPolylineXY([tip, near_root]),
+            QgsGeometry.fromPolylineXY([near_root, root]),
+            QgsGeometry.fromPolylineXY([tip, far]),
+            QgsGeometry.fromPolylineXY([far, tip]),
+            QgsGeometry.fromPolylineXY(
+                [
+                    QgsPointXY(30.0, 30.0),
+                    QgsPointXY(31.0, 30.0),
+                    QgsPointXY(30.0, 31.0),
+                    QgsPointXY(30.0, 30.0),
+                ]
+            ),
+            QgsGeometry.fromPolylineXY([QgsPointXY(40.0, 40.0), QgsPointXY(40.8, 40.0)]),
+        ]
+        geometry = QgsGeometry.unaryUnion(linework)
+
+        parts = engine._topology_clean_transition_line_parts(geometry)
+
+        self.assertEqual(len(parts), 1)
+        self.assertEqual(len(parts[0]), 3)
+        endpoints = {
+            (round(parts[0][0].x(), 1), round(parts[0][0].y(), 1)),
+            (round(parts[0][-1].x(), 1), round(parts[0][-1].y(), 1)),
+        }
+        self.assertEqual(endpoints, {(0.0, 0.0), (20.0, 5.0)})
+        segment_keys = {
+            engine._undirected_segment_key(start, end)
+            for start, end in zip(parts[0][:-1], parts[0][1:])
+        }
+        self.assertEqual(len(segment_keys), len(parts[0]) - 1)
+
+    def test_axis_conical_output_erases_hairpins_but_preserves_ordinary_corners(self):
+        points = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(10.0, 0.0),
+            QgsPointXY(9.0, 0.05),
+            QgsPointXY(20.0, 0.0),
+            QgsPointXY(20.0, 10.0),
+        ]
+
+        cleaned = PlanarControllingOlsEngine._remove_transition_curve_backtracking(points)
+
+        self.assertEqual(len(cleaned), 4)
+        self.assertAlmostEqual(cleaned[1].x(), 9.0)
+        self.assertAlmostEqual(cleaned[-1].y(), 10.0)
+
     def test_axis_conical_chord_error_does_not_create_second_cell_boundary(self):
         axis = ControllingOlsCandidate(
             "axis", "Approach", self.domain,
