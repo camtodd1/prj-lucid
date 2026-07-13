@@ -433,6 +433,10 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
       reduction remains a separately gated future performance experiment.
 - [ ] 2026-07-13 visual trial: endpoint-constrained regularised least-squares
       B-spline fitting now approximates all ordered intersection observations
-      without interpolating their local jitter. YMML export and diagnostics are
-      ready for review; the accepted MOS139 geometry lock is intentionally
-      unchanged pending visual assessment.
+      without interpolating their local jitter. The stronger inspection profile
+      retains 75% of the fitted position and blends 25% towards equality because
+      full reprojection removed most visible smoothing. On YMML, peak and RMS
+      curvature change improved by about 65% and 68% respectively versus the
+      first fitted trial, with zero endpoint shift and a maximum 0.0328 m
+      elevation-equality residual. Export and diagnostics are ready for review;
+      the accepted MOS139 geometry lock is intentionally unchanged.

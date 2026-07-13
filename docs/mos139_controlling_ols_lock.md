@@ -94,20 +94,28 @@ result had 187 rather than 183 interior axis/conical vertices, peak curvature
 change regressed from 0.001515 to 0.001943 per m², and the adopted geometry lock
 did not match.
 
-The direct 40 m-control experiment has been superseded by a user-requested
-least-squares B-spline visual trial. All ordered sampled-intersection vertices
-contribute to one endpoint-constrained fit, while a small second-difference
-penalty fairs the solved interior controls. The fitted curve is evaluated every
-5 m, projected back towards surface equality, and then subjected to the normal
-endpoint, domain, simplicity, backtracking, and geometry-validity checks.
+The direct 40 m-control experiment has been superseded by user-requested
+least-squares B-spline visual trials. All ordered sampled-intersection vertices
+contribute to one endpoint-constrained fit, while a second-difference penalty
+fairs the solved interior controls. Full equality projection proved to be the
+dominant limiter: it removed most visible influence from even extreme fitted
+guides and could cause fallback or endpoint artefacts when controls were made
+too sparse.
 
-The YMML trial represented 745 observed vertices with 127 fitted controls. All
-eight evaluated curves were emitted; the final transition output contained 170
-vertices, down from 183 in the accepted 15 m construction. Maximum fit-to-source
-displacement was 1.245 m, maximum accepted-curve equality residual was 0.0326 m,
-endpoint shift was zero, and there were no reversals, duplicate segments, short
-components, or invalid regions. The visual-trial envelope is deliberately wide
-at 1.5 m displacement and 0.05 m equality residual, with curvature improvement
-reported rather than required. This profile intentionally differs from the
-accepted geometry lock and must not update that lock until visual review is
-complete.
+The current aggressive YMML inspection profile keeps the 120 m control spacing,
+raises the fairing weight from 0.01 to 0.1, retains 75% of each fitted interior
+position, and blends 25% towards the equality root. It represented 745 observed
+vertices with 127 fitted controls. All eight curves were emitted with zero
+endpoint shift, reversals, duplicate segments, short components, or topology
+excess. Maximum symmetric displacement was 1.212 m and maximum accepted-curve
+elevation-equality residual was 0.0328 m. Peak curvature change fell from
+0.001449 to 0.000506 per m² and RMS curvature change from 0.000185 to 0.000059
+per m² relative to the first fitted trial.
+
+The diagnostic transition layer now preserves the actual fitted polygon split
+edge rather than constructing a separate fully reprojected display line. It is
+therefore coincident with the controlling polygons but contains 1,490 vertices;
+bounded shared-edge simplification remains a later performance task. The trial
+uses deliberately wide 4 m displacement and 0.10 m equality-residual gates.
+This profile intentionally differs from the accepted geometry lock and must not
+update that lock until visual review and broader fixture testing are complete.

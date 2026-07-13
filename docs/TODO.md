@@ -189,16 +189,26 @@
     pre-polygonization simplification; do not simplify final neighbouring
     polygons independently.
   - The direct 40 m control-spacing trial was superseded by an endpoint-fixed,
-    regularised least-squares B-spline fit. On YMML it represented 745 observed
-    vertices with 127 controls and produced 170 final transition vertices. Its
-    1.5 m displacement and 0.05 m equality bounds are exploratory; it remains
-    unaccepted until visual review.
+    regularised least-squares B-spline fit. The first fit was still visually
+    restrained because full equality projection erased most of the fitted
+    displacement. The current aggressive YMML inspection profile uses a 10x
+    stronger fairing penalty and retains 75% of the fitted position while
+    blending 25% towards equality.
+  - The aggressive profile represented 745 observed vertices with 127 controls.
+    All eight curves were accepted with zero endpoint shift, reversals, duplicate
+    segments, short components, or topology excess. Maximum displacement was
+    1.212 m and maximum elevation-equality residual was 0.0328 m. Its diagnostic
+    transition layer contains 1,490 vertices because it preserves the actual
+    polygon split edge rather than constructing a separately reprojected line.
+    Review this density in the later simplification/performance pass.
   - Preserve exact endpoints, the 0.5 m symmetric Hausdorff bound, the 0.01 m
     equality-residual bound, local peak and RMS curvature improvement, overlap
     domain containment, zero reversals/duplicates/short components, and all
     accepted geometry locks.
   - Treat this as a measured performance optimization. Retain the accepted 15 m
-    curve unless the trial passes visual review and broader regression evidence.
+    curve unless the trial passes visual review and broader regression evidence;
+    the aggressive profile's 4 m/0.10 m experimental gates are not production
+    acceptance limits.
 
 - [x] Improve the OLS tab workflow selection and validation.
 

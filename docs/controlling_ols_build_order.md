@@ -279,14 +279,21 @@ must pass. Otherwise the projected unsmoothed zero contour remains authoritative
 This order is important: unconstrained 2D smoothing can create an attractive
 line that is no longer an equal-elevation intersection.
 
-An explicit `least_squares_bspline_visual_trial` profile is temporarily
-available for visual evaluation. It fits an endpoint-constrained cubic B-spline
-to all ordered sampled-intersection vertices using substantially fewer solved
-controls and a small control-fairing penalty. The fitted curve is evaluated at
-5 m spacing and projected back towards equality. Its exploratory bounds are
-1.5 m displacement and 0.05 m equality residual, and curvature improvement is
-advisory. It retains endpoint, domain, simplicity and topology checks but is not
-part of the accepted MOS139 compatibility lock.
+An explicit `aggressive_least_squares_bspline_visual_trial` profile is
+temporarily available for visual evaluation. It fits an endpoint-constrained
+cubic B-spline to all ordered sampled-intersection vertices using substantially
+fewer solved controls and a stronger control-fairing penalty. Full equality
+projection was found to erase most visible influence from the fitted curve, so
+this trial retains 75% of the fitted position and blends 25% towards the exact
+equality root. The fitted curve is evaluated at 5 m spacing. Its deliberately
+wide exploratory bounds are 4 m displacement and 0.10 m elevation-equality
+residual, while endpoints remain exact and domain, simplicity and topology
+checks still apply. The output transition extractor uses the same temporary
+0.04 m observed-residual envelope so the intentionally approximate curve is
+not split back into short fragments. The diagnostic transition layer retains
+the fitted split edge instead of reprojecting a second display-only line, so it
+remains coincident with the controlling polygons. This is an aggressive
+inspection profile, not part of the accepted MOS139 compatibility lock.
 
 The zero contour is the single construction boundary. The solver must not
 subsequently triangulate the same MOS139 cell onto a different chord when the

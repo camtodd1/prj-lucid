@@ -61,18 +61,20 @@ AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS = 80000
 AXIS_CONICAL_CURVE_SMOOTHING_ENABLED = True
 AXIS_CONICAL_CURVE_FIT_CONTROL_SPACING_M = 120.0
 AXIS_CONICAL_CURVE_FIT_OUTPUT_SPACING_M = 5.0
-AXIS_CONICAL_CURVE_FIT_FAIRING_WEIGHT = 0.01
+AXIS_CONICAL_CURVE_FIT_FAIRING_WEIGHT = 0.1
+AXIS_CONICAL_CURVE_FIT_EQUALITY_PROJECTION_FRACTION = 0.25
 AXIS_CONICAL_CURVE_FIT_MIN_CONTROL_POINTS = 4
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M = 1.5
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.05
-AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M = 0.05
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_DEVIATION_M = 4.0
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.10
+AXIS_CONICAL_CURVE_SMOOTHING_MAX_RESIDUAL_INCREASE_M = 0.10
 AXIS_CONICAL_CURVE_SMOOTHING_MIN_CURVATURE_IMPROVEMENT = 0.01
 AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT = False
 AXIS_CONICAL_CURVE_SMOOTHING_DOMAIN_TOLERANCE_M = 0.05
 AXIS_CONICAL_CURVE_SMOOTHING_HAUSDORFF_DENSIFY_FRACTION = 0.25
 AXIS_CONICAL_CURVE_SMOOTHING_MAX_ENDPOINT_SHIFT_M = 1e-9
 AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M = 0.10
-AXIS_CONICAL_OUTPUT_EQUALITY_FILTER_M = 0.01
+AXIS_CONICAL_OUTPUT_EQUALITY_FILTER_M = 0.04
+AXIS_CONICAL_OUTPUT_REPROJECT_TO_EQUALITY = False
 AXIS_CONICAL_OUTPUT_SIMPLIFY_TOLERANCE_M = 0.05
 AXIS_CONICAL_OUTPUT_TOPOLOGY_SNAP_M = 0.5
 AXIS_CONICAL_OUTPUT_MIN_COMPONENT_LENGTH_M = 1.0
@@ -266,12 +268,13 @@ class PlanarControllingOlsEngine:
                     stats.get("axis_curve_smoothing_accepted", 0.0)
                 ),
                 "zero_contour_smoothing_method": (
-                    "endpoint_constrained_regularized_least_squares_bspline"
+                    "endpoint_constrained_regularized_least_squares_bspline_"
+                    "partial_equality_projection"
                     if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
                     else "disabled"
                 ),
                 "zero_contour_smoothing_profile": (
-                    "least_squares_bspline_visual_trial"
+                    "aggressive_least_squares_bspline_visual_trial"
                     if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
                     else "disabled"
                 ),
@@ -292,6 +295,10 @@ class PlanarControllingOlsEngine:
                 "smoothing_max_allowed_equality_residual_m": (
                     AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M
                 ),
+                "output_equality_filter_m": AXIS_CONICAL_OUTPUT_EQUALITY_FILTER_M,
+                "output_reprojects_to_equality": (
+                    AXIS_CONICAL_OUTPUT_REPROJECT_TO_EQUALITY
+                ),
                 "smoothing_max_allowed_endpoint_shift_m": (
                     AXIS_CONICAL_CURVE_SMOOTHING_MAX_ENDPOINT_SHIFT_M
                 ),
@@ -307,6 +314,9 @@ class PlanarControllingOlsEngine:
                 "fit_control_spacing_m": AXIS_CONICAL_CURVE_FIT_CONTROL_SPACING_M,
                 "fit_output_spacing_m": AXIS_CONICAL_CURVE_FIT_OUTPUT_SPACING_M,
                 "fit_fairing_weight": AXIS_CONICAL_CURVE_FIT_FAIRING_WEIGHT,
+                "fit_equality_projection_fraction": (
+                    AXIS_CONICAL_CURVE_FIT_EQUALITY_PROJECTION_FRACTION
+                ),
                 "fit_source_vertices": int(
                     stats.get("axis_curve_fit_source_vertices", 0.0)
                 ),
@@ -355,7 +365,7 @@ class PlanarControllingOlsEngine:
                 "unanimous_gap_audit": "qa_diagnostic",
                 "merged_conical_overlap_assignment": "accepted_compatibility_correction",
                 "axis_conical_isoline": (
-                    "experimental_least_squares_bspline_equality_projection"
+                    "experimental_least_squares_bspline_partial_equality_projection"
                     if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED
                     and not AXIS_CONICAL_CURVE_SMOOTHING_REQUIRE_CURVATURE_IMPROVEMENT
                     else "bounded_c2_guide_equality_projection"
@@ -673,6 +683,9 @@ class PlanarControllingOlsEngine:
             if len(reference_points) < 2:
                 continue
             reference = QgsGeometry.fromPolylineXY(reference_points)
+            if not AXIS_CONICAL_OUTPUT_REPROJECT_TO_EQUALITY:
+                output.append(reference)
+                continue
             try:
                 densified = reference.densifyByDistance(5.0)
             except Exception:
@@ -3527,7 +3540,7 @@ class PlanarControllingOlsEngine:
         conical_model: dict,
         overlap: QgsGeometry,
     ) -> Optional[QgsGeometry]:
-        """Create an endpoint-clamped C2 guide and project it back to equality."""
+        """Create an endpoint-clamped C2 guide and blend it towards equality."""
         self._region_solve_stats["axis_curve_smoothing_calls"] = (
             self._region_solve_stats.get("axis_curve_smoothing_calls", 0.0) + 1.0
         )
@@ -3603,8 +3616,12 @@ class PlanarControllingOlsEngine:
             )
 
             projected_points: List[QgsPointXY] = []
+            projection_fraction = min(
+                1.0,
+                max(0.0, AXIS_CONICAL_CURVE_FIT_EQUALITY_PROJECTION_FRACTION),
+            )
             for index, guide_point in enumerate(guide_points):
-                projected_point = (
+                equality_point = (
                     QgsPointXY(source_points[0])
                     if index == 0
                     else QgsPointXY(source_points[-1])
@@ -3613,6 +3630,16 @@ class PlanarControllingOlsEngine:
                         axis,
                         conical_model,
                         guide_point,
+                    )
+                )
+                projected_point = (
+                    equality_point
+                    if index in {0, len(guide_points) - 1}
+                    else QgsPointXY(
+                        guide_point.x()
+                        + (projection_fraction * (equality_point.x() - guide_point.x())),
+                        guide_point.y()
+                        + (projection_fraction * (equality_point.y() - guide_point.y())),
                     )
                 )
                 if not projected_points or projected_point.distance(projected_points[-1]) > 1e-6:
