@@ -114,6 +114,38 @@
         }
       }
     },
+    "ymml_intersecting.json": {
+      "runways": 2,
+      "total_seconds": 19.069,
+      "stages": {
+        "region_solve": 6.297,
+        "boundary_generation": 2.701,
+        "comparison": 3.106,
+        "change_contours": 7.719,
+        "modernisation_layers": 11.357
+      },
+      "output": {
+        "layers": 189,
+        "features": 15841,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {"gain": 75, "loss": 15, "no_change": 0, "transition": 8},
+          "common_domain_area_m2": 18172243.176025,
+          "unclassified_common_area_m2": 0.011852,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {"gain": 72, "loss": 201, "no_change": 8, "transition": 18},
+          "common_domain_area_m2": 536044731.781271,
+          "unclassified_common_area_m2": 0.022391,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
     "yssy_multiple_stress.json": {
       "runways": 3,
       "total_seconds": 33.506,

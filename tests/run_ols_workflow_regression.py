@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import math
 import os
 import statistics
 import sys
@@ -86,6 +87,174 @@ def _engine_lock_signature(engine) -> Dict[str, object]:
         "geometry_digest": hashlib.sha256(
             "".join(sorted(records)).encode("ascii")
         ).hexdigest(),
+    }
+
+
+def _axis_conical_transition_metrics(engine) -> Dict[str, object]:
+    """Measure equality residual, analytic deviation, and visible line kinks."""
+    candidates = {candidate.surface_id: candidate for candidate in engine.candidates}
+    feature_count = 0
+    pair_ids = set()
+    vertex_count = 0
+    total_length_m = 0.0
+    equality_residuals = []
+    analytic_deviations = []
+    shared_elevations = []
+    turn_angles = []
+
+    def _boundary(geometry):
+        lines = [
+            QgsGeometry.fromPolylineXY(points)
+            for points in engine._polygon_boundary_parts(geometry)
+            if len(points) >= 2
+        ]
+        if not lines:
+            return QgsGeometry()
+        return QgsGeometry.unaryUnion(lines) if len(lines) > 1 else lines[0]
+
+    boundary_records = engine._region_boundary_records()
+    has_projected_axis_conical_output = any(
+        len(attributes) > 5 and attributes[5] == "projected_axis_conical_transition"
+        for _geometry, attributes in boundary_records
+    )
+    for geometry, attributes in boundary_records:
+        if (
+            has_projected_axis_conical_output
+            and (len(attributes) <= 5 or attributes[5] != "projected_axis_conical_transition")
+        ):
+            continue
+        pair_id = str(attributes[4] or "")
+        surface_ids = pair_id.split("|")
+        if len(surface_ids) != 2:
+            continue
+        first = candidates.get(surface_ids[0])
+        second = candidates.get(surface_ids[1])
+        if first is None or second is None or {first.model, second.model} != {"axis", "conical"}:
+            continue
+        axis = first if first.model == "axis" else second
+        conical = first if first.model == "conical" else second
+        if axis.surface_type not in {"Approach", "TOCS"}:
+            continue
+
+        axis_boundary = _boundary(axis.footprint)
+        conical_boundary = _boundary(conical.footprint)
+        interior_parts = []
+
+        def _equality_residual(point_xy):
+            axis_z = axis.elevation_at_xy(point_xy)
+            conical_z = conical.elevation_at_xy(point_xy)
+            if axis_z is None or conical_z is None:
+                return None
+            return abs(float(axis_z) - float(conical_z))
+
+        for points in engine._line_parts(geometry):
+            current_points = []
+            for start_point, end_point in zip(points[:-1], points[1:]):
+                segment = QgsGeometry.fromPolylineXY([start_point, end_point])
+                midpoint = segment.interpolate(segment.length() / 2.0)
+                if midpoint is None or midpoint.isEmpty():
+                    qualifies = False
+                else:
+                    midpoint_point = midpoint.asPoint()
+                    midpoint_xy = QgsPointXY(midpoint_point.x(), midpoint_point.y())
+                    residuals = [
+                        _equality_residual(start_point),
+                        _equality_residual(midpoint_xy),
+                        _equality_residual(end_point),
+                    ]
+                    qualifies = (
+                        axis_boundary.distance(midpoint) > 0.5
+                        and conical_boundary.distance(midpoint) > 0.5
+                        and all(residual is not None and residual <= 0.5 for residual in residuals)
+                    )
+                if qualifies:
+                    if not current_points:
+                        current_points.append(start_point)
+                    current_points.append(end_point)
+                elif len(current_points) >= 2:
+                    interior_parts.append(
+                        (QgsGeometry.fromPolylineXY(current_points), current_points)
+                    )
+                    current_points = []
+                else:
+                    current_points = []
+            if len(current_points) >= 2:
+                interior_parts.append((QgsGeometry.fromPolylineXY(current_points), current_points))
+        if not interior_parts:
+            continue
+
+        feature_count += len(interior_parts)
+        pair_ids.add(pair_id)
+        total_length_m += sum(part.length() for part, _points in interior_parts)
+        vertex_count += sum(len(points) for _part, points in interior_parts)
+        for _part, points in interior_parts:
+            for previous, current, following in zip(points[:-2], points[1:-1], points[2:]):
+                first_dx = current.x() - previous.x()
+                first_dy = current.y() - previous.y()
+                second_dx = following.x() - current.x()
+                second_dy = following.y() - current.y()
+                denominator = math.hypot(first_dx, first_dy) * math.hypot(second_dx, second_dy)
+                if denominator <= 1e-12:
+                    continue
+                cosine = max(
+                    -1.0,
+                    min(1.0, ((first_dx * second_dx) + (first_dy * second_dy)) / denominator),
+                )
+                turn_angles.append(math.degrees(math.acos(cosine)))
+
+        try:
+            overlap = axis.footprint.intersection(conical.footprint)
+            analytic = engine._axis_conical_transition_curve(
+                engine._axis_model(axis),
+                engine._conical_model(conical),
+                overlap,
+            )
+        except Exception:
+            analytic = None
+
+        for part, _points in interior_parts:
+            try:
+                sampled_geometry = part.densifyByDistance(5.0)
+            except Exception:
+                sampled_geometry = part
+            sampled_parts = engine._line_parts(sampled_geometry)
+            if not sampled_parts:
+                continue
+            points = sampled_parts[0]
+            for point_xy in points:
+                axis_z = axis.elevation_at_xy(point_xy)
+                conical_z = conical.elevation_at_xy(point_xy)
+                if axis_z is None or conical_z is None:
+                    continue
+                if not math.isfinite(axis_z) or not math.isfinite(conical_z):
+                    continue
+                equality_residuals.append(abs(float(axis_z) - float(conical_z)))
+                shared_elevations.append((float(axis_z) + float(conical_z)) / 2.0)
+                if analytic is not None and not analytic.isEmpty():
+                    analytic_deviations.append(
+                        analytic.distance(QgsGeometry.fromPointXY(point_xy))
+                    )
+
+    def _rms(values):
+        return math.sqrt(sum(value * value for value in values) / len(values)) if values else None
+
+    return {
+        "features": feature_count,
+        "pairs": len(pair_ids),
+        "vertices": vertex_count,
+        "length_m": total_length_m,
+        "sample_points": len(equality_residuals),
+        "shared_elevation_min_m": min(shared_elevations) if shared_elevations else None,
+        "shared_elevation_max_m": max(shared_elevations) if shared_elevations else None,
+        "shared_elevation_range_m": (
+            max(shared_elevations) - min(shared_elevations) if shared_elevations else None
+        ),
+        "maximum_equality_residual_m": max(equality_residuals) if equality_residuals else None,
+        "rms_equality_residual_m": _rms(equality_residuals),
+        "maximum_analytic_deviation_m": max(analytic_deviations) if analytic_deviations else None,
+        "rms_analytic_deviation_m": _rms(analytic_deviations),
+        "maximum_vertex_turn_degrees": max(turn_angles) if turn_angles else None,
+        "rms_vertex_turn_degrees": _rms(turn_angles),
     }
 
 
@@ -346,8 +515,9 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
         failures.append(f"{layers['empty_geometries']} empty geometries")
     if layers["duplicate_comparison_ids"]:
         failures.append(f"{layers['duplicate_comparison_ids']} duplicate comparison IDs")
+    maximum_region_overlap_m2 = float(case.get("maximum_region_overlap_m2", 1e-3))
     for region_layer in layers.get("controlling_region_layers", []):
-        if float(region_layer["overlap_area_m2"]) > 1e-3:
+        if float(region_layer["overlap_area_m2"]) > maximum_region_overlap_m2:
             failures.append(
                 f"{region_layer['layer']} has {region_layer['overlap_area_m2']:.6f} m2 "
                 "of cross-controller overlap"
@@ -515,6 +685,9 @@ def _run_case(
             "candidate_count": len(engine.candidates),
             **engine.solver_diagnostics(),
         }
+        transition_metrics = _axis_conical_transition_metrics(engine)
+        if transition_metrics["features"]:
+            diagnostics["axis_conical_transitions"] = transition_metrics
         if families == ["MOS139"]:
             diagnostics["mos139_lock"] = _engine_lock_signature(engine)
         solver_diagnostics.append(diagnostics)

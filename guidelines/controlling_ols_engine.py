@@ -57,6 +57,8 @@ AXIS_CONICAL_ZERO_CONTOUR_MAX_GRID_M = 75.0
 AXIS_CONICAL_ZERO_CONTOUR_TARGET_STEPS = 160.0
 AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS = 80000
 AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M = 0.10
+AXIS_CONICAL_OUTPUT_EQUALITY_FILTER_M = 0.01
+AXIS_CONICAL_OUTPUT_SIMPLIFY_TOLERANCE_M = 0.05
 
 ElevationEvaluator = Callable[[QgsPointXY], Optional[float]]
 
@@ -425,7 +427,7 @@ class PlanarControllingOlsEngine:
         for geometry, attributes in self._region_boundary_records():
             feature = QgsFeature(fields)
             feature.setGeometry(QgsGeometry(geometry))
-            feature.setAttributes(list(attributes))
+            feature.setAttributes(list(attributes)[: fields.count()])
             features.append(feature)
         return features
 
@@ -490,29 +492,300 @@ class PlanarControllingOlsEngine:
                     merged = line_merged
             except Exception:
                 merged = segments[0]
-            for line_points in self._line_parts(merged):
-                if len(line_points) < 2:
-                    continue
-                z_values = self._transition_z_values(line_points, first_controller, second_controller)
-                z_line = self._line_points_to_z_geometry(line_points, z_values)
-                if z_line is None or z_line.isEmpty():
-                    continue
-                pair_id = f"{first_controller.surface_id}|{second_controller.surface_id}"
-                records.append(
-                    (
-                        QgsGeometry(z_line),
-                        [
-                            pair_id[:160],
-                            "Transition",
-                            min(z_values),
-                            max(z_values),
-                            pair_id[:254],
-                            "region_boundary_merged",
-                        ],
-                    )
+            output_geometries = [(merged, "region_boundary_merged")]
+            sampled_equality = self._axis_conical_boundary_segments(
+                merged,
+                first_controller,
+                second_controller,
+                keep_equality=True,
+            )
+            projected_transitions = self._axis_conical_output_transition_lines(
+                first_controller,
+                second_controller,
+                sampled_equality,
+            )
+            if projected_transitions:
+                retained_boundary = self._remove_sampled_axis_conical_equality_segments(
+                    merged,
+                    first_controller,
+                    second_controller,
                 )
+                output_geometries = [
+                    (retained_boundary, "region_boundary_merged"),
+                    *[
+                        (transition, "projected_axis_conical_transition")
+                        for transition in projected_transitions
+                    ],
+                ]
+            for output_geometry, method in output_geometries:
+                if output_geometry is None or output_geometry.isEmpty():
+                    continue
+                for line_points in self._line_parts(output_geometry):
+                    if len(line_points) < 2:
+                        continue
+                    z_values = self._transition_z_values(line_points, first_controller, second_controller)
+                    z_line = self._line_points_to_z_geometry(line_points, z_values)
+                    if z_line is None or z_line.isEmpty():
+                        continue
+                    pair_id = f"{first_controller.surface_id}|{second_controller.surface_id}"
+                    records.append(
+                        (
+                            QgsGeometry(z_line),
+                            [
+                                pair_id[:160],
+                                "Transition",
+                                min(z_values),
+                                max(z_values),
+                                pair_id[:254],
+                                method,
+                                (
+                                    self._transition_max_equality_residual(
+                                        line_points,
+                                        first_controller,
+                                        second_controller,
+                                    )
+                                    if method == "projected_axis_conical_transition"
+                                    else None
+                                ),
+                            ],
+                        )
+                    )
         self._region_boundary_records_cache = records
         return records
+
+    def _axis_conical_output_transition_lines(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+        sampled_equality: Optional[QgsGeometry] = None,
+    ) -> List[QgsGeometry]:
+        """Project the continuous sampled transition laterally onto the modeled zero contour."""
+        if {first_candidate.model, second_candidate.model} != {"axis", "conical"}:
+            return []
+        axis_candidate = first_candidate if first_candidate.model == "axis" else second_candidate
+        conical_candidate = first_candidate if first_candidate.model == "conical" else second_candidate
+        if axis_candidate.surface_type not in {"Approach", "TOCS"}:
+            return []
+        axis = self._axis_model(axis_candidate)
+        conical_model = self._conical_model(conical_candidate)
+        if axis is None or conical_model is None:
+            return []
+        if sampled_equality is None or sampled_equality.isEmpty():
+            return []
+        output: List[QgsGeometry] = []
+        for reference_points in self._line_parts(sampled_equality):
+            if len(reference_points) < 2:
+                continue
+            reference = QgsGeometry.fromPolylineXY(reference_points)
+            try:
+                densified = reference.densifyByDistance(5.0)
+            except Exception:
+                densified = reference
+            densified_parts = self._line_parts(densified)
+            if not densified_parts:
+                continue
+            source_points = densified_parts[0]
+            projected: List[QgsPointXY] = []
+            for index, point_xy in enumerate(source_points):
+                equality_point = (
+                    point_xy
+                    if index in {0, len(source_points) - 1}
+                    else self._project_axis_conical_point_to_equality(
+                        axis,
+                        conical_model,
+                        point_xy,
+                    )
+                )
+                if not projected or equality_point.distance(projected[-1]) > 1e-6:
+                    projected.append(equality_point)
+            for continuous_points in self._split_transition_curve_at_sharp_turns(projected):
+                continuous_points = self._simplify_transition_curve_points(
+                    continuous_points,
+                    AXIS_CONICAL_OUTPUT_SIMPLIFY_TOLERANCE_M,
+                )
+                if len(continuous_points) >= 2:
+                    output.append(QgsGeometry.fromPolylineXY(continuous_points))
+        return output
+
+    def _split_transition_curve_at_sharp_turns(
+        self,
+        points: Sequence[QgsPointXY],
+        maximum_turn_degrees: float = 45.0,
+    ) -> List[List[QgsPointXY]]:
+        """Split union-induced reversals while preserving coincident endpoints."""
+        if len(points) < 3:
+            return [list(points)] if len(points) >= 2 else []
+        parts: List[List[QgsPointXY]] = []
+        current = [QgsPointXY(points[0])]
+        for index in range(1, len(points) - 1):
+            previous = points[index - 1]
+            point = points[index]
+            following = points[index + 1]
+            first_dx = point.x() - previous.x()
+            first_dy = point.y() - previous.y()
+            second_dx = following.x() - point.x()
+            second_dy = following.y() - point.y()
+            denominator = math.hypot(first_dx, first_dy) * math.hypot(second_dx, second_dy)
+            turn_degrees = 0.0
+            if denominator > 1e-12:
+                cosine = max(
+                    -1.0,
+                    min(1.0, ((first_dx * second_dx) + (first_dy * second_dy)) / denominator),
+                )
+                turn_degrees = math.degrees(math.acos(cosine))
+            current.append(QgsPointXY(point))
+            if turn_degrees > maximum_turn_degrees:
+                if len(current) >= 2:
+                    parts.append(current)
+                current = [QgsPointXY(point)]
+        current.append(QgsPointXY(points[-1]))
+        if len(current) >= 2:
+            parts.append(current)
+        return parts
+
+    def _project_axis_conical_point_to_equality(
+        self,
+        axis: dict,
+        conical_model: dict,
+        point_xy: QgsPointXY,
+    ) -> QgsPointXY:
+        """Project a near-equality sampled point laterally onto the modeled zero contour."""
+        base_footprint = conical_model.get("base_footprint")
+        conical_slope = float(conical_model.get("slope", 0.0))
+        if base_footprint is None or base_footprint.isEmpty() or conical_slope <= 0.0:
+            return point_xy
+        station, lateral = self._axis_local_coordinates(axis, point_xy)
+        required_distance = (
+            (float(axis["origin_elevation_m"]) - float(conical_model["base_elevation_m"]))
+            / conical_slope
+        ) + ((float(axis["slope"]) / conical_slope) * station)
+
+        def _point_at(value: float) -> QgsPointXY:
+            return self._axis_point_from_local(axis, station, value)
+
+        def _difference(value: float) -> float:
+            return QgsGeometry.fromPointXY(_point_at(value)).distance(base_footprint) - required_distance
+
+        try:
+            initial_value = _difference(lateral)
+        except Exception:
+            return point_xy
+        if abs(initial_value) <= 1e-4:
+            return point_xy
+
+        for radius in (0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 25.0, 50.0, 100.0):
+            for direction in (-1.0, 1.0):
+                candidate_lateral = lateral + (direction * radius)
+                try:
+                    candidate_value = _difference(candidate_lateral)
+                except Exception:
+                    continue
+                if initial_value * candidate_value > 0.0:
+                    continue
+                lower_l, upper_l = sorted((lateral, candidate_lateral))
+                projected_lateral = self._axis_conical_bisect_lateral_root(
+                    _difference,
+                    lower_l,
+                    upper_l,
+                )
+                projected = _point_at(projected_lateral)
+                try:
+                    if abs(_difference(projected_lateral)) <= 0.01:
+                        return projected
+                except Exception:
+                    pass
+        return point_xy
+
+    def _remove_sampled_axis_conical_equality_segments(
+        self,
+        geometry: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> QgsGeometry:
+        """Keep footprint edges while removing sampled interior equality chords."""
+        return self._axis_conical_boundary_segments(
+            geometry,
+            first_candidate,
+            second_candidate,
+            keep_equality=False,
+        )
+
+    def _axis_conical_boundary_segments(
+        self,
+        geometry: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+        keep_equality: bool,
+    ) -> QgsGeometry:
+        """Select sampled equality chords or the complementary footprint boundaries."""
+        if {first_candidate.model, second_candidate.model} != {"axis", "conical"}:
+            return QgsGeometry()
+        retained: List[QgsGeometry] = []
+        for line_points in self._line_parts(geometry):
+            current: List[QgsPointXY] = []
+            for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+                midpoint = QgsPointXY(
+                    (start_point.x() + end_point.x()) / 2.0,
+                    (start_point.y() + end_point.y()) / 2.0,
+                )
+                residuals = []
+                for point_xy in (start_point, midpoint, end_point):
+                    first_z = first_candidate.elevation_at_xy(point_xy)
+                    second_z = second_candidate.elevation_at_xy(point_xy)
+                    if first_z is None or second_z is None:
+                        residuals = []
+                        break
+                    residuals.append(abs(float(first_z) - float(second_z)))
+                is_sampled_equality = (
+                    bool(residuals)
+                    and max(residuals) <= AXIS_CONICAL_OUTPUT_EQUALITY_FILTER_M
+                )
+                retain_segment = is_sampled_equality if keep_equality else not is_sampled_equality
+                if retain_segment:
+                    if not current:
+                        current.append(start_point)
+                    current.append(end_point)
+                elif len(current) >= 2:
+                    retained.append(QgsGeometry.fromPolylineXY(current))
+                    current = []
+                else:
+                    current = []
+            if len(current) >= 2:
+                retained.append(QgsGeometry.fromPolylineXY(current))
+        if not retained:
+            return QgsGeometry()
+        try:
+            merged = QgsGeometry.unaryUnion(retained) if len(retained) > 1 else retained[0]
+            line_merged = merged.mergeLines()
+            return line_merged if line_merged is not None and not line_merged.isEmpty() else merged
+        except Exception:
+            return retained[0]
+
+    def _transition_max_equality_residual(
+        self,
+        line_points: Sequence[QgsPointXY],
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+    ) -> Optional[float]:
+        """Return the sampled maximum absolute height difference along a transition."""
+        residuals: List[float] = []
+        for start_point, end_point in zip(line_points[:-1], line_points[1:]):
+            segment_length = start_point.distance(end_point)
+            steps = max(1, int(math.ceil(segment_length / 5.0)))
+            for step in range(steps + 1):
+                fraction = step / steps
+                point_xy = QgsPointXY(
+                    start_point.x() + ((end_point.x() - start_point.x()) * fraction),
+                    start_point.y() + ((end_point.y() - start_point.y()) * fraction),
+                )
+                first_z = first_candidate.elevation_at_xy(point_xy)
+                second_z = second_candidate.elevation_at_xy(point_xy)
+                if first_z is None or second_z is None:
+                    continue
+                if not math.isfinite(first_z) or not math.isfinite(second_z):
+                    continue
+                residuals.append(abs(float(first_z) - float(second_z)))
+        return max(residuals) if residuals else None
 
     def _adjacency_region_boundary_records(
         self,
@@ -5503,6 +5776,7 @@ class ControllingOlsEngineMixin:
                 QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
                 QgsField("adjacent", QVariant.String, self.tr("Adjacent Surfaces"), 254),
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
+                QgsField("eq_res_max", QVariant.Double, self.tr("Max Equality Residual"), 12, 6),
             ]
         )
         features = engine.region_boundary_features(fields)
@@ -5678,6 +5952,7 @@ class ControllingOlsEngineMixin:
                 QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
                 QgsField("adjacent", QVariant.String, self.tr("Adjacent Surfaces"), 254),
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
+                QgsField("eq_res_max", QVariant.Double, self.tr("Max Equality Residual"), 12, 6),
             ]
         )
         surface_type_by_id = {candidate.surface_id: candidate.surface_type for candidate in engine.candidates}

@@ -23,6 +23,12 @@
       "geometry_digest": "57ee1fefce29f4b07867619930f46cee117e3b43530021e0f63423c456f99197",
       "controller_ids_digest": "0106316fcdb69893a723b546cd653d9c4d1099eff93275ae3a81bd4e1bec3f28"
     },
+    "ymml_intersecting.json": {
+      "regions": 41,
+      "area_m2": 734359700.6967449,
+      "geometry_digest": "a462359e45ab7ce134beb2be1c2d0361defd2dad37389d80d0cb83fb312a48c0",
+      "controller_ids_digest": "61717c210bcdbd3c780c85362ff844440c2a82ed9c3173a0248219c412e79866"
+    },
     "yssy_multiple_stress.json": {
       "regions": 59,
       "area_m2": 742334576.1056356,

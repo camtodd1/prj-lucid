@@ -1,0 +1,124 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-13",
+  "source_revision_base": "8e15ad3b5b48fc9c070f5276ddd7acc3487b85e0",
+  "environment": {
+    "qgis_version": "4.0.2-Norrkoping",
+    "qgis_runtime": "/Applications/QGIS-4.0.app/Contents/MacOS/python",
+    "qt_platform": "offscreen",
+    "project_crs": "EPSG:32755",
+    "output_mode": "memory"
+  },
+  "inputs": {
+    "fixture": "ymml_intersecting.json",
+    "fixture_sha256": "8c025c4676bf6531014bc3489189380e1e521fe1a3ebfd0abff7f3934dc6af8f",
+    "supplied_input_sha256": "2d6a6b8bfd3996f720cf4095444ae045e4d1d4ef69dfac683d326c29b0436a0b",
+    "supplied_transition_output_sha256": "dc1b21610ae2d318dc0e5e95ac07636fd56f656a4d1982ff93bc314a33b4c810",
+    "normalised_transition_snapshot": "baselines/ymml_controlling_transition_boundaries_sampled_2026-07-13.geojson",
+    "normalised_transition_snapshot_sha256": "f3e781e8840ce48b827dcd5edd894ab1ba146ce8ee1c288972df59f340c82a50"
+  },
+  "interpretation": {
+    "timing_units": "seconds",
+    "timing_method": "Three runs on the same machine/runtime; compare medians and investigate changes above 20 percent.",
+    "transition_scope": "Interior Approach/TOCS-to-Conical equality segments only; existing straight footprint-boundary handoffs are excluded from curve-quality metrics.",
+    "elevation_semantics": "elev_min and elev_max are the shared AMSL elevation range along the line. They are not a surface-to-surface error and need not be equal on a sloping equality curve.",
+    "equality_metric": "maximum_equality_residual_m is max(abs(z_axis - z_conical)) sampled at no more than 5 m spacing.",
+    "smoothness_metric": "maximum_vertex_turn_degrees measures the largest local heading change at a line vertex. Lower is smoother."
+  },
+  "sampled_baseline": {
+    "method": "sampled_zero_contour_region_boundary",
+    "timing": {
+      "runs": [19.37697124999977, 19.78795354199974, 19.73744925000028],
+      "median_total_seconds": 19.73744925000028,
+      "median_stages": {
+        "region_solve": 6.445173374999285,
+        "boundary_generation": 2.697674790999372,
+        "comparison": 3.259915208000166,
+        "change_contours": 8.022509417000038,
+        "modernisation_layers": 11.836503874999835
+      }
+    },
+    "transition_output": {
+      "features": 191,
+      "vertices": 1384,
+      "axis_conical_features_including_footprint_boundaries": 73,
+      "axis_conical_vertices_including_footprint_boundaries": 618,
+      "method_counts": {"region_boundary_merged": 191}
+    },
+    "interior_axis_conical_quality": {
+      "features": 19,
+      "pairs": 8,
+      "vertices": 449,
+      "length_m": 7393.452290011731,
+      "sample_points": 1831,
+      "shared_elevation_min_m": 190.04799703058433,
+      "shared_elevation_max_m": 266.41943838499213,
+      "shared_elevation_range_m": 76.3714413544078,
+      "maximum_equality_residual_m": 0.006137155906458247,
+      "rms_equality_residual_m": 0.0008501222977071073,
+      "maximum_analytic_deviation_m": 35.86172969291544,
+      "rms_analytic_deviation_m": 3.9785070271143868,
+      "maximum_vertex_turn_degrees": 178.67685833049381,
+      "rms_vertex_turn_degrees": 9.92129472354237
+    },
+    "workflow_output": {
+      "layers": 189,
+      "features": 15815,
+      "invalid_geometries": 0,
+      "empty_geometries": 0,
+      "determinism_digest": "b81659d641317b6deee9beac0a94a6434ba5e87f9574827e8e453be59d2501cc"
+    },
+    "controlling_geometry_lock": {
+      "regions": 41,
+      "area_m2": 734359700.6967449,
+      "geometry_digest": "a462359e45ab7ce134beb2be1c2d0361defd2dad37389d80d0cb83fb312a48c0",
+      "controller_ids_digest": "61717c210bcdbd3c780c85362ff844440c2a82ed9c3173a0248219c412e79866"
+    },
+    "known_region_layer_overlap_m2": 0.108276
+  },
+  "adopted_projected_output": {
+    "method": "continuous_sampled_arc_with_lateral_zero_projection_and_0.05_m_simplification",
+    "timing": {
+      "runs": [19.38427133299956, 19.069295166000302, 18.820469915999638],
+      "median_total_seconds": 19.069295166000302,
+      "median_change_percent": -3.3852,
+      "median_stages": {
+        "region_solve": 6.297117124002398,
+        "boundary_generation": 2.700532208000368,
+        "comparison": 3.105925291998574,
+        "change_contours": 7.7192580419996375,
+        "modernisation_layers": 11.357378000000608
+      }
+    },
+    "transition_output": {
+      "features": 217,
+      "projected_axis_conical_features": 29
+    },
+    "interior_axis_conical_quality": {
+      "features": 29,
+      "pairs": 8,
+      "vertices": 212,
+      "length_m": 7405.649121330596,
+      "length_change_percent": 0.1650,
+      "sample_points": 1608,
+      "shared_elevation_min_m": 190.04799703058433,
+      "shared_elevation_max_m": 266.41943838499213,
+      "shared_elevation_range_m": 76.3714413544078,
+      "maximum_equality_residual_m": 0.006137155906458247,
+      "rms_equality_residual_m": 0.0005449816330387692,
+      "rms_equality_residual_change_percent": -35.8937,
+      "maximum_vertex_turn_degrees": 1.928739309037189,
+      "maximum_vertex_turn_change_percent": -98.9205,
+      "rms_vertex_turn_degrees": 0.9169624282949665
+    },
+    "workflow_output": {
+      "layers": 189,
+      "features": 15841,
+      "invalid_geometries": 0,
+      "empty_geometries": 0,
+      "determinism_digest": "b81659d641317b6deee9beac0a94a6434ba5e87f9574827e8e453be59d2501cc"
+    },
+    "controlling_geometry_unchanged": true,
+    "three_run_regression_gate_passed": true
+  }
+}

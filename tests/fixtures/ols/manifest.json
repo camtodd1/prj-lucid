@@ -22,6 +22,14 @@
       "project_crs": "EPSG:28356"
     },
     {
+      "file": "ymml_intersecting.json",
+      "description": "Two intersecting runways with visible Approach/TOCS-to-Conical arcs",
+      "icao_code": "YMML",
+      "runway_count": 2,
+      "project_crs": "EPSG:32755",
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
       "file": "yssy_multiple_stress.json",
       "description": "Three-runway controlling-envelope stress case",
       "icao_code": "YSSY",

@@ -1,3 +1,4 @@
+import math
 import unittest
 from unittest.mock import patch
 
@@ -6,6 +7,7 @@ from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle
 from guidelines.controlling_ols_engine import (
     ControllingOlsCandidate,
     PlanarControllingOlsEngine,
+    axis_elevation_evaluator,
     conical_elevation_evaluator,
     constant_elevation_evaluator,
     plane_elevation_evaluator,
@@ -813,7 +815,89 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
         self.assertEqual(controller_probe.call_count, 7)
         self.assertLess(len(records), controller_probe.call_count)
-        self.assertTrue(all(record[1][-1] == "region_boundary_merged" for record in records))
+        self.assertTrue(all(record[1][5] == "region_boundary_merged" for record in records))
+
+    def test_axis_conical_output_uses_smooth_equal_height_curve(self):
+        base = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        overlap = QgsGeometry.fromRect(QgsRectangle(100.0, 100.0, 150.0, 150.0))
+        origin = QgsPointXY(100.0, 100.0)
+        axis = ControllingOlsCandidate(
+            "axis",
+            "Approach",
+            overlap,
+            axis_elevation_evaluator(origin, 90.0, 101.0, 0.02, 100.0),
+            "axis",
+            {
+                "origin_x": 100.0,
+                "origin_y": 100.0,
+                "origin_elevation_m": 101.0,
+                "slope": 0.02,
+                "max_distance_m": 100.0,
+                "azimuth_degrees": 90.0,
+            },
+        )
+        conical = ControllingOlsCandidate(
+            "conical",
+            "Conical",
+            overlap,
+            conical_elevation_evaluator(base, 100.0, 0.05, 100.0),
+            "conical",
+            {
+                "base_footprint": base,
+                "base_elevation_m": 100.0,
+                "slope": 0.05,
+                "max_distance_m": 100.0,
+            },
+        )
+        engine = PlanarControllingOlsEngine([axis, conical])
+        sampled_reference = engine._axis_conical_transition_curve(
+            engine._axis_model(axis),
+            engine._conical_model(conical),
+            overlap,
+        )
+        curves = engine._axis_conical_output_transition_lines(
+            axis,
+            conical,
+            sampled_reference,
+        )
+
+        self.assertTrue(curves)
+        residuals = []
+        shared_elevations = []
+        maximum_turn = 0.0
+        for curve in curves:
+            sampled = curve.densifyByDistance(1.0)
+            for points in engine._line_parts(sampled):
+                for point in points:
+                    axis_z = axis.elevation_at_xy(point)
+                    conical_z = conical.elevation_at_xy(point)
+                    self.assertIsNotNone(axis_z)
+                    self.assertIsNotNone(conical_z)
+                    residuals.append(abs(axis_z - conical_z))
+                    shared_elevations.append((axis_z + conical_z) / 2.0)
+            for points in engine._line_parts(curve):
+                for previous, current, following in zip(points[:-2], points[1:-1], points[2:]):
+                    first_dx = current.x() - previous.x()
+                    first_dy = current.y() - previous.y()
+                    second_dx = following.x() - current.x()
+                    second_dy = following.y() - current.y()
+                    first_length = (first_dx * first_dx + first_dy * first_dy) ** 0.5
+                    second_length = (second_dx * second_dx + second_dy * second_dy) ** 0.5
+                    if first_length <= 1e-9 or second_length <= 1e-9:
+                        continue
+                    cosine = max(
+                        -1.0,
+                        min(
+                            1.0,
+                            ((first_dx * second_dx) + (first_dy * second_dy))
+                            / (first_length * second_length),
+                        ),
+                    )
+                    maximum_turn = max(maximum_turn, math.degrees(math.acos(cosine)))
+
+        self.assertLess(max(residuals), 0.01)
+        self.assertLess(maximum_turn, 15.0)
+        self.assertGreater(max(shared_elevations) - min(shared_elevations), 0.1)
 
     def test_axis_conical_chord_error_does_not_create_second_cell_boundary(self):
         axis = ControllingOlsCandidate(
