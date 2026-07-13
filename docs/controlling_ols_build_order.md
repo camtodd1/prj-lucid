@@ -167,7 +167,8 @@ Acceptance criteria:
 - conical controls only where it is lower than IHS/OHS/approach/TOCS/
   transitional candidates;
 - conical contours clip correctly against all lower controlling regions;
-- known conical alignment issues are tracked separately from controlling logic.
+- Approach/TOCS and Conical polygons use one continuous shared equality edge,
+  without detached wedges, slivers, or intervening gaps.
 
 ### 7. Performance and Output Hygiene
 
@@ -202,8 +203,9 @@ next milestone.
 
 ## Planar And Conical Milestone Status
 
-Status: implemented with defined partial coverage for controlling regions with
-planar, transitional, and conical candidates.
+Status: implemented and locked for MOS139 controlling regions with planar,
+transitional, and conical candidates. Modernised Annex 14 OFS/OES remains a
+separate partial workflow.
 
 The current implementation generates:
 
@@ -267,6 +269,21 @@ crossings along grid-cell edges, and uses that curve as preferred linework for
 the global cell solver and region splitting. The older analytical
 axis-vs-conical curve remains as a fallback.
 
+The zero contour is the single construction boundary. The solver must not
+subsequently triangulate the same MOS139 cell onto a different chord when the
+sampled residual is within the bounded curved-surface allowance. Polygonized
+MOS139 conical cells are retained down to 0.001 m²; discarding these small faces
+previously produced a narrow gap which, when filled wholesale, became a false
+Approach/Conical wedge. Both owning polygons now inherit the identical noded
+curve. Adjacent diagnostic edge segments are line-merged by canonical
+controller pair after region construction.
+
+The accepted YBBN intersection had a measured equal-elevation residual between
+approximately 0.00002 m and 0.00446 m along the reviewed shared edge. The same
+construction was visually accepted for YSSY, YSWS, and YMML; YMML used
+EPSG:32755, demonstrating that the metric projected-CRS implementation is not
+tied to the EPSG:28356 fixture environment.
+
 No-OLS strip-core exclusion masks are applied before competition. These masks
 suppress IHS, OHS, Approach, TOCS, and Transitional candidate footprints within
 the runway strip core/lower-edge corridor where no OLS surface should be
@@ -323,9 +340,8 @@ tracked centrally in `docs/TODO.md`.
 
 Known remaining limitations:
 
-- transition-edge diagnostics remain secondary to the region layer and should
-  be rechecked as contour clipping and any promoted transition outputs are
-  introduced.
+- transition-edge diagnostics remain secondary to the locked MOS139 region
+  layer; modernised Annex 14 topology and promotion remain separate work.
 
 ### Contour Clipping Checkpoint
 

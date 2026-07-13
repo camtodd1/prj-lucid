@@ -110,25 +110,23 @@ Assumptions for Review
 Recommended sequence is MOS139 controlling OLS first, followed by modernised Annex 14 OFS/OES and comparison.
 Mandatory evidence is regulation traceability plus an independent analytical oracle; external peer-tool comparison is supplementary rather than required.
 Broad recovery repairs may remain available for diagnostics, but activation prevents a production-supported result.
-Implementation status: tranche 1 diagnostics and regression reporting are now
-implemented. Geometry construction remains unchanged while these diagnostics
-establish the attributable pre-hardening baseline. Use `--production-gates` to
-reject exceptional recovery or unresolved comparisons; the current performance
-fixtures are expected to expose (and therefore fail on) known downstream repair
-until tranches 2–4 eliminate those activations.
+Implementation status: tranche 1 diagnostics and regression reporting are
+implemented. Use `--production-gates` to reject exceptional recovery or
+unresolved comparisons.
 
-Tranche 2/3 progress: the global solver now audits polygonize coverage and
-records unanimous and ambiguous omitted cells without mutating production
-geometry. Applying those cells is deliberately blocked because the intersecting
-and stress benchmarks showed changed OES classifications. An exact shared-edge
-cell-adjacency network is now constructed as the authoritative internal
-topology, without rounded coordinate keys or across-edge probes. The historical
-probed transition layer remains diagnostic and unchanged for output-contract
-compatibility during the first production release. Production gates require the
-adjacency network and reject either class of unapplied coverage gap.
+Tranche 2/3 progress: the global solver constructs exact shared-edge adjacency
+without rounded coordinate keys or across-edge probes. For locked MOS139
+axis/conical cases, one sampled zero contour is authoritative, polygonized cells
+are retained down to 0.001 m², and a second mismatched triangulation chord is not
+introduced. Diagnostic transition segments are merged by controller pair.
+Annex 14 OFS/OES retains its original 1 m² cell threshold and remains outside
+the MOS139 compatibility lock.
 
 MOS139 disposition: accepted and locked on 12 July 2026. Its current controlling
 geometry is promoted to `supported` under the explicit compatibility contract
 in `docs/mos139_controlling_ols_lock.md`. Remaining topology and comparison
 hardening applies to modernised Annex 14 OFS/OES and must not alter the locked
-MOS139 controller identities or geometry digests.
+MOS139 controller identities or geometry digests. Final acceptance included
+YBBN, YSSY intersecting, YSWS parallel, and YSSY stress machine locks, plus
+manual visual confirmation of YMML in EPSG:32755. The committed MOS139 cases
+have zero unassigned or ambiguous cells and zero normal-path recovery activation.

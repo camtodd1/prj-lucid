@@ -5,7 +5,7 @@ ruleset metadata, implementation notes, tests, and TODO ledger. It is intended
 as a practical working list for deciding what to validate, consolidate, and
 build next.
 
-Last reviewed: 2026-07-11.
+Last reviewed: 2026-07-12.
 
 ## High Confidence Delivery
 
@@ -205,19 +205,27 @@ Last reviewed: 2026-07-11.
   - Keep the ruleset gated as a draft future standard and retain the
     21 November 2030 applicability warning.
 
-- [ ] Harden the Controlling OLS engine.
+- [x] Stabilise and lock the MOS139 Controlling OLS engine.
 
-  Work items:
-  - Reduce reliance on ring despiking, `buffer(0)`, and local coverage repair.
-  - Expand source-backed validation of axis/conical equality handling beyond the
-    current four-airport regression set.
-  - Replace coordinate-key transition de-duplication with adjacency-derived
-    topology if transition diagnostics are promoted.
-  - Define the general fallback policy for equal candidates not covered by the
-    explicit family and nested-surface priorities.
-  - Preserve current performance checkpoints: solved-envelope reuse, lazy
-    candidate spatial indexing, cached boundary probes, prepared contour
-    clipping, and pair/level contour caches.
+  Completed:
+  - MOS139 axis/conical equality uses one sampled zero contour as authoritative
+    construction linework; no independent TIN boundary is introduced afterward.
+  - Sub-metre polygonized cells are retained at the curve, eliminating the
+    detached Approach/TOCS wedges and visible Conical gaps seen during YBBN
+    troubleshooting.
+  - Shared region edges are merged by controller pair for continuous diagnostic
+    transitions, while controlling polygons remain the authoritative product.
+  - YBBN, YSSY intersecting, YSWS parallel, and YSSY stress fixtures have zero
+    unassigned/ambiguous cells and zero MOS139 recovery activation. Manual
+    visual validation passed YMML in projected metre CRS EPSG:32755.
+  - Final controller IDs, region counts, areas, and geometry digests are frozen
+    by the 12 July 2026 MOS139 compatibility lock.
+
+- [ ] Continue production hardening for modernised Annex 14 OFS/OES.
+
+  Remaining work is isolated from the locked MOS139 geometry and includes
+  source-backed validation, complex transitional components, release timing,
+  and removal of Annex-specific final partition recovery.
 
 - [x] Finish MOS139 stopway geometry.
 
@@ -412,3 +420,8 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
       polygons and OES retains only four broad, exactly equal regions. Across
       the four fixtures the narrowest legitimate unchanged region had a
       74.5 m area/perimeter width proxy.
+- [x] 2026-07-12: MOS139 curved Approach/TOCS-to-Conical boundaries were
+      stabilised and accepted after visual checks at YBBN, YSSY, YSWS, and YMML.
+      YMML passed in EPSG:32755; the committed YBBN/YSSY/YSWS matrix completed
+      with zero MOS139 gaps, refinements, fallbacks, or repairs. The accepted
+      signatures are enforced by the MOS139 compatibility lock.

@@ -62,7 +62,7 @@
       },
       "output": {
         "layers": 185,
-        "features": 17706,
+        "features": 14971,
         "invalid_geometries": 0,
         "empty_geometries": 0,
         "duplicate_comparison_ids": 0
@@ -94,7 +94,7 @@
       },
       "output": {
         "layers": 182,
-        "features": 16225,
+        "features": 13692,
         "invalid_geometries": 0,
         "empty_geometries": 0,
         "duplicate_comparison_ids": 0
@@ -126,7 +126,7 @@
       },
       "output": {
         "layers": 249,
-        "features": 24976,
+        "features": 20428,
         "invalid_geometries": 0,
         "empty_geometries": 0,
         "duplicate_comparison_ids": 0

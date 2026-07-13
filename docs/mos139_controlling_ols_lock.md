@@ -21,12 +21,16 @@ enforced automatically by `tests/run_ols_workflow_regression.py`. Updating that
 file is an explicit compatibility change requiring user approval; it must not
 be refreshed simply to make a failing test pass.
 
-The lock was superseded once on 12 July 2026 to correct duplicated ownership at
-MOS139 Conical intersections. All Conical/axis merged overlaps are now resolved
-from one lower-envelope result and its complement. The corrected four-fixture
-matrix has zero cross-controller overlap; YBBN specifically resolves two
-TOCS/Conical strips totalling 7.176229 m². The regression runner now treats any
-controlling-region overlap above 0.001 m² as a hard failure.
+The lock was superseded during its 12 July 2026 acceptance session to correct
+curved MOS139 Conical intersections. Approach/TOCS and Conical now share one
+zero-contour boundary; small polygonized faces are retained rather than dropped
+and later filled as false wedges. The corrected four-fixture matrix has stable
+controller identities and zero unassigned cells, ambiguous gaps, curved-cell
+refinements, solver fallbacks, or MOS139 repair activation.
+
+Visual acceptance covered YBBN, YSSY, and YSWS in the committed projected-metre
+test environment, plus YMML in EPSG:32755. YMML is manual cross-CRS evidence and
+does not add an unreviewed generated fixture to the machine lock.
 
 ## Supported families and retained behaviour
 
@@ -39,3 +43,21 @@ hardening must not change MOS139 geometry.
 Supported runtime: QGIS 4.0.2 Norrköping, using the committed memory-output
 fixture matrix. File-output behavior remains governed by the existing plugin
 output tests and does not alter the geometry lock.
+
+## Locked curved-boundary construction
+
+For MOS139 Approach/TOCS-to-Conical competition:
+
+1. evaluate `z_axis - z_conical` over the exact 2D footprint overlap;
+2. interpolate and node the zero contour as the one shared construction edge;
+3. retain polygonized conical cells down to 0.001 m² so the curve is not opened
+   by minimum-area filtering;
+4. do not introduce a second triangulated chord for bounded residual disagreement;
+5. assign cells by the lower evaluator and dissolve same-controller neighbours;
+6. derive diagnostic transitions from final shared adjacency, merging connected
+   segments by canonical controller pair.
+
+The reviewed YBBN problem edge had an observed vertical equality residual of
+approximately 0.00002–0.00446 m. The global diagnostics retain the explicit
+curved approximation allowance, while the accepted output remains fixed by the
+geometry digests and zero-gap gates above.

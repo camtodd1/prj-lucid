@@ -161,6 +161,23 @@
     the start of profiling to approximately 27–29 seconds on the current local
     QGIS 4.0.2 environment.
 
+- [x] Stabilise and lock MOS139 Approach/TOCS-to-Conical intersections.
+
+  Completed:
+  - Construct the shared boundary once from the zero contour of
+    `z_axis - z_conical` over the projected overlap.
+  - Retain MOS139 conical subdivision cells down to 0.001 m² so the two owning
+    polygons reuse the same curve rather than creating a repaired wedge or gap.
+  - Suppress a second triangulated boundary when cell disagreement is within
+    the documented curved-chord allowance, and merge adjacent transition
+    segments by controller pair for diagnostic output.
+  - Lock the corrected YBBN, YSSY intersecting, YSWS parallel, and YSSY stress
+    signatures. Manual review also passed YMML in EPSG:32755, confirming the
+    approach outside the EPSG:28356 fixture CRS.
+  - This MOS139 work is stable. Further curved-surface work in the production
+    readiness list applies to the separate Annex 14 OFS/OES workflow unless a
+    locked MOS139 regression is explicitly approved.
+
 - [x] Improve the OLS tab workflow selection and validation.
 
   Completed:
@@ -200,17 +217,18 @@
   Topology hardening:
   - [ ] Prevent invalid, self-returning, and out-and-back rings during primary
         region construction instead of relying on post-processing repair.
-  - [ ] Root-cause every normal-fixture coverage gap and make the primary
-        lower-envelope solve complete without local gap filling.
+  - [x] Root-cause normal MOS139 fixture coverage gaps and make its primary
+        conical lower-envelope solve complete without local gap filling.
   - [ ] Reduce `buffer(0)`, ring-despiking, geometry-collection extraction, and
         other broad repair fallbacks to exceptional, instrumented safeguards.
-  - [ ] Decide and document whether same-controller dissolves are canonical
-        output normalisation or a temporary fragmentation workaround.
-  - [ ] Replace coordinate-rounded transition de-duplication with
-        adjacency-derived topology before transition boundaries are considered
-        user-facing outputs.
-  - [ ] Rationalise equality, minimum-area, boundary snap, and contour-clipping
-        tolerances, with units, justification, and regression tests for each.
+  - [x] Document same-controller dissolves as canonical MOS139 output
+        normalisation after the shared subdivision is complete.
+  - [x] Replace coordinate-rounded MOS139 transition de-duplication with final
+        shared-edge adjacency and connected-line merging. Transition output
+        remains diagnostic.
+  - [x] Document the MOS139 conical equality residual, 0.001 m² cell-retention
+        threshold, and bounded chord-disagreement rule. Annex-specific tolerance
+        rationalisation remains part of its separate production workstream.
   - [ ] Preserve explicit OFS/OES and Inner Approach/Approach tie priorities and
         define a deterministic fallback for otherwise equivalent candidates.
 

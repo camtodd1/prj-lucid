@@ -41,7 +41,8 @@ CONTROLLING_CONTOUR_CLIP_TOLERANCE_M = 0.05
 CONTROLLING_CONTOUR_STRICT_BOUNDARY_TOLERANCE_M = 0.001
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
-CONTROLLING_GLOBAL_CELL_MIN_AREA_M2 = 1e-3
+CONTROLLING_GLOBAL_CELL_MIN_AREA_M2 = 1.0
+CONTROLLING_MOS139_CONICAL_CELL_MIN_AREA_M2 = 1e-3
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
 AXIS_CONICAL_VERTEX_CURVE_CHORD_TOLERANCE_M = 0.25
@@ -991,8 +992,17 @@ class PlanarControllingOlsEngine:
         assigned_count = 0
         unassigned_count = 0
         refined_count = 0
+        minimum_cell_area_m2 = (
+            CONTROLLING_MOS139_CONICAL_CELL_MIN_AREA_M2
+            if any(
+                candidate.model == "conical"
+                and not str((candidate.metadata or {}).get("annex14_family") or "").strip()
+                for candidate in self.candidates
+            )
+            else CONTROLLING_GLOBAL_CELL_MIN_AREA_M2
+        )
         for cell in self._polygon_parts(polygonized):
-            if not self._has_polygon_area(cell, min_area=CONTROLLING_GLOBAL_CELL_MIN_AREA_M2):
+            if not self._has_polygon_area(cell, min_area=minimum_cell_area_m2):
                 continue
             cell_count += 1
             controller = self._controlling_candidate_for_cell(cell)
@@ -1007,7 +1017,7 @@ class PlanarControllingOlsEngine:
                     for refined_candidate, refined_geometry in refined_parts:
                         if not self._has_polygon_area(
                             refined_geometry,
-                            min_area=CONTROLLING_GLOBAL_CELL_MIN_AREA_M2,
+                            min_area=minimum_cell_area_m2,
                         ):
                             continue
                         cell_parts.append((refined_candidate, refined_geometry))
@@ -1021,7 +1031,7 @@ class PlanarControllingOlsEngine:
             for part in self._polygon_parts(clipped_cell):
                 if not self._has_polygon_area(
                     part,
-                    min_area=CONTROLLING_GLOBAL_CELL_MIN_AREA_M2,
+                    min_area=minimum_cell_area_m2,
                 ):
                     continue
                 cell_parts.append((candidate, part))
