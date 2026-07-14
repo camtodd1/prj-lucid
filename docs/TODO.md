@@ -221,8 +221,12 @@
 - [x] Improve the OLS tab workflow selection and validation.
 
   Completed:
-  - Baseline, future Annex 14, and modernisation-comparison modes are explicit
-    on the OLS tab while retaining the existing persisted policy identifiers.
+  - Baseline and optional comparison OLS rulesets use the same two-column
+    presentation as primary and reciprocal runway-end inputs.
+  - `None — baseline only` generates the selected baseline without comparison
+    layers; legacy protected-airspace policy identifiers remain loadable.
+  - Rulesets without an available controlling-envelope capability remain
+    visible but disabled until their implementation is promoted.
   - OFS versus OES meaning is explained in future/comparison modes.
   - Mode-specific contour rows replace the previous always-expanded table.
   - OLS readiness and ADG requirements are shown inline beside the workflow.

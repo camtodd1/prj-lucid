@@ -3,6 +3,15 @@
 from qgis.PyQt import QtCore, QtWidgets  # type: ignore
 from qgis.core import QgsMessageLog, Qgis  # type: ignore
 
+try:
+    from ..rulesets.registry import (
+        DEFAULT_RULESET_ID,
+        get_ruleset_profile,
+        iter_ruleset_profiles,
+    )
+except ImportError:
+    from rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile, iter_ruleset_profiles  # type: ignore
+
 from .dialog_constants import (
     ANNEX14_FAMILY_CONTOUR_KEYS,
     CONTOUR_INTERVAL_KEYS,
@@ -81,12 +90,12 @@ class OutputOptionsMixin:
         self._on_output_option_changed()
 
     def _setup_ols_workflow_control(self):
-        """Move the persisted OLS policy selector into a compact workflow card."""
+        """Create side-by-side baseline and comparison OLS selectors."""
         parent_layout = getattr(self, "verticalLayout_olsTab", None)
-        combo = getattr(self, "protected_airspace_policy_combo", None)
-        if parent_layout is None or combo is None:
+        legacy_combo = getattr(self, "protected_airspace_policy_combo", None)
+        if parent_layout is None:
             QgsMessageLog.logMessage(
-                "OLS workflow mode setup skipped: tab layout or policy selector missing.",
+                "OLS workflow setup skipped: tab layout missing.",
                 DIALOG_LOG_TAG,
                 level=Qgis.Warning,
             )
@@ -104,37 +113,87 @@ class OutputOptionsMixin:
         grid.setContentsMargins(12, 14, 12, 12)
         grid.setHorizontalSpacing(12)
         grid.setVerticalSpacing(8)
-        grid.setColumnStretch(0, 0)
+        grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
 
-        old_layout = combo.parentWidget().layout() if combo.parentWidget() is not None else None
-        if old_layout is not None:
-            old_layout.removeWidget(combo)
+        if legacy_combo is not None:
+            old_layout = (
+                legacy_combo.parentWidget().layout()
+                if legacy_combo.parentWidget() is not None
+                else None
+            )
+            if old_layout is not None:
+                old_layout.removeWidget(legacy_combo)
+            legacy_combo.hide()
         old_label = getattr(self, "label_protected_airspace_policy", None)
         if old_label is not None:
             old_label.hide()
 
-        mode_label = QtWidgets.QLabel(self.tr("Workflow mode"))
-        mode_label.setObjectName("label_olsWorkflowMode")
-        mode_label.setStyleSheet("font-weight: 600;")
-        combo.setMinimumWidth(320)
-        combo.setMaximumWidth(520)
-        combo.setItemText(0, self.tr("Baseline — selected design standard"))
-        combo.setItemText(1, self.tr("Future Annex 14 — OFS/OES only"))
-        combo.setItemText(2, self.tr("Modernisation comparison — baseline vs future"))
-        combo.setToolTip(
+        baseline_label = QtWidgets.QLabel(self.tr("Baseline OLS"))
+        baseline_label.setObjectName("label_baselineOlsRuleset")
+        baseline_label.setStyleSheet("font-weight: 600;")
+        comparison_label = QtWidgets.QLabel(self.tr("Comparison OLS"))
+        comparison_label.setObjectName("label_comparisonOlsRuleset")
+        comparison_label.setStyleSheet("font-weight: 600;")
+
+        baseline_combo = QtWidgets.QComboBox()
+        baseline_combo.setObjectName("comboBox_baseline_ols_ruleset")
+        comparison_combo = QtWidgets.QComboBox()
+        comparison_combo.setObjectName("comboBox_comparison_ols_ruleset")
+        comparison_combo.addItem(self.tr("None — baseline only"), userData="")
+        self._available_ols_ruleset_ids = set()
+        profiles = tuple(iter_ruleset_profiles())
+        for profile in profiles:
+            available = self._ols_profile_available(profile)
+            label = profile.display_name
+            if not available:
+                label = self.tr(f"{label} — controlling OLS unavailable")
+            baseline_combo.addItem(label, userData=profile.id)
+            comparison_combo.addItem(label, userData=profile.id)
+            if available:
+                self._available_ols_ruleset_ids.add(profile.id)
+            for ruleset_combo in (baseline_combo, comparison_combo):
+                item = ruleset_combo.model().item(ruleset_combo.count() - 1)
+                if item is not None:
+                    item.setEnabled(available)
+                    if not available:
+                        item.setToolTip(
+                            self.tr(
+                                "This ruleset will become selectable when its controlling OLS capability is available."
+                            )
+                        )
+
+        initial_ruleset = DEFAULT_RULESET_ID
+        design_combo = getattr(self, "ruleset_combo", None)
+        if design_combo is not None and design_combo.currentData():
+            initial_ruleset = str(design_combo.currentData())
+        initial_index = baseline_combo.findData(initial_ruleset)
+        if initial_ruleset not in self._available_ols_ruleset_ids:
+            initial_index = baseline_combo.findData(DEFAULT_RULESET_ID)
+        baseline_combo.setCurrentIndex(max(0, initial_index))
+
+        baseline_combo.setMinimumWidth(280)
+        comparison_combo.setMinimumWidth(280)
+        baseline_combo.setToolTip(
             self.tr(
-                "Choose the protected-airspace calculation. The saved policy identifiers remain unchanged."
+                "Ruleset used to generate the reference controlling OLS envelope."
             )
         )
-        grid.addWidget(mode_label, 0, 0)
-        grid.addWidget(combo, 0, 1)
+        comparison_combo.setToolTip(
+            self.tr(
+                "Optional second controlling OLS envelope. Select None to generate only the baseline."
+            )
+        )
+        grid.addWidget(baseline_label, 0, 0)
+        grid.addWidget(comparison_label, 0, 1)
+        grid.addWidget(baseline_combo, 1, 0)
+        grid.addWidget(comparison_combo, 1, 1)
 
         description = QtWidgets.QLabel()
         description.setObjectName("label_olsModeDescription")
         description.setWordWrap(True)
         description.setStyleSheet("color: #3f4852;")
-        grid.addWidget(description, 1, 0, 1, 2)
+        grid.addWidget(description, 2, 0, 1, 2)
 
         family_frame = QtWidgets.QFrame()
         family_frame.setObjectName("frame_olsFamilyExplanation")
@@ -166,14 +225,18 @@ class OutputOptionsMixin:
         family_layout.addWidget(ofs_detail, 0, 1)
         family_layout.addWidget(oes_title, 1, 0)
         family_layout.addWidget(oes_detail, 1, 1)
-        grid.addWidget(family_frame, 2, 0, 1, 2)
+        grid.addWidget(family_frame, 3, 0, 1, 2)
 
         status = QtWidgets.QLabel()
         status.setObjectName("label_olsInlineStatus")
         status.setWordWrap(True)
         status.setMinimumHeight(30)
-        grid.addWidget(status, 3, 0, 1, 2)
+        grid.addWidget(status, 4, 0, 1, 2)
 
+        self.baseline_ols_ruleset_combo = baseline_combo
+        self.comparison_ols_ruleset_combo = comparison_combo
+        self.label_baselineOlsRuleset = baseline_label
+        self.label_comparisonOlsRuleset = comparison_label
         self.label_olsModeDescription = description
         self.frame_olsFamilyExplanation = family_frame
         self.label_olsOfsTitle = ofs_title
@@ -181,34 +244,148 @@ class OutputOptionsMixin:
         self.label_olsOesTitle = oes_title
         self.label_olsOesDetail = oes_detail
         self.label_olsInlineStatus = status
-        combo.currentIndexChanged.connect(self._update_ols_workflow_ui)
+        baseline_combo.currentIndexChanged.connect(self._on_ols_ruleset_selection_changed)
+        comparison_combo.currentIndexChanged.connect(self._on_ols_ruleset_selection_changed)
+        self._update_comparison_ols_ruleset_items()
+        self._sync_legacy_ols_policy()
+
+    @staticmethod
+    def _ols_profile_available(profile) -> bool:
+        """Return whether a ruleset can currently produce a controlling envelope."""
+        try:
+            return profile.capability_status("ols.controlling_lower_envelope") in {
+                "supported",
+                "partial",
+                "experimental",
+            }
+        except Exception:
+            return False
+
+    def _current_ols_ruleset_ids(self):
+        baseline_combo = getattr(self, "baseline_ols_ruleset_combo", None)
+        comparison_combo = getattr(self, "comparison_ols_ruleset_combo", None)
+        baseline_id = (
+            str(baseline_combo.currentData() or DEFAULT_RULESET_ID)
+            if baseline_combo is not None
+            else DEFAULT_RULESET_ID
+        )
+        comparison_id = (
+            str(comparison_combo.currentData() or "")
+            if comparison_combo is not None
+            else ""
+        )
+        return baseline_id, comparison_id
+
+    def _legacy_ols_policy_for_selection(self) -> str:
+        """Map explicit ruleset choices onto legacy processing policy identifiers."""
+        baseline_id, comparison_id = self._current_ols_ruleset_ids()
+        modernised_id = "icao_annex14_vol1_modernised_ofs_oes"
+        if not comparison_id:
+            return (
+                "future_annex14_ofs_oes"
+                if baseline_id == modernised_id
+                else "ruleset_aligned"
+            )
+        if comparison_id == modernised_id and baseline_id != modernised_id:
+            return "modernisation_comparison"
+        return "ruleset_comparison"
+
+    def _sync_legacy_ols_policy(self) -> None:
+        legacy_combo = getattr(self, "protected_airspace_policy_combo", None)
+        if legacy_combo is None:
+            return
+        policy = self._legacy_ols_policy_for_selection()
+        index = legacy_combo.findData(policy)
+        if index < 0:
+            legacy_combo.addItem(policy, userData=policy)
+            index = legacy_combo.count() - 1
+        blocked = legacy_combo.blockSignals(True)
+        legacy_combo.setCurrentIndex(index)
+        legacy_combo.blockSignals(blocked)
+
+    def _update_comparison_ols_ruleset_items(self) -> None:
+        baseline_id, comparison_id = self._current_ols_ruleset_ids()
+        comparison_combo = getattr(self, "comparison_ols_ruleset_combo", None)
+        if comparison_combo is None:
+            return
+        if comparison_id and not self._ols_pair_available(baseline_id, comparison_id):
+            comparison_combo.setCurrentIndex(0)
+            comparison_id = ""
+        available_ids = getattr(self, "_available_ols_ruleset_ids", set())
+        for index in range(1, comparison_combo.count()):
+            ruleset_id = str(comparison_combo.itemData(index) or "")
+            item = comparison_combo.model().item(index)
+            if item is not None:
+                item.setEnabled(
+                    ruleset_id in available_ids
+                    and self._ols_pair_available(baseline_id, ruleset_id)
+                )
+
+    @staticmethod
+    def _ols_pair_available(baseline_id: str, comparison_id: str) -> bool:
+        """Return whether the current comparison adapter supports the pair."""
+        if not comparison_id:
+            return True
+        return baseline_id != comparison_id
+
+    def _on_ols_ruleset_selection_changed(self, *_args) -> None:
+        self._update_comparison_ols_ruleset_items()
+        self._sync_legacy_ols_policy()
+        self._update_ols_workflow_ui()
+        if hasattr(self, "update_dialog_status"):
+            self.update_dialog_status()
+
+    def _set_ols_ruleset_selection(self, baseline_id, comparison_id="") -> None:
+        """Apply saved explicit OLS ruleset IDs to the selector pair."""
+        baseline_combo = getattr(self, "baseline_ols_ruleset_combo", None)
+        comparison_combo = getattr(self, "comparison_ols_ruleset_combo", None)
+        if baseline_combo is None or comparison_combo is None:
+            return
+        baseline_id = str(baseline_id or DEFAULT_RULESET_ID)
+        comparison_id = str(comparison_id or "")
+        baseline_index = baseline_combo.findData(baseline_id)
+        if baseline_index < 0 or baseline_id not in getattr(self, "_available_ols_ruleset_ids", set()):
+            baseline_index = baseline_combo.findData(DEFAULT_RULESET_ID)
+        baseline_blocked = baseline_combo.blockSignals(True)
+        comparison_blocked = comparison_combo.blockSignals(True)
+        baseline_combo.setCurrentIndex(max(0, baseline_index))
+        comparison_index = comparison_combo.findData(comparison_id)
+        comparison_combo.setCurrentIndex(comparison_index if comparison_index >= 0 else 0)
+        baseline_combo.blockSignals(baseline_blocked)
+        comparison_combo.blockSignals(comparison_blocked)
+        self._update_comparison_ols_ruleset_items()
+        self._sync_legacy_ols_policy()
+        self._update_ols_workflow_ui()
 
     def _update_ols_workflow_ui(self, *_args, dependency_status=None, runway_count=None):
         """Apply mode-specific guidance, controls, and inline readiness state."""
-        combo = getattr(self, "protected_airspace_policy_combo", None)
-        if combo is None:
-            return
-        mode = str(combo.currentData() or "ruleset_aligned")
+        baseline_id, comparison_id = self._current_ols_ruleset_ids()
         count = len(getattr(self, "_runway_groups", {})) if runway_count is None else int(runway_count)
-        descriptions = {
-            "ruleset_aligned": self.tr(
-                f"Selected-standard protected airspace for {count} runway(s). Standard workload."
-            ),
-            "future_annex14_ofs_oes": self.tr(
-                f"Future Annex 14 OFS/OES for {count} runway(s), without baseline comparison layers. Moderate workload."
-            ),
-            "modernisation_comparison": self.tr(
-                f"Baseline, future OFS/OES, and gain/loss comparison products for {count} runway(s). Highest workload."
-            ),
-        }
+        baseline_profile = get_ruleset_profile(baseline_id)
+        comparison_profile = get_ruleset_profile(comparison_id) if comparison_id else None
+        if comparison_profile is None:
+            description_text = self.tr(
+                f"{baseline_profile.display_name} baseline for {count} runway(s), with no comparison. Standard workload."
+            )
+        else:
+            description_text = self.tr(
+                f"{baseline_profile.display_name} baseline compared with {comparison_profile.display_name} "
+                f"for {count} runway(s). Highest workload."
+            )
         if hasattr(self, "label_olsModeDescription"):
-            self.label_olsModeDescription.setText(descriptions.get(mode, descriptions["ruleset_aligned"]))
+            self.label_olsModeDescription.setText(description_text)
+        modernised_id = "icao_annex14_vol1_modernised_ofs_oes"
+        annex_selected = modernised_id in {baseline_id, comparison_id}
+        conventional_selected = any(
+            ruleset_id and ruleset_id != modernised_id
+            for ruleset_id in (baseline_id, comparison_id)
+        )
         if hasattr(self, "frame_olsFamilyExplanation"):
-            self.frame_olsFamilyExplanation.setVisible(mode != "ruleset_aligned")
+            self.frame_olsFamilyExplanation.setVisible(annex_selected)
 
         checkbox = getattr(self, "checkBox_generateControllingOls", None)
         if checkbox is not None:
-            comparison_required = mode == "modernisation_comparison"
+            comparison_required = bool(comparison_id)
             if comparison_required:
                 checkbox.setChecked(True)
             checkbox.setEnabled(not comparison_required)
@@ -223,7 +400,7 @@ class OutputOptionsMixin:
                 else self.tr("Controlling envelope layers")
             )
             checkbox.setToolTip(
-                self.tr("Required because comparison polygons use the solved baseline and future controlling envelopes.")
+                self.tr("Required because comparison polygons use both solved controlling envelopes.")
                 if comparison_required
                 else self.tr("Include solved controlling regions, transitions, and clipped controlling contours.")
             )
@@ -233,16 +410,14 @@ class OutputOptionsMixin:
         contour_group = getattr(self, "groupBox_contourIntervals", None)
         if contour_group is not None:
             contour_group.setTitle(
-                self.tr("Contours — Baseline and Future")
-                if mode == "modernisation_comparison"
-                else self.tr("Contours — Future OFS/OES")
-                if mode == "future_annex14_ofs_oes"
+                self.tr("Contours — Baseline and Comparison")
+                if comparison_id
                 else self.tr("Contours — Baseline OLS")
             )
 
         future_family_widget = getattr(self, "widgetModernisationContourIntervals", None)
         if future_family_widget is not None:
-            future_family_widget.setVisible(mode != "ruleset_aligned")
+            future_family_widget.setVisible(annex_selected)
         for header_name in (
             "labelModernisationChangeIntervals",
             "labelModernisationChangePrimaryHeader",
@@ -250,14 +425,14 @@ class OutputOptionsMixin:
         ):
             header = getattr(self, header_name, None)
             if header is not None:
-                header.setVisible(mode == "modernisation_comparison")
+                header.setVisible(bool(comparison_id) and annex_selected)
         overrides_button = getattr(self, "toolButtonContourOverrides", None)
         if overrides_button is not None:
-            overrides_button.setVisible(mode != "future_annex14_ofs_oes")
+            overrides_button.setVisible(conventional_selected)
         overrides_widget = getattr(self, "widgetContourOverrides", None)
         if overrides_widget is not None:
             overrides_widget.setVisible(
-                mode != "future_annex14_ofs_oes"
+                conventional_selected
                 and bool(overrides_button and overrides_button.isChecked())
             )
 
@@ -265,11 +440,11 @@ class OutputOptionsMixin:
         comparison_keys = set(MODERNISATION_CHANGE_CONTOUR_KEYS)
         for key, label in getattr(self, "_contour_interval_labels", {}).items():
             visible = (
-                key not in annex_keys | comparison_keys
-                if mode == "ruleset_aligned"
-                else key in annex_keys
-                if mode == "future_annex14_ofs_oes"
-                else True
+                annex_selected
+                if key in annex_keys
+                else bool(comparison_id) and annex_selected
+                if key in comparison_keys
+                else conventional_selected
             )
             label.setVisible(visible)
             primary = getattr(self, "_contour_primary_interval_spinboxes", {}).get(key)

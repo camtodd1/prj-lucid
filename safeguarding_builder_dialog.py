@@ -843,7 +843,7 @@ class SafeguardingBuilderDialog(
                 "tab": "tab_ols",
                 "title": "Protected airspace",
                 "summary": "Workflow mode, readiness, contours, and controlling output",
-                "feeds": ["Baseline OLS", "Future OFS/OES", "Modernisation comparison"],
+                "feeds": ["Baseline OLS", "Comparison OLS", "Contour settings"],
                 "functions": [
                     "get_contour_interval_options()",
                     "_process_airport_wide_ols_if_possible()",
@@ -1055,13 +1055,15 @@ class SafeguardingBuilderDialog(
         return numeric
 
     def _current_policy_ids(self) -> Tuple[str, str]:
-        ruleset_combo = self._ruleset_combo_widget()
-        active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
+        baseline_ruleset_id = DEFAULT_RULESET_ID
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ruleset_id, _comparison_ruleset_id = self._current_ols_ruleset_ids()
         protected_airspace_policy = (
-            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+            self._legacy_ols_policy_for_selection()
+            if hasattr(self, "_legacy_ols_policy_for_selection")
+            else "ruleset_aligned"
         )
-        return str(active_ruleset_id or DEFAULT_RULESET_ID), str(protected_airspace_policy or "ruleset_aligned")
+        return str(baseline_ruleset_id or DEFAULT_RULESET_ID), str(protected_airspace_policy)
 
     def _airport_dependency_status(self, icao: str, iata: str) -> Dict[str, Any]:
         arp_values = [
@@ -1132,10 +1134,13 @@ class SafeguardingBuilderDialog(
         missing_elevations = 0
         missing_adg = 0
         runway_end_elevation_count = 0
-        requires_adg = (
-            active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
-            or protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}
-        )
+        comparison_ruleset_id = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            _baseline_ruleset_id, comparison_ruleset_id = self._current_ols_ruleset_ids()
+        requires_adg = "icao_annex14_vol1_modernised_ofs_oes" in {
+            active_ruleset_id,
+            comparison_ruleset_id,
+        }
 
         for group in self._runway_groups.values():
             data = group.get_input_data()
@@ -1349,12 +1354,18 @@ class SafeguardingBuilderDialog(
         active_ruleset_id: str,
         protected_airspace_policy: str,
     ) -> Dict[str, Any]:
-        if protected_airspace_policy == "modernisation_comparison" and active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes":
-            return {"state": "blocked", "summary": "Modernisation comparison needs a current baseline ruleset."}
+        comparison_ruleset_id = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            _baseline_ruleset_id, comparison_ruleset_id = self._current_ols_ruleset_ids()
+        if comparison_ruleset_id and comparison_ruleset_id == active_ruleset_id:
+            return {"state": "blocked", "summary": "Baseline and comparison OLS rulesets must be different."}
         if not airport_status.get("identity_ready"):
             return {"state": "blocked", "summary": "OLS needs a resolved ICAO airport identity."}
         if not runway_status.get("ready"):
-            if protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}:
+            if "icao_annex14_vol1_modernised_ofs_oes" in {
+                active_ruleset_id,
+                comparison_ruleset_id,
+            }:
                 adg_issues = [
                     str(issue)
                     for issue in runway_status.get("issues", [])
@@ -1371,26 +1382,53 @@ class SafeguardingBuilderDialog(
             ruleset_profile = get_ruleset_profile(active_ruleset_id)
             airport_wide_capability = ruleset_profile.capability_status("ols.airport_wide")
             controlling_capability = ruleset_profile.capability_status("ols.controlling_lower_envelope")
+            comparison_capability = (
+                get_ruleset_profile(comparison_ruleset_id).capability_status(
+                    "ols.controlling_lower_envelope"
+                )
+                if comparison_ruleset_id
+                else None
+            )
+            comparison_airport_wide_capability = (
+                get_ruleset_profile(comparison_ruleset_id).capability_status(
+                    "ols.airport_wide"
+                )
+                if comparison_ruleset_id
+                else None
+            )
         except Exception:
             airport_wide_capability = None
             controlling_capability = None
+            comparison_capability = None
+            comparison_airport_wide_capability = None
 
-        needs_red = airport_wide_capability not in {None, "unsupported"}
+        modernised_id = "icao_annex14_vol1_modernised_ofs_oes"
+        needs_red = any(
+            ruleset_id
+            and ruleset_id != modernised_id
+            and capability not in {None, "unsupported"}
+            for ruleset_id, capability in (
+                (active_ruleset_id, airport_wide_capability),
+                (comparison_ruleset_id, comparison_airport_wide_capability),
+            )
+        )
         red_ready = airport_status.get("arp_elev_ready") and runway_status.get("red_elevation_ready")
         review = []
-        if needs_red and not red_ready and protected_airspace_policy != "future_annex14_ofs_oes":
+        if needs_red and not red_ready:
             review.append("airport-wide/secondary OLS needs ARP elevation and runway-end elevations")
-        if not airport_status.get("arp_pair_ready") and airport_wide_capability not in {None, "unsupported"}:
+        if not airport_status.get("arp_pair_ready") and needs_red:
             review.append("ARP coordinates needed for airport-wide safeguarding references")
         if hasattr(self, "checkBox_generateControllingOls") and self.checkBox_generateControllingOls.isChecked():
             if controlling_capability == "unsupported":
                 review.append("controlling OLS is unsupported for this ruleset")
             elif controlling_capability == "experimental":
                 review.append("controlling OLS is experimental")
+            if comparison_ruleset_id and comparison_capability in {None, "unsupported", "scaffold"}:
+                review.append("comparison controlling OLS is unavailable")
 
         if review:
             return {"state": "warning", "summary": "Runway OLS ready; review " + "; ".join(review) + "."}
-        return {"state": "ready", "summary": "OLS inputs are ready for the selected policy."}
+        return {"state": "ready", "summary": "OLS inputs are ready for the selected rulesets."}
 
     def _setup_ruleset_selector_ui(self) -> None:
         """Create global policy selectors."""
@@ -1431,6 +1469,10 @@ class SafeguardingBuilderDialog(
         self.protected_airspace_policy_combo.addItem(
             "OLS modernisation comparison",
             userData="modernisation_comparison",
+        )
+        self.protected_airspace_policy_combo.addItem(
+            "Ruleset comparison",
+            userData="ruleset_comparison",
         )
         self.protected_airspace_policy_combo.setToolTip(
             "Protected airspace/OLS policy. Use Ruleset aligned for the selected design standard, "
@@ -2972,20 +3014,33 @@ class SafeguardingBuilderDialog(
 
         ruleset_combo = self._ruleset_combo_widget()
         framework_combo = self._framework_combo_widget()
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
         design_standard = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
         safeguarding_framework = framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID
+        baseline_ols_ruleset = design_standard
+        comparison_ols_ruleset = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
         protected_airspace_policy = (
-            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+            self._legacy_ols_policy_for_selection()
+            if hasattr(self, "_legacy_ols_policy_for_selection")
+            else "ruleset_aligned"
         )
-        if (
-            protected_airspace_policy == "modernisation_comparison"
-            and design_standard == "icao_annex14_vol1_modernised_ofs_oes"
+        if comparison_ols_ruleset and comparison_ols_ruleset == baseline_ols_ruleset:
+            validation_ok = False
+            error_messages.append(
+                "Baseline and comparison OLS rulesets must be different."
+            )
+        elif (
+            comparison_ols_ruleset
+            and hasattr(self, "_ols_pair_available")
+            and not self._ols_pair_available(
+                str(baseline_ols_ruleset),
+                str(comparison_ols_ruleset),
+            )
         ):
             validation_ok = False
             error_messages.append(
-                "OLS modernisation comparison requires an existing ruleset as the baseline; "
-                "select MOS 139, EASA, CAP 168, or current Annex 14."
+                "The selected OLS ruleset pair does not yet have a validated comparison adapter."
             )
         final_data.update(
             {
@@ -3000,6 +3055,8 @@ class SafeguardingBuilderDialog(
                 "ruleset": design_standard,
                 "safeguarding_framework": safeguarding_framework,
                 "protected_airspace_policy": protected_airspace_policy,
+                "baseline_ols_ruleset": baseline_ols_ruleset,
+                "comparison_ols_ruleset": comparison_ols_ruleset or None,
             }
         )
 
@@ -3376,15 +3433,14 @@ class SafeguardingBuilderDialog(
             current_errors += 1
             adg = ""
         ruleset_combo = self._ruleset_combo_widget()
-        active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
-        protected_airspace_policy = (
-            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
-        )
-        if (
-            active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
-            or protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}
-        ) and not adg:
+        baseline_ols_ruleset = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
+        comparison_ols_ruleset = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
+        if "icao_annex14_vol1_modernised_ofs_oes" in {
+            baseline_ols_ruleset,
+            comparison_ols_ruleset,
+        } and not adg:
             errors.append(f"Rwy {index}: ADG is required for Annex 14 OFS/OES generation.")
             current_errors += 1
         validated["adg"] = adg

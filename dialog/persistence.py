@@ -84,6 +84,14 @@ class PersistenceMixin:
                 return None
         return None
 
+    def _baseline_ols_ruleset_combo_widget(self):
+        combo = getattr(self, "baseline_ols_ruleset_combo", None)
+        return combo if isinstance(combo, QComboBox) else None
+
+    def _comparison_ols_ruleset_combo_widget(self):
+        combo = getattr(self, "comparison_ols_ruleset_combo", None)
+        return combo if isinstance(combo, QComboBox) else None
+
     def _pick_json_file(self, title: str, accept_mode: QFileDialog.AcceptMode, initial_path: str = "") -> str:
         """Use a Qt file dialog that behaves reliably inside the plugin shell."""
         file_filter = self.tr("JSON Files (*.json)")
@@ -146,6 +154,8 @@ class PersistenceMixin:
         if isinstance(protected_airspace_combo, QComboBox):
             idx = protected_airspace_combo.findData("ruleset_aligned")
             protected_airspace_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        if hasattr(self, "_set_ols_ruleset_selection"):
+            self._set_ols_ruleset_selection(DEFAULT_RULESET_ID, "")
 
         for index in list(self._runway_groups.keys()):
             self._remove_runway_group_internal(index)
@@ -231,6 +241,10 @@ class PersistenceMixin:
         protected_airspace_policy = (
             protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
         )
+        baseline_ols_ruleset = design_standard
+        comparison_ols_ruleset = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
         data_to_save = {
             "icao_code": icao_code,
             "iata_code": self._line_text("lineEdit_iata_code").strip().upper(),
@@ -244,6 +258,8 @@ class PersistenceMixin:
             "ruleset": design_standard,
             "safeguarding_framework": framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID,
             "protected_airspace_policy": protected_airspace_policy,
+            "baseline_ols_ruleset": baseline_ols_ruleset,
+            "comparison_ols_ruleset": comparison_ols_ruleset or None,
             "runways": [self._runway_groups[idx].get_input_data() for idx in sorted(self._runway_groups.keys())],
             "cns_facilities": self._get_cns_save_rows(),
         }
@@ -315,6 +331,10 @@ class PersistenceMixin:
             and protected_airspace_combo.currentData() not in {None, "ruleset_aligned"}
         ):
             return True
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
+            if baseline_ols_ruleset != DEFAULT_RULESET_ID or comparison_ols_ruleset:
+                return True
         if any(self._runway_has_existing_input(group.get_input_data()) for group in self._runway_groups.values()):
             return True
         cns_table = self._table("table_cns_facility")
@@ -372,6 +392,27 @@ class PersistenceMixin:
             policy_id = loaded_data.get("protected_airspace_policy", "ruleset_aligned")
             idx = protected_airspace_combo.findData(policy_id)
             protected_airspace_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        if hasattr(self, "_set_ols_ruleset_selection"):
+            baseline_ols_ruleset = loaded_data.get("baseline_ols_ruleset")
+            comparison_ols_ruleset = loaded_data.get("comparison_ols_ruleset")
+            if not baseline_ols_ruleset:
+                policy_id = loaded_data.get("protected_airspace_policy", "ruleset_aligned")
+                baseline_ols_ruleset = (
+                    "icao_annex14_vol1_modernised_ofs_oes"
+                    if policy_id == "future_annex14_ofs_oes"
+                    else loaded_data.get(
+                        "design_standard",
+                        loaded_data.get("ruleset", DEFAULT_RULESET_ID),
+                    )
+                )
+                if policy_id == "modernisation_comparison":
+                    comparison_ols_ruleset = "icao_annex14_vol1_modernised_ofs_oes"
+            self._set_ols_ruleset_selection(
+                normalize_ruleset_id(baseline_ols_ruleset),
+                normalize_ruleset_id(comparison_ols_ruleset)
+                if comparison_ols_ruleset
+                else "",
+            )
         self._load_runway_rows(loaded_data.get("runways", []))
         if hasattr(self, "_load_agl_options"):
             self._load_agl_options(loaded_data.get("agl_options", {}))

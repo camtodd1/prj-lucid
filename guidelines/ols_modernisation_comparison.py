@@ -1985,7 +1985,19 @@ class OlsModernisationComparisonMixin:
             "OES": "modernisation_oes_change",
         }.get(family_key)
         if contour_key is None:
-            return COMPARISON_CONTOUR_INTERVAL_M, COMPARISON_PRIMARY_CONTOUR_INTERVAL_M
+            intermediate_getter = getattr(self, "_get_contour_interval", None)
+            primary_getter = getattr(self, "_get_primary_contour_interval", None)
+            intermediate = (
+                intermediate_getter("default", COMPARISON_CONTOUR_INTERVAL_M)
+                if callable(intermediate_getter)
+                else COMPARISON_CONTOUR_INTERVAL_M
+            )
+            primary = (
+                primary_getter("default", COMPARISON_PRIMARY_CONTOUR_INTERVAL_M)
+                if callable(primary_getter)
+                else COMPARISON_PRIMARY_CONTOUR_INTERVAL_M
+            )
+            return float(intermediate), float(primary)
         intermediate_getter = getattr(self, "_get_contour_interval", None)
         primary_getter = getattr(self, "_get_primary_contour_interval", None)
         intermediate = (
@@ -2025,6 +2037,7 @@ class OlsModernisationComparisonMixin:
         oes_group,
         solved_baseline_engine: Optional[PlanarControllingOlsEngine] = None,
         solved_future_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
+        comparison_ruleset_id: str = "icao_annex14_vol1_modernised_ofs_oes",
     ) -> bool:
         baseline_planar = [
             candidate for candidate in baseline_candidates
@@ -2082,12 +2095,12 @@ class OlsModernisationComparisonMixin:
             created = self._create_modernisation_wireframe_layer(
                 icao_code, baseline_ruleset_id, family, "baseline",
                 "Baseline OLS Wireframe", baseline_engine._controlling_region_geometries(),
-                family_group,
+                family_group, comparison_ruleset_id=comparison_ruleset_id,
             ) or created
             created = self._create_modernisation_wireframe_layer(
                 icao_code, baseline_ruleset_id, family, "future",
                 "Future Annex 14 Wireframe", future_engine._controlling_region_geometries(),
-                family_group,
+                family_group, comparison_ruleset_id=comparison_ruleset_id,
             ) or created
             gain_name = "Height Gain" if family == "OFS" else "Trigger Height Raised"
             loss_name = "Height Loss" if family == "OFS" else "Trigger Height Lowered"
@@ -2095,14 +2108,17 @@ class OlsModernisationComparisonMixin:
             created = self._create_modernisation_change_layer(
                 icao_code, baseline_ruleset_id, family, "gain", gain_name,
                 parts["gain"], comparison, family_group,
+                comparison_ruleset_id=comparison_ruleset_id,
             ) or created
             created = self._create_modernisation_change_layer(
                 icao_code, baseline_ruleset_id, family, "loss", loss_name,
                 parts["loss"], comparison, family_group,
+                comparison_ruleset_id=comparison_ruleset_id,
             ) or created
             created = self._create_modernisation_change_layer(
                 icao_code, baseline_ruleset_id, family, "no_change", no_change_name,
                 parts["no_change"], comparison, family_group,
+                comparison_ruleset_id=comparison_ruleset_id,
             ) or created
             if not self._modernisation_subphase(
                 f"Modernisation {family}: generating signed change contours..."
@@ -2131,13 +2147,202 @@ class OlsModernisationComparisonMixin:
                 family_group,
                 contour_interval_m=contour_interval_m,
                 primary_interval_m=primary_contour_interval_m,
+                comparison_ruleset_id=comparison_ruleset_id,
             ) or created
             created = self._create_modernisation_transition_layer(
                 icao_code, baseline_ruleset_id, family, parts["transition"], comparison, family_group,
+                comparison_ruleset_id=comparison_ruleset_id,
             ) or created
             created = self._create_modernisation_baseline_only_layer(
                 icao_code, baseline_ruleset_id, family,
                 comparison.baseline_only_parts(), family_group,
+                comparison_ruleset_id=comparison_ruleset_id,
+            ) or created
+        return created
+
+    def _create_ols_ruleset_comparison_layers(
+        self,
+        *,
+        icao_code: str,
+        baseline_ruleset_id: str,
+        comparison_ruleset_id: str,
+        baseline_model: str,
+        comparison_model: str,
+        baseline_candidates: Sequence[ControllingOlsCandidate],
+        baseline_exclusions: Sequence[QgsGeometry],
+        comparison_candidates: Sequence[ControllingOlsCandidate],
+        comparison_exclusions: Sequence[QgsGeometry],
+        output_groups: Dict[str, object],
+        solved_baseline_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
+        solved_comparison_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
+    ) -> bool:
+        """Compare arbitrary solved OLS rulesets using a common family adapter."""
+        annex_model = "annex14_modernised_ofs_oes"
+        baseline_is_annex = baseline_model == annex_model
+        comparison_is_annex = comparison_model == annex_model
+        families = ("OFS", "OES") if baseline_is_annex or comparison_is_annex else ("OLS",)
+
+        def family_candidates(candidates, is_annex, family):
+            planar = [
+                candidate
+                for candidate in candidates
+                if candidate.model in {"constant", "axis", "plane", "conical"}
+            ]
+            if not is_annex:
+                return planar
+            return [
+                candidate
+                for candidate in planar
+                if str((candidate.metadata or {}).get("annex14_family") or "").upper()
+                == family
+            ]
+
+        def matching_engine(solved, family, candidates, exclusions):
+            engine = (solved or {}).get(family) or (solved or {}).get("baseline")
+            candidate_ids = {candidate.surface_id for candidate in candidates}
+            if (
+                engine is None
+                or {candidate.surface_id for candidate in engine.candidates}
+                != candidate_ids
+            ):
+                engine = PlanarControllingOlsEngine(
+                    candidates,
+                    exclusion_geometries=list(exclusions or []),
+                )
+            return engine
+
+        created = False
+        for family in families:
+            output_group = output_groups.get(family)
+            baseline_family_candidates = family_candidates(
+                baseline_candidates,
+                baseline_is_annex,
+                family,
+            )
+            comparison_family_candidates = family_candidates(
+                comparison_candidates,
+                comparison_is_annex,
+                family,
+            )
+            if (
+                output_group is None
+                or not baseline_family_candidates
+                or not comparison_family_candidates
+            ):
+                QgsMessageLog.logMessage(
+                    f"[skip] OLS ruleset {family} comparison: candidates or output group unavailable.",
+                    PLUGIN_TAG,
+                    Qgis.Warning,
+                )
+                continue
+            baseline_engine = matching_engine(
+                solved_baseline_engines,
+                family,
+                baseline_family_candidates,
+                [] if baseline_is_annex else baseline_exclusions,
+            )
+            comparison_engine = matching_engine(
+                solved_comparison_engines,
+                family,
+                comparison_family_candidates,
+                [] if comparison_is_annex else comparison_exclusions,
+            )
+            if not self._modernisation_subphase(
+                f"Ruleset {family}: classifying gain, loss, and unchanged regions..."
+            ):
+                return created
+
+            comparison = OlsEnvelopeComparisonEngine(
+                baseline_engine,
+                comparison_engine,
+            )
+            parts = comparison.comparison_parts()
+            contour_interval_m, primary_contour_interval_m = (
+                self._modernisation_change_contour_intervals(family)
+            )
+            created = self._create_modernisation_wireframe_layer(
+                icao_code,
+                baseline_ruleset_id,
+                family,
+                "baseline",
+                "Baseline OLS Wireframe",
+                baseline_engine._controlling_region_geometries(),
+                output_group,
+                comparison_ruleset_id=comparison_ruleset_id,
+            ) or created
+            created = self._create_modernisation_wireframe_layer(
+                icao_code,
+                baseline_ruleset_id,
+                family,
+                "comparison",
+                "Comparison OLS Wireframe",
+                comparison_engine._controlling_region_geometries(),
+                output_group,
+                comparison_ruleset_id=comparison_ruleset_id,
+            ) or created
+
+            if family == "OES":
+                names = {
+                    "gain": "Trigger Height Raised",
+                    "loss": "Trigger Height Lowered",
+                    "no_change": "Trigger Height Unchanged",
+                }
+            else:
+                names = {
+                    "gain": "Height Gain",
+                    "loss": "Height Loss",
+                    "no_change": "No Height Change",
+                }
+            for change in ("gain", "loss", "no_change"):
+                created = self._create_modernisation_change_layer(
+                    icao_code,
+                    baseline_ruleset_id,
+                    family,
+                    change,
+                    names[change],
+                    parts[change],
+                    comparison,
+                    output_group,
+                    comparison_ruleset_id=comparison_ruleset_id,
+                ) or created
+
+            contour_parts = []
+            for change in ("gain", "loss"):
+                contour_parts.extend(
+                    (change, *contour_part)
+                    for contour_part in comparison.change_contour_parts(
+                        parts[change],
+                        change,
+                        interval_m=contour_interval_m,
+                        primary_interval_m=primary_contour_interval_m,
+                    )
+                )
+            created = self._create_modernisation_change_contour_layer(
+                icao_code,
+                baseline_ruleset_id,
+                family,
+                contour_parts,
+                output_group,
+                contour_interval_m=contour_interval_m,
+                primary_interval_m=primary_contour_interval_m,
+                comparison_ruleset_id=comparison_ruleset_id,
+            ) or created
+            created = self._create_modernisation_transition_layer(
+                icao_code,
+                baseline_ruleset_id,
+                family,
+                parts["transition"],
+                comparison,
+                output_group,
+                comparison_ruleset_id=comparison_ruleset_id,
+            ) or created
+            created = self._create_modernisation_baseline_only_layer(
+                icao_code,
+                baseline_ruleset_id,
+                family,
+                comparison.baseline_only_parts(),
+                output_group,
+                comparison_ruleset_id=comparison_ruleset_id,
             ) or created
         return created
 
@@ -2174,6 +2379,7 @@ class OlsModernisationComparisonMixin:
         parts,
         comparison,
         output_group,
+        comparison_ruleset_id="",
     ) -> bool:
         fields = QgsFields([
             QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
@@ -2189,22 +2395,33 @@ class OlsModernisationComparisonMixin:
             QgsField("future_surface", QVariant.String, self.tr("Future Surface"), 50),
             QgsField("meaning", QVariant.String, self.tr("Regulatory Meaning"), 160),
             QgsField("label_txt", QVariant.String, self.tr("Map Label"), 48),
+            QgsField("comparison_ruleset", QVariant.String, self.tr("Comparison Ruleset"), 80),
+            QgsField("comparison_family", QVariant.String, self.tr("Comparison Family"), 8),
+            QgsField("comparison_surface_id", QVariant.String, self.tr("Comparison Surface ID"), 160),
+            QgsField("comparison_surface", QVariant.String, self.tr("Comparison Surface"), 50),
         ])
         features: List[QgsFeature] = []
         if family == "OFS":
             if change == "gain":
-                meaning = "Future obstacle-free reference surface is higher than baseline"
+                meaning = "Comparison controlling elevation is higher than baseline in the OFS protected-airspace family"
             elif change == "loss":
-                meaning = "Future obstacle-free reference surface is lower than baseline"
+                meaning = "Comparison controlling elevation is lower than baseline in the OFS protected-airspace family"
             else:
-                meaning = "Future obstacle-free reference surface is effectively equal to baseline"
+                meaning = "Comparison controlling elevation is effectively equal to baseline in the OFS protected-airspace family"
+        elif family == "OES":
+            if change == "gain":
+                meaning = "Comparison controlling elevation is higher than baseline in the OES assessment-trigger family; not an approval limit"
+            elif change == "loss":
+                meaning = "Comparison controlling elevation is lower than baseline in the OES assessment-trigger family; not an approval limit"
+            else:
+                meaning = "Comparison controlling elevation is effectively equal to baseline in the OES assessment-trigger family; not an approval limit"
         else:
             if change == "gain":
-                meaning = "Future aeronautical-study trigger is raised; this is not an approval limit"
+                meaning = "Comparison controlling OLS elevation is higher than baseline"
             elif change == "loss":
-                meaning = "Future aeronautical-study trigger is lowered; this is not an approval limit"
+                meaning = "Comparison controlling OLS elevation is lower than baseline"
             else:
-                meaning = "Future aeronautical-study trigger is effectively unchanged; this is not an approval limit"
+                meaning = "Comparison controlling OLS elevation is effectively equal to baseline"
         for sequence, (baseline, future, geometry) in enumerate(parts, start=1):
             delta_min, delta_max, delta_sample = comparison.delta_range(
                 geometry,
@@ -2228,6 +2445,10 @@ class OlsModernisationComparisonMixin:
                 future.surface_type,
                 meaning,
                 self._comparison_label(change, delta_min, delta_max),
+                comparison_ruleset_id,
+                family,
+                future.surface_id,
+                future.surface_type,
             ])
             features.append(feature)
         layer = self._create_and_add_layer(
@@ -2254,6 +2475,7 @@ class OlsModernisationComparisonMixin:
         output_group,
         contour_interval_m: float = COMPARISON_CONTOUR_INTERVAL_M,
         primary_interval_m: float = COMPARISON_PRIMARY_CONTOUR_INTERVAL_M,
+        comparison_ruleset_id: str = "",
     ) -> bool:
         fields = QgsFields([
             QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
@@ -2270,6 +2492,10 @@ class OlsModernisationComparisonMixin:
             QgsField("future_id", QVariant.String, self.tr("Future Surface ID"), 160),
             QgsField("future_surface", QVariant.String, self.tr("Future Surface"), 50),
             QgsField("label_txt", QVariant.String, self.tr("Map Label"), 24),
+            QgsField("comparison_ruleset", QVariant.String, self.tr("Comparison Ruleset"), 80),
+            QgsField("comparison_family", QVariant.String, self.tr("Comparison Family"), 8),
+            QgsField("comparison_surface_id", QVariant.String, self.tr("Comparison Surface ID"), 160),
+            QgsField("comparison_surface", QVariant.String, self.tr("Comparison Surface"), 50),
         ])
         features: List[QgsFeature] = []
         for sequence, contour_part in enumerate(contour_parts, start=1):
@@ -2299,6 +2525,10 @@ class OlsModernisationComparisonMixin:
                 future.surface_id,
                 future.surface_type,
                 f"{self._comparison_label_delta(delta_m)} m",
+                comparison_ruleset_id,
+                family,
+                future.surface_id,
+                future.surface_type,
             ])
             features.append(feature)
         layer = self._create_and_add_layer(
@@ -2321,6 +2551,7 @@ class OlsModernisationComparisonMixin:
         display_name,
         candidate_regions,
         output_group,
+        comparison_ruleset_id="",
     ) -> bool:
         fields = QgsFields([
             QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
@@ -2329,6 +2560,8 @@ class OlsModernisationComparisonMixin:
             QgsField("baseline_ruleset", QVariant.String, self.tr("Baseline Ruleset"), 80),
             QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
             QgsField("surface", QVariant.String, self.tr("Surface"), 50),
+            QgsField("comparison_ruleset", QVariant.String, self.tr("Comparison Ruleset"), 80),
+            QgsField("ruleset_id", QVariant.String, self.tr("Ruleset ID"), 80),
         ])
         features: List[QgsFeature] = []
         sequence = 0
@@ -2346,6 +2579,8 @@ class OlsModernisationComparisonMixin:
                     baseline_ruleset_id,
                     candidate.surface_id,
                     candidate.surface_type,
+                    comparison_ruleset_id,
+                    baseline_ruleset_id if source_kind == "baseline" else comparison_ruleset_id,
                 ])
                 features.append(feature)
         layer = self._create_and_add_layer(
@@ -2388,6 +2623,7 @@ class OlsModernisationComparisonMixin:
         parts,
         comparison,
         output_group,
+        comparison_ruleset_id="",
     ) -> bool:
         fields = QgsFields([
             QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
@@ -2398,6 +2634,10 @@ class OlsModernisationComparisonMixin:
             QgsField("future_id", QVariant.String, self.tr("Future Surface ID"), 160),
             QgsField("future_surface", QVariant.String, self.tr("Future Surface"), 50),
             QgsField("meaning", QVariant.String, self.tr("Regulatory Meaning"), 160),
+            QgsField("comparison_ruleset", QVariant.String, self.tr("Comparison Ruleset"), 80),
+            QgsField("comparison_family", QVariant.String, self.tr("Comparison Family"), 8),
+            QgsField("comparison_surface_id", QVariant.String, self.tr("Comparison Surface ID"), 160),
+            QgsField("comparison_surface", QVariant.String, self.tr("Comparison Surface"), 50),
         ])
         features: List[QgsFeature] = []
         for sequence, (baseline, future, geometry) in enumerate(parts, start=1):
@@ -2411,7 +2651,11 @@ class OlsModernisationComparisonMixin:
                 baseline.surface_type,
                 future.surface_id,
                 future.surface_type,
-                "Approximate line where the baseline and future controlling elevations are equal",
+                "Approximate line where the baseline and comparison controlling elevations are equal",
+                comparison_ruleset_id,
+                family,
+                future.surface_id,
+                future.surface_type,
             ])
             features.append(feature)
         layer = self._create_and_add_layer(
@@ -2432,6 +2676,7 @@ class OlsModernisationComparisonMixin:
         family,
         parts,
         output_group,
+        comparison_ruleset_id="",
     ) -> bool:
         fields = QgsFields([
             QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
@@ -2442,6 +2687,7 @@ class OlsModernisationComparisonMixin:
             QgsField("baseline_surface", QVariant.String, self.tr("Baseline Surface"), 50),
             QgsField("meaning", QVariant.String, self.tr("Regulatory Meaning"), 160),
             QgsField("label_txt", QVariant.String, self.tr("Map Label"), 32),
+            QgsField("comparison_ruleset", QVariant.String, self.tr("Comparison Ruleset"), 80),
         ])
         features: List[QgsFeature] = []
         for sequence, (baseline, geometry) in enumerate(parts, start=1):
@@ -2454,14 +2700,15 @@ class OlsModernisationComparisonMixin:
                 baseline_ruleset_id,
                 baseline.surface_id,
                 baseline.surface_type,
-                "Baseline controlling OLS area with no overlapping future Annex 14 comparison surface",
-                "no future overlay",
+                "Baseline controlling OLS area with no overlapping comparison surface",
+                "no comparison overlay",
+                comparison_ruleset_id,
             ])
             features.append(feature)
         layer = self._create_and_add_layer(
             "MultiPolygon",
             f"OLS_Modernisation_{family}_no_future_overlay_{icao_code}",
-            "No Future OLS Overlay",
+            "No Comparison OLS Overlay",
             fields,
             features,
             output_group,

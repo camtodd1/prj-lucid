@@ -5,7 +5,7 @@ ruleset metadata, implementation notes, tests, and TODO ledger. It is intended
 as a practical working list for deciding what to validate, consolidate, and
 build next.
 
-Last reviewed: 2026-07-12.
+Last reviewed: 2026-07-14.
 
 ## High Confidence Delivery
 
@@ -227,12 +227,14 @@ Last reviewed: 2026-07-12.
   source-backed validation, complex transitional components, release timing,
   and removal of Annex-specific final partition recovery.
 
-- [ ] Generalise the OLS comparison engine for ruleset-to-ruleset comparisons.
+- [x] Generalise the OLS comparison engine for ruleset-to-ruleset comparisons.
 
-  Allow any supported OLS ruleset to be selected independently as the baseline
-  and comparison ruleset, rather than fixing future Annex 14 as the comparison.
-  Example pairings include MOS 139 against future Annex 14 and CAP 168 against
-  MOS 139.
+  Baseline and comparison rulesets are selected independently in a two-column
+  OLS workflow card, with a baseline-only option. The engine preserves the
+  selected direction for signed change outputs and adapts conventional OLS and
+  Annex 14 OFS/OES families. Rulesets remain disabled until their controlling
+  OLS capability is available; CAP 168 will therefore unlock without another
+  dialog redesign once its constructor and validation work is complete.
 
 - [x] Finish MOS139 stopway geometry.
 

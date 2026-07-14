@@ -419,7 +419,12 @@ class Annex14GeometryMixin:
         vat_kt = runway_data.get("vat_kt") or runway_data.get("indicated_airspeed_at_threshold_kt")
         if wingspan is not None or vat_kmh is not None or vat_kt is not None:
             try:
-                result = self.get_active_ruleset().design_group(
+                ruleset_getter = getattr(
+                    self,
+                    "get_active_protected_airspace_ruleset",
+                    self.get_active_ruleset,
+                )
+                result = ruleset_getter().design_group(
                     wingspan_m=float(wingspan) if wingspan is not None else None,
                     indicated_airspeed_at_threshold_kmh=float(vat_kmh) if vat_kmh is not None else None,
                     indicated_airspeed_at_threshold_kt=float(vat_kt) if vat_kt is not None else None,

@@ -26,21 +26,105 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.dialog.deleteLater()
 
     def select_mode(self, mode):
-        combo = self.dialog.protected_airspace_policy_combo
-        combo.setCurrentIndex(combo.findData(mode))
+        baseline_id = "mos139_2019"
+        comparison_id = ""
+        if mode == "future_annex14_ofs_oes":
+            baseline_id = "icao_annex14_vol1_modernised_ofs_oes"
+        elif mode == "modernisation_comparison":
+            comparison_id = "icao_annex14_vol1_modernised_ofs_oes"
+        self.dialog._set_ols_ruleset_selection(baseline_id, comparison_id)
         self.dialog._update_ols_workflow_ui(
             dependency_status={"state": "ready", "summary": "OLS ready."},
             runway_count=2,
         )
 
-    def test_persisted_policy_selector_is_presented_on_ols_tab(self):
-        combo = self.dialog.protected_airspace_policy_combo
+    def test_two_column_ruleset_selectors_are_presented_on_ols_tab(self):
+        baseline = self.dialog.baseline_ols_ruleset_combo
+        comparison = self.dialog.comparison_ols_ruleset_combo
 
-        self.assertIs(combo.parentWidget(), self.dialog.groupBox_olsWorkflow)
+        self.assertIs(baseline.parentWidget(), self.dialog.groupBox_olsWorkflow)
+        self.assertIs(comparison.parentWidget(), self.dialog.groupBox_olsWorkflow)
         self.assertTrue(self.dialog.label_protected_airspace_policy.isHidden())
-        self.assertEqual(combo.itemData(0), "ruleset_aligned")
-        self.assertEqual(combo.itemData(1), "future_annex14_ofs_oes")
-        self.assertEqual(combo.itemData(2), "modernisation_comparison")
+        self.assertTrue(self.dialog.protected_airspace_policy_combo.isHidden())
+        self.assertEqual(self.dialog.label_baselineOlsRuleset.text(), "Baseline OLS")
+        self.assertEqual(self.dialog.label_comparisonOlsRuleset.text(), "Comparison OLS")
+        self.assertEqual(baseline.currentData(), "mos139_2019")
+        self.assertEqual(comparison.itemData(0), "")
+        self.assertEqual(comparison.itemText(0), "None — baseline only")
+
+    def test_unavailable_controlling_rulesets_remain_visible_but_disabled(self):
+        baseline = self.dialog.baseline_ols_ruleset_combo
+        cap168_index = baseline.findData("uk_caa_cap168_edition_13")
+
+        self.assertGreaterEqual(cap168_index, 0)
+        self.assertIn("unavailable", baseline.itemText(cap168_index).lower())
+        self.assertFalse(baseline.model().item(cap168_index).isEnabled())
+
+    def test_explicit_selection_keeps_legacy_policy_compatible(self):
+        self.select_mode("modernisation_comparison")
+
+        self.assertEqual(
+            self.dialog.protected_airspace_policy_combo.currentData(),
+            "modernisation_comparison",
+        )
+        self.assertEqual(
+            self.dialog._current_ols_ruleset_ids(),
+            ("mos139_2019", "icao_annex14_vol1_modernised_ofs_oes"),
+        )
+
+    def test_annex_baseline_can_select_mos_as_the_comparison(self):
+        self.dialog._set_ols_ruleset_selection(
+            "icao_annex14_vol1_modernised_ofs_oes",
+            "mos139_2019",
+        )
+
+        self.assertEqual(
+            self.dialog._current_ols_ruleset_ids(),
+            ("icao_annex14_vol1_modernised_ofs_oes", "mos139_2019"),
+        )
+        self.assertEqual(
+            self.dialog.protected_airspace_policy_combo.currentData(),
+            "ruleset_comparison",
+        )
+        self.assertFalse(self.dialog._contour_interval_labels["approach"].isHidden())
+        self.assertFalse(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
+        self.assertTrue(self.dialog.checkBox_generateControllingOls.isChecked())
+        self.assertFalse(self.dialog.checkBox_generateControllingOls.isEnabled())
+
+    def test_reverse_annex_comparison_still_checks_conventional_red_inputs(self):
+        self.dialog._set_ols_ruleset_selection(
+            "icao_annex14_vol1_modernised_ofs_oes",
+            "mos139_2019",
+        )
+
+        status = self.dialog._ols_dependency_status(
+            airport_status={
+                "identity_ready": True,
+                "arp_pair_ready": True,
+                "arp_elev_ready": False,
+            },
+            runway_status={
+                "ready": True,
+                "red_elevation_ready": False,
+            },
+            active_ruleset_id="icao_annex14_vol1_modernised_ofs_oes",
+            protected_airspace_policy="ruleset_comparison",
+        )
+
+        self.assertEqual(status["state"], "warning")
+        self.assertIn("airport-wide/secondary OLS", status["summary"])
+
+    def test_save_payload_records_explicit_ols_ruleset_pair(self):
+        self.select_mode("modernisation_comparison")
+
+        payload = self.dialog._build_save_payload("TEST")
+
+        self.assertEqual(payload["baseline_ols_ruleset"], "mos139_2019")
+        self.assertEqual(
+            payload["comparison_ols_ruleset"],
+            "icao_annex14_vol1_modernised_ofs_oes",
+        )
+        self.assertEqual(payload["protected_airspace_policy"], "modernisation_comparison")
 
     def test_baseline_mode_hides_future_family_rows(self):
         self.select_mode("ruleset_aligned")

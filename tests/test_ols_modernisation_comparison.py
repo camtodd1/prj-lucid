@@ -1351,6 +1351,63 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             self.assertEqual(call.kwargs["interval_m"], 0.25)
             self.assertEqual(call.kwargs["primary_interval_m"], 2.0)
 
+    def test_generic_ruleset_adapter_preserves_selected_baseline_direction(self):
+        annex_baseline = ControllingOlsCandidate(
+            surface_id="annex-ofs",
+            surface_type="Annex OFS",
+            footprint=QgsGeometry(self.domain),
+            elevation_at_xy=constant_elevation_evaluator(110.0),
+            model="constant",
+            metadata={"elevation_m": 110.0, "annex14_family": "OFS"},
+        )
+        mos_comparison = self.constant("mos-ols", 100.0)
+        capture = _ComparisonLayerCapture()
+
+        created = capture._create_ols_ruleset_comparison_layers(
+            icao_code="TEST",
+            baseline_ruleset_id="annex",
+            comparison_ruleset_id="mos",
+            baseline_model="annex14_modernised_ofs_oes",
+            comparison_model="ols_current",
+            baseline_candidates=[annex_baseline],
+            baseline_exclusions=[],
+            comparison_candidates=[mos_comparison],
+            comparison_exclusions=[],
+            output_groups={"OFS": object(), "OES": object(), "OLS": None},
+        )
+
+        self.assertTrue(created)
+        loss_layer = next(layer for layer in capture.layers if layer[2] == "Height Loss")
+        feature = loss_layer[4][0]
+        self.assertEqual(feature["baseline_ruleset"], "annex")
+        self.assertEqual(feature["comparison_ruleset"], "mos")
+        self.assertEqual(feature["change"], "loss")
+        self.assertEqual(feature["delta_sample_m"], -10.0)
+
+    def test_generic_ruleset_adapter_compares_two_conventional_ols_envelopes(self):
+        capture = _ComparisonLayerCapture()
+
+        created = capture._create_ols_ruleset_comparison_layers(
+            icao_code="TEST",
+            baseline_ruleset_id="cap168",
+            comparison_ruleset_id="mos139",
+            baseline_model="ols_current",
+            comparison_model="ols_current",
+            baseline_candidates=[self.constant("cap", 90.0)],
+            baseline_exclusions=[],
+            comparison_candidates=[self.constant("mos", 100.0)],
+            comparison_exclusions=[],
+            output_groups={"OFS": None, "OES": None, "OLS": object()},
+        )
+
+        self.assertTrue(created)
+        gain_layer = next(layer for layer in capture.layers if layer[2] == "Height Gain")
+        feature = gain_layer[4][0]
+        self.assertEqual(feature["future_family"], "OLS")
+        self.assertEqual(feature["baseline_ruleset"], "cap168")
+        self.assertEqual(feature["comparison_ruleset"], "mos139")
+        self.assertEqual(feature["delta_sample_m"], 10.0)
+
     def test_all_comparison_output_features_receive_unique_ids(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 110.0)

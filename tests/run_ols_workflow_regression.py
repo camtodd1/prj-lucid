@@ -445,7 +445,10 @@ def _comparison_metrics(engine, result) -> Dict[str, object]:
     family = next(
         (
             str((candidate.metadata or {}).get("annex14_family") or "").upper()
-            for candidate in engine.future_engine.candidates
+            for candidate in (
+                list(engine.future_engine.candidates)
+                + list(engine.baseline_engine.candidates)
+            )
             if (candidate.metadata or {}).get("annex14_family")
         ),
         "UNKNOWN",

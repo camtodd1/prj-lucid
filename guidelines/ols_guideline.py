@@ -43,6 +43,13 @@ OLS_EDGE_ELEVATION_SOURCE = "safeguarding_builder_calculated"
 
 
 class OlsGuidelineMixin:
+    def _get_ols_ruleset(self):
+        """Return the explicitly selected OLS ruleset, with legacy fallback."""
+        protected_getter = getattr(self, "get_active_protected_airspace_ruleset", None)
+        if callable(protected_getter):
+            return protected_getter()
+        return self.get_active_ruleset()
+
     def _get_contour_interval(self, surface_key: str, fallback: float) -> float:
         """Return a positive intermediate contour interval from dialog options, or the default fallback."""
         return self._get_contour_interval_value(surface_key, "intermediate", fallback)
@@ -192,7 +199,7 @@ class OlsGuidelineMixin:
         overall_success = False  # Tracks if *any* airport-wide OLS layer was successfully created
 
         # --- Get IHS Parameters ---
-        ihs_base_height_agl = self.get_active_ruleset().ihs_base_height()
+        ihs_base_height_agl = self._get_ols_ruleset().ihs_base_height()
         if ihs_base_height_agl is None:
             QgsMessageLog.logMessage(
                 "Cannot generate Airport-Wide OLS: Failed to retrieve IHS base height parameter.",
@@ -336,7 +343,7 @@ class OlsGuidelineMixin:
                     continue
 
                 # Check IHS Radius Calculation
-                ihs_params = self.get_active_ruleset().ols_parameters(arc_num, current_max_type_str, "IHS")
+                ihs_params = self._get_ols_ruleset().ols_parameters(arc_num, current_max_type_str, "IHS")
                 ihs_end_radius = ihs_params.get("radius") if ihs_params else None
                 if ihs_end_radius is None or not isinstance(ihs_end_radius, (int, float)) or ihs_end_radius <= 0:
                     if isinstance(strip_width, (int, float)) and strip_width > 0:
@@ -455,7 +462,7 @@ class OlsGuidelineMixin:
         # --- 3. Create IHS Layer ---
         if ihs_base_geom:
             try:
-                ihs_ref_params = self.get_active_ruleset().ols_parameters(
+                ihs_ref_params = self._get_ols_ruleset().ols_parameters(
                     highest_arc_num, highest_precision_type_str, "IHS"
                 )
                 ref_text = ihs_ref_params.get("ref", "MOS 8.2.18") if ihs_ref_params else "MOS 8.2.18"
@@ -507,7 +514,7 @@ class OlsGuidelineMixin:
         # --- 4. Generate Conical Surface & Contours ---
         conical_layer_created = False
         if ihs_base_geom:
-            conical_params = self.get_active_ruleset().ols_parameters(
+            conical_params = self._get_ols_ruleset().ols_parameters(
                 highest_arc_num, highest_precision_type_str, "CONICAL"
             )
             if conical_params:
@@ -515,7 +522,7 @@ class OlsGuidelineMixin:
                 slope = conical_params.get("slope")
                 ref = conical_params.get("ref", "MOS 8.2.19")
                 if slope is not None and slope > 0 and height_extent_agl is not None and height_extent_agl > 0:
-                    ohs_params_for_conical = self.get_active_ruleset().ols_parameters(
+                    ohs_params_for_conical = self._get_ols_ruleset().ols_parameters(
                         highest_arc_num, highest_precision_type_str, "OHS"
                     )
                     if ohs_params_for_conical:
@@ -847,7 +854,7 @@ class OlsGuidelineMixin:
                 )
 
         # --- 5. Generate Outer Horizontal Surface (OHS) ---
-        ohs_params = self.get_active_ruleset().ols_parameters(highest_arc_num, highest_precision_type_str, "OHS")
+        ohs_params = self._get_ols_ruleset().ols_parameters(highest_arc_num, highest_precision_type_str, "OHS")
         if ohs_params:
             radius = ohs_params.get("radius")
             height_agl = ohs_params.get("height_agl")
@@ -2169,7 +2176,7 @@ class OlsGuidelineMixin:
                     ),
                 ]
             ):
-                approach_sections_params = self.get_active_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
+                approach_sections_params = self._get_ols_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
                 if not approach_sections_params:
                     continue
                 current_section_start_pt = None
@@ -2284,8 +2291,8 @@ class OlsGuidelineMixin:
             primary_desig, reciprocal_desig = runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
 
             # --- Get Transitional Slope ---
-            type_abbr_1 = self.get_active_ruleset().classify_runway_type(type1_str)
-            type_abbr_2 = self.get_active_ruleset().classify_runway_type(type2_str)
+            type_abbr_1 = self._get_ols_ruleset().classify_runway_type(type1_str)
+            type_abbr_2 = self._get_ols_ruleset().classify_runway_type(type2_str)
             type_order_abbr = ["", "NI", "NPA", "PA_I", "PA_II_III"]
             type_order_full = [
                 "",
@@ -2311,7 +2318,7 @@ class OlsGuidelineMixin:
                 )
             else:
                 governing_type_str_full = "Non-Instrument (NI)"
-            trans_params = self.get_active_ruleset().ols_parameters(arc_num, governing_type_str_full, "Transitional")
+            trans_params = self._get_ols_ruleset().ols_parameters(arc_num, governing_type_str_full, "Transitional")
             if not trans_params or "slope" not in trans_params or trans_params["slope"] <= 1e-9:
                 QgsMessageLog.logMessage(
                     f"Skipping Transitional features for {runway_name}: No valid slope found for classification ('{governing_type_str_full}').",
@@ -2360,7 +2367,7 @@ class OlsGuidelineMixin:
                 outward_az: float,
                 end_desig: str,
             ) -> Optional[Tuple[QgsPointXY, float]]:
-                approach_params = self.get_active_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
+                approach_params = self._get_ols_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
                 if not approach_params:
                     QgsMessageLog.logMessage(
                         f"Transitional strip clipping skipped for {runway_name} {end_desig}: no approach params.",
@@ -2612,7 +2619,7 @@ class OlsGuidelineMixin:
                     ),
                 ]
             ):
-                approach_sections_params = self.get_active_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
+                approach_sections_params = self._get_ols_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
                 if not approach_sections_params:
                     continue
 
@@ -3316,7 +3323,7 @@ class OlsGuidelineMixin:
         """
 
         # --- Get Section Parameters ---
-        sections = self.get_active_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
+        sections = self._get_ols_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
         if not sections:
             QgsMessageLog.logMessage(
                 f"No Approach params found for {end_desig} (Code {arc_num}, Type {end_type})",
@@ -3661,7 +3668,7 @@ class OlsGuidelineMixin:
         tocs_contour_interval = self._get_contour_interval("tocs", TOCS_CONTOUR_INTERVAL)
 
         # 1. Get Parameters
-        params = self.get_active_ruleset().ols_parameters(arc_num, None, "TOCS")
+        params = self._get_ols_ruleset().ols_parameters(arc_num, None, "TOCS")
         if not params:
             QgsMessageLog.logMessage(
                 f"No TOCS params found for {end_desig} (Code {arc_num})",
@@ -4109,7 +4116,7 @@ class OlsGuidelineMixin:
 
         IHS_ELEVATION_AMSL: Optional[float] = None
         if self.reference_elevation_datum is not None:
-            ihs_base_height_agl = self.get_active_ruleset().ihs_base_height()
+            ihs_base_height_agl = self._get_ols_ruleset().ihs_base_height()
             if ihs_base_height_agl is not None:
                 IHS_ELEVATION_AMSL = self.reference_elevation_datum + ihs_base_height_agl
         if IHS_ELEVATION_AMSL is None:
@@ -4171,7 +4178,7 @@ class OlsGuidelineMixin:
 
             # --- Inner Approach ---
             try:
-                active_ruleset = self.get_active_ruleset()
+                active_ruleset = self._get_ols_ruleset()
                 inner_approach_params_getter = getattr(active_ruleset, "inner_approach_parameters", None)
                 if callable(inner_approach_params_getter):
                     ia_params = inner_approach_params_getter(arc_num, config["approach_type_str"], arc_let)
@@ -4279,7 +4286,7 @@ class OlsGuidelineMixin:
 
             # --- Baulked Landing ---
             try:
-                active_ruleset = self.get_active_ruleset()
+                active_ruleset = self._get_ols_ruleset()
                 baulked_params_getter = getattr(active_ruleset, "baulked_landing_parameters", None)
                 if callable(baulked_params_getter):
                     bls_params_dict = baulked_params_getter(arc_num, config["approach_type_str"], arc_let)
@@ -4359,7 +4366,7 @@ class OlsGuidelineMixin:
 
             # --- Inner Transitional Surface ---
             if IHS_ELEVATION_AMSL is not None:
-                it_params_dict = self.get_active_ruleset().ols_parameters(
+                it_params_dict = self._get_ols_ruleset().ols_parameters(
                     arc_num, config["approach_type_str"], "InnerTransitional"
                 )
                 if it_params_dict:
@@ -4368,10 +4375,10 @@ class OlsGuidelineMixin:
 
                     if its_slope is not None and its_slope > 1e-9:
                         its_fields = self._get_ols_fields("InnerTransitional")
-                        type_abbr_for_its = self.get_active_ruleset().classify_runway_type(
+                        type_abbr_for_its = self._get_ols_ruleset().classify_runway_type(
                             config["approach_type_str"]
                         )
-                        strip_params_for_its = self.get_active_ruleset().strip_parameters(
+                        strip_params_for_its = self._get_ols_ruleset().strip_parameters(
                             arc_num, type_abbr_for_its, runway_actual_width
                         )
                         graded_strip_total_width = 150.0
@@ -4637,7 +4644,7 @@ class OlsGuidelineMixin:
             # --- Take-off Climb Surface (TOCS) ---
             try:
                 tocs_plane_origin_pt = config["tocs_departure_pavement_end_pt"]
-                tocs_params_for_offset = self.get_active_ruleset().ols_parameters(arc_num, None, "TOCS")
+                tocs_params_for_offset = self._get_ols_ruleset().ols_parameters(arc_num, None, "TOCS")
                 origin_offset_param_val = 60.0
                 if tocs_params_for_offset:
                     origin_offset_param_val = tocs_params_for_offset.get("origin_offset", 60.0)
@@ -4866,9 +4873,9 @@ class OlsGuidelineMixin:
 
         # Logging for empty ITS on Precision Approach runways
         is_precision_runway = False
-        precision_type_codes = self.get_active_ruleset().precision_type_codes()
+        precision_type_codes = self._get_ols_ruleset().precision_type_codes()
         current_runway_type_abbrs = {
-            self.get_active_ruleset().classify_runway_type(s.get("approach_type_str"))
+            self._get_ols_ruleset().classify_runway_type(s.get("approach_type_str"))
             for s in runway_end_configurations
             if s.get("approach_type_str")
         }
