@@ -598,7 +598,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.assertTrue(self.dialog.is_processing_cancel_requested())
         self.assertFalse(self.dialog._processing_cancel_button.isEnabled())
-        self.assertIn("finishing the current phase", self.dialog.label_footer_status.text())
+        self.assertIn(
+            "finishing the current phase",
+            self.dialog.label_footer_status.toolTip(),
+        )
 
         self.dialog.clear_processing_status("Generation cancelled — completed layers were kept.")
 
@@ -606,9 +609,70 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertFalse(self.dialog.is_processing_cancel_requested())
         self.assertTrue(self.dialog._processing_progress_bar.isHidden())
         self.assertEqual(
-            self.dialog.label_footer_status.text(),
+            self.dialog.label_footer_status.toolTip(),
             "Generation cancelled — completed layers were kept.",
         )
+
+    def test_dynamic_status_text_is_bounded_without_resizing_the_dialog(self):
+        self.dialog.show()
+        self.app.processEvents()
+        self.dialog.resize(824, 760)
+        self.app.processEvents()
+        original_size = self.dialog.size()
+
+        self.dialog.set_processing_status(
+            "Generating a deliberately long protected-airspace status message "
+            "that must remain inside the footer allocation",
+            step=8,
+            total_steps=10,
+        )
+        self.app.processEvents()
+
+        self.assertEqual(self.dialog.size(), original_size)
+        self.assertIn(
+            "deliberately long protected-airspace status message",
+            self.dialog.label_footer_status.toolTip(),
+        )
+        self.assertEqual(
+            self.dialog.label_footer_status.sizePolicy().horizontalPolicy(),
+            QtWidgets.QSizePolicy.Policy.Ignored,
+        )
+
+    def test_footer_status_elides_and_retains_full_message_in_tooltip(self):
+        message = "A long generation message that cannot fit into a narrow footer label"
+        self.dialog.label_footer_status.setFixedWidth(120)
+
+        self.dialog._set_footer_status(message)
+
+        self.assertEqual(self.dialog.label_footer_status.toolTip(), message)
+        self.assertNotEqual(self.dialog.label_footer_status.text(), message)
+        self.assertIn("…", self.dialog.label_footer_status.text())
+
+    def test_readiness_and_ols_warning_labels_wrap_with_shrinkable_widths(self):
+        readiness = self.dialog.label_generation_readiness_detail
+        ols_warning = self.dialog.label_olsInlineStatus
+
+        self.assertTrue(readiness.wordWrap())
+        self.assertEqual(readiness.minimumWidth(), 0)
+        self.assertEqual(
+            readiness.sizePolicy().horizontalPolicy(),
+            QtWidgets.QSizePolicy.Policy.Ignored,
+        )
+        self.assertTrue(ols_warning.wordWrap())
+        self.assertEqual(ols_warning.minimumWidth(), 0)
+        self.assertEqual(
+            ols_warning.sizePolicy().horizontalPolicy(),
+            QtWidgets.QSizePolicy.Policy.Ignored,
+        )
+
+    def test_post_initial_height_update_preserves_user_size(self):
+        self.dialog.resize(930, 710)
+        expected_size = self.dialog.size()
+
+        self.dialog._update_dialog_height()
+        self.app.processEvents()
+
+        self.assertEqual(self.dialog.size(), expected_size)
 
     def test_builder_stops_at_checkpoint_after_cancel_request(self):
         builder = object.__new__(SafeguardingBuilder)

@@ -257,6 +257,11 @@ class OutputOptionsMixin:
         status = QtWidgets.QLabel()
         status.setObjectName("label_olsInlineStatus")
         status.setWordWrap(True)
+        status.setMinimumWidth(0)
+        status.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored,
+            QtWidgets.QSizePolicy.Policy.Preferred,
+        )
         status.setMinimumHeight(30)
         grid.addWidget(status, 4, 0, 1, 2)
 
@@ -528,7 +533,9 @@ class OutputOptionsMixin:
         }
         background, border, foreground = colors.get(state, colors["neutral"])
         if hasattr(self, "label_olsInlineStatus"):
-            self.label_olsInlineStatus.setText(str(status_data.get("summary") or ""))
+            summary = str(status_data.get("summary") or "")
+            self.label_olsInlineStatus.setText(summary)
+            self.label_olsInlineStatus.setToolTip(summary)
             self.label_olsInlineStatus.setVisible(state in {"warning", "blocked"})
             self.label_olsInlineStatus.setStyleSheet(
                 f"QLabel {{ background: {background}; border: 1px solid {border}; border-radius: 4px; "

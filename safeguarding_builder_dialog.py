@@ -107,6 +107,7 @@ class SafeguardingBuilderDialog(
         self._processing_cancel_button: Optional[QtWidgets.QPushButton] = None
         self._processing_cancel_requested = False
         self._processing_elapsed_timer = QtCore.QElapsedTimer()
+        self._footer_status_full_text = ""
         self._airport_lookup_cache: Dict[str, Dict[str, str]] = {}
         self._airport_iata_cache: Dict[str, Dict[str, str]] = {}
         self._airport_dataset_loaded = False
@@ -245,6 +246,49 @@ class SafeguardingBuilderDialog(
         footer_layout.insertWidget(2, cancel_button)
         self._processing_cancel_button = cancel_button
 
+        footer_status = getattr(self, "label_footer_status", None)
+        if footer_status is not None:
+            footer_status.setWordWrap(False)
+            footer_status.setMinimumWidth(0)
+            footer_status.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Ignored,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            footer_layout.setStretch(0, 1)
+
+    def _set_footer_status(self, message: str) -> None:
+        """Display a bounded one-line footer message and retain its full text."""
+        self._footer_status_full_text = str(message or "")
+        label = getattr(self, "label_footer_status", None)
+        if label is None:
+            return
+        label.setToolTip(self._footer_status_full_text)
+        self._refresh_footer_status_elision()
+
+    def _refresh_footer_status_elision(self) -> None:
+        """Elide the footer message to the width allocated by its layout."""
+        label = getattr(self, "label_footer_status", None)
+        if label is None:
+            return
+        full_text = getattr(self, "_footer_status_full_text", "")
+        available_width = max(0, label.contentsRect().width() - 2)
+        display_text = (
+            label.fontMetrics().elidedText(
+                full_text,
+                QtCore.Qt.TextElideMode.ElideRight,
+                available_width,
+            )
+            if available_width > 0
+            else full_text
+        )
+        if label.text() != display_text:
+            label.setText(display_text)
+
+    def resizeEvent(self, event) -> None:
+        """Refresh bounded status text after a user-controlled resize."""
+        super().resizeEvent(event)
+        QtCore.QTimer.singleShot(0, self._refresh_footer_status_elision)
+
     def begin_processing(self, total_steps: int = 1) -> None:
         """Reset cancellation and start a determinate generation run."""
         self._processing_status_active = True
@@ -267,7 +311,7 @@ class SafeguardingBuilderDialog(
             self._processing_cancel_button.setEnabled(False)
             self._processing_cancel_button.setText(self.tr("Cancellation requested"))
         if hasattr(self, "label_footer_status"):
-            self.label_footer_status.setText(
+            self._set_footer_status(
                 self.tr("Cancellation requested — finishing the current phase safely...")
             )
 
@@ -289,7 +333,7 @@ class SafeguardingBuilderDialog(
             else 0.0
         )
         if hasattr(self, "label_footer_status"):
-            self.label_footer_status.setText(f"{message}  •  {elapsed_seconds:.1f}s")
+            self._set_footer_status(f"{message}  •  {elapsed_seconds:.1f}s")
         if self._processing_progress_bar is not None:
             if total_steps is not None:
                 self._processing_progress_bar.setRange(0, max(1, int(total_steps)))
@@ -324,7 +368,7 @@ class SafeguardingBuilderDialog(
             generate_button.setText("Generate Airport Layers")
         self.update_dialog_status()
         if final_message and hasattr(self, "label_footer_status"):
-            self.label_footer_status.setText(final_message)
+            self._set_footer_status(final_message)
 
     # --- Initialization Helpers ---
     def _setup_arp_validators(
@@ -744,7 +788,18 @@ class SafeguardingBuilderDialog(
         detail = QtWidgets.QLabel(readiness_frame)
         detail.setObjectName("label_generation_readiness_detail")
         detail.setStyleSheet("QLabel { color: #555555; font-size: 11px; }")
-        detail.setWordWrap(False)
+        title.setMinimumWidth(0)
+        title.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        detail.setWordWrap(True)
+        detail.setMinimumWidth(0)
+        detail.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        detail.setMaximumHeight(detail.fontMetrics().lineSpacing() * 2 + 2)
 
         text_block = QtWidgets.QFrame(readiness_frame)
         text_block_layout = QtWidgets.QVBoxLayout(text_block)
@@ -1042,6 +1097,7 @@ class SafeguardingBuilderDialog(
             title_label.setText(title)
         if detail_label is not None:
             detail_label.setText(detail)
+            detail_label.setToolTip(detail)
 
     def _line_value(self, widget_name: str) -> str:
         widget = getattr(self, widget_name, self.findChild(QtWidgets.QLineEdit, widget_name))
@@ -2695,8 +2751,8 @@ class SafeguardingBuilderDialog(
                 footer_parts.append("AGL")
             footer_parts.append(output_text)
             footer_text = " | ".join(footer_parts)
-            if self.label_footer_status.text() != footer_text:
-                self.label_footer_status.setText(footer_text)
+            if self._footer_status_full_text != footer_text:
+                self._set_footer_status(footer_text)
 
     # --- Runway Group Management ---
     def _get_next_runway_id(self) -> int:
@@ -2940,22 +2996,19 @@ class SafeguardingBuilderDialog(
             )
 
     def _update_dialog_height(self, initial: bool = False):
-        """Adjusts the dialog height to fit its contents."""
+        """Set the initial dialog size without overriding later user resizing."""
+        if not initial:
+            return
+
         def _apply_size():
-            current_width = self.width()
-            current_height = self.height()
             self.adjustSize()
             preferred_height = 760
             screen = self.screen() or QtWidgets.QApplication.primaryScreen()
             if screen is not None:
                 preferred_height = min(preferred_height, int(screen.availableGeometry().height() * 0.86))
-            if initial:
-                target_width = 824
-                target_height = min(self.height(), preferred_height)
-                self.resize(target_width, target_height)
-            else:
-                max_auto_height = preferred_height if current_height <= preferred_height else current_height
-                self.resize(current_width, min(self.height(), max_auto_height))
+            target_width = 824
+            target_height = min(self.height(), preferred_height)
+            self.resize(target_width, target_height)
         QtCore.QTimer.singleShot(0, _apply_size)
 
     def _focus_runway_group(self, group_widget: RunwayWidgetGroup) -> None:
