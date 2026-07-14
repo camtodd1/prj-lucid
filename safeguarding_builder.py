@@ -112,6 +112,7 @@ class SafeguardingBuilder(
         self.baseline_ols_ruleset = self.ruleset
         self.comparison_ols_ruleset = None
         self.protected_airspace_ruleset = self.baseline_ols_ruleset
+        self._contour_interval_ruleset_role = "baseline"
         self.framework = get_framework_profile()
         self.ruleset_context = RulesetContext(
             design_standard=self.ruleset,
@@ -521,6 +522,7 @@ class SafeguardingBuilder(
         self.protected_airspace_policy = "ruleset_aligned"
         self.baseline_ols_ruleset = self.ruleset
         self.comparison_ols_ruleset = None
+        self._contour_interval_ruleset_role = "baseline"
         self.debug_logging = False
         self._processing_main_group = None
         self._processing_total_steps = 10
@@ -1778,8 +1780,12 @@ class SafeguardingBuilder(
             return False
 
         original_protected_ruleset = self.protected_airspace_ruleset
+        original_contour_role = getattr(
+            self, "_contour_interval_ruleset_role", "baseline"
+        )
         try:
             self.protected_airspace_ruleset = comparison_ruleset
+            self._contour_interval_ruleset_role = "comparison"
             self._reset_controlling_ols_engine()
             comparison_is_annex14 = self._is_future_annex14_protected_airspace()
             geometry_created = False
@@ -1881,6 +1887,7 @@ class SafeguardingBuilder(
             return controlling_created or comparison_created
         finally:
             self.protected_airspace_ruleset = original_protected_ruleset
+            self._contour_interval_ruleset_role = original_contour_role
 
     def _run_modernisation_comparison(
         self,
@@ -1908,12 +1915,16 @@ class SafeguardingBuilder(
             return False
 
         original_protected_ruleset = self.protected_airspace_ruleset
+        original_contour_role = getattr(
+            self, "_contour_interval_ruleset_role", "baseline"
+        )
         try:
             self.protected_airspace_ruleset = getattr(
                 self,
                 "comparison_ols_ruleset",
                 None,
             ) or get_ruleset_profile("icao_annex14_vol1_modernised_ofs_oes")
+            self._contour_interval_ruleset_role = "comparison"
             self._reset_controlling_ols_engine()
             future_geometry_created = False
             runway_total = len(processed_runway_data_list)
@@ -1962,6 +1973,7 @@ class SafeguardingBuilder(
             return future_controlling_created or comparison_created
         finally:
             self.protected_airspace_ruleset = original_protected_ruleset
+            self._contour_interval_ruleset_role = original_contour_role
 
     def _move_layer_tree_node(
         self,

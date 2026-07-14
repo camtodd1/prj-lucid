@@ -5,6 +5,12 @@ selectors. Choosing **None — baseline only** generates only the baseline.
 Rulesets are selectable when their controlling-envelope capability is available;
 incomplete rulesets remain visible but disabled.
 
+Individual contour settings repeat the same two-column baseline/comparison
+layout. Each column only shows the surface families used by its selected
+ruleset, and its interval values are stored independently. With no comparison
+selected, the comparison column shows a baseline-only empty state. Signed
+change-contour controls remain on the comparison side when Annex 14 is present.
+
 The comparison engine solves both selected envelopes and calculates:
 
 `delta height = comparison elevation - baseline elevation`

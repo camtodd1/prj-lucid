@@ -31,6 +31,19 @@ ANNEX14_FAMILY_CONTOUR_KEYS = (
     "annex14_ofs",
     "annex14_oes",
 )
+CONVENTIONAL_SURFACE_CONTOUR_KEYS = (
+    "approach",
+    "tocs",
+    "transitional",
+    "conical",
+    "inner_approach",
+    "inner_transitional",
+    "baulked_landing",
+)
+SURFACE_CONTOUR_KEYS = CONVENTIONAL_SURFACE_CONTOUR_KEYS + ANNEX14_FAMILY_CONTOUR_KEYS
+COMPARISON_SURFACE_CONTOUR_KEYS = tuple(
+    f"comparison_{key}" for key in SURFACE_CONTOUR_KEYS
+)
 MODERNISATION_CHANGE_CONTOUR_KEYS = (
     "modernisation_ofs_change",
     "modernisation_oes_change",
@@ -40,17 +53,9 @@ CONTOUR_INTERVAL_KEY_DEFAULTS = {
     "modernisation_oes_change": {"primary": 5.0, "intermediate": 1.0},
 }
 CONTOUR_INTERVAL_KEYS = (
-    "approach",
-    "tocs",
-    "transitional",
-    "conical",
-    "inner_approach",
-    "inner_transitional",
-    "baulked_landing",
-    "annex14_ofs",
-    "annex14_oes",
-    "modernisation_ofs_change",
-    "modernisation_oes_change",
+    SURFACE_CONTOUR_KEYS
+    + COMPARISON_SURFACE_CONTOUR_KEYS
+    + MODERNISATION_CHANGE_CONTOUR_KEYS
 )
 CONTOUR_INTERVAL_LABELS = {
     "approach": "Approach",
@@ -65,3 +70,9 @@ CONTOUR_INTERVAL_LABELS = {
     "modernisation_ofs_change": "OFS change contours",
     "modernisation_oes_change": "OES change contours",
 }
+CONTOUR_INTERVAL_LABELS.update(
+    {
+        f"comparison_{key}": CONTOUR_INTERVAL_LABELS[key]
+        for key in SURFACE_CONTOUR_KEYS
+    }
+)

@@ -14,15 +14,18 @@ except ImportError:
 
 from .dialog_constants import (
     ANNEX14_FAMILY_CONTOUR_KEYS,
+    COMPARISON_SURFACE_CONTOUR_KEYS,
     CONTOUR_INTERVAL_KEYS,
     CONTOUR_INTERVAL_KEY_DEFAULTS,
     CONTOUR_INTERVAL_LABELS,
+    CONVENTIONAL_SURFACE_CONTOUR_KEYS,
     DEFAULT_CONTOUR_INTERVAL,
     DEFAULT_PRIMARY_CONTOUR_INTERVAL,
     DEFAULT_OUTPUT_FORMAT,
     DIALOG_LOG_TAG,
     MODERNISATION_CHANGE_CONTOUR_KEYS,
     OUTPUT_FORMATS,
+    SURFACE_CONTOUR_KEYS,
 )
 
 
@@ -376,10 +379,6 @@ class OutputOptionsMixin:
             self.label_olsModeDescription.setText(description_text)
         modernised_id = "icao_annex14_vol1_modernised_ofs_oes"
         annex_selected = modernised_id in {baseline_id, comparison_id}
-        conventional_selected = any(
-            ruleset_id and ruleset_id != modernised_id
-            for ruleset_id in (baseline_id, comparison_id)
-        )
         if hasattr(self, "frame_olsFamilyExplanation"):
             self.frame_olsFamilyExplanation.setVisible(annex_selected)
 
@@ -415,37 +414,70 @@ class OutputOptionsMixin:
                 else self.tr("Contours — Baseline OLS")
             )
 
-        future_family_widget = getattr(self, "widgetModernisationContourIntervals", None)
-        if future_family_widget is not None:
-            future_family_widget.setVisible(annex_selected)
-        for header_name in (
-            "labelModernisationChangeIntervals",
-            "labelModernisationChangePrimaryHeader",
-            "labelModernisationChangeIntermediateHeader",
-        ):
-            header = getattr(self, header_name, None)
-            if header is not None:
-                header.setVisible(bool(comparison_id) and annex_selected)
         overrides_button = getattr(self, "toolButtonContourOverrides", None)
         if overrides_button is not None:
-            overrides_button.setVisible(conventional_selected)
+            overrides_button.setVisible(True)
         overrides_widget = getattr(self, "widgetContourOverrides", None)
         if overrides_widget is not None:
             overrides_widget.setVisible(
-                conventional_selected
-                and bool(overrides_button and overrides_button.isChecked())
+                bool(overrides_button and overrides_button.isChecked())
             )
 
-        annex_keys = set(ANNEX14_FAMILY_CONTOUR_KEYS)
-        comparison_keys = set(MODERNISATION_CHANGE_CONTOUR_KEYS)
-        for key, label in getattr(self, "_contour_interval_labels", {}).items():
-            visible = (
-                annex_selected
-                if key in annex_keys
-                else bool(comparison_id) and annex_selected
-                if key in comparison_keys
-                else conventional_selected
+        baseline_is_annex = (
+            getattr(baseline_profile, "protected_airspace_model", "")
+            == "annex14_modernised_ofs_oes"
+        )
+        comparison_is_annex = (
+            comparison_profile is not None
+            and getattr(comparison_profile, "protected_airspace_model", "")
+            == "annex14_modernised_ofs_oes"
+        )
+        baseline_keys = set(
+            ANNEX14_FAMILY_CONTOUR_KEYS
+            if baseline_is_annex
+            else CONVENTIONAL_SURFACE_CONTOUR_KEYS
+        )
+        comparison_keys = (
+            {
+                f"comparison_{key}"
+                for key in (
+                    ANNEX14_FAMILY_CONTOUR_KEYS
+                    if comparison_is_annex
+                    else CONVENTIONAL_SURFACE_CONTOUR_KEYS
+                )
+            }
+            if comparison_profile is not None
+            else set()
+        )
+        visible_keys = baseline_keys | comparison_keys
+        if comparison_profile is not None and annex_selected:
+            visible_keys.update(MODERNISATION_CHANGE_CONTOUR_KEYS)
+
+        header_labels = getattr(self, "_contour_column_headers", {})
+        if "baseline" in header_labels:
+            header_labels["baseline"].setText(
+                self.tr(f"Baseline OLS — {baseline_profile.display_name}")
             )
+        if "comparison" in header_labels:
+            header_labels["comparison"].setText(
+                self.tr(f"Comparison OLS — {comparison_profile.display_name}")
+                if comparison_profile is not None
+                else self.tr("Comparison OLS — None")
+            )
+        empty_labels = getattr(self, "_contour_column_empty_labels", {})
+        if "baseline" in empty_labels:
+            empty_labels["baseline"].setVisible(False)
+        if "comparison" in empty_labels:
+            empty_labels["comparison"].setVisible(comparison_profile is None)
+        for label in getattr(self, "_contour_column_interval_headers", {}).get(
+            "comparison", ()
+        ):
+            label.setVisible(comparison_profile is not None)
+        for label in getattr(self, "_contour_change_section_labels", []):
+            label.setVisible(comparison_profile is not None and annex_selected)
+
+        for key, label in getattr(self, "_contour_interval_labels", {}).items():
+            visible = key in visible_keys
             label.setVisible(visible)
             primary = getattr(self, "_contour_primary_interval_spinboxes", {}).get(key)
             intermediate = getattr(self, "_contour_interval_spinboxes", {}).get(key)
@@ -582,69 +614,11 @@ class OutputOptionsMixin:
         grid.addWidget(self.doubleSpinBoxContourDefaultPrimary, 1, 1)
         grid.addWidget(self.doubleSpinBoxContourDefault, 1, 2)
 
-        modernisation_widget = getattr(self, "widgetModernisationContourIntervals", None)
-        if modernisation_widget is None:
-            modernisation_widget = QtWidgets.QFrame(group)
-            modernisation_widget.setObjectName("widgetModernisationContourIntervals")
-            modernisation_widget.setStyleSheet(
-                "QFrame#widgetModernisationContourIntervals { background: #f5f8fb; "
-                "border: 1px solid #d9e2ea; border-radius: 4px; }"
-            )
-            modernisation_grid = QtWidgets.QGridLayout(modernisation_widget)
-            modernisation_grid.setObjectName("gridLayoutModernisationContourIntervals")
-            modernisation_grid.setContentsMargins(8, 1, 8, 1)
-            modernisation_grid.setHorizontalSpacing(12)
-            modernisation_grid.setVerticalSpacing(1)
-            modernisation_grid.setColumnStretch(0, 1)
-            modernisation_grid.setColumnStretch(1, 0)
-            modernisation_grid.setColumnStretch(2, 0)
-            modernisation_grid.setColumnStretch(3, 1)
-            modernisation_grid.setColumnStretch(4, 0)
-            modernisation_grid.setColumnStretch(5, 0)
-            family_header = QtWidgets.QLabel(self.tr("Future surface contours"))
-            family_header.setObjectName("labelModernisationContourIntervals")
-            family_header.setStyleSheet("font-weight: 600; color: #234b68; font-size: 10px;")
-            family_header.setToolTip(
-                self.tr(
-                    "Future surface intervals control elevation contours; change intervals control signed comparison isolines."
-                )
-            )
-            family_primary_header = QtWidgets.QLabel(self.tr("Primary"))
-            family_primary_header.setStyleSheet("color: #59636e; font-size: 9px;")
-            family_intermediate_header = QtWidgets.QLabel(self.tr("Intermediate"))
-            family_intermediate_header.setStyleSheet("color: #59636e; font-size: 9px;")
-            change_header = QtWidgets.QLabel(self.tr("Comparison change contours"))
-            change_header.setObjectName("labelModernisationChangeIntervals")
-            change_header.setStyleSheet("font-weight: 600; color: #234b68; font-size: 10px;")
-            change_primary_header = QtWidgets.QLabel(self.tr("Primary"))
-            change_primary_header.setObjectName("labelModernisationChangePrimaryHeader")
-            change_primary_header.setStyleSheet("color: #59636e; font-size: 9px;")
-            change_intermediate_header = QtWidgets.QLabel(self.tr("Intermediate"))
-            change_intermediate_header.setObjectName(
-                "labelModernisationChangeIntermediateHeader"
-            )
-            change_intermediate_header.setStyleSheet("color: #59636e; font-size: 9px;")
-            modernisation_grid.addWidget(family_header, 0, 0)
-            modernisation_grid.addWidget(family_primary_header, 0, 1)
-            modernisation_grid.addWidget(family_intermediate_header, 0, 2)
-            modernisation_grid.addWidget(change_header, 0, 3)
-            modernisation_grid.addWidget(change_primary_header, 0, 4)
-            modernisation_grid.addWidget(change_intermediate_header, 0, 5)
-            grid.addWidget(modernisation_widget, 2, 0, 1, 4)
-            self.widgetModernisationContourIntervals = modernisation_widget
-            self.gridLayoutModernisationContourIntervals = modernisation_grid
-            self.labelModernisationContourIntervals = family_header
-            self.labelModernisationChangeIntervals = change_header
-            self.labelModernisationChangePrimaryHeader = change_primary_header
-            self.labelModernisationChangeIntermediateHeader = change_intermediate_header
-        else:
-            modernisation_grid = modernisation_widget.layout()
-
         overrides_button = getattr(self, "toolButtonContourOverrides", None)
         if overrides_button is None:
             overrides_button = QtWidgets.QToolButton()
             overrides_button.setObjectName("toolButtonContourOverrides")
-            overrides_button.setText(self.tr("Individual baseline surface settings"))
+            overrides_button.setText(self.tr("Individual contour settings"))
             overrides_button.setCheckable(True)
             overrides_button.setChecked(False)
             overrides_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
@@ -658,7 +632,7 @@ class OutputOptionsMixin:
                 "background: #f6f8fa; padding: 6px 8px; text-align: left; font-weight: 600; }"
                 "QToolButton:hover { background: #eef3f7; }"
             )
-            grid.addWidget(overrides_button, 3, 0, 1, 4)
+            grid.addWidget(overrides_button, 2, 0, 1, 4)
             self.toolButtonContourOverrides = overrides_button
 
         overrides_widget = getattr(self, "widgetContourOverrides", None)
@@ -667,51 +641,97 @@ class OutputOptionsMixin:
             overrides_widget.setObjectName("widgetContourOverrides")
             overrides_grid = QtWidgets.QGridLayout(overrides_widget)
             overrides_grid.setObjectName("gridLayoutContourOverrides")
-            overrides_grid.setContentsMargins(8, 6, 8, 4)
+            overrides_grid.setContentsMargins(0, 2, 0, 2)
             overrides_grid.setHorizontalSpacing(12)
-            overrides_grid.setVerticalSpacing(6)
+            overrides_grid.setVerticalSpacing(0)
             overrides_grid.setColumnStretch(0, 1)
-            overrides_grid.setColumnStretch(1, 0)
-            overrides_grid.setColumnStretch(2, 0)
-            detail_primary_header = QtWidgets.QLabel(self.tr("Primary"))
-            detail_primary_header.setStyleSheet("color: #59636e; font-size: 11px;")
-            detail_intermediate_header = QtWidgets.QLabel(self.tr("Intermediate"))
-            detail_intermediate_header.setStyleSheet("color: #59636e; font-size: 11px;")
-            overrides_grid.addWidget(detail_primary_header, 0, 1)
-            overrides_grid.addWidget(detail_intermediate_header, 0, 2)
-            grid.addWidget(overrides_widget, 4, 0, 1, 4)
+            overrides_grid.setColumnStretch(1, 1)
+            grid.addWidget(overrides_widget, 3, 0, 1, 4)
             self.widgetContourOverrides = overrides_widget
             self.gridLayoutContourOverrides = overrides_grid
         else:
             overrides_grid = overrides_widget.layout()
 
+        self._contour_column_widgets = {}
+        self._contour_column_headers = {}
+        self._contour_column_interval_headers = {}
+        self._contour_column_empty_labels = {}
+        self._contour_change_section_labels = []
+        column_grids = {}
+        for column, role in enumerate(("baseline", "comparison")):
+            title = (
+                self.tr("Baseline OLS")
+                if role == "baseline"
+                else self.tr("Comparison OLS")
+            )
+            frame = QtWidgets.QFrame(overrides_widget)
+            frame.setObjectName(f"frame{role.title()}ContourSettings")
+            frame.setStyleSheet(
+                f"QFrame#frame{role.title()}ContourSettings {{ background: #f5f8fb; "
+                "border: 1px solid #d9e2ea; border-radius: 4px; }"
+            )
+            column_grid = QtWidgets.QGridLayout(frame)
+            column_grid.setObjectName(f"gridLayout{role.title()}ContourSettings")
+            column_grid.setContentsMargins(10, 8, 10, 8)
+            column_grid.setHorizontalSpacing(10)
+            column_grid.setVerticalSpacing(5)
+            column_grid.setColumnStretch(0, 1)
+            column_grid.setColumnStretch(1, 0)
+            column_grid.setColumnStretch(2, 0)
+            ruleset_header = QtWidgets.QLabel(title)
+            ruleset_header.setObjectName(f"label{role.title()}ContourRuleset")
+            ruleset_header.setWordWrap(True)
+            ruleset_header.setStyleSheet("font-weight: 600; color: #234b68;")
+            primary = QtWidgets.QLabel(self.tr("Primary"))
+            primary.setStyleSheet("color: #59636e; font-size: 10px;")
+            intermediate = QtWidgets.QLabel(self.tr("Intermediate"))
+            intermediate.setStyleSheet("color: #59636e; font-size: 10px;")
+            empty = QtWidgets.QLabel(self.tr("No comparison selected — baseline only."))
+            empty.setObjectName(f"label{role.title()}ContourEmpty")
+            empty.setWordWrap(True)
+            empty.setStyleSheet("color: #6b7580; padding: 8px 0;")
+            column_grid.addWidget(ruleset_header, 0, 0, 1, 3)
+            column_grid.addWidget(primary, 1, 1)
+            column_grid.addWidget(intermediate, 1, 2)
+            column_grid.addWidget(empty, 2, 0, 1, 3)
+            overrides_grid.addWidget(frame, 0, column)
+            self._contour_column_widgets[role] = frame
+            self._contour_column_headers[role] = ruleset_header
+            self._contour_column_interval_headers[role] = (primary, intermediate)
+            self._contour_column_empty_labels[role] = empty
+            column_grids[role] = column_grid
+            setattr(self, f"frame{role.title()}ContourSettings", frame)
+            setattr(self, f"label{role.title()}ContourRuleset", ruleset_header)
+            setattr(self, f"label{role.title()}ContourEmpty", empty)
+
         overrides_button.toggled.connect(self._toggle_contour_overrides)
         self._toggle_contour_overrides(overrides_button.isChecked())
 
-        regular_row = 1
-        modernisation_keys = set(ANNEX14_FAMILY_CONTOUR_KEYS) | set(
-            MODERNISATION_CHANGE_CONTOUR_KEYS
-        )
-        modernisation_positions = {
-            "annex14_ofs": (1, 0, 1, 2),
-            "annex14_oes": (2, 0, 1, 2),
-            "modernisation_ofs_change": (1, 3, 4, 5),
-            "modernisation_oes_change": (2, 3, 4, 5),
-        }
         for key in CONTOUR_INTERVAL_KEYS:
-            is_modernisation = key in modernisation_keys
-            target_grid = modernisation_grid if is_modernisation else overrides_grid
-            if is_modernisation:
-                row, label_column, primary_column, intermediate_column = (
-                    modernisation_positions[key]
-                )
+            is_change = key in MODERNISATION_CHANGE_CONTOUR_KEYS
+            if key.startswith("comparison_") or is_change:
+                role = "comparison"
+                base_key = key.removeprefix("comparison_")
             else:
-                row, label_column, primary_column, intermediate_column = (
-                    regular_row,
-                    0,
-                    1,
-                    2,
+                role = "baseline"
+                base_key = key
+            target_grid = column_grids[role]
+            if is_change and not self._contour_change_section_labels:
+                change_row = 2 + len(SURFACE_CONTOUR_KEYS)
+                change_header = QtWidgets.QLabel(self.tr("Signed change contours"))
+                change_header.setObjectName("labelComparisonChangeContourSettings")
+                change_header.setStyleSheet(
+                    "font-weight: 600; color: #234b68; padding-top: 4px;"
                 )
+                target_grid.addWidget(change_header, change_row, 0, 1, 3)
+                self._contour_change_section_labels.append(change_header)
+            row = (
+                3
+                + len(SURFACE_CONTOUR_KEYS)
+                + list(MODERNISATION_CHANGE_CONTOUR_KEYS).index(key)
+                if is_change
+                else 2 + list(SURFACE_CONTOUR_KEYS).index(base_key)
+            )
             label_name = f"labelContour{key.title()}"
             primary_spin_name = f"doubleSpinBoxContour{key.title()}Primary"
             intermediate_spin_name = f"doubleSpinBoxContour{key.title()}Intermediate"
@@ -719,7 +739,7 @@ class OutputOptionsMixin:
             if label is None:
                 label = QtWidgets.QLabel(self.tr(CONTOUR_INTERVAL_LABELS[key]))
                 label.setObjectName(label_name)
-                target_grid.addWidget(label, row, label_column)
+                target_grid.addWidget(label, row, 0)
             self._contour_interval_labels[key] = label
             label.setToolTip(self._contour_interval_tooltip(key))
             primary_spinbox = getattr(self, primary_spin_name, None)
@@ -742,13 +762,8 @@ class OutputOptionsMixin:
             intermediate_spinbox.setToolTip(self._contour_interval_tooltip(key, role="intermediate"))
             self._contour_primary_interval_spinboxes[key] = primary_spinbox
             self._contour_interval_spinboxes[key] = intermediate_spinbox
-            if is_modernisation:
-                primary_spinbox.setFixedHeight(18)
-                intermediate_spinbox.setFixedHeight(18)
-            target_grid.addWidget(primary_spinbox, row, primary_column)
-            target_grid.addWidget(intermediate_spinbox, row, intermediate_column)
-            if not is_modernisation:
-                regular_row += 1
+            target_grid.addWidget(primary_spinbox, row, 1)
+            target_grid.addWidget(intermediate_spinbox, row, 2)
 
         self.doubleSpinBoxContourDefaultPrimary.valueChanged.connect(
             lambda value: self._apply_default_contour_interval("primary", value)
@@ -770,18 +785,12 @@ class OutputOptionsMixin:
                 QtCore.Qt.ArrowType.DownArrow if expanded else QtCore.Qt.ArrowType.RightArrow
             )
             button.setToolTip(
-                self.tr("Hide individual baseline surface contour intervals.")
+                self.tr("Hide individual baseline and comparison contour intervals.")
                 if expanded
-                else self.tr("Show individual baseline surface contour intervals.")
+                else self.tr("Show individual baseline and comparison contour intervals.")
             )
         if widget is not None:
-            combo = getattr(self, "protected_airspace_policy_combo", None)
-            mode = (
-                str(combo.currentData() or "ruleset_aligned")
-                if combo is not None
-                else "ruleset_aligned"
-            )
-            widget.setVisible(bool(expanded) and mode != "future_annex14_ofs_oes")
+            widget.setVisible(bool(expanded))
 
     def _create_contour_interval_spinbox(self, object_name: str, default_value: float = DEFAULT_CONTOUR_INTERVAL):
         spinbox = QtWidgets.QDoubleSpinBox()
@@ -794,6 +803,7 @@ class OutputOptionsMixin:
         return spinbox
 
     def _contour_interval_tooltip(self, key: str, role: str = "label") -> str:
+        key = key.removeprefix("comparison_")
         label = CONTOUR_INTERVAL_LABELS.get(key, key.replace("_", " ").title())
         family_note = ""
         if key == "annex14_ofs":
@@ -899,20 +909,20 @@ class OutputOptionsMixin:
 
         primary_spinboxes = getattr(self, "_contour_primary_interval_spinboxes", {})
         intermediate_spinboxes = getattr(self, "_contour_interval_spinboxes", {})
-        modernisation_keys = set(ANNEX14_FAMILY_CONTOUR_KEYS) | set(
-            MODERNISATION_CHANGE_CONTOUR_KEYS
-        )
         for key in CONTOUR_INTERVAL_KEYS:
             key_defaults = CONTOUR_INTERVAL_KEY_DEFAULTS.get(key, {})
+            source_key = key
+            if key in COMPARISON_SURFACE_CONTOUR_KEYS and key not in contour_options:
+                source_key = key.removeprefix("comparison_")
             primary_value = self._coerce_contour_interval_value(
                 contour_options,
-                key,
+                source_key,
                 "primary",
                 key_defaults.get("primary", default_primary),
             )
             intermediate_value = self._coerce_contour_interval_value(
                 contour_options,
-                key,
+                source_key,
                 "intermediate",
                 key_defaults.get("intermediate", default_intermediate),
             )
@@ -920,15 +930,15 @@ class OutputOptionsMixin:
                 primary_spinboxes[key].setValue(primary_value)
             if key in intermediate_spinboxes:
                 intermediate_spinboxes[key].setValue(intermediate_value)
-        has_regular_overrides = any(
+        has_surface_overrides = any(
             abs(primary_spinboxes[key].value() - default_primary) > 1e-9
             or abs(intermediate_spinboxes[key].value() - default_intermediate) > 1e-9
             for key in CONTOUR_INTERVAL_KEYS
-            if key not in modernisation_keys
+            if key not in MODERNISATION_CHANGE_CONTOUR_KEYS
             if key in primary_spinboxes and key in intermediate_spinboxes
         )
         if hasattr(self, "toolButtonContourOverrides"):
-            self.toolButtonContourOverrides.setChecked(has_regular_overrides)
+            self.toolButtonContourOverrides.setChecked(has_surface_overrides)
 
     def _coerce_contour_interval_value(
         self,

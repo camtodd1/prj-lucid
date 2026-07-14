@@ -60,13 +60,18 @@ class OlsGuidelineMixin:
 
     def _get_contour_interval_value(self, surface_key: str, role: str, fallback: float) -> float:
         intervals = getattr(self, "contour_intervals", {}) or {}
-        raw_value = intervals.get(surface_key)
+        lookup_key = surface_key
+        if getattr(self, "_contour_interval_ruleset_role", "baseline") == "comparison":
+            comparison_key = f"comparison_{surface_key}"
+            if comparison_key in intervals:
+                lookup_key = comparison_key
+        raw_value = intervals.get(lookup_key)
         if isinstance(raw_value, dict):
             value = raw_value.get(role)
         elif role == "intermediate":
             value = raw_value
         else:
-            value = intervals.get(f"{surface_key}_{role}")
+            value = intervals.get(f"{lookup_key}_{role}")
         if value is None:
             default_value = intervals.get("default")
             if isinstance(default_value, dict):
