@@ -189,11 +189,14 @@ class OlsGuidelineMixin:
     ) -> List[Tuple[QgsGeometry, QgsPointXY, float, float, float]]:
         """Create locally planar corridor panels along a nominated track."""
         length = float(length_m)
-        segment_count = max(1, int(math.ceil(length / max(1.0, max_segment_m))))
+        breakpoints = self._ols_track_relative_breakpoints(
+            track,
+            start_station_m,
+            length,
+            max_segment_m,
+        )
         parts = []
-        for index in range(segment_count):
-            rel_start = length * index / segment_count
-            rel_end = length * (index + 1) / segment_count
+        for rel_start, rel_end in zip(breakpoints[:-1], breakpoints[1:]):
             point_a, azimuth_a = self._ols_track_point_azimuth(track, start_station_m + rel_start)
             point_b, azimuth_b = self._ols_track_point_azimuth(track, start_station_m + rel_end)
             if any(value is None for value in (point_a, point_b, azimuth_a, azimuth_b)):
@@ -208,13 +211,40 @@ class OlsGuidelineMixin:
             a_right = point_a.project(width_a / 2.0, (azimuth_a + 90.0) % 360.0)
             b_left = point_b.project(width_b / 2.0, (azimuth_b - 90.0) % 360.0)
             b_right = point_b.project(width_b / 2.0, (azimuth_b + 90.0) % 360.0)
-            polygon = self._create_polygon_from_corners(
-                [a_left, a_right, b_right, b_left], "nominated track corridor panel"
-            )
-            if polygon is not None and not polygon.isEmpty():
+            corners = [a_left, a_right, b_right, b_left]
+            polygon = QgsGeometry.fromPolygonXY([corners + [corners[0]]])
+            if polygon is not None and not polygon.isEmpty() and not polygon.isGeosValid():
+                polygon = polygon.makeValid()
+            if (
+                polygon is not None
+                and not polygon.isEmpty()
+                and polygon.isGeosValid()
+                and polygon.area() > 1e-6
+            ):
                 local_azimuth = point_a.azimuth(point_b)
                 parts.append((polygon, point_a, local_azimuth, rel_start, rel_end - rel_start))
         return parts
+
+    @staticmethod
+    def _ols_track_relative_breakpoints(
+        track: QgsGeometry,
+        start_station_m: float,
+        length_m: float,
+        max_segment_m: float,
+    ) -> List[float]:
+        """Split regularly and at every nominated-track vertex within the interval."""
+        length = float(length_m)
+        segment_count = max(1, int(math.ceil(length / max(1.0, max_segment_m))))
+        breakpoints = {length * index / segment_count for index in range(segment_count + 1)}
+        points = track.asPolyline()
+        station = 0.0
+        interval_start = float(start_station_m)
+        interval_end = interval_start + length
+        for first, second in zip(points[:-1], points[1:]):
+            station += first.distance(second)
+            if interval_start + 1e-7 < station < interval_end - 1e-7:
+                breakpoints.add(station - interval_start)
+        return sorted(breakpoints)
 
     def _ols_track_cross_section(
         self,
@@ -228,6 +258,54 @@ class OlsGuidelineMixin:
         left = point.project(width_m / 2.0, (azimuth - 90.0) % 360.0)
         right = point.project(width_m / 2.0, (azimuth + 90.0) % 360.0)
         return QgsGeometry.fromPolylineXY([left, right])
+
+    def _ols_track_corridor_edge_parts(
+        self,
+        track: QgsGeometry,
+        start_station_m: float,
+        length_m: float,
+        start_width_m: float,
+        end_width_m: float,
+        max_segment_m: float = 100.0,
+    ) -> Dict[str, List[dict]]:
+        """Return locally oriented left/right edges for a nominated corridor."""
+        length = float(length_m)
+        breakpoints = self._ols_track_relative_breakpoints(
+            track,
+            start_station_m,
+            length,
+            max_segment_m,
+        )
+        edge_parts: Dict[str, List[dict]] = {"L": [], "R": []}
+        for index, (rel_start, rel_end) in enumerate(
+            zip(breakpoints[:-1], breakpoints[1:]),
+            start=1,
+        ):
+            point_a, azimuth_a = self._ols_track_point_azimuth(
+                track, start_station_m + rel_start
+            )
+            point_b, azimuth_b = self._ols_track_point_azimuth(
+                track, start_station_m + rel_end
+            )
+            if any(value is None for value in (point_a, point_b, azimuth_a, azimuth_b)):
+                continue
+            width_a = start_width_m + ((end_width_m - start_width_m) * rel_start / length)
+            width_b = start_width_m + ((end_width_m - start_width_m) * rel_end / length)
+            for side_label, azimuth_delta in (("L", -90.0), ("R", 90.0)):
+                outward_a = (azimuth_a + azimuth_delta) % 360.0
+                outward_b = (azimuth_b + azimuth_delta) % 360.0
+                edge_parts[side_label].append(
+                    {
+                        "start": point_a.project(width_a / 2.0, outward_a),
+                        "end": point_b.project(width_b / 2.0, outward_b),
+                        "relative_start_m": rel_start,
+                        "relative_end_m": rel_end,
+                        "outward_start_azimuth": outward_a,
+                        "outward_end_azimuth": outward_b,
+                        "track_segment_index": index,
+                    }
+                )
+        return edge_parts
 
     def _get_contour_interval(self, surface_key: str, fallback: float) -> float:
         """Return a positive intermediate contour interval from dialog options, or the default fallback."""
@@ -2186,12 +2264,16 @@ class OlsGuidelineMixin:
 
             # Handle multipart or single part
             geoms = []
-            if clipped.isMultipart():
-                geoms = [QgsGeometry.fromPolylineXY(line) for line in clipped.asMultiPolyline()]
-            elif clipped.type() == QgsWkbTypes.LineGeometry:
-                geoms = [clipped]
-            else:
+            if clipped.type() != QgsWkbTypes.LineGeometry:
                 continue
+            if clipped.isMultipart():
+                geoms = [
+                    QgsGeometry.fromPolylineXY(line)
+                    for line in clipped.asMultiPolyline()
+                    if len(line) >= 2
+                ]
+            else:
+                geoms = [clipped]
 
             for g in geoms:
                 if g.length() < 1e-3:
@@ -2230,7 +2312,12 @@ class OlsGuidelineMixin:
         surface_id: Optional[str] = None,
     ) -> Optional[QgsFeature]:
         """Create a labelled transitional contour/edge feature."""
-        if geom is None or geom.isEmpty():
+        if (
+            geom is None
+            or geom.isEmpty()
+            or geom.type() != QgsWkbTypes.LineGeometry
+            or geom.length() <= 1e-3
+        ):
             return None
         feat = QgsFeature(contour_fields)
         feat.setGeometry(geom)
@@ -2336,6 +2423,205 @@ class OlsGuidelineMixin:
         )
         return surface_id
 
+    @staticmethod
+    def _transitional_triangle_contour_geometry(
+        vertices: List[Tuple[QgsPointXY, float]],
+        elevation_m: float,
+    ) -> Optional[QgsGeometry]:
+        """Intersect a constant elevation with one planar 3D triangle."""
+        intersections: List[QgsPointXY] = []
+
+        def add_unique(point: QgsPointXY) -> None:
+            if not any(point.distance(existing) <= 1e-7 for existing in intersections):
+                intersections.append(point)
+
+        for (first, first_z), (second, second_z) in zip(
+            vertices,
+            vertices[1:] + vertices[:1],
+        ):
+            first_delta = elevation_m - first_z
+            second_delta = elevation_m - second_z
+            if abs(first_delta) <= 1e-9 and abs(second_delta) <= 1e-9:
+                add_unique(first)
+                add_unique(second)
+                continue
+            if first_delta * second_delta > 1e-12 or abs(second_z - first_z) <= 1e-12:
+                continue
+            fraction = (elevation_m - first_z) / (second_z - first_z)
+            if -1e-9 <= fraction <= 1.0 + 1e-9:
+                add_unique(
+                    QgsPointXY(
+                        first.x() + fraction * (second.x() - first.x()),
+                        first.y() + fraction * (second.y() - first.y()),
+                    )
+                )
+        if len(intersections) < 2:
+            return None
+        first, second = max(
+            (
+                (first, second)
+                for index, first in enumerate(intersections)
+                for second in intersections[index + 1 :]
+            ),
+            key=lambda pair: pair[0].distance(pair[1]),
+        )
+        if first.distance(second) <= 1e-7:
+            return None
+        return QgsGeometry.fromPolylineXY([first, second])
+
+    def _generate_nominated_track_transitional_triangles(
+        self,
+        edge_parts: List[dict],
+        section_start_elevation_m: float,
+        section_slope: float,
+        ihs_elevation_m: float,
+        transitional_slope: float,
+        transitional_fields: QgsFields,
+        contour_fields: QgsFields,
+        contour_interval: float,
+        runway_name: str,
+        end_desig: str,
+        side_label: str,
+        approach_section_index: int,
+        transitional_ref: str,
+        sequence_start: int,
+    ) -> Tuple[List[QgsFeature], List[QgsFeature], int]:
+        """Triangulate a curved approach-edge transitional surface without warping."""
+        features: List[QgsFeature] = []
+        contours: List[QgsFeature] = []
+        sequence = sequence_start
+        section_desc = f"Transitional {end_desig} Approach Adjacent Surface"
+        for edge_part in edge_parts:
+            base_start = QgsPointXY(edge_part["start"])
+            base_end = QgsPointXY(edge_part["end"])
+            z_start = section_start_elevation_m + (
+                float(edge_part["relative_start_m"]) * section_slope
+            )
+            z_end = section_start_elevation_m + (
+                float(edge_part["relative_end_m"]) * section_slope
+            )
+            if z_start >= ihs_elevation_m and z_end >= ihs_elevation_m:
+                continue
+            if z_start < ihs_elevation_m < z_end:
+                fraction = (ihs_elevation_m - z_start) / (z_end - z_start)
+                base_end = QgsPointXY(
+                    base_start.x() + fraction * (base_end.x() - base_start.x()),
+                    base_start.y() + fraction * (base_end.y() - base_start.y()),
+                )
+                z_end = ihs_elevation_m
+            elif z_end < ihs_elevation_m < z_start:
+                fraction = (ihs_elevation_m - z_end) / (z_start - z_end)
+                base_start = QgsPointXY(
+                    base_end.x() + fraction * (base_start.x() - base_end.x()),
+                    base_end.y() + fraction * (base_start.y() - base_end.y()),
+                )
+                z_start = ihs_elevation_m
+
+            start_offset = max(0.0, (ihs_elevation_m - z_start) / transitional_slope)
+            end_offset = max(0.0, (ihs_elevation_m - z_end) / transitional_slope)
+            top_start = base_start.project(
+                start_offset,
+                float(edge_part["outward_start_azimuth"]),
+            )
+            top_end = base_end.project(
+                end_offset,
+                float(edge_part["outward_end_azimuth"]),
+            )
+            triangles = (
+                [(base_start, z_start), (base_end, z_end), (top_start, ihs_elevation_m)],
+                [(base_end, z_end), (top_end, ihs_elevation_m), (top_start, ihs_elevation_m)],
+            )
+            for triangle_index, vertices in enumerate(triangles, start=1):
+                triangle_points = [point for point, _elevation in vertices]
+                triangle_geom = QgsGeometry.fromPolygonXY(
+                    [triangle_points + [triangle_points[0]]]
+                )
+                if (
+                    triangle_geom is None
+                    or triangle_geom.isEmpty()
+                    or triangle_geom.area() <= 1e-6
+                ):
+                    continue
+                feature = QgsFeature(transitional_fields)
+                feature.setGeometry(triangle_geom)
+                attr_map = {
+                    "rwy_name": runway_name,
+                    "surface": "Transitional",
+                    "end_desig": end_desig,
+                    "section_desc": section_desc,
+                    "elev_m": ihs_elevation_m,
+                    "height_agl": ihs_elevation_m - min(z_start, z_end),
+                    "side": side_label,
+                    "slope_perc": transitional_slope * 100.0,
+                    "ref_mos": transitional_ref,
+                }
+                for name, value in attr_map.items():
+                    field_index = transitional_fields.indexFromName(name)
+                    if field_index != -1:
+                        feature.setAttribute(field_index, value)
+                features.append(feature)
+
+                sequence += 1
+                surface_id = self._register_transitional_controlling_candidate(
+                    triangle_geom,
+                    runway_name,
+                    section_desc,
+                    side_label,
+                    sequence,
+                    vertices[0][0],
+                    vertices[0][1],
+                    vertices[1][0],
+                    vertices[1][1],
+                    vertices[2][0],
+                    vertices[2][1],
+                    metadata={
+                        "slope": transitional_slope,
+                        "ref_mos": transitional_ref,
+                        "end_desig": end_desig,
+                        "approach_section_index": approach_section_index,
+                        "track_type": "nominated",
+                        "track_segment_index": edge_part["track_segment_index"],
+                        "triangle_index": triangle_index,
+                    },
+                )
+                elevations = set(
+                    self._contour_interval_elevations(
+                        min(elevation for _point, elevation in vertices),
+                        max(elevation for _point, elevation in vertices),
+                        contour_interval,
+                    )
+                )
+                elevations.update(elevation for _point, elevation in vertices)
+                for elevation in sorted(elevations):
+                    contour_geom = self._transitional_triangle_contour_geometry(
+                        vertices,
+                        elevation,
+                    )
+                    if contour_geom is None or contour_geom.isEmpty():
+                        continue
+                    contour_feature = self._make_transitional_contour_feature(
+                        contour_geom,
+                        contour_fields,
+                        runway_name,
+                        section_desc,
+                        elevation,
+                        side_label=side_label,
+                        end_desig=end_desig,
+                        transitional_ref=transitional_ref,
+                        surface_id=surface_id,
+                    )
+                    if contour_feature is None:
+                        continue
+                    contours.append(contour_feature)
+                    if surface_id and hasattr(self, "_register_controlling_ols_contour"):
+                        self._register_controlling_ols_contour(
+                            surface_id,
+                            "Transitional",
+                            contour_feature,
+                            "OLS Transitional Contour",
+                        )
+        return features, contours, sequence
+
     def _generate_transitional_features(
         self,
         processed_runway_data_list: List[dict],
@@ -2405,8 +2691,24 @@ class OlsGuidelineMixin:
                 )
                 if not approach_sections_params:
                     continue
+                required_track_length = float(
+                    approach_sections_params[0].get("start_dist_from_thr", 0.0) or 0.0
+                ) + sum(
+                    float(section.get("length", 0.0) or 0.0)
+                    for section in approach_sections_params
+                )
+                nominated_track, nominated_requested = self._ols_nominated_track(
+                    runway_data,
+                    direction,
+                    "approach",
+                    end_thr_pt,
+                    required_track_length,
+                )
+                if nominated_requested and nominated_track is None:
+                    continue
                 current_section_start_pt = None
                 current_section_start_width = 0.0
+                current_track_station = 0.0
                 for i, section_params in enumerate(approach_sections_params):
                     length = section_params.get("length", 0.0)
                     divergence = section_params.get("divergence", 0.0)
@@ -2417,32 +2719,59 @@ class OlsGuidelineMixin:
                         start_width = section_params.get("start_width", 0.0)
                         if start_width <= 0:
                             break
-                        current_section_start_pt = end_thr_pt.project(start_dist, outward_az)
+                        if nominated_track is not None:
+                            current_section_start_pt, _ = self._ols_track_point_azimuth(
+                                nominated_track,
+                                start_dist,
+                            )
+                        else:
+                            current_section_start_pt = end_thr_pt.project(start_dist, outward_az)
                         current_section_start_width = start_width
+                        current_track_station = start_dist
                     else:
                         if current_section_start_pt is None:
                             break
                     if not current_section_start_pt:
                         break
-                    start_hw = current_section_start_width / 2.0
                     end_width = current_section_start_width + (2 * length * divergence)
-                    end_hw = end_width / 2.0
-                    end_pt = current_section_start_pt.project(length, outward_az)
+                    if nominated_track is not None:
+                        end_pt, _ = self._ols_track_point_azimuth(
+                            nominated_track,
+                            current_track_station + length,
+                        )
+                    else:
+                        end_pt = current_section_start_pt.project(length, outward_az)
                     if not end_pt:
                         break
-                    az_perp_l = (outward_az + 270.0) % 360.0
-                    az_perp_r = (outward_az + 90.0) % 360.0
-                    p_start_l = current_section_start_pt.project(start_hw, az_perp_l)
-                    p_start_r = current_section_start_pt.project(start_hw, az_perp_r)
-                    p_end_l = end_pt.project(end_hw, az_perp_l)
-                    p_end_r = end_pt.project(end_hw, az_perp_r)
-                    if all([p_start_l, p_end_l, p_start_r, p_end_r]):
-                        edge_l = QgsLineString([p_start_l, p_end_l])
-                        edge_r = QgsLineString([p_start_r, p_end_r])
-                        approach_edges_cache[(runway_name, end_desig, i, "L")] = edge_l
-                        approach_edges_cache[(runway_name, end_desig, i, "R")] = edge_r
+                    if nominated_track is not None:
+                        edge_parts = self._ols_track_corridor_edge_parts(
+                            nominated_track,
+                            current_track_station,
+                            length,
+                            current_section_start_width,
+                            end_width,
+                        )
+                        for side_label in ("L", "R"):
+                            approach_edges_cache[(runway_name, end_desig, i, side_label)] = edge_parts[
+                                side_label
+                            ]
+                    else:
+                        start_hw = current_section_start_width / 2.0
+                        end_hw = end_width / 2.0
+                        az_perp_l = (outward_az + 270.0) % 360.0
+                        az_perp_r = (outward_az + 90.0) % 360.0
+                        p_start_l = current_section_start_pt.project(start_hw, az_perp_l)
+                        p_start_r = current_section_start_pt.project(start_hw, az_perp_r)
+                        p_end_l = end_pt.project(end_hw, az_perp_l)
+                        p_end_r = end_pt.project(end_hw, az_perp_r)
+                        if all([p_start_l, p_end_l, p_start_r, p_end_r]):
+                            edge_l = QgsLineString([p_start_l, p_end_l])
+                            edge_r = QgsLineString([p_start_r, p_end_r])
+                            approach_edges_cache[(runway_name, end_desig, i, "L")] = edge_l
+                            approach_edges_cache[(runway_name, end_desig, i, "R")] = edge_r
                     current_section_start_pt = end_pt
                     current_section_start_width = end_width
+                    current_track_station += length
 
         # --- Pass 2: Generate Transitional Features ---
 
@@ -2892,7 +3221,33 @@ class OlsGuidelineMixin:
                         ("L", (outward_az + 270.0) % 360.0),
                         ("R", (outward_az + 90.0) % 360.0),
                     ]:
-                        approach_edge = approach_edges_cache.get((runway_name, end_desig, i, side_label))
+                        approach_edge = approach_edges_cache.get(
+                            (runway_name, end_desig, i, side_label)
+                        )
+                        if isinstance(approach_edge, list):
+                            (
+                                nominated_features,
+                                nominated_contours,
+                                transitional_candidate_sequence,
+                            ) = self._generate_nominated_track_transitional_triangles(
+                                approach_edge,
+                                current_section_start_elev,
+                                section_slope,
+                                IHS_ELEVATION_AMSL,
+                                transitional_slope,
+                                transitional_fields,
+                                contour_fields,
+                                contour_interval,
+                                runway_name,
+                                end_desig,
+                                side_label,
+                                i + 1,
+                                transitional_ref,
+                                transitional_candidate_sequence,
+                            )
+                            transitional_features.extend(nominated_features)
+                            transitional_contour_features.extend(nominated_contours)
+                            continue
                         if not approach_edge or approach_edge.isEmpty():
                             continue
                         pa_start = approach_edge.startPoint()
@@ -3117,6 +3472,14 @@ class OlsGuidelineMixin:
                 if clipped_geom.isEmpty():
                     continue  # Skip if completely outside
                 line_geom = clipped_geom  # Use the clipped geometry
+
+            if (
+                line_geom is None
+                or line_geom.isEmpty()
+                or line_geom.type() != QgsWkbTypes.LineGeometry
+                or line_geom.length() <= 1e-3
+            ):
+                continue
 
             feat = QgsFeature(contour_fields)
             feat.setGeometry(line_geom)

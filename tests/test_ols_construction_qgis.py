@@ -49,6 +49,21 @@ class TrackHarness(OlsGuidelineMixin):
         return CAP168_PROFILE
 
 
+class CandidateTrackHarness(TrackHarness):
+    def __init__(self, context):
+        super().__init__(context)
+        self.contour_intervals = {}
+        self._contour_interval_ruleset_role = "baseline"
+        self.candidates = []
+        self.registered_contours = []
+
+    def _register_controlling_ols_candidate(self, candidate):
+        self.candidates.append(candidate)
+
+    def _register_controlling_ols_contour(self, surface_id, surface_type, feature, source_layer):
+        self.registered_contours.append((surface_id, surface_type, feature, source_layer))
+
+
 def cap_context(track_wkt: str) -> OlsConstructionContext:
     primary = OlsRunwayEndContext(
         direction="primary",
@@ -142,6 +157,82 @@ class OlsConstructionQgisTests(unittest.TestCase):
         self.assertGreater(union.area(), 280.0 * 1000.0)
         cross_section = harness._ols_track_cross_section(track, 600.0, 400.0)
         self.assertAlmostEqual(cross_section.length(), 400.0, delta=0.01)
+
+    def test_curved_approach_transitional_is_triangulated_and_contours_match_planes(self):
+        harness = CandidateTrackHarness(
+            cap_context("LINESTRING (0 0, -500 0, -1000 150, -1500 500)")
+        )
+        track, requested = harness._ols_nominated_track(
+            {"original_index": 1},
+            "primary",
+            "approach",
+            QgsPointXY(0.0, 0.0),
+            1500.0,
+        )
+        self.assertTrue(requested)
+        self.assertIsNotNone(track)
+        edge_parts = harness._ols_track_corridor_edge_parts(
+            track,
+            60.0,
+            1000.0,
+            280.0,
+            580.0,
+            max_segment_m=200.0,
+        )["L"]
+        transitional_fields = QgsFields(
+            [
+                QgsField("rwy_name", QVariant.String),
+                QgsField("surface", QVariant.String),
+                QgsField("end_desig", QVariant.String),
+                QgsField("section_desc", QVariant.String),
+                QgsField("elev_m", QVariant.Double),
+                QgsField("height_agl", QVariant.Double),
+                QgsField("side", QVariant.String),
+                QgsField("slope_perc", QVariant.Double),
+                QgsField("ref_mos", QVariant.String),
+            ]
+        )
+        contour_fields = harness._get_transitional_contour_fields()
+        features, contours, sequence = harness._generate_nominated_track_transitional_triangles(
+            edge_parts,
+            100.0,
+            0.025,
+            145.0,
+            0.143,
+            transitional_fields,
+            contour_fields,
+            5.0,
+            "09/27",
+            "09",
+            "L",
+            1,
+            "CAP 168 4.34-4.39",
+            0,
+        )
+
+        self.assertGreater(len(features), len(edge_parts))
+        self.assertEqual(sequence, len(features))
+        self.assertEqual(len(harness.candidates), len(features))
+        self.assertTrue(all(feature.geometry().isGeosValid() for feature in features))
+        self.assertTrue(
+            all(candidate.metadata.get("track_type") == "nominated" for candidate in harness.candidates)
+        )
+        candidates = {candidate.surface_id: candidate for candidate in harness.candidates}
+        self.assertGreater(len(contours), 0)
+        for contour in contours:
+            surface_id = str(contour.attribute("surface_id") or "")
+            candidate = candidates[surface_id]
+            elevation = float(contour.attribute("contour_elev_am"))
+            self.assertLessEqual(
+                contour.geometry().difference(candidate.footprint).length(),
+                1e-6,
+            )
+            for point in contour.geometry().asPolyline():
+                self.assertAlmostEqual(
+                    candidate.elevation_at_xy(QgsPointXY(point)),
+                    elevation,
+                    delta=0.001,
+                )
 
     def test_track_with_wrong_origin_is_blocked_instead_of_falling_back_to_aligned(self):
         harness = TrackHarness(cap_context("LINESTRING (100 100, -1000 100)"))

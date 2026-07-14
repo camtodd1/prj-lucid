@@ -13,8 +13,8 @@ applicable until 20 November 2030.
 | Inner horizontal | 4.45-4.52, printed p.240 / PDF p.17 | `IHS_HEIGHT_RULE`, `IHS_PLAN_RULES`, `Cap168OlsConstructionPolicy` | Integrated. Elevation is 45 m above the lowest runway threshold, not RED. The longest physical runway is the main runway; plan form varies by its length, with applicable subsidiary joins. |
 | Conical | 4.53-4.55, printed pp.240-241 / PDF pp.17-18 | `CONICAL_RULES`, `Cap168OlsConstructionPolicy` | Integrated: 5%; 105 m above IHS normally, 55 m NI Code 2, 35 m NI Code 1. |
 | Outer horizontal | 4.56-4.58, printed p.241 / PDF p.18 | `OUTER_HORIZONTAL_RULES` | Loaded. Applicability/radius depends on actual main-runway length, so legacy ARC-only lookup is intentionally not used. |
-| OFZ / inner surfaces | 4.59-4.73, printed pp.241-244 / PDF pp.18-21 | `INNER_APPROACH_PARAMS`, `INNER_TRANSITIONAL_PARAMS`, `BAULKED_LANDING_PARAMS`, `OFZ_APPLICABILITY_RULES` | Source-loaded for precision runway combinations, including Cat I versus Cat II/III establishment language. End-to-end geometry fixtures remain pending. |
-| Independent validation | Chapter 4 source facts above | `tests/fixtures/ols/source_validation_v1.json` | Representative source constants, independently calculated approach elevations/contour, IHS elevation and conical contour are locked. Reviewer sign-off pending. |
+| OFZ / inner surfaces | 4.59-4.73, printed pp.241-244 / PDF pp.18-21 | `INNER_APPROACH_PARAMS`, `INNER_TRANSITIONAL_PARAMS`, `BAULKED_LANDING_PARAMS`, `OFZ_APPLICABILITY_RULES` | Source-loaded for precision runway combinations, including Cat I versus Cat II/III establishment language, and exercised by the CAP168 workflow fixtures. |
+| Independent validation | Chapter 4 source facts above | `tests/fixtures/ols/source_validation_v1.json` | Representative source constants, independently calculated approach elevations/contour, IHS elevation and conical contour are locked. Production promotion was approved by the project owner on 14 July 2026; a secondary independent source review remains recommended release governance. |
 
 ## Confirmed source corrections and retained interpretations
 
@@ -42,10 +42,18 @@ not text-extraction artefacts:
 
 ## Capability position
 
-CAP168 OLS capability is `partial` and selectable. Promotion to production-
-supported still requires:
+CAP168 conventional OLS is production-supported. Its supported scope includes
+airport-wide, approach, take-off climb, OFZ and controlling-lower-envelope
+construction; longest-runway main-runway selection; and explicit aligned,
+offset, curved and greater-than-15-degree nominated tracks.
 
-- CAP168-specific generated-geometry and controlling-envelope fixtures; and
-- track-following approach-adjacent transitional construction plus topology/
-  performance coverage for nominated offset and curved tracks; and
-- independent technical review of the source capture and generated results.
+The [14 July 2026 release evidence](release_evidence_2026-07-14.md) includes
+pure policy/source checks and headless QGIS
+fixtures for short, single, main/subsidiary, parallel and intersecting runway
+configurations. Numeric topology closure is bounded to 0.020 m² per completed
+partition and is reported separately from exceptional recovery. Offset and
+curved paths must be supplied as line geometry beginning at the applicable
+construction origin; missing or invalid nominated paths remain visibly blocked.
+
+CAP168 physical capabilities retain their own capability declarations. In
+particular, RESA remains unsupported and is not implied by this OLS promotion.

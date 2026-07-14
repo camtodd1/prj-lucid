@@ -645,8 +645,14 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
                 f"{region_layer['layer']} has {region_layer['overlap_area_m2']:.6f} m2 "
                 "of cross-controller overlap"
             )
-    if set(comparisons) != {"OFS", "OES"}:
-        failures.append(f"comparison families were {sorted(comparisons)}")
+    expected_comparison_families = set(
+        case.get("expected_comparison_families", ["OFS", "OES"])
+    )
+    if set(comparisons) != expected_comparison_families:
+        failures.append(
+            f"comparison families were {sorted(comparisons)}; "
+            f"expected {sorted(expected_comparison_families)}"
+        )
 
     for family, metrics in comparisons.items():
         area_tolerance = max(
@@ -797,10 +803,16 @@ def _run_case(
 
     layers = _layer_metrics(project)
     solver_diagnostics = []
+    baseline_ruleset_id = getattr(
+        getattr(builder, "baseline_ols_ruleset", None), "id", "conventional_ols"
+    )
+    conventional_family = (
+        "MOS139" if baseline_ruleset_id == "mos139_2019" else baseline_ruleset_id
+    )
     for engine in engine_instances.values():
         engine.ensure_adjacency_diagnostics()
         families = sorted({
-            str((candidate.metadata or {}).get("annex14_family") or "MOS139")
+            str((candidate.metadata or {}).get("annex14_family") or conventional_family)
             for candidate in engine.candidates
         })
         diagnostics = {
@@ -811,7 +823,11 @@ def _run_case(
         transition_metrics = _axis_conical_transition_metrics(engine)
         if transition_metrics["features"]:
             diagnostics["axis_conical_transitions"] = transition_metrics
-        if families == ["MOS139"]:
+        if (
+            families == ["MOS139"]
+            and getattr(getattr(builder, "baseline_ols_ruleset", None), "id", "")
+            == "mos139_2019"
+        ):
             diagnostics["mos139_lock"] = _engine_lock_signature(engine)
         solver_diagnostics.append(diagnostics)
     failures = _case_failures(case, manifest, comparison_results, layers)
@@ -907,6 +923,8 @@ def _run_case(
         "description": case["description"],
         "icao_code": case["icao_code"],
         "runways": case["payload_runway_count"],
+        "baseline_ruleset": getattr(getattr(builder, "baseline_ols_ruleset", None), "id", None),
+        "comparison_ruleset": getattr(getattr(builder, "comparison_ols_ruleset", None), "id", None),
         "total_seconds": total_seconds,
         "stages": dict(sorted(stage_totals.items())),
         "comparisons": comparison_results,
@@ -1074,7 +1092,7 @@ def main() -> int:
         gate_failures = _release_gate_failures(
             case["file"], runs, baseline, args.maximum_runtime_regression
         )
-        if mos139_lock is not None:
+        if mos139_lock is not None and case.get("mos139_lock_required", True):
             expected_lock = mos139_lock.get("fixtures", {}).get(case["file"])
             for run in runs:
                 if expected_lock is None:

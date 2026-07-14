@@ -35,6 +35,46 @@
       "icao_code": "YSSY",
       "runway_count": 3,
       "project_crs": "EPSG:28356"
+    },
+    {
+      "file": "cap168_curved_single.json",
+      "description": "CAP168 single runway with a nominated curved approach track",
+      "icao_code": "YBCP",
+      "runway_count": 1,
+      "project_crs": "EPSG:28356",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "cap168_short_single.json",
+      "description": "CAP168 short non-instrument runway and circular IHS",
+      "icao_code": "YBSC",
+      "runway_count": 1,
+      "project_crs": "EPSG:28356",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "cap168_parallel_main_subsidiary.json",
+      "description": "CAP168 parallel main and subsidiary runways with displaced thresholds",
+      "icao_code": "YBPM",
+      "runway_count": 2,
+      "project_crs": "EPSG:28356",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "cap168_intersecting.json",
+      "description": "CAP168 intersecting main and subsidiary runways",
+      "icao_code": "YBCI",
+      "runway_count": 2,
+      "project_crs": "EPSG:28356",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
     }
   ],
   "accuracy_tolerances": {
