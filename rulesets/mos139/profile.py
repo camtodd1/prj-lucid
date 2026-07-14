@@ -8,7 +8,7 @@ from .services import ClassificationService, LightingService, MarkingService, Ol
 
 
 class Mos139RulesetProfile(RulesetProfile):
-    """Public ruleset API for the current MOS139 implementation."""
+    """Public ruleset API for the MOS139 C.07 2026 implementation."""
 
     classification = ClassificationService()
     ols = OlsService()

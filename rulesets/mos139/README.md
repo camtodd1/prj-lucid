@@ -1,6 +1,7 @@
 # MOS139 Ruleset Package
 
-This package contains the current CASA Part 139 MOS 2019 ruleset implementation.
+This package contains the CASA Part 139 MOS 2019, Compilation No. 7 (2026),
+ruleset implementation, displayed in the plugin as `MOS139 (C.07 2026)`.
 It is the reference structure for future rulesets such as EASA, Annex 14, or
 future Annex 14 OLS modernisation.
 

@@ -134,7 +134,7 @@ dimensions/ols_dimensions.py     Legacy compatibility shim for MOS139 OLS
                                  dimensions.
 dimensions/agl_dimensions.py     Legacy compatibility shim for MOS139 AGL
                                  dimensions.
-rulesets/mos139/                Current MOS139 metadata, OLS, physical,
+rulesets/mos139/                MOS139 C.07 2026 metadata, OLS, physical,
                                  marking, and lighting policy sources. See
                                  `rulesets/mos139/README.md`.
 rulesets/mos139/classification.py

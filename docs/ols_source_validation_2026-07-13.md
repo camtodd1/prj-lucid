@@ -22,7 +22,7 @@ relevant tables rather than relying only on PDF text extraction:
 
 | Source | Edition / applicability | Verified provisions | SHA-256 |
 | --- | --- | --- | --- |
-| CASA Part 139 (Aerodromes) MOS 2019, Chapter 7 | Compilation No. 7, in force 12 May 2026, Authorised Version F2026C00403 | 7.04–7.16; Tables 7.15(1) and 7.16(1) | `ecda4ab7171aef3932a35ac631ac8968d5056c616013ae3f452475b4bd513465` |
+| MOS139 (C.07 2026): CASA Part 139 (Aerodromes) MOS 2019, Chapter 7 | Compilation No. 7, in force 12 May 2026, Authorised Version F2026C00403 | 7.04–7.16; Tables 7.15(1) and 7.16(1) | `ecda4ab7171aef3932a35ac631ac8968d5056c616013ae3f452475b4bd513465` |
 | UK CAA CAP 168, Chapter 4 | Thirteenth Edition, July 2025, Amendment 15; current table applicable until 20 November 2030 | 4.8–4.73; Tables 4.1 and 4.2 | `27c1d35fce840caaffeefb898e6fc4df9a4bd4abdb5e8db3f878cfdccce3f649` |
 | ICAO Annex 14, Volume I, Chapter 4 | Ninth Edition, July 2022; future OFS/OES provisions applicable as of 21 November 2030 | 4.2–4.3; Tables 4-1–4-15 | `15a5618515f4c7088eb59b86392b53c24f15a05fa9341484931c421489f39cb9` |
 

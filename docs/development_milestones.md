@@ -370,7 +370,7 @@ Last reviewed: 2026-07-14.
 
 ## Suggested Working Order
 
-- [x] 1. QGIS smoke-test the current MOS139 workflow and record any runtime
+- [x] 1. QGIS smoke-test the MOS139 C.07 2026 workflow and record any runtime
       issues before adding new capability.
 - [x] 2. Consolidate declared distances around warning/override behaviour,
       because the first and second passes are implemented and user-facing.

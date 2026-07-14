@@ -73,7 +73,7 @@ class OlsLayerGroupingTests(unittest.TestCase):
         protected_airspace = groups["protected_airspace"]
         baseline = self.direct_group(
             protected_airspace,
-            "Baseline OLS — MOS139 (current)",
+            "Baseline OLS — MOS139 (C.07 2026)",
         )
         comparison = self.direct_group(
             protected_airspace,
