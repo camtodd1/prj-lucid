@@ -76,11 +76,11 @@ for IHS, Conical and OHS; Annex OFS approach/inner/transitional/balked surfaces;
 horizontal, straight-in, precision approach, departure and both take-off mass
 categories.
 
-CAP168 airport-wide rules are deliberately source-checked without enabling
-generation. The generic constructor currently assumes a RED-relative IHS and
-an ARC/type lookup, while CAP168 requires the lowest runway threshold, actual
-main-runway length, circle/racetrack selection and subsidiary-runway joins.
-`rulesets/cap168/source_matrix.md` records the required adaptation.
+CAP168 airport-wide rules are source-checked and resolved through the new
+ruleset-owned construction context. This keeps its lowest-runway-threshold
+datum, actual main-runway length, circle/racetrack selection and subsidiary
+joins independent of the MOS RED-relative compatibility path.
+`rulesets/cap168/source_matrix.md` records the adaptation and release gates.
 
 ### CAP168 source corrections
 
@@ -133,10 +133,11 @@ rather than independently calculating the regulatory surface elevations.
 - Expand parameter traceability from representative contour-producing
   profiles to every applicable MOS/CAP168 runway code/type and every selected
   Annex ADG/operational option.
-- Adapt the CAP168 airport-wide constructor for its source-specific elevation
-  datum, plan forms and runway-length applicability. The three numerical
-  misprints no longer require disposition; independent technical review of the
-  source capture and generated results remains required.
+- Complete track-following CAP168 approach-adjacent transitional construction.
+  The airport-wide datum, plan forms and runway-length applicability are now
+  integrated, and the three numerical misprints no longer require disposition;
+  independent technical review of the source capture and generated results
+  remains required.
 - Add source-backed airport/runway fixtures for displaced thresholds,
   clearways/stopways, precision/non-precision/non-instrument operations,
   parallel/converging/intersecting runways and near-coincident geometry.

@@ -6069,7 +6069,24 @@ class ControllingOlsEngineMixin:
         if not self._controlling_ols_subphase("Controlling OLS: solving lower-envelope regions..."):
             return candidate_layer_ok
         step_start = time.perf_counter()
-        region_layer_ok = self._create_controlling_region_layer(icao_code, region_output_group, engine)
+        active_ruleset_getter = getattr(
+            self,
+            "get_active_protected_airspace_ruleset",
+            None,
+        )
+        active_ruleset = (
+            active_ruleset_getter()
+            if callable(active_ruleset_getter)
+            else None
+        )
+        region_layer_ok = self._create_controlling_region_layer(
+            icao_code,
+            region_output_group,
+            engine,
+            partition_overlaps=(
+                getattr(active_ruleset, "id", "mos139_2019") != "mos139_2019"
+            ),
+        )
         timing_splits["regions"] = time.perf_counter() - step_start
 
         if not self._controlling_ols_subphase("Controlling OLS: constructing transition boundaries..."):
@@ -6427,12 +6444,19 @@ class ControllingOlsEngineMixin:
         assigned = QgsGeometry()
         family_priority = {"OFS": 0, "OES": 1}
         surface_priority = {"Inner Approach": 0, "Approach": 1}
+
+        def attribute(feature: QgsFeature, name: str):
+            try:
+                return feature.attribute(name)
+            except KeyError:
+                return None
+
         ordered = sorted(
             features,
             key=lambda feature: (
-                family_priority.get(str(feature.attribute("family") or "").strip().upper(), 2),
-                surface_priority.get(str(feature.attribute("surface") or ""), 2),
-                str(feature.attribute("surface_id") or ""),
+                family_priority.get(str(attribute(feature, "family") or "").strip().upper(), 2),
+                surface_priority.get(str(attribute(feature, "surface") or ""), 2),
+                str(attribute(feature, "surface_id") or ""),
             ),
         )
         for feature in ordered:
@@ -6542,12 +6566,20 @@ class ControllingOlsEngineMixin:
                 output.setAttribute("elev_min", elev_min)
                 output.setAttribute("elev_max", elev_max)
             if len(group_features) > 1:
+                def attribute(feature: QgsFeature, name: str):
+                    try:
+                        return feature.attribute(name)
+                    except KeyError:
+                        return None
+
                 source_ids = sorted({str(feature.attribute("surface_id") or "") for feature in group_features})
-                components = sorted({str(feature.attribute("component") or "") for feature in group_features})
-                runway_ends = sorted({str(feature.attribute("rwy_end") or "") for feature in group_features})
+                components = sorted({str(attribute(feature, "component") or "") for feature in group_features})
+                runway_ends = sorted({str(attribute(feature, "rwy_end") or "") for feature in group_features})
                 output.setAttribute("surface_id", "|".join(source_ids)[:160])
-                output.setAttribute("component", "|".join(filter(None, components))[:80])
-                output.setAttribute("rwy_end", "|".join(filter(None, runway_ends))[:10])
+                if output.fields().indexFromName("component") >= 0:
+                    output.setAttribute("component", "|".join(filter(None, components))[:80])
+                if output.fields().indexFromName("rwy_end") >= 0:
+                    output.setAttribute("rwy_end", "|".join(filter(None, runway_ends))[:10])
                 output.setAttribute("method", "exact_planar_halfplane_coplanar_dissolve")
             dissolved.append(output)
         dissolved.sort(key=lambda feature: str(feature.attribute("surface_id") or ""))
@@ -6611,12 +6643,26 @@ class ControllingOlsEngineMixin:
             gaps = coverage.difference(solved)
         except Exception:
             return features
-        if not engine._has_polygon_area(gaps):
-            return features
+        has_coverage_gaps = engine._has_polygon_area(gaps)
+        if not has_coverage_gaps:
+            overlap_proxy_m2 = 0.0
+            for index, first in enumerate(solved_parts):
+                for second in solved_parts[index + 1 :]:
+                    if not engine._bounding_boxes_intersect(first, second):
+                        continue
+                    try:
+                        overlap_proxy_m2 = max(
+                            overlap_proxy_m2,
+                            first.intersection(second).area(),
+                        )
+                    except Exception:
+                        continue
+            if overlap_proxy_m2 <= 1e-3:
+                return features
 
         repaired_count = 0
         repaired_area = 0.0
-        for gap in engine._polygon_parts(gaps):
+        for gap in engine._polygon_parts(gaps) if has_coverage_gaps else ():
             if gap.area() <= 1e-3:
                 continue
             repairs = engine._gap_lower_envelope_parts(gap)

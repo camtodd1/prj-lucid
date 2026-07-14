@@ -50,7 +50,12 @@ from .guidelines.ols_modernisation_comparison import OlsModernisationComparisonM
 from .reports.declared_distances import annotate_declared_distance_warnings, apply_declared_distance_overrides
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 from .frameworks.registry import get_framework_profile
-from .rulesets.context import RulesetContext
+from .rulesets.context import (
+    OlsConstructionContext,
+    OlsRunwayContext,
+    OlsRunwayEndContext,
+    RulesetContext,
+)
 from .rulesets.registry import get_ruleset_profile
 
 
@@ -209,6 +214,179 @@ class SafeguardingBuilder(
     def get_active_protected_airspace_ruleset(self):
         """Return the ruleset profile used for protected airspace/OLS generation."""
         return getattr(self, "protected_airspace_ruleset", self.get_active_ruleset())
+
+    def _build_ols_construction_context(
+        self,
+        ruleset,
+        processed_runway_data_list: List[Dict[str, Any]],
+        arp_point=None,
+    ) -> OlsConstructionContext:
+        """Normalise runway inputs independently under one selected OLS ruleset."""
+
+        context_runways: List[OlsRunwayContext] = []
+        for source_runway in processed_runway_data_list:
+            runway_data = dict(source_runway)
+            runway_data.pop("_effective_clearway_specs", None)
+            runway_data.pop("_calculated_strip_ruleset_id", None)
+            runway_data.pop("calculated_strip_dims", None)
+            thr_point = runway_data.get("thr_point")
+            rec_thr_point = runway_data.get("rec_thr_point")
+            rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
+            if not rwy_params:
+                continue
+            physical_endpoints = self._get_physical_runway_endpoints(
+                thr_point,
+                rec_thr_point,
+                self._non_negative_float(runway_data.get("thr_displaced_1"), 0.0),
+                self._non_negative_float(runway_data.get("thr_displaced_2"), 0.0),
+                rwy_params,
+            )
+            if physical_endpoints is None:
+                continue
+            physical_primary, physical_reciprocal, physical_length = physical_endpoints
+            try:
+                arc_number = int(runway_data.get("arc_num"))
+            except (TypeError, ValueError):
+                continue
+            width_m = self._non_negative_float(runway_data.get("width"), 0.0)
+            classified_primary = ruleset.classify_runway_type(runway_data.get("type1"))
+            classified_reciprocal = ruleset.classify_runway_type(runway_data.get("type2"))
+            type_rank = {"NI": 0, "NPA": 1, "PA_I": 2, "PA_II_III": 3}
+            strip_classification = classified_primary
+            if getattr(ruleset, "id", "") != "mos139_2019":
+                strip_classification = max(
+                    (classified_primary, classified_reciprocal),
+                    key=lambda value: type_rank.get(value, -1),
+                )
+            strip_parameters = ruleset.strip_parameters(
+                arc_number,
+                strip_classification,
+                width_m or None,
+            ) or {}
+            runway_data["calculated_strip_dims"] = strip_parameters
+            runway_data["_calculated_strip_ruleset_id"] = ruleset.id
+            clearway_specs = self._calculate_effective_clearway_specs(
+                runway_data,
+                physical_length,
+                ruleset=ruleset,
+            )
+            declared_distances = self._calculate_declared_distances(runway_data, ruleset=ruleset)
+            runway_data["declared_distances"] = declared_distances
+            records_by_direction = {
+                str(record.get("direction") or ""): record
+                for record in declared_distances
+            }
+            runway_name = runway_data.get(
+                "short_name",
+                f"RWY_{runway_data.get('original_index', '?')}",
+            )
+            primary_designator, reciprocal_designator = (
+                runway_name.split("/", 1)
+                if "/" in runway_name
+                else (runway_name, "Reciprocal")
+            )
+
+            def end_context(
+                direction: str,
+                designator: str,
+                threshold_point,
+                threshold_elevation_key: str,
+                runway_end_elevation_key: str,
+                approach_type_key: str,
+                classified_type: str,
+                suffix: str,
+            ) -> OlsRunwayEndContext:
+                record = records_by_direction.get(direction, {})
+                return OlsRunwayEndContext(
+                    direction=direction,
+                    designator=designator,
+                    threshold_point=threshold_point,
+                    threshold_elevation_m=runway_data.get(threshold_elevation_key),
+                    runway_end_elevation_m=runway_data.get(runway_end_elevation_key),
+                    approach_type=str(runway_data.get(approach_type_key) or ""),
+                    classified_type=classified_type,
+                    clearway_length_m=float(record.get("clearway_m") or 0.0),
+                    stopway_length_m=float(record.get("stopway_m") or 0.0),
+                    tora_m=record.get("tora_m"),
+                    toda_m=record.get("toda_m"),
+                    asda_m=record.get("asda_m"),
+                    lda_m=record.get("lda_m"),
+                    approach_track_type=str(
+                        runway_data.get(f"approach_track_type_{suffix}") or "aligned"
+                    ),
+                    approach_track_wkt=str(
+                        runway_data.get(f"approach_track_wkt_{suffix}") or ""
+                    ),
+                    takeoff_track_type=str(
+                        runway_data.get(f"takeoff_track_type_{suffix}") or "aligned"
+                    ),
+                    takeoff_track_wkt=str(
+                        runway_data.get(f"takeoff_track_wkt_{suffix}") or ""
+                    ),
+                )
+
+            ends = (
+                end_context(
+                    "primary",
+                    primary_designator,
+                    thr_point,
+                    "threshold_elev_1",
+                    "runway_end_elev_1",
+                    "type1",
+                    classified_primary,
+                    "1",
+                ),
+                end_context(
+                    "reciprocal",
+                    reciprocal_designator,
+                    rec_thr_point,
+                    "threshold_elev_2",
+                    "runway_end_elev_2",
+                    "type2",
+                    classified_reciprocal,
+                    "2",
+                ),
+            )
+            context_runways.append(
+                OlsRunwayContext(
+                    runway_id=runway_name,
+                    original_index=int(runway_data.get("original_index") or 0),
+                    arc_number=arc_number,
+                    arc_letter=str(runway_data.get("arc_let") or "").strip().upper(),
+                    width_m=width_m,
+                    physical_length_m=float(physical_length),
+                    threshold_length_m=float(rwy_params.get("length") or 0.0),
+                    primary_threshold_point=thr_point,
+                    reciprocal_threshold_point=rec_thr_point,
+                    primary_physical_end_point=physical_primary,
+                    reciprocal_physical_end_point=physical_reciprocal,
+                    strip_parameters=dict(strip_parameters),
+                    ends=ends,
+                    is_wide_runway=bool(
+                        runway_data.get("cap168_wide_runway")
+                        or strip_parameters.get("wide_non_instrument_variation")
+                    ),
+                    generation_data=runway_data,
+                )
+            )
+        return OlsConstructionContext(
+            ruleset_id=ruleset.id,
+            runways=tuple(context_runways),
+            arp_point=arp_point,
+            arp_elevation_m=getattr(self, "arp_elevation_amsl", None),
+            reference_elevation_datum_m=getattr(self, "reference_elevation_datum", None),
+        )
+
+    def _activate_ols_construction_context(self, ruleset, context: OlsConstructionContext) -> bool:
+        """Install and validate the context consumed by conventional geometry."""
+
+        errors = tuple(ruleset.ols_construction_policy().validate(context))
+        self.ols_construction_context = context
+        if errors:
+            for error in errors:
+                self._log_warning(f"[skip] {ruleset.display_name} OLS: {error}")
+            return False
+        return True
 
     def get_active_framework(self):
         """Return the active safeguarding framework profile, defaulting to NASF."""
@@ -859,10 +1037,31 @@ class SafeguardingBuilder(
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl, runway_input_list
             )
+            self._ols_source_runways = processed_runway_data_list
+            self._ols_arp_point = arp_point
+            baseline_ols_context = self._build_ols_construction_context(
+                self.baseline_ols_ruleset,
+                processed_runway_data_list,
+                arp_point=arp_point,
+            )
+            self._ols_construction_contexts = {
+                self.baseline_ols_ruleset.id: baseline_ols_context,
+            }
+            baseline_ols_context_ready = self._activate_ols_construction_context(
+                self.baseline_ols_ruleset,
+                baseline_ols_context,
+            )
+            baseline_airport_spec = self.baseline_ols_ruleset.ols_construction_policy().airport_wide_spec(
+                self.baseline_ols_ruleset,
+                baseline_ols_context,
+            )
+            baseline_ols_requires_red = (
+                baseline_airport_spec.get("datum_name") == "reference_elevation_datum"
+            )
             pa_runways_exist = any(
                 "PA" in rwy.get("type1", "") or "PA" in rwy.get("type2", "") for rwy in runway_input_list if rwy
             )
-            if self.reference_elevation_datum is None and pa_runways_exist:
+            if self.reference_elevation_datum is None and pa_runways_exist and baseline_ols_requires_red:
                 QgsMessageLog.logMessage(
                     "Aborting OLS generation: RED calculation failed and precision approach runways exist.",
                     plugin_tag,
@@ -900,6 +1099,14 @@ class SafeguardingBuilder(
                 ofz_group,
                 runway_ols_group,
                 airport_wide_ols_group,
+                ols_runway_data_list=(
+                    processed_runway_data_list
+                    if getattr(self.baseline_ols_ruleset, "protected_airspace_model", "")
+                    == "annex14_modernised_ofs_oes"
+                    else baseline_ols_context.generation_runways()
+                    if baseline_ols_context_ready
+                    else []
+                ),
             )
 
             if not self._processing_checkpoint(
@@ -1001,7 +1208,7 @@ class SafeguardingBuilder(
                 met_point is not None,
                 bool(agl_options.get("enabled")),
                 len(cns_input_list),
-                self.reference_elevation_datum is not None,
+                self.reference_elevation_datum is not None or not baseline_ols_requires_red,
                 pa_runways_exist,
             )
 
@@ -1153,13 +1360,32 @@ class SafeguardingBuilder(
         ):
             self._log_skip("Airport-wide current OLS: protected airspace policy is future Annex 14 OFS/OES.")
             return False
-        if guideline_groups.get("F") is not None and processed_runway_data_list:
-            if self.reference_elevation_datum is not None:
+        active_context = getattr(self, "ols_construction_context", None)
+        active_policy = self.get_active_protected_airspace_ruleset().ols_construction_policy()
+        airport_spec = (
+            active_policy.airport_wide_spec(
+                self.get_active_protected_airspace_ruleset(),
+                active_context,
+            )
+            if active_context is not None
+            else {}
+        )
+        airport_wide_datum = airport_spec.get(
+            "datum_elevation_m",
+            self.reference_elevation_datum,
+        )
+        context_runways = (
+            active_context.generation_runways()
+            if active_context is not None
+            else processed_runway_data_list
+        )
+        if guideline_groups.get("F") is not None and context_runways:
+            if airport_spec.get("ihs_elevation_amsl") is not None:
                 try:
                     airport_wide_ols_processed = self._generate_airport_wide_ols(
-                        processed_runway_data_list,
+                        context_runways,
                         airport_wide_ols_group or guideline_groups["F"],
-                        self.reference_elevation_datum,
+                        float(airport_wide_datum or 0.0),
                         icao_code,
                         guideline_groups["F"],
                     )
@@ -1316,7 +1542,11 @@ class SafeguardingBuilder(
             self._log_warning(f"Runway summary report failed: {e}\n{traceback.format_exc()}")
             return None
 
-    def _calculate_declared_distances(self, runway_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _calculate_declared_distances(
+        self,
+        runway_data: Dict[str, Any],
+        ruleset=None,
+    ) -> List[Dict[str, Any]]:
         """Calculate baseline declared distances for both runway directions."""
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
@@ -1347,7 +1577,11 @@ class SafeguardingBuilder(
             primary_desig = runway_name
             reciprocal_desig = "Reciprocal"
 
-        clearway_specs = self._calculate_effective_clearway_specs(runway_data, physical_length)
+        clearway_specs = self._calculate_effective_clearway_specs(
+            runway_data,
+            physical_length,
+            ruleset=ruleset,
+        )
         clearway_primary_end = clearway_specs["primary"]["length_m"]
         clearway_reciprocal_end = clearway_specs["reciprocal"]["length_m"]
         clearway_primary_input = self._non_negative_float(runway_data.get("clearway1_len"), 0.0)
@@ -1407,7 +1641,7 @@ class SafeguardingBuilder(
                 "lda_m": reciprocal_lda,
             },
         ]
-        records = self._apply_declared_distance_policy(records)
+        records = self._apply_declared_distance_policy(records, ruleset=ruleset)
         records = apply_declared_distance_overrides(runway_data, records)
         warnings = annotate_declared_distance_warnings(runway_data, records)
         if warnings:
@@ -1417,8 +1651,13 @@ class SafeguardingBuilder(
                 QgsMessageLog.logMessage(warning, PLUGIN_TAG, level=Qgis.Warning)
         return records
 
-    def _apply_declared_distance_policy(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        declared_distance_parameters = getattr(self.get_active_ruleset(), "declared_distance_parameters", None)
+    def _apply_declared_distance_policy(
+        self,
+        records: List[Dict[str, Any]],
+        ruleset=None,
+    ) -> List[Dict[str, Any]]:
+        active_ruleset = ruleset or self.get_active_ruleset()
+        declared_distance_parameters = getattr(active_ruleset, "declared_distance_parameters", None)
         if not callable(declared_distance_parameters):
             return records
 
@@ -1438,10 +1677,11 @@ class SafeguardingBuilder(
         self,
         runway_data: Dict[str, Any],
         physical_length: Optional[float] = None,
+        ruleset=None,
     ) -> Dict[str, Dict[str, Any]]:
-        """Return active-ruleset clearway length and width specs for each runway end."""
+        """Return clearway specs under the explicitly selected ruleset."""
         cached_specs = runway_data.get("_effective_clearway_specs")
-        ruleset = self.get_active_ruleset()
+        ruleset = ruleset or self.get_active_ruleset()
         ruleset_id = getattr(ruleset, "id", None)
         if (
             isinstance(cached_specs, dict)
@@ -1466,10 +1706,15 @@ class SafeguardingBuilder(
             "PA_II_III",
         }
 
-        strip_dims = runway_data.get("calculated_strip_dims")
+        strip_dims = (
+            runway_data.get("calculated_strip_dims")
+            if runway_data.get("_calculated_strip_ruleset_id") in {None, ruleset_id}
+            else None
+        )
         if not strip_dims:
             strip_dims = ruleset.strip_parameters(arc_num, type1_abbr, runway_width or None)
             runway_data["calculated_strip_dims"] = strip_dims
+            runway_data["_calculated_strip_ruleset_id"] = ruleset_id
 
         strip_extension = self._non_negative_float((strip_dims or {}).get("extension_length"), 0.0)
         strip_overall_width = self._non_negative_float((strip_dims or {}).get("overall_width"), 0.0)
@@ -1794,17 +2039,35 @@ class SafeguardingBuilder(
             return False
 
         original_protected_ruleset = self.protected_airspace_ruleset
+        original_ols_context = getattr(self, "ols_construction_context", None)
         original_contour_role = getattr(
             self, "_contour_interval_ruleset_role", "baseline"
         )
         try:
             self.protected_airspace_ruleset = comparison_ruleset
             self._contour_interval_ruleset_role = "comparison"
+            comparison_context = self._build_ols_construction_context(
+                comparison_ruleset,
+                processed_runway_data_list,
+                arp_point=getattr(self, "_ols_arp_point", None),
+            )
+            self._ols_construction_contexts[comparison_ruleset.id] = comparison_context
+            if not self._activate_ols_construction_context(
+                comparison_ruleset,
+                comparison_context,
+            ):
+                return False
+            comparison_runways = (
+                processed_runway_data_list
+                if getattr(comparison_ruleset, "protected_airspace_model", "")
+                == "annex14_modernised_ofs_oes"
+                else comparison_context.generation_runways()
+            )
             self._reset_controlling_ols_engine()
             comparison_is_annex14 = self._is_future_annex14_protected_airspace()
             geometry_created = False
-            runway_total = len(processed_runway_data_list)
-            for runway_index, runway_data in enumerate(processed_runway_data_list, start=1):
+            runway_total = len(comparison_runways)
+            for runway_index, runway_data in enumerate(comparison_runways, start=1):
                 self._set_processing_status(
                     self.tr(
                         f"Comparison OLS: creating {comparison_ruleset.display_name} candidates "
@@ -1829,12 +2092,16 @@ class SafeguardingBuilder(
 
             if (
                 not comparison_is_annex14
-                and self.reference_elevation_datum is not None
+                and comparison_context is not None
             ):
+                comparison_spec = comparison_ruleset.ols_construction_policy().airport_wide_spec(
+                    comparison_ruleset,
+                    comparison_context,
+                )
                 geometry_created = self._generate_airport_wide_ols(
-                    processed_runway_data_list,
+                    comparison_runways,
                     comparison_secondary_group,
-                    self.reference_elevation_datum,
+                    float(comparison_spec.get("datum_elevation_m") or 0.0),
                     icao_code,
                     comparison_primary_group,
                 ) or geometry_created
@@ -1901,6 +2168,7 @@ class SafeguardingBuilder(
             return controlling_created or comparison_created
         finally:
             self.protected_airspace_ruleset = original_protected_ruleset
+            self.ols_construction_context = original_ols_context
             self._contour_interval_ruleset_role = original_contour_role
 
     def _run_modernisation_comparison(
@@ -2526,11 +2794,16 @@ class SafeguardingBuilder(
         ofz_group: Optional[QgsLayerTreeGroup],
         runway_ols_group: Optional[QgsLayerTreeGroup] = None,
         airport_wide_ols_group: Optional[QgsLayerTreeGroup] = None,
+        ols_runway_data_list: Optional[List[dict]] = None,
     ) -> bool:
         """Generate runway-specific safeguarding outputs."""
         any_guideline_processed_ok = False
         if not processed_runway_data_list:
             return False
+        ols_data_by_index = {
+            runway_data.get("original_index"): runway_data
+            for runway_data in (ols_runway_data_list or [])
+        }
         for runway_data in processed_runway_data_list:
             rwy_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
             run_success_flags = []
@@ -2540,21 +2813,29 @@ class SafeguardingBuilder(
                 if guideline_groups.get("E") is not None:
                     run_success_flags.append(self.process_lighting_control_zones(runway_data, guideline_groups["E"]))
                 if guideline_groups.get("F") is not None:
+                    ols_runway_data = ols_data_by_index.get(
+                        runway_data.get("original_index")
+                    )
+                    if ols_runway_data is None:
+                        self._log_skip(
+                            f"Runway OLS {rwy_name}: selected ruleset context is unavailable."
+                        )
+                        ols_runway_data = None
                     if (
                         getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
                         == "annex14_modernised_ofs_oes"
-                    ):
+                    ) and ols_runway_data is not None:
                         run_success_flags.append(
                             self.process_annex14_geometry(
-                                runway_data,
+                                ols_runway_data,
                                 runway_ols_group or guideline_groups["F"],
                                 airport_wide_ols_group,
                             )
                         )
-                    else:
+                    elif ols_runway_data is not None:
                         run_success_flags.append(
                             self.process_runway_ols_surfaces(
-                                runway_data,
+                                ols_runway_data,
                                 runway_ols_group or guideline_groups["F"],
                                 ofz_group,
                             )

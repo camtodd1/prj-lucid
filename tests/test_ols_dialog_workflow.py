@@ -78,13 +78,42 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             )
         )
 
-    def test_unavailable_controlling_rulesets_remain_visible_but_disabled(self):
+    def test_cap168_and_easa_are_selectable_while_current_annex14_is_source_gated(self):
         baseline = self.dialog.baseline_ols_ruleset_combo
         cap168_index = baseline.findData("uk_caa_cap168_edition_13")
+        easa_index = baseline.findData("easa_cs_adr_dsn_issue_7")
+        current_annex_index = baseline.findData("icao_annex14_vol1_current_ols")
 
         self.assertGreaterEqual(cap168_index, 0)
-        self.assertIn("unavailable", baseline.itemText(cap168_index).lower())
-        self.assertFalse(baseline.model().item(cap168_index).isEnabled())
+        self.assertTrue(baseline.model().item(cap168_index).isEnabled())
+        self.assertTrue(baseline.model().item(easa_index).isEnabled())
+        self.assertIn("partial preview", baseline.itemText(cap168_index).lower())
+        self.assertIn("partial preview", baseline.itemText(easa_index).lower())
+        self.assertIn("source tables required", baseline.itemText(current_annex_index).lower())
+        self.assertFalse(baseline.model().item(current_annex_index).isEnabled())
+        self.assertIn("authorised edition", baseline.model().item(current_annex_index).toolTip())
+
+    def test_nominated_ols_track_options_round_trip_with_runway_data(self):
+        group = self.dialog._runway_groups[1]
+        saved = group.get_input_data()
+        saved.update(
+            {
+                "approach_track_type_1": "curved_gt_15",
+                "approach_track_wkt_1": "LINESTRING (0 0, 100 10, 200 40)",
+                "takeoff_track_type_2": "offset",
+                "takeoff_track_wkt_2": "LINESTRING (1000 0, 2000 100)",
+                "cap168_wide_runway": True,
+            }
+        )
+
+        group.set_input_data(saved)
+        restored = group.get_input_data()
+
+        self.assertEqual(restored["approach_track_type_1"], "curved_gt_15")
+        self.assertEqual(restored["approach_track_wkt_1"], saved["approach_track_wkt_1"])
+        self.assertEqual(restored["takeoff_track_type_2"], "offset")
+        self.assertEqual(restored["takeoff_track_wkt_2"], saved["takeoff_track_wkt_2"])
+        self.assertTrue(restored["cap168_wide_runway"])
 
     def test_explicit_selection_keeps_legacy_policy_compatible(self):
         self.select_mode("modernisation_comparison")

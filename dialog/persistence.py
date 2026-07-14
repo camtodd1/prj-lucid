@@ -605,6 +605,15 @@ class PersistenceMixin:
         runway_data.setdefault("landing_available_2", True)
         runway_data.setdefault("lahso_applied_1", False)
         runway_data.setdefault("lahso_applied_2", False)
+        runway_data.setdefault("cap168_wide_runway", False)
+        runway_data.setdefault("approach_track_type_1", "aligned")
+        runway_data.setdefault("approach_track_type_2", "aligned")
+        runway_data.setdefault("approach_track_wkt_1", "")
+        runway_data.setdefault("approach_track_wkt_2", "")
+        runway_data.setdefault("takeoff_track_type_1", "aligned")
+        runway_data.setdefault("takeoff_track_type_2", "aligned")
+        runway_data.setdefault("takeoff_track_wkt_1", "")
+        runway_data.setdefault("takeoff_track_wkt_2", "")
         return runway_data
 
     def _line_edit(self, name: str):

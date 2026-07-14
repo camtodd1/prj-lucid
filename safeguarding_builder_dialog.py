@@ -21,9 +21,11 @@ from urllib.request import Request, urlopen
 from qgis.core import (  # type: ignore
     QgsMessageLog,
     Qgis,
+    QgsGeometry,
     QgsPointXY,
     QgsProject,
     QgsCoordinateReferenceSystem,
+    QgsWkbTypes,
 )
 from qgis.PyQt import uic, QtWidgets, QtGui, QtCore  # type: ignore
 from qgis.PyQt.QtWidgets import (  # type: ignore
@@ -1191,7 +1193,9 @@ class SafeguardingBuilderDialog(
         invalid = 0
         missing_elevations = 0
         missing_adg = 0
+        missing_track_geometry = 0
         runway_end_elevation_count = 0
+        longest_physical_length_m = 0.0
         comparison_ruleset_id = ""
         if hasattr(self, "_current_ols_ruleset_ids"):
             _baseline_ruleset_id, comparison_ruleset_id = self._current_ols_ruleset_ids()
@@ -1221,11 +1225,35 @@ class SafeguardingBuilderDialog(
             elif math.isclose(coords[0], coords[2], abs_tol=1e-6) and math.isclose(coords[1], coords[3], abs_tol=1e-6):
                 invalid += 1
                 missing_required = True
+            else:
+                displaced_1 = self._parse_status_float(data.get("thr_displaced_1"), minimum=0.0) or 0.0
+                displaced_2 = self._parse_status_float(data.get("thr_displaced_2"), minimum=0.0) or 0.0
+                threshold_length = math.hypot(coords[2] - coords[0], coords[3] - coords[1])
+                longest_physical_length_m = max(
+                    longest_physical_length_m,
+                    threshold_length + displaced_1 + displaced_2,
+                )
 
             adg = str(data.get("adg", data.get("design_group", "")) or "").strip().upper()
             if requires_adg and not adg:
                 missing_adg += 1
                 missing_required = True
+
+            for family in ("approach", "takeoff"):
+                for end_number in (1, 2):
+                    track_type = str(data.get(f"{family}_track_type_{end_number}") or "aligned")
+                    track_wkt = str(data.get(f"{family}_track_wkt_{end_number}") or "").strip()
+                    if track_type != "aligned":
+                        track_geometry = QgsGeometry.fromWkt(track_wkt) if track_wkt else QgsGeometry()
+                        if (
+                            not track_wkt
+                            or track_geometry.isNull()
+                            or track_geometry.isEmpty()
+                            or track_geometry.type() != QgsWkbTypes.LineGeometry
+                            or track_geometry.length() <= 0
+                        ):
+                            missing_track_geometry += 1
+                            missing_required = True
 
             end_elevations = [
                 self._parse_status_float(data.get("runway_end_elev_1")),
@@ -1250,6 +1278,8 @@ class SafeguardingBuilderDialog(
             issues.append("threshold coordinates must not be identical")
         if missing_adg:
             issues.append(f"ADG required for {missing_adg} runway{'s' if missing_adg != 1 else ''}")
+        if missing_track_geometry:
+            issues.append(f"path geometry required for {missing_track_geometry} non-aligned OLS track{'s' if missing_track_geometry != 1 else ''}")
 
         return {
             "total": total,
@@ -1259,7 +1289,9 @@ class SafeguardingBuilderDialog(
             "ready": ready,
             "runway_end_elevation_count": runway_end_elevation_count,
             "missing_elevations": missing_elevations,
+            "missing_track_geometry": missing_track_geometry,
             "red_elevation_ready": total > 0 and missing_elevations == 0,
+            "longest_physical_length_m": longest_physical_length_m,
             "issues": issues,
         }
 
@@ -1417,6 +1449,11 @@ class SafeguardingBuilderDialog(
         if not airport_status.get("identity_ready"):
             return {"state": "blocked", "summary": "OLS needs a resolved ICAO airport identity."}
         if not runway_status.get("ready"):
+            if runway_status.get("missing_track_geometry"):
+                return {
+                    "state": "blocked",
+                    "summary": "Non-aligned OLS tracks need a LINESTRING path in the project CRS.",
+                }
             if "icao_annex14_vol1_modernised_ofs_oes" in {
                 active_ruleset_id,
                 comparison_ruleset_id,
@@ -1458,9 +1495,10 @@ class SafeguardingBuilderDialog(
             comparison_airport_wide_capability = None
 
         modernised_id = "icao_annex14_vol1_modernised_ofs_oes"
+        cap168_id = "uk_caa_cap168_edition_13"
         needs_red = any(
             ruleset_id
-            and ruleset_id != modernised_id
+            and ruleset_id not in {modernised_id, cap168_id}
             and capability not in {None, "unsupported"}
             for ruleset_id, capability in (
                 (active_ruleset_id, airport_wide_capability),
@@ -1473,6 +1511,16 @@ class SafeguardingBuilderDialog(
             review.append("airport-wide/secondary OLS needs ARP elevation and runway-end elevations")
         if not airport_status.get("arp_pair_ready") and needs_red:
             review.append("ARP coordinates needed for airport-wide safeguarding references")
+        cap168_selected = cap168_id in {active_ruleset_id, comparison_ruleset_id}
+        if (
+            cap168_selected
+            and float(runway_status.get("longest_physical_length_m") or 0.0) >= 1100.0
+            and not airport_status.get("arp_pair_ready")
+        ):
+            return {
+                "state": "blocked",
+                "summary": "CAP168 OHS needs ARP coordinates because the longest runway is at least 1,100 m.",
+            }
         if controlling_capability == "unsupported":
             review.append("controlling OLS is unsupported for this ruleset")
         elif controlling_capability == "experimental":
@@ -3506,6 +3554,38 @@ class SafeguardingBuilderDialog(
         validated["surface_material"] = surface_material
         validated["type1"] = inputs.get("type1")
         validated["type2"] = inputs.get("type2")
+        validated["cap168_wide_runway"] = self._bool_from_input(
+            inputs.get("cap168_wide_runway", False)
+        )
+
+        valid_track_types = {"aligned", "offset", "curved", "curved_gt_15"}
+        for family in ("approach", "takeoff"):
+            for end_number in (1, 2):
+                type_key = f"{family}_track_type_{end_number}"
+                wkt_key = f"{family}_track_wkt_{end_number}"
+                track_type = str(inputs.get(type_key) or "aligned").strip().lower()
+                track_wkt = str(inputs.get(wkt_key) or "").strip()
+                if track_type not in valid_track_types:
+                    errors.append(
+                        f"Rwy {index}: Invalid {family} track type '{track_type}' for end {end_number}."
+                    )
+                    current_errors += 1
+                    track_type = "aligned"
+                if track_type != "aligned":
+                    geometry = QgsGeometry.fromWkt(track_wkt) if track_wkt else QgsGeometry()
+                    if (
+                        not track_wkt
+                        or geometry.isNull()
+                        or geometry.isEmpty()
+                        or geometry.type() != QgsWkbTypes.LineGeometry
+                        or geometry.length() <= 0
+                    ):
+                        errors.append(
+                            f"Rwy {index}: {family.title()} track {end_number} requires a valid non-empty LINESTRING WKT in the project CRS."
+                        )
+                        current_errors += 1
+                validated[type_key] = track_type
+                validated[wkt_key] = track_wkt
 
         return validated if current_errors == 0 else None
 

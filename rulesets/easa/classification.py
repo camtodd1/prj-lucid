@@ -26,6 +26,8 @@ def get_runway_type_abbr(runway_type_str: Optional[str]) -> str:
         return "NI"
 
     value = runway_type_str.strip()
+    if value in {"NI", "NPA", "PA_I", "PA_II_III"}:
+        return value
     abbr = RUNWAY_TYPE_MAP.get(value)
     if abbr is not None:
         return abbr

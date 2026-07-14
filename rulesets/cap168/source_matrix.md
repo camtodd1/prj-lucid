@@ -10,8 +10,8 @@ applicable until 20 November 2030.
 | Take-off climb | 4.8-4.20, Table 4.1, printed pp.227-229 / PDF pp.4-6 | `TOCS_PARAMS`, `TAKE_OFF_CLIMB_CONSTRUCTION_RULES` | Loaded. Normal Code 3/4 final width is 1,200 m; 1,800 m is retained as the >15-degree heading-change option. Clearway station/width, wide-runway, slew and reduced-slope rules are explicit. |
 | Approach | 4.21-4.27, Table 4.2, printed pp.231-234 / PDF pp.8-11 | `APPROACH_PARAMS`, `APPROACH_CONSTRUCTION_RULES` | Loaded for NI, NPA and precision Codes 1-4, including elevation datum, 150 m instrument cap, wide-runway and offset/curved-track rules. Current applicability ends 20 November 2030. |
 | Transitional | 4.34-4.39, especially 4.36, printed p.238 / PDF p.15 | `TRANSITIONAL_PARAMS` | Loaded: 20% for NI/NPA Codes 1/2; 14.3% otherwise. |
-| Inner horizontal | 4.45-4.52, printed p.240 / PDF p.17 | `IHS_HEIGHT_RULE`, `IHS_PLAN_RULES` | Source-loaded, constructor integration pending. Elevation is 45 m above the lowest runway threshold, not RED. Plan form varies by actual main-runway length. |
-| Conical | 4.53-4.55, printed pp.240-241 / PDF pp.17-18 | `CONICAL_RULES` | Loaded: 5%; 105 m above IHS normally, 55 m NI Code 2, 35 m NI Code 1. Constructor integration pending. |
+| Inner horizontal | 4.45-4.52, printed p.240 / PDF p.17 | `IHS_HEIGHT_RULE`, `IHS_PLAN_RULES`, `Cap168OlsConstructionPolicy` | Integrated. Elevation is 45 m above the lowest runway threshold, not RED. The longest physical runway is the main runway; plan form varies by its length, with applicable subsidiary joins. |
+| Conical | 4.53-4.55, printed pp.240-241 / PDF pp.17-18 | `CONICAL_RULES`, `Cap168OlsConstructionPolicy` | Integrated: 5%; 105 m above IHS normally, 55 m NI Code 2, 35 m NI Code 1. |
 | Outer horizontal | 4.56-4.58, printed p.241 / PDF p.18 | `OUTER_HORIZONTAL_RULES` | Loaded. Applicability/radius depends on actual main-runway length, so legacy ARC-only lookup is intentionally not used. |
 | OFZ / inner surfaces | 4.59-4.73, printed pp.241-244 / PDF pp.18-21 | `INNER_APPROACH_PARAMS`, `INNER_TRANSITIONAL_PARAMS`, `BAULKED_LANDING_PARAMS`, `OFZ_APPLICABILITY_RULES` | Source-loaded for precision runway combinations, including Cat I versus Cat II/III establishment language. End-to-end geometry fixtures remain pending. |
 | Independent validation | Chapter 4 source facts above | `tests/fixtures/ols/source_validation_v1.json` | Representative source constants, independently calculated approach elevations/contour, IHS elevation and conical contour are locked. Reviewer sign-off pending. |
@@ -42,12 +42,10 @@ not text-extraction artefacts:
 
 ## Capability position
 
-CAP168 OLS capability remains `unsupported` in profile metadata even though the
-parameter model is source-loaded. Promotion first requires:
+CAP168 OLS capability is `partial` and selectable. Promotion to production-
+supported still requires:
 
-- a datum-aware airport-wide constructor using the lowest threshold;
-- correct circle/racetrack selection and subsidiary-runway joins;
-- actual-runway-length inputs for IHS and OHS applicability;
-- conditional clearway and >15-degree TOCS widths;
 - CAP168-specific generated-geometry and controlling-envelope fixtures; and
+- track-following approach-adjacent transitional construction plus topology/
+  performance coverage for nominated offset and curved tracks; and
 - independent technical review of the source capture and generated results.

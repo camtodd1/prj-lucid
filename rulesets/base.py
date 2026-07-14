@@ -40,6 +40,13 @@ class RulesetProfile:
     def supports(self, key: str) -> bool:
         return self.capability_status(key) == "supported"
 
+    def ols_construction_policy(self):
+        """Return the conventional OLS policy owned by this ruleset."""
+
+        from .ols_construction import policy_for_ruleset
+
+        return policy_for_ruleset(self.id)
+
 
 def capability_map(status_by_key: Dict[str, str]) -> Dict[str, RulesetCapability]:
     """Build a capability dictionary from compact key/status pairs."""

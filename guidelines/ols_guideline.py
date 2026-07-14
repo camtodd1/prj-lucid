@@ -50,6 +50,185 @@ class OlsGuidelineMixin:
             return protected_getter()
         return self.get_active_ruleset()
 
+    def _get_ols_construction_context(self):
+        """Return the independently rebuilt context for the active OLS ruleset."""
+        context = getattr(self, "ols_construction_context", None)
+        ruleset = self._get_ols_ruleset()
+        if context is not None and getattr(context, "ruleset_id", None) == getattr(ruleset, "id", None):
+            return context
+        return None
+
+    def _get_ols_construction_policy(self):
+        ruleset = self._get_ols_ruleset()
+        getter = getattr(ruleset, "ols_construction_policy", None)
+        return getter() if callable(getter) else None
+
+    def _get_ols_runway_context(self, runway_data: Optional[dict]):
+        context = self._get_ols_construction_context()
+        if context is None or not runway_data:
+            return None
+        try:
+            return context.runway(int(runway_data.get("original_index")))
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _get_ols_end_context(runway_context, direction: Optional[str]):
+        if runway_context is None or not direction:
+            return None
+        return runway_context.end(direction)
+
+    def _ols_parameters(
+        self,
+        arc_num: int,
+        runway_type: Optional[str],
+        surface_type: str,
+        runway_data: Optional[dict] = None,
+        direction: Optional[str] = None,
+    ):
+        """Resolve parameters through ruleset policy before shared geometry."""
+        ruleset = self._get_ols_ruleset()
+        policy = self._get_ols_construction_policy()
+        context = self._get_ols_construction_context()
+        runway_context = self._get_ols_runway_context(runway_data)
+        end_context = self._get_ols_end_context(runway_context, direction)
+        if policy is not None:
+            return policy.parameters(
+                ruleset,
+                context,
+                runway_context,
+                end_context,
+                arc_num,
+                runway_type,
+                surface_type,
+            )
+        return ruleset.ols_parameters(arc_num, runway_type, surface_type)
+
+    def _ols_airport_wide_spec(self) -> Dict[str, object]:
+        ruleset = self._get_ols_ruleset()
+        context = self._get_ols_construction_context()
+        policy = self._get_ols_construction_policy()
+        if context is None or policy is None:
+            return {}
+        return dict(policy.airport_wide_spec(ruleset, context) or {})
+
+    def _ols_nominated_track(
+        self,
+        runway_data: dict,
+        direction: Optional[str],
+        family: str,
+        origin: QgsPointXY,
+        required_length_m: float,
+    ) -> Tuple[Optional[QgsGeometry], bool]:
+        """Return an oriented nominated track; bool indicates it was requested."""
+        runway_context = self._get_ols_runway_context(runway_data)
+        end_context = self._get_ols_end_context(runway_context, direction)
+        if end_context is None:
+            return None, False
+        track_type = str(getattr(end_context, f"{family}_track_type", "aligned") or "aligned")
+        if track_type == "aligned":
+            return None, False
+        track_wkt = str(getattr(end_context, f"{family}_track_wkt", "") or "").strip()
+        geometry = QgsGeometry.fromWkt(track_wkt)
+        if geometry is None or geometry.isEmpty() or geometry.type() != QgsWkbTypes.LineGeometry:
+            QgsMessageLog.logMessage(
+                f"[skip] {family.title()} {end_context.designator}: nominated track is not a line geometry.",
+                PLUGIN_TAG,
+                Qgis.Critical,
+            )
+            return None, True
+        parts = geometry.asMultiPolyline() if geometry.isMultipart() else [geometry.asPolyline()]
+        parts = [part for part in parts if len(part) >= 2]
+        if not parts:
+            return None, True
+        points = max(parts, key=lambda part: QgsGeometry.fromPolylineXY(part).length())
+        if origin.distance(points[-1]) < origin.distance(points[0]):
+            points = list(reversed(points))
+        if origin.distance(points[0]) > 5.0:
+            QgsMessageLog.logMessage(
+                f"[skip] {family.title()} {end_context.designator}: nominated track must start within 5 m of its construction origin.",
+                PLUGIN_TAG,
+                Qgis.Critical,
+            )
+            return None, True
+        points[0] = QgsPointXY(origin)
+        track = QgsGeometry.fromPolylineXY(points)
+        if track.length() + 1e-6 < float(required_length_m):
+            QgsMessageLog.logMessage(
+                f"[skip] {family.title()} {end_context.designator}: nominated track is {track.length():.1f} m; "
+                f"{float(required_length_m):.1f} m is required.",
+                PLUGIN_TAG,
+                Qgis.Critical,
+            )
+            return None, True
+        return track, True
+
+    @staticmethod
+    def _ols_track_point_azimuth(track: QgsGeometry, station_m: float) -> Tuple[Optional[QgsPointXY], Optional[float]]:
+        length = float(track.length())
+        station = min(max(0.0, float(station_m)), length)
+        point_geom = track.interpolate(station)
+        if point_geom is None or point_geom.isEmpty():
+            return None, None
+        point = point_geom.asPoint()
+        before = track.interpolate(max(0.0, station - 0.5)).asPoint()
+        after = track.interpolate(min(length, station + 0.5)).asPoint()
+        if before.distance(after) <= 1e-9:
+            return point, None
+        return point, before.azimuth(after)
+
+    def _ols_track_corridor_parts(
+        self,
+        track: QgsGeometry,
+        start_station_m: float,
+        length_m: float,
+        start_width_m: float,
+        end_width_m: float,
+        max_segment_m: float = 100.0,
+        width_at_relative_station=None,
+    ) -> List[Tuple[QgsGeometry, QgsPointXY, float, float, float]]:
+        """Create locally planar corridor panels along a nominated track."""
+        length = float(length_m)
+        segment_count = max(1, int(math.ceil(length / max(1.0, max_segment_m))))
+        parts = []
+        for index in range(segment_count):
+            rel_start = length * index / segment_count
+            rel_end = length * (index + 1) / segment_count
+            point_a, azimuth_a = self._ols_track_point_azimuth(track, start_station_m + rel_start)
+            point_b, azimuth_b = self._ols_track_point_azimuth(track, start_station_m + rel_end)
+            if any(value is None for value in (point_a, point_b, azimuth_a, azimuth_b)):
+                continue
+            if callable(width_at_relative_station):
+                width_a = float(width_at_relative_station(rel_start))
+                width_b = float(width_at_relative_station(rel_end))
+            else:
+                width_a = start_width_m + ((end_width_m - start_width_m) * rel_start / length)
+                width_b = start_width_m + ((end_width_m - start_width_m) * rel_end / length)
+            a_left = point_a.project(width_a / 2.0, (azimuth_a - 90.0) % 360.0)
+            a_right = point_a.project(width_a / 2.0, (azimuth_a + 90.0) % 360.0)
+            b_left = point_b.project(width_b / 2.0, (azimuth_b - 90.0) % 360.0)
+            b_right = point_b.project(width_b / 2.0, (azimuth_b + 90.0) % 360.0)
+            polygon = self._create_polygon_from_corners(
+                [a_left, a_right, b_right, b_left], "nominated track corridor panel"
+            )
+            if polygon is not None and not polygon.isEmpty():
+                local_azimuth = point_a.azimuth(point_b)
+                parts.append((polygon, point_a, local_azimuth, rel_start, rel_end - rel_start))
+        return parts
+
+    def _ols_track_cross_section(
+        self,
+        track: QgsGeometry,
+        station_m: float,
+        width_m: float,
+    ) -> Optional[QgsGeometry]:
+        point, azimuth = self._ols_track_point_azimuth(track, station_m)
+        if point is None or azimuth is None or width_m <= 0:
+            return None
+        left = point.project(width_m / 2.0, (azimuth - 90.0) % 360.0)
+        right = point.project(width_m / 2.0, (azimuth + 90.0) % 360.0)
+        return QgsGeometry.fromPolylineXY([left, right])
+
     def _get_contour_interval(self, surface_key: str, fallback: float) -> float:
         """Return a positive intermediate contour interval from dialog options, or the default fallback."""
         return self._get_contour_interval_value(surface_key, "intermediate", fallback)
@@ -195,24 +374,32 @@ class OlsGuidelineMixin:
         # Constants for this method
         BUFFER_SEGMENTS = 36  # Segments for geometry buffers
 
-        QgsMessageLog.logMessage(
-            f"[step] Airport-wide OLS: generating Transitional, IHS, Conical and OHS surfaces "
-            f"(RED={reference_elevation_datum:.2f}m).",
-            plugin_tag,
-            level=Qgis.Info,
-        )
         overall_success = False  # Tracks if *any* airport-wide OLS layer was successfully created
 
-        # --- Get IHS Parameters ---
-        ihs_base_height_agl = self._get_ols_ruleset().ihs_base_height()
-        if ihs_base_height_agl is None:
+        # Regulatory datum and airport-wide dimensions are ruleset-owned.
+        airport_spec = self._ols_airport_wide_spec()
+        ihs_base_height_agl = airport_spec.get("ihs_height_m")
+        ihs_elevation = airport_spec.get("ihs_elevation_amsl")
+        if ihs_base_height_agl is None or ihs_elevation is None:
             QgsMessageLog.logMessage(
                 "Cannot generate Airport-Wide OLS: Failed to retrieve IHS base height parameter.",
                 plugin_tag,
                 level=Qgis.Critical,
             )
             return False
-        IHS_ELEVATION_AMSL = reference_elevation_datum + ihs_base_height_agl
+        reference_elevation_datum = float(
+            airport_spec.get("datum_elevation_m")
+            if airport_spec.get("datum_elevation_m") is not None
+            else reference_elevation_datum
+        )
+        ihs_base_height_agl = float(ihs_base_height_agl)
+        IHS_ELEVATION_AMSL = float(ihs_elevation)
+        QgsMessageLog.logMessage(
+            f"[step] Airport-wide OLS: generating Transitional, IHS, Conical and OHS surfaces "
+            f"({airport_spec.get('datum_name', 'datum')}={reference_elevation_datum:.2f}m).",
+            plugin_tag,
+            level=Qgis.Info,
+        )
 
         # --- Initialize Variables ---
         ihs_base_geom: Optional[QgsGeometry] = None
@@ -347,9 +534,25 @@ class OlsGuidelineMixin:
                     )
                     continue
 
-                # Check IHS Radius Calculation
-                ihs_params = self._get_ols_ruleset().ols_parameters(arc_num, current_max_type_str, "IHS")
-                ihs_end_radius = ihs_params.get("radius") if ihs_params else None
+                runway_context = self._get_ols_runway_context(rwy_data)
+                policy = self._get_ols_construction_policy()
+                ihs_plan = (
+                    dict(policy.ihs_plan(self._get_ols_construction_context(), runway_context) or {})
+                    if policy is not None and runway_context is not None
+                    else {}
+                )
+                if ihs_plan.get("shape") == "not_applicable":
+                    continue
+                ihs_end_radius = ihs_plan.get("radius")
+                ihs_params = {}
+                if ihs_end_radius is None and ihs_plan.get("use_parameter_radius", True):
+                    ihs_params = self._ols_parameters(
+                        arc_num,
+                        current_max_type_str,
+                        "IHS",
+                        rwy_data,
+                    )
+                    ihs_end_radius = ihs_params.get("radius") if ihs_params else None
                 if ihs_end_radius is None or not isinstance(ihs_end_radius, (int, float)) or ihs_end_radius <= 0:
                     if isinstance(strip_width, (int, float)) and strip_width > 0:
                         ihs_end_radius = strip_width / 2.0
@@ -369,6 +572,18 @@ class OlsGuidelineMixin:
 
                 # --- Geometry Generation ---
                 try:  # Generate the geometry
+                    if ihs_plan.get("shape") == "runway_midpoint_circle":
+                        runway_axis = QgsGeometry.fromPolylineXY([phys_p_start, phys_p_end])
+                        midpoint_geom = runway_axis.interpolate(runway_axis.length() / 2.0)
+                        midpoint = midpoint_geom.asPoint() if midpoint_geom and not midpoint_geom.isEmpty() else None
+                        if midpoint is None:
+                            continue
+                        circle = QgsGeometry.fromPointXY(midpoint).buffer(ihs_end_radius, BUFFER_SEGMENTS)
+                        valid_circle = self._ensure_valid_geometry(circle, f"IHS midpoint circle {rwy_name}")
+                        if valid_circle is not None:
+                            strip_outline_geoms.append(valid_circle)
+                        continue
+
                     buffer_p = QgsGeometry.fromPointXY(strip_end_p).buffer(ihs_end_radius, BUFFER_SEGMENTS)
                     buffer_r = QgsGeometry.fromPointXY(strip_end_r).buffer(ihs_end_radius, BUFFER_SEGMENTS)
 
@@ -467,10 +682,7 @@ class OlsGuidelineMixin:
         # --- 3. Create IHS Layer ---
         if ihs_base_geom:
             try:
-                ihs_ref_params = self._get_ols_ruleset().ols_parameters(
-                    highest_arc_num, highest_precision_type_str, "IHS"
-                )
-                ref_text = ihs_ref_params.get("ref", "MOS 8.2.18") if ihs_ref_params else "MOS 8.2.18"
+                ref_text = airport_spec.get("ihs_ref") or "OLS IHS source table"
                 fields = self._get_ols_fields("IHS")
                 feature = QgsFeature(fields)
                 feature.setGeometry(ihs_base_geom)
@@ -519,18 +731,14 @@ class OlsGuidelineMixin:
         # --- 4. Generate Conical Surface & Contours ---
         conical_layer_created = False
         if ihs_base_geom:
-            conical_params = self._get_ols_ruleset().ols_parameters(
-                highest_arc_num, highest_precision_type_str, "CONICAL"
-            )
+            conical_params = airport_spec.get("conical")
             if conical_params:
                 height_extent_agl = conical_params.get("height_extent_agl")
                 slope = conical_params.get("slope")
                 ref = conical_params.get("ref", "MOS 8.2.19")
                 if slope is not None and slope > 0 and height_extent_agl is not None and height_extent_agl > 0:
-                    ohs_params_for_conical = self._get_ols_ruleset().ols_parameters(
-                        highest_arc_num, highest_precision_type_str, "OHS"
-                    )
-                    if ohs_params_for_conical:
+                    ohs_params_for_conical = airport_spec.get("ohs")
+                    if airport_spec.get("extend_conical_to_ohs") and ohs_params_for_conical:
                         ohs_height_agl = ohs_params_for_conical.get("height_agl")
                         if isinstance(ohs_height_agl, (int, float)):
                             height_extent_to_ohs = float(ohs_height_agl) - ihs_base_height_agl
@@ -859,7 +1067,7 @@ class OlsGuidelineMixin:
                 )
 
         # --- 5. Generate Outer Horizontal Surface (OHS) ---
-        ohs_params = self._get_ols_ruleset().ols_parameters(highest_arc_num, highest_precision_type_str, "OHS")
+        ohs_params = airport_spec.get("ohs")
         if ohs_params:
             radius = ohs_params.get("radius")
             height_agl = ohs_params.get("height_agl")
@@ -870,13 +1078,18 @@ class OlsGuidelineMixin:
                 level=Qgis.Info,
             )
             if radius is not None and height_agl is not None and radius > 0:
-                ohs_elevation_amsl = reference_elevation_datum + height_agl
-                arp_point_xy: Optional[QgsPointXY] = None
+                ohs_elevation_amsl = float(
+                    ohs_params.get("elevation_amsl")
+                    if ohs_params.get("elevation_amsl") is not None
+                    else reference_elevation_datum + height_agl
+                )
+                context_arp = getattr(self._get_ols_construction_context(), "arp_point", None)
+                arp_point_xy: Optional[QgsPointXY] = QgsPointXY(context_arp) if context_arp is not None else None
                 project = QgsProject.instance()
                 # Construct the expected ARP layer name that your plugin creates
                 expected_arp_layer_name = f"{icao_code} {self.tr('ARP')}"  # Match display name from create_arp_layer
 
-                arp_layer_candidates = project.mapLayersByName(expected_arp_layer_name)
+                arp_layer_candidates = project.mapLayersByName(expected_arp_layer_name) if arp_point_xy is None else []
 
                 found_arp_point_layer = None
                 for lyr in arp_layer_candidates:
@@ -884,7 +1097,9 @@ class OlsGuidelineMixin:
                         found_arp_point_layer = lyr
                         break  # Found a suitable point layer
 
-                if found_arp_point_layer is not None:
+                if arp_point_xy is not None:
+                    pass
+                elif found_arp_point_layer is not None:
                     arp_feat = next(found_arp_point_layer.getFeatures(), None)
                     if arp_feat and arp_feat.hasGeometry() and not arp_feat.geometry().isNull():
                         geom = arp_feat.geometry()
@@ -988,6 +1203,7 @@ class OlsGuidelineMixin:
                                 "height_agl": height_agl,
                                 "ref_mos": ref,
                                 "radius_m": radius,
+                                "applicability": ohs_params.get("applicability"),
                             }
                             if fields.indexFromName("rwy_name") != -1:
                                 attr_map["rwy_name"] = self.tr("Airport Wide")
@@ -1017,6 +1233,8 @@ class OlsGuidelineMixin:
                                         metadata={
                                             "elevation_m": ohs_elevation_amsl,
                                             "display_footprint": QgsGeometry(ohs_final_geom),
+                                            "applicability": ohs_params.get("applicability"),
+                                            "source_ref": ref,
                                         },
                                     )
                                 )
@@ -2181,7 +2399,10 @@ class OlsGuidelineMixin:
                     ),
                 ]
             ):
-                approach_sections_params = self._get_ols_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
+                direction = "primary" if end_idx == 0 else "reciprocal"
+                approach_sections_params = self._ols_parameters(
+                    arc_num, end_type, "APPROACH", runway_data, direction
+                )
                 if not approach_sections_params:
                     continue
                 current_section_start_pt = None
@@ -2323,7 +2544,9 @@ class OlsGuidelineMixin:
                 )
             else:
                 governing_type_str_full = "Non-Instrument (NI)"
-            trans_params = self._get_ols_ruleset().ols_parameters(arc_num, governing_type_str_full, "Transitional")
+            trans_params = self._ols_parameters(
+                arc_num, governing_type_str_full, "Transitional", runway_data
+            )
             if not trans_params or "slope" not in trans_params or trans_params["slope"] <= 1e-9:
                 QgsMessageLog.logMessage(
                     f"Skipping Transitional features for {runway_name}: No valid slope found for classification ('{governing_type_str_full}').",
@@ -2371,8 +2594,11 @@ class OlsGuidelineMixin:
                 end_thr_elev: float,
                 outward_az: float,
                 end_desig: str,
+                direction: str,
             ) -> Optional[Tuple[QgsPointXY, float]]:
-                approach_params = self._get_ols_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
+                approach_params = self._ols_parameters(
+                    arc_num, end_type, "APPROACH", runway_data, direction
+                )
                 if not approach_params:
                     QgsMessageLog.logMessage(
                         f"Transitional strip clipping skipped for {runway_name} {end_desig}: no approach params.",
@@ -2397,6 +2623,7 @@ class OlsGuidelineMixin:
                 thr_elev,
                 rwy_params["azimuth_r_p"],
                 primary_desig,
+                "primary",
             )
             reciprocal_approach_inner = _approach_inner_boundary(
                 type2_str,
@@ -2404,6 +2631,7 @@ class OlsGuidelineMixin:
                 rec_thr_elev,
                 rwy_params["azimuth_p_r"],
                 reciprocal_desig,
+                "reciprocal",
             )
 
             strip_breakpoints = [
@@ -2624,7 +2852,10 @@ class OlsGuidelineMixin:
                     ),
                 ]
             ):
-                approach_sections_params = self._get_ols_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
+                direction = "primary" if end_idx == 0 else "reciprocal"
+                approach_sections_params = self._ols_parameters(
+                    arc_num, end_type, "APPROACH", runway_data, direction
+                )
                 if not approach_sections_params:
                     continue
 
@@ -3328,6 +3559,7 @@ class OlsGuidelineMixin:
         end_desig: str,
         threshold_elevation: Optional[float],
         inner_horizontal_elevation_amsl: Optional[float] = None,
+        direction: Optional[str] = None,
     ) -> Tuple[List[QgsFeature], List[QgsFeature]]:
         """
         Generates a list of Approach Surface section features (polygons)
@@ -3336,13 +3568,26 @@ class OlsGuidelineMixin:
         """
 
         # --- Get Section Parameters ---
-        sections = self._get_ols_ruleset().ols_parameters(arc_num, end_type, "APPROACH")
+        sections = self._ols_parameters(
+            arc_num, end_type, "APPROACH", runway_data, direction
+        )
         if not sections:
             QgsMessageLog.logMessage(
                 f"No Approach params found for {end_desig} (Code {arc_num}, Type {end_type})",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
+            return [], []
+
+        first_start_offset = float(sections[0].get("start_dist_from_thr", 0.0) or 0.0)
+        nominated_track, nominated_requested = self._ols_nominated_track(
+            runway_data,
+            direction,
+            "approach",
+            thr_point,
+            first_start_offset + sum(float(section.get("length", 0.0) or 0.0) for section in sections),
+        )
+        if nominated_requested and nominated_track is None:
             return [], []
 
         # --- Initialize Variables ---
@@ -3389,7 +3634,12 @@ class OlsGuidelineMixin:
                         level=Qgis.Critical,
                     )
                     return [], []
-                current_start_point = thr_point.project(start_dist_offset, outward_azimuth)
+                if nominated_track is not None:
+                    current_start_point, _ = self._ols_track_point_azimuth(
+                        nominated_track, start_dist_offset
+                    )
+                else:
+                    current_start_point = thr_point.project(start_dist_offset, outward_azimuth)
                 current_start_width = start_width
                 current_dist_from_thr = start_dist_offset  # Initialize cumulative distance
                 section_start_dist_thr = start_dist_offset  # Store for attribute
@@ -3408,7 +3658,12 @@ class OlsGuidelineMixin:
             current_start_hw = current_start_width / 2.0
             section_end_width = current_start_width + (2 * section_length * section_divergence)
             end_hw = section_end_width / 2.0
-            end_point = current_start_point.project(section_length, outward_azimuth)
+            if nominated_track is not None:
+                end_point, _ = self._ols_track_point_azimuth(
+                    nominated_track, current_dist_from_thr + section_length
+                )
+            else:
+                end_point = current_start_point.project(section_length, outward_azimuth)
 
             if not end_point:
                 QgsMessageLog.logMessage(
@@ -3427,7 +3682,18 @@ class OlsGuidelineMixin:
 
             section_name_log = f"Approach {end_desig} {section_desc}"
 
-            if abs(section_divergence) < 1e-9:  # Horizontal section or parallel sides
+            track_parts = []
+            if nominated_track is not None:
+                track_parts = self._ols_track_corridor_parts(
+                    nominated_track,
+                    current_dist_from_thr,
+                    section_length,
+                    current_start_width,
+                    section_end_width,
+                )
+                if track_parts:
+                    section_geom = QgsGeometry.unaryUnion([part[0] for part in track_parts])
+            elif abs(section_divergence) < 1e-9:  # Horizontal section or parallel sides
                 section_geom = self._create_rectangle_from_start(
                     current_start_point,
                     outward_azimuth,
@@ -3523,8 +3789,39 @@ class OlsGuidelineMixin:
                         and current_elevation_amsl is not None
                         and current_start_point is not None
                     ):
-                        self._register_controlling_ols_candidate(
-                            ControllingOlsCandidate(
+                        candidates_to_register = []
+                        if nominated_track is not None and track_parts:
+                            for panel_index, (panel, panel_origin, panel_azimuth, panel_rel_start, panel_length) in enumerate(track_parts):
+                                candidates_to_register.append(
+                                    ControllingOlsCandidate(
+                                        surface_id=f"{section_surface_id}:P{panel_index + 1}",
+                                        surface_type="Approach",
+                                        footprint=QgsGeometry(panel),
+                                        elevation_at_xy=axis_elevation_evaluator(
+                                            panel_origin,
+                                            panel_azimuth,
+                                            current_elevation_amsl + (panel_rel_start * section_slope),
+                                            section_slope,
+                                            panel_length,
+                                        ),
+                                        model="axis",
+                                        metadata={
+                                            "origin_x": panel_origin.x(),
+                                            "origin_y": panel_origin.y(),
+                                            "azimuth_degrees": panel_azimuth,
+                                            "origin_elevation_m": current_elevation_amsl + (panel_rel_start * section_slope),
+                                            "slope": section_slope,
+                                            "max_distance_m": panel_length,
+                                            "runway": runway_data.get("short_name", "N/A"),
+                                            "end": end_desig,
+                                            "section": i + 1,
+                                            "track_type": "nominated",
+                                            **section_vertical_attrs,
+                                        },
+                                    )
+                                )
+                        else:
+                            candidates_to_register.append(ControllingOlsCandidate(
                                 surface_id=section_surface_id,
                                 surface_type="Approach",
                                 footprint=QgsGeometry(valid_geom),
@@ -3548,8 +3845,9 @@ class OlsGuidelineMixin:
                                     "section": i + 1,
                                     **section_vertical_attrs,
                                 },
-                            )
-                        )
+                            ))
+                        for candidate in candidates_to_register:
+                            self._register_controlling_ols_candidate(candidate)
 
                 except Exception as e_feat:
                     QgsMessageLog.logMessage(
@@ -3601,18 +3899,30 @@ class OlsGuidelineMixin:
                             continue  # Skip contours outside this section
                         dist_along = delta_h / section_slope
 
-                    cl_point = current_start_point.project(dist_along, outward_azimuth)
+                    if nominated_track is not None:
+                        cl_point, _ = self._ols_track_point_azimuth(
+                            nominated_track, current_dist_from_thr + dist_along
+                        )
+                    else:
+                        cl_point = current_start_point.project(dist_along, outward_azimuth)
                     current_width_at_dist = current_start_width + (2 * dist_along * section_divergence)
                     half_width = current_width_at_dist / 2.0
 
                     if cl_point and half_width > 0:
-                        az_perp_l = (outward_azimuth - 90.0 + 360.0) % 360.0
-                        az_perp_r = (outward_azimuth + 90.0) % 360.0
-                        pt_l = cl_point.project(half_width, az_perp_l)
-                        pt_r = cl_point.project(half_width, az_perp_r)
-
-                        if pt_l and pt_r:
+                        if nominated_track is not None:
+                            contour_geom = self._ols_track_cross_section(
+                                nominated_track,
+                                current_dist_from_thr + dist_along,
+                                current_width_at_dist,
+                            )
+                        else:
+                            az_perp_l = (outward_azimuth - 90.0 + 360.0) % 360.0
+                            az_perp_r = (outward_azimuth + 90.0) % 360.0
+                            pt_l = cl_point.project(half_width, az_perp_l)
+                            pt_r = cl_point.project(half_width, az_perp_r)
                             contour_geom = QgsGeometry.fromPolylineXY([pt_l, pt_r])
+
+                        if contour_geom is not None:
                             if contour_geom and not contour_geom.isEmpty():
                                 # --- CLIP CONTOUR TO CURRENT SECTION POLYGON ---
                                 if valid_geom:  # Clip to current section
@@ -3669,6 +3979,7 @@ class OlsGuidelineMixin:
         end_desig: str,
         origin_elevation: Optional[float],
         inner_horizontal_elevation_amsl: Optional[float] = None,
+        direction: Optional[str] = None,
     ) -> Tuple[Optional[QgsFeature], List[QgsFeature]]:
         """
         Generates a single Take-Off Climb Surface (TOCS) feature and a list of contour features.
@@ -3681,7 +3992,7 @@ class OlsGuidelineMixin:
         tocs_contour_interval = self._get_contour_interval("tocs", TOCS_CONTOUR_INTERVAL)
 
         # 1. Get Parameters
-        params = self._get_ols_ruleset().ols_parameters(arc_num, None, "TOCS")
+        params = self._ols_parameters(arc_num, None, "TOCS", runway_data, direction)
         if not params:
             QgsMessageLog.logMessage(
                 f"No TOCS params found for {end_desig} (Code {arc_num})",
@@ -3692,6 +4003,7 @@ class OlsGuidelineMixin:
 
         try:
             origin_offset = params.get("origin_offset")
+            origin_station = params.get("origin_station_from_pavement_end")
             inner_width = params.get("inner_edge_width")
             divergence = params.get("divergence")
             overall_length = params.get("length")
@@ -3756,19 +4068,26 @@ class OlsGuidelineMixin:
             return None, []
 
         # 2. Calculate Start Point of TOCS Inner Edge
-        effective_takeoff_start = runway_phys_end_point
-        if clearway_len > 1e-6:
-            projected_clearway_end = effective_takeoff_start.project(clearway_len, outward_azimuth)
-            if not projected_clearway_end:
-                QgsMessageLog.logMessage(
-                    f"Failed calc TOCS clearway end point {end_desig}",
-                    PLUGIN_TAG,
-                    level=Qgis.Warning,
-                )
-                return None, []
-            effective_takeoff_start = projected_clearway_end
-
-        start_point = effective_takeoff_start.project(origin_offset, outward_azimuth)
+        station_from_pavement_end = (
+            float(origin_station)
+            if origin_station is not None
+            else float(clearway_len) + origin_offset
+        )
+        nominated_track, nominated_requested = self._ols_nominated_track(
+            runway_data,
+            direction,
+            "takeoff",
+            runway_phys_end_point,
+            station_from_pavement_end + overall_length,
+        )
+        if nominated_requested and nominated_track is None:
+            return None, []
+        if nominated_track is not None:
+            start_point, _ = self._ols_track_point_azimuth(
+                nominated_track, station_from_pavement_end
+            )
+        else:
+            start_point = runway_phys_end_point.project(station_from_pavement_end, outward_azimuth)
         if not start_point:
             QgsMessageLog.logMessage(
                 f"Failed calc TOCS start point after offset {end_desig}",
@@ -3783,7 +4102,26 @@ class OlsGuidelineMixin:
 
         # 4. Generate Geometry
         try:
-            if length_divergence >= overall_length - 1e-6:
+            track_parts = []
+            if nominated_track is not None:
+                actual_end_width = min(
+                    final_width,
+                    inner_width + (2.0 * overall_length * divergence),
+                )
+                track_parts = self._ols_track_corridor_parts(
+                    nominated_track,
+                    station_from_pavement_end,
+                    overall_length,
+                    inner_width,
+                    actual_end_width,
+                    width_at_relative_station=lambda station: min(
+                        final_width,
+                        inner_width + (2.0 * station * divergence),
+                    ),
+                )
+                if track_parts:
+                    final_geom = QgsGeometry.unaryUnion([part[0] for part in track_parts])
+            elif length_divergence >= overall_length - 1e-6:
                 outer_hw_at_overall = inner_hw + (overall_length * divergence)
                 final_geom = self._create_trapezoid(
                     start_point,
@@ -3862,7 +4200,7 @@ class OlsGuidelineMixin:
             "innerw_m": inner_width,
             "outerw_m": final_width,
             "diverg_perc": divergence * 100.0 if divergence is not None else None,
-            "origin_offset": origin_offset,
+            "origin_offset": station_from_pavement_end,
             "vertical_model": "linear_edge_interpolation",
             "z_units": "m",
             "height_reference": "AMSL",
@@ -3878,8 +4216,35 @@ class OlsGuidelineMixin:
             if idx != -1:
                 feature.setAttribute(idx, value)
         if hasattr(self, "_register_controlling_ols_candidate") and origin_elevation is not None:
-            self._register_controlling_ols_candidate(
-                ControllingOlsCandidate(
+            candidates_to_register = []
+            if nominated_track is not None and track_parts:
+                for panel_index, (panel, panel_origin, panel_azimuth, panel_rel_start, panel_length) in enumerate(track_parts):
+                    candidates_to_register.append(ControllingOlsCandidate(
+                        surface_id=f"{tocs_surface_id}:P{panel_index + 1}",
+                        surface_type="TOCS",
+                        footprint=QgsGeometry(panel),
+                        elevation_at_xy=axis_elevation_evaluator(
+                            panel_origin,
+                            panel_azimuth,
+                            origin_elevation + (panel_rel_start * slope),
+                            slope,
+                            panel_length,
+                        ),
+                        model="axis",
+                        metadata={
+                            "origin_x": panel_origin.x(),
+                            "origin_y": panel_origin.y(),
+                            "azimuth_degrees": panel_azimuth,
+                            "origin_elevation_m": origin_elevation + (panel_rel_start * slope),
+                            "slope": slope,
+                            "max_distance_m": panel_length,
+                            "runway": runway_data.get("short_name", "N/A"),
+                            "end": end_desig,
+                            "track_type": "nominated",
+                        },
+                    ))
+            else:
+                candidates_to_register.append(ControllingOlsCandidate(
                     surface_id=tocs_surface_id,
                     surface_type="TOCS",
                     footprint=QgsGeometry(final_geom),
@@ -3910,8 +4275,9 @@ class OlsGuidelineMixin:
                         "surface_axis": "distance_along_centerline_from_narrow_edge",
                         "edge_elevation_source": OLS_EDGE_ELEVATION_SOURCE,
                     },
-                )
-            )
+                ))
+            for candidate in candidates_to_register:
+                self._register_controlling_ols_candidate(candidate)
 
         # ---- TOCS Contour Features with Clipping ----
         # TOCS_CONTOUR_INTERVAL = 10.0  # Adjust as needed
@@ -3950,35 +4316,53 @@ class OlsGuidelineMixin:
 
                 if is_last_contour:
                     # At the end: use polygon outer width, no clipping
-                    cl_point = start_point.project(overall_length, outward_azimuth)
+                    if nominated_track is not None:
+                        cl_point, _ = self._ols_track_point_azimuth(
+                            nominated_track, station_from_pavement_end + overall_length
+                        )
+                    else:
+                        cl_point = start_point.project(overall_length, outward_azimuth)
                     current_width_at_dist = final_width
                     half_width = current_width_at_dist / 2.0
 
                     if cl_point and half_width > 0:
-                        az_perp_l = (outward_azimuth - 90.0 + 360.0) % 360.0
-                        az_perp_r = (outward_azimuth + 90.0) % 360.0
-                        pt_l = cl_point.project(half_width, az_perp_l)
-                        pt_r = cl_point.project(half_width, az_perp_r)
-
-                        if pt_l and pt_r:
-                            contour_geom = QgsGeometry.fromPolylineXY([pt_l, pt_r])
-                            # No clipping for the last contour
-                            final_contour_geom = contour_geom
+                        if nominated_track is not None:
+                            final_contour_geom = self._ols_track_cross_section(
+                                nominated_track,
+                                station_from_pavement_end + overall_length,
+                                current_width_at_dist,
+                            )
+                        else:
+                            az_perp_l = (outward_azimuth - 90.0 + 360.0) % 360.0
+                            az_perp_r = (outward_azimuth + 90.0) % 360.0
+                            pt_l = cl_point.project(half_width, az_perp_l)
+                            pt_r = cl_point.project(half_width, az_perp_r)
+                            final_contour_geom = QgsGeometry.fromPolylineXY([pt_l, pt_r])
                 else:
                     # Intermediate contours: project as normal, then clip
-                    cl_point = start_point.project(dist_along, outward_azimuth)
+                    if nominated_track is not None:
+                        cl_point, _ = self._ols_track_point_azimuth(
+                            nominated_track, station_from_pavement_end + dist_along
+                        )
+                    else:
+                        cl_point = start_point.project(dist_along, outward_azimuth)
                     current_width_at_dist = inner_width + (2 * dist_along * divergence)
                     half_width = current_width_at_dist / 2.0
 
                     if cl_point and half_width > 0:
-                        az_perp_l = (outward_azimuth - 90.0 + 360.0) % 360.0
-                        az_perp_r = (outward_azimuth + 90.0) % 360.0
-                        pt_l = cl_point.project(half_width, az_perp_l)
-                        pt_r = cl_point.project(half_width, az_perp_r)
-
-                        if pt_l and pt_r:
+                        if nominated_track is not None:
+                            contour_geom = self._ols_track_cross_section(
+                                nominated_track,
+                                station_from_pavement_end + dist_along,
+                                current_width_at_dist,
+                            )
+                        else:
+                            az_perp_l = (outward_azimuth - 90.0 + 360.0) % 360.0
+                            az_perp_r = (outward_azimuth + 90.0) % 360.0
+                            pt_l = cl_point.project(half_width, az_perp_l)
+                            pt_r = cl_point.project(half_width, az_perp_r)
                             contour_geom = QgsGeometry.fromPolylineXY([pt_l, pt_r])
-                            # Clip to TOCS polygon
+                        if contour_geom is not None:
                             final_contour_geom = contour_geom.intersection(final_geom)
                 # If valid, create the feature
                 if "final_contour_geom" in locals() and final_contour_geom and not final_contour_geom.isEmpty():
@@ -4128,10 +4512,9 @@ class OlsGuidelineMixin:
         ofz_bls_contour_features: List[QgsFeature] = []
 
         IHS_ELEVATION_AMSL: Optional[float] = None
-        if self.reference_elevation_datum is not None:
-            ihs_base_height_agl = self._get_ols_ruleset().ihs_base_height()
-            if ihs_base_height_agl is not None:
-                IHS_ELEVATION_AMSL = self.reference_elevation_datum + ihs_base_height_agl
+        airport_spec = self._ols_airport_wide_spec()
+        if airport_spec.get("ihs_elevation_amsl") is not None:
+            IHS_ELEVATION_AMSL = float(airport_spec["ihs_elevation_amsl"])
         if IHS_ELEVATION_AMSL is None:
             QgsMessageLog.logMessage(
                 f"Runway OLS for {runway_name}: IHS Elevation could not be determined.",
@@ -4141,6 +4524,7 @@ class OlsGuidelineMixin:
 
         runway_end_configurations = [
             {
+                "direction": "primary",
                 "current_desig": primary_desig,
                 "landing_threshold_pt": primary_threshold_point,
                 "landing_threshold_elev": primary_thr_elev,
@@ -4155,6 +4539,7 @@ class OlsGuidelineMixin:
                 "runway_orientation_azimuth_for_its_perp": az_primary_to_reciprocal,
             },
             {
+                "direction": "reciprocal",
                 "current_desig": reciprocal_desig,
                 "landing_threshold_pt": reciprocal_threshold_point,
                 "landing_threshold_elev": reciprocal_thr_elev,
@@ -4196,7 +4581,13 @@ class OlsGuidelineMixin:
                 if callable(inner_approach_params_getter):
                     ia_params = inner_approach_params_getter(arc_num, config["approach_type_str"], arc_let)
                 else:
-                    ia_params = active_ruleset.ols_parameters(arc_num, config["approach_type_str"], "InnerApproach")
+                    ia_params = self._ols_parameters(
+                        arc_num,
+                        config["approach_type_str"],
+                        "InnerApproach",
+                        runway_data,
+                        config["direction"],
+                    )
                 if ia_params:
                     ia_slope_param = ia_params.get("slope")
                     ia_start_dist_param = ia_params.get("start_dist_from_thr")
@@ -4301,10 +4692,16 @@ class OlsGuidelineMixin:
             try:
                 active_ruleset = self._get_ols_ruleset()
                 baulked_params_getter = getattr(active_ruleset, "baulked_landing_parameters", None)
-                if callable(baulked_params_getter):
+                if getattr(active_ruleset, "id", "") == "mos139_2019" and callable(baulked_params_getter):
                     bls_params_dict = baulked_params_getter(arc_num, config["approach_type_str"], arc_let)
                 else:
-                    bls_params_dict = active_ruleset.ols_parameters(arc_num, config["approach_type_str"], "BaulkedLanding")
+                    bls_params_dict = self._ols_parameters(
+                        arc_num,
+                        config["approach_type_str"],
+                        "BaulkedLanding",
+                        runway_data,
+                        config["direction"],
+                    )
                 if bls_params_dict and IHS_ELEVATION_AMSL is not None:
                     strip_end_distance_from_thr = None
                     strip_type_abbr = active_ruleset.classify_runway_type(config["approach_type_str"])
@@ -4379,8 +4776,12 @@ class OlsGuidelineMixin:
 
             # --- Inner Transitional Surface ---
             if IHS_ELEVATION_AMSL is not None:
-                it_params_dict = self._get_ols_ruleset().ols_parameters(
-                    arc_num, config["approach_type_str"], "InnerTransitional"
+                it_params_dict = self._ols_parameters(
+                    arc_num,
+                    config["approach_type_str"],
+                    "InnerTransitional",
+                    runway_data,
+                    config["direction"],
                 )
                 if it_params_dict:
                     its_slope = it_params_dict.get("slope")
@@ -4642,6 +5043,7 @@ class OlsGuidelineMixin:
                     current_desig,
                     config["landing_threshold_elev"],
                     IHS_ELEVATION_AMSL,
+                    config["direction"],
                 )
                 if app_sections:
                     approach_poly_features.extend(app_sections)
@@ -4657,19 +5059,42 @@ class OlsGuidelineMixin:
             # --- Take-off Climb Surface (TOCS) ---
             try:
                 tocs_plane_origin_pt = config["tocs_departure_pavement_end_pt"]
-                tocs_params_for_offset = self._get_ols_ruleset().ols_parameters(arc_num, None, "TOCS")
+                tocs_params_for_offset = self._ols_parameters(
+                    arc_num, None, "TOCS", runway_data, config["direction"]
+                )
                 origin_offset_param_val = 60.0
                 if tocs_params_for_offset:
                     origin_offset_param_val = tocs_params_for_offset.get("origin_offset", 60.0)
 
-                if config["tocs_clearway_len_at_departure_end"] > 1e-6:
+                station_from_pavement_end = float(config["tocs_clearway_len_at_departure_end"])
+                if tocs_params_for_offset and tocs_params_for_offset.get("origin_station_from_pavement_end") is not None:
+                    station_from_pavement_end = float(
+                        tocs_params_for_offset["origin_station_from_pavement_end"]
+                    )
+                    origin_offset_param_val = 0.0
+                if station_from_pavement_end > 1e-6:
                     tocs_plane_origin_pt = tocs_plane_origin_pt.project(
-                        config["tocs_clearway_len_at_departure_end"],
-                        config["tocs_flight_path_azimuth"],
+                        station_from_pavement_end, config["tocs_flight_path_azimuth"]
                     )
                 if tocs_plane_origin_pt:
                     tocs_plane_origin_pt = tocs_plane_origin_pt.project(
                         origin_offset_param_val, config["tocs_flight_path_azimuth"]
+                    )
+                nominated_tocs_track, nominated_tocs_requested = self._ols_nominated_track(
+                    runway_data,
+                    config["direction"],
+                    "takeoff",
+                    config["tocs_departure_pavement_end_pt"],
+                    station_from_pavement_end
+                    + origin_offset_param_val
+                    + float((tocs_params_for_offset or {}).get("length") or 0.0),
+                )
+                if nominated_tocs_requested and nominated_tocs_track is None:
+                    tocs_plane_origin_pt = None
+                elif nominated_tocs_track is not None:
+                    tocs_plane_origin_pt, _ = self._ols_track_point_azimuth(
+                        nominated_tocs_track,
+                        station_from_pavement_end + origin_offset_param_val,
                     )
 
                 tocs_actual_start_elevation = None
@@ -4695,6 +5120,7 @@ class OlsGuidelineMixin:
                         current_desig,
                         tocs_actual_start_elevation,
                         IHS_ELEVATION_AMSL,
+                        config["direction"],
                     )
                     if tocs_feat:
                         tocs_poly_features.append(tocs_feat)

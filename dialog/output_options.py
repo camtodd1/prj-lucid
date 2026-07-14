@@ -156,10 +156,22 @@ class OutputOptionsMixin:
         self._available_ols_ruleset_ids = set()
         profiles = tuple(iter_ruleset_profiles())
         for profile in profiles:
+            capability_status = profile.capability_status(
+                "ols.controlling_lower_envelope"
+            )
+            partial_preview = (
+                profile.id
+                in {"uk_caa_cap168_edition_13", "easa_cs_adr_dsn_issue_7"}
+                and capability_status != "supported"
+            )
             available = self._ols_profile_available(profile)
+            unavailable_reason = self._ols_profile_unavailable_reason(profile)
             label = profile.display_name
             if not available:
-                label = self.tr(f"{label} — controlling OLS unavailable")
+                suffix = "source tables required" if "source" in unavailable_reason.lower() else "controlling OLS unavailable"
+                label = self.tr(f"{label} — {suffix}")
+            elif partial_preview:
+                label = self.tr(f"{label} — partial preview")
             baseline_combo.addItem(label, userData=profile.id)
             comparison_combo.addItem(label, userData=profile.id)
             if available:
@@ -169,9 +181,11 @@ class OutputOptionsMixin:
                 if item is not None:
                     item.setEnabled(available)
                     if not available:
+                        item.setToolTip(self.tr(unavailable_reason))
+                    elif partial_preview:
                         item.setToolTip(
                             self.tr(
-                                "This ruleset will become selectable when its controlling OLS capability is available."
+                                "Selectable for construction and comparison; production release gates remain pending."
                             )
                         )
 
@@ -306,6 +320,16 @@ class OutputOptionsMixin:
             }
         except Exception:
             return False
+
+    @staticmethod
+    def _ols_profile_unavailable_reason(profile) -> str:
+        try:
+            policy = profile.ols_construction_policy()
+            if not getattr(policy, "source_ready", True):
+                return str(getattr(policy, "reason", "Authoritative source tables are required."))
+        except Exception:
+            pass
+        return "This ruleset will become selectable when its controlling OLS capability is available."
 
     def _current_ols_ruleset_ids(self):
         baseline_combo = getattr(self, "baseline_ols_ruleset_combo", None)

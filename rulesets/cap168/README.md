@@ -18,14 +18,19 @@ Implemented parameters:
   applicable until 20 November 2030. Approach, take-off climb, transitional,
   OFZ, inner-horizontal, conical, and outer-horizontal source rules are loaded.
 
-Placeholder areas:
+Release-gated areas:
 
 - RESA remains scaffolded and not yet source-loaded.
-- CAP 168 OLS remains capability-gated while the shared constructor is adapted
-  for its lowest-threshold elevation datum, short-runway circular IHS,
-  subsidiary-runway IHS joins, runway-length-driven OHS applicability, and
-  conditional TOCS widths. The `250 m` Code 2 non-instrument IHS radius printed
-  by paragraph 4.50 is recorded as the user-confirmed corrected value `2500 m`.
+- CAP 168 conventional OLS is selectable as a partial profile. Its independent
+  construction context uses the longest physical runway as the main runway,
+  the lowest threshold datum, short-runway circles, long-runway racetracks,
+  subsidiary tangent joins, length-dependent OHS, LDA/clearway declared-distance
+  rules, and nominated offset or curved approach/take-off tracks. The approach
+  and take-off climb corridors follow those tracks; track-following approach-
+  adjacent transitional construction remains release-gated. Production
+  promotion also remains gated on the QGIS topology, performance, and
+  independent review suites. The `250 m` Code 2 non-instrument IHS radius printed by
+  paragraph 4.50 is recorded as the user-confirmed corrected value `2500 m`.
 
 See `source_matrix.md` for clause-level scope, the three user-confirmed numeric
 corrections, and the two retained source/cross-reference interpretations.

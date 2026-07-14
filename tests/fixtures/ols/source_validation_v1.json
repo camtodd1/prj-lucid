@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "validation_id": "ols-source-validation-v1-2026-07-13",
-  "scope": "Independent analytical contour, controller and boundary checkpoints plus representative production-parameter traceability for CASA MOS139, UK CAA CAP168 and future ICAO Annex 14 OFS/OES.",
+  "scope": "Independent analytical contour, controller and boundary checkpoints plus representative production-parameter traceability for CASA MOS139, UK CAA CAP168, EASA CS-ADR-DSN Issue 7 and future ICAO Annex 14 OFS/OES.",
   "review_status": "calculation evidence prepared; independent technical reviewer sign-off pending",
   "documents": {
     "mos139": {
@@ -28,6 +28,15 @@
       "correction_confirmation": "user-confirmed 2026-07-13",
       "supplied_filename": "CAA Aerodrome Licensing CAP168 - Guidelines_July2025 Chapter 4.pdf",
       "sha256": "27c1d35fce840caaffeefb898e6fc4df9a4bd4abdb5e8db3f878cfdccce3f649"
+    },
+    "easa": {
+      "title": "Easy Access Rules for Aerodromes — CS-ADR-DSN Issue 7",
+      "authority": "European Union Aviation Safety Agency",
+      "edition": "CS-ADR-DSN Issue 7",
+      "table_j1_ref": "CS ADR-DSN.J.470/J.475/J.480 Table J-1",
+      "table_j2_ref": "CS ADR-DSN.J.485 Table J-2",
+      "outer_horizontal_ref": "GM1 ADR-DSN.H.410",
+      "source_url": "https://www.easa.europa.eu/en/document-library/easy-access-rules/online-publications/easy-access-rules-aerodromes-regulation-eu"
     },
     "annex14": {
       "title": "ICAO Annex 14, Aerodromes, Volume I — Aerodrome Design and Operations",
@@ -313,6 +322,75 @@
       "expected": {"minimum_main_runway_length_m": 1100.0, "radius_if_main_runway_at_least_1860_m": 15000.0, "radius_if_main_runway_1100_to_below_1860_m": 10000.0}
     },
     {
+      "id": "easa-npa-code3-approach",
+      "source_ref": "CS ADR-DSN.J.475 Table J-1 (NPA Code 3)",
+      "production": {
+        "module": "rulesets.easa.ols_surfaces",
+        "symbol": "APPROACH_PARAMS",
+        "key": [3, "NPA"],
+        "tuple_key": true
+      },
+      "expected": [
+        {"length": 3000.0, "slope": 0.02, "divergence": 0.15, "start_dist_from_thr": 60.0, "start_width": 280.0},
+        {"length": 3600.0, "slope": 0.025, "divergence": 0.15, "variable_length": true},
+        {"length": 8400.0, "slope": 0.0, "divergence": 0.15, "variable_length": true, "total_length": 15000.0}
+      ]
+    },
+    {
+      "id": "easa-code3-take-off-climb",
+      "source_ref": "CS ADR-DSN.J.485 Table J-2 (Code 3/4)",
+      "production": {
+        "module": "rulesets.easa.ols_surfaces",
+        "symbol": "TOCS_PARAMS",
+        "key": 3
+      },
+      "expected": {"inner_edge_width": 180.0, "inner_edge_width_clearway": 180.0, "origin_offset": 60.0, "divergence": 0.125, "final_width": 1200.0, "final_width_turning": 1800.0, "length": 15000.0, "slope": 0.02}
+    },
+    {
+      "id": "easa-pa-code3-ofz-components",
+      "source_ref": "CS ADR-DSN.J.480 Table J-1 (PA CAT I Code 3/4)",
+      "production": {
+        "module": "rulesets.easa.ols_surfaces",
+        "symbol": "INNER_APPROACH_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"width": 120.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.02, "code_letter_f_width": 140.0}
+    },
+    {
+      "id": "easa-pa-code3-inner-horizontal",
+      "source_ref": "CS ADR-DSN.J.480 Table J-1 (PA CAT I Code 3/4)",
+      "production": {
+        "module": "rulesets.easa.ols_surfaces",
+        "symbol": "IHS_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"height_agl": 45.0, "radius": 4000.0}
+    },
+    {
+      "id": "easa-pa-code3-conical",
+      "source_ref": "CS ADR-DSN.J.480 Table J-1 (PA CAT I Code 3/4)",
+      "production": {
+        "module": "rulesets.easa.ols_surfaces",
+        "symbol": "CONICAL_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"slope": 0.05, "height_extent_agl": 100.0}
+    },
+    {
+      "id": "easa-outer-horizontal-guidance",
+      "source_ref": "GM1 ADR-DSN.H.410",
+      "production": {
+        "module": "rulesets.easa.ols_surfaces",
+        "symbol": "OHS_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"height_agl": 150.0, "radius": 15000.0, "local_object_height_agl": 30.0, "guidance_only": true}
+    },
+    {
       "id": "annex14-ofs-adg-iii-instrument-approach",
       "source_ref": "Annex 14 Vol I 4.2.1 and Table 4-2, printed page 4-15, supplied PDF page 18",
       "production": {
@@ -566,6 +644,43 @@
         "contour_checkpoint": {"elevation_m": 200.0, "expected_offset_from_ihs_m": 1100.0}
       }
     },
+    "easa_npa_code3": {
+      "source_refs": [
+        "CS ADR-DSN.J.475 Table J-1 (NPA Code 3)",
+        "CS ADR-DSN.J.485 Table J-2 (Code 3/4)",
+        "GM1 ADR-DSN.H.410"
+      ],
+      "assumptions": {
+        "reference_elevation_datum_m": 123.0,
+        "threshold_elevation_m": 100.0,
+        "inner_horizontal_elevation_m": 168.0
+      },
+      "resolved_approach": {
+        "inner_edge_length_m": 280.0,
+        "sections": [
+          {"length_m": 3000.0, "slope": 0.02, "divergence": 0.15},
+          {"length_m": 320.0, "slope": 0.025, "divergence": 0.15},
+          {"length_m": 11680.0, "slope": 0.0, "divergence": 0.15}
+        ],
+        "elevation_checkpoints": [
+          {"station_m": 3000.0, "expected_elevation_m": 160.0},
+          {"station_m": 3320.0, "expected_elevation_m": 168.0},
+          {"station_m": 10000.0, "expected_elevation_m": 168.0}
+        ],
+        "contour_checkpoint": {"elevation_m": 165.0, "expected_station_m": 3200.0, "expected_half_width_m": 620.0}
+      },
+      "inner_horizontal_and_conical": {
+        "conical_slope": 0.05,
+        "conical_height_extent_m": 100.0,
+        "contour_checkpoint": {"elevation_m": 200.0, "expected_offset_from_ihs_m": 640.0}
+      },
+      "outer_horizontal_guidance": {
+        "height_above_datum_m": 150.0,
+        "expected_elevation_m": 273.0,
+        "radius_m": 15000.0,
+        "applicability": "guidance_only"
+      }
+    },
     "annex14_future": {
       "source_refs": [
         "Annex 14 Vol I Chapter 4, applicable as of 21 November 2030",
@@ -646,7 +761,7 @@
     "Primary/intermediate contour interval compatibility validation remains intentionally unimplemented and accepted.",
     "CAP 168 Table 4.1 visibly prints 180 m for the conditional Code 3/4 final width while footnote 4 specifies 1800 m. The parameter follows the unambiguous footnote and records the interpretation.",
     "CAP 168 4.73(1) points its Code 1/2 balked-landing origin to the Code 3/4 area in 4.70 rather than the immediately preceding Code 1/2 area in 4.72. The loaded start rule follows 4.72 and requires reviewer confirmation.",
-    "CAP 168 airport-wide construction is not promoted: lowest-threshold datum, short-runway circular IHS, subsidiary-runway joins and runway-length-driven OHS applicability still require constructor integration and airport fixtures.",
+    "CAP168 and EASA conventional construction are integrated but remain partial profiles pending the full airport topology/performance fixture matrix and independent technical review.",
     "Independent technical reviewer sign-off is not yet recorded."
   ]
 }

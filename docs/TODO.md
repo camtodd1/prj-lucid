@@ -28,13 +28,17 @@
   Notes:
   - Registered ruleset id is `uk_caa_cap168_edition_13`.
   - Initial tranches cover reference code, runway minimum width, runway strips, runway markings, runway lighting, declared distances, clearway, stopway, parallel runway separation, and taxiway separation tables.
-  - Remaining source tranche: RESA. CAP 168 Chapter 4 OLS parameters are now
+  - Remaining source tranche: RESA. CAP 168 Chapter 4 OLS parameters are
     source-loaded in `rulesets/cap168/ols_surfaces.py` and traced in
-    `rulesets/cap168/source_matrix.md`, but OLS capability remains gated pending
-    constructor adaptation and generated-geometry validation.
-  - CAP168 OLS integration must honour lowest-threshold IHS elevation, short-
-    runway circle/racetrack selection, subsidiary-runway joins, actual-runway-
-    length OHS applicability, and conditional TOCS widths.
+    `rulesets/cap168/source_matrix.md`. OLS is selectable as a partial profile;
+    production promotion remains gated on generated-geometry, topology,
+    performance and independent review.
+  - The ruleset-owned constructor now honours lowest-threshold IHS elevation,
+    short-runway circle/racetrack selection, subsidiary-runway joins, actual-
+    runway-length OHS applicability, declared-distance TOCS/BLS rules, and
+    nominated offset or curved tracks for the approach and take-off climb
+    corridors. Track-following approach-adjacent transitional construction
+    remains a production-promotion tranche.
   - Confirmed source corrections are encoded as `6 m` -> `60 m`, `360 m` ->
     `3600 m`, and the paragraph 4.50 NI Code 2 short-runway IHS radius
     `250 m` -> `2500 m` (user confirmation, 13 July 2026).
