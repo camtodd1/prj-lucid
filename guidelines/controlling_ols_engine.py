@@ -6105,6 +6105,13 @@ class ControllingOlsEngineMixin:
             contours,
         )
         timing_splits["contours"] = time.perf_counter() - step_start
+        total_elapsed = time.perf_counter() - overall_start
+
+        recorder = getattr(self, "_runtime_run_recorder", None)
+        if recorder is not None:
+            for timing_name, elapsed_seconds in timing_splits.items():
+                recorder.add_timing(f"controlling_ols.{timing_name}", elapsed_seconds)
+            recorder.add_timing("controlling_ols.total", total_elapsed)
 
         QgsMessageLog.logMessage(
             "[done] Controlling OLS summary: "
@@ -6112,7 +6119,7 @@ class ControllingOlsEngineMixin:
             f"regions={timing_splits['regions']:.2f}s, "
             f"transitions={timing_splits['transitions']:.2f}s, "
             f"contours={timing_splits['contours']:.2f}s, "
-            f"total={time.perf_counter() - overall_start:.2f}s; "
+            f"total={total_elapsed:.2f}s; "
             f"inputs={len(planar_candidates)} candidates, {len(exclusion_geometries)} exclusion masks, "
             f"{len(contours)} source contours.",
             PLUGIN_TAG,
@@ -6372,6 +6379,14 @@ class ControllingOlsEngineMixin:
             engine._region_solve_stats["dissolved_output_union_area_m2"] = self._feature_union_area(features)
             features = self._repair_final_controlling_partition(features, engine)
         solve_summary = engine.region_solve_timing_summary()
+        recorder = getattr(self, "_runtime_run_recorder", None)
+        if recorder is not None:
+            for timing_name, elapsed_seconds in engine._region_solve_stats.items():
+                if timing_name.endswith("_time_s") and isinstance(elapsed_seconds, (int, float)):
+                    recorder.add_timing(
+                        f"controlling_solver.{timing_name[:-7]}",
+                        elapsed_seconds,
+                    )
         diagnostics = engine.solver_diagnostics()
         recovery = diagnostics["exceptional_recovery"]
         QgsMessageLog.logMessage(

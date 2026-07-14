@@ -5,6 +5,7 @@ import os.path
 import math
 import re
 import traceback
+from pathlib import Path
 
 # import functools # Not used directly
 from typing import Dict, Optional, List, Any, Tuple
@@ -37,6 +38,7 @@ from qgis.core import (  # type: ignore
 from .core.layers import LayerMixin
 from .core import output_structure
 from .core.styles import DEFAULT_STYLE_MAP
+from .core.run_history import RuntimeRunRecorder
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.annex14_geometry import Annex14GeometryMixin
 from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
@@ -684,6 +686,42 @@ class SafeguardingBuilder(
         return reference_elevation_datum
 
     def run_safeguarding_processing(self):
+        """Run generation and always append one GUI/headless runtime record."""
+        recorder = RuntimeRunRecorder(
+            Path(self.plugin_dir),
+            qgis_version=getattr(Qgis, "QGIS_VERSION", "unknown"),
+        )
+        self._runtime_run_recorder = recorder
+        self._processing_run_status = "aborted"
+        recorder.set_context(
+            airport=None,
+            design_ruleset=getattr(getattr(self, "ruleset", None), "id", None),
+            baseline_ruleset=getattr(getattr(self, "baseline_ols_ruleset", None), "id", None),
+            comparison_ruleset=getattr(getattr(self, "comparison_ols_ruleset", None), "id", None),
+            design_ruleset_label=getattr(getattr(self, "ruleset", None), "display_name", None),
+            baseline_ruleset_label=getattr(
+                getattr(self, "baseline_ols_ruleset", None), "display_name", None
+            ),
+            comparison_ruleset_label=getattr(
+                getattr(self, "comparison_ols_ruleset", None), "display_name", None
+            ),
+        )
+        recorder.start_phase("startup")
+        try:
+            return self._run_safeguarding_processing()
+        except Exception:
+            self._processing_run_status = "failed"
+            raise
+        finally:
+            try:
+                recorder.finish(self._processing_run_status)
+                self._log_done(f"Runtime test record appended to {recorder.history_path}.")
+            except Exception as exc:
+                self._log_warning(f"Could not append runtime test record: {exc}", notify_user=False)
+            finally:
+                self._runtime_run_recorder = None
+
+    def _run_safeguarding_processing(self):
         plugin_tag = PLUGIN_TAG
         self._log_step("Safeguarding generation started.")
 
@@ -764,6 +802,7 @@ class SafeguardingBuilder(
                 self.tr("Reading and validating inputs..."),
                 1,
                 self._processing_total_steps,
+                phase_key="inputs",
             ):
                 return
             input_data = self.dlg.get_all_input_data()
@@ -818,6 +857,20 @@ class SafeguardingBuilder(
             safeguarding_framework=self.framework,
         )
 
+        recorder = getattr(self, "_runtime_run_recorder", None)
+        if recorder is not None:
+            recorder.set_context(
+                airport=input_data.get("icao_code"),
+                design_ruleset=self.ruleset.id,
+                baseline_ruleset=self.baseline_ols_ruleset.id,
+                comparison_ruleset=getattr(self.comparison_ols_ruleset, "id", None),
+                design_ruleset_label=self.ruleset.display_name,
+                baseline_ruleset_label=self.baseline_ols_ruleset.display_name,
+                comparison_ruleset_label=getattr(
+                    self.comparison_ols_ruleset, "display_name", None
+                ),
+            )
+
         icao_code = input_data.get("icao_code", "UNKNOWN")
         arp_point = input_data.get("arp_point")
         arp_east = input_data.get("arp_easting")
@@ -861,6 +914,7 @@ class SafeguardingBuilder(
                 self.tr("Preparing output groups and reference layers..."),
                 2,
                 self._processing_total_steps,
+                phase_key="output_setup",
             ):
                 return
 
@@ -953,6 +1007,7 @@ class SafeguardingBuilder(
                 self.tr("Generating runway reference geometry..."),
                 3,
                 self._processing_total_steps,
+                phase_key="runway_reference_geometry",
             ):
                 return
             processed_runway_data_list, any_runway_base_data_ok = self._process_runways_part1(
@@ -975,6 +1030,7 @@ class SafeguardingBuilder(
                 self.tr("Generating physical and protection surfaces..."),
                 4,
                 self._processing_total_steps,
+                phase_key="physical_and_protection",
             ):
                 return
             (
@@ -998,6 +1054,7 @@ class SafeguardingBuilder(
                 self.tr("Generating supporting safeguarding layers..."),
                 5,
                 self._processing_total_steps,
+                phase_key="supporting_safeguarding",
             ):
                 return
             if agl_options.get("enabled"):
@@ -1021,6 +1078,7 @@ class SafeguardingBuilder(
                 self.tr(self.get_active_framework().generation_status_message()),
                 5,
                 self._processing_total_steps,
+                phase_key="supporting_safeguarding",
             ):
                 return
             guideline_groups = self._create_guideline_groups(external_safeguarding_group, bool(cns_input_list))
@@ -1090,6 +1148,7 @@ class SafeguardingBuilder(
                 self.tr("Generating runway OLS surfaces..."),
                 6,
                 self._processing_total_steps,
+                phase_key="runway_ols",
             ):
                 return
             any_guideline_processed_ok = self._process_runways_part2(
@@ -1113,6 +1172,7 @@ class SafeguardingBuilder(
                 self.tr("Generating airport-wide OLS surfaces..."),
                 7,
                 self._processing_total_steps,
+                phase_key="airport_wide_ols",
             ):
                 return
             any_guideline_processed_ok = self._process_airport_wide_ols_if_possible(
@@ -1127,6 +1187,7 @@ class SafeguardingBuilder(
                 self.tr("Solving controlling protected-airspace envelopes..."),
                 8,
                 self._processing_total_steps,
+                phase_key="controlling_envelope",
             ):
                 return
             if guideline_groups.get("F") is not None:
@@ -1165,6 +1226,7 @@ class SafeguardingBuilder(
                         self.tr("Generating and comparing the selected OLS ruleset..."),
                         9,
                         self._processing_total_steps,
+                        phase_key="ruleset_comparison",
                     ):
                         return
                     comparison_ok = self._run_ols_ruleset_comparison(
@@ -1184,6 +1246,7 @@ class SafeguardingBuilder(
                 self.tr("Finalising generated layers and report..."),
                 self._processing_total_steps,
                 self._processing_total_steps,
+                phase_key="finalisation",
             ):
                 return
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
@@ -1213,6 +1276,7 @@ class SafeguardingBuilder(
             )
 
             self._log_done("Safeguarding generation finished.")
+            self._processing_run_status = "completed"
 
             if self.successfully_generated_layers:
                 if self.dlg:
@@ -1242,17 +1306,22 @@ class SafeguardingBuilder(
         message: str,
         step: int,
         total_steps: int,
+        phase_key: Optional[str] = None,
     ) -> bool:
         """Enter a phase unless cancellation was requested during the previous phase."""
         QCoreApplication.processEvents()
         if self._processing_cancel_requested():
             self._finish_processing_cancelled()
             return False
+        recorder = getattr(self, "_runtime_run_recorder", None)
+        if recorder is not None and phase_key:
+            recorder.start_phase(phase_key)
         self._set_processing_status(message, step=step, total_steps=total_steps)
         return True
 
     def _finish_processing_cancelled(self) -> None:
         """Keep completed layers and make a partial run safe to inspect or restart."""
+        self._processing_run_status = "cancelled"
         main_group = getattr(self, "_processing_main_group", None)
         if main_group is not None:
             try:

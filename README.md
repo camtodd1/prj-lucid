@@ -116,6 +116,7 @@ dialog/dialog_constants.py       Shared dialog labels, placeholders, logging
                                  tag, and output format definitions.
 core/layers.py                   Layer creation, feature writing, output file
                                  handling, grouping, and style application.
+core/run_history.py              Append-only GUI/headless runtime test ledger.
 core/styles.py                   Mapping between layer style keys and QML files.
 guidelines/guideline_constants.py
                                  Shared constants for guideline dimensions,
@@ -152,6 +153,21 @@ styles/*.qml                     QGIS layer styling files.
 metadata.txt                     QGIS plugin metadata.
 resources.qrc                    Qt resource manifest.
 ```
+
+## Runtime Test History
+
+Every safeguarding generation run appends one compact JSON record to
+`runtime_test_runs.txt` in the plugin directory. This includes QGIS runs and
+headless workflow runs. Each line records the actor (`qgis user`, `codex
+headless`, or an explicit override), airport, selected rulesets, completion
+status, total and phase/module elapsed times, plugin/QGIS versions, Git commit,
+and whether the working tree was dirty.
+
+Set `SAFEGUARDING_BUILDER_RUN_AGENT` to override the actor,
+`SAFEGUARDING_BUILDER_COMMIT` for packaged builds without `.git`, or
+`SAFEGUARDING_BUILDER_RUN_HISTORY` to select another text-file path. The file
+uses versioned JSON Lines so it remains append-only and can be reviewed or
+parsed without migrating older records.
 
 ## Development Notes
 
