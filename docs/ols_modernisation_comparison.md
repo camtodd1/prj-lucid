@@ -16,9 +16,8 @@ Transitional, Balked Landing, Inner Approach, and Inner Transitional surfaces.
 The previous family-wide OFS/OES values remain load-compatible fallbacks.
 MOS139 contour controls mirror the generated layer groups: Obstacle Free Zone
 (Inner Approach, Inner Transitional, Balked Landing), Primary Surfaces
-(Approach, Take-off Climb, Transitional), Secondary (Conical), and Controlling.
-The Controlling interval filters and classifies the clipped contours published
-with the solved controlling envelope.
+(Approach, Take-off Climb, Transitional), and Secondary (Conical). Controlling
+envelope contours continue to inherit their source-surface intervals.
 
 The comparison engine solves both selected envelopes and calculates:
 

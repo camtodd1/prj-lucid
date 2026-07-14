@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from qgis.PyQt import QtWidgets
+from qgis.PyQt import QtCore, QtWidgets
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -171,7 +171,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 ),
             ),
             ("Secondary", (("conical", "Conical"),)),
-            ("Controlling", (("controlling", "Controlling"),)),
         )
         layout = self.dialog.frameBaselineContourSettings.layout()
         previous_row = -1
@@ -230,7 +229,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertTrue(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
         self.assertTrue(self.dialog._contour_interval_labels["annex14_oes"].isHidden())
-        self.assertTrue(self.dialog._contour_interval_labels["controlling"].isHidden())
         self.assertTrue(
             self.dialog._contour_interval_labels["modernisation_ofs_change"].isHidden()
         )
@@ -315,7 +313,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             self.assertTrue(spinbox.isEnabled())
 
         ofs_primary.setValue(2.0)
-        ofs_intermediate.setValue(0.25)
+        ofs_intermediate.setValue(0.3)
         oes_primary.setValue(1.5)
         oes_intermediate.setValue(0.2)
         options = self.dialog.get_contour_interval_options()
@@ -324,12 +322,61 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.assertEqual(
             builder._modernisation_change_contour_intervals("OFS"),
-            (0.25, 2.0),
+            (0.3, 2.0),
         )
         self.assertEqual(
             builder._modernisation_change_contour_intervals("OES"),
             (0.2, 1.5),
         )
+
+    def test_contour_control_markup_behaviour(self):
+        self.select_mode("modernisation_comparison")
+        self.dialog.toolButtonContourOverrides.setChecked(False)
+
+        layout = self.dialog.groupBox_contourIntervals.layout()
+        change_label = self.dialog._contour_interval_labels[
+            "modernisation_ofs_change"
+        ]
+        change_row = layout.getItemPosition(layout.indexOf(change_label))[0]
+        disclosure_row = layout.getItemPosition(
+            layout.indexOf(self.dialog.toolButtonContourOverrides)
+        )[0]
+        self.assertLess(change_row, disclosure_row)
+        self.assertIs(change_label.parentWidget(), self.dialog.groupBox_contourIntervals)
+        self.assertFalse(change_label.isHidden())
+        self.assertTrue(self.dialog.widgetContourOverrides.isHidden())
+
+        headers = [
+            self.dialog.labelContourPrimaryHeader,
+            self.dialog.labelContourIntermediateHeader,
+            *self.dialog._contour_column_interval_headers["baseline"],
+            *self.dialog._contour_column_interval_headers["comparison"],
+        ]
+        for header in headers:
+            self.assertTrue(
+                header.alignment() & QtCore.Qt.AlignmentFlag.AlignHCenter
+            )
+
+        spinboxes = [
+            self.dialog.doubleSpinBoxContourDefaultPrimary,
+            self.dialog.doubleSpinBoxContourDefault,
+            *self.dialog._contour_primary_interval_spinboxes.values(),
+            *self.dialog._contour_interval_spinboxes.values(),
+        ]
+        self.assertTrue(all(spinbox.decimals() == 1 for spinbox in spinboxes))
+
+        class WheelEvent:
+            ignored = False
+
+            def ignore(self):
+                self.ignored = True
+
+        spinbox = self.dialog.doubleSpinBoxContourDefault
+        original_value = spinbox.value()
+        event = WheelEvent()
+        spinbox.wheelEvent(event)
+        self.assertTrue(event.ignored)
+        self.assertEqual(spinbox.value(), original_value)
 
     def test_change_contour_defaults_are_not_overwritten_by_surface_default(self):
         self.dialog.doubleSpinBoxContourDefaultPrimary.setValue(100.0)

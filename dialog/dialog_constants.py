@@ -56,7 +56,6 @@ CONVENTIONAL_CONTOUR_SECTIONS = (
         ("approach", "tocs", "transitional"),
     ),
     ("Secondary", ("conical",)),
-    ("Controlling", ("controlling",)),
 )
 CONVENTIONAL_SURFACE_CONTOUR_KEYS = tuple(
     key
@@ -92,7 +91,6 @@ CONTOUR_INTERVAL_LABELS = {
     "inner_approach": "Inner approach",
     "inner_transitional": "Inner transitional",
     "baulked_landing": "Balked landing",
-    "controlling": "Controlling",
     "annex14_ofs": "Annex 14 obstacle free surfaces",
     "annex14_oes": "Annex 14 obstacle evaluation surfaces",
     "annex14_oes_precision_approach": "Precision Approach",

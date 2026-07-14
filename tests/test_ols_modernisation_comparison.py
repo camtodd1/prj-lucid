@@ -198,56 +198,6 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                 self.assertAlmostEqual(clipped.boundingBox().xMaximum(), 100.0, places=9)
                 self.assertTrue(clipped.difference(region).isEmpty())
 
-    def test_mos_controlling_interval_filters_and_classifies_published_contours(self):
-        region = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
-        candidate = ControllingOlsCandidate(
-            "approach",
-            "Approach",
-            QgsGeometry(region),
-            constant_elevation_evaluator(100.0),
-            "constant",
-        )
-        engine = PlanarControllingOlsEngine([candidate])
-        engine._controlling_region_geometries_cache = [
-            (candidate, QgsGeometry(region))
-        ]
-        contours = [
-            ControllingOlsContour(
-                surface_id=candidate.surface_id,
-                surface_type=candidate.surface_type,
-                geometry=QgsGeometry.fromPolylineXY(
-                    [QgsPointXY(0.0, elevation), QgsPointXY(100.0, elevation)]
-                ),
-                contour_elevation_m=elevation,
-                source_layer="test",
-            )
-            for elevation in (10.0, 20.0, 30.0, 40.0)
-        ]
-        capture = _ControllingLayerCapture()
-        capture._get_contour_interval = lambda key, fallback: 20.0
-        capture._get_primary_contour_interval = lambda key, fallback: 40.0
-
-        created = capture._create_controlling_contour_layer(
-            "TEST",
-            None,
-            engine,
-            contours,
-            contour_interval_override_key="controlling",
-        )
-
-        self.assertTrue(created)
-        features = capture.layers[0][4]
-        self.assertEqual(
-            [feature["contour_elev_am"] for feature in features],
-            [20.0, 40.0],
-        )
-        self.assertEqual(
-            [feature["contour_class"] for feature in features],
-            ["intermediate", "primary"],
-        )
-        self.assertTrue(all(feature["contour_interval_m"] == 20.0 for feature in features))
-        self.assertTrue(all(feature["primary_interval_m"] == 40.0 for feature in features))
-
     def test_mos_tocs_conical_overlap_is_assigned_once(self):
         conical = ControllingOlsCandidate(
             "conical", "Conical", QgsGeometry.fromRect(QgsRectangle(40, 0, 100, 100)),
