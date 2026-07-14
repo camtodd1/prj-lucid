@@ -150,6 +150,47 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertTrue(self.dialog.checkBox_generateControllingOls.isEnabled())
 
+    def test_mos139_contours_follow_output_group_sections(self):
+        self.select_mode("ruleset_aligned")
+        self.dialog.toolButtonContourOverrides.setChecked(True)
+        expected_sections = (
+            (
+                "Obstacle Free Zone",
+                (
+                    ("inner_approach", "Inner approach"),
+                    ("inner_transitional", "Inner transitional"),
+                    ("baulked_landing", "Balked landing"),
+                ),
+            ),
+            (
+                "Primary Surfaces",
+                (
+                    ("approach", "Approach"),
+                    ("tocs", "Take-off climb"),
+                    ("transitional", "Transitional"),
+                ),
+            ),
+            ("Secondary", (("conical", "Conical"),)),
+            ("Controlling", (("controlling", "Controlling"),)),
+        )
+        layout = self.dialog.frameBaselineContourSettings.layout()
+        previous_row = -1
+        for section, rows in expected_sections:
+            section_label = self.dialog._contour_conventional_section_labels[
+                "baseline"
+            ][section]
+            section_row = layout.getItemPosition(layout.indexOf(section_label))[0]
+            self.assertGreater(section_row, previous_row)
+            self.assertFalse(section_label.isHidden())
+            for key, text in rows:
+                label = self.dialog._contour_interval_labels[key]
+                row = layout.getItemPosition(layout.indexOf(label))[0]
+                self.assertGreater(row, section_row)
+                self.assertEqual(label.text(), text)
+                self.assertFalse(label.isHidden())
+                previous_row = row
+
+
     def test_future_mode_shows_requested_granular_oes_and_ofs_rows(self):
         self.select_mode("future_annex14_ofs_oes")
         self.dialog.toolButtonContourOverrides.setChecked(True)
@@ -189,6 +230,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertTrue(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
         self.assertTrue(self.dialog._contour_interval_labels["annex14_oes"].isHidden())
+        self.assertTrue(self.dialog._contour_interval_labels["controlling"].isHidden())
         self.assertTrue(
             self.dialog._contour_interval_labels["modernisation_ofs_change"].isHidden()
         )

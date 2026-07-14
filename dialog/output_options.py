@@ -21,6 +21,7 @@ from .dialog_constants import (
     CONTOUR_INTERVAL_KEYS,
     CONTOUR_INTERVAL_KEY_DEFAULTS,
     CONTOUR_INTERVAL_LABELS,
+    CONVENTIONAL_CONTOUR_SECTIONS,
     CONVENTIONAL_SURFACE_CONTOUR_KEYS,
     DEFAULT_CONTOUR_INTERVAL,
     DEFAULT_PRIMARY_CONTOUR_INTERVAL,
@@ -478,6 +479,15 @@ class OutputOptionsMixin:
             label.setVisible(comparison_profile is not None)
         for label in getattr(self, "_contour_change_section_labels", []):
             label.setVisible(comparison_profile is not None and annex_selected)
+        conventional_sections = getattr(
+            self, "_contour_conventional_section_labels", {}
+        )
+        for label in conventional_sections.get("baseline", {}).values():
+            label.setVisible(not baseline_is_annex)
+        for label in conventional_sections.get("comparison", {}).values():
+            label.setVisible(
+                comparison_profile is not None and not comparison_is_annex
+            )
         annex_sections = getattr(self, "_contour_annex_section_labels", {})
         for label in annex_sections.get("baseline", {}).values():
             label.setVisible(baseline_is_annex)
@@ -664,11 +674,19 @@ class OutputOptionsMixin:
         self._contour_column_headers = {}
         self._contour_column_interval_headers = {}
         self._contour_column_empty_labels = {}
+        self._contour_conventional_section_labels = {}
         self._contour_annex_section_labels = {}
         self._contour_change_section_labels = []
         surface_rows = {}
         next_row = 2
-        for key in CONVENTIONAL_SURFACE_CONTOUR_KEYS + ANNEX14_FAMILY_CONTOUR_KEYS:
+        conventional_section_rows = {}
+        for section, section_keys in CONVENTIONAL_CONTOUR_SECTIONS:
+            conventional_section_rows[section] = next_row
+            next_row += 1
+            for key in section_keys:
+                surface_rows[key] = next_row
+                next_row += 1
+        for key in ANNEX14_FAMILY_CONTOUR_KEYS:
             surface_rows[key] = next_row
             next_row += 1
         annex_section_rows = {"OES": next_row}
@@ -723,6 +741,17 @@ class OutputOptionsMixin:
             column_grid.addWidget(primary, 1, 1)
             column_grid.addWidget(intermediate, 1, 2)
             column_grid.addWidget(empty, 2, 0, 1, 3)
+            conventional_labels = {}
+            for section, section_row in conventional_section_rows.items():
+                section_label = QtWidgets.QLabel(self.tr(section))
+                section_label.setObjectName(
+                    f"label{role.title()}Conventional{section.replace(' ', '')}ContourSection"
+                )
+                section_label.setStyleSheet(
+                    "font-weight: 600; color: #234b68; padding-top: 4px;"
+                )
+                column_grid.addWidget(section_label, section_row, 0, 1, 3)
+                conventional_labels[section] = section_label
             annex_labels = {}
             for family, section_row in annex_section_rows.items():
                 section_label = QtWidgets.QLabel(self.tr(family))
@@ -739,6 +768,7 @@ class OutputOptionsMixin:
             self._contour_column_headers[role] = ruleset_header
             self._contour_column_interval_headers[role] = (primary, intermediate)
             self._contour_column_empty_labels[role] = empty
+            self._contour_conventional_section_labels[role] = conventional_labels
             self._contour_annex_section_labels[role] = annex_labels
             column_grids[role] = column_grid
             setattr(self, f"frame{role.title()}ContourSettings", frame)
@@ -854,6 +884,8 @@ class OutputOptionsMixin:
             family_note = " Controls this Annex 14 obstacle free surface only."
         elif key.startswith("annex14_oes_"):
             family_note = " Controls this Annex 14 obstacle evaluation surface only."
+        elif key == "controlling":
+            family_note = " Controls interval filtering and classification in the published controlling-contours layer."
         elif key in MODERNISATION_CHANGE_CONTOUR_KEYS:
             family = "OFS" if key == "modernisation_ofs_change" else "OES"
             family_note = f" Controls signed height-change isolines for the {family} comparison output."

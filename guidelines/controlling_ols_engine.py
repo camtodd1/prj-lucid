@@ -6086,6 +6086,7 @@ class ControllingOlsEngineMixin:
             contour_output_group,
             engine,
             contours,
+            contour_interval_override_key="controlling",
         )
         timing_splits["contours"] = time.perf_counter() - step_start
 
@@ -6761,6 +6762,7 @@ class ControllingOlsEngineMixin:
         display_name: Optional[str] = None,
         style_key: str = "OLS Controlling Contour",
         strict_clip: bool = False,
+        contour_interval_override_key: Optional[str] = None,
     ) -> bool:
         start_time = time.perf_counter()
         if not contours:
@@ -6806,9 +6808,27 @@ class ControllingOlsEngineMixin:
                 QgsField("primary_interval_m", QVariant.Double, self.tr("Primary Interval (m)"), 10, 2),
             ]
         )
+        published_interval = None
+        published_primary_interval = None
+        if contour_interval_override_key:
+            interval_getter = getattr(self, "_get_contour_interval", None)
+            primary_getter = getattr(self, "_get_primary_contour_interval", None)
+            if callable(interval_getter):
+                published_interval = float(
+                    interval_getter(contour_interval_override_key, 10.0)
+                )
+            if callable(primary_getter):
+                published_primary_interval = float(
+                    primary_getter(contour_interval_override_key, 50.0)
+                )
         features: List[QgsFeature] = []
         contour_id = 1
         for contour in contours:
+            contour_elevation = contour.contour_elevation_m
+            if published_interval is not None and contour_elevation is not None:
+                interval_ratio = float(contour_elevation) / published_interval
+                if abs(interval_ratio - round(interval_ratio)) > 0.001:
+                    continue
             contour_candidate = candidates_by_surface_id.get(contour.surface_id)
             if contour_candidate is not None:
                 matching_regions = regions_by_coplanar_key.get(
@@ -6852,17 +6872,25 @@ class ControllingOlsEngineMixin:
                 continue
             feature = QgsFeature(fields)
             feature.setGeometry(line_geometry)
+            contour_class = contour.contour_class
+            if published_primary_interval is not None and contour_elevation is not None:
+                primary_ratio = float(contour_elevation) / published_primary_interval
+                contour_class = (
+                    "primary"
+                    if abs(primary_ratio - round(primary_ratio)) <= 0.001
+                    else "intermediate"
+                )
             feature.setAttributes(
                 [
                     contour_id,
                     contour.surface_id,
                     contour.surface_type,
-                    contour.contour_elevation_m,
+                    contour_elevation,
                     contour.source_layer,
                     method,
-                    contour.contour_class,
-                    contour.contour_interval_m,
-                    contour.primary_interval_m,
+                    contour_class,
+                    published_interval or contour.contour_interval_m,
+                    published_primary_interval or contour.primary_interval_m,
                 ]
             )
             features.append(feature)

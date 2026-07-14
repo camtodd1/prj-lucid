@@ -93,6 +93,7 @@ class OlsGuidelineMixin:
             "inner_approach": APPROACH_CONTOUR_INTERVAL,
             "inner_transitional": TRANSITIONAL_CONTOUR_INTERVAL,
             "baulked_landing": APPROACH_CONTOUR_INTERVAL,
+            "controlling": CONICAL_CONTOUR_INTERVAL,
         }
         intermediate_interval = self._get_contour_interval(
             surface_key,

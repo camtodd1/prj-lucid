@@ -46,14 +46,22 @@ ANNEX14_OFS_SURFACE_CONTOUR_KEYS = (
 ANNEX14_SURFACE_CONTOUR_KEYS = (
     ANNEX14_OES_SURFACE_CONTOUR_KEYS + ANNEX14_OFS_SURFACE_CONTOUR_KEYS
 )
-CONVENTIONAL_SURFACE_CONTOUR_KEYS = (
-    "approach",
-    "tocs",
-    "transitional",
-    "conical",
-    "inner_approach",
-    "inner_transitional",
-    "baulked_landing",
+CONVENTIONAL_CONTOUR_SECTIONS = (
+    (
+        "Obstacle Free Zone",
+        ("inner_approach", "inner_transitional", "baulked_landing"),
+    ),
+    (
+        "Primary Surfaces",
+        ("approach", "tocs", "transitional"),
+    ),
+    ("Secondary", ("conical",)),
+    ("Controlling", ("controlling",)),
+)
+CONVENTIONAL_SURFACE_CONTOUR_KEYS = tuple(
+    key
+    for _section, section_keys in CONVENTIONAL_CONTOUR_SECTIONS
+    for key in section_keys
 )
 SURFACE_CONTOUR_KEYS = (
     CONVENTIONAL_SURFACE_CONTOUR_KEYS
@@ -78,12 +86,13 @@ CONTOUR_INTERVAL_KEYS = (
 )
 CONTOUR_INTERVAL_LABELS = {
     "approach": "Approach",
-    "tocs": "Take-off climb / departure",
+    "tocs": "Take-off climb",
     "transitional": "Transitional",
     "conical": "Conical",
     "inner_approach": "Inner approach",
     "inner_transitional": "Inner transitional",
-    "baulked_landing": "Balked / baulked landing",
+    "baulked_landing": "Balked landing",
+    "controlling": "Controlling",
     "annex14_ofs": "Annex 14 obstacle free surfaces",
     "annex14_oes": "Annex 14 obstacle evaluation surfaces",
     "annex14_oes_precision_approach": "Precision Approach",
