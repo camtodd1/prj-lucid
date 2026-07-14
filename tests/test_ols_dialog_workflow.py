@@ -46,8 +46,15 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertIs(comparison.parentWidget(), self.dialog.groupBox_olsWorkflow)
         self.assertTrue(self.dialog.label_protected_airspace_policy.isHidden())
         self.assertTrue(self.dialog.protected_airspace_policy_combo.isHidden())
-        self.assertEqual(self.dialog.label_baselineOlsRuleset.text(), "Baseline OLS")
-        self.assertEqual(self.dialog.label_comparisonOlsRuleset.text(), "Comparison OLS")
+        self.assertEqual(self.dialog.groupBox_olsWorkflow.title(), "OLS rulesets")
+        self.assertEqual(self.dialog.label_baselineOlsRuleset.text(), "Baseline")
+        self.assertEqual(self.dialog.label_comparisonOlsRuleset.text(), "Comparison")
+        self.assertIsNone(
+            self.dialog.findChild(QtWidgets.QLabel, "label_olsModeDescription")
+        )
+        self.assertIsNone(
+            self.dialog.findChild(QtWidgets.QFrame, "frame_workflow_context_tab_ols")
+        )
         self.assertEqual(baseline.currentData(), "mos139_2019")
         self.assertEqual(comparison.itemData(0), "")
         self.assertEqual(comparison.itemText(0), "None — baseline only")
@@ -159,6 +166,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.dialog.toolButtonContourOverrides.setChecked(True)
 
         self.assertTrue(self.dialog.frame_olsFamilyExplanation.isHidden())
+        self.assertTrue(self.dialog.toolButtonOlsFamilyHelp.isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["approach"].isHidden())
         self.assertTrue(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
         self.assertFalse(self.dialog.labelComparisonContourEmpty.isHidden())
@@ -210,6 +218,9 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.select_mode("future_annex14_ofs_oes")
         self.dialog.toolButtonContourOverrides.setChecked(True)
 
+        self.assertFalse(self.dialog.toolButtonOlsFamilyHelp.isHidden())
+        self.assertTrue(self.dialog.frame_olsFamilyExplanation.isHidden())
+        self.dialog.toolButtonOlsFamilyHelp.setChecked(True)
         self.assertFalse(self.dialog.frame_olsFamilyExplanation.isHidden())
         self.assertEqual(self.dialog.label_olsOfsTitle.text(), "OFS — protected airspace")
         self.assertIn("Obstacle-free surface", self.dialog.label_olsOfsDetail.text())
@@ -308,7 +319,9 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
     def test_comparison_change_contours_are_directly_editable_per_family(self):
         self.select_mode("modernisation_comparison")
-        self.dialog.toolButtonContourOverrides.setChecked(True)
+        self.assertFalse(self.dialog.toolButtonComparisonChangeContours.isHidden())
+        self.assertFalse(self.dialog.toolButtonComparisonChangeContours.isChecked())
+        self.dialog.toolButtonComparisonChangeContours.setChecked(True)
         ofs_primary = self.dialog._contour_primary_interval_spinboxes[
             "modernisation_ofs_change"
         ]
@@ -354,11 +367,17 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "modernisation_ofs_change"
         ]
         change_row = layout.getItemPosition(layout.indexOf(change_label))[0]
+        change_disclosure_row = layout.getItemPosition(
+            layout.indexOf(self.dialog.toolButtonComparisonChangeContours)
+        )[0]
         disclosure_row = layout.getItemPosition(
             layout.indexOf(self.dialog.toolButtonContourOverrides)
         )[0]
+        self.assertLess(change_disclosure_row, change_row)
         self.assertLess(change_row, disclosure_row)
         self.assertIs(change_label.parentWidget(), self.dialog.groupBox_contourIntervals)
+        self.assertTrue(change_label.isHidden())
+        self.dialog.toolButtonComparisonChangeContours.setChecked(True)
         self.assertFalse(change_label.isHidden())
         self.assertTrue(self.dialog.widgetContourOverrides.isHidden())
 
@@ -423,7 +442,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertFalse(self.dialog.toolButtonContourOverrides.isHidden())
         self.assertTrue(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
-        self.assertIn("Highest workload", self.dialog.label_olsModeDescription.text())
         self.assertEqual(self.dialog.label_olsInlineStatus.text(), "OLS ready.")
         self.assertTrue(self.dialog.label_olsInlineStatus.isHidden())
 
@@ -438,7 +456,30 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             self.dialog.label_olsInlineStatus.text(),
             "Controlling OLS is experimental.",
         )
-        self.assertNotIn("experimental", self.dialog.label_olsModeDescription.text().lower())
+
+    def test_contour_disclosures_report_state_and_reset_is_contextual(self):
+        self.assertEqual(self.dialog.groupBox_contourIntervals.title(), "Contour intervals")
+        self.assertEqual(
+            self.dialog.toolButtonContourOverrides.text(),
+            "Surface-specific overrides · Using defaults",
+        )
+        self.assertTrue(self.dialog.toolButtonResetContourIntervals.isHidden())
+
+        self.dialog._contour_interval_spinboxes["approach"].setValue(5.0)
+
+        self.assertEqual(
+            self.dialog.toolButtonContourOverrides.text(),
+            "Surface-specific overrides · 1 override",
+        )
+        self.assertFalse(self.dialog.toolButtonResetContourIntervals.isHidden())
+
+        self.dialog._reset_contour_interval_controls()
+
+        self.assertEqual(
+            self.dialog.toolButtonContourOverrides.text(),
+            "Surface-specific overrides · Using defaults",
+        )
+        self.assertTrue(self.dialog.toolButtonResetContourIntervals.isHidden())
 
     def test_partial_controlling_capability_is_not_a_readiness_warning(self):
         with patch(

@@ -5,11 +5,14 @@ selectors. Choosing **None — baseline only** generates only the baseline.
 Rulesets are selectable when their controlling-envelope capability is available;
 incomplete rulesets remain visible but disabled.
 
-Individual contour settings repeat the same two-column baseline/comparison
-layout. Each column only shows the surface families used by its selected
-ruleset, and its interval values are stored independently. With no comparison
-selected, the comparison column shows a baseline-only empty state. Signed
-change-contour controls remain on the comparison side when Annex 14 is present.
+The OLS tab keeps the shared contour defaults visible and places detailed
+controls behind two disclosures. **Surface-specific overrides** repeats the
+same two-column baseline/comparison layout, reports whether overrides are in
+use, and only shows the surface families used by each selected ruleset.
+**Comparison change contours** is shown when an Annex 14 comparison is active
+and contains the independent OFS/OES signed-change intervals. The Reset action
+appears only after an interval differs from its default. With no comparison
+selected, the comparison column shows a baseline-only empty state.
 Annex 14 exposes separate OES intervals for Precision Approach, Take-off Climb,
 and Instrument Departure, plus separate OFS intervals for Approach,
 Transitional, Balked Landing, Inner Approach, and Inner Transitional surfaces.
@@ -104,7 +107,6 @@ integer multiple of the intermediate interval.
 
 The comparison requires:
 
-- controlling OLS generation to be enabled;
 - different baseline and comparison rulesets, unless baseline-only is selected;
 - an available controlling-envelope capability for each selected ruleset;
 - an Aeroplane Design Group for every runway used by future Annex 14 generation;

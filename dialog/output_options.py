@@ -114,10 +114,11 @@ class OutputOptionsMixin:
 
         group = getattr(self, "groupBox_olsWorkflow", None)
         if group is None:
-            group = QtWidgets.QGroupBox(self.tr("Workflow"))
+            group = QtWidgets.QGroupBox(self.tr("OLS rulesets"))
             group.setObjectName("groupBox_olsWorkflow")
             parent_layout.insertWidget(0, group)
             self.groupBox_olsWorkflow = group
+        group.setTitle(self.tr("OLS rulesets"))
         grid = group.layout()
         if grid is None:
             grid = QtWidgets.QGridLayout(group)
@@ -140,10 +141,10 @@ class OutputOptionsMixin:
         if old_label is not None:
             old_label.hide()
 
-        baseline_label = QtWidgets.QLabel(self.tr("Baseline OLS"))
+        baseline_label = QtWidgets.QLabel(self.tr("Baseline"))
         baseline_label.setObjectName("label_baselineOlsRuleset")
         baseline_label.setStyleSheet("font-weight: 600;")
-        comparison_label = QtWidgets.QLabel(self.tr("Comparison OLS"))
+        comparison_label = QtWidgets.QLabel(self.tr("Comparison"))
         comparison_label.setObjectName("label_comparisonOlsRuleset")
         comparison_label.setStyleSheet("font-weight: 600;")
 
@@ -200,11 +201,25 @@ class OutputOptionsMixin:
         grid.addWidget(baseline_combo, 1, 0)
         grid.addWidget(comparison_combo, 1, 1)
 
-        description = QtWidgets.QLabel()
-        description.setObjectName("label_olsModeDescription")
-        description.setWordWrap(True)
-        description.setStyleSheet("color: #3f4852;")
-        grid.addWidget(description, 2, 0, 1, 2)
+        family_help = QtWidgets.QToolButton()
+        family_help.setObjectName("toolButtonOlsFamilyHelp")
+        family_help.setText(self.tr("About OFS/OES"))
+        family_help.setCheckable(True)
+        family_help.setChecked(False)
+        family_help.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        family_help.setToolButtonStyle(
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        family_help.setStyleSheet(
+            "QToolButton { border: none; color: #235f84; padding: 2px 0; "
+            "font-weight: 600; text-align: left; }"
+            "QToolButton:hover { color: #17425e; text-decoration: underline; }"
+        )
+        family_help.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Maximum,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        grid.addWidget(family_help, 2, 0, 1, 2)
 
         family_frame = QtWidgets.QFrame()
         family_frame.setObjectName("frame_olsFamilyExplanation")
@@ -237,6 +252,7 @@ class OutputOptionsMixin:
         family_layout.addWidget(oes_title, 1, 0)
         family_layout.addWidget(oes_detail, 1, 1)
         grid.addWidget(family_frame, 3, 0, 1, 2)
+        family_frame.hide()
 
         status = QtWidgets.QLabel()
         status.setObjectName("label_olsInlineStatus")
@@ -248,17 +264,31 @@ class OutputOptionsMixin:
         self.comparison_ols_ruleset_combo = comparison_combo
         self.label_baselineOlsRuleset = baseline_label
         self.label_comparisonOlsRuleset = comparison_label
-        self.label_olsModeDescription = description
+        self.toolButtonOlsFamilyHelp = family_help
         self.frame_olsFamilyExplanation = family_frame
         self.label_olsOfsTitle = ofs_title
         self.label_olsOfsDetail = ofs_detail
         self.label_olsOesTitle = oes_title
         self.label_olsOesDetail = oes_detail
         self.label_olsInlineStatus = status
+        family_help.toggled.connect(self._toggle_ols_family_help)
         baseline_combo.currentIndexChanged.connect(self._on_ols_ruleset_selection_changed)
         comparison_combo.currentIndexChanged.connect(self._on_ols_ruleset_selection_changed)
         self._update_comparison_ols_ruleset_items()
         self._sync_legacy_ols_policy()
+
+    def _toggle_ols_family_help(self, expanded: bool) -> None:
+        """Show Annex 14 terminology only when the user asks for it."""
+        button = getattr(self, "toolButtonOlsFamilyHelp", None)
+        frame = getattr(self, "frame_olsFamilyExplanation", None)
+        if button is not None:
+            button.setArrowType(
+                QtCore.Qt.ArrowType.DownArrow
+                if expanded
+                else QtCore.Qt.ArrowType.RightArrow
+            )
+        if frame is not None:
+            frame.setVisible(bool(expanded and button and not button.isHidden()))
 
     @staticmethod
     def _ols_profile_available(profile) -> bool:
@@ -371,32 +401,23 @@ class OutputOptionsMixin:
     def _update_ols_workflow_ui(self, *_args, dependency_status=None, runway_count=None):
         """Apply mode-specific guidance, controls, and inline readiness state."""
         baseline_id, comparison_id = self._current_ols_ruleset_ids()
-        count = len(getattr(self, "_runway_groups", {})) if runway_count is None else int(runway_count)
         baseline_profile = get_ruleset_profile(baseline_id)
         comparison_profile = get_ruleset_profile(comparison_id) if comparison_id else None
-        if comparison_profile is None:
-            description_text = self.tr(
-                f"{baseline_profile.display_name} baseline for {count} runway(s), with no comparison. Standard workload."
-            )
-        else:
-            description_text = self.tr(
-                f"{baseline_profile.display_name} baseline compared with {comparison_profile.display_name} "
-                f"for {count} runway(s). Highest workload."
-            )
-        if hasattr(self, "label_olsModeDescription"):
-            self.label_olsModeDescription.setText(description_text)
         modernised_id = "icao_annex14_vol1_modernised_ofs_oes"
         annex_selected = modernised_id in {baseline_id, comparison_id}
+        family_help = getattr(self, "toolButtonOlsFamilyHelp", None)
+        if family_help is not None:
+            family_help.setVisible(annex_selected)
+            if not annex_selected:
+                family_help.setChecked(False)
         if hasattr(self, "frame_olsFamilyExplanation"):
-            self.frame_olsFamilyExplanation.setVisible(annex_selected)
+            self.frame_olsFamilyExplanation.setVisible(
+                bool(annex_selected and family_help and family_help.isChecked())
+            )
 
         contour_group = getattr(self, "groupBox_contourIntervals", None)
         if contour_group is not None:
-            contour_group.setTitle(
-                self.tr("Contours — Baseline and Comparison")
-                if comparison_id
-                else self.tr("Contours — Baseline OLS")
-            )
+            contour_group.setTitle(self.tr("Contour intervals"))
 
         overrides_button = getattr(self, "toolButtonContourOverrides", None)
         if overrides_button is not None:
@@ -434,8 +455,18 @@ class OutputOptionsMixin:
             else set()
         )
         visible_keys = baseline_keys | comparison_keys
-        if comparison_profile is not None and annex_selected:
+        change_applicable = comparison_profile is not None and annex_selected
+        if change_applicable:
             visible_keys.update(MODERNISATION_CHANGE_CONTOUR_KEYS)
+
+        change_button = getattr(self, "toolButtonComparisonChangeContours", None)
+        if change_button is not None:
+            change_button.setVisible(change_applicable)
+            if not change_applicable:
+                change_button.setChecked(False)
+        change_expanded = bool(
+            change_applicable and change_button and change_button.isChecked()
+        )
 
         header_labels = getattr(self, "_contour_column_headers", {})
         if "baseline" in header_labels:
@@ -457,8 +488,6 @@ class OutputOptionsMixin:
             "comparison", ()
         ):
             label.setVisible(comparison_profile is not None)
-        for label in getattr(self, "_contour_change_section_labels", []):
-            label.setVisible(comparison_profile is not None and annex_selected)
         conventional_sections = getattr(
             self, "_contour_conventional_section_labels", {}
         )
@@ -476,6 +505,8 @@ class OutputOptionsMixin:
 
         for key, label in getattr(self, "_contour_interval_labels", {}).items():
             visible = key in visible_keys
+            if key in MODERNISATION_CHANGE_CONTOUR_KEYS:
+                visible = visible and change_expanded
             label.setVisible(visible)
             primary = getattr(self, "_contour_primary_interval_spinboxes", {}).get(key)
             intermediate = getattr(self, "_contour_interval_spinboxes", {}).get(key)
@@ -506,6 +537,7 @@ class OutputOptionsMixin:
         workflow_group = getattr(self, "groupBox_olsWorkflow", None)
         if workflow_group is not None:
             workflow_group.updateGeometry()
+        self._update_contour_control_state()
 
     def _setup_contour_interval_controls(self):
         """Add contour interval controls to the Output tab."""
@@ -522,7 +554,7 @@ class OutputOptionsMixin:
             group = QtWidgets.QGroupBox(self.tr("Protected Airspace Contour Intervals"))
             group.setObjectName("groupBox_contourIntervals")
             parent_layout.addWidget(group)
-        group.setTitle(self.tr("Protected Airspace Contour Intervals"))
+        group.setTitle(self.tr("Contour intervals"))
         group.setToolTip(
             self.tr(
                 "Adjust contour spacing for protected-airspace outputs. Family rows override the matching surface rows."
@@ -568,6 +600,7 @@ class OutputOptionsMixin:
             self.toolButtonResetContourIntervals = reset_button
             grid.addWidget(reset_button, 0, 3)
         reset_button.setToolTip(self.tr("Reset all contour intervals to the default values."))
+        reset_button.hide()
 
         self._contour_primary_interval_spinboxes = {}
         self._contour_interval_spinboxes = {}
@@ -596,19 +629,32 @@ class OutputOptionsMixin:
         grid.addWidget(self.doubleSpinBoxContourDefaultPrimary, 1, 1)
         grid.addWidget(self.doubleSpinBoxContourDefault, 1, 2)
 
-        change_header = QtWidgets.QLabel(self.tr("Signed change contours"))
-        change_header.setObjectName("labelComparisonChangeContourSettings")
-        change_header.setStyleSheet(
-            "font-weight: 600; color: #234b68; padding-top: 4px;"
+        change_button = QtWidgets.QToolButton()
+        change_button.setObjectName("toolButtonComparisonChangeContours")
+        change_button.setText(self.tr("Comparison change contours"))
+        change_button.setCheckable(True)
+        change_button.setChecked(False)
+        change_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        change_button.setToolButtonStyle(
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
         )
-        grid.addWidget(change_header, 2, 0, 1, 3)
-        self.labelComparisonChangeContourSettings = change_header
+        change_button.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        change_button.setStyleSheet(
+            "QToolButton { border: 1px solid #d4dbe2; border-radius: 4px; "
+            "background: #f6f8fa; padding: 6px 8px; text-align: left; font-weight: 600; }"
+            "QToolButton:hover { background: #eef3f7; }"
+        )
+        grid.addWidget(change_button, 2, 0, 1, 4)
+        self.toolButtonComparisonChangeContours = change_button
 
         overrides_button = getattr(self, "toolButtonContourOverrides", None)
         if overrides_button is None:
             overrides_button = QtWidgets.QToolButton()
             overrides_button.setObjectName("toolButtonContourOverrides")
-            overrides_button.setText(self.tr("Individual contour settings"))
+            overrides_button.setText(self.tr("Surface-specific overrides · Using defaults"))
             overrides_button.setCheckable(True)
             overrides_button.setChecked(False)
             overrides_button.setArrowType(QtCore.Qt.ArrowType.RightArrow)
@@ -648,7 +694,7 @@ class OutputOptionsMixin:
         self._contour_column_empty_labels = {}
         self._contour_conventional_section_labels = {}
         self._contour_annex_section_labels = {}
-        self._contour_change_section_labels = [change_header]
+        self._contour_change_section_labels = []
         surface_rows = {}
         next_row = 2
         conventional_section_rows = {}
@@ -747,6 +793,8 @@ class OutputOptionsMixin:
 
         overrides_button.toggled.connect(self._toggle_contour_overrides)
         self._toggle_contour_overrides(overrides_button.isChecked())
+        change_button.toggled.connect(self._toggle_comparison_change_contours)
+        self._toggle_comparison_change_contours(change_button.isChecked())
 
         for key in CONTOUR_INTERVAL_KEYS:
             is_change = key in MODERNISATION_CHANGE_CONTOUR_KEYS
@@ -805,6 +853,18 @@ class OutputOptionsMixin:
             spinbox.valueChanged.connect(self._on_contour_interval_changed)
         for spinbox in self._contour_interval_spinboxes.values():
             spinbox.valueChanged.connect(self._on_contour_interval_changed)
+        self._update_contour_control_state()
+
+    def _toggle_comparison_change_contours(self, expanded: bool) -> None:
+        """Show or hide the signed comparison-contour interval rows."""
+        button = getattr(self, "toolButtonComparisonChangeContours", None)
+        if button is not None:
+            button.setArrowType(
+                QtCore.Qt.ArrowType.DownArrow
+                if expanded
+                else QtCore.Qt.ArrowType.RightArrow
+            )
+        self._update_ols_workflow_ui()
 
     def _toggle_contour_overrides(self, expanded: bool):
         """Show or hide individual contour overrides while defaults stay visible."""
@@ -821,6 +881,78 @@ class OutputOptionsMixin:
             )
         if widget is not None:
             widget.setVisible(bool(expanded))
+
+    def _surface_contour_override_count(self) -> int:
+        """Count surface rows that differ from the current shared defaults."""
+        primary_default = getattr(
+            self, "doubleSpinBoxContourDefaultPrimary", None
+        )
+        intermediate_default = getattr(self, "doubleSpinBoxContourDefault", None)
+        if primary_default is None or intermediate_default is None:
+            return 0
+        primary_value = primary_default.value()
+        intermediate_value = intermediate_default.value()
+        primary_spinboxes = getattr(self, "_contour_primary_interval_spinboxes", {})
+        intermediate_spinboxes = getattr(self, "_contour_interval_spinboxes", {})
+        return sum(
+            1
+            for key in CONTOUR_INTERVAL_KEYS
+            if key not in MODERNISATION_CHANGE_CONTOUR_KEYS
+            and key in primary_spinboxes
+            and key in intermediate_spinboxes
+            and (
+                abs(primary_spinboxes[key].value() - primary_value) > 1e-9
+                or abs(intermediate_spinboxes[key].value() - intermediate_value)
+                > 1e-9
+            )
+        )
+
+    def _contour_intervals_differ_from_defaults(self) -> bool:
+        """Return whether Reset would make any change."""
+        if abs(
+            self.doubleSpinBoxContourDefaultPrimary.value()
+            - DEFAULT_PRIMARY_CONTOUR_INTERVAL
+        ) > 1e-9:
+            return True
+        if abs(
+            self.doubleSpinBoxContourDefault.value() - DEFAULT_CONTOUR_INTERVAL
+        ) > 1e-9:
+            return True
+        if self._surface_contour_override_count():
+            return True
+        for key in MODERNISATION_CHANGE_CONTOUR_KEYS:
+            defaults = CONTOUR_INTERVAL_KEY_DEFAULTS[key]
+            if (
+                key not in self._contour_primary_interval_spinboxes
+                or key not in self._contour_interval_spinboxes
+            ):
+                continue
+            if abs(
+                self._contour_primary_interval_spinboxes[key].value()
+                - defaults["primary"]
+            ) > 1e-9:
+                return True
+            if abs(
+                self._contour_interval_spinboxes[key].value()
+                - defaults["intermediate"]
+            ) > 1e-9:
+                return True
+        return False
+
+    def _update_contour_control_state(self) -> None:
+        """Refresh concise disclosure labels and the contextual Reset action."""
+        count = self._surface_contour_override_count()
+        button = getattr(self, "toolButtonContourOverrides", None)
+        if button is not None:
+            state = (
+                self.tr("Using defaults")
+                if count == 0
+                else self.tr(f"{count} override" if count == 1 else f"{count} overrides")
+            )
+            button.setText(self.tr(f"Surface-specific overrides · {state}"))
+        reset = getattr(self, "toolButtonResetContourIntervals", None)
+        if reset is not None:
+            reset.setVisible(self._contour_intervals_differ_from_defaults())
 
     def _create_contour_interval_spinbox(self, object_name: str, default_value: float = DEFAULT_CONTOUR_INTERVAL):
         spinbox = _ContourIntervalSpinBox()
@@ -871,6 +1003,9 @@ class OutputOptionsMixin:
                 intermediate.setValue(defaults["intermediate"])
         if hasattr(self, "toolButtonContourOverrides"):
             self.toolButtonContourOverrides.setChecked(False)
+        if hasattr(self, "toolButtonComparisonChangeContours"):
+            self.toolButtonComparisonChangeContours.setChecked(False)
+        self._update_contour_control_state()
 
     def _apply_default_contour_interval(self, role: str, value: float):
         attr_name = (
@@ -887,6 +1022,7 @@ class OutputOptionsMixin:
         self._on_contour_interval_changed()
 
     def _on_contour_interval_changed(self):
+        self._update_contour_control_state()
         if hasattr(self, "update_dialog_status"):
             self.update_dialog_status()
 
@@ -971,6 +1107,7 @@ class OutputOptionsMixin:
         )
         if hasattr(self, "toolButtonContourOverrides"):
             self.toolButtonContourOverrides.setChecked(has_surface_overrides)
+        self._update_contour_control_state()
 
     @staticmethod
     def _contour_interval_source_key(contour_options, key: str) -> str:
