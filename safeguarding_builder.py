@@ -1594,6 +1594,12 @@ class SafeguardingBuilder(
         self._stage_layer_tree_node(group)
         return group
 
+    def _baseline_ols_group_name(self) -> str:
+        """Return the layer-tree label for the selected baseline ruleset."""
+        profile = getattr(self, "baseline_ols_ruleset", None)
+        display_name = getattr(profile, "display_name", None) or self.tr("Selected ruleset")
+        return self.tr(f"Baseline OLS — {display_name}")
+
     def _find_direct_child_group(
         self,
         parent_group: QgsLayerTreeGroup,
@@ -1649,21 +1655,26 @@ class SafeguardingBuilder(
             )
         protected_airspace_group = groups["protected_airspace"]
         if protected_airspace_group is not None:
+            baseline_surface_group = self._ensure_layer_group(
+                protected_airspace_group,
+                self._baseline_ols_group_name(),
+            )
+            groups["baseline_ols"] = baseline_surface_group
             if self._is_future_annex14_protected_airspace():
-                groups["ols_surfaces"] = self._ensure_layer_group(protected_airspace_group, "OFS")
-                groups["airport_wide_ols"] = self._ensure_layer_group(protected_airspace_group, "OES")
+                groups["ols_surfaces"] = self._ensure_layer_group(baseline_surface_group, "OFS")
+                groups["airport_wide_ols"] = self._ensure_layer_group(baseline_surface_group, "OES")
             else:
                 groups["obstacle_free_zone"] = self._ensure_layer_group(
-                    protected_airspace_group, output_structure.OBSTACLE_FREE_ZONE
+                    baseline_surface_group, output_structure.OBSTACLE_FREE_ZONE
                 )
                 groups["ols_surfaces"] = self._ensure_layer_group(
-                    protected_airspace_group, output_structure.PRIMARY_SURFACES
+                    baseline_surface_group, output_structure.PRIMARY_SURFACES
                 )
                 groups["airport_wide_ols"] = self._ensure_layer_group(
-                    protected_airspace_group, output_structure.SECONDARY_SURFACES
+                    baseline_surface_group, output_structure.SECONDARY_SURFACES
                 )
                 groups["controlling_surfaces"] = self._ensure_layer_group(
-                    protected_airspace_group, output_structure.CONTROLLING_SURFACES
+                    baseline_surface_group, output_structure.CONTROLLING_SURFACES
                 )
                 groups["controlling_ols_surfaces"] = groups["controlling_surfaces"]
                 groups["controlling_contours"] = groups["controlling_surfaces"]
@@ -2067,27 +2078,31 @@ class SafeguardingBuilder(
         infrastructure_group = self._ensure_layer_group(main_group, output_structure.AERODROME_INFRASTRUCTURE)
         protection_group = self._ensure_layer_group(main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION)
         protected_airspace_group = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
+        baseline_surface_group = self._ensure_layer_group(
+            protected_airspace_group,
+            self._baseline_ols_group_name(),
+        )
         if self._is_future_annex14_protected_airspace():
             obstacle_free_zone_group = None
-            primary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OFS")
-            secondary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OES")
-            controlling_surfaces_group = protected_airspace_group
+            primary_surfaces_group = self._ensure_layer_group(baseline_surface_group, "OFS")
+            secondary_surfaces_group = self._ensure_layer_group(baseline_surface_group, "OES")
+            controlling_surfaces_group = baseline_surface_group
         else:
             obstacle_free_zone_group = self._ensure_layer_group(
-                protected_airspace_group,
+                baseline_surface_group,
                 output_structure.OBSTACLE_FREE_ZONE,
             )
             primary_surfaces_group = (
-                self._ensure_layer_group(protected_airspace_group, output_structure.PRIMARY_SURFACES)
-                if protected_airspace_group is not None
+                self._ensure_layer_group(baseline_surface_group, output_structure.PRIMARY_SURFACES)
+                if baseline_surface_group is not None
                 else None
             )
             secondary_surfaces_group = self._ensure_layer_group(
-                protected_airspace_group,
+                baseline_surface_group,
                 output_structure.SECONDARY_SURFACES,
             )
             controlling_surfaces_group = self._ensure_layer_group(
-                protected_airspace_group,
+                baseline_surface_group,
                 output_structure.CONTROLLING_SURFACES,
             )
         framework = self.get_active_framework()
@@ -2098,6 +2113,7 @@ class SafeguardingBuilder(
             or infrastructure_group is None
             or protection_group is None
             or protected_airspace_group is None
+            or baseline_surface_group is None
             or (
                 not self._is_future_annex14_protected_airspace()
                 and obstacle_free_zone_group is None
@@ -2109,6 +2125,21 @@ class SafeguardingBuilder(
             or debug_group is None
         ):
             return
+
+        baseline_child_names = (
+            output_structure.OBSTACLE_FREE_ZONE,
+            output_structure.PRIMARY_SURFACES,
+            output_structure.SECONDARY_SURFACES,
+            output_structure.CONTROLLING_SURFACES,
+            "OFS",
+            "OES",
+        )
+        for child_name in baseline_child_names:
+            self._merge_or_move_direct_group(
+                protected_airspace_group,
+                self.tr(child_name),
+                baseline_surface_group,
+            )
 
         for child in list(debug_group.children()):
             if not isinstance(child, QgsLayerTreeLayer):
@@ -2847,13 +2878,27 @@ class SafeguardingBuilder(
         framework = self.get_active_framework()
         safeguarding_group_name = framework.safeguarding_group_name()
         guideline_groups = framework.guideline_group_definitions(include_cns=True)
-        primary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.PRIMARY_SURFACES]
+        baseline_ols_group_name = self._baseline_ols_group_name()
+        primary_surfaces_path = [
+            output_structure.PROTECTED_AIRSPACE,
+            baseline_ols_group_name,
+            output_structure.PRIMARY_SURFACES,
+        ]
         obstacle_free_zone_path = [
             output_structure.PROTECTED_AIRSPACE,
+            baseline_ols_group_name,
             output_structure.OBSTACLE_FREE_ZONE,
         ]
-        secondary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.SECONDARY_SURFACES]
-        controlling_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_SURFACES]
+        secondary_surfaces_path = [
+            output_structure.PROTECTED_AIRSPACE,
+            baseline_ols_group_name,
+            output_structure.SECONDARY_SURFACES,
+        ]
+        controlling_surfaces_path = [
+            output_structure.PROTECTED_AIRSPACE,
+            baseline_ols_group_name,
+            output_structure.CONTROLLING_SURFACES,
+        ]
 
         items = [
             self._format_checklist_layer_item(

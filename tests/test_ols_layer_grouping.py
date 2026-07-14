@@ -9,6 +9,8 @@ WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE.parent))
 
 from safeguarding_builder.safeguarding_builder import SafeguardingBuilder
+from safeguarding_builder.frameworks.registry import get_framework_profile
+from safeguarding_builder.rulesets.registry import get_ruleset_profile
 
 
 class OlsLayerGroupingTests(unittest.TestCase):
@@ -56,6 +58,36 @@ class OlsLayerGroupingTests(unittest.TestCase):
             self.direct_group(promoted_runway, "OLS Inner Approach RWY 01L")
         )
         self.assertIsNone(self.direct_group(primary_runway, "Obstacle Free Zone"))
+
+    def test_baseline_and_comparison_rulesets_are_parallel_first_order_groups(self):
+        self.builder.framework = get_framework_profile()
+        self.builder.baseline_ols_ruleset = get_ruleset_profile("mos139_2019")
+        self.builder.protected_airspace_ruleset = self.builder.baseline_ols_ruleset
+        self.builder.comparison_ols_ruleset = get_ruleset_profile(
+            "icao_annex14_vol1_modernised_ofs_oes"
+        )
+        main_group = QgsLayerTreeGroup("TEST")
+
+        groups = self.builder._create_output_layer_groups(main_group, agl_enabled=False)
+
+        protected_airspace = groups["protected_airspace"]
+        baseline = self.direct_group(
+            protected_airspace,
+            "Baseline OLS — MOS139 (current)",
+        )
+        comparison = self.direct_group(
+            protected_airspace,
+            "Comparison OLS — Annex 14 Modernised OLS",
+        )
+        self.assertIsNotNone(baseline)
+        self.assertIsNotNone(comparison)
+        self.assertIs(groups["baseline_ols"], baseline)
+        self.assertIs(groups["obstacle_free_zone"].parent(), baseline)
+        self.assertIs(groups["ols_surfaces"].parent(), baseline)
+        self.assertIs(groups["airport_wide_ols"].parent(), baseline)
+        self.assertIs(groups["controlling_surfaces"].parent(), baseline)
+        self.assertIs(groups["comparison_ols_surfaces"].parent(), comparison)
+        self.assertIs(groups["comparison_airport_wide_ols"].parent(), comparison)
 
 
 if __name__ == "__main__":
