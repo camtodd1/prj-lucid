@@ -51,6 +51,25 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(baseline.currentData(), "mos139_2019")
         self.assertEqual(comparison.itemData(0), "")
         self.assertEqual(comparison.itemText(0), "None — baseline only")
+        modernised_index = comparison.findData(
+            "icao_annex14_vol1_modernised_ofs_oes"
+        )
+        self.assertEqual(
+            comparison.itemText(modernised_index),
+            "Annex 14 Modernised OLS",
+        )
+        self.assertIsNone(
+            self.dialog.findChild(
+                QtWidgets.QCheckBox,
+                "checkBox_generateControllingOls",
+            )
+        )
+        self.assertIsNone(
+            self.dialog.findChild(
+                QtWidgets.QGroupBox,
+                "groupBox_controllingOls",
+            )
+        )
 
     def test_unavailable_controlling_rulesets_remain_visible_but_disabled(self):
         baseline = self.dialog.baseline_ols_ruleset_combo
@@ -99,8 +118,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 "comparison_annex14_ofs_approach"
             ].isHidden()
         )
-        self.assertTrue(self.dialog.checkBox_generateControllingOls.isChecked())
-        self.assertFalse(self.dialog.checkBox_generateControllingOls.isEnabled())
 
     def test_reverse_annex_comparison_still_checks_conventional_red_inputs(self):
         self.dialog._set_ols_ruleset_selection(
@@ -148,7 +165,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertTrue(
             self.dialog._contour_interval_labels["comparison_approach"].isHidden()
         )
-        self.assertTrue(self.dialog.checkBox_generateControllingOls.isEnabled())
 
     def test_mos139_contours_follow_output_group_sections(self):
         self.select_mode("ruleset_aligned")
@@ -395,13 +411,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             1.0,
         )
 
-    def test_comparison_mode_requires_controlling_output_and_shows_all_rows(self):
-        self.dialog.checkBox_generateControllingOls.setChecked(False)
+    def test_comparison_selection_shows_all_comparison_rows(self):
         self.select_mode("modernisation_comparison")
         self.dialog.toolButtonContourOverrides.setChecked(True)
 
-        self.assertTrue(self.dialog.checkBox_generateControllingOls.isChecked())
-        self.assertFalse(self.dialog.checkBox_generateControllingOls.isEnabled())
         self.assertFalse(self.dialog._contour_interval_labels["approach"].isHidden())
         self.assertFalse(
             self.dialog._contour_interval_labels[
@@ -413,7 +426,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertIn("Highest workload", self.dialog.label_olsModeDescription.text())
         self.assertEqual(self.dialog.label_olsInlineStatus.text(), "OLS ready.")
         self.assertTrue(self.dialog.label_olsInlineStatus.isHidden())
-        self.assertEqual(self.dialog.groupBox_controllingOls.title(), "Generated Outputs")
 
     def test_ols_warning_is_shown_once_in_the_inline_status_area(self):
         self.dialog._update_ols_workflow_ui(
@@ -450,13 +462,13 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(status["state"], "ready")
         self.assertNotIn("partial", status["summary"].lower())
 
-    def test_legacy_comparison_payload_cannot_disable_required_controlling_output(self):
+    def test_legacy_controlling_toggle_is_ignored_and_not_resaved(self):
         self.select_mode("modernisation_comparison")
 
         self.dialog._load_output_options({"generate_controlling_ols": False})
+        payload = self.dialog._build_save_payload("TEST")
 
-        self.assertTrue(self.dialog.checkBox_generateControllingOls.isChecked())
-        self.assertFalse(self.dialog.checkBox_generateControllingOls.isEnabled())
+        self.assertNotIn("generate_controlling_ols", payload["output_options"])
 
     def test_contour_defaults_remain_visible_outside_collapsed_overrides(self):
         self.assertTrue(self.dialog.widgetContourOverrides.isHidden())

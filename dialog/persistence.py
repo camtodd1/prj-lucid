@@ -270,9 +270,6 @@ class PersistenceMixin:
             "mode": output_mode,
             "path": self.fileWidgetOutputPath.filePath().strip(),
             "format": self.comboOutputFormat.currentText(),
-            "generate_controlling_ols": self.checkBox_generateControllingOls.isChecked()
-            if hasattr(self, "checkBox_generateControllingOls")
-            else True,
         }
         if hasattr(self, "get_contour_interval_options"):
             data_to_save["output_options"]["contour_intervals"] = self.get_contour_interval_options()
@@ -507,8 +504,6 @@ class PersistenceMixin:
         if hasattr(self, "fileWidgetOutputPath"):
             self.fileWidgetOutputPath.setFilePath(output_path)
 
-        if hasattr(self, "checkBox_generateControllingOls"):
-            self.checkBox_generateControllingOls.setChecked(bool(output_options.get("generate_controlling_ols", True)))
         if hasattr(self, "set_contour_interval_options"):
             self.set_contour_interval_options(output_options.get("contour_intervals", {}))
         if hasattr(self, "_update_ols_workflow_ui"):
@@ -522,8 +517,6 @@ class PersistenceMixin:
             self.fileWidgetOutputPath.setFilePath("")
         if hasattr(self, "comboOutputFormat") and DEFAULT_OUTPUT_FORMAT in OUTPUT_FORMATS:
             self.comboOutputFormat.setCurrentText(DEFAULT_OUTPUT_FORMAT)
-        if hasattr(self, "checkBox_generateControllingOls"):
-            self.checkBox_generateControllingOls.setChecked(True)
         if hasattr(self, "set_contour_interval_options"):
             self.set_contour_interval_options({})
         self._on_output_option_changed()
@@ -532,8 +525,6 @@ class PersistenceMixin:
         if hasattr(self, "radioFileOutput") and self.radioFileOutput.isChecked():
             return True
         if hasattr(self, "fileWidgetOutputPath") and self.fileWidgetOutputPath.filePath().strip():
-            return True
-        if hasattr(self, "checkBox_generateControllingOls") and not self.checkBox_generateControllingOls.isChecked():
             return True
         if hasattr(self, "get_contour_interval_options"):
             contour_options = self.get_contour_interval_options()

@@ -105,7 +105,6 @@ class SafeguardingBuilder(
         self.output_format_driver: Optional[str] = None
         self.output_format_extension: Optional[str] = None
         self.contour_intervals: Dict[str, float] = {}
-        self.generate_controlling_ols: bool = True
         self.protected_airspace_policy: str = "ruleset_aligned"
         self.debug_logging: bool = False
         self.ruleset = get_ruleset_profile()
@@ -518,7 +517,6 @@ class SafeguardingBuilder(
         self.output_format_driver = None
         self.output_format_extension = None
         self.contour_intervals = {}
-        self.generate_controlling_ols = True
         self.protected_airspace_policy = "ruleset_aligned"
         self.baseline_ols_ruleset = self.ruleset
         self.comparison_ols_ruleset = None
@@ -614,7 +612,6 @@ class SafeguardingBuilder(
         self.output_format_driver = input_data.get("output_format_driver")
         self.output_format_extension = input_data.get("output_format_extension")
         self.contour_intervals = input_data.get("contour_intervals", {})
-        self.generate_controlling_ols = bool(input_data.get("generate_controlling_ols", True))
         self.debug_logging = bool(input_data.get("debug_logging", False))
         self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
         protected_airspace_policy = input_data.get("protected_airspace_policy", "ruleset_aligned")
@@ -925,7 +922,7 @@ class SafeguardingBuilder(
                 self._processing_total_steps,
             ):
                 return
-            if guideline_groups.get("F") is not None and self.generate_controlling_ols:
+            if guideline_groups.get("F") is not None:
                 if self._is_future_annex14_protected_airspace():
                     self._set_processing_status(
                         self.tr("Solving controlling Annex 14 OFS/OES surfaces..."),
@@ -974,8 +971,6 @@ class SafeguardingBuilder(
                         self._finish_processing_cancelled()
                         return
                     any_guideline_processed_ok = any_guideline_processed_ok or comparison_ok
-            elif guideline_groups.get("F") is not None:
-                self._log_skip("Controlling OLS: output option disabled.")
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
             if not self._processing_checkpoint(
@@ -2910,7 +2905,6 @@ class SafeguardingBuilder(
                 main_group,
                 output_structure.CONTROLLING_SURFACES,
                 controlling_surfaces_path,
-                not_applicable_reason=None if self.generate_controlling_ols else "controlling OLS option is disabled",
                 failed_reason="controlling OLS outputs failed to generate",
             ),
             self._format_checklist_item(

@@ -244,7 +244,8 @@
 - [x] Consolidate OLS output controls and guidance.
 
   Completed:
-  - Output selection is grouped under a stable Generated Outputs heading.
+  - Controlling-envelope outputs are always generated; selecting a Comparison
+    OLS is the sole control for comparison-layer generation.
   - Mode, runway count, and workload are presented in one concise summary.
   - OFS/OES guidance is retained in the detailed two-row explanation box,
     while ready-state and repeated warning text are suppressed from the inline

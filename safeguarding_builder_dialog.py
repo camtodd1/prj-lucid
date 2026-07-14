@@ -1258,10 +1258,7 @@ class SafeguardingBuilderDialog(
         if not all(hasattr(self, name) for name in ["radioMemoryOutput", "radioFileOutput", "fileWidgetOutputPath", "comboOutputFormat"]):
             return {"ready": False, "state": "blocked", "summary": "Output controls are missing.", "path": ""}
         if self.radioMemoryOutput.isChecked():
-            controlling_note = ""
-            if hasattr(self, "checkBox_generateControllingOls") and not self.checkBox_generateControllingOls.isChecked():
-                controlling_note = " | controlling OLS off"
-            return {"ready": True, "state": "ready", "summary": "Memory layers" + controlling_note, "path": ""}
+            return {"ready": True, "state": "ready", "summary": "Memory layers", "path": ""}
         if not self.radioFileOutput.isChecked():
             return {"ready": False, "state": "blocked", "summary": "Select memory or file output.", "path": ""}
 
@@ -1418,13 +1415,12 @@ class SafeguardingBuilderDialog(
             review.append("airport-wide/secondary OLS needs ARP elevation and runway-end elevations")
         if not airport_status.get("arp_pair_ready") and needs_red:
             review.append("ARP coordinates needed for airport-wide safeguarding references")
-        if hasattr(self, "checkBox_generateControllingOls") and self.checkBox_generateControllingOls.isChecked():
-            if controlling_capability == "unsupported":
-                review.append("controlling OLS is unsupported for this ruleset")
-            elif controlling_capability == "experimental":
-                review.append("controlling OLS is experimental")
-            if comparison_ruleset_id and comparison_capability in {None, "unsupported", "scaffold"}:
-                review.append("comparison controlling OLS is unavailable")
+        if controlling_capability == "unsupported":
+            review.append("controlling OLS is unsupported for this ruleset")
+        elif controlling_capability == "experimental":
+            review.append("controlling OLS is experimental")
+        if comparison_ruleset_id and comparison_capability in {None, "unsupported", "scaffold"}:
+            review.append("comparison controlling OLS is unavailable")
 
         if review:
             return {"state": "warning", "summary": "Runway OLS ready; review " + "; ".join(review) + "."}
@@ -1646,7 +1642,6 @@ class SafeguardingBuilderDialog(
             "groupBox_ruleset",
             "groupBox_CNS",
             "groupBox_olsWorkflow",
-            "groupBox_controllingOls",
             "groupBox_contourIntervals",
             "groupBox_outputOptions",
             "groupBox_agl_options",
@@ -2414,7 +2409,6 @@ class SafeguardingBuilderDialog(
             "radioFileOutput",
             "comboOutputFormat",
             "fileWidgetOutputPath",
-            "checkBox_generateControllingOls",
         ]:
             widget = getattr(self, name, None)
             if not widget:
@@ -3164,11 +3158,6 @@ class SafeguardingBuilderDialog(
             final_data["contour_intervals"] = self.get_contour_interval_options()
         else:
             final_data["contour_intervals"] = {}
-        if hasattr(self, "checkBox_generateControllingOls"):
-            final_data["generate_controlling_ols"] = self.checkBox_generateControllingOls.isChecked()
-        else:
-            final_data["generate_controlling_ols"] = True
-
         return final_data
 
     def _validate_runway_data(self, index: int, inputs: Dict[str, str], errors: List[str]) -> Optional[Dict[str, Any]]:

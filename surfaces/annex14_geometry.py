@@ -580,8 +580,6 @@ class Annex14GeometryMixin:
         ref: str,
     ) -> None:
         """Register one planar Annex 14 component with the lower-envelope solver."""
-        if not getattr(self, "generate_controlling_ols", True):
-            return
         register = getattr(self, "_register_controlling_ols_candidate", None)
         if not callable(register):
             return
@@ -667,8 +665,6 @@ class Annex14GeometryMixin:
 
     def _annex14_register_controlling_contours(self, contour_features: List[QgsFeature]) -> None:
         """Link generated Annex 14 contours to the planar candidates they describe."""
-        if not getattr(self, "generate_controlling_ols", True):
-            return
         register = getattr(self, "_register_controlling_ols_contour", None)
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
         if not callable(register) or not candidates:

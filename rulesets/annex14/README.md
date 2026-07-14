@@ -4,7 +4,7 @@ This package is a source-capture scaffold for ICAO Annex 14 Volume I rulesets.
 It exposes two protected-airspace profiles through the ruleset selector:
 
 - `ICAO Annex 14 Vol I - Current OLS`
-- `ICAO Annex 14 Vol I - Modernised OFS/OES (from 21 Nov 2030)`
+- `Annex 14 Modernised OLS`
 
 The current OLS profile is the landing pad for the enforceable Annex 14 OLS
 surfaces. The modernised OFS/OES profile holds the future protected-airspace

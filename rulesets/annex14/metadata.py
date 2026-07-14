@@ -18,7 +18,7 @@ CURRENT_ALIASES = (
 )
 
 MODERNISED_RULESET_ID = "icao_annex14_vol1_modernised_ofs_oes"
-MODERNISED_DISPLAY_NAME = "ICAO Annex 14 Vol I - Modernised OFS/OES (from 21 Nov 2030)"
+MODERNISED_DISPLAY_NAME = "Annex 14 Modernised OLS"
 MODERNISED_EDITION = "Annex 14 Volume I modernised OFS/OES"
 MODERNISED_STATUS = "draft"
 MODERNISED_DESCRIPTION = (
