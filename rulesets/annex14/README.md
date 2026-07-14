@@ -1,14 +1,15 @@
-# ICAO Annex 14 Vol I Ruleset Scaffold
+# ICAO Annex 14 Vol I Rulesets
 
-This package is a source-capture scaffold for ICAO Annex 14 Volume I rulesets.
-It exposes two protected-airspace profiles through the ruleset selector:
+This package exposes two independent ICAO Annex 14 Volume I
+protected-airspace profiles through the ruleset selector:
 
 - `ICAO Annex 14 Vol I - Current OLS`
 - `Annex 14 Modernised OLS`
 
-The current OLS profile is the landing pad for the enforceable Annex 14 OLS
-surfaces. The modernised OFS/OES profile holds the future protected-airspace
-model that is not enforceable until 21 November 2030.
+The current OLS profile is production-supported for the conventional OLS
+applicable until 20 November 2030. The modernised OFS/OES profile holds the
+future protected-airspace model that is not enforceable until
+21 November 2030.
 
 Implemented now:
 
@@ -17,7 +18,11 @@ Implemented now:
 - Aerodrome reference code number/letter classification from Table 1-1.
 - Aeroplane Design Group classification from Table 1-2, applicable from
   21 November 2030.
-- Current OLS profile scaffold for enforceable Annex 14 protected airspace.
+- Current Table 4-1 and Table 4-2 conventional OLS construction, including
+  airport-wide, approach, take-off climb, transitional and precision OFZ
+  families.
+- Current Chapter 3 strip, clearway and stopway dependencies used by the OLS
+  constructor.
 - Per-runway ADG input in the main dialog for modernised Annex 14 OFS/OES
   generation, alongside the existing ARC inputs used by current OLS and other
   design standards.
@@ -41,11 +46,8 @@ Implemented now:
 - Empty physical, taxiway, markings, and lighting policy modules.
 - An OES service placeholder for future obstacle evaluation surface workflows.
 
-Pending source input:
+Pending source input outside current OLS:
 
-- Physical characteristics: runway, strip, RESA, shoulder, taxiway, and separation
-  tables.
-- Current Annex 14 OLS surface dimension tables and geometry generation.
-- Full complex transitional and inner transitional geometry construction.
-- TODA/clearway-aware departure and take-off climb start positions.
+- Remaining physical characteristics: runway, RESA, shoulder, taxiway, and
+  separation tables.
 - Runway markings and aeronautical ground lighting parameters.

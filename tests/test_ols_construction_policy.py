@@ -77,7 +77,7 @@ def runway(
         reciprocal_threshold_point=reciprocal.threshold_point,
         primary_physical_end_point=primary.threshold_point,
         reciprocal_physical_end_point=reciprocal.threshold_point,
-        strip_parameters={"overall_width": 300.0},
+        strip_parameters={"overall_width": 300.0, "extension_length": 60.0},
         ends=(primary, reciprocal),
         is_wide_runway=is_wide_runway,
         generation_data={"original_index": index},
@@ -221,13 +221,103 @@ class OtherConventionalPolicyTests(unittest.TestCase):
         self.assertAlmostEqual(sections[2]["length"], 11680.0, places=6)
         self.assertEqual(sum(section["length"] for section in sections), 15000.0)
 
-    def test_current_annex14_remains_source_gated(self):
-        item = runway(1, 2000.0)
+    def test_current_annex14_uses_source_loaded_tables_and_clearway_tocs(self):
+        item = runway(
+            1,
+            2000.0,
+            arc=3,
+            runway_type="PA_I",
+            clearway=240.0,
+            takeoff_track_type="curved_gt_15",
+            takeoff_track_wkt="LINESTRING (0 0, 16000 0)",
+        )
         ctx = replace(context(item), ruleset_id="icao_annex14_vol1_current_ols")
         errors = ANNEX14_CURRENT_OLS_CONSTRUCTION_POLICY.validate(ctx)
-        self.assertFalse(ANNEX14_CURRENT_OLS_CONSTRUCTION_POLICY.source_ready)
-        self.assertIn("authorised edition", errors[0])
-        self.assertIsNone(ANNEX14_CURRENT_OLS_PROFILE.ols_parameters(3, "PA_I", "Approach"))
+        self.assertTrue(ANNEX14_CURRENT_OLS_CONSTRUCTION_POLICY.source_ready)
+        self.assertEqual(errors, ())
+        approach = ANNEX14_CURRENT_OLS_PROFILE.ols_parameters(3, "PA_I", "Approach")
+        self.assertEqual(approach[0]["start_width"], 280.0)
+        self.assertEqual([section["length"] for section in approach], [3000.0, 3600.0, 8400.0])
+        tocs = ANNEX14_CURRENT_OLS_CONSTRUCTION_POLICY.parameters(
+            ANNEX14_CURRENT_OLS_PROFILE,
+            ctx,
+            item,
+            item.ends[0],
+            3,
+            "PA_I",
+            "TOCS",
+        )
+        self.assertEqual(tocs["origin_station_from_pavement_end"], 240.0)
+        self.assertEqual(tocs["final_width"], 1800.0)
+
+    def test_current_annex14_airport_wide_and_code_f_ofz(self):
+        item = runway(1, 2000.0, arc=3, arc_letter="F", runway_type="PA_I")
+        ctx = replace(context(item), ruleset_id="icao_annex14_vol1_current_ols")
+        spec = ANNEX14_CURRENT_OLS_CONSTRUCTION_POLICY.airport_wide_spec(
+            ANNEX14_CURRENT_OLS_PROFILE,
+            ctx,
+        )
+        self.assertEqual(spec["ihs_elevation_amsl"], 168.0)
+        self.assertEqual(spec["conical"]["height_extent_agl"], 100.0)
+        self.assertFalse(spec["extend_conical_to_ohs"])
+        self.assertIsNone(spec["ohs"])
+        inner_approach = ANNEX14_CURRENT_OLS_CONSTRUCTION_POLICY.parameters(
+            ANNEX14_CURRENT_OLS_PROFILE,
+            ctx,
+            item,
+            item.ends[0],
+            3,
+            "PA_I",
+            "InnerApproach",
+        )
+        self.assertEqual(inner_approach["width"], 140.0)
+        balked = ANNEX14_CURRENT_OLS_CONSTRUCTION_POLICY.parameters(
+            ANNEX14_CURRENT_OLS_PROFILE,
+            ctx,
+            item,
+            item.ends[0],
+            3,
+            "PA_I",
+            "BalkedLanding",
+        )
+        self.assertEqual(balked["width"], 140.0)
+        self.assertEqual(
+            balked["start_dist_rule"],
+            "1800_m_or_end_of_runway_strip_whichever_is_less",
+        )
+
+    def test_current_annex14_strip_and_clearway_dependency_bands(self):
+        expected_non_instrument = {
+            1: (60.0, 60.0, 30.0),
+            2: (80.0, 80.0, 60.0),
+            3: (110.0, 110.0, 60.0),
+            4: (150.0, 150.0, 60.0),
+        }
+        for code, expected in expected_non_instrument.items():
+            with self.subTest(code=code):
+                params = ANNEX14_CURRENT_OLS_PROFILE.strip_parameters(code, "NI", 30.0)
+                self.assertEqual(
+                    (
+                        params["overall_width"],
+                        params["graded_width"],
+                        params["extension_length"],
+                    ),
+                    expected,
+                )
+
+        instrument = ANNEX14_CURRENT_OLS_PROFILE.strip_parameters(3, "PA_I", 45.0)
+        self.assertEqual(instrument["overall_width"], 280.0)
+        self.assertEqual(instrument["graded_width"], 150.0)
+        clearways = ANNEX14_CURRENT_OLS_PROFILE.clearway_parameters(
+            strip_overall_width=instrument["overall_width"],
+            physical_length=1000.0,
+            clearway_primary_input=600.0,
+            clearway_reciprocal_input=100.0,
+            is_instrument_runway=True,
+        )
+        self.assertEqual(clearways["primary"]["length_m"], 500.0)
+        self.assertTrue(clearways["primary"]["capped"])
+        self.assertEqual(clearways["primary"]["width_m"], 150.0)
 
 
 if __name__ == "__main__":

@@ -451,7 +451,7 @@ def _comparison_metrics(engine, result) -> Dict[str, object]:
             )
             if (candidate.metadata or {}).get("annex14_family")
         ),
-        "UNKNOWN",
+        "OLS",
     )
     no_change_parts = []
     for baseline, future, geometry in result["no_change"]:

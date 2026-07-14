@@ -1563,6 +1563,10 @@ class PhysicalGeometryMixin:
         plugin_tag = PLUGIN_TAG
         generated: List[Tuple[str, QgsGeometry, dict]] = []
 
+        active_ruleset = self.get_active_ruleset()
+        if active_ruleset.capability_status("markings.runway") != "supported":
+            return generated
+
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
         runway_width = runway_data.get("width")

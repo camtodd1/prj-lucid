@@ -75,6 +75,36 @@
       "expected_comparison_families": [],
       "mos139_lock_required": false,
       "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "annex14_current_short_single.json",
+      "description": "Current Annex 14 non-instrument code 1 runway",
+      "icao_code": "YBAS",
+      "runway_count": 1,
+      "project_crs": "EPSG:28356",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "annex14_current_intersecting.json",
+      "description": "Current Annex 14 intersecting code 3 and code 2 runways",
+      "icao_code": "YBAI",
+      "runway_count": 2,
+      "project_crs": "EPSG:28356",
+      "expected_comparison_families": ["OLS"],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "annex14_current_intersecting_reverse.json",
+      "description": "Current Annex 14 and MOS139 intersecting comparison in reverse order",
+      "icao_code": "YBAI",
+      "runway_count": 2,
+      "project_crs": "EPSG:28356",
+      "expected_comparison_families": ["OLS"],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
     }
   ],
   "accuracy_tolerances": {

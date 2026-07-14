@@ -1,7 +1,7 @@
 # OLS workflow fixtures
 
-These inputs exercise the complete MOS139-to-future-Annex-14 modernisation
-comparison workflow under QGIS 4.
+These inputs exercise conventional OLS and the MOS139-to-future-Annex-14
+modernisation comparison workflow under QGIS 4.
 
 - `ybbn_single.json`: single runway.
 - `yssy_dual_intersecting.json`: intersecting runways.
@@ -9,6 +9,12 @@ comparison workflow under QGIS 4.
 - `ymml_intersecting.json`: intersecting YMML runways with prominent
   Approach/TOCS-to-Conical equality arcs in EPSG:32755.
 - `yssy_multiple_stress.json`: three-runway stress case.
+- `annex14_current_short_single.json`: current Annex 14 non-instrument code 1
+  runway and airport-wide OLS.
+- `annex14_current_intersecting.json`: current Annex 14 intersecting mixed-code
+  runways with precision OFZ, displaced thresholds, clearways and stopways.
+- `annex14_current_intersecting_reverse.json`: the same current Annex 14/MOS139
+  comparison with the pair order reversed.
 
 The files are normalized copies of the test inputs supplied for regression use.
 They use memory output and enable controlling OLS generation. Run them explicitly

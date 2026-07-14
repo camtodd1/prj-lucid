@@ -486,6 +486,79 @@ class Cap168OlsConstructionPolicy(ConventionalOlsConstructionPolicy):
         return min(distances) if distances else float("inf")
 
 
+class Annex14CurrentOlsConstructionPolicy(ConventionalOlsConstructionPolicy):
+    """Current conventional Annex 14 OLS, separate from future OFS/OES."""
+
+    key = "annex14_current_ols"
+
+    def validate(self, context: OlsConstructionContext) -> Tuple[str, ...]:
+        errors = list(super().validate(context))
+        if context.reference_elevation_datum_m is None:
+            errors.append(
+                "Current Annex 14 airport-wide OLS requires an established inner-horizontal elevation datum."
+            )
+        for runway in context.runways:
+            strip = runway.strip_parameters or {}
+            if strip.get("overall_width") is None or strip.get("extension_length") is None:
+                errors.append(
+                    f"{runway.runway_id}: current Annex 14 runway-strip width and extension are required."
+                )
+        return tuple(errors)
+
+    def parameters(
+        self,
+        profile,
+        context: Optional[OlsConstructionContext],
+        runway: Optional[OlsRunwayContext],
+        end: Optional[OlsRunwayEndContext],
+        arc_number: int,
+        runway_type: Optional[str],
+        surface_type: str,
+    ):
+        params = super().parameters(
+            profile,
+            context,
+            runway,
+            end,
+            arc_number,
+            runway_type,
+            surface_type,
+        )
+        if not params:
+            return params
+        normalized = "".join(
+            character for character in str(surface_type).upper() if character.isalnum()
+        )
+        if normalized in {"TOCS", "TAKEOFFCLIMB", "TAKEOFFCLIMBSURFACE"}:
+            resolved = dict(params)
+            if end is not None:
+                resolved["origin_station_from_pavement_end"] = max(
+                    float(resolved.get("origin_offset") or 0.0),
+                    end.clearway_length_m,
+                )
+                if end.takeoff_track_changes_over_15_degrees:
+                    resolved["final_width"] = resolved.get(
+                        "heading_change_gt_15_final_width",
+                        resolved.get("final_width"),
+                    )
+            return resolved
+        if normalized in {
+            "INNERAPPROACH",
+            "INNERAPPROACHSURFACE",
+            "BALKEDLANDING",
+            "BALKEDLANDINGSURFACE",
+            "BAULKEDLANDING",
+            "BAULKEDLANDINGSURFACE",
+        }:
+            resolved = dict(params)
+            if runway is not None and runway.arc_letter == "F" and resolved.get(
+                "code_letter_f_width"
+            ):
+                resolved["width"] = resolved["code_letter_f_width"]
+            return resolved
+        return params
+
+
 class SourceGatedOlsConstructionPolicy(ConventionalOlsConstructionPolicy):
     """Policy used where an authoritative conventional OLS table is absent."""
 
@@ -506,9 +579,7 @@ class SourceGatedOlsConstructionPolicy(ConventionalOlsConstructionPolicy):
 MOS139_OLS_CONSTRUCTION_POLICY = Mos139OlsConstructionPolicy()
 EASA_OLS_CONSTRUCTION_POLICY = EasaOlsConstructionPolicy()
 CAP168_OLS_CONSTRUCTION_POLICY = Cap168OlsConstructionPolicy()
-ANNEX14_CURRENT_OLS_CONSTRUCTION_POLICY = SourceGatedOlsConstructionPolicy(
-    "Current Annex 14 OLS remains unavailable until its enforceable surface tables are source-loaded from an authorised edition."
-)
+ANNEX14_CURRENT_OLS_CONSTRUCTION_POLICY = Annex14CurrentOlsConstructionPolicy()
 
 
 def policy_for_ruleset(ruleset_id: str) -> ConventionalOlsConstructionPolicy:
@@ -533,6 +604,7 @@ __all__ = [
     "Mos139OlsConstructionPolicy",
     "EasaOlsConstructionPolicy",
     "Cap168OlsConstructionPolicy",
+    "Annex14CurrentOlsConstructionPolicy",
     "SourceGatedOlsConstructionPolicy",
     "policy_for_ruleset",
 ]

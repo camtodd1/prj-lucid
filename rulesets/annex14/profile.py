@@ -3,7 +3,7 @@
 from typing import Optional
 
 from ..base import RulesetProfile, capability_map
-from . import metadata
+from . import current_ols, metadata, physical_data
 from .services import (
     ClassificationService,
     LightingService,
@@ -58,16 +58,59 @@ class Annex14RulesetProfile(RulesetProfile):
         return self.physical.refs()
 
     def strip_parameters(self, arc_num: int, type_abbr: str, runway_width: Optional[float]):
+        if self.protected_airspace_model == "annex14_current_ols":
+            return physical_data.get_current_strip_params(arc_num, type_abbr, runway_width)
         return self.physical.strip_parameters(arc_num, type_abbr, runway_width)
 
     def resa_parameters(self, arc_num: int, type1_abbr: str, type2_abbr: str):
         return self.physical.resa_parameters(arc_num, type1_abbr, type2_abbr)
 
     def ihs_base_height(self):
+        if self.protected_airspace_model == "annex14_current_ols":
+            return current_ols.ihs_base_height()
         return self.ols.ihs_base_height()
 
     def ols_parameters(self, arc_num: int, runway_type: Optional[str], surface_type: str):
+        if self.protected_airspace_model == "annex14_current_ols":
+            return current_ols.ols_parameters(arc_num, runway_type, surface_type)
         return self.ols.parameters(arc_num, runway_type, surface_type)
+
+    def clearway_parameters(
+        self,
+        runway_width: Optional[float] = None,
+        strip_extension: Optional[float] = None,
+        strip_overall_width: Optional[float] = None,
+        physical_length: Optional[float] = None,
+        clearway_primary_input: Optional[float] = None,
+        clearway_reciprocal_input: Optional[float] = None,
+        stopway_primary: Optional[float] = None,
+        stopway_reciprocal: Optional[float] = None,
+        is_instrument_runway: bool = False,
+        arc_num: Optional[int] = None,
+    ):
+        if self.protected_airspace_model != "annex14_current_ols":
+            return None
+        return physical_data.get_current_clearway_params(
+            runway_width=runway_width,
+            strip_extension=strip_extension,
+            strip_overall_width=strip_overall_width,
+            physical_length=physical_length,
+            clearway_primary_input=clearway_primary_input,
+            clearway_reciprocal_input=clearway_reciprocal_input,
+            stopway_primary=stopway_primary,
+            stopway_reciprocal=stopway_reciprocal,
+            is_instrument_runway=is_instrument_runway,
+            arc_num=arc_num,
+        )
+
+    def stopway_parameters(
+        self,
+        runway_width: Optional[float] = None,
+        stopway_length: Optional[float] = None,
+    ):
+        if self.protected_airspace_model != "annex14_current_ols":
+            return None
+        return physical_data.get_current_stopway_params(runway_width, stopway_length)
 
     def approach_surface_parameters(
         self,

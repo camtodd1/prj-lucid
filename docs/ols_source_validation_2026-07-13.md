@@ -2,9 +2,9 @@
 
 ## Outcome
 
-The first independent, source-backed analytical validation tranche is in
-place for MOS139 OLS, CAP168 current OLS, future Annex 14 OFS/OES, and the
-modernisation comparison.
+The independent, source-backed analytical validation is in place for MOS139
+OLS, CAP168 current OLS, current Annex 14 OLS, future Annex 14 OFS/OES, and
+the modernisation comparison.
 It passes without importing QGIS, generated polygons, the controlling solver,
 or production elevation evaluators into the calculation oracle.
 
@@ -24,7 +24,7 @@ relevant tables rather than relying only on PDF text extraction:
 | --- | --- | --- | --- |
 | MOS139 (C.07 2026): CASA Part 139 (Aerodromes) MOS 2019, Chapter 7 | Compilation No. 7, in force 12 May 2026, Authorised Version F2026C00403 | 7.04–7.16; Tables 7.15(1) and 7.16(1) | `ecda4ab7171aef3932a35ac631ac8968d5056c616013ae3f452475b4bd513465` |
 | UK CAA CAP 168, Chapter 4 | Thirteenth Edition, July 2025, Amendment 15; current table applicable until 20 November 2030 | 4.8–4.73; Tables 4.1 and 4.2 | `27c1d35fce840caaffeefb898e6fc4df9a4bd4abdb5e8db3f878cfdccce3f649` |
-| ICAO Annex 14, Volume I, Chapter 4 | Ninth Edition, July 2022; future OFS/OES provisions applicable as of 21 November 2030 | 4.2–4.3; Tables 4-1–4-15 | `15a5618515f4c7088eb59b86392b53c24f15a05fa9341484931c421489f39cb9` |
+| ICAO Annex 14, Volume I, Chapter 4 | Ninth Edition, July 2022, Amendment 18; conventional OLS applicable until 20 November 2030 and future OFS/OES applicable from 21 November 2030 | Current 4.1–4.2 Tables 4-1–4-2; future 4.2–4.3 Tables 4-1–4-15 | `15a5618515f4c7088eb59b86392b53c24f15a05fa9341484931c421489f39cb9` |
 
 The PDFs are not copied into the repository. The fixture records source title,
 edition/date, supplied filename, hash, clause/table and printed/PDF page so a
@@ -64,6 +64,7 @@ The initial fixture exercises the following calculations:
 | Curved MOS139 axis/conical intersection | Four closed-form points on a circular-IHS conical/approach equality arc; axis and conical elevations agree to `1e-9 m`. |
 | CAP168 Code 1 precision approach | Section elevations at 3,000 m, 5,500 m and 10,000 m; 200 m contour at station 3,833.333333333 m with 645 m half-width. |
 | CAP168 IHS/conical | IHS at 45 m above the lowest threshold; a 200 m conical contour 1,100 m from the IHS edge for a 100 m lowest threshold. |
+| Annex 14 current code-3 NI OLS | 123.3 m and 189.9 m approach checkpoints; 150 m approach contour station/width; 120 m TOCS contour; IHS at RED + 45 m and a 180 m conical contour 700 m from its edge. |
 | Annex 14 future OFS | ADG III instrument approach and 20% transitional contour stations/elevations. |
 | Annex 14 future OES | Precision approach, instrument departure, heavy ADG III take-off climb and horizontal-surface elevations. |
 | Modernisation comparison | Signed -1 m, 0 m and +5 m delta-contour stations, with controlling identity checked independently on both sides of the zero line. |
@@ -72,7 +73,8 @@ The source-to-production checks cover representative values from every
 contour-producing family used in those calculations: MOS Approach, TOCS, IHS,
 Conical, Transitional, Inner Approach, Inner Transitional, Baulked Landing and
 OHS; CAP168 Approach, TOCS, Transitional, OFZ/inner surfaces and source rules
-for IHS, Conical and OHS; Annex OFS approach/inner/transitional/balked surfaces; and Annex OES
+for IHS, Conical and OHS; current Annex approach, TOCS, IHS, conical, OFZ and
+Chapter 3 OLS dependencies; Annex OFS approach/inner/transitional/balked surfaces; and Annex OES
 horizontal, straight-in, precision approach, departure and both take-off mass
 categories.
 

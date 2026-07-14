@@ -3,20 +3,200 @@
 from __future__ import annotations
 
 import configparser
+import csv
+import io
 import json
 import os
 import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Mapping, Optional
+from typing import Dict, Iterable, Mapping, Optional
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - QGIS production targets are Unix-like.
+    fcntl = None
 
 
-RUN_HISTORY_SCHEMA_VERSION = 1
+RUN_HISTORY_SCHEMA_VERSION = 2
 RUN_HISTORY_FILENAME = "runtime_test_runs.txt"
 AGENT_ENV_VAR = "SAFEGUARDING_BUILDER_RUN_AGENT"
 COMMIT_ENV_VAR = "SAFEGUARDING_BUILDER_COMMIT"
 HISTORY_PATH_ENV_VAR = "SAFEGUARDING_BUILDER_RUN_HISTORY"
+
+KEY_MODULE_COLUMNS = (
+    ("phase_startup_seconds", "phase.startup"),
+    ("phase_inputs_seconds", "phase.inputs"),
+    ("phase_output_setup_seconds", "phase.output_setup"),
+    ("phase_runway_reference_geometry_seconds", "phase.runway_reference_geometry"),
+    ("phase_physical_and_protection_seconds", "phase.physical_and_protection"),
+    ("phase_runway_ols_seconds", "phase.runway_ols"),
+    ("phase_airport_wide_ols_seconds", "phase.airport_wide_ols"),
+    ("phase_controlling_envelope_seconds", "phase.controlling_envelope"),
+    ("phase_ruleset_comparison_seconds", "phase.ruleset_comparison"),
+    ("phase_supporting_safeguarding_seconds", "phase.supporting_safeguarding"),
+    ("phase_finalisation_seconds", "phase.finalisation"),
+    ("controlling_candidates_seconds", "controlling_ols.candidates"),
+    ("controlling_regions_seconds", "controlling_ols.regions"),
+    ("controlling_transitions_seconds", "controlling_ols.transitions"),
+    ("controlling_contours_seconds", "controlling_ols.contours"),
+    ("controlling_total_seconds", "controlling_ols.total"),
+)
+
+RUN_HISTORY_COLUMNS = (
+    "schema_version",
+    "timestamp_utc",
+    "agent",
+    "status",
+    "airport",
+    "design_ruleset",
+    "baseline_ols_ruleset",
+    "comparison_ols_ruleset",
+    "design_ruleset_label",
+    "baseline_ols_ruleset_label",
+    "comparison_ols_ruleset_label",
+    "commit_ref",
+    "working_tree_dirty",
+    "plugin_version",
+    "qgis_version",
+    "elapsed_seconds",
+    *(column for column, _module in KEY_MODULE_COLUMNS),
+    "module_timings_json",
+)
+
+
+def _module_timings(record: Mapping[str, object]) -> Dict[str, Dict[str, object]]:
+    timings: Dict[str, Dict[str, object]] = {}
+    modules = record.get("modules", [])
+    if not isinstance(modules, list):
+        return timings
+    for module in modules:
+        if not isinstance(module, Mapping):
+            continue
+        name = str(module.get("name", "")).strip()
+        if not name:
+            continue
+        timings[name] = {
+            "calls": int(module.get("calls", 0)),
+            "elapsed_seconds": module.get("elapsed_seconds", 0),
+        }
+    return timings
+
+
+def _table_row(record: Mapping[str, object]) -> Dict[str, object]:
+    rulesets = record.get("rulesets", {})
+    labels = record.get("ruleset_labels", {})
+    rulesets = rulesets if isinstance(rulesets, Mapping) else {}
+    labels = labels if isinstance(labels, Mapping) else {}
+    timings = _module_timings(record)
+    dirty = record.get("working_tree_dirty")
+    row: Dict[str, object] = {
+        "schema_version": record.get("schema_version", ""),
+        "timestamp_utc": record.get("timestamp_utc", ""),
+        "agent": record.get("agent", ""),
+        "status": record.get("status", ""),
+        "airport": record.get("airport", ""),
+        "design_ruleset": rulesets.get("design", "") or "",
+        "baseline_ols_ruleset": rulesets.get("baseline_ols", "") or "",
+        "comparison_ols_ruleset": rulesets.get("comparison_ols", "") or "",
+        "design_ruleset_label": labels.get("design", "") or "",
+        "baseline_ols_ruleset_label": labels.get("baseline_ols", "") or "",
+        "comparison_ols_ruleset_label": labels.get("comparison_ols", "") or "",
+        "commit_ref": record.get("commit_ref", ""),
+        "working_tree_dirty": "" if dirty is None else str(bool(dirty)).lower(),
+        "plugin_version": record.get("plugin_version", ""),
+        "qgis_version": record.get("qgis_version", ""),
+        "elapsed_seconds": record.get("elapsed_seconds", ""),
+        "module_timings_json": json.dumps(timings, sort_keys=True, separators=(",", ":")),
+    }
+    for column, module_name in KEY_MODULE_COLUMNS:
+        timing = timings.get(module_name)
+        row[column] = timing.get("elapsed_seconds", "") if timing else ""
+    return row
+
+
+def _table_payload(records: Iterable[Mapping[str, object]], *, header: bool) -> bytes:
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(
+        stream,
+        fieldnames=RUN_HISTORY_COLUMNS,
+        delimiter="\t",
+        lineterminator="\n",
+        extrasaction="ignore",
+    )
+    if header:
+        writer.writeheader()
+    for record in records:
+        writer.writerow(_table_row(record))
+    return stream.getvalue().encode("utf-8")
+
+
+def _legacy_records(content: str) -> Optional[list[Dict[str, object]]]:
+    if not content.strip().startswith("{"):
+        return None
+    records = []
+    for line in content.splitlines():
+        if line.strip():
+            records.append(json.loads(line))
+    return records
+
+
+def _lock(descriptor: int) -> None:
+    if fcntl is not None:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+
+
+def _unlock(descriptor: int) -> None:
+    if fcntl is not None:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+
+
+def migrate_history_file(history_path: Path) -> bool:
+    """Convert the former JSON-lines ledger to the tabular schema in place."""
+    path = Path(history_path)
+    if not path.exists():
+        return False
+    descriptor = os.open(path, os.O_RDWR)
+    try:
+        _lock(descriptor)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        content = os.read(descriptor, os.fstat(descriptor).st_size).decode("utf-8")
+        records = _legacy_records(content)
+        if records is None:
+            return False
+        payload = _table_payload(records, header=True)
+        os.ftruncate(descriptor, 0)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        os.write(descriptor, payload)
+        return True
+    finally:
+        _unlock(descriptor)
+        os.close(descriptor)
+
+
+def _append_record(history_path: Path, record: Mapping[str, object]) -> None:
+    descriptor = os.open(history_path, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        _lock(descriptor)
+        size = os.fstat(descriptor).st_size
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        prefix = os.read(descriptor, min(size, 4096)).decode("utf-8") if size else ""
+        legacy = None
+        if prefix.strip().startswith("{"):
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            legacy = _legacy_records(os.read(descriptor, size).decode("utf-8"))
+        if legacy is not None:
+            payload = _table_payload([*legacy, record], header=True)
+            os.ftruncate(descriptor, 0)
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            os.write(descriptor, payload)
+            return
+        os.lseek(descriptor, 0, os.SEEK_END)
+        os.write(descriptor, _table_payload([record], header=not bool(size)))
+    finally:
+        _unlock(descriptor)
+        os.close(descriptor)
 
 
 def detect_run_agent(environ: Optional[Mapping[str, str]] = None) -> str:
@@ -171,16 +351,7 @@ class RuntimeRunRecorder:
             "modules": modules,
         }
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
-        payload = (json.dumps(record, sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-        descriptor = os.open(
-            self.history_path,
-            os.O_APPEND | os.O_CREAT | os.O_WRONLY,
-            0o644,
-        )
-        try:
-            os.write(descriptor, payload)
-        finally:
-            os.close(descriptor)
+        _append_record(self.history_path, record)
         return record
 
 
@@ -188,11 +359,14 @@ __all__ = [
     "AGENT_ENV_VAR",
     "COMMIT_ENV_VAR",
     "HISTORY_PATH_ENV_VAR",
+    "KEY_MODULE_COLUMNS",
+    "RUN_HISTORY_COLUMNS",
     "RUN_HISTORY_FILENAME",
     "RUN_HISTORY_SCHEMA_VERSION",
     "RuntimeRunRecorder",
     "default_history_path",
     "detect_run_agent",
     "git_revision",
+    "migrate_history_file",
     "plugin_version",
 ]

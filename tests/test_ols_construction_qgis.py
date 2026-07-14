@@ -17,6 +17,7 @@ from qgis.core import (
 )
 
 from guidelines.ols_guideline import OlsGuidelineMixin
+from rulesets.annex14.profile import ANNEX14_CURRENT_OLS_PROFILE
 from rulesets.cap168.profile import CAP168_PROFILE
 from rulesets.easa.profile import EASA_PROFILE
 from rulesets.mos139.profile import MOS139_PROFILE
@@ -242,7 +243,7 @@ class OlsConstructionQgisTests(unittest.TestCase):
         self.assertTrue(requested)
         self.assertIsNone(track)
 
-    def test_builder_rebuilds_cap_and_easa_contexts_without_cross_ruleset_state(self):
+    def test_builder_rebuilds_conventional_contexts_without_cross_ruleset_state(self):
         builder = object.__new__(SafeguardingBuilder)
         builder.translator = None
         builder.reference_elevation_datum = 130.0
@@ -275,16 +276,34 @@ class OlsConstructionQgisTests(unittest.TestCase):
         easa = builder._build_ols_construction_context(
             EASA_PROFILE, [source], arp_point=QgsPointXY(1000.0, 500.0)
         )
+        annex_current = builder._build_ols_construction_context(
+            ANNEX14_CURRENT_OLS_PROFILE,
+            [source],
+            arp_point=QgsPointXY(1000.0, 500.0),
+        )
 
         self.assertEqual(cap.ruleset_id, CAP168_PROFILE.id)
         self.assertEqual(easa.ruleset_id, EASA_PROFILE.id)
+        self.assertEqual(annex_current.ruleset_id, ANNEX14_CURRENT_OLS_PROFILE.id)
         self.assertEqual(cap.lowest_threshold_elevation_m, 100.0)
         self.assertEqual(cap.reference_elevation_datum_m, 130.0)
         self.assertIsNot(cap.runways[0].generation_data, easa.runways[0].generation_data)
+        self.assertIsNot(
+            cap.runways[0].generation_data,
+            annex_current.runways[0].generation_data,
+        )
         self.assertEqual(source["clearway1_len"], 200.0)
         self.assertNotEqual(
             cap.runways[0].strip_parameters.get("overall_width_ref"),
             easa.runways[0].strip_parameters.get("overall_width_ref"),
+        )
+        self.assertIn(
+            "Annex 14 Vol I 3.4",
+            annex_current.runways[0].strip_parameters.get("ref", ""),
+        )
+        self.assertEqual(
+            sorted(end.clearway_length_m for end in annex_current.runways[0].ends),
+            [100.0, 200.0],
         )
 
         blank_clearway_source = {

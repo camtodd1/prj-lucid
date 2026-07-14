@@ -78,7 +78,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             )
         )
 
-    def test_cap168_is_supported_while_easa_is_preview_and_current_annex14_is_source_gated(self):
+    def test_cap168_and_current_annex14_are_supported_while_easa_is_preview(self):
         baseline = self.dialog.baseline_ols_ruleset_combo
         cap168_index = baseline.findData("uk_caa_cap168_edition_13")
         easa_index = baseline.findData("easa_cs_adr_dsn_issue_7")
@@ -90,9 +90,11 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertNotIn("partial preview", baseline.itemText(cap168_index).lower())
         self.assertEqual(baseline.itemText(cap168_index), "UK CAA CAP 168 (Edition 13)")
         self.assertIn("partial preview", baseline.itemText(easa_index).lower())
-        self.assertIn("source tables required", baseline.itemText(current_annex_index).lower())
-        self.assertFalse(baseline.model().item(current_annex_index).isEnabled())
-        self.assertIn("authorised edition", baseline.model().item(current_annex_index).toolTip())
+        self.assertEqual(
+            baseline.itemText(current_annex_index),
+            "ICAO Annex 14 Vol I - Current OLS",
+        )
+        self.assertTrue(baseline.model().item(current_annex_index).isEnabled())
 
     def test_nominated_ols_track_options_round_trip_with_runway_data(self):
         group = self.dialog._runway_groups[1]

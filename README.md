@@ -156,18 +156,21 @@ resources.qrc                    Qt resource manifest.
 
 ## Runtime Test History
 
-Every safeguarding generation run appends one compact JSON record to
-`runtime_test_runs.txt` in the plugin directory. This includes QGIS runs and
-headless workflow runs. Each line records the actor (`qgis user`, `codex
-headless`, or an explicit override), airport, selected rulesets, completion
-status, total and phase/module elapsed times, plugin/QGIS versions, Git commit,
-and whether the working tree was dirty.
+Every safeguarding generation run appends one tab-separated row beneath stable
+column headers in `runtime_test_runs.txt` in the plugin directory. This includes
+QGIS runs and headless workflow runs. The columns record the actor (`qgis user`,
+`codex headless`, or an explicit override), airport, selected rulesets,
+completion status, total and key phase/module elapsed times, plugin/QGIS
+versions, Git commit, and whether the working tree was dirty. The final
+`module_timings_json` column retains all module timings and call counts, including
+diagnostic modules that do not have dedicated columns.
 
 Set `SAFEGUARDING_BUILDER_RUN_AGENT` to override the actor,
 `SAFEGUARDING_BUILDER_COMMIT` for packaged builds without `.git`, or
 `SAFEGUARDING_BUILDER_RUN_HISTORY` to select another text-file path. The file
-uses versioned JSON Lines so it remains append-only and can be reviewed or
-parsed without migrating older records.
+uses a versioned TSV schema. Existing version 1 JSON Lines ledgers are converted
+automatically on the next write, preserving their original schema version and
+timing data.
 
 ## Development Notes
 

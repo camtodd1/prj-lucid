@@ -31,7 +31,8 @@ IDs and geometry digests match the existing locked MOS139 contract exactly:
 - `yssy_multiple_stress.json`
 
 Modernised Annex 14 OFS/OES construction is unchanged. Current Annex 14
-conventional OLS remains separately source-gated, and EASA remains a preview.
+conventional OLS was subsequently source-loaded and promoted through its own
+release evidence; EASA remains a preview.
 
 Runtime details for each headless run are appended to `runtime_test_runs.txt`
 with the agent, airport, rulesets, QGIS/plugin version, Git reference, dirty

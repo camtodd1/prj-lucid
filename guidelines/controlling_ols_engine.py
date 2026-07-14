@@ -220,9 +220,17 @@ class PlanarControllingOlsEngine:
         self.ruleset_id = str(ruleset_id or "")
         self.bounds = self._combined_bounds(self.candidates)
 
-    def _cap168_refinement_enabled(self) -> bool:
-        """Keep CAP-specific completion refinements out of locked legacy engines."""
-        return self.ruleset_id == "uk_caa_cap168_edition_13"
+    def _conventional_refinement_enabled(self) -> bool:
+        """Enable conventional-policy completion without touching locked engines.
+
+        The current Annex 14 and CAP 168 constructors share the new
+        ruleset-owned conventional candidate contract. MOS139 compatibility
+        and the post-2030 OFS/OES engine deliberately remain excluded.
+        """
+        return self.ruleset_id in {
+            "uk_caa_cap168_edition_13",
+            "icao_annex14_vol1_current_ols",
+        }
 
     def solver_diagnostics(self) -> Dict[str, object]:
         """Return stable, structured diagnostics without exposing timing as correctness data."""
@@ -1967,7 +1975,7 @@ class PlanarControllingOlsEngine:
             if (
                 controller is None
                 and numeric_completion
-                and self._cap168_refinement_enabled()
+                and self._conventional_refinement_enabled()
             ):
                 try:
                     point = gap.pointOnSurface().asPoint()
@@ -1980,7 +1988,7 @@ class PlanarControllingOlsEngine:
                     controller = None
             if controller is None:
                 refined_parts = []
-                if self._cap168_refinement_enabled():
+                if self._conventional_refinement_enabled():
                     refined_parts = self._complete_gap_with_lower_envelope(gap)
                 if refined_parts:
                     completed.extend(refined_parts)
@@ -2009,7 +2017,7 @@ class PlanarControllingOlsEngine:
                 owned = None
             if not self._has_polygon_area(owned) or not self._areas_match(owned, gap, tolerance_m2=1e-3):
                 refined_parts = []
-                if self._cap168_refinement_enabled():
+                if self._conventional_refinement_enabled():
                     refined_parts = self._complete_gap_with_lower_envelope(gap)
                 if refined_parts:
                     completed.extend(refined_parts)
@@ -2209,7 +2217,7 @@ class PlanarControllingOlsEngine:
     ) -> Optional[QgsGeometry]:
         """Resolve a small mixed global cell without invoking broad axis/conical station bands."""
         if {candidate.model, competitor.model} == {"axis", "conical"} and self._has_polygon_area(overlap):
-            if not self._cap168_refinement_enabled():
+            if not self._conventional_refinement_enabled():
                 return self._triangulated_candidate_lower_region(
                     candidate, competitor, overlap
                 )
@@ -2236,7 +2244,7 @@ class PlanarControllingOlsEngine:
                 candidate, competitor, overlap
             )
         if (
-            self._cap168_refinement_enabled()
+            self._conventional_refinement_enabled()
             and "conical" in {candidate.model, competitor.model}
             and self._has_polygon_area(overlap)
         ):
@@ -2552,7 +2560,7 @@ class PlanarControllingOlsEngine:
             source_boundary = self._combined_boundary_geometry(geometries)
             cleaned_merged = self._clean_merged_region_geometry(merged, candidate, source_boundary)
             if (
-                self._cap168_refinement_enabled()
+                self._conventional_refinement_enabled()
                 and self._has_polygon_area(cleaned_merged)
                 and merged.isGeosValid()
             ):
@@ -2588,7 +2596,7 @@ class PlanarControllingOlsEngine:
                 self._has_polygon_area(snapped)
                 and snapped.isGeosValid()
                 and (
-                    not self._cap168_refinement_enabled()
+                    not self._conventional_refinement_enabled()
                     or abs(snapped.area() - geometry.area())
                     <= CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2
                 )
@@ -2865,7 +2873,7 @@ class PlanarControllingOlsEngine:
                         candidate_region = QgsGeometry()
                         break
             for region_part in self._polygon_parts(candidate_region):
-                if self._cap168_refinement_enabled() and region_part.isGeosValid():
+                if self._conventional_refinement_enabled() and region_part.isGeosValid():
                     output_parts = [region_part]
                 else:
                     output_parts = self._clean_region_polygon_parts(
@@ -5599,7 +5607,7 @@ class PlanarControllingOlsEngine:
                 model = self._conical_model(evaluated_candidate)
                 if model is not None:
                     conical_lipschitz += abs(float(model.get("slope", 0.0)))
-            if self._cap168_refinement_enabled():
+            if self._conventional_refinement_enabled():
                 bbox = geometry.boundingBox()
                 sample_spacing_m = max(
                     15.0,

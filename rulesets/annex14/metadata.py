@@ -2,9 +2,12 @@
 
 CURRENT_RULESET_ID = "icao_annex14_vol1_current_ols"
 CURRENT_DISPLAY_NAME = "ICAO Annex 14 Vol I - Current OLS"
-CURRENT_EDITION = "Annex 14 Volume I current OLS"
-CURRENT_STATUS = "scaffold"
-CURRENT_DESCRIPTION = "Current enforceable ICAO Annex 14 Volume I protected-airspace OLS scaffold."
+CURRENT_EDITION = "Annex 14 Volume I, Ninth Edition, Amendment 18"
+CURRENT_STATUS = "stable"
+CURRENT_DESCRIPTION = (
+    "Production-supported current ICAO Annex 14 Volume I conventional OLS, "
+    "applicable until 20 November 2030."
+)
 CURRENT_ALIASES = (
     "Annex 14",
     "ANNEX14",
@@ -79,12 +82,15 @@ CAPABILITY_STATUS_BY_KEY = {
 CURRENT_CAPABILITY_STATUS_BY_KEY = {
     **CAPABILITY_STATUS_BY_KEY,
     "classification.design_group": "unsupported",
-    "ols.airport_wide": "scaffold",
+    "physical.strip": "supported",
+    "physical.clearway": "supported",
+    "physical.stopway": "supported",
+    "ols.airport_wide": "supported",
     "ols.obstacle_free_surfaces": "unsupported",
-    "ols.runway_approach": "scaffold",
-    "ols.takeoff_climb": "scaffold",
-    "ols.ofz": "scaffold",
-    "ols.controlling_lower_envelope": "unsupported",
+    "ols.runway_approach": "supported",
+    "ols.takeoff_climb": "supported",
+    "ols.ofz": "supported",
+    "ols.controlling_lower_envelope": "supported",
     "oes.airport_wide": "unsupported",
     "oes.design_group_driven": "unsupported",
     "oes.horizontal": "unsupported",

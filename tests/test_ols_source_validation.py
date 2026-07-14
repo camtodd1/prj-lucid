@@ -87,6 +87,8 @@ class OlsSourceValidationTests(unittest.TestCase):
         self.assertEqual(documents["mos139"]["compilation_date"], "2026-05-12")
         self.assertEqual(documents["mos139"]["authorised_version"], "F2026C00403")
         self.assertEqual(documents["annex14"]["edition"], "Ninth Edition")
+        self.assertEqual(documents["annex14"]["amendment"], "Amendment 18")
+        self.assertEqual(documents["annex14"]["current_ols_applicability_end"], "2030-11-20")
         self.assertEqual(documents["annex14"]["future_chapter_applicability"], "2030-11-21")
         self.assertEqual(documents["cap168"]["edition"], "Thirteenth Edition")
         self.assertEqual(documents["cap168"]["current_ols_applicability_end"], "2030-11-20")
@@ -101,6 +103,8 @@ class OlsSourceValidationTests(unittest.TestCase):
         self.assertEqual(documents["cap168"]["correction_confirmation"], "user-confirmed 2026-07-13")
         self.assertEqual(len(documents["mos139"]["sha256"]), 64)
         self.assertEqual(len(documents["annex14"]["sha256"]), 64)
+        self.assertEqual(len(documents["annex14"]["full_standard_sha256"]), 64)
+        self.assertEqual(len(documents["annex14"]["amendment_state_letter_sha256"]), 64)
         self.assertEqual(len(documents["cap168"]["sha256"]), 64)
 
     def test_cited_source_parameters_match_production_constants(self):
@@ -420,6 +424,70 @@ class OlsSourceValidationTests(unittest.TestCase):
             horizontal["aerodrome_elevation_m"] + horizontal["height_above_aerodrome_m"],
             horizontal["expected_elevation_m"],
             delta=self.elevation_tolerance,
+        )
+
+    def test_independent_annex14_current_elevations_and_contours(self):
+        case = self.manifest["analytical_cases"]["annex14_current_ni_code3"]
+        approach = case["approach"]
+        approach_base = case["assumptions"]["approach_inner_edge_elevation_m"]
+        for checkpoint in approach["elevation_checkpoints"]:
+            self.assertAlmostEqual(
+                piecewise_axis_elevation(
+                    approach_base,
+                    checkpoint["station_m"],
+                    approach["sections"],
+                ),
+                checkpoint["expected_elevation_m"],
+                delta=self.elevation_tolerance,
+            )
+        contour = approach["contour_checkpoint"]
+        station = first_station_for_elevation(
+            approach_base,
+            contour["elevation_m"],
+            approach["sections"],
+        )
+        self.assertAlmostEqual(station, contour["expected_station_m"], delta=self.distance_tolerance)
+        self.assertAlmostEqual(
+            (approach["inner_edge_length_m"] / 2.0)
+            + station * approach["sections"][0]["divergence"],
+            contour["expected_half_width_m"],
+            delta=self.distance_tolerance,
+        )
+
+        take_off = case["take_off_climb"]
+        take_off_base = case["assumptions"]["take_off_inner_edge_elevation_m"]
+        checkpoint = take_off["contour_checkpoint"]
+        self.assertAlmostEqual(
+            first_station_for_elevation(
+                take_off_base,
+                checkpoint["elevation_m"],
+                take_off["sections"],
+            ),
+            checkpoint["expected_station_m"],
+            delta=self.distance_tolerance,
+        )
+        end = take_off["end_checkpoint"]
+        self.assertAlmostEqual(
+            piecewise_axis_elevation(take_off_base, end["station_m"], take_off["sections"]),
+            end["expected_elevation_m"],
+            delta=self.elevation_tolerance,
+        )
+
+        horizontal = case["inner_horizontal_and_conical"]
+        ihs_elevation = (
+            case["assumptions"]["reference_elevation_datum_m"]
+            + horizontal["inner_horizontal_height_above_datum_m"]
+        )
+        self.assertAlmostEqual(
+            ihs_elevation,
+            horizontal["inner_horizontal_expected_elevation_m"],
+            delta=self.elevation_tolerance,
+        )
+        conical = horizontal["contour_checkpoint"]
+        self.assertAlmostEqual(
+            (conical["elevation_m"] - ihs_elevation) / horizontal["conical_slope"],
+            conical["expected_offset_from_ihs_m"],
+            delta=self.distance_tolerance,
         )
 
     def test_independent_comparison_contours_and_controlling_identity(self):

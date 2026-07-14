@@ -322,11 +322,14 @@ Last reviewed: 2026-07-14.
 
 ## Scaffolded Or Future Enhancements
 
-- [ ] Annex 14 current OLS.
+- [x] Annex 14 current OLS.
 
   Status:
-  - Registered as a selectable profile.
-  - Current enforceable OLS dimensions and geometry are still scaffolded.
+  - Production-supported from the Ninth Edition, Amendment 18 source set for
+    the conventional OLS applicable until 20 November 2030.
+  - Current Table 4-1 and 4-2 surfaces, Chapter 3 strip/clearway dependencies,
+    controlling lower envelope, and bidirectional MOS139 comparison pass the
+    release gate.
 
 - [ ] Annex 14 modernised OFS/OES.
 
@@ -348,8 +351,8 @@ Last reviewed: 2026-07-14.
     standard and is not promoted as enforceable before 2030-11-21.
   - Full complex transitional and inner-transitional geometry, plus
     TODA/clearway-aware departure starts, remain incomplete.
-  - Physical, taxiway, markings, lighting, declared-distance, and current OLS
-    source tables remain incomplete or unsupported.
+  - Physical, taxiway, markings, lighting, and declared-distance source tables
+    outside the current OLS dependency scope remain incomplete or unsupported.
 
 - [ ] Aircraft characteristics registry.
 

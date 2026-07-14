@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "validation_id": "ols-source-validation-v1-2026-07-13",
-  "scope": "Independent analytical contour, controller and boundary checkpoints plus representative production-parameter traceability for CASA MOS139, UK CAA CAP168, EASA CS-ADR-DSN Issue 7 and future ICAO Annex 14 OFS/OES.",
+  "scope": "Independent analytical contour, controller and boundary checkpoints plus representative production-parameter traceability for CASA MOS139, UK CAA CAP168, EASA CS-ADR-DSN Issue 7, current ICAO Annex 14 OLS and future ICAO Annex 14 OFS/OES.",
   "review_status": "calculation evidence prepared; independent technical reviewer sign-off pending",
   "documents": {
     "mos139": {
@@ -43,9 +43,15 @@
       "authority": "International Civil Aviation Organization",
       "edition": "Ninth Edition",
       "edition_date": "2022-07",
+      "amendment": "Amendment 18",
+      "current_ols_applicability_end": "2030-11-20",
       "future_chapter_applicability": "2030-11-21",
       "supplied_filename": "ICAO Annex 14 Aerodrome Design and Operations - Chapter 4.pdf",
-      "sha256": "15a5618515f4c7088eb59b86392b53c24f15a05fa9341484931c421489f39cb9"
+      "sha256": "15a5618515f4c7088eb59b86392b53c24f15a05fa9341484931c421489f39cb9",
+      "full_standard_filename": "ICAO Annex 14 Aerodrome Design and Operations - Standards and Recommended Practices.pdf",
+      "full_standard_sha256": "71064dc685b4a008828f2655fb7a8217e44e3407d4c0f78d2b4f82b9cbe74a36",
+      "amendment_state_letter_filename": "ICAO Annex 14 Amendment 18 - State Letter.pdf",
+      "amendment_state_letter_sha256": "39ebf233b74c4843a3c572339e8465a73b4103ca2046a8f271dd74963d3cb10f"
     }
   },
   "tolerances": {
@@ -391,6 +397,47 @@
       "expected": {"height_agl": 150.0, "radius": 15000.0, "local_object_height_agl": 30.0, "guidance_only": true}
     },
     {
+      "id": "annex14-current-ni-code3-approach",
+      "source_ref": "Annex 14 Vol I Table 4-1, printed page 4-8, supplied PDF page 11",
+      "production": {
+        "module": "rulesets.annex14.current_ols",
+        "symbol": "APPROACH_PARAMS",
+        "key": [3, "NI"],
+        "tuple_key": true
+      },
+      "expected": [{"length": 3000.0, "slope": 0.0333, "divergence": 0.1, "start_dist_from_thr": 60.0, "start_width": 110.0}]
+    },
+    {
+      "id": "annex14-current-pa-code3-ofz",
+      "source_ref": "Annex 14 Vol I Table 4-1, printed page 4-8, supplied PDF page 11",
+      "production": {
+        "module": "rulesets.annex14.current_ols",
+        "symbol": "INNER_APPROACH_PARAMS",
+        "key": [3, "PA_I"],
+        "tuple_key": true
+      },
+      "expected": {"width": 120.0, "code_letter_f_width": 140.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.02}
+    },
+    {
+      "id": "annex14-current-code3-take-off-climb",
+      "source_ref": "Annex 14 Vol I Table 4-2, printed page 4-11, supplied PDF page 14",
+      "production": {
+        "module": "rulesets.annex14.current_ols",
+        "symbol": "TOCS_PARAMS",
+        "key": 3
+      },
+      "expected": {"inner_edge_width": 180.0, "origin_offset": 60.0, "divergence": 0.125, "final_width": 1200.0, "heading_change_gt_15_final_width": 1800.0, "length": 15000.0, "slope": 0.02}
+    },
+    {
+      "id": "annex14-current-instrument-code3-strip",
+      "source_ref": "Annex 14 Vol I 3.4.2-3.4.4 and 3.4.8, printed pages 3-10 to 3-12",
+      "production": {
+        "module": "rulesets.annex14.physical_data",
+        "symbol": "PHYSICAL_REFS"
+      },
+      "expected": {"status": "current_ols_dependencies_source_loaded"}
+    },
+    {
       "id": "annex14-ofs-adg-iii-instrument-approach",
       "source_ref": "Annex 14 Vol I 4.2.1 and Table 4-2, printed page 4-15, supplied PDF page 18",
       "production": {
@@ -679,6 +726,39 @@
         "expected_elevation_m": 273.0,
         "radius_m": 15000.0,
         "applicability": "guidance_only"
+      }
+    },
+    "annex14_current_ni_code3": {
+      "source_refs": [
+        "Annex 14 Vol I 4.1-4.2 and Table 4-1, printed page 4-8, supplied PDF page 11",
+        "Annex 14 Vol I 4.2.22-4.2.27 and Table 4-2, printed page 4-11, supplied PDF page 14"
+      ],
+      "assumptions": {
+        "reference_elevation_datum_m": 100.0,
+        "approach_inner_edge_elevation_m": 90.0,
+        "take_off_inner_edge_elevation_m": 92.0
+      },
+      "approach": {
+        "inner_edge_length_m": 110.0,
+        "sections": [{"length_m": 3000.0, "slope": 0.0333, "divergence": 0.1}],
+        "elevation_checkpoints": [
+          {"station_m": 1000.0, "expected_elevation_m": 123.3},
+          {"station_m": 3000.0, "expected_elevation_m": 189.9}
+        ],
+        "contour_checkpoint": {"elevation_m": 150.0, "expected_station_m": 1801.8018018018017, "expected_half_width_m": 235.18018018018017}
+      },
+      "take_off_climb": {
+        "sections": [{"length_m": 15000.0, "slope": 0.02, "divergence": 0.125}],
+        "contour_checkpoint": {"elevation_m": 120.0, "expected_station_m": 1400.0},
+        "end_checkpoint": {"station_m": 15000.0, "expected_elevation_m": 392.0}
+      },
+      "inner_horizontal_and_conical": {
+        "inner_horizontal_height_above_datum_m": 45.0,
+        "inner_horizontal_expected_elevation_m": 145.0,
+        "inner_horizontal_radius_m": 4000.0,
+        "conical_slope": 0.05,
+        "conical_height_extent_m": 75.0,
+        "contour_checkpoint": {"elevation_m": 180.0, "expected_offset_from_ihs_m": 700.0}
       }
     },
     "annex14_future": {
