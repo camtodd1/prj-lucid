@@ -10,6 +10,10 @@ layout. Each column only shows the surface families used by its selected
 ruleset, and its interval values are stored independently. With no comparison
 selected, the comparison column shows a baseline-only empty state. Signed
 change-contour controls remain on the comparison side when Annex 14 is present.
+Annex 14 exposes separate OES intervals for Precision Approach, Take-off Climb,
+and Instrument Departure, plus separate OFS intervals for Approach,
+Transitional, Balked Landing, Inner Approach, and Inner Transitional surfaces.
+The previous family-wide OFS/OES values remain load-compatible fallbacks.
 
 The comparison engine solves both selected envelopes and calculates:
 

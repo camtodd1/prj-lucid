@@ -14,6 +14,9 @@ except ImportError:
 
 from .dialog_constants import (
     ANNEX14_FAMILY_CONTOUR_KEYS,
+    ANNEX14_OES_SURFACE_CONTOUR_KEYS,
+    ANNEX14_OFS_SURFACE_CONTOUR_KEYS,
+    ANNEX14_SURFACE_CONTOUR_KEYS,
     COMPARISON_SURFACE_CONTOUR_KEYS,
     CONTOUR_INTERVAL_KEYS,
     CONTOUR_INTERVAL_KEY_DEFAULTS,
@@ -433,7 +436,7 @@ class OutputOptionsMixin:
             == "annex14_modernised_ofs_oes"
         )
         baseline_keys = set(
-            ANNEX14_FAMILY_CONTOUR_KEYS
+            ANNEX14_SURFACE_CONTOUR_KEYS
             if baseline_is_annex
             else CONVENTIONAL_SURFACE_CONTOUR_KEYS
         )
@@ -441,7 +444,7 @@ class OutputOptionsMixin:
             {
                 f"comparison_{key}"
                 for key in (
-                    ANNEX14_FAMILY_CONTOUR_KEYS
+                    ANNEX14_SURFACE_CONTOUR_KEYS
                     if comparison_is_annex
                     else CONVENTIONAL_SURFACE_CONTOUR_KEYS
                 )
@@ -475,6 +478,11 @@ class OutputOptionsMixin:
             label.setVisible(comparison_profile is not None)
         for label in getattr(self, "_contour_change_section_labels", []):
             label.setVisible(comparison_profile is not None and annex_selected)
+        annex_sections = getattr(self, "_contour_annex_section_labels", {})
+        for label in annex_sections.get("baseline", {}).values():
+            label.setVisible(baseline_is_annex)
+        for label in annex_sections.get("comparison", {}).values():
+            label.setVisible(comparison_is_annex)
 
         for key, label in getattr(self, "_contour_interval_labels", {}).items():
             visible = key in visible_keys
@@ -656,7 +664,24 @@ class OutputOptionsMixin:
         self._contour_column_headers = {}
         self._contour_column_interval_headers = {}
         self._contour_column_empty_labels = {}
+        self._contour_annex_section_labels = {}
         self._contour_change_section_labels = []
+        surface_rows = {}
+        next_row = 2
+        for key in CONVENTIONAL_SURFACE_CONTOUR_KEYS + ANNEX14_FAMILY_CONTOUR_KEYS:
+            surface_rows[key] = next_row
+            next_row += 1
+        annex_section_rows = {"OES": next_row}
+        next_row += 1
+        for key in ANNEX14_OES_SURFACE_CONTOUR_KEYS:
+            surface_rows[key] = next_row
+            next_row += 1
+        annex_section_rows["OFS"] = next_row
+        next_row += 1
+        for key in ANNEX14_OFS_SURFACE_CONTOUR_KEYS:
+            surface_rows[key] = next_row
+            next_row += 1
+        change_section_row = next_row
         column_grids = {}
         for column, role in enumerate(("baseline", "comparison")):
             title = (
@@ -678,6 +703,10 @@ class OutputOptionsMixin:
             column_grid.setColumnStretch(0, 1)
             column_grid.setColumnStretch(1, 0)
             column_grid.setColumnStretch(2, 0)
+            column_grid.setRowStretch(
+                change_section_row + len(MODERNISATION_CHANGE_CONTOUR_KEYS) + 1,
+                1,
+            )
             ruleset_header = QtWidgets.QLabel(title)
             ruleset_header.setObjectName(f"label{role.title()}ContourRuleset")
             ruleset_header.setWordWrap(True)
@@ -694,11 +723,23 @@ class OutputOptionsMixin:
             column_grid.addWidget(primary, 1, 1)
             column_grid.addWidget(intermediate, 1, 2)
             column_grid.addWidget(empty, 2, 0, 1, 3)
+            annex_labels = {}
+            for family, section_row in annex_section_rows.items():
+                section_label = QtWidgets.QLabel(self.tr(family))
+                section_label.setObjectName(
+                    f"label{role.title()}Annex14{family}ContourSection"
+                )
+                section_label.setStyleSheet(
+                    "font-weight: 600; color: #234b68; padding-top: 4px;"
+                )
+                column_grid.addWidget(section_label, section_row, 0, 1, 3)
+                annex_labels[family] = section_label
             overrides_grid.addWidget(frame, 0, column)
             self._contour_column_widgets[role] = frame
             self._contour_column_headers[role] = ruleset_header
             self._contour_column_interval_headers[role] = (primary, intermediate)
             self._contour_column_empty_labels[role] = empty
+            self._contour_annex_section_labels[role] = annex_labels
             column_grids[role] = column_grid
             setattr(self, f"frame{role.title()}ContourSettings", frame)
             setattr(self, f"label{role.title()}ContourRuleset", ruleset_header)
@@ -717,20 +758,19 @@ class OutputOptionsMixin:
                 base_key = key
             target_grid = column_grids[role]
             if is_change and not self._contour_change_section_labels:
-                change_row = 2 + len(SURFACE_CONTOUR_KEYS)
                 change_header = QtWidgets.QLabel(self.tr("Signed change contours"))
                 change_header.setObjectName("labelComparisonChangeContourSettings")
                 change_header.setStyleSheet(
                     "font-weight: 600; color: #234b68; padding-top: 4px;"
                 )
-                target_grid.addWidget(change_header, change_row, 0, 1, 3)
+                target_grid.addWidget(change_header, change_section_row, 0, 1, 3)
                 self._contour_change_section_labels.append(change_header)
             row = (
-                3
-                + len(SURFACE_CONTOUR_KEYS)
+                change_section_row
+                + 1
                 + list(MODERNISATION_CHANGE_CONTOUR_KEYS).index(key)
                 if is_change
-                else 2 + list(SURFACE_CONTOUR_KEYS).index(base_key)
+                else surface_rows[base_key]
             )
             label_name = f"labelContour{key.title()}"
             primary_spin_name = f"doubleSpinBoxContour{key.title()}Primary"
@@ -810,6 +850,10 @@ class OutputOptionsMixin:
             family_note = " Overrides Annex 14 obstacle free surface contours after surface-level defaults."
         elif key == "annex14_oes":
             family_note = " Overrides Annex 14 obstacle evaluation surface contours after surface-level defaults."
+        elif key.startswith("annex14_ofs_"):
+            family_note = " Controls this Annex 14 obstacle free surface only."
+        elif key.startswith("annex14_oes_"):
+            family_note = " Controls this Annex 14 obstacle evaluation surface only."
         elif key in MODERNISATION_CHANGE_CONTOUR_KEYS:
             family = "OFS" if key == "modernisation_ofs_change" else "OES"
             family_note = f" Controls signed height-change isolines for the {family} comparison output."
@@ -911,9 +955,7 @@ class OutputOptionsMixin:
         intermediate_spinboxes = getattr(self, "_contour_interval_spinboxes", {})
         for key in CONTOUR_INTERVAL_KEYS:
             key_defaults = CONTOUR_INTERVAL_KEY_DEFAULTS.get(key, {})
-            source_key = key
-            if key in COMPARISON_SURFACE_CONTOUR_KEYS and key not in contour_options:
-                source_key = key.removeprefix("comparison_")
+            source_key = self._contour_interval_source_key(contour_options, key)
             primary_value = self._coerce_contour_interval_value(
                 contour_options,
                 source_key,
@@ -939,6 +981,29 @@ class OutputOptionsMixin:
         )
         if hasattr(self, "toolButtonContourOverrides"):
             self.toolButtonContourOverrides.setChecked(has_surface_overrides)
+
+    @staticmethod
+    def _contour_interval_source_key(contour_options, key: str) -> str:
+        """Return the saved key to use, including legacy Annex family fallbacks."""
+        if key in contour_options:
+            return key
+        comparison = key.startswith("comparison_")
+        base_key = key.removeprefix("comparison_")
+        candidates = []
+        if base_key.startswith("annex14_oes_"):
+            candidates.append("comparison_annex14_oes" if comparison else "annex14_oes")
+            if comparison:
+                candidates.append("annex14_oes")
+        elif base_key.startswith("annex14_ofs_"):
+            candidates.append("comparison_annex14_ofs" if comparison else "annex14_ofs")
+            if comparison:
+                candidates.append("annex14_ofs")
+        elif comparison and key in COMPARISON_SURFACE_CONTOUR_KEYS:
+            candidates.append(base_key)
+        return next(
+            (candidate for candidate in candidates if candidate in contour_options),
+            key,
+        )
 
     def _coerce_contour_interval_value(
         self,
