@@ -21,6 +21,10 @@ MOS139 contour controls mirror the generated layer groups: Obstacle Free Zone
 (Inner Approach, Inner Transitional, Balked Landing), Primary Surfaces
 (Approach, Take-off Climb, Transitional), and Secondary (Conical). Controlling
 envelope contours continue to inherit their source-surface intervals.
+In the generated layer tree, Obstacle Free Zone is a first-order child of
+**04 Obstacle Limitation Surfaces**, alongside Primary, Secondary, and
+Controlling Surfaces. Its layers are grouped by runway end before the individual
+surface and contour layers.
 
 The comparison engine solves both selected envelopes and calculates:
 

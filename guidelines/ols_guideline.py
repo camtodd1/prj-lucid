@@ -3034,6 +3034,14 @@ class OlsGuidelineMixin:
         runway_group = self._ols_child_group(parent_group, f"RWY {end_desig}")
         return self._ols_child_group(runway_group, surface_group_name)
 
+    def _ols_runway_group(
+        self,
+        parent_group: QgsLayerTreeGroup,
+        end_desig: str,
+    ) -> QgsLayerTreeGroup:
+        """Return the runway branch used by first-order OLS surface groups."""
+        return self._ols_child_group(parent_group, f"RWY {end_desig}")
+
     def _ols_feature_end_designator(self, feature: QgsFeature) -> str:
         try:
             idx = feature.fields().indexFromName("end_desig")
@@ -4713,6 +4721,7 @@ class OlsGuidelineMixin:
         # --- Layer Creation ---
         had_ofz_inner_trans_features = bool(ofz_inner_trans_features)
         safe_runway_name = runway_name.replace("/", "_")
+        ofz_parent_group = ofz_group if ofz_group is not None else layer_group
 
         for config in runway_end_configurations:
             current_desig = config["current_desig"]
@@ -4789,7 +4798,9 @@ class OlsGuidelineMixin:
                     overall_success = True
 
             if end_inner_trans_features:
-                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
+                ofz_direction_group = self._ols_runway_group(
+                    ofz_parent_group, current_desig
+                )
                 fields = self._get_ols_fields("InnerTransitional")
                 if self._create_and_add_layer(
                     "Polygon",
@@ -4803,7 +4814,9 @@ class OlsGuidelineMixin:
                     overall_success = True
 
             if end_inner_trans_contours:
-                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
+                ofz_direction_group = self._ols_runway_group(
+                    ofz_parent_group, current_desig
+                )
                 if self._create_and_add_layer(
                     "LineString",
                     f"OLS_InnerTransitional_Contours_{safe_runway_name}_{safe_end_desig}",
@@ -4816,7 +4829,9 @@ class OlsGuidelineMixin:
                     overall_success = True
 
             if end_inner_approach_features:
-                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
+                ofz_direction_group = self._ols_runway_group(
+                    ofz_parent_group, current_desig
+                )
                 fields = self._get_ols_fields("InnerApproach")
                 if self._create_and_add_layer(
                     "Polygon",
@@ -4830,7 +4845,9 @@ class OlsGuidelineMixin:
                     overall_success = True
 
             if end_inner_approach_contours:
-                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
+                ofz_direction_group = self._ols_runway_group(
+                    ofz_parent_group, current_desig
+                )
                 if self._create_and_add_layer(
                     "LineString",
                     f"OLS_InnerApproach_Contours_{safe_runway_name}_{safe_end_desig}",
@@ -4843,7 +4860,9 @@ class OlsGuidelineMixin:
                     overall_success = True
 
             if end_bls_features:
-                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
+                ofz_direction_group = self._ols_runway_group(
+                    ofz_parent_group, current_desig
+                )
                 fields = self._get_ols_fields("BaulkedLanding")
                 bls_layer = self._create_and_add_layer(
                     "Polygon",
@@ -4864,7 +4883,9 @@ class OlsGuidelineMixin:
                     )
 
             if end_bls_contours:
-                ofz_direction_group = self._ols_runway_surface_group(layer_group, current_desig, "Obstacle Free Zone")
+                ofz_direction_group = self._ols_runway_group(
+                    ofz_parent_group, current_desig
+                )
                 if self._create_and_add_layer(
                     "LineString",
                     f"OLS_BaulkedLanding_Contours_{safe_runway_name}_{safe_end_desig}",

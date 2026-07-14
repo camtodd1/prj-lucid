@@ -851,7 +851,7 @@ class SafeguardingBuilder(
 
             airport_wide_ols_group = None
             runway_ols_group = None
-            ofz_group = None
+            ofz_group = output_groups.get("obstacle_free_zone")
             if guideline_groups.get("F") is not None:
                 runway_ols_group = guideline_groups["F"]
                 airport_wide_ols_group = output_groups.get("airport_wide_ols")
@@ -1653,6 +1653,9 @@ class SafeguardingBuilder(
                 groups["ols_surfaces"] = self._ensure_layer_group(protected_airspace_group, "OFS")
                 groups["airport_wide_ols"] = self._ensure_layer_group(protected_airspace_group, "OES")
             else:
+                groups["obstacle_free_zone"] = self._ensure_layer_group(
+                    protected_airspace_group, output_structure.OBSTACLE_FREE_ZONE
+                )
                 groups["ols_surfaces"] = self._ensure_layer_group(
                     protected_airspace_group, output_structure.PRIMARY_SURFACES
                 )
@@ -1688,6 +1691,10 @@ class SafeguardingBuilder(
                     groups["future_annex14_ofs"] = groups["comparison_ols_surfaces"]
                     groups["future_annex14_oes"] = groups["comparison_airport_wide_ols"]
                 else:
+                    groups["comparison_obstacle_free_zone"] = self._ensure_layer_group(
+                        comparison_surface_group,
+                        output_structure.OBSTACLE_FREE_ZONE,
+                    )
                     groups["comparison_ols_surfaces"] = self._ensure_layer_group(
                         comparison_surface_group,
                         output_structure.PRIMARY_SURFACES,
@@ -1766,6 +1773,7 @@ class SafeguardingBuilder(
         )
         comparison_primary_group = output_groups.get("comparison_ols_surfaces")
         comparison_secondary_group = output_groups.get("comparison_airport_wide_ols")
+        comparison_ofz_group = output_groups.get("comparison_obstacle_free_zone")
         comparison_controlling_group = output_groups.get("comparison_controlling_surfaces")
         if comparison_primary_group is None or comparison_secondary_group is None:
             self._log_warning("[skip] OLS ruleset comparison: comparison output groups are unavailable.")
@@ -1804,7 +1812,7 @@ class SafeguardingBuilder(
                     created = self.process_runway_ols_surfaces(
                         runway_data,
                         comparison_primary_group,
-                        None,
+                        comparison_ofz_group,
                     )
                 geometry_created = created or geometry_created
 
@@ -2060,10 +2068,15 @@ class SafeguardingBuilder(
         protection_group = self._ensure_layer_group(main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION)
         protected_airspace_group = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
         if self._is_future_annex14_protected_airspace():
+            obstacle_free_zone_group = None
             primary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OFS")
             secondary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OES")
             controlling_surfaces_group = protected_airspace_group
         else:
+            obstacle_free_zone_group = self._ensure_layer_group(
+                protected_airspace_group,
+                output_structure.OBSTACLE_FREE_ZONE,
+            )
             primary_surfaces_group = (
                 self._ensure_layer_group(protected_airspace_group, output_structure.PRIMARY_SURFACES)
                 if protected_airspace_group is not None
@@ -2085,6 +2098,10 @@ class SafeguardingBuilder(
             or infrastructure_group is None
             or protection_group is None
             or protected_airspace_group is None
+            or (
+                not self._is_future_annex14_protected_airspace()
+                and obstacle_free_zone_group is None
+            )
             or primary_surfaces_group is None
             or secondary_surfaces_group is None
             or controlling_surfaces_group is None
@@ -2175,14 +2192,19 @@ class SafeguardingBuilder(
         legacy_ols_names = [output_structure.OLS_SURFACES, "Annex 14 Future OLS Standard"]
         legacy_primary_names = [
             self.get_active_framework().guideline_f_subgroup_names()["runway"],
-            self.get_active_framework().guideline_f_subgroup_names()["ofz"],
             "Future Annex 14 OLS Surfaces",
+        ]
+        legacy_ofz_names = [
+            self.get_active_framework().guideline_f_subgroup_names()["ofz"],
         ]
         airport_wide_legacy_name = self.get_active_framework().guideline_f_subgroup_names()["airport_wide"]
         for legacy_name, destination in [
             (airport_wide_legacy_name, secondary_surfaces_group),
             *((name, primary_surfaces_group) for name in legacy_primary_names),
+            *((name, obstacle_free_zone_group) for name in legacy_ofz_names),
         ]:
+            if destination is None:
+                continue
             legacy_group = self._find_direct_child_group(main_group, self.tr(legacy_name))
             if legacy_group is not None:
                 for child in list(legacy_group.children()):
@@ -2207,6 +2229,15 @@ class SafeguardingBuilder(
                         self._move_layer_tree_node(child, primary_surfaces_group)
                     if not primary_group.children():
                         legacy_group.removeChildNode(primary_group)
+            for ofz_name in legacy_ofz_names:
+                ofz_legacy_group = self._find_direct_child_group(
+                    legacy_group, self.tr(ofz_name)
+                )
+                if ofz_legacy_group is not None and obstacle_free_zone_group is not None:
+                    for child in list(ofz_legacy_group.children()):
+                        self._move_layer_tree_node(child, obstacle_free_zone_group)
+                    if not ofz_legacy_group.children():
+                        legacy_group.removeChildNode(ofz_legacy_group)
             for child in list(legacy_group.children()):
                 self._move_layer_tree_node(child, primary_surfaces_group)
             if not legacy_group.children():
@@ -2223,6 +2254,7 @@ class SafeguardingBuilder(
         self._repair_guideline_f_layer_tree(
             primary_surfaces_group,
             secondary_surfaces_group,
+            obstacle_free_zone_group,
             extra_source_groups=[main_group],
         )
         self._repair_debug_development_layer_tree(main_group, debug_group)
@@ -2262,6 +2294,7 @@ class SafeguardingBuilder(
         self,
         primary_surfaces_group: QgsLayerTreeGroup,
         secondary_surfaces_group: QgsLayerTreeGroup,
+        obstacle_free_zone_group: Optional[QgsLayerTreeGroup] = None,
         extra_source_groups: Optional[List[QgsLayerTreeGroup]] = None,
     ) -> None:
         """Move direct OLS layers into the reviewed primary/secondary folders."""
@@ -2304,6 +2337,14 @@ class SafeguardingBuilder(
                     "OLS Baulked Landing",
                 ]
             ):
+                if obstacle_free_zone_group is not None:
+                    runway_match = re.search(r"\bRWY\s+(\S+)$", layer_name)
+                    if runway_match:
+                        return self._ensure_layer_group(
+                            obstacle_free_zone_group,
+                            f"RWY {runway_match.group(1)}",
+                        )
+                    return obstacle_free_zone_group
                 return primary_surfaces_group
             if style_key in airport_wide_style_keys or any(
                 label in layer_name
@@ -2325,7 +2366,26 @@ class SafeguardingBuilder(
                 return primary_surfaces_group
             return None
 
+        if obstacle_free_zone_group is not None:
+            for runway_group in list(primary_surfaces_group.children()):
+                if not isinstance(runway_group, QgsLayerTreeGroup):
+                    continue
+                nested_ofz = self._find_direct_child_group(
+                    runway_group, self.tr(output_structure.OBSTACLE_FREE_ZONE)
+                )
+                if nested_ofz is None:
+                    continue
+                destination_runway = self._ensure_layer_group(
+                    obstacle_free_zone_group, runway_group.name()
+                )
+                for child in list(nested_ofz.children()):
+                    self._move_layer_tree_node(child, destination_runway)
+                if not nested_ofz.children():
+                    runway_group.removeChildNode(nested_ofz)
+
         source_groups = [primary_surfaces_group, secondary_surfaces_group]
+        if obstacle_free_zone_group is not None:
+            source_groups.append(obstacle_free_zone_group)
         source_groups.extend(group for group in (extra_source_groups or []) if group is not None)
         for group in source_groups:
             for child in list(group.children()):
@@ -2582,6 +2642,8 @@ class SafeguardingBuilder(
             return "no protected airspace layers generated; check runway, approach, and RED inputs"
         if group_name == self.tr(output_structure.PRIMARY_SURFACES):
             return "no OLS layers generated; check runway, approach, and RED inputs"
+        if group_name == self.tr(output_structure.OBSTACLE_FREE_ZONE):
+            return "no OFZ layers generated; check precision approach and inner-surface prerequisites"
         if group_name == self.tr(output_structure.DEBUG_DEVELOPMENT):
             return "no debug or development layers generated; enable debug outputs or controlling OLS"
         framework_reason = self.get_active_framework().empty_group_reason(group_name)
@@ -2786,6 +2848,10 @@ class SafeguardingBuilder(
         safeguarding_group_name = framework.safeguarding_group_name()
         guideline_groups = framework.guideline_group_definitions(include_cns=True)
         primary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.PRIMARY_SURFACES]
+        obstacle_free_zone_path = [
+            output_structure.PROTECTED_AIRSPACE,
+            output_structure.OBSTACLE_FREE_ZONE,
+        ]
         secondary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.SECONDARY_SURFACES]
         controlling_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_SURFACES]
 
@@ -2889,10 +2955,10 @@ class SafeguardingBuilder(
             ),
             self._format_checklist_item(
                 main_group,
-                output_structure.SECONDARY_SURFACES,
-                secondary_surfaces_path,
-                missing_reason=no_runway_reason or red_missing_reason,
-                failed_reason="airport-wide OLS failed; check RED, runway strip dimensions, ARP, and preceding warnings",
+                output_structure.OBSTACLE_FREE_ZONE,
+                obstacle_free_zone_path,
+                missing_reason=no_runway_reason,
+                failed_reason="OFZ generation failed; check precision approach and inner-surface prerequisites",
             ),
             self._format_checklist_item(
                 main_group,
@@ -2900,6 +2966,13 @@ class SafeguardingBuilder(
                 primary_surfaces_path,
                 missing_reason=no_runway_reason,
                 failed_reason="runway OLS generation failed; check runway type, elevations, clearway, OFZ prerequisites, and preceding warnings",
+            ),
+            self._format_checklist_item(
+                main_group,
+                output_structure.SECONDARY_SURFACES,
+                secondary_surfaces_path,
+                missing_reason=no_runway_reason or red_missing_reason,
+                failed_reason="airport-wide OLS failed; check RED, runway strip dimensions, ARP, and preceding warnings",
             ),
             self._format_checklist_item(
                 main_group,
@@ -2951,6 +3024,7 @@ class SafeguardingBuilder(
             "Runway protection areas": output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
             "Specialised runway safeguarding": output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
             output_structure.SECONDARY_SURFACES: output_structure.PROTECTED_AIRSPACE,
+            output_structure.OBSTACLE_FREE_ZONE: output_structure.PROTECTED_AIRSPACE,
             output_structure.PRIMARY_SURFACES: output_structure.PROTECTED_AIRSPACE,
             output_structure.CONTROLLING_SURFACES: output_structure.PROTECTED_AIRSPACE,
             guideline_groups["B"]: safeguarding_section,
