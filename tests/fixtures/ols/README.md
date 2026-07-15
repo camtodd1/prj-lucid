@@ -15,11 +15,17 @@ modernisation comparison workflow under QGIS 4.
   runways with precision OFZ, displaced thresholds, clearways and stopways.
 - `annex14_current_intersecting_reverse.json`: the same current Annex 14/MOS139
   comparison with the pair order reversed.
+- `file_output_logging.json`: a manifest-defined case based on the CAP168 short
+  runway input. The runner substitutes a temporary GeoPackage directory and
+  verifies generated-layer/file parity, concise log volume, and the absence of
+  per-layer file-success debug messages.
 
 The files are normalized copies of the test inputs supplied for regression use.
 They use memory output and enable controlling OLS generation. Run them explicitly
 with `tests/run_ols_workflow_regression.py`; they are intentionally excluded from
 normal unit-test discovery because a full run is computationally expensive.
+When more than one fixture is selected, the runner isolates each fixture in a
+new QGIS process and combines the child reports into one matrix report.
 
 The runner treats spatial indexes and other future optimizations only as filters.
 Exact geometry containment, elevation evaluation, tie-breaking, common-domain

@@ -1,5 +1,8 @@
 # TODO
 
+Last reviewed: 2026-07-15. Completed items are retained as implementation
+history; unchecked items are the remaining work.
+
 ## Aircraft Characteristics Registry
 
 - [ ] Integrate an aircraft characteristics registry for design-aircraft nomination.
@@ -23,22 +26,27 @@
 
 ## UK CAA CAP 168 Ruleset
 
-- [ ] Continue CAP 168 source-loading beyond the initial physical-data tranche.
+- [ ] Complete the remaining CAP 168 non-OLS scope and release governance.
 
   Notes:
   - Registered ruleset id is `uk_caa_cap168_edition_13`.
-  - Initial tranches cover reference code, runway minimum width, runway strips, runway markings, runway lighting, declared distances, clearway, stopway, parallel runway separation, and taxiway separation tables.
-  - Remaining source tranche: RESA. CAP 168 Chapter 4 OLS parameters are
-    source-loaded in `rulesets/cap168/ols_surfaces.py` and traced in
-    `rulesets/cap168/source_matrix.md`. OLS is selectable as a partial profile;
-    production promotion remains gated on generated-geometry, topology,
-    performance and independent review.
-  - The ruleset-owned constructor now honours lowest-threshold IHS elevation,
+  - Reference code, runway width/strip, markings, lighting, declared distances,
+    clearway, stopway, parallel-runway separation, and taxiway-separation
+    tranches are source-loaded.
+  - CAP 168 Chapter 4 OLS is production-supported and selectable, including its
+    controlling lower envelope and nominated offset/curved tracks. Promotion
+    evidence is recorded in `rulesets/cap168/release_evidence_2026-07-14.md`.
+  - Remaining source tranche: RESA. Pavement and shoulder capabilities also
+    remain partial and must not be implied by the OLS promotion.
+  - The ruleset-owned constructor honours lowest-threshold IHS elevation,
     short-runway circle/racetrack selection, subsidiary-runway joins, actual-
     runway-length OHS applicability, declared-distance TOCS/BLS rules, and
     nominated offset or curved tracks for the approach and take-off climb
-    corridors. Track-following approach-adjacent transitional construction
-    remains a production-promotion tranche.
+    corridors. Track-following approach-adjacent transitional construction is a
+    documented exclusion for future extension, not a blocker to the promoted
+    scope.
+  - A secondary independent source review remains recommended release
+    governance even though project-owner promotion was approved on 14 July 2026.
   - Confirmed source corrections are encoded as `6 m` -> `60 m`, `360 m` ->
     `3600 m`, and the paragraph 4.50 NI Code 2 short-runway IHS radius
     `250 m` -> `2500 m` (user confirmation, 13 July 2026).
@@ -58,6 +66,43 @@
   Notes:
   - Top-level Guideline H groups are treated as expected empty placeholders.
   - `README.md` documents Guideline H as placeholder-only.
+
+## Operational Logging And File Output
+
+- [x] Reform the operational logging schema and volume.
+
+  Completed:
+  - Added stable run events for start, phases, skips, material outputs,
+    warnings/errors, cancellation, failure, and successful completion.
+  - Corrected QGIS severity classification and removed duplicate user
+    notifications from message-log events.
+  - Routed production logging through the central adapter and moved detailed
+    implementation diagnostics behind `SAFEGUARDING_BUILDER_DIAGNOSTICS=1`.
+  - Removed import-time, dialog-lifecycle, temporary debug, raw attribute,
+    per-layer file-success, and expanded final-checklist noise.
+  - Added contract tests for rendering, aggregation, severities, volume,
+    diagnostics separation, and prevention of direct QGIS logger bypasses.
+
+- [x] Add workflow-matrix and file-output logging regression coverage.
+
+  Completed:
+  - All 13 QGIS workflow cases pass in isolated processes with 21–36 normal
+    operational events and zero QGIS log warnings.
+  - The dedicated GeoPackage case uses a temporary directory, checks 48 loaded
+    layers against 48 files, and rejects reintroduced per-layer debug chatter.
+  - Multi-fixture runner invocations now isolate cases automatically and merge
+    their child reports, avoiding native QGIS state accumulation.
+
+- [ ] Resolve the GeoPackage Polygon/MultiPolygon declaration mismatch for
+      pre-threshold area markings.
+
+  Notes:
+  - The dedicated file-output fixture exports successfully, but GDAL reports a
+    `MULTIPOLYGON` feature being inserted into a `POLYGON`-declared
+    pre-threshold markings layer.
+  - Promote or normalise the declared writer geometry type without changing
+    the accepted feature geometry, then make the file-output regression reject
+    this GDAL conformance warning.
 
 ## Declared Distances And Stopways
 
@@ -141,8 +186,8 @@
   - See `docs/controlling_ols_global_cell_solver_plan.md`.
   - The global solver is active, with the pairwise subtract solver retained as
     a fallback when global linework cannot produce a usable partition.
-  - QGIS 4 end-to-end fixtures cover YBBN single, YSSY intersecting, YSWS
-    parallel, and a three-runway YSSY stress configuration.
+  - The QGIS 4 workflow matrix covers 13 MOS139, CAP168, current Annex 14,
+    future Annex comparison, curved, stress, and file-output configurations.
   - The regression runner compares candidate/controlling coverage, region and
     class overlap, common-domain coverage, validity, IDs, and performance stages.
   - YMEN remains a useful additional targeted case for historical same-surface
@@ -160,7 +205,8 @@
     with final common-domain residual repair and stable comparison IDs.
   - Signed contours retain parent IDs; affine contours are exact and curved
     contours use the existing clipped triangulated approximation.
-  - The 2026-07-11 suite passed 110 unit tests and all four end-to-end fixtures.
+  - The 2026-07-15 suite passed 147 unit tests and all 13 isolated end-to-end
+    fixtures under the routine geometry and logging gates.
 
 - [x] Complete the first OLS performance hardening pass.
 
@@ -258,10 +304,10 @@
 - [ ] Complete the Controlling OLS production-readiness workstream.
 
   Objective:
-  - Promote each ruleset's controlling-envelope capability from `partial` to
-    `supported` only after its topology, source-validation, performance, and
-    release gates below pass. Promotion is per ruleset; MOS139 readiness does
-    not automatically promote the modernised Annex 14 OFS/OES model.
+  - Apply topology, source-validation, performance, and release gates per
+    ruleset. MOS139, CAP 168, and current Annex 14 have separate supported
+    scopes and locks; modernised Annex 14 and EASA remain partial until their
+    own gates pass.
 
   Accepted contour dispositions:
   - [x] Contour clipping is resolved. Published controlling contours are
@@ -287,16 +333,19 @@
   - [x] Document the MOS139 conical equality residual, 0.001 m² cell-retention
         threshold, and bounded chord-disagreement rule. Annex-specific tolerance
         rationalisation remains part of its separate production workstream.
-  - [ ] Preserve explicit OFS/OES and Inner Approach/Approach tie priorities and
+  - [x] Preserve explicit OFS/OES and Inner Approach/Approach tie priorities and
         define a deterministic fallback for otherwise equivalent candidates.
+        The final fallback is stable `surface_id` ordering.
 
   Comparison-constructor hardening:
   - [ ] Keep lower-region comparison constructors domain-limited so
         `_clip_lower_region_to_overlap(...)` remains a safety check.
   - [ ] Reduce unresolved axis/conical and curved-surface comparisons to cases
         that are explicitly identified, logged, and covered by tests.
-  - [ ] Retain tests distinguishing unresolved `None` from a resolved empty
-        `QgsGeometry()` result.
+  - [ ] Add a focused regression distinguishing unresolved `None` from a
+        resolved empty `QgsGeometry()` result. The workflow gate already rejects
+        unresolved comparisons, but this return-value contract is not directly
+        named by a current unit test.
   - [ ] Prove gain, loss, no-change, transition, and baseline-only outputs are
         valid, mutually exclusive, and complete over their declared domains.
 
@@ -337,8 +386,9 @@
     not yet marked complete.
 
   Performance and determinism:
-  - [ ] Turn the four committed QGIS 4 fixtures into release-oriented timing
-        thresholds using three-run medians on the same environment.
+  - [ ] Turn the five saved performance fixtures into release-oriented timing
+        thresholds using three-run medians on the same environment, then extend
+        the determinism gate across the broader 13-case workflow matrix.
   - [ ] Use
         `tests/fixtures/ols/performance_baseline_qgis4_2026-07-11.json` as the
         initial checkpoint and investigate median regressions above 20 percent.
@@ -352,6 +402,9 @@
   Production promotion gate:
   - [ ] Run the complete unit, integration, source-backed fixture, memory-output,
         and file-output matrix on the supported QGIS release(s).
+        The routine 2026-07-15 QGIS 4.0.2 pass completed 147 discovered tests
+        and all 13 memory/file workflow cases; release evidence still requires
+        repeated runs with production gates and the review items below.
   - [ ] Require zero unexplained invalid geometries, coverage gaps, overlaps,
         unresolved comparisons, or repair fallbacks in the production fixture
         matrix.

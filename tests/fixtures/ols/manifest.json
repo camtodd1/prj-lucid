@@ -117,6 +117,20 @@
       "expected_comparison_families": ["OLS"],
       "mos139_lock_required": false,
       "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "file_output_logging.json",
+      "source_file": "cap168_short_single.json",
+      "description": "Dedicated concise-logging check for GeoPackage file output",
+      "icao_code": "YBSC",
+      "runway_count": 1,
+      "runway_configuration": "single",
+      "project_crs": "EPSG:28356",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "performance_baseline_required": false,
+      "maximum_region_overlap_m2": 0.2,
+      "file_output_logging": true
     }
   ],
   "accuracy_tolerances": {

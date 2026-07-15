@@ -22,4 +22,6 @@ tests/run_ols_workflow_regression.py --fixture ybbn_single.json
 
 Run the complete fixture matrix and production gates only for release evidence
 or when shared OLS geometry code changes. See `tests/fixtures/ols/README.md` for
-the QGIS environment and baseline commands.
+the QGIS environment and baseline commands. Multi-fixture runs automatically
+use a fresh QGIS process per fixture so native geometry and project state cannot
+accumulate across the matrix.
