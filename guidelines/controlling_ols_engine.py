@@ -40,10 +40,12 @@ CONTROLLING_REGION_DISSOLVE_RETRY_GRID_M = 2e-6
 CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2 = 0.01
 CONTROLLING_NUMERIC_COVERAGE_TOLERANCE_M2 = 0.02
 CONTROLLING_REGION_MIN_INTERIOR_RING_AREA_M2 = 0.01
+CONTROLLING_NUMERIC_SLIVER_MAX_EFFECTIVE_WIDTH_M = 0.05
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_CONTOUR_BOUNDARY_RECOVERY_MIN_LENGTH_M = 0.25
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
 CONTROLLING_GLOBAL_CELL_MIN_AREA_M2 = 1.0
+CONTROLLING_ANNEX14_CELL_MIN_AREA_M2 = 1e-3
 CONTROLLING_MOS139_CONICAL_CELL_MIN_AREA_M2 = 1e-3
 AXIS_CONICAL_EXACT_SOLVER_ENABLED = True
 AXIS_CONICAL_TRIANGULATION_FALLBACK_ENABLED = True
@@ -232,6 +234,117 @@ class PlanarControllingOlsEngine:
             "uk_caa_cap168_edition_13",
             "icao_annex14_vol1_current_ols",
         }
+
+    def _minimum_cell_area_m2(self) -> float:
+        """Retain sub-square-metre cells for curved and Annex 14 arrangements."""
+        if any(
+            str((candidate.metadata or {}).get("annex14_family") or "")
+            .strip()
+            .upper()
+            == "OES"
+            for candidate in self.candidates
+        ):
+            return CONTROLLING_ANNEX14_CELL_MIN_AREA_M2
+        if any(
+            candidate.model == "conical"
+            and not str((candidate.metadata or {}).get("annex14_family") or "").strip()
+            for candidate in self.candidates
+        ):
+            return CONTROLLING_MOS139_CONICAL_CELL_MIN_AREA_M2
+        return CONTROLLING_GLOBAL_CELL_MIN_AREA_M2
+
+    @staticmethod
+    def _is_numeric_sliver(geometry: Optional[QgsGeometry]) -> bool:
+        """Return whether a polygon is sub-resolution relative to its boundary length."""
+        if geometry is None or geometry.isNull() or geometry.isEmpty():
+            return False
+        area = geometry.area()
+        perimeter = geometry.length()
+        if area <= 0.0 or perimeter <= 0.0:
+            return False
+        return (
+            (2.0 * area) / perimeter
+            <= CONTROLLING_NUMERIC_SLIVER_MAX_EFFECTIVE_WIDTH_M
+        )
+
+    def _validated_numeric_sliver_controller(
+        self,
+        assigned_candidate: ControllingOlsCandidate,
+        geometry: Optional[QgsGeometry],
+    ) -> Optional[ControllingOlsCandidate]:
+        """Return the verified controller for a mislabelled near-tie sliver."""
+        if not self._is_numeric_sliver(geometry):
+            return None
+        if (
+            str((assigned_candidate.metadata or {}).get("annex14_family") or "")
+            .strip()
+            .upper()
+            != "OES"
+        ):
+            return None
+        try:
+            point = geometry.pointOnSurface().asPoint()
+            point_xy = QgsPointXY(point.x(), point.y())
+            result = self.controlling_candidate_at_xy(point_xy)
+        except Exception:
+            return None
+        if result is None or result[0].surface_id == assigned_candidate.surface_id:
+            return None
+        controller = result[0]
+
+        sample_points = [point_xy]
+        sample_points.extend(self._geometry_sample_points(geometry))
+        finite_differences = []
+        for sample in sample_points:
+            difference = self._candidate_difference(
+                assigned_candidate,
+                controller,
+                sample,
+            )
+            if difference is None or not math.isfinite(difference):
+                continue
+            finite_differences.append(abs(float(difference)))
+        if not finite_differences or max(finite_differences) > self.tie_tolerance_m:
+            return None
+
+        try:
+            controller_footprint = self._effective_footprint(controller)
+            covered = geometry.intersection(controller_footprint)
+            coverage_difference = geometry.difference(covered).area()
+        except Exception:
+            return None
+        tolerance = max(1e-6, geometry.area() * 1e-8)
+        return controller if coverage_difference <= tolerance else None
+
+    def _reassign_numeric_sliver_parts(
+        self,
+        parts: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
+        """Correct near-tie sliver labels before candidate geometries are merged."""
+        corrected = []
+        reassigned_count = 0
+        reassigned_area_m2 = 0.0
+        for candidate, geometry in parts:
+            controller = self._validated_numeric_sliver_controller(candidate, geometry)
+            if controller is not None:
+                candidate = controller
+                reassigned_count += 1
+                reassigned_area_m2 += geometry.area()
+            corrected.append((candidate, geometry))
+        if reassigned_count:
+            self._region_solve_stats["numeric_sliver_reassigned_part_count"] = (
+                self._region_solve_stats.get(
+                    "numeric_sliver_reassigned_part_count", 0.0
+                )
+                + float(reassigned_count)
+            )
+            self._region_solve_stats["numeric_sliver_reassigned_area_m2"] = (
+                self._region_solve_stats.get(
+                    "numeric_sliver_reassigned_area_m2", 0.0
+                )
+                + reassigned_area_m2
+            )
+        return corrected
 
     def solver_diagnostics(self) -> Dict[str, object]:
         """Return stable, structured diagnostics without exposing timing as correctness data."""
@@ -1659,15 +1772,7 @@ class PlanarControllingOlsEngine:
         assigned_count = 0
         unassigned_count = 0
         refined_count = 0
-        minimum_cell_area_m2 = (
-            CONTROLLING_MOS139_CONICAL_CELL_MIN_AREA_M2
-            if any(
-                candidate.model == "conical"
-                and not str((candidate.metadata or {}).get("annex14_family") or "").strip()
-                for candidate in self.candidates
-            )
-            else CONTROLLING_GLOBAL_CELL_MIN_AREA_M2
-        )
+        minimum_cell_area_m2 = self._minimum_cell_area_m2()
         for cell in self._polygon_parts(polygonized):
             if not self._has_polygon_area(cell, min_area=minimum_cell_area_m2):
                 continue
@@ -1715,6 +1820,7 @@ class PlanarControllingOlsEngine:
             return []
 
         cell_parts.extend(self._global_subdivision_completion_parts(cell_parts))
+        cell_parts = self._reassign_numeric_sliver_parts(cell_parts)
         self._region_solve_stats["global_pre_merge_union_area_m2"] = self._geometry_union_area(
             geometry for _candidate, geometry in cell_parts
         )
@@ -2206,7 +2312,7 @@ class PlanarControllingOlsEngine:
                         break
             for region_part in self._polygon_parts(candidate_region):
                 for clean_part in self._clean_region_polygon_parts(region_part, candidate):
-                    if clean_part.area() > 1.0:
+                    if clean_part.area() > self._minimum_cell_area_m2():
                         refined_parts.append((candidate, clean_part))
         return refined_parts
 
@@ -2807,8 +2913,9 @@ class PlanarControllingOlsEngine:
         except Exception:
             return
 
+        minimum_cell_area_m2 = self._minimum_cell_area_m2()
         for gap_part in self._polygon_parts(gaps):
-            if gap_part.area() <= 1.0:
+            if gap_part.area() <= minimum_cell_area_m2:
                 continue
             repaired_parts = self._gap_lower_envelope_parts(gap_part)
             if not repaired_parts:
@@ -2881,7 +2988,7 @@ class PlanarControllingOlsEngine:
                         region_part, candidate
                     )
                 for output_part in output_parts:
-                    if output_part.area() > 1.0:
+                    if output_part.area() > self._minimum_cell_area_m2():
                         repaired_parts.append((candidate, output_part))
         return repaired_parts
 
@@ -7110,7 +7217,8 @@ class ControllingOlsEngineMixin:
         for feature in features:
             source_id = str(feature.attribute("surface_id") or "").split("|", 1)[0]
             candidate = candidates_by_id.get(source_id)
-            features_by_key[self._controlling_candidate_dissolve_key(candidate, feature)] = feature
+            key = self._controlling_candidate_dissolve_key(candidate, feature)
+            features_by_key[key] = feature
 
         coverage_parts = []
         for candidate in engine.candidates:
@@ -7161,11 +7269,73 @@ class ControllingOlsEngineMixin:
                 target = features_by_key.get(key)
                 if target is None or not engine._has_polygon_area(repair):
                     continue
+                verified_controller = engine._validated_numeric_sliver_controller(
+                    candidate,
+                    repair,
+                )
+                if verified_controller is not None:
+                    verified_key = self._controlling_candidate_dissolve_key(
+                        verified_controller
+                    )
+                    verified_target = features_by_key.get(verified_key)
+                    if verified_target is not None:
+                        target = verified_target
+                        candidate = verified_controller
+                        engine._region_solve_stats[
+                            "repair_sliver_reassigned_part_count"
+                        ] = (
+                            engine._region_solve_stats.get(
+                                "repair_sliver_reassigned_part_count", 0.0
+                            )
+                            + 1.0
+                        )
+                        engine._region_solve_stats[
+                            "repair_sliver_reassigned_area_m2"
+                        ] = (
+                            engine._region_solve_stats.get(
+                                "repair_sliver_reassigned_area_m2", 0.0
+                            )
+                            + repair.area()
+                        )
+                target_geometry = target.geometry()
                 try:
-                    combined = QgsGeometry.unaryUnion([target.geometry(), repair])
+                    repair = repair.difference(target_geometry)
+                except Exception:
+                    pass
+                if not engine._has_polygon_area(repair, min_area=1e-3):
+                    continue
+                try:
+                    combined = QgsGeometry.unaryUnion([target_geometry, repair])
                 except Exception:
                     combined = None
                 if combined is None or combined.isNull() or combined.isEmpty():
+                    continue
+                if (
+                    repair.area() <= CONTROLLING_NUMERIC_COVERAGE_TOLERANCE_M2
+                    and engine._is_numeric_sliver(repair)
+                    and (
+                        engine._polygon_part_count(combined)
+                        > engine._polygon_part_count(target_geometry)
+                        or combined.length() - target_geometry.length()
+                        > (2.0 * CONTROLLING_NUMERIC_SLIVER_MAX_EFFECTIVE_WIDTH_M)
+                    )
+                ):
+                    engine._region_solve_stats[
+                        "repair_sliver_suppressed_part_count"
+                    ] = (
+                        engine._region_solve_stats.get(
+                            "repair_sliver_suppressed_part_count", 0.0
+                        )
+                        + 1.0
+                    )
+                    engine._region_solve_stats[
+                        "repair_sliver_suppressed_area_m2"
+                    ] = (
+                        engine._region_solve_stats.get(
+                            "repair_sliver_suppressed_area_m2", 0.0
+                        )
+                        + repair.area()
+                    )
                     continue
                 try:
                     if not combined.isGeosValid() or combined.validateGeometry():

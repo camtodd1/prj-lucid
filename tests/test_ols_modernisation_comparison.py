@@ -2,8 +2,11 @@ import math
 import unittest
 from unittest.mock import patch
 
+from qgis.PyQt.QtCore import QVariant
 from qgis.core import (
     QgsFeature,
+    QgsField,
+    QgsFields,
     QgsGeometry,
     QgsLayerTreeGroup,
     QgsPointXY,
@@ -383,6 +386,181 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                         min(1.0, ((first_dx * second_dx) + (first_dy * second_dy)) / denominator),
                     )
                     self.assertLess(math.degrees(math.acos(cosine)), 150.0)
+
+    def test_numeric_sliver_is_reclassified_to_verified_near_tie_controller(self):
+        needle = QgsGeometry.fromRect(QgsRectangle(40.0, 49.99, 95.0, 50.01))
+        assigned = ControllingOlsCandidate(
+            "assigned",
+            "Assigned Surface",
+            needle,
+            constant_elevation_evaluator(100.005),
+            "plane",
+            {
+                "plane_a": 0.0,
+                "plane_b": 0.0,
+                "plane_c": 100.005,
+                "annex14_family": "OES",
+            },
+        )
+        controller = ControllingOlsCandidate(
+            "controller",
+            "Controller Surface",
+            needle,
+            constant_elevation_evaluator(100.0),
+            "plane",
+            {
+                "plane_a": 0.0,
+                "plane_b": 0.0,
+                "plane_c": 100.0,
+                "annex14_family": "OES",
+            },
+        )
+        engine = PlanarControllingOlsEngine([assigned, controller])
+
+        corrected = engine._reassign_numeric_sliver_parts([(assigned, needle)])
+
+        self.assertEqual(corrected[0][0].surface_id, "controller")
+        self.assertTrue(corrected[0][1].equals(needle))
+        self.assertEqual(
+            engine._region_solve_stats["numeric_sliver_reassigned_part_count"],
+            1.0,
+        )
+        self.assertAlmostEqual(
+            engine._region_solve_stats["numeric_sliver_reassigned_area_m2"],
+            needle.area(),
+            places=6,
+        )
+
+    def test_final_partition_preserves_an_existing_solved_narrow_region(self):
+        fields = QgsFields(
+            [
+                QgsField("region_id", QVariant.Int),
+                QgsField("surface_id", QVariant.String),
+                QgsField("surface", QVariant.String),
+                QgsField("elev_min", QVariant.Double),
+                QgsField("elev_max", QVariant.Double),
+            ]
+        )
+        main = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 40.0, 100.0))
+        needle = QgsGeometry.fromRect(QgsRectangle(40.0, 49.99, 95.0, 50.01))
+        solved = QgsGeometry.unaryUnion([main, needle])
+        candidate = ControllingOlsCandidate(
+            "solved",
+            "Solved Surface",
+            solved,
+            constant_elevation_evaluator(90.0),
+            "plane",
+            {
+                "plane_a": 0.0,
+                "plane_b": 0.0,
+                "plane_c": 90.0,
+                "annex14_family": "OES",
+            },
+        )
+        competitor = ControllingOlsCandidate(
+            "competitor",
+            "Competitor Surface",
+            needle,
+            constant_elevation_evaluator(100.0),
+            "plane",
+            {
+                "plane_a": 0.0,
+                "plane_b": 0.0,
+                "plane_c": 100.0,
+                "annex14_family": "OES",
+            },
+        )
+        engine = PlanarControllingOlsEngine([candidate, competitor])
+        item = QgsFeature(fields)
+        item.setAttributes(
+            [1, candidate.surface_id, candidate.surface_type, 90.0, 90.0]
+        )
+        item.setGeometry(solved)
+
+        corrected = engine._reassign_numeric_sliver_parts([(candidate, needle)])
+
+        repaired = _ControllingLayerCapture()._repair_final_controlling_partition(
+            [item], engine
+        )
+
+        self.assertEqual(corrected[0][0].surface_id, "solved")
+        self.assertEqual(len(repaired), 1)
+        self.assertAlmostEqual(repaired[0].geometry().area(), solved.area(), places=6)
+        self.assertNotIn("repair_sliver_reassigned_part_count", engine._region_solve_stats)
+
+    def test_final_partition_suppresses_numeric_line_spike(self):
+        fields = QgsFields(
+            [
+                QgsField("region_id", QVariant.Int),
+                QgsField("surface_id", QVariant.String),
+                QgsField("surface", QVariant.String),
+            ]
+        )
+        base = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 40.0, 100.0))
+        spike = QgsGeometry.fromRect(QgsRectangle(40.0, 49.995, 41.0, 50.005))
+        coverage = QgsGeometry.unaryUnion([base, spike])
+        candidate = ControllingOlsCandidate(
+            "surface",
+            "Surface",
+            coverage,
+            constant_elevation_evaluator(90.0),
+            "plane",
+            {"plane_a": 0.0, "plane_b": 0.0, "plane_c": 90.0},
+        )
+        engine = PlanarControllingOlsEngine([candidate])
+        item = QgsFeature(fields)
+        item.setAttributes([1, candidate.surface_id, candidate.surface_type])
+        item.setGeometry(base)
+
+        repaired = _ControllingLayerCapture()._repair_final_controlling_partition(
+            [item], engine
+        )
+
+        self.assertEqual(len(repaired), 1)
+        self.assertAlmostEqual(repaired[0].geometry().area(), base.area(), places=6)
+        self.assertEqual(
+            engine._region_solve_stats["repair_sliver_suppressed_part_count"],
+            1.0,
+        )
+
+    def test_final_partition_retains_numeric_gap_closure(self):
+        fields = QgsFields(
+            [
+                QgsField("region_id", QVariant.Int),
+                QgsField("surface_id", QVariant.String),
+                QgsField("surface", QVariant.String),
+                QgsField("elev_min", QVariant.Double),
+                QgsField("elev_max", QVariant.Double),
+            ]
+        )
+        coverage = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        notch = QgsGeometry.fromRect(QgsRectangle(40.0, 99.99, 41.0, 100.0))
+        solved = coverage.difference(notch)
+        candidate = ControllingOlsCandidate(
+            "surface",
+            "Surface",
+            coverage,
+            constant_elevation_evaluator(90.0),
+            "plane",
+            {"plane_a": 0.0, "plane_b": 0.0, "plane_c": 90.0},
+        )
+        engine = PlanarControllingOlsEngine([candidate])
+        item = QgsFeature(fields)
+        item.setAttributes(
+            [1, candidate.surface_id, candidate.surface_type, 90.0, 90.0]
+        )
+        item.setGeometry(solved)
+
+        repaired = _ControllingLayerCapture()._repair_final_controlling_partition(
+            [item], engine
+        )
+
+        self.assertEqual(len(repaired), 1)
+        self.assertAlmostEqual(repaired[0].geometry().area(), coverage.area(), places=6)
+        self.assertNotIn(
+            "repair_sliver_suppressed_part_count",
+            engine._region_solve_stats,
+        )
 
     def test_one_sided_surface_with_tolerance_edge_is_entirely_gain(self):
         baseline = self.constant("baseline", 100.0)
