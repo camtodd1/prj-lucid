@@ -2,7 +2,14 @@ import math
 import unittest
 from unittest.mock import patch
 
-from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle
+from qgis.core import (
+    QgsFeature,
+    QgsGeometry,
+    QgsLayerTreeGroup,
+    QgsPointXY,
+    QgsRectangle,
+    QgsVectorLayer,
+)
 
 from guidelines.controlling_ols_engine import (
     ControllingOlsCandidate,
@@ -250,6 +257,36 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             "test",
         )
         self.assertEqual(capture._controlling_ols_contours, [])
+
+    def test_change_contour_group_reconciliation_uses_feature_family(self):
+        ofs_group = QgsLayerTreeGroup("OFS")
+        oes_group = QgsLayerTreeGroup("OES")
+        ofs_layer = QgsVectorLayer(
+            "LineString?field=future_family:string&field=delta_m:double",
+            "Change Contours",
+            "memory",
+        )
+        feature = QgsFeature(ofs_layer.fields())
+        feature.setGeometry(
+            QgsGeometry.fromPolylineXY(
+                [QgsPointXY(0.0, 0.0), QgsPointXY(100.0, 0.0)]
+            )
+        )
+        feature.setAttributes(["OFS", 5.0])
+        self.assertTrue(ofs_layer.dataProvider().addFeature(feature))
+
+        # Reproduce the reported tree state: an OFS-attributed contour layer
+        # has been reparented beneath the OES result group.
+        oes_group.addLayer(ofs_layer)
+        capture = _ComparisonLayerCapture()
+        capture._reconcile_modernisation_change_contour_groups(
+            {"OFS": ofs_group, "OES": oes_group}
+        )
+
+        self.assertEqual(len(ofs_group.children()), 1)
+        self.assertEqual(len(oes_group.children()), 0)
+        moved_layer = ofs_group.children()[0].layer()
+        self.assertIs(moved_layer, ofs_layer)
 
     def test_mos_tocs_conical_overlap_is_assigned_once(self):
         conical = ControllingOlsCandidate(

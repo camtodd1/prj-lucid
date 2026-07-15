@@ -11,6 +11,8 @@ from qgis.core import (  # type: ignore
     QgsField,
     QgsFields,
     QgsGeometry,
+    QgsLayerTreeGroup,
+    QgsLayerTreeLayer,
     QgsMessageLog,
     QgsPointXY,
     QgsRectangle,
@@ -2188,6 +2190,9 @@ class OlsModernisationComparisonMixin:
                 comparison.baseline_only_parts(), family_group,
                 comparison_ruleset_id=comparison_ruleset_id,
             ) or created
+        self._reconcile_modernisation_change_contour_groups(
+            {"OFS": ofs_group, "OES": oes_group}
+        )
         return created
 
     def _create_ols_ruleset_comparison_layers(
@@ -2374,7 +2379,59 @@ class OlsModernisationComparisonMixin:
                 output_group,
                 comparison_ruleset_id=comparison_ruleset_id,
             ) or created
+        self._reconcile_modernisation_change_contour_groups(output_groups)
         return created
+
+    def _reconcile_modernisation_change_contour_groups(
+        self,
+        output_groups: Dict[str, object],
+    ) -> None:
+        """Keep each signed change-contour layer under its attributed family."""
+        family_groups = {
+            str(family).upper(): group
+            for family, group in output_groups.items()
+            if isinstance(group, QgsLayerTreeGroup)
+        }
+        if not family_groups:
+            return
+
+        for source_group in list(family_groups.values()):
+            for node in list(source_group.children()):
+                if not isinstance(node, QgsLayerTreeLayer):
+                    continue
+                layer = node.layer()
+                if layer is None or layer.fields().indexFromName("future_family") < 0:
+                    continue
+                if layer.fields().indexFromName("delta_m") < 0:
+                    continue
+                try:
+                    attributed_families = {
+                        str(feature.attribute("future_family") or "").upper()
+                        for feature in layer.getFeatures()
+                    }
+                    attributed_families.discard("")
+                except Exception:
+                    continue
+                if len(attributed_families) != 1:
+                    continue
+                family = next(iter(attributed_families))
+                target_group = family_groups.get(family)
+                if target_group is None or target_group is source_group:
+                    continue
+                try:
+                    target_group.addChildNode(node.clone())
+                    source_group.removeChildNode(node)
+                    QgsMessageLog.logMessage(
+                        f"[normalise] Moved {family} change contours to the {family} comparison group.",
+                        PLUGIN_TAG,
+                        Qgis.Info,
+                    )
+                except Exception as exc:
+                    QgsMessageLog.logMessage(
+                        f"Warning: could not reconcile {family} change-contour group: {exc}",
+                        PLUGIN_TAG,
+                        Qgis.Warning,
+                    )
 
     @staticmethod
     def _comparison_label_delta(value: float) -> str:

@@ -19,7 +19,7 @@ except ImportError:  # pragma: no cover - QGIS production targets are Unix-like.
     fcntl = None
 
 
-RUN_HISTORY_SCHEMA_VERSION = 2
+RUN_HISTORY_SCHEMA_VERSION = 3
 RUN_HISTORY_FILENAME = "runtime_test_runs.txt"
 AGENT_ENV_VAR = "SAFEGUARDING_BUILDER_RUN_AGENT"
 COMMIT_ENV_VAR = "SAFEGUARDING_BUILDER_COMMIT"
@@ -63,6 +63,8 @@ RUN_HISTORY_COLUMNS = (
     "elapsed_seconds",
     *(column for column, _module in KEY_MODULE_COLUMNS),
     "module_timings_json",
+    "layers_created",
+    "features_created",
 )
 
 
@@ -109,6 +111,8 @@ def _table_row(record: Mapping[str, object]) -> Dict[str, object]:
         "qgis_version": record.get("qgis_version", ""),
         "elapsed_seconds": record.get("elapsed_seconds", ""),
         "module_timings_json": json.dumps(timings, sort_keys=True, separators=(",", ":")),
+        "layers_created": record.get("layers_created", ""),
+        "features_created": record.get("features_created", ""),
     }
     for column, module_name in KEY_MODULE_COLUMNS:
         timing = timings.get(module_name)
@@ -142,6 +146,21 @@ def _legacy_records(content: str) -> Optional[list[Dict[str, object]]]:
     return records
 
 
+def _upgrade_tabular_header(content: str) -> Optional[bytes]:
+    """Append newly introduced trailing columns to an older tabular header."""
+    if not content or content.lstrip().startswith("{"):
+        return None
+    first_line, separator, remainder = content.partition("\n")
+    existing_columns = tuple(first_line.rstrip("\r").split("\t"))
+    if existing_columns == RUN_HISTORY_COLUMNS:
+        return None
+    if existing_columns != RUN_HISTORY_COLUMNS[: len(existing_columns)]:
+        return None
+    header = "\t".join(RUN_HISTORY_COLUMNS)
+    upgraded = header + ("\n" + remainder if separator else "\n")
+    return upgraded.encode("utf-8")
+
+
 def _lock(descriptor: int) -> None:
     if fcntl is not None:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
@@ -163,9 +182,12 @@ def migrate_history_file(history_path: Path) -> bool:
         os.lseek(descriptor, 0, os.SEEK_SET)
         content = os.read(descriptor, os.fstat(descriptor).st_size).decode("utf-8")
         records = _legacy_records(content)
-        if records is None:
-            return False
-        payload = _table_payload(records, header=True)
+        if records is not None:
+            payload = _table_payload(records, header=True)
+        else:
+            payload = _upgrade_tabular_header(content)
+            if payload is None:
+                return False
         os.ftruncate(descriptor, 0)
         os.lseek(descriptor, 0, os.SEEK_SET)
         os.write(descriptor, payload)
@@ -192,6 +214,15 @@ def _append_record(history_path: Path, record: Mapping[str, object]) -> None:
             os.lseek(descriptor, 0, os.SEEK_SET)
             os.write(descriptor, payload)
             return
+        if size:
+            os.lseek(descriptor, 0, os.SEEK_SET)
+            content = os.read(descriptor, size).decode("utf-8")
+            upgraded = _upgrade_tabular_header(content)
+            if upgraded is not None:
+                os.ftruncate(descriptor, 0)
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                os.write(descriptor, upgraded)
+                size = len(upgraded)
         os.lseek(descriptor, 0, os.SEEK_END)
         os.write(descriptor, _table_payload([record], header=not bool(size)))
     finally:
@@ -277,6 +308,9 @@ class RuntimeRunRecorder:
             "comparison_ols": None,
         }
         self.ruleset_labels: Dict[str, Optional[str]] = dict(self.rulesets)
+        self.layers_created = 0
+        self.features_created = 0
+        self._output_counts_set = False
 
     def set_context(
         self,
@@ -310,6 +344,12 @@ class RuntimeRunRecorder:
         item = self._timings.setdefault(key, {"calls": 0.0, "elapsed_seconds": 0.0})
         item["calls"] += max(0, int(calls))
         item["elapsed_seconds"] += max(0.0, float(elapsed_seconds))
+
+    def set_output_counts(self, layers_created: int, features_created: int) -> None:
+        """Record the generated output totals reported at completion."""
+        self.layers_created = max(0, int(layers_created))
+        self.features_created = max(0, int(features_created))
+        self._output_counts_set = True
 
     def start_phase(self, name: str) -> None:
         key = str(name).strip()
@@ -348,6 +388,8 @@ class RuntimeRunRecorder:
             "plugin_version": plugin_version(self.plugin_dir),
             "qgis_version": self.qgis_version,
             "elapsed_seconds": round(finished_at - self.started_at, 6),
+            "layers_created": self.layers_created,
+            "features_created": self.features_created,
             "modules": modules,
         }
         self.history_path.parent.mkdir(parents=True, exist_ok=True)

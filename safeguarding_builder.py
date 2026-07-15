@@ -714,12 +714,37 @@ class SafeguardingBuilder(
             raise
         finally:
             try:
+                if not recorder._output_counts_set:
+                    recorder.set_output_counts(*self._runtime_generated_output_counts())
                 recorder.finish(self._processing_run_status)
                 self._log_done(f"Runtime test record appended to {recorder.history_path}.")
             except Exception as exc:
                 self._log_warning(f"Could not append runtime test record: {exc}", notify_user=False)
             finally:
                 self._runtime_run_recorder = None
+
+    def _runtime_generated_output_counts(self) -> Tuple[int, int]:
+        """Return valid generated layer and feature totals for partial runs."""
+        layers = []
+        seen_layer_ids = set()
+        for layer in list(getattr(self, "successfully_generated_layers", []) or []):
+            try:
+                if layer is None or not layer.isValid():
+                    continue
+                layer_id = str(layer.id())
+                if layer_id in seen_layer_ids:
+                    continue
+                seen_layer_ids.add(layer_id)
+                layers.append(layer)
+            except Exception:
+                continue
+        feature_count = 0
+        for layer in layers:
+            try:
+                feature_count += max(0, int(layer.featureCount()))
+            except Exception:
+                continue
+        return len(layers), feature_count
 
     def _run_safeguarding_processing(self):
         plugin_tag = PLUGIN_TAG
@@ -3533,6 +3558,9 @@ class SafeguardingBuilder(
             )
             generation_summary = self._render_generation_summary(generation_checklist)
             num_layers_created = tree_layer_count or len(self.successfully_generated_layers)
+            recorder = getattr(self, "_runtime_run_recorder", None)
+            if recorder is not None:
+                recorder.set_output_counts(num_layers_created, tree_feature_count)
             runway_summary = (
                 f"runways={processed_rwy_count}/{total_runways_in_input}" if total_runways_in_input else "runways=0"
             )
@@ -3565,6 +3593,9 @@ class SafeguardingBuilder(
             ):  # Only expand group if it exists (it might not if only file output and no group made)
                 self._stage_layer_tree_node(main_group)
         else:
+            recorder = getattr(self, "_runtime_run_recorder", None)
+            if recorder is not None:
+                recorder.set_output_counts(0, 0)
             # This case means self.successfully_generated_layers is empty
             self.iface.messageBar().pushMessage(
                 self.tr("Process Finished"),

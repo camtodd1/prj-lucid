@@ -10,7 +10,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from core.run_history import RuntimeRunRecorder, detect_run_agent, migrate_history_file
+from core.run_history import (
+    RUN_HISTORY_COLUMNS,
+    RuntimeRunRecorder,
+    detect_run_agent,
+    migrate_history_file,
+)
 
 
 def _rows(history_path: Path):
@@ -54,12 +59,13 @@ class RunHistoryTests(unittest.TestCase):
             recorder.start_phase("inputs")
             recorder.start_phase("controlling_envelope")
             recorder.add_timing("controlling_ols.regions", 1.25)
+            recorder.set_output_counts(185, 9973)
             with patch.dict("os.environ", {"SAFEGUARDING_BUILDER_COMMIT": "abc123def456"}):
                 record = recorder.finish("completed")
 
             stored = _rows(history_path)[0]
-            self.assertEqual(record["schema_version"], 2)
-            self.assertEqual(stored["schema_version"], "2")
+            self.assertEqual(record["schema_version"], 3)
+            self.assertEqual(stored["schema_version"], "3")
             self.assertEqual(stored["agent"], "codex headless")
             self.assertEqual(stored["airport"], "YBBN")
             self.assertEqual(stored["commit_ref"], "abc123def456")
@@ -70,6 +76,8 @@ class RunHistoryTests(unittest.TestCase):
             timings = json.loads(stored["module_timings_json"])
             self.assertEqual(timings["controlling_ols.regions"]["elapsed_seconds"], 1.25)
             self.assertEqual(stored["controlling_regions_seconds"], "1.25")
+            self.assertEqual(stored["layers_created"], "185")
+            self.assertEqual(stored["features_created"], "9973")
             self.assertIn("phase.inputs", timings)
             self.assertIn("phase.controlling_envelope", timings)
 
@@ -114,6 +122,32 @@ class RunHistoryTests(unittest.TestCase):
                 json.loads(stored["module_timings_json"])["phase.runway_ols"]["calls"],
                 1,
             )
+
+    def test_older_tabular_header_is_extended_before_append(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            history_path = root / "runs.txt"
+            old_columns = RUN_HISTORY_COLUMNS[:-2]
+            old_values = [""] * len(old_columns)
+            old_values[old_columns.index("schema_version")] = "2"
+            old_values[old_columns.index("airport")] = "YMML"
+            old_values[old_columns.index("module_timings_json")] = "{}"
+            history_path.write_text(
+                "\t".join(old_columns) + "\n" + "\t".join(old_values) + "\n",
+                encoding="utf-8",
+            )
+
+            recorder = RuntimeRunRecorder(root, history_path=history_path)
+            recorder.set_output_counts(12, 345)
+            with patch.dict("os.environ", {"SAFEGUARDING_BUILDER_COMMIT": "test-ref"}):
+                recorder.finish("completed")
+
+            records = _rows(history_path)
+            self.assertEqual(tuple(records[0]), RUN_HISTORY_COLUMNS)
+            self.assertEqual(records[0]["airport"], "YMML")
+            self.assertIsNone(records[0]["layers_created"])
+            self.assertEqual(records[1]["layers_created"], "12")
+            self.assertEqual(records[1]["features_created"], "345")
 
 
 if __name__ == "__main__":
