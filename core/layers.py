@@ -674,7 +674,12 @@ class LayerMixin:
             if symbol is not None:
                 layer.setRenderer(QgsSingleSymbolRenderer(symbol.clone()))
                 return
-        layer.setRenderer(renderer)
+        # Assign a distinct renderer instance so the QGIS layer-tree model
+        # invalidates legend nodes created when the full QML was first loaded.
+        # Reassigning the same mutated object can leave absent surface rules
+        # visible in the legend even though the renderer no longer contains
+        # matching features.
+        layer.setRenderer(renderer.clone())
 
     def _apply_controlling_region_style(self, layer: QgsVectorLayer):
         """Apply complementary solid fills for controlling OLS regions."""

@@ -59,9 +59,11 @@ class LayerStyleTests(unittest.TestCase):
     def test_annex_renderer_keeps_only_rules_with_features(self):
         layer = self._surface_layer(["Take-off Climb", "Horizontal"])
         self._set_surface_renderer(layer)
+        renderer_before_pruning = layer.renderer()
 
         LayerMixin()._prune_annex14_renderer_rules(layer)
 
+        self.assertIsNot(layer.renderer(), renderer_before_pruning)
         self.assertEqual(layer.renderer().type(), "RuleRenderer")
         self.assertEqual(
             [rule.label() for rule in layer.renderer().rootRule().children()],
