@@ -12,10 +12,14 @@ from qgis.core import (  # type: ignore
     QgsFields,
     QgsGeometry,
     QgsLayerTreeGroup,
-    QgsMessageLog,
 )
 
 from .constants import RAOA_MOS_REF_VAL, MOS_REF_TAXIWAY_SEPARATION
+
+try:
+    from ..core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
@@ -481,8 +485,6 @@ class SpecialisedSurfacesMixin:
                         "arc_let": attr_arc_let,
                         "side": "L",
                     }
-                    # QgsMessageLog.logMessage(f"Taxiway Sep Left Attr Map for {runway_name}: {attr_map}", plugin_tag, level=Qgis.Info)
-
                     for name, value in attr_map.items():
                         idx = fields.indexFromName(name)
                         if idx != -1:
@@ -528,8 +530,6 @@ class SpecialisedSurfacesMixin:
                         "arc_let": attr_arc_let,
                         "side": "R",
                     }
-                    # QgsMessageLog.logMessage(f"Taxiway Sep Right Attr Map for {runway_name}: {attr_map_right}", plugin_tag, level=Qgis.Info)
-
                     for name, value in attr_map_right.items():
                         idx = fields.indexFromName(name)
                         if idx != -1:

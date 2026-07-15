@@ -1,7 +1,12 @@
 """Output option setup and validation helpers for the dialog."""
 
 from qgis.PyQt import QtCore, QtWidgets  # type: ignore
-from qgis.core import QgsMessageLog, Qgis  # type: ignore
+from qgis.core import Qgis  # type: ignore
+
+try:
+    from ..core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 
 try:
     from ..rulesets.registry import (

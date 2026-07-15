@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional
 
 from qgis.core import (  # type: ignore
     QgsGeometry,
-    QgsMessageLog,
     QgsPointXY,
     QgsProject,
     Qgis,
@@ -18,6 +17,11 @@ from qgis.PyQt.QtWidgets import (  # type: ignore
 )
 
 from .dialog_constants import DIALOG_LOG_TAG
+
+try:
+    from ..core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 
 
 CNS_FACILITY_TYPES = sorted(

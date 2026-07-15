@@ -19,7 +19,6 @@ from urllib.request import Request, urlopen
 
 # --- QGIS Imports ---
 from qgis.core import (  # type: ignore
-    QgsMessageLog,
     Qgis,
     QgsGeometry,
     QgsPointXY,
@@ -27,6 +26,11 @@ from qgis.core import (  # type: ignore
     QgsCoordinateReferenceSystem,
     QgsWkbTypes,
 )
+
+try:
+    from .core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 from qgis.PyQt import uic, QtWidgets, QtGui, QtCore  # type: ignore
 from qgis.PyQt.QtWidgets import (  # type: ignore
     QMessageBox,
@@ -2838,7 +2842,6 @@ class SafeguardingBuilderDialog(
         """
         group_widget = self._runway_groups.get(runway_index)
         if not group_widget:
-            # QgsMessageLog.logMessage(f"Skipping calc update for index {runway_index}: Group not found.", DIALOG_LOG_TAG, level=Qgis.Debug)
             return
 
         input_data = group_widget.get_input_data()

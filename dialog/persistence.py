@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from qgis.core import QgsMessageLog, Qgis  # type: ignore
+from qgis.core import Qgis  # type: ignore
 from qgis.PyQt import QtCore, QtWidgets  # type: ignore
 from qgis.PyQt.QtWidgets import (  # type: ignore
     QFileDialog,
@@ -22,6 +22,11 @@ from .dialog_constants import (
     DIALOG_LOG_TAG,
     OUTPUT_FORMATS,
 )
+
+try:
+    from ..core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 
 try:
     from ..frameworks.registry import DEFAULT_FRAMEWORK_ID, normalize_framework_id

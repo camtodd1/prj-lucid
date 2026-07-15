@@ -14,7 +14,6 @@ from qgis.core import (  # type: ignore
     QgsGeometry,
     QgsLineString,
     QgsLayerTreeGroup,
-    QgsMessageLog,
     QgsPoint,
     QgsPointXY,
     QgsPolygon,
@@ -23,8 +22,10 @@ from qgis.core import (  # type: ignore
 
 try:
     from ..guidelines.controlling_ols_engine import ControllingOlsCandidate, plane_elevation_evaluator
+    from ..core.run_log import QgsMessageLog
 except ImportError:
     from guidelines.controlling_ols_engine import ControllingOlsCandidate, plane_elevation_evaluator
+    from core.run_log import QgsMessageLog  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 

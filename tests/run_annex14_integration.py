@@ -401,7 +401,11 @@ def run(input_path, audit_path, preview_path):
         "annex_features": sum(record["features"] for record in annex),
         "coverage": coverage,
         "layers": annex,
-        "warnings": [entry for entry in logs if entry["level"] >= int(Qgis.Warning)],
+        "warnings": [
+            entry
+            for entry in logs
+            if entry["level"] in {int(Qgis.Warning), int(Qgis.Critical)}
+        ],
         "message_bar": iface.bar.messages,
         "preview": preview_path,
     }

@@ -29,7 +29,6 @@ from qgis.core import (  # type: ignore
     QgsLayerTreeGroup,
     QgsLayerTreeLayer,
     QgsLayerTreeNode,
-    QgsMessageLog,
     Qgis,
     QgsCoordinateReferenceSystem,
 )
@@ -37,6 +36,7 @@ from qgis.core import (  # type: ignore
 # --- Local Imports ---
 from .core.layers import LayerMixin
 from .core import output_structure
+from .core.run_log import QgsMessageLog, RunLog, set_active_run_log
 from .core.styles import DEFAULT_STYLE_MAP
 from .core.run_history import (
     RuntimeRunRecorder,
@@ -71,8 +71,9 @@ try:
 
     resources_rc.qInitResources
 except ImportError:
-    # Fallback message if resources haven't been compiled
-    print("Note: resources_rc.py not found or generated. Icons might be missing.")
+    # Resource registration is optional; operational logging is not available
+    # during module import and import-time console noise is deliberately avoided.
+    resources_rc = None
 # Import the dialog class
 from .safeguarding_builder_dialog import SafeguardingBuilderDialog
 
@@ -117,7 +118,7 @@ class SafeguardingBuilder(
         self.output_format_extension: Optional[str] = None
         self.contour_intervals: Dict[str, float] = {}
         self.protected_airspace_policy: str = "ruleset_aligned"
-        self.debug_logging: bool = False
+        self._run_log: Optional[RunLog] = None
         self.ruleset = get_ruleset_profile()
         self.baseline_ols_ruleset = self.ruleset
         self.comparison_ols_ruleset = None
@@ -135,12 +136,10 @@ class SafeguardingBuilder(
         """Force QGIS to initialise CRS subsystems by adding and removing a dummy layer."""
         plugin_tag = PLUGIN_TAG
         crs_authid = QgsProject.instance().crs().authid()
-        # QgsMessageLog.logMessage(f"Initialising CRS: {crs_authid}", plugin_tag, Qgis.Info)
         dummy = QgsVectorLayer(f"Point?crs={crs_authid}", "crs_init_dummy", "memory")
         if dummy.isValid():
             QgsProject.instance().addMapLayer(dummy, False)
             QgsProject.instance().removeMapLayer(dummy)
-            # QgsMessageLog.logMessage("CRS initialisation dummy layer added and removed successfully.", plugin_tag, Qgis.Info)
         else:
             QgsMessageLog.logMessage(
                 "CRS initialisation dummy layer failed to create.",
@@ -157,7 +156,6 @@ class SafeguardingBuilder(
             if self.translator.load(locale_path):
                 QCoreApplication.installTranslator(self.translator)
             else:
-                # QgsMessageLog.logMessage(f"Failed to load translation file: {locale_path}", PLUGIN_TAG, level=Qgis.Warning)
                 self.translator = None
 
     def tr(self, message: str) -> str:
@@ -168,43 +166,25 @@ class SafeguardingBuilder(
         return message
 
     def _log(self, message: str, level=Qgis.Info, notify_user: bool = False):
-        """Log plugin messages with QGIS 3/4 compatible notification hints."""
-        try:
-            QgsMessageLog.logMessage(
-                message,
-                PLUGIN_TAG,
-                level=level,
-                notifyUser=notify_user,
-            )
-        except TypeError:
-            QgsMessageLog.logMessage(message, PLUGIN_TAG, level=level)
-
-    def _log_success(self, message: str, notify_user: bool = False):
-        self._log(message, Qgis.Success, notify_user)
-
-    def _log_step(self, message: str):
-        self._log(f"[step] {message}", Qgis.Info, notify_user=False)
-
-    def _log_done(self, message: str):
-        self._log_success(f"[done] {message}", notify_user=False)
+        """Compatibility entry point routed through the structured run logger."""
+        del notify_user
+        QgsMessageLog.logMessage(message, PLUGIN_TAG, level=level)
 
     def _log_skip(self, message: str):
         self._log(f"[skip] {message}", Qgis.Info, notify_user=False)
 
     def _log_warning(self, message: str, notify_user: bool = True):
-        self._log(message, Qgis.Warning, notify_user)
+        del notify_user
+        self._log(message, Qgis.Warning)
 
     def _log_critical(self, message: str, notify_user: bool = True):
-        self._log(message, Qgis.Critical, notify_user)
+        del notify_user
+        self._log(message, Qgis.Critical)
 
-    def _log_dev_debug(self, message: str, topic: Optional[str] = None):
-        if not self.debug_logging:
-            return
-        prefix = "[temporary debug]" if not topic else f"[temporary debug:{topic}]"
-        self._log(f"{prefix} {message}", Qgis.Info, notify_user=False)
-
-    def _log_debug(self, message: str):
-        self._log_dev_debug(message)
+    def _diagnostic(self, message: str, topic: Optional[str] = None):
+        run_log = getattr(self, "_run_log", None)
+        if run_log is not None:
+            run_log.diagnostic(topic or "generation", message)
 
     def _crs_is_geographic(self, crs: QgsCoordinateReferenceSystem) -> bool:
         """Return True when a CRS uses angular units and is unsuitable for metre buffers."""
@@ -484,7 +464,6 @@ class SafeguardingBuilder(
         if self.dlg is not None and self.dlg.isVisible():
             self.dlg.raise_()
             self.dlg.activateWindow()
-            QgsMessageLog.logMessage("Dialog already open.", PLUGIN_TAG, level=Qgis.Info)
             return
 
         self.successfully_generated_layers = []  # Reset layers list
@@ -534,15 +513,10 @@ class SafeguardingBuilder(
             self.dlg.finished.connect(self.dialog_finished)
 
         self.dlg.show()
-        QgsMessageLog.logMessage("Safeguarding Builder dialog shown.", PLUGIN_TAG, level=Qgis.Info)
 
     def dialog_finished(self, result: int):
         """Slot connected to the dialog's finished signal for cleanup."""
-        QgsMessageLog.logMessage(
-            f"Dialog finished signal received (result code: {result})",
-            PLUGIN_TAG,
-            level=Qgis.Info,
-        )  # Use Info level
+        del result
         self.dlg = None
 
     # ============================================================
@@ -660,6 +634,7 @@ class SafeguardingBuilder(
         # Apply MOS 139 rule
         if abs(arp_elevation - avg_end_elev) <= 3.0:
             reference_elevation_unrounded = arp_elevation
+            red_basis = "ARP elevation"
             # Info: Log the basis for the RED value.
             QgsMessageLog.logMessage(
                 "RED based on ARP Elevation (within 3m of average runway-end elev).",
@@ -668,6 +643,7 @@ class SafeguardingBuilder(
             )
         else:
             reference_elevation_unrounded = avg_end_elev
+            red_basis = "average runway-end elevation"
             # Info: Log the basis for the RED value.
             QgsMessageLog.logMessage(
                 "RED based on Average Runway-End Elevation (>3m difference from ARP).",
@@ -687,10 +663,26 @@ class SafeguardingBuilder(
             plugin_tag,
             level=Qgis.Success,
         )
+        if self._run_log is not None:
+            self._run_log.output(
+                "reference elevation datum",
+                value_m=f"{reference_elevation_datum:.2f}",
+                basis=red_basis,
+                samples=len(runway_end_elevations),
+            )
         return reference_elevation_datum
 
     def run_safeguarding_processing(self):
         """Run generation and always append one GUI/headless runtime record."""
+        run_log = RunLog()
+        self._run_log = run_log
+        set_active_run_log(run_log)
+        project_crs = QgsProject.instance().crs()
+        run_log.start(
+            crs=project_crs.authid()
+            if project_crs is not None and project_crs.isValid()
+            else None
+        )
         recorder = RuntimeRunRecorder(
             Path(self.plugin_dir),
             qgis_version=getattr(Qgis, "QGIS_VERSION", "unknown"),
@@ -718,15 +710,30 @@ class SafeguardingBuilder(
             self._processing_run_status = "failed"
             raise
         finally:
+            layer_count, feature_count = self._runtime_generated_output_counts()
             try:
                 if not recorder._output_counts_set:
-                    recorder.set_output_counts(*self._runtime_generated_output_counts())
+                    recorder.set_output_counts(layer_count, feature_count)
                 recorder.finish(self._processing_run_status)
-                self._log_done(f"Runtime test record appended to {recorder.history_path}.")
             except Exception as exc:
                 self._log_warning(f"Could not append runtime test record: {exc}", notify_user=False)
             finally:
                 self._runtime_run_recorder = None
+                output = (
+                    self.output_path
+                    if self.output_mode == "file" and self.output_path
+                    else self.output_mode or "unknown"
+                )
+                run_log.finish(
+                    self._processing_run_status,
+                    airport=getattr(self, "icao_code", None),
+                    runways=getattr(self, "_processing_runway_summary", None),
+                    layers=layer_count,
+                    features=feature_count,
+                    output=output,
+                )
+                set_active_run_log(None)
+                self._run_log = None
 
     def _runtime_generated_output_counts(self) -> Tuple[int, int]:
         """Return valid generated layer and feature totals for partial runs."""
@@ -753,7 +760,6 @@ class SafeguardingBuilder(
 
     def _run_safeguarding_processing(self):
         plugin_tag = PLUGIN_TAG
-        self._log_step("Safeguarding generation started.")
 
         self.successfully_generated_layers = []
         self.reference_elevation_datum = None
@@ -767,7 +773,6 @@ class SafeguardingBuilder(
         self.baseline_ols_ruleset = self.ruleset
         self.comparison_ols_ruleset = None
         self._contour_interval_ruleset_role = "baseline"
-        self.debug_logging = False
         self._processing_main_group = None
         self._processing_total_steps = 10
 
@@ -814,15 +819,11 @@ class SafeguardingBuilder(
             self._clear_processing_status()
             return
 
-        self._log_step(f"Using project CRS {target_crs_authid} ({target_crs.description()}).")
+        if self._run_log is not None:
+            self._run_log.start(crs=target_crs_authid)
 
         # Force CRS subsystem to initialise properly
         self._initialise_crs()
-        # QgsMessageLog.logMessage(
-        #     f"CRS initialisation complete. Project CRS is now active: {target_crs.authid()}",
-        #     plugin_tag,
-        #     level=Qgis.Info,
-        # )
 
         specialised_safeguarding_group = None
 
@@ -859,7 +860,6 @@ class SafeguardingBuilder(
         self.output_format_driver = input_data.get("output_format_driver")
         self.output_format_extension = input_data.get("output_format_extension")
         self.contour_intervals = input_data.get("contour_intervals", {})
-        self.debug_logging = bool(input_data.get("debug_logging", False))
         self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
         protected_airspace_policy = input_data.get("protected_airspace_policy", "ruleset_aligned")
         self.protected_airspace_policy = protected_airspace_policy
@@ -888,6 +888,7 @@ class SafeguardingBuilder(
         )
 
         runway_input_list = input_data.get("runways", [])
+        self._processing_runway_summary = f"0/{len(runway_input_list)}"
         runtime_test_context = dict(
             getattr(self.dlg, "_runtime_test_context", {}) or {}
         )
@@ -935,17 +936,29 @@ class SafeguardingBuilder(
             if self.output_mode == "memory"
             else f"{self.output_format_driver or 'file'} -> {self.output_path or 'N/A'}"
         )
-        self._log_step(
-            f"Inputs: ICAO={icao_code}, output={output_desc}, "
-            f"ARP={'yes' if arp_point is not None else 'no'}, "
-            f"MET={'yes' if met_point is not None else 'no'}, "
-            f"AGL={'enabled' if agl_options.get('enabled') else 'disabled'}, "
-            f"CNS={len(cns_input_list)}, runways={len(runway_input_list)}, "
-            f"design_standard={self.ruleset.id}, "
-            f"baseline_ols={self.baseline_ols_ruleset.id}, "
-            f"comparison_ols={getattr(self.comparison_ols_ruleset, 'id', 'none')}, "
-            f"safeguarding_framework={self.framework.id}."
-        )
+        if self._run_log is not None:
+            self._run_log.update_context(
+                airport=icao_code,
+                ruleset=self.ruleset.id,
+                baseline=self.baseline_ols_ruleset.id,
+                comparison=getattr(self.comparison_ols_ruleset, "id", "none"),
+                framework=self.framework.id,
+                output=output_desc,
+            )
+            self._run_log.output(
+                "inputs",
+                airport=icao_code,
+                runways=len(runway_input_list),
+                arp="yes" if arp_point is not None else "no",
+                met="yes" if met_point is not None else "no",
+                agl="enabled" if agl_options.get("enabled") else "disabled",
+                cns=len(cns_input_list),
+                ruleset=self.ruleset.id,
+                baseline=self.baseline_ols_ruleset.id,
+                comparison=getattr(self.comparison_ols_ruleset, "id", "none"),
+                framework=self.framework.id,
+                output=output_desc,
+            )
 
         if not runway_input_list:
             self._log_warning("Processing aborted: no valid runway data found.")
@@ -1324,8 +1337,9 @@ class SafeguardingBuilder(
                 pa_runways_exist,
             )
 
-            self._log_done("Safeguarding generation finished.")
-            self._processing_run_status = "completed"
+            self._processing_run_status = (
+                "completed" if self.successfully_generated_layers else "failed"
+            )
 
             if self.successfully_generated_layers:
                 if self.dlg:
@@ -1365,6 +1379,14 @@ class SafeguardingBuilder(
         recorder = getattr(self, "_runtime_run_recorder", None)
         if recorder is not None and phase_key:
             recorder.start_phase(phase_key)
+        run_log = getattr(self, "_run_log", None)
+        if run_log is not None and phase_key and run_log.started:
+            run_log.phase(
+                step,
+                total_steps,
+                phase_key,
+                message.rstrip(". …"),
+            )
         self._set_processing_status(message, step=step, total_steps=total_steps)
         return True
 
@@ -1378,7 +1400,10 @@ class SafeguardingBuilder(
                 self._remove_empty_generated_groups(main_group)
             except Exception as exc:
                 self._log_warning(f"Cancellation cleanup warning: {exc}")
-        self._log_warning("Safeguarding generation cancelled at a safe phase boundary; completed layers were kept.")
+        if self._run_log is not None:
+            self._run_log.update_context(
+                reason="cancelled at a safe phase boundary; completed layers were kept"
+            )
         if self.iface is not None:
             self.iface.messageBar().pushMessage(
                 self.tr("Cancelled"),
@@ -1422,7 +1447,10 @@ class SafeguardingBuilder(
         wind_turbine_processed = False
         cns_processed = False
         if arp_point is not None and guideline_groups.get("C") is not None:
-            self._log_step(f"Wildlife safeguarding: generating from ARP ({arp_point.x():.3f}, {arp_point.y():.3f}).")
+            self._diagnostic(
+                f"Wildlife safeguarding: generating from ARP "
+                f"({arp_point.x():.3f}, {arp_point.y():.3f})."
+            )
             wildlife_processed = self.process_wildlife_safeguarding(
                 arp_point,
                 icao_code,
@@ -1630,7 +1658,6 @@ class SafeguardingBuilder(
                 # if centreline_layer and centreline_layer.isValid() and project.mapLayer(centreline_layer.id()): project.removeMapLayer(centreline_layer.id())
                 continue  # Process next runway
 
-            # QgsMessageLog.logMessage(f"Finished processing centrelines. {len(processed_runway_data_list)}/{len(runway_input_list)} successful.", plugin_tag, level=Qgis.Info)
         return processed_runway_data_list, any_runway_base_data_ok
 
     def _write_runway_summary_report(
@@ -1654,7 +1681,7 @@ class SafeguardingBuilder(
             markdown = render_markdown_report(icao_code, None, summaries)
             with open(report_path, "w", encoding="utf-8") as report_file:
                 report_file.write(markdown)
-            self._log_success(f"Runway summary report written to '{report_path}'.")
+            self._diagnostic(f"Runway summary report written to '{report_path}'.")
             return report_path
         except Exception as e:
             self._log_warning(f"Runway summary report failed: {e}\n{traceback.format_exc()}")
@@ -2984,6 +3011,18 @@ class SafeguardingBuilder(
 
                 if any(run_success_flags):
                     any_guideline_processed_ok = True
+                if self._run_log is not None:
+                    generated_counts = runway_data.get("generated_feature_counts") or {}
+                    feature_total = sum(
+                        int(value)
+                        for value in generated_counts.values()
+                        if isinstance(value, (int, float))
+                    )
+                    self._run_log.output(
+                        "runway generation",
+                        runway=rwy_name,
+                        features=feature_total,
+                    )
             except Exception as e_guideline:
                 QgsMessageLog.logMessage(
                     f"Error processing guidelines/specialised for {rwy_name}: {e_guideline}",
@@ -3562,42 +3601,20 @@ class SafeguardingBuilder(
 
         # Check if any layers were successfully generated and added to our tracking list
         anything_successfully_generated = bool(self.successfully_generated_layers)
+        self._processing_runway_summary = (
+            f"{processed_rwy_count}/{total_runways_in_input}"
+            if total_runways_in_input
+            else "0"
+        )
 
         if anything_successfully_generated:
-            (
-                _populated_summaries,
-                _empty_summaries,
-                tree_layer_count,
-                tree_feature_count,
-            ) = self._build_layer_tree_summary(main_group, met_ok)
-            generation_checklist = self._build_generation_checklist(
-                main_group,
-                arp_ok,
-                met_ok,
-                rwy_base_ok,
-                wildlife_ok,
-                wind_turbine_ok,
-                cns_safeguarding_ok,
-                runway_safeguarding_ok,
-                processed_rwy_count,
-                total_runways_in_input,
-                physical_protection_ok,
-                arp_input_provided,
-                met_input_provided,
-                agl_enabled,
-                cns_count,
-                red_ok,
-                pa_runways_exist,
+            _, _, tree_layer_count, tree_feature_count = self._build_layer_tree_summary(
+                main_group, met_ok
             )
-            generation_summary = self._render_generation_summary(generation_checklist)
             num_layers_created = tree_layer_count or len(self.successfully_generated_layers)
             recorder = getattr(self, "_runtime_run_recorder", None)
             if recorder is not None:
                 recorder.set_output_counts(num_layers_created, tree_feature_count)
-            runway_summary = (
-                f"runways={processed_rwy_count}/{total_runways_in_input}" if total_runways_in_input else "runways=0"
-            )
-
             if self.output_mode == "file" and self.output_path:
                 output_summary = f"files saved to {self.output_path}"
             elif self.output_mode == "memory":
@@ -3609,17 +3626,16 @@ class SafeguardingBuilder(
                 f"Processing complete for {icao_code}. "
                 f"{num_layers_created} layer(s), {tree_feature_count} feature(s); {output_summary}."
             )
-            final_log_message = (
-                f"Complete: {icao_code} - {num_layers_created} layer(s), "
-                f"{tree_feature_count} feature(s), {runway_summary}, {output_summary}."
-            )
-
             self.iface.messageBar().pushMessage(
                 self.tr("Success"), final_user_message, level=Qgis.Success, duration=10
             )  # Increased duration
-            self._log_success(final_log_message, notify_user=True)
-            if generation_summary:
-                self._log("Generation summary:\n" + "\n".join(generation_summary))
+            self._emit_section_outputs(main_group)
+            if self._run_log is not None:
+                self._run_log.update_context(
+                    airport=icao_code,
+                    runways=self._processing_runway_summary,
+                    output=(self.output_path if self.output_mode == "file" else self.output_mode),
+                )
 
             if (
                 main_group is not None
@@ -3645,6 +3661,23 @@ class SafeguardingBuilder(
                 self._remove_group_recursively(main_group, project)
                 if main_group.parent() is not None:
                     main_group.parent().removeChildNode(main_group)
+
+    def _emit_section_outputs(self, main_group: Optional[QgsLayerTreeGroup]) -> None:
+        """Emit one concise output line per populated user-facing section."""
+        if main_group is None or self._run_log is None:
+            return
+        debug_name = self.tr(output_structure.DEBUG_DEVELOPMENT)
+        for child in main_group.children():
+            if isinstance(child, QgsLayerTreeGroup):
+                if child.name() == debug_name:
+                    continue
+                layers, features, _ = self._count_layer_tree_contents(child)
+                if layers > 0 and features > 0:
+                    self._run_log.output(
+                        child.name(),
+                        layers=layers,
+                        features=features,
+                    )
 
     # --- Geometry Creation Helpers ---
     def create_arp_layer(

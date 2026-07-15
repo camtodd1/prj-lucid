@@ -18,7 +18,6 @@ from qgis.core import (  # type: ignore
     QgsLayerTreeLayer,
     QgsLayerTreeNode,
     QgsLineSymbol,
-    QgsMessageLog,
     QgsPalLayerSettings,
     QgsProject,
     QgsRendererCategory,
@@ -34,6 +33,7 @@ from qgis.core import (  # type: ignore
 )
 
 from .constants import LAYER_FEATURE_BATCH_SIZE
+from .run_log import QgsMessageLog
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
@@ -134,13 +134,8 @@ class LayerMixin:
             batch = features[:batch_size]
             add_ok, _ = provider.addFeatures(batch)
             if not add_ok:
-                QgsMessageLog.logMessage(
-                    f"Failed to add feature batch to layer '{display_name}'. "
-                    "Retrying feature-by-feature for diagnostics.",
-                    plugin_tag,
-                    Qgis.Warning,
-                )
                 failed_features = 0
+                first_geometry_detail = None
                 for batch_index, feature in enumerate(batch):
                     single_ok, _ = provider.addFeatures([feature])
                     if single_ok:
@@ -159,15 +154,15 @@ class LayerMixin:
                             )
                         except Exception as geom_error:
                             geom_details = f"geometry detail error: {geom_error}"
+                    if first_geometry_detail is None:
+                        first_geometry_detail = f"index={batch_index}, {geom_details}"
+                if failed_features:
                     QgsMessageLog.logMessage(
-                        f"Failed to add feature {batch_index} to layer "
-                        f"'{display_name}': {geom_details}; "
-                        f"attr_count={len(feature.attributes())}; "
-                        f"attrs={feature.attributes()}",
+                        f"Layer '{display_name}' omitted: {failed_features}/{len(batch)} "
+                        f"features could not be written; first failure: {first_geometry_detail}.",
                         plugin_tag,
                         Qgis.Critical,
                     )
-                if failed_features:
                     return False
             del features[: len(batch)]
         return True
@@ -251,8 +246,6 @@ class LayerMixin:
                     )
                     return layer
 
-                QgsMessageLog.logMessage(f"display_name = '{display_name}'", plugin_tag, Qgis.Info)
-
                 name_without_ext = os.path.splitext(display_name)[0]
                 safe_name = self._sanitize_filename(name_without_ext)
                 full_path = os.path.join(self.output_path, f"{safe_name}{self.output_format_extension}")
@@ -266,11 +259,6 @@ class LayerMixin:
                 )
 
                 if isinstance(result, tuple) and result[0] == QgsVectorFileWriter.NoError:
-                    QgsMessageLog.logMessage(
-                        f"Layer '{display_name}' successfully written to '{full_path}'.",
-                        plugin_tag,
-                        Qgis.Info,
-                    )
                     loaded_layer = self.iface.addVectorLayer(full_path, display_name, "ogr")
                     if loaded_layer is not None and loaded_layer.isValid():
                         root = project.layerTreeRoot()

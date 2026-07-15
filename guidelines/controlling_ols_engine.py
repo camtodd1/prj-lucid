@@ -17,7 +17,6 @@ from qgis.core import (  # type: ignore
     QgsGeometry,
     QgsLayerTreeGroup,
     QgsLineString,
-    QgsMessageLog,
     QgsPoint,
     QgsPointXY,
     QgsRectangle,
@@ -27,8 +26,10 @@ from qgis.core import (  # type: ignore
 
 try:
     from ..core import output_structure
+    from ..core.run_log import QgsMessageLog
 except ImportError:
     from core import output_structure
+    from core.run_log import QgsMessageLog  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS = 8

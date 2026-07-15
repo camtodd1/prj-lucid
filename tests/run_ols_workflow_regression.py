@@ -22,7 +22,6 @@ from qgis.core import (
     QgsApplication,
     QgsCoordinateReferenceSystem,
     QgsGeometry,
-    QgsMessageLog,
     QgsPointXY,
     QgsProject,
 )
@@ -684,6 +683,60 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
     return failures
 
 
+def _logging_contract_failures(logs, runway_count: int) -> List[str]:
+    """Validate the concise, scan-oriented operational log contract."""
+    failures = []
+    normal = [entry for entry in logs if entry["tag"] == "SafeguardingBuilder"]
+    severe = [
+        entry
+        for entry in normal
+        if entry["level"] in {int(Qgis.Warning), int(Qgis.Critical)}
+    ]
+    maximum_events = 32 + (3 * runway_count) + len(severe)
+    if len(normal) > maximum_events:
+        failures.append(
+            f"operational log emitted {len(normal)} events; budget is {maximum_events}"
+        )
+
+    starts = [entry for entry in normal if entry["message"].startswith("START")]
+    terminals = [
+        entry
+        for entry in normal
+        if entry["message"].startswith(("DONE", "CANCELLED", "FAILED"))
+    ]
+    if len(starts) != 1:
+        failures.append(f"operational log has {len(starts)} START events instead of one")
+    if len(terminals) != 1:
+        failures.append(
+            f"operational log has {len(terminals)} terminal events instead of one"
+        )
+
+    expected_levels = {
+        "START": int(Qgis.Info),
+        "PHASE": int(Qgis.Info),
+        "SKIP": int(Qgis.Info),
+        "OUTPUT": int(Qgis.Info),
+        "WARN": int(Qgis.Warning),
+        "ERROR": int(Qgis.Critical),
+        "DONE": int(Qgis.Success),
+        "CANCELLED": int(Qgis.Info),
+        "FAILED": int(Qgis.Critical),
+    }
+    for entry in normal:
+        message = entry["message"]
+        token = message.split(" ", 1)[0]
+        expected = expected_levels.get(token)
+        if expected is None:
+            failures.append(f"operational log uses unknown event kind: {token}")
+        elif entry["level"] != expected:
+            failures.append(
+                f"{token} uses QGIS severity {entry['level']} instead of {expected}"
+            )
+        if "\n" in message or "\r" in message:
+            failures.append(f"{token} event is not a single readable line")
+    return failures
+
+
 def _run_case(
     case, manifest, builder_cls, dialog_cls, controlling_cls, comparison_cls,
     production_gates=False,
@@ -771,22 +824,19 @@ def _run_case(
     builder.dlg = dialog
     qgis_logs = []
 
+    run_log_module = sys.modules[
+        f"{builder_cls.__module__.split('.', 1)[0]}.core.run_log"
+    ]
+    original_log_sink = run_log_module._qgis_sink
+
     def capture_log(message, tag, level):
-        text = str(message)
-        if int(level) >= int(Qgis.Warning) or "Controlling" in text or "controlling" in text:
-            qgis_logs.append({"message": text, "tag": str(tag), "level": int(level)})
+        qgis_logs.append(
+            {"message": str(message), "tag": str(tag), "level": int(level)}
+        )
+        original_log_sink(message, tag, level)
 
-    QgsApplication.messageLog().messageReceived.connect(capture_log)
     with ExitStack() as stack:
-        original_log_message = QgsMessageLog.logMessage
-
-        def recorded_log_message(message, tag="", level=Qgis.Info, notifyUser=False):
-            text = str(message)
-            if int(level) >= int(Qgis.Warning) or "Controlling" in text or "controlling" in text:
-                qgis_logs.append({"message": text, "tag": str(tag), "level": int(level)})
-            return original_log_message(message, tag, level, notifyUser)
-
-        stack.enter_context(patch.object(QgsMessageLog, "logMessage", recorded_log_message))
+        stack.enter_context(patch.object(run_log_module, "_qgis_sink", capture_log))
         for name in builder_methods:
             original = getattr(builder_cls, name)
             stack.enter_context(patch.object(builder_cls, name, timed(name, original)))
@@ -805,7 +855,6 @@ def _run_case(
         start = time.perf_counter()
         builder.run_safeguarding_processing()
         total_seconds = time.perf_counter() - start
-    QgsApplication.messageLog().messageReceived.disconnect(capture_log)
 
     layers = _layer_metrics(project)
     solver_diagnostics = []
@@ -837,6 +886,7 @@ def _run_case(
             diagnostics["mos139_lock"] = _engine_lock_signature(engine)
         solver_diagnostics.append(diagnostics)
     failures = _case_failures(case, manifest, comparison_results, layers)
+    failures.extend(_logging_contract_failures(qgis_logs, case["payload_runway_count"]))
     if production_gates:
         for index, diagnostics in enumerate(solver_diagnostics, start=1):
             exceptional = diagnostics["exceptional_recovery"]
@@ -937,6 +987,29 @@ def _run_case(
         "layers": layers,
         "messages": iface.bar.messages,
         "qgis_logs": qgis_logs,
+        "qgis_warnings": [
+            entry
+            for entry in qgis_logs
+            if entry["level"] in {int(Qgis.Warning), int(Qgis.Critical)}
+        ],
+        "logging_contract": {
+            "normal_events": sum(
+                entry["tag"] == "SafeguardingBuilder" for entry in qgis_logs
+            ),
+            "diagnostic_events": sum(
+                entry["tag"] == "SafeguardingBuilder.Diagnostics"
+                for entry in qgis_logs
+            ),
+            "maximum_normal_events": (
+                32
+                + (3 * case["payload_runway_count"])
+                + sum(
+                    entry["tag"] == "SafeguardingBuilder"
+                    and entry["level"] in {int(Qgis.Warning), int(Qgis.Critical)}
+                    for entry in qgis_logs
+                )
+            ),
+        },
         "solver_diagnostics": solver_diagnostics,
         "mos139_lock": next(
             (
@@ -963,6 +1036,11 @@ def _parse_args():
         help="Fixture filename from tests/fixtures/ols; repeat to select multiple cases.",
     )
     parser.add_argument("--output", type=Path, help="Optional JSON report path.")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print the full JSON report even when --output is supplied.",
+    )
     parser.add_argument("--repeat", type=int, default=1, help="Runs per fixture; use 3 or more for release gates.")
     parser.add_argument("--baseline", type=Path, help="Performance baseline JSON used for release gates.")
     parser.add_argument(
@@ -1121,7 +1199,15 @@ def main() -> int:
     report["passed"] = all(case["passed"] for case in report["fixtures"])
     if args.output:
         args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(json.dumps(report, indent=2))
+    if args.verbose or not args.output:
+        print(json.dumps(report, indent=2))
+    else:
+        failed = sum(not fixture["passed"] for fixture in report["fixtures"])
+        status = "PASS" if report["passed"] else "FAIL"
+        print(
+            f"{status} | fixtures={len(report['fixtures'])} | "
+            f"failed={failed} | output={args.output}"
+        )
     app.exitQgis()
     return 0 if report["passed"] else 1
 

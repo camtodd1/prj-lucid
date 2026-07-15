@@ -116,6 +116,8 @@ dialog/dialog_constants.py       Shared dialog labels, placeholders, logging
                                  tag, and output format definitions.
 core/layers.py                   Layer creation, feature writing, output file
                                  handling, grouping, and style application.
+core/run_log.py                  Structured operational events, diagnostic
+                                 routing, aggregation, and QGIS severity mapping.
 core/run_history.py              Append-only GUI/headless runtime test ledger.
 core/styles.py                   Mapping between layer style keys and QML files.
 guidelines/guideline_constants.py
@@ -153,6 +155,30 @@ styles/*.qml                     QGIS layer styling files.
 metadata.txt                     QGIS plugin metadata.
 resources.qrc                    Qt resource manifest.
 ```
+
+## Logging Contract
+
+The QGIS **SafeguardingBuilder** log is a concise operational trace intended for
+a quick scan. A run emits one `START`, numbered `PHASE` events, material `SKIP`,
+`OUTPUT`, `WARN`, or `ERROR` outcomes, and exactly one terminal `DONE`,
+`CANCELLED`, or `FAILED` event. Fields use a stable `key=value` format on one
+line. Skips state why an output was omitted; warnings state the consequence and,
+where useful, the corrective action. Repeated equivalent skips and warnings are
+aggregated rather than emitted once per feature or layer.
+
+Severity is semantic rather than numeric: routine progress, skips, and
+cancellation are QGIS Info; recoverable degradation is Warning; failed output is
+Critical; and only a successfully completed run is Success. User notifications
+remain in the message bar, so message-log events do not request duplicate QGIS
+pop-ups.
+
+Detailed solver, geometry, and legacy implementation messages use the separate
+**SafeguardingBuilder.Diagnostics** tag and are disabled by default. Set
+`SAFEGUARDING_BUILDER_DIAGNOSTICS=1` before starting QGIS to enable them. New
+code should use `RunLog` outcomes instead of calling QGIS logging directly. The
+workflow regression runner checks the event schema, exact severity mapping,
+single-line rendering, one start/terminal pair, and a volume ceiling of
+`32 + 3 × runway count`, with additional allowance for warnings and errors.
 
 ## Runtime Test History
 

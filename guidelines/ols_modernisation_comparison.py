@@ -13,13 +13,17 @@ from qgis.core import (  # type: ignore
     QgsGeometry,
     QgsLayerTreeGroup,
     QgsLayerTreeLayer,
-    QgsMessageLog,
     QgsPointXY,
     QgsRectangle,
     QgsWkbTypes,
 )
 
 from .controlling_ols_engine import ControllingOlsCandidate, PlanarControllingOlsEngine
+
+try:
+    from ..core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 COMPARISON_TOLERANCE_M = 0.01

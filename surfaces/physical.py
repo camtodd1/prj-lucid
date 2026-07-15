@@ -15,7 +15,6 @@ from qgis.core import (  # type: ignore
     QgsFields,
     QgsGeometry,
     QgsLayerTreeGroup,
-    QgsMessageLog,
     QgsPointXY,
     QgsProject,
     QgsVectorLayer,
@@ -23,6 +22,7 @@ from qgis.core import (  # type: ignore
 )
 
 from ..reports.runway_summary import summarize_generated_elements
+from ..core.run_log import QgsMessageLog
 
 PLUGIN_TAG = "SafeguardingBuilder"
 

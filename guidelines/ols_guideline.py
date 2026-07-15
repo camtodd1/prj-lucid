@@ -16,7 +16,6 @@ from qgis.core import (  # type: ignore
     QgsGeometry,
     QgsLayerTreeGroup,
     QgsLineString,
-    QgsMessageLog,
     QgsPoint,
     QgsPointXY,
     QgsProject,
@@ -37,6 +36,11 @@ from .controlling_ols_engine import (
     constant_elevation_evaluator,
     plane_elevation_evaluator,
 )
+
+try:
+    from ..core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 OLS_EDGE_ELEVATION_SOURCE = "safeguarding_builder_calculated"
@@ -487,12 +491,6 @@ class OlsGuidelineMixin:
 
         # --- 1. Generate Individual Strip Outline Geometries ---
         strip_outline_geoms: List[QgsGeometry] = []
-        # QgsMessageLog.logMessage(
-        #     "Generating individual runway strip outlines for IHS base...",
-        #     plugin_tag,
-        #     level=Qgis.Info,
-        # )
-
         if not processed_runway_data_list:
             QgsMessageLog.logMessage(
                 "Cannot generate IHS base: No processed runway data available.",
@@ -1003,11 +1001,6 @@ class OlsGuidelineMixin:
                     feat.setAttribute(fields.indexFromName("surface_id"), conical_surface_id)
                     self._apply_contour_metadata(feat, fields, "conical", IHS_ELEVATION_AMSL)
                     contour_features.append(feat)
-                    # QgsMessageLog.logMessage(
-                    #     f"Conical start contour at {IHS_ELEVATION_AMSL:.2f}m AMSL.",
-                    #     plugin_tag,
-                    #     Qgis.Info,
-                    # )
                 else:
                     QgsMessageLog.logMessage(
                         "Failed to extract exterior ring for IHS base.",
@@ -1064,9 +1057,6 @@ class OlsGuidelineMixin:
                                 current_target_contour_elev_amsl,
                             )
                             contour_features.append(feat)
-                            # QgsMessageLog.logMessage(
-                            #     f"Conical interval contour at {current_target_contour_elev_amsl:.2f}m AMSL.", plugin_tag, Qgis.Info
-                            # )
                 except Exception as e_contour:
                     QgsMessageLog.logMessage(
                         f"Error generating conical interval contour at elev={current_target_contour_elev_amsl}: {e_contour}",
@@ -1098,11 +1088,6 @@ class OlsGuidelineMixin:
                         feat.setAttribute(fields.indexFromName("surface_id"), conical_surface_id)
                         self._apply_contour_metadata(feat, fields, "conical", conical_outer_elevation)
                         contour_features.append(feat)
-                        # QgsMessageLog.logMessage(
-                        #     f"Conical end contour at {conical_outer_elevation:.2f}m AMSL.",
-                        #     plugin_tag,
-                        #     Qgis.Info,
-                        # )
                 else:
                     QgsMessageLog.logMessage(
                         "Failed to extract exterior ring for conical outer edge.",
@@ -1183,14 +1168,6 @@ class OlsGuidelineMixin:
                         geom = arp_feat.geometry()
                         actual_wkb_type = geom.wkbType()
 
-                        # QgsMessageLog.logMessage(
-                        #     f"ARP feature for OHS: Layer='{found_arp_point_layer.name()}', "
-                        #     f"Geom valid? {geom.isGeosValid()}, "
-                        #     f"WKBType Int: {actual_wkb_type} ({QgsWkbTypes.displayString(actual_wkb_type)})",
-                        #     PLUGIN_TAG,
-                        #     Qgis.Info,
-                        # )
-
                         acceptable_point_wkb_types = {
                             QgsWkbTypes.Point,
                             QgsWkbTypes.PointZ,
@@ -1240,11 +1217,6 @@ class OlsGuidelineMixin:
                         if ohs_full_circle_geom is not None:
                             ohs_final_geom = ohs_full_circle_geom
                             if outer_conical_geom and outer_conical_geom.isGeosValid():
-                                # QgsMessageLog.logMessage(
-                                #     "Attempting to difference Conical outer boundary from OHS circle.",
-                                #     plugin_tag,
-                                #     level=Qgis.Info,
-                                # )
                                 try:
                                     difference_geom = self._ensure_valid_geometry(
                                         ohs_full_circle_geom.difference(outer_conical_geom),
@@ -1349,8 +1321,6 @@ class OlsGuidelineMixin:
 
         # --- 6. Generate Transitional Surfaces ---
         if ihs_base_geom and IHS_ELEVATION_AMSL is not None:
-            # Note: Transitional feature generation logs its own start/finish messages inside the helper now
-            # QgsMessageLog.logMessage("Generating Transitional Surface features...", plugin_tag, level=Qgis.Info) # Removed from here
             transitional_features = []
             try:
                 target_crs = QgsProject.instance().crs()
@@ -1678,12 +1648,6 @@ class OlsGuidelineMixin:
         start_dist_from_thr = ofz_params.get("start_dist_from_thr")
         ref = ofz_params.get("ref", "MOS (Verify)")
 
-        QgsMessageLog.logMessage(
-            f"Entered _generate_inner_transitional_surface for {runway_name} {end_desig}",
-            PLUGIN_TAG,
-            Qgis.Info,
-        )
-
         if None in [width, length, slope, start_dist_from_thr]:
             return None
 
@@ -1781,17 +1745,17 @@ class OlsGuidelineMixin:
             missing_params_list.append("IHS_ELEVATION_AMSL")  # Should not be None if type hint is enforced
 
         if missing_params_list:
-            self._log_debug(f"BLS {end_desig} skipped: missing inputs {', '.join(missing_params_list)}.")
+            self._diagnostic(f"BLS {end_desig} skipped: missing inputs {', '.join(missing_params_list)}.")
             return None
 
         inner_edge_center_pt = thr_point.project(resolved_start_dist, outward_azimuth)
         if not inner_edge_center_pt:
-            self._log_debug(f"BLS {end_desig} skipped: failed to calculate inner edge centre.")
+            self._diagnostic(f"BLS {end_desig} skipped: failed to calculate inner edge centre.")
             return None
 
         required_rwy_keys = ["thr_point", "rec_thr_point", "threshold_elev_1", "threshold_elev_2"]
         if not all(key in runway_data and runway_data[key] is not None for key in required_rwy_keys):
-            self._log_debug(f"BLS {end_desig} skipped: runway data missing keys for elevation calculation.")
+            self._diagnostic(f"BLS {end_desig} skipped: runway data missing keys for elevation calculation.")
             return None
 
         inner_edge_elev_amsl = self._get_elevation_at_point_along_gradient(
@@ -1803,7 +1767,7 @@ class OlsGuidelineMixin:
             QgsProject.instance().crs(),
         )
         if inner_edge_elev_amsl is None:
-            self._log_debug(f"BLS {end_desig} skipped: inner edge elevation unavailable.")
+            self._diagnostic(f"BLS {end_desig} skipped: inner edge elevation unavailable.")
             return None
 
         height_to_gain = IHS_ELEVATION_AMSL - inner_edge_elev_amsl
@@ -1818,7 +1782,7 @@ class OlsGuidelineMixin:
         if (
             calculated_length < -1e-9
         ):  # Allow for very small negative due to float precision if height_to_gain is near zero
-            self._log_debug(f"BLS {end_desig} skipped: negative calculated length {calculated_length:.3f} m.")
+            self._diagnostic(f"BLS {end_desig} skipped: negative calculated length {calculated_length:.3f} m.")
             return None
 
         # If calculated_length is 0 (starts at/above IHS), still create a degenerate feature or handle as per requirements.
@@ -1843,9 +1807,9 @@ class OlsGuidelineMixin:
             # Decide if this is an error or if a degenerate (e.g., line) feature should be made.
             # For now, if it's not a valid polygon, we return None.
             if calculated_length <= 1e-9:  # If length was effectively zero
-                self._log_debug(f"BLS {end_desig} skipped: calculated length is zero.")
+                self._diagnostic(f"BLS {end_desig} skipped: calculated length is zero.")
             else:
-                self._log_debug(f"BLS {end_desig} skipped: generated polygon is invalid.")
+                self._diagnostic(f"BLS {end_desig} skipped: generated polygon is invalid.")
             return None
 
         # --- Feature Creation ---
@@ -3494,11 +3458,6 @@ class OlsGuidelineMixin:
                 "surface_id": surface_id,
             }
             attr_map.update(self._contour_attribute_values("transitional", current_z))
-            #     QgsMessageLog.logMessage(
-            #     f"Setting contour_elev_am for contour: current_z={current_z} (type={type(current_z)})",
-            #     PLUGIN_TAG,
-            #     level=Qgis.Info,
-            # )
             for name, value in attr_map.items():
                 idx = contour_fields.indexFromName(name)
                 if idx != -1:
@@ -5123,13 +5082,13 @@ class OlsGuidelineMixin:
                                 )
                             )
                         else:
-                            self._log_debug(f"BLS {current_desig} skipped: helper returned no feature.")
+                            self._diagnostic(f"BLS {current_desig} skipped: helper returned no feature.")
                     else:
-                        self._log_debug(f"BLS {current_desig} skipped: helper returned no result.")
+                        self._diagnostic(f"BLS {current_desig} skipped: helper returned no result.")
                 elif not bls_params_dict:
-                    self._log_debug(f"BLS {current_desig} skipped: no baulked landing parameters.")
+                    self._diagnostic(f"BLS {current_desig} skipped: no baulked landing parameters.")
                 elif IHS_ELEVATION_AMSL is None:
-                    self._log_debug(f"BLS {current_desig} skipped: IHS elevation unavailable.")
+                    self._diagnostic(f"BLS {current_desig} skipped: IHS elevation unavailable.")
             except Exception as e_bls:
                 QgsMessageLog.logMessage(
                     f"ERROR generating Baulked Landing for {current_desig}: {e_bls}\n{traceback.format_exc()}",
@@ -5162,7 +5121,7 @@ class OlsGuidelineMixin:
                         if strip_params_for_its and strip_params_for_its.get("graded_width") is not None:
                             graded_strip_total_width = strip_params_for_its.get("graded_width")
                         else:
-                            self._log_debug(
+                            self._diagnostic(
                                 f"ITS {current_desig}: using default strip width {graded_strip_total_width} m."
                             )
                         graded_strip_half_width = graded_strip_total_width / 2.0
@@ -5490,7 +5449,7 @@ class OlsGuidelineMixin:
                     if tocs_conts:
                         tocs_contour_features.extend(tocs_conts)
                 else:
-                    self._log_debug(f"TOCS {current_desig} skipped: missing origin point or elevation.")
+                    self._diagnostic(f"TOCS {current_desig} skipped: missing origin point or elevation.")
             except Exception as e_tocs:
                 QgsMessageLog.logMessage(
                     f"ERROR generating TOCS for {current_desig}: {e_tocs}\n{traceback.format_exc()}",

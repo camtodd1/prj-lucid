@@ -8,10 +8,14 @@ from qgis.core import (  # type: ignore
     QgsField,
     QgsFields,
     QgsLayerTreeGroup,
-    QgsMessageLog,
 )
 
 from .processor_base import NasfGuidelineProcessorBase
+
+try:
+    from ...core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
