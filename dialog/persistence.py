@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 from qgis.core import QgsMessageLog, Qgis  # type: ignore
 from qgis.PyQt import QtCore, QtWidgets  # type: ignore
@@ -132,6 +133,8 @@ class PersistenceMixin:
             if reply == QtWidgets.QMessageBox.StandardButton.No:
                 return
 
+        self._runtime_test_context = {}
+
         cns_table = self._table("table_cns_facility")
         if cns_table:
             cns_table.setRowCount(0)
@@ -199,6 +202,12 @@ class PersistenceMixin:
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data_to_save, f, indent=4, ensure_ascii=False)
+            saved_path = Path(file_path)
+            self._runtime_test_context = {
+                "test_case_id": saved_path.stem,
+                "test_case_name": saved_path.stem.replace("_", " ").replace("-", " ").title(),
+                "input_filename": saved_path.name,
+            }
             QMessageBox.information(
                 self,
                 self.tr("Save Successful"),
@@ -231,6 +240,19 @@ class PersistenceMixin:
             self._validate_loaded_payload(loaded_data)
             self.clear_all_inputs(confirm=False)
             self._apply_loaded_payload(loaded_data)
+            loaded_path = Path(file_path)
+            self._runtime_test_context = {
+                "test_case_id": str(loaded_data.get("test_case_id") or loaded_path.stem),
+                "test_case_name": str(
+                    loaded_data.get("test_case_name")
+                    or loaded_path.stem.replace("_", " ").replace("-", " ").title()
+                ),
+                "input_filename": loaded_path.name,
+            }
+            if loaded_data.get("runway_configuration"):
+                self._runtime_test_context["runway_configuration"] = str(
+                    loaded_data["runway_configuration"]
+                )
             self._update_dialog_height()
             if hasattr(self, "queue_current_airport_lookup"):
                 self.queue_current_airport_lookup()

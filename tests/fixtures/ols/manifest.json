@@ -5,6 +5,7 @@
       "description": "Single-runway modernisation comparison baseline",
       "icao_code": "YBBN",
       "runway_count": 1,
+      "runway_configuration": "single",
       "project_crs": "EPSG:28356"
     },
     {
@@ -12,6 +13,7 @@
       "description": "Two intersecting runways",
       "icao_code": "YSSY",
       "runway_count": 2,
+      "runway_configuration": "intersecting",
       "project_crs": "EPSG:28356"
     },
     {
@@ -19,6 +21,7 @@
       "description": "Two parallel runways",
       "icao_code": "YSWS",
       "runway_count": 2,
+      "runway_configuration": "parallel",
       "project_crs": "EPSG:28356"
     },
     {
@@ -26,6 +29,7 @@
       "description": "Two intersecting runways with visible Approach/TOCS-to-Conical arcs",
       "icao_code": "YMML",
       "runway_count": 2,
+      "runway_configuration": "intersecting",
       "project_crs": "EPSG:32755",
       "maximum_region_overlap_m2": 0.2
     },
@@ -34,6 +38,7 @@
       "description": "Three-runway controlling-envelope stress case",
       "icao_code": "YSSY",
       "runway_count": 3,
+      "runway_configuration": "mixed",
       "project_crs": "EPSG:28356"
     },
     {
@@ -41,6 +46,7 @@
       "description": "CAP168 single runway with a nominated curved approach track",
       "icao_code": "YBCP",
       "runway_count": 1,
+      "runway_configuration": "single",
       "project_crs": "EPSG:28356",
       "expected_comparison_families": [],
       "mos139_lock_required": false,
@@ -51,6 +57,7 @@
       "description": "CAP168 short non-instrument runway and circular IHS",
       "icao_code": "YBSC",
       "runway_count": 1,
+      "runway_configuration": "single",
       "project_crs": "EPSG:28356",
       "expected_comparison_families": [],
       "mos139_lock_required": false,
@@ -61,6 +68,7 @@
       "description": "CAP168 parallel main and subsidiary runways with displaced thresholds",
       "icao_code": "YBPM",
       "runway_count": 2,
+      "runway_configuration": "parallel",
       "project_crs": "EPSG:28356",
       "expected_comparison_families": [],
       "mos139_lock_required": false,
@@ -71,6 +79,7 @@
       "description": "CAP168 intersecting main and subsidiary runways",
       "icao_code": "YBCI",
       "runway_count": 2,
+      "runway_configuration": "intersecting",
       "project_crs": "EPSG:28356",
       "expected_comparison_families": [],
       "mos139_lock_required": false,
@@ -81,6 +90,7 @@
       "description": "Current Annex 14 non-instrument code 1 runway",
       "icao_code": "YBAS",
       "runway_count": 1,
+      "runway_configuration": "single",
       "project_crs": "EPSG:28356",
       "expected_comparison_families": [],
       "mos139_lock_required": false,
@@ -91,6 +101,7 @@
       "description": "Current Annex 14 intersecting code 3 and code 2 runways",
       "icao_code": "YBAI",
       "runway_count": 2,
+      "runway_configuration": "intersecting",
       "project_crs": "EPSG:28356",
       "expected_comparison_families": ["OLS"],
       "mos139_lock_required": false,
@@ -101,6 +112,7 @@
       "description": "Current Annex 14 and MOS139 intersecting comparison in reverse order",
       "icao_code": "YBAI",
       "runway_count": 2,
+      "runway_configuration": "intersecting",
       "project_crs": "EPSG:28356",
       "expected_comparison_families": ["OLS"],
       "mos139_lock_required": false,

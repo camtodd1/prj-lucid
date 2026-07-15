@@ -149,6 +149,12 @@ def run(input_path, audit_path, preview_path):
     with open(input_path, "r", encoding="utf-8") as handle:
         payload = json.load(handle)
     dialog = SafeguardingBuilderDialog()
+    input_filename = os.path.basename(input_path)
+    dialog._runtime_test_context = {
+        "test_case_id": os.path.splitext(input_filename)[0],
+        "test_case_name": os.path.splitext(input_filename)[0].replace("_", " ").title(),
+        "input_filename": input_filename,
+    }
     if hasattr(dialog, "_airport_lookup_timer"):
         dialog._airport_lookup_timer.stop()
     dialog._apply_loaded_payload(payload)

@@ -695,6 +695,12 @@ def _run_case(
     project.clear()
     project.setCrs(QgsCoordinateReferenceSystem(case["project_crs"]))
     dialog = dialog_cls()
+    dialog._runtime_test_context = {
+        "test_case_id": fixture_path.stem,
+        "test_case_name": case["description"],
+        "input_filename": fixture_path.name,
+        "runway_configuration": case["runway_configuration"],
+    }
     if hasattr(dialog, "_airport_lookup_timer"):
         dialog._airport_lookup_timer.stop()
     dialog._apply_loaded_payload(payload)

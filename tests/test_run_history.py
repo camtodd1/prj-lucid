@@ -13,8 +13,10 @@ from unittest.mock import patch
 from core.run_history import (
     RUN_HISTORY_COLUMNS,
     RuntimeRunRecorder,
+    classify_runway_configuration,
     detect_run_agent,
     migrate_history_file,
+    runtime_input_fingerprint,
 )
 
 
@@ -55,6 +57,12 @@ class RunHistoryTests(unittest.TestCase):
                 design_ruleset_label="MOS139 (C.07 2026)",
                 baseline_ruleset_label="MOS139 (C.07 2026)",
                 comparison_ruleset_label="EASA CS-ADR-DSN Issue 7",
+                test_case_id="ybbn_single",
+                test_case_name="YBBN single runway",
+                input_filename="ybbn_single.json",
+                runway_count=1,
+                runway_configuration="single",
+                input_fingerprint="abc123",
             )
             recorder.start_phase("inputs")
             recorder.start_phase("controlling_envelope")
@@ -64,8 +72,8 @@ class RunHistoryTests(unittest.TestCase):
                 record = recorder.finish("completed")
 
             stored = _rows(history_path)[0]
-            self.assertEqual(record["schema_version"], 3)
-            self.assertEqual(stored["schema_version"], "3")
+            self.assertEqual(record["schema_version"], 4)
+            self.assertEqual(stored["schema_version"], "4")
             self.assertEqual(stored["agent"], "codex headless")
             self.assertEqual(stored["airport"], "YBBN")
             self.assertEqual(stored["commit_ref"], "abc123def456")
@@ -73,6 +81,12 @@ class RunHistoryTests(unittest.TestCase):
             self.assertEqual(stored["qgis_version"], "4.0-test")
             self.assertEqual(stored["comparison_ols_ruleset"], "easa_cs_adr_dsn_issue_7")
             self.assertEqual(stored["design_ruleset_label"], "MOS139 (C.07 2026)")
+            self.assertEqual(stored["test_case_id"], "ybbn_single")
+            self.assertEqual(stored["test_case_name"], "YBBN single runway")
+            self.assertEqual(stored["input_filename"], "ybbn_single.json")
+            self.assertEqual(stored["runway_count"], "1")
+            self.assertEqual(stored["runway_configuration"], "single")
+            self.assertEqual(stored["input_fingerprint"], "abc123")
             timings = json.loads(stored["module_timings_json"])
             self.assertEqual(timings["controlling_ols.regions"]["elapsed_seconds"], 1.25)
             self.assertEqual(stored["controlling_regions_seconds"], "1.25")
@@ -127,7 +141,7 @@ class RunHistoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             history_path = root / "runs.txt"
-            old_columns = RUN_HISTORY_COLUMNS[:-2]
+            old_columns = RUN_HISTORY_COLUMNS[: RUN_HISTORY_COLUMNS.index("test_case_id")]
             old_values = [""] * len(old_columns)
             old_values[old_columns.index("schema_version")] = "2"
             old_values[old_columns.index("airport")] = "YMML"
@@ -145,9 +159,52 @@ class RunHistoryTests(unittest.TestCase):
             records = _rows(history_path)
             self.assertEqual(tuple(records[0]), RUN_HISTORY_COLUMNS)
             self.assertEqual(records[0]["airport"], "YMML")
-            self.assertIsNone(records[0]["layers_created"])
+            self.assertEqual(records[0]["layers_created"], "")
             self.assertEqual(records[1]["layers_created"], "12")
             self.assertEqual(records[1]["features_created"], "345")
+            self.assertIsNone(records[0]["test_case_id"])
+            self.assertEqual(records[1]["test_case_id"], "")
+
+    def test_runway_configuration_uses_actual_centreline_geometry(self):
+        runway = lambda start, end: {"thr_point": start, "rec_thr_point": end}
+        self.assertEqual(classify_runway_configuration([runway((0, 0), (10, 0))]), "single")
+        self.assertEqual(
+            classify_runway_configuration(
+                [runway((0, 0), (10, 0)), runway((0, 2), (10, 2))]
+            ),
+            "parallel",
+        )
+        self.assertEqual(
+            classify_runway_configuration(
+                [runway((0, 0), (10, 10)), runway((0, 10), (10, 0))]
+            ),
+            "intersecting",
+        )
+        self.assertEqual(
+            classify_runway_configuration(
+                [
+                    runway((0, 0), (10, 0)),
+                    runway((0, 2), (10, 2)),
+                    runway((5, -5), (5, 5)),
+                ]
+            ),
+            "mixed",
+        )
+
+    def test_input_fingerprint_is_stable_and_changes_with_parameters(self):
+        first = {
+            "icao_code": "YTEST",
+            "runways": [{"thr_point": (0, 0), "rec_thr_point": (10, 0)}],
+            "baseline_ols_ruleset": "mos139_2019",
+        }
+        reordered = {
+            "baseline_ols_ruleset": "mos139_2019",
+            "runways": [{"rec_thr_point": (10, 0), "thr_point": (0, 0)}],
+            "icao_code": "YTEST",
+        }
+        changed = {**first, "baseline_ols_ruleset": "uk_caa_cap168_edition_13"}
+        self.assertEqual(runtime_input_fingerprint(first), runtime_input_fingerprint(reordered))
+        self.assertNotEqual(runtime_input_fingerprint(first), runtime_input_fingerprint(changed))
 
 
 if __name__ == "__main__":

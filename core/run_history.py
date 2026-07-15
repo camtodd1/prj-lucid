@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import configparser
 import csv
+import hashlib
 import io
 import json
+import math
 import os
 import subprocess
 import time
@@ -19,7 +21,7 @@ except ImportError:  # pragma: no cover - QGIS production targets are Unix-like.
     fcntl = None
 
 
-RUN_HISTORY_SCHEMA_VERSION = 3
+RUN_HISTORY_SCHEMA_VERSION = 4
 RUN_HISTORY_FILENAME = "runtime_test_runs.txt"
 AGENT_ENV_VAR = "SAFEGUARDING_BUILDER_RUN_AGENT"
 COMMIT_ENV_VAR = "SAFEGUARDING_BUILDER_COMMIT"
@@ -65,7 +67,150 @@ RUN_HISTORY_COLUMNS = (
     "module_timings_json",
     "layers_created",
     "features_created",
+    "test_case_id",
+    "test_case_name",
+    "input_filename",
+    "runway_count",
+    "runway_configuration",
+    "input_fingerprint",
 )
+
+
+def _xy(point: object) -> Optional[tuple[float, float]]:
+    """Read an x/y pair from QGIS point-like objects or simple sequences."""
+    if point is None:
+        return None
+    try:
+        x_value = point.x() if callable(getattr(point, "x", None)) else getattr(point, "x")
+        y_value = point.y() if callable(getattr(point, "y", None)) else getattr(point, "y")
+        return float(x_value), float(y_value)
+    except (AttributeError, TypeError, ValueError):
+        pass
+    if isinstance(point, (list, tuple)) and len(point) >= 2:
+        try:
+            return float(point[0]), float(point[1])
+        except (TypeError, ValueError):
+            return None
+    return None
+
+
+def _runway_segment(
+    runway: Mapping[str, object],
+) -> Optional[tuple[tuple[float, float], tuple[float, float]]]:
+    start = _xy(runway.get("thr_point"))
+    end = _xy(runway.get("rec_thr_point"))
+    if start is None:
+        try:
+            start = (float(runway["thr_easting"]), float(runway["thr_northing"]))
+        except (KeyError, TypeError, ValueError):
+            start = None
+    if end is None:
+        try:
+            end = (float(runway["rec_easting"]), float(runway["rec_northing"]))
+        except (KeyError, TypeError, ValueError):
+            end = None
+    if start is None or end is None or start == end:
+        return None
+    return start, end
+
+
+def _segments_intersect(
+    first: tuple[tuple[float, float], tuple[float, float]],
+    second: tuple[tuple[float, float], tuple[float, float]],
+) -> bool:
+    def orientation(a, b, c) -> float:
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    a, b = first
+    c, d = second
+    return (
+        orientation(a, b, c) * orientation(a, b, d) <= 0
+        and orientation(c, d, a) * orientation(c, d, b) <= 0
+    )
+
+
+def classify_runway_configuration(runways: Iterable[Mapping[str, object]]) -> str:
+    """Return a plain layout label from the runway centreline geometry."""
+    runway_list = list(runways)
+    if not runway_list:
+        return "not recorded"
+    if len(runway_list) == 1:
+        return "single"
+    segments = [segment for segment in (_runway_segment(item) for item in runway_list) if segment]
+    if len(segments) != len(runway_list):
+        return "multiple"
+
+    parallel_pairs = 0
+    intersecting_pairs = 0
+    pair_count = 0
+    for index, first in enumerate(segments):
+        first_dx = first[1][0] - first[0][0]
+        first_dy = first[1][1] - first[0][1]
+        first_length = math.hypot(first_dx, first_dy)
+        for second in segments[index + 1 :]:
+            pair_count += 1
+            second_dx = second[1][0] - second[0][0]
+            second_dy = second[1][1] - second[0][1]
+            second_length = math.hypot(second_dx, second_dy)
+            sine = abs(first_dx * second_dy - first_dy * second_dx) / (
+                first_length * second_length
+            )
+            if sine <= math.sin(math.radians(5.0)):
+                parallel_pairs += 1
+            elif _segments_intersect(first, second):
+                intersecting_pairs += 1
+
+    if parallel_pairs == pair_count:
+        return "parallel"
+    if intersecting_pairs and parallel_pairs:
+        return "mixed"
+    if intersecting_pairs:
+        return "intersecting"
+    return "mixed"
+
+
+def _fingerprint_value(value: object) -> object:
+    if value is None or isinstance(value, (bool, int, str)):
+        return value
+    if isinstance(value, float):
+        return round(value, 9)
+    if isinstance(value, Mapping):
+        return {
+            str(key): _fingerprint_value(item)
+            for key, item in sorted(value.items(), key=lambda pair: str(pair[0]))
+            if not str(key).startswith("_")
+        }
+    if isinstance(value, (list, tuple)):
+        return [_fingerprint_value(item) for item in value]
+    point = _xy(value)
+    if point is not None:
+        return [round(point[0], 6), round(point[1], 6)]
+    return str(value)
+
+
+def runtime_input_fingerprint(input_data: Mapping[str, object]) -> str:
+    """Fingerprint inputs that can materially change a safeguarding runtime."""
+    relevant_keys = (
+        "icao_code",
+        "design_standard",
+        "safeguarding_framework",
+        "protected_airspace_policy",
+        "baseline_ols_ruleset",
+        "comparison_ols_ruleset",
+        "runways",
+        "cns_facilities",
+        "agl_options",
+        "contour_intervals",
+        "output_mode",
+        "output_format_driver",
+    )
+    payload = {
+        key: _fingerprint_value(input_data.get(key))
+        for key in relevant_keys
+        if key in input_data
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
 
 
 def _module_timings(record: Mapping[str, object]) -> Dict[str, Dict[str, object]]:
@@ -113,6 +258,12 @@ def _table_row(record: Mapping[str, object]) -> Dict[str, object]:
         "module_timings_json": json.dumps(timings, sort_keys=True, separators=(",", ":")),
         "layers_created": record.get("layers_created", ""),
         "features_created": record.get("features_created", ""),
+        "test_case_id": record.get("test_case_id", "") or "",
+        "test_case_name": record.get("test_case_name", "") or "",
+        "input_filename": record.get("input_filename", "") or "",
+        "runway_count": record.get("runway_count", "") or "",
+        "runway_configuration": record.get("runway_configuration", "") or "",
+        "input_fingerprint": record.get("input_fingerprint", "") or "",
     }
     for column, module_name in KEY_MODULE_COLUMNS:
         timing = timings.get(module_name)
@@ -294,7 +445,9 @@ class RuntimeRunRecorder:
         agent: Optional[str] = None,
     ) -> None:
         self.plugin_dir = Path(plugin_dir)
-        self.history_path = Path(history_path) if history_path else default_history_path(self.plugin_dir)
+        self.history_path = (
+            Path(history_path) if history_path else default_history_path(self.plugin_dir)
+        )
         self.agent = agent or detect_run_agent()
         self.qgis_version = str(qgis_version or "unknown")
         self.started_at = time.perf_counter()
@@ -308,6 +461,12 @@ class RuntimeRunRecorder:
             "comparison_ols": None,
         }
         self.ruleset_labels: Dict[str, Optional[str]] = dict(self.rulesets)
+        self.test_case_id: Optional[str] = None
+        self.test_case_name: Optional[str] = None
+        self.input_filename: Optional[str] = None
+        self.runway_count: Optional[int] = None
+        self.runway_configuration: Optional[str] = None
+        self.input_fingerprint: Optional[str] = None
         self.layers_created = 0
         self.features_created = 0
         self._output_counts_set = False
@@ -322,6 +481,12 @@ class RuntimeRunRecorder:
         design_ruleset_label: Optional[str] = None,
         baseline_ruleset_label: Optional[str] = None,
         comparison_ruleset_label: Optional[str] = None,
+        test_case_id: Optional[str] = None,
+        test_case_name: Optional[str] = None,
+        input_filename: Optional[str] = None,
+        runway_count: Optional[int] = None,
+        runway_configuration: Optional[str] = None,
+        input_fingerprint: Optional[str] = None,
     ) -> None:
         self.airport = str(airport or "unknown")
         self.rulesets = {
@@ -336,6 +501,18 @@ class RuntimeRunRecorder:
                 str(comparison_ruleset_label) if comparison_ruleset_label else None
             ),
         }
+        if test_case_id is not None:
+            self.test_case_id = str(test_case_id).strip() or None
+        if test_case_name is not None:
+            self.test_case_name = str(test_case_name).strip() or None
+        if input_filename is not None:
+            self.input_filename = Path(str(input_filename)).name or None
+        if runway_count is not None:
+            self.runway_count = max(0, int(runway_count))
+        if runway_configuration is not None:
+            self.runway_configuration = str(runway_configuration).strip().lower() or None
+        if input_fingerprint is not None:
+            self.input_fingerprint = str(input_fingerprint).strip() or None
 
     def add_timing(self, name: str, elapsed_seconds: float, calls: int = 1) -> None:
         key = str(name).strip()
@@ -388,6 +565,12 @@ class RuntimeRunRecorder:
             "plugin_version": plugin_version(self.plugin_dir),
             "qgis_version": self.qgis_version,
             "elapsed_seconds": round(finished_at - self.started_at, 6),
+            "test_case_id": self.test_case_id,
+            "test_case_name": self.test_case_name,
+            "input_filename": self.input_filename,
+            "runway_count": self.runway_count,
+            "runway_configuration": self.runway_configuration,
+            "input_fingerprint": self.input_fingerprint,
             "layers_created": self.layers_created,
             "features_created": self.features_created,
             "modules": modules,
@@ -406,9 +589,11 @@ __all__ = [
     "RUN_HISTORY_FILENAME",
     "RUN_HISTORY_SCHEMA_VERSION",
     "RuntimeRunRecorder",
+    "classify_runway_configuration",
     "default_history_path",
     "detect_run_agent",
     "git_revision",
     "migrate_history_file",
     "plugin_version",
+    "runtime_input_fingerprint",
 ]

@@ -38,7 +38,11 @@ from qgis.core import (  # type: ignore
 from .core.layers import LayerMixin
 from .core import output_structure
 from .core.styles import DEFAULT_STYLE_MAP
-from .core.run_history import RuntimeRunRecorder
+from .core.run_history import (
+    RuntimeRunRecorder,
+    classify_runway_configuration,
+    runtime_input_fingerprint,
+)
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.annex14_geometry import Annex14GeometryMixin
 from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
@@ -705,6 +709,7 @@ class SafeguardingBuilder(
             comparison_ruleset_label=getattr(
                 getattr(self, "comparison_ols_ruleset", None), "display_name", None
             ),
+            **dict(getattr(self.dlg, "_runtime_test_context", {}) or {}),
         )
         recorder.start_phase("startup")
         try:
@@ -882,6 +887,23 @@ class SafeguardingBuilder(
             safeguarding_framework=self.framework,
         )
 
+        runway_input_list = input_data.get("runways", [])
+        runtime_test_context = dict(
+            getattr(self.dlg, "_runtime_test_context", {}) or {}
+        )
+        runtime_test_context.setdefault("test_case_id", "manual_entry")
+        runtime_test_context.setdefault("test_case_name", "Manual entry")
+        runtime_test_context.setdefault(
+            "runway_configuration",
+            classify_runway_configuration(runway_input_list),
+        )
+        runtime_runway_count = runtime_test_context.pop(
+            "runway_count", len(runway_input_list)
+        )
+        runtime_fingerprint = runtime_test_context.pop(
+            "input_fingerprint", runtime_input_fingerprint(input_data)
+        )
+
         recorder = getattr(self, "_runtime_run_recorder", None)
         if recorder is not None:
             recorder.set_context(
@@ -894,6 +916,9 @@ class SafeguardingBuilder(
                 comparison_ruleset_label=getattr(
                     self.comparison_ols_ruleset, "display_name", None
                 ),
+                runway_count=runtime_runway_count,
+                input_fingerprint=runtime_fingerprint,
+                **runtime_test_context,
             )
 
         icao_code = input_data.get("icao_code", "UNKNOWN")
@@ -901,7 +926,6 @@ class SafeguardingBuilder(
         arp_east = input_data.get("arp_easting")
         arp_north = input_data.get("arp_northing")
         met_point = input_data.get("met_point")
-        runway_input_list = input_data.get("runways", [])
         cns_input_list = input_data.get("cns_facilities", [])
         agl_options = input_data.get("agl_options", {"enabled": False})
         self.arp_elevation_amsl = input_data.get("arp_elevation")

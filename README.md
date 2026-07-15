@@ -162,8 +162,10 @@ QGIS runs and headless workflow runs. The columns record the actor (`qgis user`,
 `codex headless`, or an explicit override), airport, selected rulesets,
 completion status, total and key phase/module elapsed times, plugin/QGIS
 versions, Git commit, and whether the working tree was dirty. The final
-`module_timings_json` column retains all module timings and call counts, including
-diagnostic modules that do not have dedicated columns.
+scenario columns also record the test case, input filename, runway count and
+layout, plus a short exact-input fingerprint. `module_timings_json` retains all
+module timings and call counts, including diagnostic modules that do not have
+dedicated columns.
 
 Set `SAFEGUARDING_BUILDER_RUN_AGENT` to override the actor,
 `SAFEGUARDING_BUILDER_COMMIT` for packaged builds without `.git`, or
@@ -171,6 +173,11 @@ Set `SAFEGUARDING_BUILDER_RUN_AGENT` to override the actor,
 uses a versioned TSV schema. Existing version 1 JSON Lines ledgers are converted
 automatically on the next write, preserving their original schema version and
 timing data.
+
+For a filterable, plain-English view of runtime by test case, airport, runway
+setup, and OLS selection, run `python3 dashboard/runtime_dashboard.py --serve`
+from this repository folder and open <http://127.0.0.1:8765>. It also compares
+the last five matching runs with the previous five. See `dashboard/README.md`.
 
 ## Development Notes
 
