@@ -17,7 +17,10 @@ from qgis.core import (
 )
 
 from guidelines.ols_guideline import OlsGuidelineMixin
-from rulesets.annex14.profile import ANNEX14_CURRENT_OLS_PROFILE
+from rulesets.annex14.profile import (
+    ANNEX14_CURRENT_OLS_PROFILE,
+    ANNEX14_MODERNISED_OFS_OES_PROFILE,
+)
 from rulesets.cap168.profile import CAP168_PROFILE
 from rulesets.easa.profile import EASA_PROFILE
 from rulesets.mos139.profile import MOS139_PROFILE
@@ -281,10 +284,19 @@ class OlsConstructionQgisTests(unittest.TestCase):
             [source],
             arp_point=QgsPointXY(1000.0, 500.0),
         )
+        annex_modernised = builder._build_ols_construction_context(
+            ANNEX14_MODERNISED_OFS_OES_PROFILE,
+            [source],
+            arp_point=QgsPointXY(1000.0, 500.0),
+        )
 
         self.assertEqual(cap.ruleset_id, CAP168_PROFILE.id)
         self.assertEqual(easa.ruleset_id, EASA_PROFILE.id)
         self.assertEqual(annex_current.ruleset_id, ANNEX14_CURRENT_OLS_PROFILE.id)
+        self.assertEqual(
+            annex_modernised.ruleset_id,
+            ANNEX14_MODERNISED_OFS_OES_PROFILE.id,
+        )
         self.assertEqual(cap.lowest_threshold_elevation_m, 100.0)
         self.assertEqual(cap.reference_elevation_datum_m, 130.0)
         self.assertIsNot(cap.runways[0].generation_data, easa.runways[0].generation_data)
@@ -303,6 +315,16 @@ class OlsConstructionQgisTests(unittest.TestCase):
         )
         self.assertEqual(
             sorted(end.clearway_length_m for end in annex_current.runways[0].ends),
+            [100.0, 200.0],
+        )
+        self.assertEqual(
+            annex_modernised.runways[0].generation_data[
+                "_effective_clearway_specs"
+            ]["ruleset_id"],
+            ANNEX14_MODERNISED_OFS_OES_PROFILE.id,
+        )
+        self.assertEqual(
+            sorted(end.clearway_length_m for end in annex_modernised.runways[0].ends),
             [100.0, 200.0],
         )
 

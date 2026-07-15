@@ -1815,7 +1815,7 @@ class SafeguardingBuilder(
 
         clearway_parameters = getattr(ruleset, "clearway_parameters", None)
         if callable(clearway_parameters):
-            specs = clearway_parameters(
+            profile_specs = clearway_parameters(
                 runway_width=runway_width or None,
                 strip_extension=strip_extension,
                 strip_overall_width=strip_overall_width,
@@ -1827,6 +1827,15 @@ class SafeguardingBuilder(
                 is_instrument_runway=is_instrument_runway,
                 arc_num=arc_num,
             )
+        else:
+            profile_specs = None
+
+        if (
+            isinstance(profile_specs, dict)
+            and isinstance(profile_specs.get("primary"), dict)
+            and isinstance(profile_specs.get("reciprocal"), dict)
+        ):
+            specs = profile_specs
             specs["ruleset_id"] = ruleset_id
             for end_key in ("primary", "reciprocal"):
                 end_spec = specs.get(end_key, {})
