@@ -41,6 +41,7 @@ CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2 = 0.01
 CONTROLLING_NUMERIC_COVERAGE_TOLERANCE_M2 = 0.02
 CONTROLLING_REGION_MIN_INTERIOR_RING_AREA_M2 = 0.01
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
+CONTROLLING_CONTOUR_BOUNDARY_RECOVERY_MIN_LENGTH_M = 0.25
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
 CONTROLLING_GLOBAL_CELL_MIN_AREA_M2 = 1.0
 CONTROLLING_MOS139_CONICAL_CELL_MIN_AREA_M2 = 1e-3
@@ -6442,6 +6443,12 @@ class ControllingOlsEngineMixin:
             contour_elevation = float(contour_elevation) if contour_elevation is not None else None
         except (KeyError, TypeError, ValueError):
             contour_elevation = None
+        # A varying-elevation surface edge is useful construction geometry, but
+        # it is not a contour.  Some transitional panels deliberately create
+        # those edges with a NULL elevation; publishing them here produces
+        # unlabelled, contour-like artefacts in the controlling output.
+        if contour_elevation is None or not math.isfinite(contour_elevation):
+            return
 
         def _feature_attr(name: str):
             try:
@@ -7389,6 +7396,42 @@ class ControllingOlsEngineMixin:
                 clipped = contour.geometry.intersection(clip_geometry)
             except Exception:
                 clipped = None
+
+            # Source contours and solved region edges are constructed by
+            # independent geometry paths.  When a contour is meant to follow
+            # a region edge, sub-centimetre offsets can make exact intersection
+            # alternate between retained and rejected fragments.  Recover the
+            # nearby solved boundary itself, then remove the parallel source
+            # fragment before combining.  The delivered recovery therefore
+            # remains on the exact owning-region boundary and never relies on a
+            # buffered region as output geometry.
+            recovered_boundary = self._controlling_contour_boundary_recovery(
+                contour.geometry,
+                clip_geometry,
+            )
+            combined_parts: List[QgsGeometry] = []
+            if clipped is not None and not clipped.isEmpty():
+                if recovered_boundary is not None and not recovered_boundary.isEmpty():
+                    try:
+                        recovery_mask = recovered_boundary.buffer(
+                            CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M,
+                            CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS,
+                        )
+                        clipped = clipped.difference(recovery_mask)
+                    except Exception:
+                        pass
+                if clipped is not None and not clipped.isEmpty():
+                    combined_parts.append(clipped)
+            if recovered_boundary is not None and not recovered_boundary.isEmpty():
+                combined_parts.append(recovered_boundary)
+            if combined_parts:
+                try:
+                    clipped = QgsGeometry.unaryUnion(combined_parts)
+                    merged = clipped.mergeLines()
+                    if merged is not None and not merged.isEmpty():
+                        clipped = merged
+                except Exception:
+                    clipped = combined_parts[0]
             _add_clipped_parts(clipped)
             method = "clip_to_controlling_region"
             line_geometry = self._controlling_contour_geometry_from_parts(clipped_line_parts)
@@ -7548,6 +7591,78 @@ class ControllingOlsEngineMixin:
             if len(valid_parts) == 1:
                 return QgsGeometry.fromPolylineXY(valid_parts[0])
         return None
+
+    def _controlling_contour_boundary_recovery(
+        self,
+        source_geometry: QgsGeometry,
+        clip_geometry: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        """Return substantial solved-boundary runs coincident with a contour."""
+        if source_geometry is None or source_geometry.isEmpty():
+            return None
+        if clip_geometry is None or clip_geometry.isEmpty():
+            return None
+        try:
+            proximity = source_geometry.buffer(
+                CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M,
+                CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS,
+            )
+            boundary = self._controlling_contour_polygon_boundary(clip_geometry)
+            if boundary is None or boundary.isEmpty():
+                return None
+            recovery = boundary.intersection(proximity)
+        except Exception:
+            return None
+        recovered_parts = []
+        for line_points in self._controlling_contour_line_parts(recovery):
+            if len(line_points) < 2:
+                continue
+            line = QgsGeometry.fromPolylineXY(line_points)
+            if line.length() < CONTROLLING_CONTOUR_BOUNDARY_RECOVERY_MIN_LENGTH_M:
+                continue
+            recovered_parts.append(line_points)
+        return self._controlling_contour_geometry_from_parts(recovered_parts)
+
+    def _controlling_contour_polygon_boundary(
+        self,
+        geometry: Optional[QgsGeometry],
+    ) -> Optional[QgsGeometry]:
+        """Build polygon ring linework compatibly across QGIS geometry APIs."""
+        if geometry is None or geometry.isEmpty():
+            return None
+        rings: List[List[QgsPointXY]] = []
+        try:
+            if geometry.type() == QgsWkbTypes.PolygonGeometry:
+                polygons = geometry.asMultiPolygon() if geometry.isMultipart() else [geometry.asPolygon()]
+                for polygon in polygons:
+                    rings.extend([list(ring) for ring in polygon if len(ring) >= 2])
+            else:
+                for part_geometry in geometry.asGeometryCollection():
+                    part_boundary = self._controlling_contour_polygon_boundary(part_geometry)
+                    rings.extend(self._controlling_contour_line_parts(part_boundary))
+        except Exception:
+            return None
+        return self._controlling_contour_geometry_from_parts(rings)
+
+    def _controlling_contour_line_parts(
+        self,
+        geometry: Optional[QgsGeometry],
+    ) -> List[List[QgsPointXY]]:
+        """Extract line parts without depending on a particular solver instance."""
+        if geometry is None or geometry.isEmpty():
+            return []
+        try:
+            if geometry.type() == QgsWkbTypes.LineGeometry:
+                if geometry.isMultipart():
+                    return [part for part in geometry.asMultiPolyline() if len(part) >= 2]
+                line = geometry.asPolyline()
+                return [line] if len(line) >= 2 else []
+            parts: List[List[QgsPointXY]] = []
+            for part_geometry in geometry.asGeometryCollection():
+                parts.extend(self._controlling_contour_line_parts(part_geometry))
+            return parts
+        except Exception:
+            return []
 
     def _controlling_contour_part_key(self, line_points: Sequence[QgsPointXY]) -> Tuple[Tuple[int, int], ...]:
         rounded_points = tuple((int(round(point.x() * 1000.0)), int(round(point.y() * 1000.0))) for point in line_points)

@@ -198,6 +198,59 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                 self.assertAlmostEqual(clipped.boundingBox().xMaximum(), 100.0, places=9)
                 self.assertTrue(clipped.difference(region).isEmpty())
 
+    def test_controlling_contours_recover_near_coincident_region_boundary(self):
+        region = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        candidate = ControllingOlsCandidate(
+            "approach",
+            "Precision Approach",
+            QgsGeometry(region),
+            constant_elevation_evaluator(5.3),
+            "constant",
+        )
+        engine = PlanarControllingOlsEngine([candidate])
+        engine._controlling_region_geometries_cache = [(candidate, QgsGeometry(region))]
+        contour = ControllingOlsContour(
+            surface_id=candidate.surface_id,
+            surface_type=candidate.surface_type,
+            geometry=QgsGeometry.fromPolylineXY(
+                [QgsPointXY(10.0, -0.01), QgsPointXY(90.0, -0.01)]
+            ),
+            contour_elevation_m=5.3,
+            source_layer="test",
+        )
+
+        capture = _ControllingLayerCapture()
+        self.assertTrue(
+            capture._create_controlling_contour_layer("TEST", None, engine, [contour])
+        )
+        recovered = capture.layers[0][4][0].geometry()
+        self.assertGreater(recovered.length(), 79.9)
+        self.assertLess(recovered.length(), 80.1)
+        self.assertAlmostEqual(recovered.boundingBox().yMinimum(), 0.0, places=9)
+        self.assertAlmostEqual(recovered.boundingBox().yMaximum(), 0.0, places=9)
+        self.assertTrue(recovered.difference(region).isEmpty())
+
+    def test_controlling_contour_registration_rejects_null_elevation_edges(self):
+        class _SourceFeature:
+            @staticmethod
+            def geometry():
+                return QgsGeometry.fromPolylineXY(
+                    [QgsPointXY(0.0, 0.0), QgsPointXY(100.0, 0.0)]
+                )
+
+            @staticmethod
+            def attribute(name):
+                return None if name == "contour_elev_am" else ""
+
+        capture = _ControllingLayerCapture()
+        capture._register_controlling_ols_contour(
+            "transition",
+            "Transitional",
+            _SourceFeature(),
+            "test",
+        )
+        self.assertEqual(capture._controlling_ols_contours, [])
+
     def test_mos_tocs_conical_overlap_is_assigned_once(self):
         conical = ControllingOlsCandidate(
             "conical", "Conical", QgsGeometry.fromRect(QgsRectangle(40, 0, 100, 100)),
