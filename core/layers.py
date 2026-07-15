@@ -11,6 +11,7 @@ from qgis.core import (  # type: ignore
     Qgis,
     QgsCategorizedSymbolRenderer,
     QgsFeature,
+    QgsFeatureRequest,
     QgsFillSymbol,
     QgsFields,
     QgsLayerTreeGroup,
@@ -638,27 +639,37 @@ class LayerMixin:
             )
 
     def _prune_annex14_renderer_rules(self, layer: QgsVectorLayer):
-        """Keep only Annex 14 legend rules represented by features in this layer."""
+        """Keep only Annex 14 legend rules matching non-empty layer features."""
         if layer is None or not layer.isValid() or layer.fields().indexOf("surface") < 0:
             return
         renderer = layer.renderer()
         if renderer is None or renderer.type() != "RuleRenderer":
             return
-        def normalized_surface(value) -> str:
-            return str(value or "").strip().casefold().replace("-", "_").replace(" ", "_")
-
-        surface_values = {
-            normalized_surface(feature.attribute("surface"))
-            for feature in layer.getFeatures()
-        }
-        surface_values.discard("")
         root_rule = renderer.rootRule()
         for rule in list(root_rule.children()):
-            label = str(rule.label() or "").strip()
-            if rule.isElse() or normalized_surface(label) not in surface_values:
+            if rule.isElse():
+                root_rule.removeChild(rule)
+                continue
+            expression = str(rule.filterExpression() or "").strip()
+            request = QgsFeatureRequest()
+            if expression:
+                request.setFilterExpression(expression)
+            represented = False
+            try:
+                for feature in layer.getFeatures(request):
+                    geometry = feature.geometry()
+                    if geometry is not None and not geometry.isEmpty():
+                        represented = True
+                        break
+            except Exception:
+                represented = False
+            if not represented:
                 root_rule.removeChild(rule)
         remaining_rules = list(root_rule.children())
-        if len(surface_values) == 1 and len(remaining_rules) == 1:
+        if (
+            len(remaining_rules) == 1
+            and not str(layer.name()).startswith("Controlling ")
+        ):
             symbol = remaining_rules[0].symbol()
             if symbol is not None:
                 layer.setRenderer(QgsSingleSymbolRenderer(symbol.clone()))
