@@ -20,3 +20,5 @@ __pycache__/
 *.DS_Store
 .DS_Store
 tmp/pdfs/
+runtime_test_runs.txt
+dashboard/index.html
