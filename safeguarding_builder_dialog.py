@@ -54,7 +54,11 @@ try:
     from .dialog.agl_options import AglOptionsMixin
     from .dialog.persistence import PersistenceMixin
     from .frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles
-    from .rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile, iter_ruleset_profiles
+    from .rulesets.registry import (
+        DEFAULT_RULESET_ID,
+        get_ruleset_profile,
+        iter_design_standard_profiles,
+    )
 except ImportError:
     from dialog.dialog_constants import (  # type: ignore
         CALC_PLACEHOLDER,
@@ -77,7 +81,11 @@ except ImportError:
     from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
     from frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles  # type: ignore
-    from rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile, iter_ruleset_profiles  # type: ignore
+    from rulesets.registry import (  # type: ignore
+        DEFAULT_RULESET_ID,
+        get_ruleset_profile,
+        iter_design_standard_profiles,
+    )
 
 # Load the UI class from the .ui file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), "safeguarding_builder_dialog_base.ui"))
@@ -1536,12 +1544,18 @@ class SafeguardingBuilderDialog(
         """Create global policy selectors."""
         self.ruleset_combo = QtWidgets.QComboBox()
         self.ruleset_combo.setObjectName("comboBox_ruleset")
-        for profile in iter_ruleset_profiles():
-            self.ruleset_combo.addItem(profile.display_name, userData=profile.id)
+        for profile in iter_design_standard_profiles():
+            self.ruleset_combo.addItem(
+                profile.design_standard_label,
+                userData=profile.id,
+            )
         default_index = self.ruleset_combo.findData(DEFAULT_RULESET_ID)
         self.ruleset_combo.setCurrentIndex(default_index if default_index >= 0 else 0)
         self.ruleset_combo.setEnabled(True)
-        self.ruleset_combo.setToolTip("Aerodrome design standard. Select EASA for current development testing.")
+        self.ruleset_combo.setToolTip(
+            "Aerodrome design standard for physical geometry, markings, lighting, "
+            "and declared-distance rules. Select protected-airspace rulesets on the OLS tab."
+        )
         self.ruleset_combo.setMinimumWidth(190)
         self.ruleset_combo.setMinimumHeight(28)
         self.ruleset_combo.setMaximumHeight(28)

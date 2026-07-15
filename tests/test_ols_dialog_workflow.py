@@ -78,6 +78,47 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             )
         )
 
+    def test_design_standard_excludes_modernised_ols_profile(self):
+        design_standard = self.dialog.ruleset_combo
+
+        self.assertEqual(
+            design_standard.findData("icao_annex14_vol1_modernised_ofs_oes"),
+            -1,
+        )
+        current_annex_index = design_standard.findData(
+            "icao_annex14_vol1_current_ols"
+        )
+        self.assertGreaterEqual(current_annex_index, 0)
+        self.assertEqual(
+            design_standard.itemText(current_annex_index),
+            "ICAO Annex 14 Vol I (9th Edition, Amendment 18)",
+        )
+
+        self.assertGreaterEqual(
+            self.dialog.baseline_ols_ruleset_combo.findData(
+                "icao_annex14_vol1_modernised_ofs_oes"
+            ),
+            0,
+        )
+
+    def test_legacy_modernised_design_standard_loads_as_current_annex(self):
+        self.dialog._apply_loaded_payload(
+            {
+                "icao_code": "TEST",
+                "design_standard": "icao_annex14_vol1_modernised_ofs_oes",
+                "runways": [],
+            }
+        )
+
+        self.assertEqual(
+            self.dialog.ruleset_combo.currentData(),
+            "icao_annex14_vol1_current_ols",
+        )
+        self.assertEqual(
+            self.dialog.baseline_ols_ruleset_combo.currentData(),
+            "icao_annex14_vol1_modernised_ofs_oes",
+        )
+
     def test_cap168_and_current_annex14_are_supported_while_easa_is_preview(self):
         baseline = self.dialog.baseline_ols_ruleset_combo
         cap168_index = baseline.findData("uk_caa_cap168_edition_13")

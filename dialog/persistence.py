@@ -24,10 +24,18 @@ from .dialog_constants import (
 
 try:
     from ..frameworks.registry import DEFAULT_FRAMEWORK_ID, normalize_framework_id
-    from ..rulesets.registry import DEFAULT_RULESET_ID, normalize_ruleset_id
+    from ..rulesets.registry import (
+        DEFAULT_RULESET_ID,
+        normalize_design_standard_id,
+        normalize_ruleset_id,
+    )
 except ImportError:
     from frameworks.registry import DEFAULT_FRAMEWORK_ID, normalize_framework_id  # type: ignore
-    from rulesets.registry import DEFAULT_RULESET_ID, normalize_ruleset_id  # type: ignore
+    from rulesets.registry import (  # type: ignore
+        DEFAULT_RULESET_ID,
+        normalize_design_standard_id,
+        normalize_ruleset_id,
+    )
 
 
 class PersistenceMixin:
@@ -374,7 +382,7 @@ class PersistenceMixin:
         self._set_line_text("lineEdit_met_elevation", loaded_data.get("met_elevation", ""))
         ruleset_combo = self._ruleset_combo_widget()
         if isinstance(ruleset_combo, QComboBox):
-            ruleset_id = normalize_ruleset_id(
+            ruleset_id = normalize_design_standard_id(
                 loaded_data.get("design_standard", loaded_data.get("ruleset", DEFAULT_RULESET_ID))
             )
             idx = ruleset_combo.findData(ruleset_id)

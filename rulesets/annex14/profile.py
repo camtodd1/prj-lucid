@@ -335,6 +335,7 @@ ANNEX14_CURRENT_OLS_PROFILE = Annex14RulesetProfile(
     aliases=metadata.CURRENT_ALIASES,
     capabilities=capability_map(metadata.CURRENT_CAPABILITY_STATUS_BY_KEY),
     protected_airspace_model="annex14_current_ols",
+    design_standard_display_name=metadata.CURRENT_DESIGN_STANDARD_DISPLAY_NAME,
 )
 
 ANNEX14_MODERNISED_OFS_OES_PROFILE = Annex14RulesetProfile(
@@ -346,6 +347,7 @@ ANNEX14_MODERNISED_OFS_OES_PROFILE = Annex14RulesetProfile(
     aliases=metadata.MODERNISED_ALIASES,
     capabilities=capability_map(metadata.MODERNISED_CAPABILITY_STATUS_BY_KEY),
     protected_airspace_model="annex14_modernised_ofs_oes",
+    selectable_as_design_standard=False,
 )
 
 ANNEX14_PROFILE = ANNEX14_MODERNISED_OFS_OES_PROFILE
