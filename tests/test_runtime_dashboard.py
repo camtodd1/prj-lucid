@@ -139,6 +139,24 @@ class RuntimeDashboardTests(unittest.TestCase):
 
         self.assertEqual(run["scenario"], "Not recorded")
 
+    def test_icao_references_are_uppercase_in_dashboard_labels(self):
+        row = {
+            "timestamp_utc": "2026-01-01T00:00:00Z",
+            "status": "completed",
+            "airport": "ymml",
+            "commit_ref": "case123",
+            "elapsed_seconds": "30",
+            "test_case_id": "ymml_2rwy_intersecting",
+            "test_case_name": "ymml intersecting runway check",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "runs.tsv"
+            _write_ledger(ledger, [row])
+            run = load_runs(ledger)[0]
+
+        self.assertEqual(run["airport"], "YMML")
+        self.assertEqual(run["testCase"], "YMML intersecting runway check")
+
     def test_recent_window_compares_last_five_with_previous_five(self):
         runs = [
             {"status": "Completed", "elapsed": value}

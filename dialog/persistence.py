@@ -2,6 +2,7 @@
 
 import json
 import os
+import re
 from pathlib import Path
 
 from qgis.core import Qgis  # type: ignore
@@ -220,7 +221,10 @@ class PersistenceMixin:
             saved_path = Path(file_path)
             self._runtime_test_context = {
                 "test_case_id": saved_path.stem,
-                "test_case_name": saved_path.stem.replace("_", " ").replace("-", " ").title(),
+                "test_case_name": self._test_case_name_from_stem(
+                    saved_path.stem,
+                    icao_code,
+                ),
                 "input_filename": saved_path.name,
                 "runway_count": runway_count,
                 "runway_configuration": scenario,
@@ -245,6 +249,24 @@ class PersistenceMixin:
         airport_slug = str(icao_code or "").strip().lower() or "airport"
         return f"{airport_slug}_{int(runway_count)}rwy_{scenario}.json"
 
+    @staticmethod
+    def _uppercase_icao_reference(value: object, icao_code: object) -> str:
+        text = str(value or "").strip()
+        code = str(icao_code or "").strip().upper()
+        if len(code) == 4 and code.isalpha():
+            return re.sub(
+                rf"\b{re.escape(code)}\b",
+                code,
+                text,
+                flags=re.IGNORECASE,
+            )
+        return text
+
+    @classmethod
+    def _test_case_name_from_stem(cls, stem: str, icao_code: object) -> str:
+        humanized = str(stem or "").replace("_", " ").replace("-", " ").title()
+        return cls._uppercase_icao_reference(humanized, icao_code)
+
     def load_input_data(self):
         if self._has_existing_input_data():
             reply = QtWidgets.QMessageBox.question(
@@ -268,11 +290,14 @@ class PersistenceMixin:
             self.clear_all_inputs(confirm=False)
             self._apply_loaded_payload(loaded_data)
             loaded_path = Path(file_path)
+            loaded_icao = loaded_data.get("icao_code", "")
+            explicit_case_name = loaded_data.get("test_case_name")
             self._runtime_test_context = {
                 "test_case_id": str(loaded_data.get("test_case_id") or loaded_path.stem),
-                "test_case_name": str(
-                    loaded_data.get("test_case_name")
-                    or loaded_path.stem.replace("_", " ").replace("-", " ").title()
+                "test_case_name": (
+                    self._uppercase_icao_reference(explicit_case_name, loaded_icao)
+                    if explicit_case_name
+                    else self._test_case_name_from_stem(loaded_path.stem, loaded_icao)
                 ),
                 "input_filename": loaded_path.name,
             }

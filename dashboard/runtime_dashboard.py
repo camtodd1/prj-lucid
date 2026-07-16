@@ -7,6 +7,7 @@ import argparse
 import csv
 import errno
 import json
+import re
 import statistics
 import threading
 from datetime import datetime, timezone
@@ -112,16 +113,29 @@ def _run_source(agent: str) -> str:
     return agent or "Not recorded"
 
 
-def _plain_case_name(row: Mapping[str, object]) -> str:
+def _uppercase_icao_reference(value: object, airport: object) -> str:
+    text = str(value or "").strip()
+    code = str(airport or "").strip().upper()
+    if len(code) == 4 and code.isalpha():
+        return re.sub(rf"\b{re.escape(code)}\b", code, text, flags=re.IGNORECASE)
+    return text
+
+
+def _humanize_case_identifier(value: object, airport: object) -> str:
+    humanized = str(value or "").replace("_", " ").replace("-", " ").title()
+    return _uppercase_icao_reference(humanized, airport)
+
+
+def _plain_case_name(row: Mapping[str, object], airport: str) -> str:
     name = _field(row, "test_case_name")
     if name:
-        return name
+        return _uppercase_icao_reference(name, airport)
     identifier = _field(row, "test_case_id")
     if identifier:
-        return identifier.replace("_", " ").replace("-", " ").title()
+        return _humanize_case_identifier(identifier, airport)
     filename = _field(row, "input_filename")
     if filename:
-        return Path(filename).stem.replace("_", " ").replace("-", " ").title()
+        return _humanize_case_identifier(Path(filename).stem, airport)
     return "Not recorded"
 
 
@@ -152,8 +166,13 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
             runway_count,
         )
         fingerprint = _field(row, "input_fingerprint")
-        test_case = _plain_case_name(row)
-        airport = _field(row, "airport") or "Not recorded"
+        airport_text = _field(row, "airport")
+        airport = (
+            airport_text.upper()
+            if len(airport_text) == 4 and airport_text.isalpha()
+            else airport_text or "Not recorded"
+        )
+        test_case = _plain_case_name(row, airport)
         legacy_setup = "|".join(
             [
                 test_case,

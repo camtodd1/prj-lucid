@@ -1223,17 +1223,6 @@ class OlsEnvelopeComparisonEngine:
                 final_parts.append((baseline, future, cleaned))
             result[change] = final_parts
 
-    def _controllers_for_gap_part(
-        self,
-        geometry: QgsGeometry,
-    ) -> Optional[Tuple[ControllingOlsCandidate, ControllingOlsCandidate]]:
-        for point in self._sample_points(geometry):
-            baseline = self.baseline_engine.controlling_candidate_at_xy(point)
-            future = self.future_engine.controlling_candidate_at_xy(point)
-            if baseline is not None and future is not None:
-                return baseline[0], future[0]
-        return None
-
     def _classify_change_for_part(
         self,
         geometry: QgsGeometry,

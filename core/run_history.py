@@ -9,6 +9,7 @@ import io
 import json
 import math
 import os
+import re
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -27,6 +28,14 @@ AGENT_ENV_VAR = "SAFEGUARDING_BUILDER_RUN_AGENT"
 COMMIT_ENV_VAR = "SAFEGUARDING_BUILDER_COMMIT"
 HISTORY_PATH_ENV_VAR = "SAFEGUARDING_BUILDER_RUN_HISTORY"
 RUNWAY_CONFIGURATIONS = ("single", "parallel", "intersecting", "mixed")
+
+
+def _uppercase_icao_reference(value: object, icao_code: object) -> str:
+    text = str(value or "").strip()
+    code = str(icao_code or "").strip().upper()
+    if len(code) == 4 and code.isalpha():
+        return re.sub(rf"\b{re.escape(code)}\b", code, text, flags=re.IGNORECASE)
+    return text
 
 KEY_MODULE_COLUMNS = (
     ("phase_startup_seconds", "phase.startup"),
@@ -513,7 +522,12 @@ class RuntimeRunRecorder:
         runway_configuration: Optional[str] = None,
         input_fingerprint: Optional[str] = None,
     ) -> None:
-        self.airport = str(airport or "unknown")
+        airport_text = str(airport or "unknown").strip()
+        self.airport = (
+            airport_text.upper()
+            if len(airport_text) == 4 and airport_text.isalpha()
+            else airport_text
+        )
         self.rulesets = {
             "design": str(design_ruleset) if design_ruleset else None,
             "baseline_ols": str(baseline_ruleset) if baseline_ruleset else None,
@@ -529,7 +543,9 @@ class RuntimeRunRecorder:
         if test_case_id is not None:
             self.test_case_id = str(test_case_id).strip() or None
         if test_case_name is not None:
-            self.test_case_name = str(test_case_name).strip() or None
+            self.test_case_name = (
+                _uppercase_icao_reference(test_case_name, self.airport) or None
+            )
         if input_filename is not None:
             self.input_filename = Path(str(input_filename)).name or None
         if runway_count is not None:

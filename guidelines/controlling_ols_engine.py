@@ -2755,22 +2755,6 @@ class PlanarControllingOlsEngine:
         parts = self._polygon_parts(geometry)
         return len(parts) if parts else 999999
 
-    def _normalised_polygon_geometry(self, geometry: Optional[QgsGeometry]) -> Optional[QgsGeometry]:
-        if not self._has_polygon_area(geometry):
-            return geometry
-        try:
-            if not geometry.isGeosValid():
-                geometry = geometry.makeValid()
-        except Exception:
-            pass
-        try:
-            buffered = geometry.buffer(0.0, CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS)
-            if self._has_polygon_area(buffered):
-                return buffered
-        except Exception:
-            pass
-        return geometry
-
     def _introduces_long_new_boundary_segment(
         self,
         geometry: QgsGeometry,
@@ -2951,20 +2935,6 @@ class PlanarControllingOlsEngine:
                     if output_part.area() > self._minimum_cell_area_m2():
                         repaired_parts.append((candidate, output_part))
         return repaired_parts
-
-    def _candidate_for_gap(self, gap_geometry: QgsGeometry) -> Optional[ControllingOlsCandidate]:
-        sample_points: List[QgsPointXY] = []
-        try:
-            point = gap_geometry.pointOnSurface().asPoint()
-            sample_points.append(QgsPointXY(point.x(), point.y()))
-        except Exception:
-            pass
-        sample_points.extend(self._geometry_sample_points(gap_geometry))
-        for point_xy in sample_points:
-            result = self.controlling_candidate_at_xy(point_xy)
-            if result is not None:
-                return result[0]
-        return None
 
     def _clip_lower_region_to_overlap(
         self,
@@ -4453,33 +4423,6 @@ class PlanarControllingOlsEngine:
             basis = next_basis
         return basis[:control_count]
 
-    def _uniform_curve_control_points(
-        self,
-        line: QgsGeometry,
-        spacing_m: float,
-        minimum_segments: int = 1,
-    ) -> List[QgsPointXY]:
-        if line is None or line.isEmpty() or spacing_m <= 0.0:
-            return []
-        length = line.length()
-        if length <= 1e-9:
-            return []
-        segment_count = max(
-            1,
-            int(minimum_segments),
-            int(math.ceil(length / spacing_m)),
-        )
-        controls: List[QgsPointXY] = []
-        for index in range(segment_count + 1):
-            point_geometry = line.interpolate(length * index / segment_count)
-            if point_geometry is None or point_geometry.isEmpty():
-                return []
-            point = point_geometry.asPoint()
-            point_xy = QgsPointXY(point.x(), point.y())
-            if not controls or point_xy.distance(controls[-1]) > 1e-6:
-                controls.append(point_xy)
-        return controls
-
     @staticmethod
     def _clamped_cubic_bspline_points(
         control_points: Sequence[QgsPointXY],
@@ -4998,73 +4941,6 @@ class PlanarControllingOlsEngine:
             segment_start.y() + ((segment_end.y() - segment_start.y()) * projection),
         )
         return point_xy.distance(projected)
-
-    def _axis_lateral_bounds(self, axis: dict, bbox: QgsRectangle) -> Tuple[float, float]:
-        ux = float(axis["ux"])
-        uy = float(axis["uy"])
-        vx = -uy
-        vy = ux
-        origin_x = float(axis["origin_x"])
-        origin_y = float(axis["origin_y"])
-        values = []
-        for x, y in (
-            (bbox.xMinimum(), bbox.yMinimum()),
-            (bbox.xMinimum(), bbox.yMaximum()),
-            (bbox.xMaximum(), bbox.yMinimum()),
-            (bbox.xMaximum(), bbox.yMaximum()),
-        ):
-            values.append(((x - origin_x) * vx) + ((y - origin_y) * vy))
-        padding = max(25.0, (max(values) - min(values)) * 0.05)
-        return min(values) - padding, max(values) + padding
-
-    def _axis_conical_lateral_roots(
-        self,
-        axis: dict,
-        base_footprint: QgsGeometry,
-        station: float,
-        required_distance: float,
-        l_min: float,
-        l_max: float,
-        lateral_step: float,
-    ) -> List[QgsPointXY]:
-        roots: List[QgsPointXY] = []
-
-        def _point_at(lateral: float) -> QgsPointXY:
-            ux = float(axis["ux"])
-            uy = float(axis["uy"])
-            vx = -uy
-            vy = ux
-            return QgsPointXY(
-                float(axis["origin_x"]) + (station * ux) + (lateral * vx),
-                float(axis["origin_y"]) + (station * uy) + (lateral * vy),
-            )
-
-        def _difference(lateral: float) -> float:
-            point_xy = _point_at(lateral)
-            return QgsGeometry.fromPointXY(point_xy).distance(base_footprint) - required_distance
-
-        previous_l = l_min
-        try:
-            previous_value = _difference(previous_l)
-        except Exception:
-            return []
-        l_value = l_min + lateral_step
-        while l_value <= l_max + 1e-6:
-            try:
-                current_value = _difference(l_value)
-            except Exception:
-                previous_l = l_value
-                l_value += lateral_step
-                continue
-            if previous_value == 0.0 or current_value == 0.0 or previous_value * current_value < 0.0:
-                root_l = self._axis_conical_bisect_lateral_root(_difference, previous_l, l_value)
-                point_xy = _point_at(root_l)
-                if not roots or point_xy.distance(roots[-1]) > 0.5:
-                    roots.append(point_xy)
-            previous_l = l_value
-            previous_value = current_value
-            l_value += lateral_step
-        return roots
 
     def _axis_conical_bisect_lateral_root(
         self,
@@ -6052,59 +5928,6 @@ class PlanarControllingOlsEngine:
         point_on_line = self._point_on_line_near_geometry(domain, a, b, c)
         if point_on_line is None:
             return None
-        return self._clip_long_line_to_domain(domain, point_on_line, -b, a)
-
-    def _axis_constant_line(
-        self,
-        domain: QgsGeometry,
-        axis_candidate: ControllingOlsCandidate,
-        constant_candidate: ControllingOlsCandidate,
-    ) -> Optional[QgsGeometry]:
-        axis = self._axis_model(axis_candidate)
-        constant_elevation = self._constant_elevation(constant_candidate)
-        if axis is None or constant_elevation is None or abs(axis["slope"]) <= 1e-12:
-            return None
-
-        station = (constant_elevation - axis["origin_elevation_m"]) / axis["slope"]
-        max_distance = axis.get("max_distance_m")
-        if station < -1e-6:
-            return None
-        if max_distance is not None and station > max_distance + 1e-6:
-            return None
-
-        point_on_axis = QgsPointXY(
-            axis["origin_x"] + (axis["ux"] * station),
-            axis["origin_y"] + (axis["uy"] * station),
-        )
-        return self._clip_long_line_to_domain(domain, point_on_axis, -axis["uy"], axis["ux"])
-
-    def _axis_axis_line(
-        self,
-        domain: QgsGeometry,
-        first_candidate: ControllingOlsCandidate,
-        second_candidate: ControllingOlsCandidate,
-    ) -> Optional[QgsGeometry]:
-        first_axis = self._axis_model(first_candidate)
-        second_axis = self._axis_model(second_candidate)
-        if first_axis is None or second_axis is None:
-            return None
-
-        a = (first_axis["slope"] * first_axis["ux"]) - (second_axis["slope"] * second_axis["ux"])
-        b = (first_axis["slope"] * first_axis["uy"]) - (second_axis["slope"] * second_axis["uy"])
-        c = (
-            first_axis["origin_elevation_m"]
-            - (first_axis["slope"] * ((first_axis["origin_x"] * first_axis["ux"]) + (first_axis["origin_y"] * first_axis["uy"])))
-            - second_axis["origin_elevation_m"]
-            + (second_axis["slope"] * ((second_axis["origin_x"] * second_axis["ux"]) + (second_axis["origin_y"] * second_axis["uy"])))
-        )
-
-        if abs(a) <= 1e-12 and abs(b) <= 1e-12:
-            return None
-
-        if abs(a) >= abs(b):
-            point_on_line = QgsPointXY(-c / a, 0.0)
-        else:
-            point_on_line = QgsPointXY(0.0, -c / b)
         return self._clip_long_line_to_domain(domain, point_on_line, -b, a)
 
     def _line_separates_controllers(

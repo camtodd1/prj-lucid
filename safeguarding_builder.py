@@ -2456,26 +2456,6 @@ class SafeguardingBuilder(
             )
         return moved_any
 
-    def _flatten_direct_child_group(self, parent_group: QgsLayerTreeGroup, group_name: str) -> bool:
-        """Move a child group's contents into its parent and remove the empty wrapper."""
-        source_group = self._find_direct_child_group(parent_group, group_name)
-        if source_group is None or parent_group is None:
-            return False
-
-        moved_any = False
-        for child in list(source_group.children()):
-            moved_any = self._move_layer_tree_node(child, parent_group) or moved_any
-        try:
-            if not source_group.children():
-                parent_group.removeChildNode(source_group)
-        except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Warning: Failed to remove flattened group '{group_name}': {e}",
-                PLUGIN_TAG,
-                level=Qgis.Warning,
-            )
-        return moved_any
-
     def _repair_output_layer_tree(self, main_group: QgsLayerTreeGroup) -> None:
         """Move known generated nodes into the reviewed layer hierarchy if QGIS added them at root level."""
         if main_group is None:

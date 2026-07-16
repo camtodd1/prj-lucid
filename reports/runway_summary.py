@@ -19,6 +19,7 @@ def render_markdown_report(
 ) -> str:
     """Render a compact human-readable Markdown runway summary report."""
     generated_at = generated_at or datetime.now()
+    icao_code = str(icao_code or "").strip().upper()
     title_airport = f" - {airport_name}" if airport_name else ""
     lines = [
         f"# Critical Runway Information Summary - {icao_code}{title_airport}",

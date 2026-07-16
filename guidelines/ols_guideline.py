@@ -1631,61 +1631,6 @@ class OlsGuidelineMixin:
 
         return p1_strip_3d, p2_strip_3d
 
-    def _generate_inner_transitional_surface(
-        self,
-        arc_num,
-        rwy_type,
-        thr_point,
-        azimuth,
-        origin_elev,
-        ofz_params,
-        end_desig,
-        runway_name,
-    ):
-        width = ofz_params.get("width")
-        length = ofz_params.get("length")
-        slope = ofz_params.get("slope")
-        start_dist_from_thr = ofz_params.get("start_dist_from_thr")
-        ref = ofz_params.get("ref", "MOS (Verify)")
-
-        if None in [width, length, slope, start_dist_from_thr]:
-            return None
-
-        start_point = thr_point.project(start_dist_from_thr, azimuth)
-        azimuth_perp_l = (azimuth - 90) % 360
-        azimuth_perp_r = (azimuth + 90) % 360
-
-        half_width = width / 2.0
-        app_left = start_point.project(half_width, azimuth_perp_l)
-        app_right = start_point.project(half_width, azimuth_perp_r)
-        surf_left = app_left.project(length, azimuth_perp_l)
-        surf_right = app_right.project(length, azimuth_perp_r)
-
-        poly_points = [app_left, app_right, surf_right, surf_left, app_left]
-        poly_geom = QgsGeometry.fromPolygonXY([poly_points])
-        fields = self._get_ols_fields("InnerTransitional")
-        feat = QgsFeature(fields)
-        feat.setGeometry(poly_geom)
-        height_agl = length * slope
-        attr_map = {
-            "rwy_name": runway_name,
-            "surface": "Inner Transitional",
-            "end_desig": end_desig,
-            "elev_m": origin_elev + height_agl if origin_elev is not None else None,
-            "height_agl": height_agl,
-            "slope_perc": slope * 100.0,
-            "ref_mos": ref,
-            "len_m": length,
-            "innerw_m": width,
-            "outerw_m": width + 2 * length,
-            "origin_offset": start_dist_from_thr,
-        }
-        for name, value in attr_map.items():
-            idx = fields.indexFromName(name)
-            if idx != -1:
-                feat.setAttribute(idx, value)
-        return feat
-
     def _generate_baulked_landing_surface(
         self,
         runway_data: dict,
@@ -3563,20 +3508,6 @@ class OlsGuidelineMixin:
         group = parent_group.addGroup(self.tr(name))
         self._stage_layer_tree_node(group)
         return group
-
-    def _ols_runway_direction_groups(
-        self,
-        parent_group: QgsLayerTreeGroup,
-        end_desig: str,
-    ) -> Dict[str, QgsLayerTreeGroup]:
-        runway_group = self._ols_child_group(parent_group, f"RWY {end_desig}")
-        return {
-            "root": runway_group,
-            "approach": self._ols_child_group(runway_group, "Approach"),
-            "takeoff": self._ols_child_group(runway_group, "Take-off Climb"),
-            "transitional": self._ols_child_group(runway_group, "Transitional"),
-            "ofz": self._ols_child_group(runway_group, "Obstacle Free Zone"),
-        }
 
     def _ols_runway_surface_group(
         self,

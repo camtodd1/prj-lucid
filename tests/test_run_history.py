@@ -51,7 +51,7 @@ class RunHistoryTests(unittest.TestCase):
                 agent="codex headless",
             )
             recorder.set_context(
-                airport="YBBN",
+                airport="ybbn",
                 design_ruleset="mos139_2019",
                 baseline_ruleset="mos139_2019",
                 comparison_ruleset="easa_cs_adr_dsn_issue_7",
@@ -59,7 +59,7 @@ class RunHistoryTests(unittest.TestCase):
                 baseline_ruleset_label="MOS139 (C.07 2026)",
                 comparison_ruleset_label="EASA CS-ADR-DSN Issue 7",
                 test_case_id="ybbn_1rwy_single",
-                test_case_name="YBBN single runway",
+                test_case_name="ybbn single runway",
                 input_filename="ybbn_1rwy_single.json",
                 runway_count=1,
                 runway_configuration="single",

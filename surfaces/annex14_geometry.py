@@ -1400,14 +1400,6 @@ class Annex14GeometryMixin:
             prepared.append(feature)
         return prepared
 
-    def _annex14_contour_style_key(self, surface: str) -> str:
-        surface_key = str(surface or "").strip().lower()
-        if "transitional" in surface_key:
-            return "OLS Transitional Contour"
-        if surface_key in {"instrument_departure", "take_off_climb"}:
-            return "OLS TOCS Contour"
-        return "OLS Approach Contour"
-
     def _annex14_runway_group(self, parent_group: QgsLayerTreeGroup, runway_label: str) -> QgsLayerTreeGroup:
         return self._ensure_layer_group(parent_group, f"RWY {runway_label}")
 
@@ -1426,13 +1418,6 @@ class Annex14GeometryMixin:
             else ofs_group
         )
         return self._annex14_runway_group(destination, runway_label)
-
-    def _annex14_aerodrome_wide_surface_layer_group(
-        self,
-        parent_group: QgsLayerTreeGroup,
-        surface: str,
-    ) -> QgsLayerTreeGroup:
-        return self._ensure_layer_group(parent_group, self._annex14_surface_label(surface))
 
     def _annex14_runway_label_for_surface(self, surface: str, end_desig: str, runway_name: str) -> str:
         surface_key = str(surface or "").strip().lower()

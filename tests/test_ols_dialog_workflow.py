@@ -246,6 +246,13 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             ),
             "ybbn_1rwy_single.json",
         )
+        self.assertEqual(
+            self.dialog._test_case_name_from_stem(
+                "ybbn_1rwy_single",
+                payload["icao_code"],
+            ),
+            "YBBN 1Rwy Single",
+        )
 
     def test_loaded_scenario_must_match_runway_count(self):
         payload = {"icao_code": "YTEST", "runways": [{}, {}]}
