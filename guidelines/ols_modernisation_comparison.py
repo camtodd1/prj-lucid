@@ -137,6 +137,7 @@ class OlsEnvelopeComparisonEngine:
         # do not merge again, because doing so would repeat the same clipping.
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
         self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
+        self._enforce_final_height_signs(result)
         self._partition_classified_parts(result)
         self._reclassify_conventional_axis_conical_numeric_slivers(result)
         # Partition differences can reintroduce zero-area out-and-back ring
@@ -144,6 +145,7 @@ class OlsEnvelopeComparisonEngine:
         # boundary-equivalent backtracks here; genuine narrow polygons remain
         # classified because the accepted symmetric-difference area is capped.
         self._remove_final_boundary_backtracks(result)
+        self._merge_comparison_transition_parts(result)
         diagnostics = self.comparison_diagnostics()
         recovery = diagnostics["exceptional_recovery"]
         QgsMessageLog.logMessage(
@@ -1086,8 +1088,31 @@ class OlsEnvelopeComparisonEngine:
                         # fixture's absolute area tolerance. They are not a
                         # semantic controller-recovery operation.
                         continue
-                    change = self._classify_change_for_part(part, baseline, future)
-                    if change is None:
+                    starts = {
+                        change: len(result[change])
+                        for change in ("gain", "loss", "no_change")
+                    }
+                    # A final remainder can still cross the equal-height locus.
+                    # Classifying the whole polygon from pointOnSurface() puts
+                    # both signs into one output feature and lets contours of
+                    # the opposite sign leak into it.  Reuse the canonical
+                    # pair solver so the repair has the same shared zero-height
+                    # edge as the main comparison partition.
+                    self._append_classified_overlap(
+                        result,
+                        baseline,
+                        future,
+                        part,
+                        clean_spikes=False,
+                        include_transition=True,
+                    )
+                    newly_assigned = [
+                        geometry
+                        for change in ("gain", "loss", "no_change")
+                        for _baseline, _future, geometry in result[change][starts[change]:]
+                        if self._has_area(geometry)
+                    ]
+                    if not newly_assigned:
                         self._comparison_diagnostics["unresolved_comparisons"] = (
                             self._comparison_diagnostics.get("unresolved_comparisons", 0.0) + 1.0
                         )
@@ -1098,8 +1123,7 @@ class OlsEnvelopeComparisonEngine:
                     self._comparison_diagnostics["final_remainder_area_m2"] = (
                         self._comparison_diagnostics.get("final_remainder_area_m2", 0.0) + part.area()
                     )
-                    result[change].append((baseline, future, QgsGeometry(part)))
-                    assigned_parts.append(part)
+                    assigned_parts.extend(newly_assigned)
                 assigned = self._union_geometries(assigned_parts)
                 if assigned is not None:
                     remaining = self._safe_difference(remaining, assigned)
@@ -1132,6 +1156,148 @@ class OlsEnvelopeComparisonEngine:
                     if merged_assigned is not None:
                         assigned = merged_assigned
             result[change] = partitioned
+
+    def _enforce_final_height_signs(self, result) -> None:
+        """Split any repaired polygon that still spans both sides of zero."""
+        rebuilt = {"gain": [], "loss": []}
+        for source_change in ("gain", "loss"):
+            for baseline, future, geometry in result.get(source_change, []):
+                if not self._has_area(geometry):
+                    continue
+                delta_min, delta_max, _delta_sample = self.delta_range(
+                    geometry,
+                    baseline,
+                    future,
+                    source_change,
+                )
+                wrong_side = (
+                    source_change == "gain"
+                    and delta_min is not None
+                    and delta_min < -self.tolerance_m
+                ) or (
+                    source_change == "loss"
+                    and delta_max is not None
+                    and delta_max > self.tolerance_m
+                )
+                if not wrong_side:
+                    rebuilt[source_change].append((baseline, future, geometry))
+                    continue
+
+                pair_engine = PlanarControllingOlsEngine(
+                    [baseline, future],
+                    tie_tolerance_m=0.0,
+                )
+                try:
+                    gain_geometry = pair_engine._candidate_lower_region(
+                        baseline,
+                        future,
+                        geometry,
+                    )
+                except Exception:
+                    gain_geometry = None
+                if gain_geometry is None:
+                    gain_geometry = self._fallback_lower_region(
+                        pair_engine,
+                        baseline,
+                        future,
+                        geometry,
+                    )
+                if gain_geometry is None:
+                    rebuilt[source_change].append((baseline, future, geometry))
+                    continue
+
+                gain_geometry = self._safe_intersection(geometry, gain_geometry)
+                if gain_geometry is None:
+                    rebuilt[source_change].append((baseline, future, geometry))
+                    continue
+                loss_geometry = self._safe_difference(geometry, gain_geometry)
+                if loss_geometry is None:
+                    rebuilt[source_change].append((baseline, future, geometry))
+                    continue
+
+                starts = {
+                    change: len(rebuilt[change]) for change in ("gain", "loss")
+                }
+                self._append_parts(
+                    rebuilt["gain"],
+                    baseline,
+                    future,
+                    gain_geometry,
+                    "gain",
+                    clean_spikes=False,
+                )
+                self._append_parts(
+                    rebuilt["loss"],
+                    baseline,
+                    future,
+                    loss_geometry,
+                    "loss",
+                    clean_spikes=False,
+                )
+                new_geometries = [
+                    item[2]
+                    for change in ("gain", "loss")
+                    for item in rebuilt[change][starts[change]:]
+                ]
+                coverage = self._union_geometries(new_geometries)
+                coverage_error = (
+                    geometry.area()
+                    if coverage is None
+                    else geometry.symDifference(coverage).area()
+                )
+                allowed_error = max(0.01, geometry.area() * 1e-9)
+                if coverage_error > allowed_error:
+                    for change in ("gain", "loss"):
+                        del rebuilt[change][starts[change]:]
+                    rebuilt[source_change].append((baseline, future, geometry))
+                    continue
+                self._append_transition_parts(
+                    result["transition"],
+                    pair_engine,
+                    baseline,
+                    future,
+                    geometry,
+                    gain_geometry,
+                    loss_geometry,
+                )
+        result["gain"] = rebuilt["gain"]
+        result["loss"] = rebuilt["loss"]
+
+    def _merge_comparison_transition_parts(self, result) -> None:
+        """Node and deduplicate transition segments added during repair."""
+        grouped = {}
+        controllers = {}
+        for baseline, future, geometry in result.get("transition", []):
+            if geometry is None or geometry.isEmpty():
+                continue
+            key = (baseline.surface_id, future.surface_id)
+            grouped.setdefault(key, []).append(geometry)
+            controllers[key] = (baseline, future)
+        merged_parts = []
+        for key, geometries in grouped.items():
+            try:
+                merged = (
+                    QgsGeometry.unaryUnion(geometries)
+                    if len(geometries) > 1
+                    else QgsGeometry(geometries[0])
+                )
+            except Exception:
+                merged = QgsGeometry(geometries[0])
+            if merged is None or merged.isEmpty():
+                continue
+            try:
+                line_merged = merged.mergeLines()
+                if line_merged is not None and not line_merged.isEmpty():
+                    merged = line_merged
+            except Exception:
+                pass
+            baseline, future = controllers[key]
+            if merged.length() > 0.01:
+                # The output layer accepts multipart lines. Keep one noded,
+                # deduplicated feature per controller pair instead of turning
+                # every crossing into a separate transition record.
+                merged_parts.append((baseline, future, QgsGeometry(merged)))
+        result["transition"] = merged_parts
 
     def _reclassify_conventional_axis_conical_numeric_slivers(self, result) -> None:
         """Move bounded current-OLS overlay slivers out of gain/loss."""

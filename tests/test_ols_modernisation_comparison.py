@@ -258,6 +258,86 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertTrue(residuals)
         self.assertLessEqual(max(residuals), 0.01)
 
+    def test_final_conical_remainder_is_split_at_zero_height(self):
+        """Coverage repair must not classify a mixed-sign remainder as one side."""
+        domain = QgsGeometry.fromRect(QgsRectangle(250.0, 100.0, 650.0, 900.0))
+        baseline_base = QgsGeometry.fromPolylineXY(
+            [QgsPointXY(100.0, 200.0), QgsPointXY(100.0, 800.0)]
+        ).buffer(120.0, 48)
+        future_base = QgsGeometry.fromPointXY(QgsPointXY(800.0, 500.0)).buffer(
+            120.0, 48
+        )
+        baseline = ControllingOlsCandidate(
+            "baseline-conical",
+            "Conical",
+            QgsGeometry(domain),
+            conical_elevation_evaluator(baseline_base, 100.0, 0.05, 1200.0),
+            "conical",
+            {
+                "base_footprint": baseline_base,
+                "base_elevation_m": 100.0,
+                "slope": 0.05,
+                "max_distance_m": 1200.0,
+            },
+        )
+        future = ControllingOlsCandidate(
+            "future-conical",
+            "Conical",
+            QgsGeometry(domain),
+            conical_elevation_evaluator(future_base, 100.3, 0.05, 1200.0),
+            "conical",
+            {
+                "base_footprint": future_base,
+                "base_elevation_m": 100.3,
+                "slope": 0.05,
+                "max_distance_m": 1200.0,
+            },
+        )
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        result = {"gain": [], "loss": [], "no_change": [], "transition": []}
+
+        engine._append_final_common_domain_remainders(
+            result,
+            [(baseline, domain)],
+            [(future, domain)],
+        )
+
+        self.assertTrue(result["gain"])
+        self.assertTrue(result["loss"])
+        self.assertTrue(result["transition"])
+        coverage = QgsGeometry.unaryUnion(
+            [item[2] for change in ("gain", "loss") for item in result[change]]
+        )
+        self.assertLessEqual(domain.symDifference(coverage).area(), 0.01)
+        for _baseline, _future, geometry in result["gain"]:
+            delta_min, _delta_max, _sample = engine.delta_range(
+                geometry, baseline, future, "gain"
+            )
+            self.assertGreaterEqual(delta_min, -0.01)
+        for _baseline, _future, geometry in result["loss"]:
+            _delta_min, delta_max, _sample = engine.delta_range(
+                geometry, baseline, future, "loss"
+            )
+            self.assertLessEqual(delta_max, 0.01)
+
+        repaired = {
+            "gain": [],
+            "loss": [(baseline, future, QgsGeometry(domain))],
+            "no_change": [],
+            "transition": [],
+        }
+        engine._enforce_final_height_signs(repaired)
+        self.assertTrue(repaired["gain"])
+        self.assertTrue(repaired["loss"])
+        repaired_coverage = QgsGeometry.unaryUnion(
+            [item[2] for change in ("gain", "loss") for item in repaired[change]]
+        )
+        self.assertLessEqual(domain.symDifference(repaired_coverage).area(), 0.01)
+        self.assertTrue(repaired["transition"])
+
     def test_conical_conical_regularisation_removes_sampling_wave(self):
         domain = QgsGeometry.fromRect(QgsRectangle(0.0, 10.0, 100.0, 90.0))
         first_base = QgsGeometry.fromRect(QgsRectangle(-10.0, 0.0, 0.0, 100.0))
@@ -320,6 +400,48 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             ),
             0.01,
         )
+
+    def test_conical_contour_uses_fair_fit_when_accurate_chord_is_too_distant(self):
+        domain = QgsGeometry.fromRect(QgsRectangle(-10.0, -10.0, 110.0, 30.0))
+        first = ControllingOlsCandidate(
+            "first-conical",
+            "Conical",
+            QgsGeometry(domain),
+            constant_elevation_evaluator(100.0),
+            "conical",
+        )
+        second = ControllingOlsCandidate(
+            "second-conical",
+            "Conical",
+            QgsGeometry(domain),
+            constant_elevation_evaluator(100.0),
+            "conical",
+        )
+        sampled = QgsGeometry.fromPolylineXY(
+            [QgsPointXY(0.0, 0.0), QgsPointXY(50.0, 20.0), QgsPointXY(100.0, 0.0)]
+        )
+        guide_points = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(50.0, 10.0),
+            QgsPointXY(100.0, 0.0),
+        ]
+        engine = PlanarControllingOlsEngine([first, second])
+
+        with patch.object(
+            engine,
+            "_least_squares_bspline_guide_points",
+            return_value=(guide_points, {}),
+        ):
+            regularised = engine._smoothed_conical_conical_contour(
+                sampled,
+                first,
+                second,
+                domain,
+            )
+
+        self.assertIsNotNone(regularised)
+        points = [QgsPointXY(point.x(), point.y()) for point in regularised.vertices()]
+        self.assertEqual(points, guide_points)
 
     def test_diagnostics_classify_recovery_and_normalisation(self):
         engine = PlanarControllingOlsEngine([self.constant("surface", 100.0)])

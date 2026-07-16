@@ -4227,8 +4227,23 @@ class PlanarControllingOlsEngine:
                 chord_residual is not None
                 and chord_residual <= CONICAL_CONICAL_STRAIGHT_RESIDUAL_M
             ):
-                smoothed_line = chord
+                try:
+                    chord_deviation_m = source_line.hausdorffDistanceDensify(
+                        chord,
+                        AXIS_CONICAL_CURVE_SMOOTHING_HAUSDORFF_DENSIFY_FRACTION,
+                    )
+                except Exception:
+                    chord_deviation_m = float("inf")
+                smoothed_line = (
+                    chord
+                    if math.isfinite(chord_deviation_m)
+                    and 0.0 <= chord_deviation_m
+                    <= CONICAL_CONICAL_SMOOTHING_MAX_DEVIATION_M
+                    else None
+                )
             else:
+                smoothed_line = None
+            if smoothed_line is None:
                 fit_result = self._least_squares_bspline_guide_points(
                     source_points,
                     source_line,
