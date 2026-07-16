@@ -1246,7 +1246,7 @@ class SafeguardingBuilderDialog(
                     threshold_length + displaced_1 + displaced_2,
                 )
 
-            adg = str(data.get("adg", data.get("design_group", "")) or "").strip().upper()
+            adg = str(data.get("adg", "") or "").strip().upper()
             if requires_adg and not adg:
                 missing_adg += 1
                 missing_required = True
@@ -3526,7 +3526,7 @@ class SafeguardingBuilderDialog(
         validated["ruleset"] = str(inputs.get("ruleset", DEFAULT_RULESET_ID) or DEFAULT_RULESET_ID).strip()
         validated["arc_num"] = inputs.get("arc_num")
         validated["arc_let"] = inputs.get("arc_let")
-        adg = str(inputs.get("adg", inputs.get("design_group", "")) or "").strip().upper()
+        adg = str(inputs.get("adg", "") or "").strip().upper()
         if adg and adg not in {"I", "IIA", "IIB", "IIC", "III", "IV", "V"}:
             errors.append(f"Rwy {index}: Invalid Aeroplane Design Group '{adg}'.")
             current_errors += 1
@@ -3543,7 +3543,6 @@ class SafeguardingBuilderDialog(
             errors.append(f"Rwy {index}: ADG is required for Annex 14 OFS/OES generation.")
             current_errors += 1
         validated["adg"] = adg
-        validated["design_group"] = adg
         surface_category = str(inputs.get("surface_category", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_CATEGORY
         surface_material = str(inputs.get("surface_material", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_MATERIAL
         if surface_category and surface_category not in RUNWAY_SURFACE_MATERIALS:
@@ -3794,10 +3793,7 @@ if __name__ == "__main__":
     import sys
     from qgis.PyQt.QtWidgets import QApplication  # type: ignore
 
-    # --- Mock QGIS environment if running standalone ---
-    class MockQgisInterface:
-        pass
-
+    # --- Mock QGIS project if running standalone ---
     class MockQgsProject:
         def __init__(self):
             self._crs = QgsCoordinateReferenceSystem("EPSG:4326")

@@ -19,6 +19,12 @@ fixtures.
 - [ ] Review AGL and runway-marking output in QGIS using representative runway
   configurations.
 
+## Maintenance
+
+- [ ] Replace remaining legacy `AeroSense` branding with `Safeguarding Builder`
+  in the dialog title, runtime dashboard implementation and documentation, and
+  dashboard tests.
+
 ## Protected Airspace
 
 - [ ] Complete the modernised ICAO Annex 14 OFS/OES promotion boundary:

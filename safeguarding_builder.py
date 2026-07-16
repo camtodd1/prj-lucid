@@ -1613,7 +1613,7 @@ class SafeguardingBuilder(
                     main_group,
                     arc_num_val,
                     arc_let_val,
-                    runway_data.get("design_group") or runway_data.get("adg"),
+                    runway_data.get("adg"),
                     runway_data.get("declared_distances"),
                 )
 

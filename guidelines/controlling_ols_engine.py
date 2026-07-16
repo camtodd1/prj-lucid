@@ -1466,47 +1466,6 @@ class PlanarControllingOlsEngine:
                 return left[0], right[0]
         return None
 
-    def _legacy_shared_boundary_features(
-        self,
-        fields: QgsFields,
-        region_parts: List[Tuple[ControllingOlsCandidate, QgsGeometry]],
-        seen_keys: set,
-    ) -> List[QgsFeature]:
-        features: List[QgsFeature] = []
-        for index, (first_candidate, first_region) in enumerate(region_parts):
-            for second_candidate, second_region in region_parts[index + 1 :]:
-                if first_candidate.surface_id == second_candidate.surface_id:
-                    continue
-                try:
-                    boundary = first_region.boundary().intersection(second_region.boundary())
-                except Exception:
-                    continue
-                for line_points in self._line_parts(boundary):
-                    if len(line_points) < 2:
-                        continue
-                    key = self._line_key(line_points, first_candidate.surface_id, second_candidate.surface_id)
-                    if key in seen_keys:
-                        continue
-                    seen_keys.add(key)
-                    z_values = self._transition_z_values(line_points, first_candidate, second_candidate)
-                    z_line = self._line_points_to_z_geometry(line_points, z_values)
-                    if z_line is None or z_line.isEmpty():
-                        continue
-                    feature = QgsFeature(fields)
-                    feature.setGeometry(z_line)
-                    feature.setAttributes(
-                        [
-                            f"{first_candidate.surface_id}|{second_candidate.surface_id}"[:160],
-                            "Transition",
-                            min(z_values),
-                            max(z_values),
-                            f"{first_candidate.surface_id}|{second_candidate.surface_id}"[:254],
-                            "exact_region_boundary",
-                        ]
-                    )
-                    features.append(feature)
-        return features
-
     def _controlling_region_geometries(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
         if self._controlling_region_geometries_cache is None:
             self._controlling_region_geometries_cache = self._build_controlling_region_geometries()

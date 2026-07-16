@@ -1005,7 +1005,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "arc_num": self.arc_num_combo.currentData(),
             "arc_let": self.arc_let_combo.currentData(),
             "adg": self.adg_combo.currentData(),
-            "design_group": self.adg_combo.currentData(),
             "surface_category": self.surface_category_combo.currentText(),
             "surface_material": self.surface_material_combo.currentText(),
             "type1": self.type1_combo.currentText(),
@@ -1065,7 +1064,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             )
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
-            self._set_combo_data(self.adg_combo, data.get("adg", data.get("design_group", "")))
+            self._set_combo_data(self.adg_combo, data.get("adg", ""))
             self._set_combo_text(
                 self.surface_category_combo,
                 data.get("surface_category", ""),

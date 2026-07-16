@@ -250,6 +250,37 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertNotIn("thr_elev_1", runway)
         self.assertNotIn("thr_elev_2", runway)
 
+    def test_save_payload_uses_only_canonical_adg_field(self):
+        group = self.dialog._runway_groups[1]
+        group._set_combo_data(group.adg_combo, "V")
+
+        runway = self.dialog._build_save_payload("TEST")["runways"][0]
+
+        self.assertEqual(runway["adg"], "V")
+        self.assertNotIn("design_group", runway)
+
+    def test_legacy_design_group_is_normalized_at_load_boundary(self):
+        legacy = {"design_group": "III"}
+
+        normalized = self.dialog._with_runway_defaults(legacy)
+
+        self.assertEqual(normalized["adg"], "III")
+        self.assertNotIn("design_group", normalized)
+        self.assertEqual(legacy, {"design_group": "III"})
+
+        self.dialog._load_runway_rows([legacy])
+        resaved = self.dialog._build_save_payload("TEST")["runways"][0]
+        self.assertEqual(resaved["adg"], "III")
+        self.assertNotIn("design_group", resaved)
+
+    def test_load_normalization_prefers_canonical_adg(self):
+        normalized = self.dialog._with_runway_defaults(
+            {"adg": "V", "design_group": "III"}
+        )
+
+        self.assertEqual(normalized["adg"], "V")
+        self.assertNotIn("design_group", normalized)
+
     def test_legacy_runway_elevations_are_normalized_at_load_boundary(self):
         legacy = {"thr_elev_1": "0", "thr_elev_2": "12.5"}
 

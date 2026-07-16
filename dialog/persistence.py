@@ -98,14 +98,6 @@ class PersistenceMixin:
                 return None
         return None
 
-    def _baseline_ols_ruleset_combo_widget(self):
-        combo = getattr(self, "baseline_ols_ruleset_combo", None)
-        return combo if isinstance(combo, QComboBox) else None
-
-    def _comparison_ols_ruleset_combo_widget(self):
-        combo = getattr(self, "comparison_ols_ruleset_combo", None)
-        return combo if isinstance(combo, QComboBox) else None
-
     def _pick_json_file(self, title: str, accept_mode: QFileDialog.AcceptMode, initial_path: str = "") -> str:
         """Use a Qt file dialog that behaves reliably inside the plugin shell."""
         file_filter = self.tr("JSON Files (*.json)")
@@ -640,8 +632,9 @@ class PersistenceMixin:
         runway_data.setdefault("asda_override_2", "")
         runway_data.setdefault("lda_override_1", "")
         runway_data.setdefault("lda_override_2", "")
-        runway_data.setdefault("adg", runway_data.get("design_group", ""))
-        runway_data.setdefault("design_group", runway_data.get("adg", ""))
+        legacy_design_group = runway_data.pop("design_group", "")
+        if runway_data.get("adg") in (None, ""):
+            runway_data["adg"] = legacy_design_group
         runway_data.setdefault("surface_category", "")
         runway_data.setdefault("surface_material", "")
         runway_data.setdefault("takeoff_available_1", True)

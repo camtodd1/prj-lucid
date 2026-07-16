@@ -97,7 +97,7 @@ development.
 After ruleset edits, run:
 
 ```bash
-python3 -m py_compile dimensions/*.py rulesets/*.py rulesets/mos139/*.py
+python3 -m py_compile rulesets/*.py rulesets/mos139/*.py
 ```
 
 Recheck affected values against the cited MOS source whenever a rule or source

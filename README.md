@@ -120,9 +120,6 @@ core/run_log.py                  Structured operational events, diagnostic
                                  routing, aggregation, and QGIS severity mapping.
 core/run_history.py              Append-only GUI/headless runtime test ledger.
 core/styles.py                   Mapping between layer style keys and QML files.
-guidelines/guideline_constants.py
-                                 Shared constants for guideline dimensions,
-                                 references, contour intervals, and offsets.
 guidelines/ols_guideline.py      Runway and airport-wide OLS generation.
 surfaces/physical.py             Physical runway and runway protection geometry.
 surfaces/airfield_ground_lighting.py

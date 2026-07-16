@@ -450,10 +450,9 @@ class Annex14GeometryMixin:
             )
 
     def _annex14_design_group_for_runway(self, runway_data: dict) -> Optional[str]:
-        for key in ("adg", "design_group", "aeroplane_design_group", "airplane_design_group"):
-            value = runway_data.get(key)
-            if value:
-                return str(value)
+        value = runway_data.get("adg")
+        if value:
+            return str(value)
 
         wingspan = runway_data.get("wingspan_m") or runway_data.get("critical_wingspan_m")
         vat_kmh = runway_data.get("vat_kmh") or runway_data.get("indicated_airspeed_at_threshold_kmh")

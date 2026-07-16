@@ -21,11 +21,6 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class NasfRunwayGuidelinesMixin(NasfGuidelineProcessorBase):
-    def process_aircraft_noise_safeguarding(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
-        """Placeholder for aircraft noise safeguarding."""
-        QgsMessageLog.logMessage("Aircraft noise safeguarding processing not implemented.", PLUGIN_TAG, level=Qgis.Info)
-        return False
-
     def process_windshear_safeguarding(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Generate building-induced windshear assessment zones."""
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
