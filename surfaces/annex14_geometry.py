@@ -76,16 +76,12 @@ class Annex14GeometryMixin:
             return None
 
     def _annex14_runway_end_elevations(self, runway_data: dict) -> tuple:
-        primary = (
-            self._annex14_float_or_none(runway_data.get("threshold_elev_1"))
-            or self._annex14_float_or_none(runway_data.get("thr_elev_1"))
-            or self._annex14_float_or_none(runway_data.get("runway_end_elev_1"))
-        )
-        reciprocal = (
-            self._annex14_float_or_none(runway_data.get("threshold_elev_2"))
-            or self._annex14_float_or_none(runway_data.get("thr_elev_2"))
-            or self._annex14_float_or_none(runway_data.get("runway_end_elev_2"))
-        )
+        primary = self._annex14_float_or_none(runway_data.get("threshold_elev_1"))
+        if primary is None:
+            primary = self._annex14_float_or_none(runway_data.get("runway_end_elev_1"))
+        reciprocal = self._annex14_float_or_none(runway_data.get("threshold_elev_2"))
+        if reciprocal is None:
+            reciprocal = self._annex14_float_or_none(runway_data.get("runway_end_elev_2"))
         if primary is None and reciprocal is not None:
             primary = reciprocal
         if reciprocal is None and primary is not None:

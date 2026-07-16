@@ -610,10 +610,20 @@ class PersistenceMixin:
             )
 
     def _with_runway_defaults(self, runway_data):
-        runway_data.setdefault("runway_end_elev_1", runway_data.get("thr_elev_1", ""))
-        runway_data.setdefault("runway_end_elev_2", runway_data.get("thr_elev_2", ""))
-        runway_data.setdefault("threshold_elev_1", "")
-        runway_data.setdefault("threshold_elev_2", "")
+        runway_data = dict(runway_data)
+        for end_number in (1, 2):
+            legacy_key = f"thr_elev_{end_number}"
+            runway_end_key = f"runway_end_elev_{end_number}"
+            threshold_key = f"threshold_elev_{end_number}"
+            legacy_elevation = runway_data.pop(legacy_key, "")
+
+            # Old save files used one elevation for both the physical runway end
+            # and its threshold. Normalize that representation at the load
+            # boundary so the rest of the application only sees canonical keys.
+            if runway_data.get(runway_end_key) in (None, ""):
+                runway_data[runway_end_key] = legacy_elevation
+            if threshold_key not in runway_data:
+                runway_data[threshold_key] = legacy_elevation
         runway_data.setdefault("thr_pre_area_1", "")
         runway_data.setdefault("thr_pre_area_2", "")
         runway_data.setdefault("thr_displaced_1", "")

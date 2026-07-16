@@ -113,6 +113,20 @@ def cap_context(track_wkt: str) -> OlsConstructionContext:
 
 
 class OlsConstructionQgisTests(unittest.TestCase):
+    def test_annex14_elevation_fallback_preserves_zero_threshold(self):
+        builder = object.__new__(SafeguardingBuilder)
+
+        elevations = builder._annex14_runway_end_elevations(
+            {
+                "threshold_elev_1": 0.0,
+                "runway_end_elev_1": 9.0,
+                "threshold_elev_2": "",
+                "runway_end_elev_2": 5.0,
+            }
+        )
+
+        self.assertEqual(elevations, (0.0, 5.0))
+
     def test_conventional_partition_is_exclusive_without_annex_optional_fields(self):
         fields = QgsFields(
             [

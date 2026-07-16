@@ -3189,8 +3189,6 @@ class SafeguardingBuilderDialog(
                     validated_runway.setdefault("runway_end_elev_2", None)
                     validated_runway.setdefault("threshold_elev_1", None)
                     validated_runway.setdefault("threshold_elev_2", None)
-                    validated_runway.setdefault("thr_elev_1", None)
-                    validated_runway.setdefault("thr_elev_2", None)
                     validated_runway.setdefault("thr_displaced_1", None)
                     validated_runway.setdefault("thr_displaced_2", None)
                     validated_runway.setdefault("thr_pre_area_1", None)
@@ -3335,9 +3333,7 @@ class SafeguardingBuilderDialog(
 
         # Elevations (Optional)
         try:  # Primary runway end elevation
-            end_elev1_raw = inputs.get("runway_end_elev_1")
-            if end_elev1_raw is None:
-                end_elev1_raw = inputs.get("thr_elev_1", "")
+            end_elev1_raw = inputs.get("runway_end_elev_1", "")
             end_elev1_str = str(end_elev1_raw).strip()
             validated["runway_end_elev_1"] = float(end_elev1_str) if end_elev1_str else None
         except ValueError:
@@ -3347,9 +3343,7 @@ class SafeguardingBuilderDialog(
             current_errors += 1
             validated["runway_end_elev_1"] = None
         try:  # Reciprocal runway end elevation
-            end_elev2_raw = inputs.get("runway_end_elev_2")
-            if end_elev2_raw is None:
-                end_elev2_raw = inputs.get("thr_elev_2", "")
+            end_elev2_raw = inputs.get("runway_end_elev_2", "")
             end_elev2_str = str(end_elev2_raw).strip()
             validated["runway_end_elev_2"] = float(end_elev2_str) if end_elev2_str else None
         except ValueError:
@@ -3379,10 +3373,6 @@ class SafeguardingBuilderDialog(
             )
             current_errors += 1
             validated["threshold_elev_2"] = validated.get("runway_end_elev_2")
-
-        # Legacy aliases used by existing OLS code paths until all callers are migrated.
-        validated["thr_elev_1"] = validated["threshold_elev_1"]
-        validated["thr_elev_2"] = validated["threshold_elev_2"]
 
         # Displaced Thresholds (Optional, non-negative)
         try:  # Primary Displaced

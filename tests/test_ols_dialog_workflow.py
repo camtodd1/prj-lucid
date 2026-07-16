@@ -234,6 +234,63 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(payload["protected_airspace_policy"], "modernisation_comparison")
 
+    def test_save_payload_uses_only_canonical_runway_elevation_fields(self):
+        group = self.dialog._runway_groups[1]
+        group.runway_end_elev_1_le.setText("3.3")
+        group.runway_end_elev_2_le.setText("3.8")
+        group.threshold_elev_1_le.setText("3.6")
+        group.threshold_elev_2_le.setText("0")
+
+        runway = self.dialog._build_save_payload("TEST")["runways"][0]
+
+        self.assertEqual(runway["runway_end_elev_1"], "3.3")
+        self.assertEqual(runway["runway_end_elev_2"], "3.8")
+        self.assertEqual(runway["threshold_elev_1"], "3.6")
+        self.assertEqual(runway["threshold_elev_2"], "0")
+        self.assertNotIn("thr_elev_1", runway)
+        self.assertNotIn("thr_elev_2", runway)
+
+    def test_legacy_runway_elevations_are_normalized_at_load_boundary(self):
+        legacy = {"thr_elev_1": "0", "thr_elev_2": "12.5"}
+
+        normalized = self.dialog._with_runway_defaults(legacy)
+
+        self.assertEqual(normalized["runway_end_elev_1"], "0")
+        self.assertEqual(normalized["runway_end_elev_2"], "12.5")
+        self.assertEqual(normalized["threshold_elev_1"], "0")
+        self.assertEqual(normalized["threshold_elev_2"], "12.5")
+        self.assertNotIn("thr_elev_1", normalized)
+        self.assertNotIn("thr_elev_2", normalized)
+        self.assertEqual(legacy, {"thr_elev_1": "0", "thr_elev_2": "12.5"})
+
+        self.dialog._load_runway_rows([legacy])
+        resaved = self.dialog._build_save_payload("TEST")["runways"][0]
+        self.assertEqual(resaved["runway_end_elev_1"], "0")
+        self.assertEqual(resaved["runway_end_elev_2"], "12.5")
+        self.assertEqual(resaved["threshold_elev_1"], "0")
+        self.assertEqual(resaved["threshold_elev_2"], "12.5")
+        self.assertNotIn("thr_elev_1", resaved)
+        self.assertNotIn("thr_elev_2", resaved)
+
+    def test_load_normalization_preserves_distinct_canonical_elevations(self):
+        normalized = self.dialog._with_runway_defaults(
+            {
+                "runway_end_elev_1": "3.3",
+                "runway_end_elev_2": "3.8",
+                "threshold_elev_1": "3.6",
+                "threshold_elev_2": "3.2",
+                "thr_elev_1": "3.6",
+                "thr_elev_2": "3.2",
+            }
+        )
+
+        self.assertEqual(normalized["runway_end_elev_1"], "3.3")
+        self.assertEqual(normalized["runway_end_elev_2"], "3.8")
+        self.assertEqual(normalized["threshold_elev_1"], "3.6")
+        self.assertEqual(normalized["threshold_elev_2"], "3.2")
+        self.assertNotIn("thr_elev_1", normalized)
+        self.assertNotIn("thr_elev_2", normalized)
+
     def test_baseline_mode_hides_future_family_rows(self):
         self.select_mode("ruleset_aligned")
         self.dialog.toolButtonContourOverrides.setChecked(True)

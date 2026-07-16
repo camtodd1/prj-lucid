@@ -977,8 +977,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "runway_end_elev_2": self.runway_end_elev_2_le.text(),
             "threshold_elev_1": self.threshold_elev_1_le.text(),
             "threshold_elev_2": self.threshold_elev_2_le.text(),
-            "thr_elev_1": self.threshold_elev_1_le.text() or self.runway_end_elev_1_le.text(),
-            "thr_elev_2": self.threshold_elev_2_le.text() or self.runway_end_elev_2_le.text(),
             "thr_displaced_1": self.thr_displaced_1_le.text(),
             "thr_displaced_2": self.thr_displaced_2_le.text(),
             "thr_pre_area_1": self.thr_pre_area_1_le.text(),
@@ -1034,8 +1032,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.thr_north_le.setText(data.get("thr_northing", ""))
             self.rec_east_le.setText(data.get("rec_easting", ""))
             self.rec_north_le.setText(data.get("rec_northing", ""))
-            self.runway_end_elev_1_le.setText(data.get("runway_end_elev_1", "") or data.get("thr_elev_1", ""))
-            self.runway_end_elev_2_le.setText(data.get("runway_end_elev_2", "") or data.get("thr_elev_2", ""))
+            self.runway_end_elev_1_le.setText(data.get("runway_end_elev_1", ""))
+            self.runway_end_elev_2_le.setText(data.get("runway_end_elev_2", ""))
             self.threshold_elev_1_le.setText(data.get("threshold_elev_1", ""))
             self.threshold_elev_2_le.setText(data.get("threshold_elev_2", ""))
             self.thr_displaced_1_le.setText(data.get("thr_displaced_1", ""))
