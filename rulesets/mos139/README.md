@@ -75,22 +75,6 @@ points, touchdown-zone marking offsets, and runway holding positions.
 : Airfield Ground Lighting references, dimensions, colours, approach profiles,
 and helper rules.
 
-`ols_dimensions.py`
-: Internal compatibility facade. It re-exports split MOS139 modules for older
-imports. New MOS139 code should prefer the domain modules above.
-
-## Compatibility Shims
-
-The root-level files below are compatibility shims:
-
-```text
-dimensions/ols_dimensions.py
-dimensions/agl_dimensions.py
-```
-
-They forward old imports to this ruleset package. They should not be used as
-the source of truth for new MOS139 work.
-
 ## Adding or Changing MOS139 Rules
 
 Put changes in the domain module that owns the rule:

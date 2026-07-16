@@ -123,8 +123,6 @@ core/styles.py                   Mapping between layer style keys and QML files.
 guidelines/guideline_constants.py
                                  Shared constants for guideline dimensions,
                                  references, contour intervals, and offsets.
-guidelines/simple.py             Compatibility shim for NASF-backed
-                                 safeguarding generators.
 guidelines/ols_guideline.py      Runway and airport-wide OLS generation.
 surfaces/physical.py             Physical runway and runway protection geometry.
 surfaces/airfield_ground_lighting.py
@@ -132,11 +130,6 @@ surfaces/airfield_ground_lighting.py
                                  coincident-light resolution.
 surfaces/specialised.py          Specialised surfaces such as RAOA and taxiway
                                  separation offsets.
-dimensions/cns_dimensions.py     CNS building restricted area dimensions.
-dimensions/ols_dimensions.py     Legacy compatibility shim for MOS139 OLS
-                                 dimensions.
-dimensions/agl_dimensions.py     Legacy compatibility shim for MOS139 AGL
-                                 dimensions.
 rulesets/                       Aerodrome-standard profiles and policy modules
                                  for MOS139, EASA, CAP 168, and ICAO Annex 14.
 frameworks/nasf/                Australian NASF safeguarding framework profile,
@@ -237,8 +230,8 @@ Documentation conventions and the active backlog are in
 
 - The plugin expects the QGIS project CRS to be projected and metre-based.
 - Guideline A and Guideline H detailed generation are not fully implemented.
-- Some specialised CNS and OLS cases depend on the available parameter tables in
-  `dimensions/cns_dimensions.py` and `rulesets/mos139/ols_dimensions.py`.
+- Some specialised CNS and OLS cases depend on the available policy tables in
+  `frameworks/nasf/cns.py` and the active ruleset package.
 - AGL generation models plan-view light locations and display characteristics.
   It does not validate photometric intensity, vertical beam distribution,
   circuiting, power supply, monitoring, serviceability, or obstacle screening.

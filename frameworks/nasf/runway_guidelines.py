@@ -26,10 +26,6 @@ class NasfRunwayGuidelinesMixin(NasfGuidelineProcessorBase):
         QgsMessageLog.logMessage("Aircraft noise safeguarding processing not implemented.", PLUGIN_TAG, level=Qgis.Info)
         return False
 
-    def process_guideline_a(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
-        """Compatibility alias for legacy NASF Guideline A processing."""
-        return self.process_aircraft_noise_safeguarding(runway_data, layer_group)
-
     def process_windshear_safeguarding(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Generate building-induced windshear assessment zones."""
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
@@ -114,10 +110,6 @@ class NasfRunwayGuidelinesMixin(NasfGuidelineProcessorBase):
             "WSZ Runway",
         )
         return layer_created is not None
-
-    def process_guideline_b(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
-        """Compatibility alias for legacy NASF Guideline B processing."""
-        return self.process_windshear_safeguarding(runway_data, layer_group)
 
     def process_public_safety_areas(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
         """Generate public safety area trapezoids."""
@@ -222,7 +214,3 @@ class NasfRunwayGuidelinesMixin(NasfGuidelineProcessorBase):
             "PSA Runway",
         )
         return layer_created is not None
-
-    def process_guideline_i(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
-        """Compatibility alias for legacy NASF Guideline I processing."""
-        return self.process_public_safety_areas(runway_data, layer_group)

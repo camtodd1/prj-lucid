@@ -5693,12 +5693,3 @@ class OlsGuidelineMixin:
             level=Qgis.Success if overall_success else Qgis.Warning,
         )
         return overall_success
-
-    def process_guideline_f(
-        self,
-        runway_data: dict,
-        layer_group: QgsLayerTreeGroup,
-        ofz_group: Optional[QgsLayerTreeGroup] = None,
-    ) -> bool:
-        """Compatibility alias for legacy NASF Guideline F OLS processing."""
-        return self.process_runway_ols_surfaces(runway_data, layer_group, ofz_group)

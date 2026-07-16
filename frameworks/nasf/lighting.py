@@ -262,7 +262,3 @@ class LightingGuidelineMixin:
             )
 
         return overall_success
-
-    def process_guideline_e(self, runway_data: dict, layer_group: QgsLayerTreeGroup) -> bool:
-        """Compatibility alias for legacy NASF Guideline E processing."""
-        return self.process_lighting_control_zones(runway_data, layer_group)

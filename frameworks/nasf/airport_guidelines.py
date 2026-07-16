@@ -191,16 +191,6 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
             QgsMessageLog.logMessage(f"Wildlife safeguarding failed: {e}", PLUGIN_TAG, level=Qgis.Critical)
             return False
 
-    def process_guideline_c(
-        self,
-        arp_point: QgsPointXY,
-        icao_code: str,
-        target_crs: QgsCoordinateReferenceSystem,
-        layer_group: QgsLayerTreeGroup,
-    ) -> bool:
-        """Compatibility alias for legacy NASF Guideline C processing."""
-        return self.process_wildlife_safeguarding(arp_point, icao_code, target_crs, layer_group)
-
     def process_wind_turbine_safeguarding(
         self,
         arp_point: QgsPointXY,
@@ -290,13 +280,3 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
                 level=Qgis.Critical,
             )
             return False
-
-    def process_guideline_d(
-        self,
-        arp_point: QgsPointXY,
-        icao_code: str,
-        target_crs: QgsCoordinateReferenceSystem,
-        layer_group: QgsLayerTreeGroup,
-    ) -> bool:
-        """Compatibility alias for legacy NASF Guideline D processing."""
-        return self.process_wind_turbine_safeguarding(arp_point, icao_code, target_crs, layer_group)

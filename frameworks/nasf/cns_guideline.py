@@ -153,21 +153,6 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             )
         return overall_success
 
-    def process_guideline_g(
-        self,
-        cns_facilities_data: List[dict],
-        icao_code: str,
-        target_crs: QgsCoordinateReferenceSystem,
-        layer_group: QgsLayerTreeGroup,
-    ) -> bool:
-        """Compatibility alias for legacy NASF Guideline G processing."""
-        return self.process_cns_building_restricted_areas(
-            cns_facilities_data,
-            icao_code,
-            target_crs,
-            layer_group,
-        )
-
     def _generate_circular_or_donut(
         self, facility_point_geom: QgsGeometry, surface_spec: dict, description: str
     ) -> Optional[QgsGeometry]:

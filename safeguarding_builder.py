@@ -2083,9 +2083,6 @@ class SafeguardingBuilder(
                         "OES",
                     )
                     groups["comparison_controlling_surfaces"] = comparison_surface_group
-                    # Compatibility aliases for the established MOS-to-Annex workflow.
-                    groups["future_annex14_ofs"] = groups["comparison_ols_surfaces"]
-                    groups["future_annex14_oes"] = groups["comparison_airport_wide_ols"]
                 else:
                     groups["comparison_obstacle_free_zone"] = self._ensure_layer_group(
                         comparison_surface_group,
@@ -2322,8 +2319,8 @@ class SafeguardingBuilder(
         """Generate future OFS/OES beside the selected baseline and compare envelopes."""
         baseline_candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
         baseline_exclusions = list(getattr(self, "_controlling_ols_exclusion_geometries", []) or [])
-        future_ofs_group = output_groups.get("future_annex14_ofs")
-        future_oes_group = output_groups.get("future_annex14_oes")
+        future_ofs_group = output_groups.get("comparison_ols_surfaces")
+        future_oes_group = output_groups.get("comparison_airport_wide_ols")
         comparison_ofs_group = output_groups.get("comparison_ofs")
         comparison_oes_group = output_groups.get("comparison_oes")
         if any(
