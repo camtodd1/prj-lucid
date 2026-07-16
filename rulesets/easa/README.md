@@ -1,50 +1,35 @@
-# EASA Ruleset Package
+# EASA CS-ADR-DSN Ruleset
 
-This package contains the draft EASA CS-ADR-DSN Issue 7 ruleset implementation.
-It follows the same profile/service structure as `rulesets.mos139` so callers
-can resolve the active ruleset through `rulesets.registry.get_ruleset_profile()`
-and use the shared ruleset contract.
+**Status:** Current
 
-Source verification status is tracked in `docs/easa_source_verification.md`.
-This package targets the current EASA online Easy Access Rules publication,
-which incorporates CS-ADR-DSN Issue 7. It should remain treated as a draft
-current-EASA implementation until the table-level source verification register
-is complete.
+**Profile:** `easa_cs_adr_dsn_issue_7` (`draft`)
 
-Current implemented policy data covers physical runway dimensions, declared
-distances, clearway, stopway, OLS surface parameters, runway markings,
-airfield ground lighting, taxiway separation, and partial parallel runway
-separation.
+This package implements a draft EASA CS-ADR-DSN Issue 7 design-standard
+profile. It is selectable for preview and validation, but its conventional and
+controlling OLS capabilities remain `partial` until the source, topology,
+performance, interpretation, and independent-review gates are complete.
 
-Conventional and controlling OLS are selectable as a partial profile through
-the shared ruleset-owned construction contract. EASA J-1/J-2 dimensions,
-clearway-dependent TOCS origins and widths, OFZ families, and guidance-only OHS
-provenance are resolved without MOS parameter fallbacks. Production promotion
-remains gated on the source, QGIS topology, performance, and independent-review
-suites.
+## Capability Summary
 
-## Modules
+Supported policy services include runway strips, RESA, clearway, stopway,
+taxiway separation, and calculated declared distances. Pavement, shoulders,
+parallel-runway separation, OLS, markings, and lighting contain verified values
+but remain partial at the profile level because applicability or geometry is
+not yet a complete operational contract.
 
-`profile.py`
-: Public EASA profile facade. It delegates to grouped services and keeps the
-active-ruleset method names stable.
+The EASA OLS path uses CS-ADR-DSN J-1/J-2 dimensions, clearway-dependent take-off
+climb origins and widths, obstacle free zone families, and guidance-only outer
+horizontal surface provenance without MOS139 parameter fallbacks.
 
-`metadata.py`
-: Profile identifiers, aliases, status, and capability declarations.
+## Module Ownership
 
-`services.py`
-: Grouped service adapters for classification, OLS, physical, markings, and
-lighting.
+- `metadata.py` owns identifiers and capability declarations.
+- `profile.py` exposes the shared ruleset facade.
+- `classification.py` maps dialog runway types to policy categories.
+- `physical_data.py`, `taxiway.py`, `ols_surfaces.py`, `markings.py`, and
+  `lighting.py` own domain policy and source metadata.
+- `ols.py` is a compatibility wrapper around `ols_surfaces.py`.
 
-`classification.py`
-: Runway type mapping from UI strings to ruleset abbreviations.
-
-`ols_surfaces.py`, `physical_data.py`, `markings.py`, `lighting.py`
-: EASA policy sources for implemented families.
-
-`ols.py`, `taxiway.py`
-: Compatibility wrappers that satisfy the ruleset contract. `ols.py` delegates
-to `ols_surfaces.py`; `taxiway.py` stores CS ADR-DSN.D.260 Table D-1 separation
-lookups plus the CS ADR-DSN.B.050 and B.055 parallel runway separation rules.
-Segregated parallel operations accept an arrival-threshold stagger value where
-positive values reduce the minimum distance and negative values increase it.
+[`source_matrix.md`](source_matrix.md) records the verification state and known
+interpretations. Remaining promotion work is tracked in
+[`docs/roadmap.md`](../../docs/roadmap.md).

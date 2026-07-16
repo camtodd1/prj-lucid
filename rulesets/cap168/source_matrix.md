@@ -1,5 +1,7 @@
 # CAP 168 Source Matrix
 
+**Status:** Current
+
 This matrix records the UK CAA CAP 168 source-loading state. The reviewed
 source is *CAP 168 Licensing of Aerodromes*, Thirteenth Edition, July 2025,
 Chapter 4, incorporating Amendment 15. Its current OLS table is labelled
@@ -47,13 +49,13 @@ airport-wide, approach, take-off climb, OFZ and controlling-lower-envelope
 construction; longest-runway main-runway selection; and explicit aligned,
 offset, curved and greater-than-15-degree nominated tracks.
 
-The [14 July 2026 release evidence](release_evidence_2026-07-14.md) includes
-pure policy/source checks and headless QGIS
-fixtures for short, single, main/subsidiary, parallel and intersecting runway
-configurations. Numeric topology closure is bounded to 0.020 m² per completed
-partition and is reported separately from exceptional recovery. Offset and
-curved paths must be supplied as line geometry beginning at the applicable
-construction origin; missing or invalid nominated paths remain visibly blocked.
+The OLS fixture manifest and runtime ledger retain the pure policy/source checks
+and headless QGIS contracts for short, single, main/subsidiary, parallel, and
+intersecting runway configurations. Numeric topology closure is bounded to
+0.020 m² per completed partition and is reported separately from exceptional
+recovery. Offset and curved paths must be supplied as line geometry beginning
+at the applicable construction origin; missing or invalid nominated paths
+remain visibly blocked.
 
 CAP168 physical capabilities retain their own capability declarations. In
 particular, RESA remains unsupported and is not implied by this OLS promotion.

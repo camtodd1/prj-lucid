@@ -1,5 +1,9 @@
 # MOS139 Runway Marking Matrix
 
+**Status:** Working reference
+
+**Last reviewed:** 16 July 2026
+
 This matrix is the interpretation layer between MOS139 runway marking
 requirements and the generator implementation. Each marking family should be
 completed here before coding so the geometry, styling, applicability, and MOS
@@ -52,7 +56,7 @@ existing data:
 - Threshold piano key stripes start 6 m after the 1.2 m transverse threshold
   line.
 - Initial runway designation marking implementation may use controlled text/SVG;
-  polygon glyph geometry is tracked in `docs/TODO.md`.
+  polygon glyph geometry is tracked in [`roadmap.md`](roadmap.md).
 - The 12 m runway designation offset is measured from the threshold marking to
   the nearest edge of the runway designation number.
 - Default runway centreline pattern is 30 m stripe length and 20 m gap.
@@ -252,14 +256,14 @@ existing data:
 | Color | White | n/a | Implied runway marking color; confirm if needed. |
 | Orientation | Oriented for approach direction | rule | Marking should be readable from the approach end, aligned with runway centreline. |
 | Lateral placement | Centred on runway centreline | rule | Figure 8.18(6). |
-| Glyph shapes | As shown in Figure 8.18(8) | m | Polygon glyph templates are tracked in `docs/TODO.md`. |
+| Glyph shapes | As shown in Figure 8.18(8) | m | Polygon glyph templates are tracked in [`roadmap.md`](roadmap.md). |
 
 ### Generated Feature Model
 
 | Field | Proposed value |
 | --- | --- |
 | Layer name | `{ICAO} Runway Designation Markings` |
-| Geometry type | Controlled text/SVG for initial implementation; polygon glyphs tracked in `docs/TODO.md` |
+| Geometry type | Controlled text/SVG for initial implementation; polygon glyphs tracked in [`roadmap.md`](roadmap.md) |
 | Feature granularity | One feature per glyph or one multipart feature per full designation |
 | Group | Physical Geometry |
 | Style | White fill with no outline |
@@ -268,7 +272,7 @@ existing data:
 ### Implementation Notes
 
 - Initial implementation can use controlled text or SVG markings.
-- Polygon glyph geometry is tracked in `docs/TODO.md`.
+- Polygon glyph geometry is tracked in [`roadmap.md`](roadmap.md).
 - Placement should be calculated in runway-local coordinates:
   - longitudinal axis: runway centreline direction from threshold into runway;
   - lateral axis: perpendicular to runway centreline;
@@ -730,7 +734,7 @@ Status: implemented as detailed generated polygon geometry.
 | MOS 8.16(2)(c) | Chevrons are 15 m tall from apex to base. | Extended where needed so line ends target the runway-edge clearance rule. |
 | MOS 8.16(2)(d) | Chevrons point towards the non-displaced threshold, or runway end in the reciprocal direction. | Apex is placed toward the runway end/threshold side. |
 | MOS 8.16(2)(e) | Except near the threshold/runway end, line ends must be long enough to end not more than 7.5 m from the respective runway edges. | Current implementation targets this by extending the 45-degree legs for wider runways. |
-| MOS 8.16(2)(f) | Markings terminate at the runway end marking. | First chevron apex starts near the runway end marking; partial-chevron clipping is tracked in `docs/TODO.md`. |
+| MOS 8.16(2)(f) | Markings terminate at the runway end marking. | First chevron apex starts near the runway end marking; partial-chevron clipping is tracked in [`roadmap.md`](roadmap.md). |
 
 ### Applicability
 

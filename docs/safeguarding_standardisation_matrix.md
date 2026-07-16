@@ -1,5 +1,9 @@
 # Safeguarding Standardisation Matrix
 
+**Status:** Working reference
+
+**Last reviewed:** 16 July 2026
+
 This working document maps generic safeguarding elements to their source
 standards across jurisdictions. It is intended to support the refactor from
 NASF guideline-specific generator names toward generic safeguarding output

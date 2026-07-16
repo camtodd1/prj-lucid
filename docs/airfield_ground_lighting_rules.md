@@ -1,5 +1,9 @@
 # Airfield Ground Lighting Rules and Assumptions
 
+**Status:** Working reference
+
+**Last reviewed:** 16 July 2026
+
 Source: local extract `CASA Part 139 Aerodromes - Runway Lights Standards.pdf`, Part 139 (Aerodromes) Manual of Standards 2019, Chapter 9, Division 10, sections 9.51 to 9.73. The extract identifies Compilation No. 7, compilation date 12 May 2026.
 
 This document is an implementation reference for the Safeguarding Builder AGL layer. It summarises provision triggers, layout rules, display colours, and modelling assumptions. It is not a substitute for the MOS.
@@ -244,7 +248,8 @@ MOS reference: 9.63.
 - The displaced-threshold length input is interpreted as runway pavement before the displaced threshold that remains available for aircraft use, consistent with take-off use and landing from the opposite direction.
 - The separate pre-threshold area input is treated as stopway by default in the declared-distance workflow and does not trigger section 9.63 runway edge-light treatment.
 - Starter-extension classification is not currently captured, so the blue opposite-direction starter-extension case is not generated.
-- Closed pre-threshold areas are not inferred automatically. Explicit closed-area input support is tracked in `docs/TODO.md`.
+- Closed pre-threshold areas are not inferred automatically. Explicit
+  closed-area input support is tracked in [`roadmap.md`](roadmap.md).
 
 ## Runway End Lights
 
@@ -298,7 +303,8 @@ MOS reference: 9.67.
 
 ### Builder Assumptions
 
-- Not currently generated as part of runway AGL. Pad, bypass, and starter-extension geometry support is tracked in `docs/TODO.md`.
+- Not currently generated as part of runway AGL. Pad, bypass, and
+  starter-extension geometry support is tracked in [`roadmap.md`](roadmap.md).
 
 ## Stopway Lights
 
@@ -353,7 +359,8 @@ MOS reference: 9.69.
 ### Builder Assumptions
 
 - Not currently generated.
-- LAHSO-specific input, hold-short line location, and intersecting runway context are tracked in `docs/TODO.md`.
+- LAHSO-specific input, hold-short line location, and intersecting-runway
+  context are tracked in [`roadmap.md`](roadmap.md).
 
 ## Runway Centreline Lights
 

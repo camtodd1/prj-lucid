@@ -49,8 +49,8 @@ This fixture is intentionally portable and runs without QGIS:
 python3 -m unittest tests.test_ols_source_validation -v
 ```
 
-See `docs/ols_source_validation_2026-07-13.md` for the evidence scope and
-remaining production-promotion exclusions.
+The fixture itself is the machine-readable evidence record. Current promotion
+gaps are tracked in [`docs/roadmap.md`](../../../docs/roadmap.md).
 
 ## YMML axis/conical benchmark
 

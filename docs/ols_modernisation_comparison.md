@@ -1,5 +1,9 @@
 # OLS Ruleset And Modernisation Comparison
 
+**Status:** Current
+
+**Last reviewed:** 16 July 2026
+
 The OLS tab provides independent **Baseline OLS** and **Comparison OLS**
 selectors. Choosing **None — baseline only** generates only the baseline.
 Rulesets are selectable when their controlling-envelope capability is available;

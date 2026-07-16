@@ -1,36 +1,40 @@
-# UK CAA CAP 168 ruleset
+# UK CAA CAP 168 Ruleset
 
-Draft ruleset profile for UK CAA CAP 168 Edition 13.
+**Status:** Current
 
-Implemented parameters:
+**Profile:** `uk_caa_cap168_edition_13` (`stable`)
 
-- Aerodrome reference code number and letter from CAP 168 Table 3.1.
-- Runway minimum width from CAP 168 Table 3.2.
-- Runway strip length, width, graded area, construction, strength, slope, starter-extension, RNP APCH, and wide non-instrument runway variations from CAP 168 3.69-3.101.
-- Runway centreline, threshold, aiming point, touchdown zone, side stripe, dashed side stripe, and holding-position marking parameters from CAP 168 Chapter 7 and Table 3.3.
-- Approach, runway edge, threshold/end, starter-extension, runway centreline, touchdown-zone, simple touchdown-zone, and intensity-balance lighting parameters from CAP 168 Chapter 6.
-- Declared-distance policy from CAP 168 3.19.
-- Clearway length, width, and slope parameters from CAP 168 3.176-3.185.
-- Stopway width policy from CAP 168 3.186-3.195.
-- Parallel runway separation from CAP 168 3.21 and 3.24-3.25.
-- Taxiway-to-runway, taxiway-to-taxiway/object, stand taxilane, and object-height restriction parameters from CAP 168 3.163-3.167.
-- Current OLS source parameters from CAP 168 Chapter 4 and Tables 4.1-4.2,
-  applicable until 20 November 2030. Approach, take-off climb, transitional,
-  OFZ, inner-horizontal, conical, and outer-horizontal source rules are loaded.
+This package implements the UK CAA CAP 168 Edition 13 design-standard profile.
+Its conventional obstacle limitation surface (OLS) construction and controlling
+lower envelope are production-supported.
 
-Release-gated areas:
+## Supported Scope
 
-- RESA remains scaffolded and not yet source-loaded.
-- CAP 168 conventional OLS is selectable as a partial profile. Its independent
-  construction context uses the longest physical runway as the main runway,
-  the lowest threshold datum, short-runway circles, long-runway racetracks,
-  subsidiary tangent joins, length-dependent OHS, LDA/clearway declared-distance
-  rules, and nominated offset or curved approach/take-off tracks. The approach
-  and take-off climb corridors follow those tracks; track-following approach-
-  adjacent transitional construction remains release-gated. Production
-  promotion also remains gated on the QGIS topology, performance, and
-  independent review suites. The `250 m` Code 2 non-instrument IHS radius printed by
-  paragraph 4.50 is recorded as the user-confirmed corrected value `2500 m`.
+- Aerodrome reference code classification and runway-width policy.
+- Runway strip, clearway, stopway, taxiway-separation, and parallel-runway
+  policy.
+- Declared-distance calculations.
+- Runway marking and airfield ground lighting parameters.
+- Airport-wide, approach, take-off climb, transitional, obstacle free zone,
+  inner horizontal, conical, and outer horizontal OLS construction.
+- CAP 168 main/subsidiary runway context, lowest-threshold datum, short-runway
+  circles, long-runway racetracks, subsidiary tangent joins, length-dependent
+  outer horizontal surfaces, and nominated offset or curved approach/take-off
+  tracks.
 
-See `source_matrix.md` for clause-level scope, the three user-confirmed numeric
-corrections, and the two retained source/cross-reference interpretations.
+Pavement and shoulder policy are partial. RESA is unsupported. Transitional
+construction adjacent to curved approach tracks remains outside the supported
+contract.
+
+## Source and Compatibility
+
+[`source_matrix.md`](source_matrix.md) records clause-level scope, confirmed
+numeric corrections, and retained source interpretations. Regression fixtures
+and accepted geometry evidence live under
+[`tests/fixtures/ols`](../../tests/fixtures/ols/README.md); dated release results
+are preserved by Git history and the runtime ledger.
+
+`profile.py` exposes the public facade. Policy values belong in the relevant
+domain module (`classification.py`, `physical_data.py`, `taxiway.py`,
+`ols_surfaces.py`, `markings.py`, or `lighting.py`), while `metadata.py` is the
+authoritative capability declaration.

@@ -75,7 +75,7 @@ Typical inputs include:
 
 All coordinate inputs are interpreted in the current QGIS project CRS.
 
-## Output And Styling
+## Output and Styling
 
 Generated layers can be added directly to the QGIS project as memory layers or
 written to file-based outputs such as GeoPackage, Shapefile, or GeoJSON,
@@ -137,20 +137,14 @@ dimensions/ols_dimensions.py     Legacy compatibility shim for MOS139 OLS
                                  dimensions.
 dimensions/agl_dimensions.py     Legacy compatibility shim for MOS139 AGL
                                  dimensions.
-rulesets/mos139/                MOS139 C.07 2026 metadata, OLS, physical,
-                                 marking, and lighting policy sources. See
-                                 `rulesets/mos139/README.md`.
-rulesets/mos139/classification.py
-                                 MOS139 runway type mapping.
-rulesets/mos139/physical_data.py
-                                 MOS139 strip, RESA, pavement, and shoulder
-                                 policy.
-rulesets/mos139/taxiway.py      MOS139 taxiway separation policy.
-rulesets/mos139/ols_surfaces.py MOS139 OLS surface dimensions and lookups.
+rulesets/                       Aerodrome-standard profiles and policy modules
+                                 for MOS139, EASA, CAP 168, and ICAO Annex 14.
 frameworks/nasf/                Australian NASF safeguarding framework profile,
                                  policy parameters, and compatibility aliases.
-docs/                            Planning notes, implementation matrices,
-                                 TODOs, and reference mapping files.
+reports/                        Declared-distance and runway-summary reports.
+tests/                          Unit, QGIS integration, and OLS fixture tests.
+docs/                            Maintained implementation references, project
+                                 roadmap, conventions, and field-name mapping.
 styles/*.qml                     QGIS layer styling files.
 metadata.txt                     QGIS plugin metadata.
 resources.qrc                    Qt resource manifest.
@@ -205,15 +199,25 @@ setup, and OLS selection, run `python3 dashboard/runtime_dashboard.py --serve`
 from this repository folder and open <http://127.0.0.1:8765>. It also compares
 the last five matching runs with the previous five. See `dashboard/README.md`.
 
-## Development Notes
+## Development
 
-After editing Python modules, run a syntax check from the plugin directory:
+Run the QGIS-independent test suite from the plugin directory:
 
 ```bash
-python3 -m py_compile safeguarding_builder.py safeguarding_builder_dialog.py dialog/*.py core/styles.py surfaces/physical.py guidelines/ols_guideline.py surfaces/specialised.py core/layers.py guidelines/simple.py guidelines/guideline_constants.py dimensions/*.py rulesets/*.py rulesets/mos139/*.py frameworks/*.py frameworks/nasf/*.py
+python3 -m unittest \
+  tests.test_ols_construction_policy \
+  tests.test_ols_source_validation \
+  tests.test_run_history \
+  tests.test_runtime_dashboard
 ```
 
-For AGL rule changes, also review `docs/airfield_ground_lighting_rules.md`.
+Run full discovery from a QGIS-configured Python environment; QGIS-dependent
+modules cannot be imported by a normal system Python. For QGIS workflow fixtures
+and release-gate commands, see [`tests/README.md`](tests/README.md) and
+[`tests/fixtures/ols/README.md`](tests/fixtures/ols/README.md).
+
+For AGL rule changes, also review
+[`docs/airfield_ground_lighting_rules.md`](docs/airfield_ground_lighting_rules.md).
 That file records the MOS sections, builder assumptions, and concessions that
 are documented but not generated.
 
@@ -225,6 +229,9 @@ guidelines.
 
 If icons or Qt resources are changed, regenerate `resources_rc.py` with the
 QGIS-compatible Qt resource compiler used by your local QGIS/PyQt installation.
+
+Documentation conventions and the active backlog are in
+[`docs/README.md`](docs/README.md) and [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Current Limitations
 

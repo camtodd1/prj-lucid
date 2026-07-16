@@ -1,5 +1,9 @@
 # MOS139 Ruleset Package
 
+**Status:** Current
+
+**Profile:** `mos139_2019` (`stable`)
+
 This package contains the CASA Part 139 MOS 2019, Compilation No. 7 (2026),
 ruleset implementation, displayed in the plugin as `MOS139 (C.07 2026)`.
 It is the reference structure for future rulesets such as EASA, Annex 14, or
@@ -87,7 +91,7 @@ dimensions/agl_dimensions.py
 They forward old imports to this ruleset package. They should not be used as
 the source of truth for new MOS139 work.
 
-## Adding Or Changing MOS139 Rules
+## Adding or Changing MOS139 Rules
 
 Put changes in the domain module that owns the rule:
 
@@ -119,8 +123,17 @@ part of the routine suite; see `tests/README.md`.
 For plugin-wide confidence, also run the broader compile command documented in
 the root `README.md`.
 
-## Controlling OLS lock
+## Controlling OLS Compatibility
 
-`ols.controlling_lower_envelope` is supported and frozen to the QGIS 4
-compatibility evidence documented in `docs/mos139_controlling_ols_lock.md`.
-Annex 14 controlling products remain a separate partial capability.
+`ols.controlling_lower_envelope` is supported and protected by the accepted
+QGIS 4 contract in
+`tests/fixtures/ols/mos139_controlling_lock_qgis4_2026-07-12.json`. The workflow
+runner verifies controller identifiers, region counts, areas, and geometry
+digests. Updating that fixture is an explicit compatibility change; it must not
+be regenerated merely to make a failure pass.
+
+The lock covers the supported approach, take-off climb, inner horizontal, outer
+horizontal, conical, transitional, and applicable inner/OFZ surfaces. The
+accepted bounded axis/conical smoothing tolerances and benchmark measurements
+are stored with the OLS fixtures. Annex 14 controlling products have separate
+capability declarations and do not alter this contract.

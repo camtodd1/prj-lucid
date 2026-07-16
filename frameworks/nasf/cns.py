@@ -206,8 +206,8 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
             "HeightValue": None,
         },
     ],
-    "Glide Path (GP)": [],  # Specialised geometry tracked in docs/TODO.md.
-    "Localiser (LOC)": [],  # Specialised geometry tracked in docs/TODO.md.
+    "Glide Path (GP)": [],  # Specialised geometry tracked in docs/roadmap.md.
+    "Localiser (LOC)": [],  # Specialised geometry tracked in docs/roadmap.md.
     "Automatic Dependent Surveillance Broadcast (ADS-B)": [
         {
             "SurfaceName": "Zone A",

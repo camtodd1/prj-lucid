@@ -1,33 +1,29 @@
-# This file contains metadata for your plugin.
-
-# This file should be included when you package your plugin.# Mandatory items:
+# QGIS plugin metadata. Keep this file aligned with README.md and the registered
+# ruleset/framework capabilities.
 
 [general]
 name=Safeguarding Builder
 qgisMinimumVersion=3.0
 qgisMaximumVersion=4.99
-description=Generates NASF safeguarding layers based on a set of runway threshold coordinates
+description=Generates aerodrome safeguarding, protected-airspace, physical runway, marking, and lighting layers
 version=0.1
 author=Cam Todd
 email=cam.todd@to70.com.au
 
-about=Generates NASF safeguarding layers based on a set of runway threshold coordinates.
+about=Generates grouped QGIS layers for aerodrome design standards and supplementary safeguarding frameworks from runway, airport, MET, and CNS inputs.
 
-tracker=http://bugs
-repository=http://repo
-# End of mandatory metadata
-
-# Recommended items:
+tracker=https://github.com/camtodd1/prj-lucid/issues
+repository=https://github.com/camtodd1/prj-lucid
 
 hasProcessingProvider=no
 # Uncomment the following line and add your changelog:
 # changelog=
 
 # Tags are comma separated with spaces allowed
-tags=python
+tags=aerodrome, airport, safeguarding, OLS, NASF, aviation
 
-homepage=http://homepage
-category=Plugins
+homepage=https://github.com/camtodd1/prj-lucid
+category=Vector
 icon=icon.png
 # experimental flag
 experimental=False
@@ -39,9 +35,6 @@ deprecated=False
 # (or upgraded) can be specified.
 # Check the documentation for more information.
 # plugin_dependencies=
-
-Category of the plugin: Raster, Vector, Database or Web
-# category=
 
 # If the plugin can run on QGIS Server.
 server=False

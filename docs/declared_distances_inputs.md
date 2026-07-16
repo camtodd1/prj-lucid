@@ -1,161 +1,79 @@
-# Declared Distances Input Assessment
+# Declared Distances
 
-This note captures the first implementation step for declared distances: confirm
-which inputs are already available, which values can be calculated from existing
-data, and which values need new dialog inputs.
+**Status:** Current
 
-## Declared Distances To Support
+**Last reviewed:** 16 July 2026
 
-- `TORA`: Take-off Run Available
-- `TODA`: Take-off Distance Available
-- `ASDA`: Accelerate-stop Distance Available
-- `LDA`: Landing Distance Available
+Safeguarding Builder calculates declared distances for each runway direction
+and accepts optional published-value overrides. The generated records are used
+by physical outputs, reports, runway-centreline attributes, and take-off climb
+surface construction.
 
-The intended data model is one declared-distance record per runway direction,
-for example `07` and `25` for runway `07/25`.
+## Terms
 
-## Already Available In Validated Runway Data
+| Field | Meaning |
+| --- | --- |
+| `TORA` | Take-off run available |
+| `TODA` | Take-off distance available |
+| `ASDA` | Accelerate-stop distance available |
+| `LDA` | Landing distance available |
 
-These values are already collected by the dialog and passed into
-`runway_data`:
+Each runway produces one record per direction, such as `07` and `25` for runway
+`07/25`.
 
-- `designator_num`: primary runway designator number.
-- `suffix`: optional runway suffix, one of blank, `L`, `C`, `R`.
-- `short_name`: calculated runway name, for example `07/25`.
-- `thr_point`: primary threshold coordinate.
-- `rec_thr_point`: reciprocal threshold coordinate.
-- `runway_end_elev_1`: primary physical runway-end elevation.
-- `runway_end_elev_2`: reciprocal physical runway-end elevation.
-- `threshold_elev_1`: primary landing-threshold elevation, defaulting to `runway_end_elev_1` when blank.
-- `threshold_elev_2`: reciprocal landing-threshold elevation, defaulting to `runway_end_elev_2` when blank.
-- `thr_displaced_1`: displaced threshold length at the primary end.
-- `thr_displaced_2`: displaced threshold length at the reciprocal end.
-- `thr_pre_area_1`: pre-threshold area length at the primary end.
-- `thr_pre_area_2`: pre-threshold area length at the reciprocal end.
-- `width`: runway width.
-- `arc_num`: ARC number.
-- `arc_let`: ARC letter.
-- `type1`: primary end runway type.
-- `type2`: reciprocal end runway type.
+## Inputs
 
-The centreline layer already has placeholder attributes for `TODA`, `TORA`,
-`LDA`, and `ASDA`, but they are currently written as `None`.
+Threshold coordinates and displaced-threshold lengths establish the physical
+runway length and landing threshold positions. Each runway end also accepts:
 
-## Already Calculable From Existing Data
+- clearway and stopway lengths;
+- take-off and landing availability;
+- optional published overrides for `TORA`, `TODA`, `ASDA`, and `LDA`; and
+- source notes.
 
-These values do not need new UI inputs:
+Blank clearway and stopway values are treated as zero. Operation availability
+defaults to enabled. Blank published values use the calculated result.
 
-- Primary end designator.
-- Reciprocal end designator.
-- Threshold-to-threshold landing length.
-- Runway azimuth in both directions.
-- Physical pavement end near the primary threshold.
-- Physical pavement end near the reciprocal threshold.
-- Physical runway length, using threshold points plus displaced-threshold
-  lengths.
-- LDA for each landing direction, assuming the existing threshold coordinates
-  are landing thresholds.
+## Baseline Calculation
 
-Baseline calculated values:
+For a runway with no operational restriction:
 
-- `LDA primary direction = threshold-to-threshold length + reciprocal displaced threshold`
-- `LDA reciprocal direction = threshold-to-threshold length + primary displaced threshold`
-- `Physical length = threshold-to-threshold length + primary displaced threshold + reciprocal displaced threshold`
+```text
+physical length = threshold distance
+                + primary displaced threshold
+                + reciprocal displaced threshold
 
-For the common case with no operational restrictions:
+TORA = physical length
+TODA = TORA + departure-end clearway
+ASDA = TORA + departure-end stopway
+LDA  = landing-threshold distance available in that direction
+```
 
-- `TORA = physical runway length`
-- `TODA = TORA + clearway at departure end`
-- `ASDA = TORA + stopway at departure end`
+The active ruleset supplies clearway policy. A default or entered clearway may
+be capped by that ruleset, including the common half-`TORA` limit. Published
+overrides replace calculated values in the effective output while preserving
+the calculated values and recording warnings where the relationship is
+unusual.
 
-## Clearway Defaults And Dialog Overrides
+## Validation
 
-Clearways are generated per MOS 6.27-6.29. By default, each clearway extends
-from the physical runway end to the calculated runway strip end. A
-user-supplied clearway length:
-
-- overrides the default when it is longer than the runway-to-strip-end distance;
-- is ignored with a warning when it is shorter than that default;
-- is capped at half the TORA.
-
-## Missing Inputs Needed For Correct Declared Distances
-
-Add these per runway end:
-
-- `clearway1_len`: clearway length beyond the primary physical runway end.
-- `clearway2_len`: clearway length beyond the reciprocal physical runway end.
-- `stopway1_len`: stopway length beyond the primary physical runway end.
-- `stopway2_len`: stopway length beyond the reciprocal physical runway end.
-
-Add these per runway direction:
-
-- `takeoff_available_1`: whether takeoff is available from the primary end.
-- `takeoff_available_2`: whether takeoff is available from the reciprocal end.
-- `landing_available_1`: whether landing is available toward the primary end.
-- `landing_available_2`: whether landing is available toward the reciprocal end.
-
-Optional, but recommended for real airport data:
-
-- `tora_override_1`, `tora_override_2`
-- `toda_override_1`, `toda_override_2`
-- `asda_override_1`, `asda_override_2`
-- `lda_override_1`, `lda_override_2`
-
-Overrides are needed because published declared distances can be reduced by
-operational constraints that are not inferable from geometry alone.
-
-## Proposed Dialog UI Additions
-
-Add a collapsible section to each runway group named `Declared Distances`.
-
-Recommended first-pass controls:
-
-- Primary end clearway length `(m)`.
-- Reciprocal end clearway length `(m)`.
-- Primary end stopway length `(m)`.
-- Reciprocal end stopway length `(m)`.
-- Primary direction takeoff available checkbox.
-- Reciprocal direction takeoff available checkbox.
-- Primary direction landing available checkbox.
-- Reciprocal direction landing available checkbox.
-
-Default behavior:
-
-- Clearway and stopway blank values validate as zero.
-- Takeoff and landing availability default to checked.
-- Override blank values use calculated declared distances.
-
-Second-pass controls:
-
-- Optional declared-distance override fields for `TORA`, `TODA`, `ASDA`, and
-  `LDA` in both directions.
-- Source/notes text field.
-
-## Validation Rules
-
-Add validation for:
-
-- Clearway and stopway lengths must be non-negative.
-- Displaced threshold lengths must not exceed physical runway length.
-- `TODA` must be greater than or equal to `TORA`.
-- `ASDA` must be greater than or equal to `TORA`.
+- Lengths must be non-negative.
+- Displaced thresholds must fit within the physical runway model.
+- `TODA` and `ASDA` must be at least `TORA` when take-off is available.
 - `LDA` must be positive when landing is available.
-- Declared distances should be blank or zero when the relevant operation is not
-  available.
-- Override values should be positive when supplied.
+- Values for unavailable operations should be blank or zero.
+- Supplied overrides must be positive and are annotated when they conflict with
+  the calculated geometry or normal declared-distance relationships.
 
-## Implementation Status
+## Outputs and Ownership
 
-The first-pass declared-distance implementation is complete for clearway and
-stopway inputs, persistence, validation, declared-distance calculation,
-generated output records, centreline field population, and TOCS clearway reuse.
+- `safeguarding_builder.py` validates runway data and calculates the per-end
+  records.
+- `surfaces/physical.py` generates declared-distance and clearway geometry.
+- `reports/declared_distances.py` formats the declared-distance report.
+- `reports/runway_summary.py` incorporates the records into runway summaries.
+- `rulesets/*/physical_data.py` owns ruleset-specific clearway and stopway
+  policy.
 
-The second-pass declared-distance implementation is complete for optional
-published-distance overrides, warning annotations, effective declared-distance
-output, and unit coverage for override and warning behaviour.
-
-Synthetic fixture-backed regression scenarios cover representative calculated,
-override, unavailable-operation, and invalid-relationship cases.
-
-Remaining declared-distance consolidation work is tracked centrally in
-`docs/TODO.md` and `docs/development_milestones.md`.
+Source-backed sample-airport validation and stopway polygon consolidation are
+tracked in [`roadmap.md`](roadmap.md).
