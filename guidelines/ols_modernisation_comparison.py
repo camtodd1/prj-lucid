@@ -763,8 +763,38 @@ class OlsEnvelopeComparisonEngine:
                     if clipped is not None and not clipped.isEmpty():
                         segments_by_level[level].append(clipped)
         contours: List[Tuple[float, QgsGeometry]] = []
+        conical_pair_engine = (
+            PlanarControllingOlsEngine(
+                [future, baseline],
+                tie_tolerance_m=0.0,
+            )
+            if baseline.model == "conical" and future.model == "conical"
+            else None
+        )
         for level in levels:
             merged = self._merged_change_contour_lines(segments_by_level[level])
+            if (
+                merged is not None
+                and not merged.isEmpty()
+                and conical_pair_engine is not None
+            ):
+                fair_parts = []
+                for source_part in self._line_parts(merged):
+                    fair_part = conical_pair_engine._smoothed_conical_conical_contour(
+                        source_part,
+                        future,
+                        baseline,
+                        geometry,
+                        target_difference_m=level,
+                    )
+                    fair_parts.append(
+                        fair_part
+                        if fair_part is not None and not fair_part.isEmpty()
+                        else source_part
+                    )
+                fair_merged = self._merged_change_contour_lines(fair_parts)
+                if fair_merged is not None and not fair_merged.isEmpty():
+                    merged = fair_merged
             if merged is not None and not merged.isEmpty():
                 contours.append((level, merged))
         return contours

@@ -87,6 +87,11 @@ CONICAL_CONICAL_TOPOLOGY_GRID_M = 1e-6
 CONICAL_CONICAL_CHORD_RESIDUAL_M = 0.002
 CONICAL_CONICAL_CHORD_DEVIATION_M = 0.02
 CONICAL_CONICAL_CHORD_MAX_REFINEMENT_DEPTH = 8
+CONICAL_CONICAL_STRAIGHT_RESIDUAL_M = 0.01
+CONICAL_CONICAL_SMOOTHING_MAX_SOURCE_RESIDUAL_M = 0.11
+CONICAL_CONICAL_SMOOTHING_MAX_EQUALITY_RESIDUAL_M = 0.04
+CONICAL_CONICAL_SMOOTHING_MAX_DEVIATION_M = 15.0
+CONICAL_CONICAL_SMOOTHING_DOMAIN_TOLERANCE_M = 0.05
 AXIS_CONICAL_OUTPUT_EQUALITY_FILTER_M = 0.04
 AXIS_CONICAL_OUTPUT_REPROJECT_TO_EQUALITY = False
 AXIS_CONICAL_OUTPUT_SIMPLIFY_TOLERANCE_M = 0.05
@@ -4006,7 +4011,7 @@ class PlanarControllingOlsEngine:
         second_candidate: ControllingOlsCandidate,
         overlap: QgsGeometry,
     ) -> Optional[QgsGeometry]:
-        """Return one projected zero contour shared by both conical partitions."""
+        """Return one projected, fair zero contour shared by both partitions."""
         if (
             first_candidate.model != "conical"
             or second_candidate.model != "conical"
@@ -4126,6 +4131,26 @@ class PlanarControllingOlsEngine:
             maximum_residual_m,
         )
         try:
+            source_curve = (
+                QgsGeometry.unaryUnion(projected_parts)
+                if len(projected_parts) > 1
+                else projected_parts[0]
+            )
+            merged_source = source_curve.mergeLines()
+            if merged_source is not None and not merged_source.isEmpty():
+                source_curve = merged_source
+            smoothed = self._smoothed_conical_conical_contour(
+                source_curve,
+                first_candidate,
+                second_candidate,
+                overlap,
+            )
+            if smoothed is not None and not smoothed.isEmpty():
+                projected_parts = [
+                    QgsGeometry.fromPolylineXY(points)
+                    for points in self._line_parts(smoothed)
+                    if len(points) >= 2
+                ]
             noded_parts = []
             for part in projected_parts:
                 try:
@@ -4161,6 +4186,154 @@ class PlanarControllingOlsEngine:
                     QgsGeometry(projected),
                 )
             return projected
+
+    def _smoothed_conical_conical_contour(
+        self,
+        sampled_curve: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+        target_difference_m: float = 0.0,
+    ) -> Optional[QgsGeometry]:
+        """Replace sampling oscillation with a residual-checked line or fair arc."""
+        smoothed_parts: List[QgsGeometry] = []
+        for source_points in self._line_parts(sampled_curve):
+            if len(source_points) < 2:
+                return None
+            source_line = QgsGeometry.fromPolylineXY(source_points)
+            source_residual = self._maximum_candidate_pair_curve_residual(
+                source_line,
+                first_candidate,
+                second_candidate,
+                target_difference_m,
+            )
+            if (
+                source_residual is None
+                or source_residual
+                > CONICAL_CONICAL_SMOOTHING_MAX_SOURCE_RESIDUAL_M
+            ):
+                return None
+
+            chord = QgsGeometry.fromPolylineXY(
+                [source_points[0], source_points[-1]]
+            )
+            chord_residual = self._maximum_candidate_pair_curve_residual(
+                chord,
+                first_candidate,
+                second_candidate,
+                target_difference_m,
+            )
+            if (
+                chord_residual is not None
+                and chord_residual <= CONICAL_CONICAL_STRAIGHT_RESIDUAL_M
+            ):
+                smoothed_line = chord
+            else:
+                fit_result = self._least_squares_bspline_guide_points(
+                    source_points,
+                    source_line,
+                )
+                if fit_result is None:
+                    return None
+                guide_points, _fit_diagnostics = fit_result
+                if len(guide_points) < 2:
+                    return None
+                smoothed_line = QgsGeometry.fromPolylineXY(guide_points)
+
+            if (
+                smoothed_line is None
+                or smoothed_line.isEmpty()
+                or not smoothed_line.isSimple()
+            ):
+                return None
+            smoothed_residual = self._maximum_candidate_pair_curve_residual(
+                smoothed_line,
+                first_candidate,
+                second_candidate,
+                target_difference_m,
+            )
+            if (
+                smoothed_residual is None
+                or smoothed_residual
+                > CONICAL_CONICAL_SMOOTHING_MAX_EQUALITY_RESIDUAL_M
+            ):
+                return None
+            try:
+                deviation_m = source_line.hausdorffDistanceDensify(
+                    smoothed_line,
+                    AXIS_CONICAL_CURVE_SMOOTHING_HAUSDORFF_DENSIFY_FRACTION,
+                )
+            except Exception:
+                return None
+            if (
+                not math.isfinite(deviation_m)
+                or deviation_m < 0.0
+                or deviation_m > CONICAL_CONICAL_SMOOTHING_MAX_DEVIATION_M
+            ):
+                return None
+            try:
+                domain = overlap.buffer(
+                    CONICAL_CONICAL_SMOOTHING_DOMAIN_TOLERANCE_M,
+                    CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS,
+                )
+                outside = smoothed_line.difference(domain)
+            except Exception:
+                return None
+            if outside is None or (
+                not outside.isEmpty() and outside.length() > 1e-6
+            ):
+                return None
+            smoothed_parts.append(smoothed_line)
+
+        if not smoothed_parts:
+            return None
+        try:
+            smoothed = (
+                QgsGeometry.unaryUnion(smoothed_parts)
+                if len(smoothed_parts) > 1
+                else smoothed_parts[0]
+            )
+            merged = smoothed.mergeLines()
+            if merged is not None and not merged.isEmpty():
+                smoothed = merged
+        except Exception:
+            return None
+        self._region_solve_stats["conical_conical_smoothing_accepted"] = (
+            self._region_solve_stats.get(
+                "conical_conical_smoothing_accepted", 0.0
+            )
+            + 1.0
+        )
+        return smoothed
+
+    def _maximum_candidate_pair_curve_residual(
+        self,
+        line: QgsGeometry,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+        target_difference_m: float = 0.0,
+    ) -> Optional[float]:
+        """Return the maximum vertical residual along a candidate-pair contour."""
+        try:
+            sampled = line.densifyByDistance(
+                CONICAL_CONICAL_CURVE_OUTPUT_SPACING_M / 2.0
+            )
+        except Exception:
+            sampled = line
+        residuals = []
+        for points in self._line_parts(sampled):
+            for point_xy in points:
+                difference = self._candidate_difference(
+                    first_candidate,
+                    second_candidate,
+                    point_xy,
+                )
+                if difference is None or not math.isfinite(difference):
+                    return None
+                residuals.append(
+                    abs(float(difference) - float(target_difference_m))
+                )
+        return max(residuals) if residuals else None
 
     def _refine_candidate_pair_equality_segment(
         self,

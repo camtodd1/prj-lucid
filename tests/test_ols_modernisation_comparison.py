@@ -258,6 +258,69 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertTrue(residuals)
         self.assertLessEqual(max(residuals), 0.01)
 
+    def test_conical_conical_regularisation_removes_sampling_wave(self):
+        domain = QgsGeometry.fromRect(QgsRectangle(0.0, 10.0, 100.0, 90.0))
+        first_base = QgsGeometry.fromRect(QgsRectangle(-10.0, 0.0, 0.0, 100.0))
+        second_base = QgsGeometry.fromRect(QgsRectangle(100.0, 0.0, 110.0, 100.0))
+        first = ControllingOlsCandidate(
+            "first-conical",
+            "Conical",
+            QgsGeometry(domain),
+            conical_elevation_evaluator(first_base, 100.0, 0.05),
+            "conical",
+            {
+                "base_footprint": first_base,
+                "base_elevation_m": 100.0,
+                "slope": 0.05,
+            },
+        )
+        second = ControllingOlsCandidate(
+            "second-conical",
+            "Conical",
+            QgsGeometry(domain),
+            conical_elevation_evaluator(second_base, 100.0, 0.05),
+            "conical",
+            {
+                "base_footprint": second_base,
+                "base_elevation_m": 100.0,
+                "slope": 0.05,
+            },
+        )
+        sampled_wave = QgsGeometry.fromPolylineXY(
+            [
+                QgsPointXY(
+                    50.0
+                    if index in {0, 8}
+                    else 50.5
+                    if index % 2
+                    else 49.5,
+                    10.0 + index * 10.0,
+                )
+                for index in range(9)
+            ]
+        )
+        engine = PlanarControllingOlsEngine([first, second])
+
+        regularised = engine._smoothed_conical_conical_contour(
+            sampled_wave,
+            first,
+            second,
+            domain,
+        )
+
+        self.assertIsNotNone(regularised)
+        points = [QgsPointXY(point.x(), point.y()) for point in regularised.vertices()]
+        self.assertEqual(len(points), 2)
+        self.assertTrue(all(abs(point.x() - 50.0) <= 1e-9 for point in points))
+        self.assertLessEqual(
+            engine._maximum_candidate_pair_curve_residual(
+                regularised,
+                first,
+                second,
+            ),
+            0.01,
+        )
+
     def test_diagnostics_classify_recovery_and_normalisation(self):
         engine = PlanarControllingOlsEngine([self.constant("surface", 100.0)])
         engine._controlling_region_geometries()
