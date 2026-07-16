@@ -1142,7 +1142,10 @@ class OlsEnvelopeComparisonEngine:
         )
         pair_engine = PlanarControllingOlsEngine(
             [lower_candidate, upper_candidate],
-            tie_tolerance_m=0.0,
+            # Final comparison polygons already include their canonical
+            # equality edge. Treat sub-centimetre contour residuals as tied so
+            # each side is not independently re-meshed along a new chord.
+            tie_tolerance_m=self.tolerance_m,
         )
         try:
             decision = pair_engine._sampled_lower_decision(

@@ -78,6 +78,15 @@ AXIS_CONICAL_CURVE_SMOOTHING_MAX_ENDPOINT_SHIFT_M = 1e-9
 AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M = 0.10
 TRIANGULATION_TARGET_VERTICAL_ERROR_M = 0.10
 TRIANGULATION_MAX_GRID_CELLS = 80000
+CONICAL_CONICAL_CURVE_OUTPUT_SPACING_M = 5.0
+CONICAL_CONICAL_PROJECTION_STEP_M = 0.5
+CONICAL_CONICAL_PROJECTION_MAX_MOVE_M = 25.0
+CONICAL_CONICAL_PROJECTION_MAX_ITERATIONS = 12
+CONICAL_CONICAL_PROJECTION_RESIDUAL_M = 1e-6
+CONICAL_CONICAL_TOPOLOGY_GRID_M = 1e-6
+CONICAL_CONICAL_CHORD_RESIDUAL_M = 0.002
+CONICAL_CONICAL_CHORD_DEVIATION_M = 0.02
+CONICAL_CONICAL_CHORD_MAX_REFINEMENT_DEPTH = 8
 AXIS_CONICAL_OUTPUT_EQUALITY_FILTER_M = 0.04
 AXIS_CONICAL_OUTPUT_REPROJECT_TO_EQUALITY = False
 AXIS_CONICAL_OUTPUT_SIMPLIFY_TOLERANCE_M = 0.05
@@ -212,6 +221,9 @@ class PlanarControllingOlsEngine:
         ]
         self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
         self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
+        self._last_conical_conical_transition: Optional[
+            Tuple[Tuple[str, str, bytes], QgsGeometry]
+        ] = None
         self._candidate_spatial_index: Optional[QgsSpatialIndex] = None
         self._candidate_by_spatial_id: Dict[int, ControllingOlsCandidate] = {}
         self._controlling_region_geometries_cache: Optional[List[Tuple[ControllingOlsCandidate, QgsGeometry]]] = None
@@ -448,6 +460,21 @@ class PlanarControllingOlsEngine:
                 ),
                 "generic_zero_contour_vertical_error_bound_m": stats.get(
                     "generic_zero_contour_vertical_error_bound_m", 0.0
+                ),
+                "conical_conical_zero_contour_calls": int(
+                    stats.get("conical_conical_zero_contour_calls", 0.0)
+                ),
+                "conical_conical_projection_max_vertex_residual_m": stats.get(
+                    "conical_conical_projection_max_residual_m", 0.0
+                ),
+                "conical_conical_chord_max_residual_m": stats.get(
+                    "conical_conical_chord_max_residual_m", 0.0
+                ),
+                "conical_conical_output_spacing_m": (
+                    CONICAL_CONICAL_CURVE_OUTPUT_SPACING_M
+                ),
+                "conical_conical_chord_residual_tolerance_m": (
+                    CONICAL_CONICAL_CHORD_RESIDUAL_M
                 ),
                 "smoothed_zero_contours": int(
                     stats.get("axis_curve_smoothing_accepted", 0.0)
@@ -2321,7 +2348,7 @@ class PlanarControllingOlsEngine:
                 overlap,
             )
             if transition_curve is not None and not transition_curve.isEmpty():
-                sampled_region = self._axis_conical_region_from_transition_curve(
+                sampled_region = self._candidate_lower_region_from_transition_curve(
                     candidate,
                     competitor,
                     overlap,
@@ -2474,7 +2501,11 @@ class PlanarControllingOlsEngine:
             return self._plane_plane_line(domain, first_candidate, second_candidate)
 
         if first_conical and second_conical:
-            return None
+            return self._conical_conical_transition_curve(
+                first_candidate,
+                second_candidate,
+                domain,
+            )
 
         conical_candidate = first_candidate if first_conical else second_candidate
         other_candidate = second_candidate if first_conical else first_candidate
@@ -3374,7 +3405,30 @@ class PlanarControllingOlsEngine:
             )
             start_time = time.perf_counter()
             try:
-                return self._sampled_candidate_lower_region(candidate, competitor, overlap)
+                decision = self._sampled_lower_decision(
+                    candidate,
+                    competitor,
+                    overlap,
+                    dense=True,
+                )
+                if decision == "all_lower":
+                    return self._all_overlap_lower_region(overlap)
+                if decision == "all_higher":
+                    return QgsGeometry()
+                transition_curve = self._conical_conical_transition_curve(
+                    candidate,
+                    competitor,
+                    overlap,
+                )
+                if transition_curve is None or transition_curve.isEmpty():
+                    return None
+                return self._candidate_lower_region_from_transition_curve(
+                    candidate,
+                    competitor,
+                    overlap,
+                    transition_curve,
+                    simplify_tolerance_m=0.0,
+                )
             finally:
                 self._region_solve_stats["sampled_lower_region_time_s"] = (
                     self._region_solve_stats.get("sampled_lower_region_time_s", 0.0)
@@ -3626,7 +3680,7 @@ class PlanarControllingOlsEngine:
                 return self._record_axis_exact_fallback(total_start, "no_curve_mixed")
 
             for transition_curve in transition_curves:
-                combined = self._axis_conical_region_from_transition_curve(
+                combined = self._candidate_lower_region_from_transition_curve(
                     axis_candidate,
                     conical_candidate,
                     overlap,
@@ -3639,15 +3693,20 @@ class PlanarControllingOlsEngine:
         except Exception:
             return self._record_axis_exact_fallback(total_start, "exception")
 
-    def _axis_conical_region_from_transition_curve(
+    def _candidate_lower_region_from_transition_curve(
         self,
         axis_candidate: ControllingOlsCandidate,
         conical_candidate: ControllingOlsCandidate,
         overlap: QgsGeometry,
         transition_curve: QgsGeometry,
+        simplify_tolerance_m: float = AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
     ) -> Optional[QgsGeometry]:
         split_start = time.perf_counter()
-        split_parts = self._split_overlap_by_transition_curve(overlap, transition_curve)
+        split_parts = self._split_overlap_by_transition_curve(
+            overlap,
+            transition_curve,
+            simplify_tolerance_m=simplify_tolerance_m,
+        )
         self._region_solve_stats["axis_exact_split_time_s"] = (
             self._region_solve_stats.get("axis_exact_split_time_s", 0.0)
             + (time.perf_counter() - split_start)
@@ -3940,6 +3999,328 @@ class PlanarControllingOlsEngine:
             return QgsGeometry.unaryUnion(segments)
         except Exception:
             return segments[0]
+
+    def _conical_conical_transition_curve(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+        overlap: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        """Return one projected zero contour shared by both conical partitions."""
+        if (
+            first_candidate.model != "conical"
+            or second_candidate.model != "conical"
+            or self._conical_model(first_candidate) is None
+            or self._conical_model(second_candidate) is None
+        ):
+            return None
+        cache_key = None
+        try:
+            cache_key = (
+                *sorted(
+                    (first_candidate.surface_id, second_candidate.surface_id)
+                ),
+                bytes(overlap.asWkb()),
+            )
+        except Exception:
+            pass
+        if (
+            cache_key is not None
+            and self._last_conical_conical_transition is not None
+            and self._last_conical_conical_transition[0] == cache_key
+        ):
+            return QgsGeometry(self._last_conical_conical_transition[1])
+        self._region_solve_stats["conical_conical_zero_contour_calls"] = (
+            self._region_solve_stats.get(
+                "conical_conical_zero_contour_calls", 0.0
+            )
+            + 1.0
+        )
+        sampled = self._sampled_candidate_transition_curve(
+            first_candidate,
+            second_candidate,
+            overlap,
+        )
+        if sampled is None or sampled.isEmpty():
+            return None
+        try:
+            merged = sampled.mergeLines()
+            if merged is not None and not merged.isEmpty():
+                sampled = merged
+        except Exception:
+            pass
+
+        projected_parts: List[QgsGeometry] = []
+        maximum_residual_m = 0.0
+        for source_points in self._line_parts(sampled):
+            if len(source_points) < 2:
+                continue
+            source_line = QgsGeometry.fromPolylineXY(source_points)
+            try:
+                densified = source_line.densifyByDistance(
+                    CONICAL_CONICAL_CURVE_OUTPUT_SPACING_M
+                )
+            except Exception:
+                densified = source_line
+            for dense_points in self._line_parts(densified):
+                projected_points: List[QgsPointXY] = []
+                for point_xy in dense_points:
+                    projected = self._project_candidate_pair_point_to_equality(
+                        first_candidate,
+                        second_candidate,
+                        point_xy,
+                    )
+                    if not projected_points or projected.distance(projected_points[-1]) > 1e-6:
+                        projected_points.append(projected)
+                refined_points: List[QgsPointXY] = []
+                for start_point, end_point in zip(
+                    projected_points[:-1], projected_points[1:]
+                ):
+                    segment_points = self._refine_candidate_pair_equality_segment(
+                        first_candidate,
+                        second_candidate,
+                        start_point,
+                        end_point,
+                    )
+                    if not segment_points:
+                        continue
+                    if refined_points:
+                        refined_points.extend(segment_points[1:])
+                    else:
+                        refined_points.extend(segment_points)
+                projected_points = refined_points
+                projected_points = self._remove_transition_curve_backtracking(
+                    projected_points
+                )
+                if len(projected_points) < 2:
+                    continue
+                projected_line = QgsGeometry.fromPolylineXY(projected_points)
+                try:
+                    projected_line = projected_line.intersection(overlap)
+                except Exception:
+                    pass
+                for clipped_points in self._line_parts(projected_line):
+                    if len(clipped_points) < 2:
+                        continue
+                    clipped_line = QgsGeometry.fromPolylineXY(clipped_points)
+                    if clipped_line is None or clipped_line.isEmpty():
+                        continue
+                    projected_parts.append(clipped_line)
+                    for clipped_point in clipped_points:
+                        residual = self._candidate_difference(
+                            first_candidate,
+                            second_candidate,
+                            clipped_point,
+                        )
+                        if residual is not None and math.isfinite(residual):
+                            maximum_residual_m = max(
+                                maximum_residual_m,
+                                abs(float(residual)),
+                            )
+        if not projected_parts:
+            return None
+        self._region_solve_stats["conical_conical_projection_max_residual_m"] = max(
+            self._region_solve_stats.get(
+                "conical_conical_projection_max_residual_m", 0.0
+            ),
+            maximum_residual_m,
+        )
+        try:
+            noded_parts = []
+            for part in projected_parts:
+                try:
+                    snapped = part.snappedToGrid(
+                        CONICAL_CONICAL_TOPOLOGY_GRID_M,
+                        CONICAL_CONICAL_TOPOLOGY_GRID_M,
+                    )
+                except Exception:
+                    snapped = part
+                if snapped is not None and not snapped.isEmpty():
+                    noded_parts.append(snapped)
+            if not noded_parts:
+                return projected_parts[0]
+            projected = (
+                QgsGeometry.unaryUnion(noded_parts)
+                if len(noded_parts) > 1
+                else noded_parts[0]
+            )
+            merged = projected.mergeLines()
+            if merged is not None and not merged.isEmpty():
+                projected = merged
+            if cache_key is not None:
+                self._last_conical_conical_transition = (
+                    cache_key,
+                    QgsGeometry(projected),
+                )
+            return projected
+        except Exception:
+            projected = projected_parts[0]
+            if cache_key is not None:
+                self._last_conical_conical_transition = (
+                    cache_key,
+                    QgsGeometry(projected),
+                )
+            return projected
+
+    def _refine_candidate_pair_equality_segment(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+        start_point: QgsPointXY,
+        end_point: QgsPointXY,
+        depth: int = 0,
+    ) -> List[QgsPointXY]:
+        """Subdivide a projected chord until its interior follows the equality locus."""
+        if start_point.distance(end_point) <= 1e-6:
+            return [QgsPointXY(start_point)]
+        midpoint = QgsPointXY(
+            (start_point.x() + end_point.x()) / 2.0,
+            (start_point.y() + end_point.y()) / 2.0,
+        )
+        midpoint_difference = self._candidate_difference(
+            first_candidate,
+            second_candidate,
+            midpoint,
+        )
+        if midpoint_difference is None or not math.isfinite(midpoint_difference):
+            return [QgsPointXY(start_point), QgsPointXY(end_point)]
+        projected_midpoint = self._project_candidate_pair_point_to_equality(
+            first_candidate,
+            second_candidate,
+            midpoint,
+        )
+        deviation_m = self._point_to_segment_distance(
+            projected_midpoint,
+            start_point,
+            end_point,
+        )
+        if (
+            abs(float(midpoint_difference)) <= CONICAL_CONICAL_CHORD_RESIDUAL_M
+            and deviation_m <= CONICAL_CONICAL_CHORD_DEVIATION_M
+        ) or depth >= CONICAL_CONICAL_CHORD_MAX_REFINEMENT_DEPTH:
+            self._region_solve_stats["conical_conical_chord_max_residual_m"] = max(
+                self._region_solve_stats.get(
+                    "conical_conical_chord_max_residual_m", 0.0
+                ),
+                abs(float(midpoint_difference)),
+            )
+            return [QgsPointXY(start_point), QgsPointXY(end_point)]
+        left = self._refine_candidate_pair_equality_segment(
+            first_candidate,
+            second_candidate,
+            start_point,
+            projected_midpoint,
+            depth + 1,
+        )
+        right = self._refine_candidate_pair_equality_segment(
+            first_candidate,
+            second_candidate,
+            projected_midpoint,
+            end_point,
+            depth + 1,
+        )
+        if not left:
+            return right
+        if not right:
+            return left
+        return left[:-1] + right
+
+    def _project_candidate_pair_point_to_equality(
+        self,
+        first_candidate: ControllingOlsCandidate,
+        second_candidate: ControllingOlsCandidate,
+        point_xy: QgsPointXY,
+    ) -> QgsPointXY:
+        """Project a sampled point to z_first - z_second = 0 by damped Newton steps."""
+        current = QgsPointXY(point_xy)
+        best = QgsPointXY(point_xy)
+        best_residual = float("inf")
+        difference_step_m = CONICAL_CONICAL_PROJECTION_STEP_M
+
+        def _finite_difference(probe: QgsPointXY) -> Optional[float]:
+            value = self._candidate_difference(
+                first_candidate,
+                second_candidate,
+                probe,
+            )
+            return value if value is not None and math.isfinite(value) else None
+
+        for _iteration in range(CONICAL_CONICAL_PROJECTION_MAX_ITERATIONS):
+            value = _finite_difference(current)
+            if value is None:
+                break
+            absolute_value = abs(value)
+            if absolute_value < best_residual:
+                best = QgsPointXY(current)
+                best_residual = absolute_value
+            if absolute_value <= CONICAL_CONICAL_PROJECTION_RESIDUAL_M:
+                break
+
+            x_plus = _finite_difference(
+                QgsPointXY(current.x() + difference_step_m, current.y())
+            )
+            x_minus = _finite_difference(
+                QgsPointXY(current.x() - difference_step_m, current.y())
+            )
+            y_plus = _finite_difference(
+                QgsPointXY(current.x(), current.y() + difference_step_m)
+            )
+            y_minus = _finite_difference(
+                QgsPointXY(current.x(), current.y() - difference_step_m)
+            )
+            gradient_x = (
+                (x_plus - x_minus) / (2.0 * difference_step_m)
+                if x_plus is not None and x_minus is not None
+                else (
+                    (x_plus - value) / difference_step_m
+                    if x_plus is not None
+                    else (
+                        (value - x_minus) / difference_step_m
+                        if x_minus is not None
+                        else 0.0
+                    )
+                )
+            )
+            gradient_y = (
+                (y_plus - y_minus) / (2.0 * difference_step_m)
+                if y_plus is not None and y_minus is not None
+                else (
+                    (y_plus - value) / difference_step_m
+                    if y_plus is not None
+                    else (
+                        (value - y_minus) / difference_step_m
+                        if y_minus is not None
+                        else 0.0
+                    )
+                )
+            )
+            gradient_squared = (gradient_x * gradient_x) + (gradient_y * gradient_y)
+            if gradient_squared <= 1e-18:
+                break
+            move_x = value * gradient_x / gradient_squared
+            move_y = value * gradient_y / gradient_squared
+            move_length = math.hypot(move_x, move_y)
+            if move_length > CONICAL_CONICAL_PROJECTION_MAX_MOVE_M:
+                scale = CONICAL_CONICAL_PROJECTION_MAX_MOVE_M / move_length
+                move_x *= scale
+                move_y *= scale
+
+            accepted = False
+            damping = 1.0
+            for _attempt in range(8):
+                trial = QgsPointXY(
+                    current.x() - (move_x * damping),
+                    current.y() - (move_y * damping),
+                )
+                trial_value = _finite_difference(trial)
+                if trial_value is not None and abs(trial_value) < absolute_value:
+                    current = trial
+                    accepted = True
+                    break
+                damping /= 2.0
+            if not accepted:
+                break
+        return best
 
     def _smoothed_axis_conical_zero_contour(
         self,
@@ -4967,15 +5348,24 @@ class PlanarControllingOlsEngine:
         self,
         overlap: QgsGeometry,
         transition_curve: QgsGeometry,
+        simplify_tolerance_m: float = AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
     ) -> List[QgsGeometry]:
-        polygonized_parts = self._polygonize_overlap_by_transition_curve(overlap, transition_curve)
+        polygonized_parts = self._polygonize_overlap_by_transition_curve(
+            overlap,
+            transition_curve,
+            simplify_tolerance_m=simplify_tolerance_m,
+        )
         if polygonized_parts:
             self._region_solve_stats["axis_exact_polygonize_success"] = (
                 self._region_solve_stats.get("axis_exact_polygonize_success", 0.0) + 1.0
             )
             return polygonized_parts
 
-        manual_parts = self._manual_split_overlap_by_transition_curve(overlap, transition_curve)
+        manual_parts = self._manual_split_overlap_by_transition_curve(
+            overlap,
+            transition_curve,
+            simplify_tolerance_m=simplify_tolerance_m,
+        )
         if manual_parts:
             self._region_solve_stats["axis_exact_manual_split_used"] = (
                 self._region_solve_stats.get("axis_exact_manual_split_used", 0.0) + 1.0
@@ -5002,6 +5392,7 @@ class PlanarControllingOlsEngine:
         self,
         overlap: QgsGeometry,
         transition_curve: QgsGeometry,
+        simplify_tolerance_m: float = AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
     ) -> List[QgsGeometry]:
         if not hasattr(QgsGeometry, "polygonize"):
             return []
@@ -5017,7 +5408,7 @@ class PlanarControllingOlsEngine:
                 )
                 curve_points = self._simplify_transition_curve_points(
                     curve_points,
-                    AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
+                    simplify_tolerance_m,
                 )
                 self._region_solve_stats["axis_exact_curve_vertices_simplified"] = (
                     self._region_solve_stats.get("axis_exact_curve_vertices_simplified", 0.0)
@@ -5047,6 +5438,7 @@ class PlanarControllingOlsEngine:
         self,
         overlap: QgsGeometry,
         transition_curve: QgsGeometry,
+        simplify_tolerance_m: float = AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
     ) -> List[QgsGeometry]:
         parts = self._polygon_parts(overlap)
         if not parts:
@@ -5056,7 +5448,7 @@ class PlanarControllingOlsEngine:
                 continue
             curve_points = self._simplify_transition_curve_points(
                 curve_points,
-                AXIS_CONICAL_CURVE_SIMPLIFY_TOLERANCE_M,
+                simplify_tolerance_m,
             )
             curve_points = self._condition_transition_curve_for_polygonize(curve_points, overlap)
             next_parts: List[QgsGeometry] = []
@@ -5906,6 +6298,12 @@ class PlanarControllingOlsEngine:
         first_candidate: ControllingOlsCandidate,
         second_candidate: ControllingOlsCandidate,
     ) -> Optional[QgsGeometry]:
+        if first_candidate.model == "conical" and second_candidate.model == "conical":
+            return self._conical_conical_transition_curve(
+                first_candidate,
+                second_candidate,
+                domain,
+            )
         return self._plane_plane_line(domain, first_candidate, second_candidate)
 
     def _plane_plane_line(

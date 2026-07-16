@@ -128,6 +128,136 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             delta=1.0,
         )
 
+    def test_conical_conical_comparison_uses_one_accurate_shared_transition(self):
+        domain = QgsGeometry.fromRect(QgsRectangle(250.0, 100.0, 650.0, 900.0))
+        baseline_base = QgsGeometry.fromPolylineXY(
+            [QgsPointXY(100.0, 200.0), QgsPointXY(100.0, 800.0)]
+        ).buffer(120.0, 48)
+        future_base = QgsGeometry.fromPointXY(QgsPointXY(800.0, 500.0)).buffer(
+            120.0, 48
+        )
+        baseline = ControllingOlsCandidate(
+            "baseline-conical",
+            "Conical",
+            QgsGeometry(domain),
+            conical_elevation_evaluator(baseline_base, 100.0, 0.05, 1200.0),
+            "conical",
+            {
+                "base_footprint": baseline_base,
+                "base_elevation_m": 100.0,
+                "slope": 0.05,
+                "max_distance_m": 1200.0,
+            },
+        )
+        future = ControllingOlsCandidate(
+            "future-conical",
+            "Conical",
+            QgsGeometry(domain),
+            conical_elevation_evaluator(future_base, 100.3, 0.05, 1200.0),
+            "conical",
+            {
+                "base_footprint": future_base,
+                "base_elevation_m": 100.3,
+                "slope": 0.05,
+                "max_distance_m": 1200.0,
+            },
+        )
+        pair_engine = PlanarControllingOlsEngine(
+            [baseline, future],
+            tie_tolerance_m=0.0,
+        )
+
+        equality = pair_engine._equality_line_for_pair(domain, baseline, future)
+
+        self.assertIsNotNone(equality)
+        self.assertFalse(equality.isEmpty())
+        turns = []
+        for points in pair_engine._line_parts(equality):
+            for previous, current, following in zip(
+                points[:-2], points[1:-1], points[2:]
+            ):
+                first_dx = current.x() - previous.x()
+                first_dy = current.y() - previous.y()
+                second_dx = following.x() - current.x()
+                second_dy = following.y() - current.y()
+                denominator = math.hypot(first_dx, first_dy) * math.hypot(
+                    second_dx, second_dy
+                )
+                if denominator <= 1e-12:
+                    continue
+                cosine = max(
+                    -1.0,
+                    min(
+                        1.0,
+                        (
+                            (first_dx * second_dx)
+                            + (first_dy * second_dy)
+                        )
+                        / denominator,
+                    ),
+                )
+                turns.append(math.degrees(math.acos(cosine)))
+        self.assertTrue(turns)
+        self.assertLess(max(turns), 1.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine(
+                [baseline], ruleset_id="mos139_2019"
+            ),
+            PlanarControllingOlsEngine(
+                [future], ruleset_id="uk_caa_cap168_edition_13"
+            ),
+        )
+        parts = comparison.comparison_parts()
+        self.assertEqual(
+            comparison.comparison_diagnostics()["bounded_approximations"][
+                "fallback_lower_region_calls"
+            ],
+            0,
+        )
+        self.assertTrue(parts["gain"])
+        self.assertTrue(parts["loss"])
+        self.assertTrue(parts["transition"])
+
+        gain = QgsGeometry.unaryUnion([item[2] for item in parts["gain"]])
+        loss = QgsGeometry.unaryUnion([item[2] for item in parts["loss"]])
+        transitions = QgsGeometry.unaryUnion(
+            [item[2] for item in parts["transition"]]
+        )
+        gain_boundary = QgsGeometry.unaryUnion(
+            [
+                QgsGeometry.fromPolylineXY(ring)
+                for ring in pair_engine._polygon_boundary_parts(gain)
+            ]
+        )
+        loss_boundary = QgsGeometry.unaryUnion(
+            [
+                QgsGeometry.fromPolylineXY(ring)
+                for ring in pair_engine._polygon_boundary_parts(loss)
+            ]
+        )
+        shared_boundary = gain_boundary.intersection(loss_boundary)
+        coverage = gain.combine(loss)
+
+        self.assertLessEqual(domain.symDifference(coverage).area(), 0.01)
+        self.assertGreater(shared_boundary.length(), 500.0)
+        self.assertAlmostEqual(
+            shared_boundary.length(), transitions.length(), delta=0.05
+        )
+        self.assertLessEqual(shared_boundary.hausdorffDistance(transitions), 0.01)
+
+        residuals = []
+        sampled = transitions.densifyByDistance(1.0)
+        for point in sampled.vertices():
+            point_xy = QgsPointXY(point.x(), point.y())
+            residuals.append(
+                abs(
+                    baseline.elevation_at_xy(point_xy)
+                    - future.elevation_at_xy(point_xy)
+                )
+            )
+        self.assertTrue(residuals)
+        self.assertLessEqual(max(residuals), 0.01)
+
     def test_diagnostics_classify_recovery_and_normalisation(self):
         engine = PlanarControllingOlsEngine([self.constant("surface", 100.0)])
         engine._controlling_region_geometries()
