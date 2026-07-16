@@ -5,6 +5,9 @@ modernisation comparison workflow under QGIS 4.
 
 Input filenames follow `<icao>_<count>rwy_<scenario>[_<variant>].json`, where
 scenario is limited to `single`, `parallel`, `intersecting`, or `mixed`.
+The optional variant describes a genuine input variation; it is not a workload
+or test-intensity label. A three-runway mixed layout is therefore simply
+`yssy_3rwy_mixed.json`.
 
 - `ybbn_1rwy_single.json`: single runway.
 - `yssy_2rwy_intersecting.json`: intersecting runways.
@@ -39,6 +42,8 @@ from this folder** without changing its runways, scenario, or OLS selections.
 - Codex/headless: run `tests/run_ols_workflow_regression.py --fixture <same-file>`.
 - In the dashboard, narrow to that test case. **Exact · User + Codex** confirms
   that both runners have recorded the identical input fingerprint.
+- Use the **Run by** slicer to inspect User or Codex runs independently. The
+  last-five change badges then compare only within the selected owner.
 
 Changing any test parameter is valid, but creates a different setup and should
 not be treated as a like-for-like speed comparison. Each fixture stores the same
@@ -47,6 +52,20 @@ not be treated as a like-for-like speed comparison. Each fixture stores the same
 The runner treats spatial indexes and other future optimizations only as filters.
 Exact geometry containment, elevation evaluation, tie-breaking, common-domain
 coverage, and mutually exclusive gain/loss/no-change outputs remain mandatory.
+
+### YSSY mixed conical comparison coverage
+
+`yssy_3rwy_mixed.json` also exercises conical/conical intersections in a
+MOS139/CAP168 comparison. It guards against two coupled failure modes:
+
+- a late coverage repair assigning a mixed-sign polygon to gain or loss from a
+  single interior sample; and
+- a triangulated conical isoline satisfying the requested height while retaining
+  a visible saw-tooth path.
+
+Promotion checks must confirm that material gain/loss ranges do not cross zero,
+no opposite-sign contours are generated, the transition follows the shared
+zero-height locus, and conical contours pass both residual and smoothness gates.
 
 ## Source-backed analytical fixture
 

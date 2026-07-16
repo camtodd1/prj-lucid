@@ -24,6 +24,23 @@ For a User-versus-Codex comparison, load an unchanged JSON from
 The dashboard shows **Exact · User + Codex** only when the recorded input
 fingerprint matches across both runners.
 
+## Run ownership
+
+Runtime rows are normalized to two owner labels:
+
+- **User** for interactive QGIS runs; and
+- **Codex** for headless, Codex, or CI runs.
+
+The **Run by** slicer filters the KPIs, last-five cards, chart, and pivot table.
+Each last-five card repeats its owner as plain bold muted text beside the run
+time. When the slicer is active, the card's change indicator compares with the
+previous matching run from the same filtered owner; it does not silently compare
+a User run with a Codex run.
+
+Comparison quality remains fingerprint-based. **Exact · User + Codex** means
+that both owners have recorded the identical input fingerprint, even when the
+current view is temporarily filtered to one owner.
+
 ## Data quality
 
 Runtime schema 4 records the test case, input filename, runway count, runway

@@ -13,10 +13,13 @@ The OLS tab keeps the shared contour defaults visible and places detailed
 controls behind two disclosures. **Surface-specific overrides** repeats the
 same two-column baseline/comparison layout, reports whether overrides are in
 use, and only shows the surface families used by each selected ruleset.
-**Comparison change contours** is shown when an Annex 14 comparison is active
-and contains the independent OFS/OES signed-change intervals. The Reset action
-appears only after an interval differs from its default. With no comparison
-selected, the comparison column shows a baseline-only empty state.
+**Comparison change contours** is shown whenever a comparison ruleset is
+selected. Conventional OLS comparisons use one OLS signed-change interval.
+Comparisons involving modernised Annex 14 instead expose the independent OFS
+and OES signed-change intervals; OFS/OES controls are not shown for rulesets
+where those families do not apply. The Reset action appears only after an
+interval differs from its default. With no comparison selected, the comparison
+column shows a baseline-only empty state.
 Annex 14 exposes separate OES intervals for Precision Approach, Take-off Climb,
 and Instrument Departure, plus separate OFS intervals for Approach,
 Transitional, Balked Landing, Inner Approach, and Inner Transitional surfaces.
@@ -101,11 +104,48 @@ map clutter. Each contour has a unique `comparison_id`, its
 source polygon `parent_id`, signed `delta_m`, contour class and both controlling
 surface identifiers.
 
-Comparison mode exposes independent OFS and OES signed-change contour intervals
-on the OLS tab. The intermediate interval controls generated isoline spacing and
-the primary interval controls contour classification and labelling. Both default
-to 1.0 m intermediate and 5.0 m primary values, are persisted
-with the input file, and are written to each change-contour feature.
+### Comparison geometry invariants
+
+The following invariants apply to every OLS ruleset comparison, not only
+MOS139/Annex 14 modernisation comparisons:
+
+- A gain polygon must not contain a material negative height difference, and a
+  loss polygon must not contain a material positive height difference.
+- A polygon that crosses zero must be split on the controller pair's
+  equal-height locus. An interior `pointOnSurface()` sample can label a pure
+  polygon, but must never classify an entire mixed-sign repair remainder.
+- Coverage-repair and cleanup passes must use the same controller-pair solver as
+  the initial partition. A final sign audit runs before output partitioning so
+  a late repair cannot reintroduce an opposite-sign area or contour.
+- Gain and loss share the same zero-height edge. The transition output is this
+  common boundary, not two independently sampled approximations.
+- Opposite-sign contour levels are never emitted into a gain or loss feature.
+  Millimetric residuals at the shared boundary are treated as zero and do not
+  create a polygonal no-change strip.
+
+Conical/conical transition and change-contour lines require a second, geometric
+quality check. Triangulation can place an isoline accurately in height while
+still producing a visibly oscillating path. The regulariser therefore accepts
+a straight chord only when both its elevation residual and its displacement
+from the sampled line are within bounds. If the chord is vertically accurate
+but too distant, a fair fitted curve is tried instead. Any accepted line must
+remain simple, inside the comparison domain, endpoint-compatible and within the
+configured elevation-residual limit.
+
+The YSSY three-runway mixed MOS139/CAP168 case is the regression example for
+these rules. It exposed mixed-sign late repair polygons and a high-frequency
+conical contour that was vertically close but visually jagged. After the final
+sign split, it produces no material cross-zero polygons or wrong-sign contours.
+The formerly irregular +46 m contour has a maximum local turn of about 0.28
+degrees and a maximum height residual of about 0.017 m; the conical transition
+has a maximum equality residual of about 0.004 m in EPSG:32756.
+
+Comparison mode exposes a conventional OLS signed-change interval, or
+independent OFS and OES intervals when modernised Annex 14 is involved. The
+intermediate interval controls generated isoline spacing and the primary
+interval controls contour classification and labelling. Both default to 1.0 m
+intermediate and 5.0 m primary values, are persisted with the input file, and
+are written to each change-contour feature.
 
 Primary/intermediate interval compatibility validation is intentionally not
 implemented or tested and is accepted as a supported limitation. Contour levels
@@ -133,7 +173,7 @@ product work. The current regression matrix contains:
 - YBBN single-runway;
 - YSSY dual intersecting;
 - YSWS dual parallel; and
-- YSSY three-runway stress inputs.
+- YSSY three-runway mixed inputs.
 
 The QGIS 4.0.2 end-to-end runner validates geometry, candidate and controlling
 coverage, comparison-domain coverage, mutually exclusive change classes,
