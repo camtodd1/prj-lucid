@@ -300,8 +300,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     .run-card-top { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
     .run-time-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .run-time { margin: 6px 0 2px; font-size: 25px; font-weight: 700; font-variant-numeric: tabular-nums; }
-    .run-owner { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 700; }
-    .run-owner.user { background: var(--green-soft); color: var(--green); }
+    .run-owner { color: var(--muted); font-size: 11px; font-weight: 700; }
     .run-case { min-height: 40px; font-weight: 650; }
     .run-meta { color: var(--muted); font-size: 12px; }
     .delta { display: inline-block; margin-top: 8px; padding: 3px 7px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 650; }
@@ -553,7 +552,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         const runway = run.runwayCount ? `${run.runwayCount} · ${run.scenario}` : run.scenario;
         return `<article class="run-card">
           <div class="run-card-top"><span>${escapeHtml(dateLabel(run.timestamp))}</span><span>${escapeHtml(run.status)}</span></div>
-          <div class="run-time-row"><div class="run-time">${escapeHtml(seconds(run.elapsed))}</div><span class="run-owner ${run.runBy === 'User' ? 'user' : 'codex'}">${escapeHtml(run.runBy)}</span></div>
+          <div class="run-time-row"><div class="run-time">${escapeHtml(seconds(run.elapsed))}</div><span class="run-owner">${escapeHtml(run.runBy)}</span></div>
           <div class="run-case">${escapeHtml(run.testCase)}</div>
           <div class="run-meta">${escapeHtml(run.airport)} · ${escapeHtml(runway)}</div>
           <div class="run-meta">${escapeHtml(run.olsSelection)}</div>

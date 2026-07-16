@@ -96,6 +96,8 @@ class RuntimeDashboardTests(unittest.TestCase):
         ):
             self.assertIn(f'id="{control}"', html)
         self.assertIn('class="run-owner', html)
+        self.assertNotIn("run-owner user", html)
+        self.assertNotIn("run-owner codex", html)
         self.assertIn("${escapeHtml(run.runBy)}", html)
         self.assertIn("priorComparable(run, runs)", html)
         payload = re.search(
