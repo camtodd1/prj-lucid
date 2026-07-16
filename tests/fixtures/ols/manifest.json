@@ -34,8 +34,8 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
-      "file": "yssy_3rwy_mixed_stress.json",
-      "description": "Three-runway controlling-envelope stress case",
+      "file": "yssy_3rwy_mixed.json",
+      "description": "Three-runway mixed case",
       "icao_code": "YSSY",
       "runway_count": 3,
       "runway_configuration": "mixed",

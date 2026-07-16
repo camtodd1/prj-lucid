@@ -11,7 +11,7 @@ scenario is limited to `single`, `parallel`, `intersecting`, or `mixed`.
 - `ysws_2rwy_parallel.json`: parallel runways.
 - `ymml_2rwy_intersecting.json`: intersecting YMML runways with prominent
   Approach/TOCS-to-Conical equality arcs in EPSG:32755.
-- `yssy_3rwy_mixed_stress.json`: three-runway stress case.
+- `yssy_3rwy_mixed.json`: three mixed runways.
 - `ybas_1rwy_single.json`: current Annex 14 non-instrument code 1
   runway and airport-wide OLS.
 - `ybai_2rwy_intersecting.json`: current Annex 14 intersecting mixed-code

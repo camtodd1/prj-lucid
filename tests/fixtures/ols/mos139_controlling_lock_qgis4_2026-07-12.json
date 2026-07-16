@@ -29,7 +29,7 @@
       "geometry_digest": "99ed24623672cfafbe7235d6f15ee167957586a0f40ef76976f033b0d7aeffc0",
       "controller_ids_digest": "61717c210bcdbd3c780c85362ff844440c2a82ed9c3173a0248219c412e79866"
     },
-    "yssy_3rwy_mixed_stress.json": {
+    "yssy_3rwy_mixed.json": {
       "regions": 59,
       "area_m2": 742334576.1840978,
       "geometry_digest": "3bab21de2d56f0d4516978a78dfe3116c8ed2ac4b0f43d4d75d8208b529fee54",
