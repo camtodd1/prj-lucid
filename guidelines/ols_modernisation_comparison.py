@@ -18,7 +18,12 @@ from qgis.core import (  # type: ignore
     QgsWkbTypes,
 )
 
-from .controlling_ols_engine import ControllingOlsCandidate, PlanarControllingOlsEngine
+from .controlling_ols_engine import (
+    AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M,
+    AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M,
+    ControllingOlsCandidate,
+    PlanarControllingOlsEngine,
+)
 
 try:
     from ..core.run_log import QgsMessageLog
@@ -45,6 +50,12 @@ COMPARISON_DELTA_DECIMALS = 3
 COMPARISON_CONTOUR_INTERVAL_M = 1.0
 COMPARISON_PRIMARY_CONTOUR_INTERVAL_M = 5.0
 COMPARISON_CONTOUR_MIN_LENGTH_M = 0.01
+CONVENTIONAL_OLS_RULESET_IDS = frozenset({
+    "mos139_2019",
+    "uk_caa_cap168_edition_13",
+    "easa_cs_adr_dsn_issue_7",
+    "icao_annex14_vol1_current_ols",
+})
 
 
 class OlsEnvelopeComparisonEngine:
@@ -76,6 +87,16 @@ class OlsEnvelopeComparisonEngine:
                 "common_domain_gap_area_m2": stats.get("common_domain_gap_area_m2", 0.0),
                 "final_remainder_parts": int(stats.get("final_remainder_parts", 0.0)),
                 "final_remainder_area_m2": stats.get("final_remainder_area_m2", 0.0),
+            },
+            "numeric_sliver_reclassification": {
+                "parts": int(stats.get("numeric_sliver_reclassified_parts", 0.0)),
+                "area_m2": stats.get("numeric_sliver_reclassified_area_m2", 0.0),
+                "maximum_vertical_difference_m": stats.get(
+                    "numeric_sliver_reclassified_max_vertical_difference_m",
+                    0.0,
+                ),
+                "vertical_error_bound_m": AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M,
+                "maximum_effective_width_m": AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M,
             },
         }
 
@@ -117,6 +138,7 @@ class OlsEnvelopeComparisonEngine:
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
         self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
         self._partition_classified_parts(result)
+        self._reclassify_conventional_axis_conical_numeric_slivers(result)
         # Partition differences can reintroduce zero-area out-and-back ring
         # edges after the earlier controller-aware cleanup.  Remove only
         # boundary-equivalent backtracks here; genuine narrow polygons remain
@@ -137,19 +159,13 @@ class OlsEnvelopeComparisonEngine:
 
     def _strict_conventional_partition_enabled(self) -> bool:
         """Preserve exact controller-pair coverage for current-OLS comparisons."""
-        conventional_ids = {
-            "mos139_2019",
-            "uk_caa_cap168_edition_13",
-            "easa_cs_adr_dsn_issue_7",
-            "icao_annex14_vol1_current_ols",
-        }
         ruleset_ids = {
             str(getattr(self.baseline_engine, "ruleset_id", "") or ""),
             str(getattr(self.future_engine, "ruleset_id", "") or ""),
         }
         return (
             "icao_annex14_vol1_current_ols" in ruleset_ids
-            and ruleset_ids.issubset(conventional_ids)
+            and ruleset_ids.issubset(CONVENTIONAL_OLS_RULESET_IDS)
         )
 
     def _append_classified_overlap(
@@ -1086,6 +1102,94 @@ class OlsEnvelopeComparisonEngine:
                     if merged_assigned is not None:
                         assigned = merged_assigned
             result[change] = partitioned
+
+    def _reclassify_conventional_axis_conical_numeric_slivers(self, result) -> None:
+        """Move bounded current-OLS overlay slivers out of gain/loss."""
+        if not self._conventional_numeric_sliver_reclassification_enabled():
+            return
+        reclassified = []
+        for change in ("gain", "loss"):
+            retained = []
+            for baseline, future, geometry in result.get(change, []):
+                maximum_difference = self._axis_conical_numeric_sliver_maximum_difference(
+                    geometry,
+                    baseline,
+                    future,
+                )
+                if maximum_difference is None:
+                    retained.append((baseline, future, geometry))
+                    continue
+                reclassified.append((baseline, future, geometry))
+                self._comparison_diagnostics["numeric_sliver_reclassified_parts"] = (
+                    self._comparison_diagnostics.get(
+                        "numeric_sliver_reclassified_parts",
+                        0.0,
+                    )
+                    + 1.0
+                )
+                self._comparison_diagnostics["numeric_sliver_reclassified_area_m2"] = (
+                    self._comparison_diagnostics.get(
+                        "numeric_sliver_reclassified_area_m2",
+                        0.0,
+                    )
+                    + geometry.area()
+                )
+                self._comparison_diagnostics[
+                    "numeric_sliver_reclassified_max_vertical_difference_m"
+                ] = max(
+                    self._comparison_diagnostics.get(
+                        "numeric_sliver_reclassified_max_vertical_difference_m",
+                        0.0,
+                    ),
+                    maximum_difference,
+                )
+            result[change] = retained
+        result.setdefault("no_change", []).extend(reclassified)
+
+    def _conventional_numeric_sliver_reclassification_enabled(self) -> bool:
+        ruleset_ids = {
+            str(getattr(self.baseline_engine, "ruleset_id", "") or ""),
+            str(getattr(self.future_engine, "ruleset_id", "") or ""),
+        }
+        return (
+            len(ruleset_ids) == 2
+            and "" not in ruleset_ids
+            and ruleset_ids.issubset(CONVENTIONAL_OLS_RULESET_IDS)
+        )
+
+    def _axis_conical_numeric_sliver_maximum_difference(
+        self,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+    ) -> Optional[float]:
+        """Return the bounded residual for a numerical sliver, otherwise None."""
+        if {baseline.model, future.model} != {"axis", "conical"}:
+            return None
+        perimeter = geometry.length()
+        if perimeter <= 0.0:
+            return None
+        effective_width = (2.0 * geometry.area()) / perimeter
+        if effective_width > AXIS_CONICAL_CURVE_FILTER_TOLERANCE_M:
+            return None
+        delta_min, delta_max, _delta_sample = self.delta_range(
+            geometry,
+            baseline,
+            future,
+        )
+        if delta_min is None or delta_max is None:
+            return None
+        maximum_difference = max(abs(delta_min), abs(delta_max))
+        for point in self._sample_points(geometry):
+            raw_difference = self._delta_at_point(point, baseline, future)
+            if raw_difference is not None:
+                maximum_difference = max(maximum_difference, abs(raw_difference))
+        if (
+            not math.isfinite(maximum_difference)
+            or maximum_difference > AXIS_CONICAL_GLOBAL_CELL_CHORD_ERROR_M
+        ):
+            return None
+        return maximum_difference
 
     def _remove_final_boundary_backtracks(self, result) -> None:
         """Remove zero-area ring tendrils introduced by the final partition."""
