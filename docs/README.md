@@ -15,6 +15,7 @@ and implementation disagree.
 | [`runway_marking_matrix.md`](runway_marking_matrix.md) | MOS139 runway-marking rules and implementation coverage |
 | [`safeguarding_standardisation_matrix.md`](safeguarding_standardisation_matrix.md) | Cross-jurisdiction safeguarding taxonomy |
 | [`qgis_field_name_mapping.csv`](qgis_field_name_mapping.csv) | Legacy-to-current QGIS field-name mapping |
+| [`templates/test-input-template.json`](templates/test-input-template.json) | Complete placeholder template for sourcing regression inputs |
 
 Ruleset-specific documentation lives with its implementation:
 

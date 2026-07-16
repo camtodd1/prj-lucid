@@ -1,0 +1,377 @@
+{
+    "_template": {
+        "instructions": [
+            "Replace every REPLACE_ token before submitting the file.",
+            "Duplicate the runway object once for each physical runway.",
+            "Keep runway_configuration consistent with the runway count and geometry.",
+            "Use coordinates in one projected CRS with metre units; record that CRS in manifest_case.project_crs.",
+            "Use metres AMSL for elevations and metres for distances.",
+            "Set cns_facilities or agl_options.approach_lighting to an empty array when none are sourced.",
+            "Retain official source URLs, publication dates, and any assumptions in source_references."
+        ],
+        "filename_pattern": "<icao>_<count>rwy_<scenario>[_<variant>].json",
+        "scenario_rules": {
+            "single": "Exactly 1 runway",
+            "parallel": "2 or more runways",
+            "intersecting": "2 or more runways",
+            "mixed": "3 or more runways"
+        },
+        "allowed_values": {
+            "design_standard": [
+                "mos139_2019",
+                "uk_caa_cap168_edition_13",
+                "icao_annex14_vol1_current_ols",
+                "easa_cs_adr_dsn_issue_7"
+            ],
+            "safeguarding_framework": [
+                "nasf_aus"
+            ],
+            "protected_airspace_policy": [
+                "ruleset_aligned",
+                "future_annex14_ofs_oes",
+                "modernisation_comparison",
+                "ruleset_comparison"
+            ],
+            "runway_suffix": [
+                "",
+                "L",
+                "C",
+                "R"
+            ],
+            "runway_type": [
+                "Non-Instrument (NI)",
+                "Non-Precision Approach (NPA)",
+                "Precision Approach CAT I",
+                "Precision Approach CAT II/III"
+            ],
+            "arc_num": [
+                "1",
+                "2",
+                "3",
+                "4"
+            ],
+            "arc_let": [
+                "A",
+                "B",
+                "C",
+                "D",
+                "E",
+                "F"
+            ],
+            "adg": [
+                "I",
+                "IIA",
+                "IIB",
+                "IIC",
+                "III",
+                "IV",
+                "V"
+            ],
+            "surface_category": [
+                "Sealed",
+                "Unsealed"
+            ],
+            "surface_material": [
+                "Asphalt",
+                "Bitumen",
+                "Concrete",
+                "Gravel",
+                "Grass",
+                "Sand",
+                "Coral",
+                "Clay",
+                "Soil",
+                "Salt"
+            ],
+            "track_type": [
+                "aligned",
+                "offset",
+                "curved",
+                "curved_gt_15"
+            ],
+            "output_format": [
+                "GeoPackage",
+                "ESRI Shapefile",
+                "GeoJSON"
+            ]
+        },
+        "source_references": [
+            {
+                "url": "REPLACE_OFFICIAL_SOURCE_URL",
+                "publisher": "REPLACE_PUBLISHER",
+                "publication_or_revision": "REPLACE_PUBLICATION_DATE_OR_EDITION",
+                "accessed": "REPLACE_YYYY-MM-DD",
+                "coverage": "REPLACE_FIELDS_SUPPORTED_BY_THIS_SOURCE",
+                "notes": "REPLACE_ASSUMPTIONS_OR_TRANSFORMATIONS"
+            }
+        ],
+        "manifest_case": {
+            "file": "REPLACE_FILENAME.json",
+            "description": "REPLACE_SHORT_HUMAN_TEST_INTENT",
+            "icao_code": "REPLACE_ICAO",
+            "runway_count": 1,
+            "runway_configuration": "single",
+            "project_crs": "REPLACE_EPSG_CODE"
+        }
+    },
+    "test_case_id": "REPLACE_ICAO_1rwy_single",
+    "test_case_name": "REPLACE_SHORT_HUMAN_TEST_INTENT",
+    "icao_code": "REPLACE_ICAO",
+    "iata_code": "REPLACE_IATA_OR_EMPTY",
+    "arp_easting": "REPLACE_PROJECTED_EASTING_M",
+    "arp_northing": "REPLACE_PROJECTED_NORTHING_M",
+    "arp_elevation": "REPLACE_AMSL_M",
+    "met_easting": "REPLACE_PROJECTED_EASTING_M_OR_EMPTY",
+    "met_northing": "REPLACE_PROJECTED_NORTHING_M_OR_EMPTY",
+    "met_elevation": "REPLACE_AMSL_M_OR_EMPTY",
+    "design_standard": "REPLACE_RULESET_ID",
+    "ruleset": "REPLACE_SAME_RULESET_ID",
+    "safeguarding_framework": "nasf_aus",
+    "protected_airspace_policy": "ruleset_aligned",
+    "baseline_ols_ruleset": "REPLACE_RULESET_ID",
+    "comparison_ols_ruleset": null,
+    "runway_configuration": "single",
+    "runways": [
+        {
+            "designator_str": "REPLACE_01_TO_36",
+            "suffix": "REPLACE_EMPTY_L_C_OR_R",
+            "thr_easting": "REPLACE_PRIMARY_THRESHOLD_EASTING_M",
+            "thr_northing": "REPLACE_PRIMARY_THRESHOLD_NORTHING_M",
+            "rec_easting": "REPLACE_RECIPROCAL_THRESHOLD_EASTING_M",
+            "rec_northing": "REPLACE_RECIPROCAL_THRESHOLD_NORTHING_M",
+            "runway_end_elev_1": "REPLACE_PRIMARY_PHYSICAL_END_AMSL_M",
+            "runway_end_elev_2": "REPLACE_RECIPROCAL_PHYSICAL_END_AMSL_M",
+            "threshold_elev_1": "REPLACE_PRIMARY_THRESHOLD_AMSL_M",
+            "threshold_elev_2": "REPLACE_RECIPROCAL_THRESHOLD_AMSL_M",
+            "thr_displaced_1": "REPLACE_DISPLACEMENT_M_OR_EMPTY",
+            "thr_displaced_2": "REPLACE_DISPLACEMENT_M_OR_EMPTY",
+            "thr_pre_area_1": "REPLACE_PRE_THRESHOLD_AREA_LENGTH_M_OR_EMPTY",
+            "thr_pre_area_2": "REPLACE_PRE_THRESHOLD_AREA_LENGTH_M_OR_EMPTY",
+            "width": "REPLACE_RUNWAY_WIDTH_M",
+            "shoulder": "REPLACE_SHOULDER_WIDTH_M_OR_EMPTY",
+            "clearway1_len": "REPLACE_PRIMARY_CLEARWAY_M_OR_EMPTY",
+            "clearway2_len": "REPLACE_RECIPROCAL_CLEARWAY_M_OR_EMPTY",
+            "stopway1_len": "REPLACE_PRIMARY_STOPWAY_M_OR_EMPTY",
+            "stopway2_len": "REPLACE_RECIPROCAL_STOPWAY_M_OR_EMPTY",
+            "tora_override_1": "REPLACE_PRIMARY_TORA_M_OR_EMPTY",
+            "tora_override_2": "REPLACE_RECIPROCAL_TORA_M_OR_EMPTY",
+            "toda_override_1": "REPLACE_PRIMARY_TODA_M_OR_EMPTY",
+            "toda_override_2": "REPLACE_RECIPROCAL_TODA_M_OR_EMPTY",
+            "asda_override_1": "REPLACE_PRIMARY_ASDA_M_OR_EMPTY",
+            "asda_override_2": "REPLACE_RECIPROCAL_ASDA_M_OR_EMPTY",
+            "lda_override_1": "REPLACE_PRIMARY_LDA_M_OR_EMPTY",
+            "lda_override_2": "REPLACE_RECIPROCAL_LDA_M_OR_EMPTY",
+            "takeoff_available_1": true,
+            "takeoff_available_2": true,
+            "landing_available_1": true,
+            "landing_available_2": true,
+            "lahso_applied_1": false,
+            "lahso_applied_2": false,
+            "cap168_wide_runway": false,
+            "arc_num": "REPLACE_1_TO_4_OR_EMPTY",
+            "arc_let": "REPLACE_A_TO_F_OR_EMPTY",
+            "adg": "REPLACE_ADG_OR_EMPTY",
+            "surface_category": "REPLACE_SEALED_OR_UNSEALED",
+            "surface_material": "REPLACE_MATERIAL",
+            "type1": "REPLACE_PRIMARY_RUNWAY_TYPE",
+            "type2": "REPLACE_RECIPROCAL_RUNWAY_TYPE",
+            "approach_track_type_1": "aligned",
+            "approach_track_type_2": "aligned",
+            "approach_track_wkt_1": "",
+            "approach_track_wkt_2": "",
+            "takeoff_track_type_1": "aligned",
+            "takeoff_track_type_2": "aligned",
+            "takeoff_track_wkt_1": "",
+            "takeoff_track_wkt_2": ""
+        }
+    ],
+    "cns_facilities": [
+        {
+            "type": "REPLACE_SUPPORTED_CNS_FACILITY_TYPE",
+            "easting_x": "REPLACE_PROJECTED_EASTING_M",
+            "northing_y": "REPLACE_PROJECTED_NORTHING_M",
+            "elevation": "REPLACE_AMSL_M_OR_EMPTY"
+        }
+    ],
+    "agl_options": {
+        "enabled": false,
+        "edge_spacing_m": "60",
+        "threshold_spacing_m": "3",
+        "threshold_inset_m": "0",
+        "approach_spacing_m": "30",
+        "centreline_offset_m": "0",
+        "approach_lighting": [
+            {
+                "runway_index": 1,
+                "end": "primary",
+                "length_m": "REPLACE_APPROACH_LIGHT_LENGTH_M",
+                "spacing_m": "30"
+            }
+        ],
+        "runway_end_lights": true,
+        "threshold_wing_bars": false,
+        "rtil": false,
+        "temp_displaced_threshold": false,
+        "stopway_lights": true,
+        "centreline_lights": true,
+        "centreline_low_visibility": false,
+        "cat_i_centreline_lights": false,
+        "tdz_lights": true,
+        "cat_i_tdz_lights": false
+    },
+    "output_options": {
+        "mode": "memory",
+        "path": "",
+        "format": "GeoPackage",
+        "contour_intervals": {
+            "default": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "inner_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "inner_transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "baulked_landing": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "tocs": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "conical": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_ofs": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_oes": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_oes_precision_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_oes_take_off_climb": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_oes_instrument_departure": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_ofs_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_ofs_transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_ofs_balked_landing": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_ofs_inner_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "annex14_ofs_inner_transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_inner_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_inner_transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_baulked_landing": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_tocs": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_conical": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_ofs": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_oes": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_oes_precision_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_oes_take_off_climb": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_oes_instrument_departure": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_ofs_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_ofs_transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_ofs_balked_landing": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_ofs_inner_approach": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "comparison_annex14_ofs_inner_transitional": {
+                "primary": 50.0,
+                "intermediate": 10.0
+            },
+            "modernisation_ofs_change": {
+                "primary": 5.0,
+                "intermediate": 1.0
+            },
+            "modernisation_oes_change": {
+                "primary": 5.0,
+                "intermediate": 1.0
+            }
+        }
+    }
+}

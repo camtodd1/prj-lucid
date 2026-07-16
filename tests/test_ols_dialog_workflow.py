@@ -1,3 +1,4 @@
+import json
 import sys
 import unittest
 from pathlib import Path
@@ -11,6 +12,7 @@ sys.path.insert(0, str(WORKSPACE.parent))
 
 from safeguarding_builder.safeguarding_builder_dialog import SafeguardingBuilderDialog
 from safeguarding_builder.safeguarding_builder import SafeguardingBuilder
+from safeguarding_builder.dialog.dialog_constants import CONTOUR_INTERVAL_KEYS
 
 
 class OlsDialogWorkflowTests(unittest.TestCase):
@@ -252,6 +254,52 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 payload["icao_code"],
             ),
             "YBBN 1Rwy Single",
+        )
+
+    def test_sourcing_template_tracks_the_complete_input_schema(self):
+        template_path = WORKSPACE / "docs" / "templates" / "test-input-template.json"
+        payload = json.loads(template_path.read_text(encoding="utf-8"))
+
+        self.dialog._validate_loaded_payload(payload)
+        expected_top_level = {
+            "test_case_id",
+            "test_case_name",
+            "icao_code",
+            "iata_code",
+            "arp_easting",
+            "arp_northing",
+            "arp_elevation",
+            "met_easting",
+            "met_northing",
+            "met_elevation",
+            "design_standard",
+            "ruleset",
+            "safeguarding_framework",
+            "protected_airspace_policy",
+            "baseline_ols_ruleset",
+            "comparison_ols_ruleset",
+            "runway_configuration",
+            "runways",
+            "cns_facilities",
+            "agl_options",
+            "output_options",
+        }
+        self.assertTrue(expected_top_level.issubset(payload))
+        self.assertEqual(
+            set(payload["runways"][0]),
+            set(self.dialog._runway_groups[1].get_input_data()),
+        )
+        self.assertEqual(
+            set(payload["output_options"]["contour_intervals"]),
+            {"default", *CONTOUR_INTERVAL_KEYS},
+        )
+        self.assertEqual(
+            set(payload["cns_facilities"][0]),
+            {"type", "easting_x", "northing_y", "elevation"},
+        )
+        self.assertEqual(
+            set(payload["agl_options"]["approach_lighting"][0]),
+            {"runway_index", "end", "length_m", "spacing_m"},
         )
 
     def test_loaded_scenario_must_match_runway_count(self):
