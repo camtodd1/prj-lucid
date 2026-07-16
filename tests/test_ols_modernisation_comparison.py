@@ -959,6 +959,47 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertLessEqual(max(cleaned_deltas), engine.tolerance_m)
         self.assertAlmostEqual(cleaned.area(), spiked_loss.area(), places=3)
 
+        final_parts = {
+            "gain": [],
+            "loss": [(baseline, future, spiked_loss)],
+            "no_change": [],
+        }
+        engine._remove_final_boundary_backtracks(final_parts)
+        final_cleaned = final_parts["loss"][0][2]
+        final_vertices = [
+            (round(vertex.x(), 6), round(vertex.y(), 6))
+            for vertex in final_cleaned.vertices()
+        ]
+        self.assertNotIn((293.097156, 633.241381), final_vertices)
+        self.assertAlmostEqual(final_cleaned.symDifference(spiked_loss).area(), 0.0, places=6)
+
+    def test_final_boundary_cleanup_retains_nonzero_narrow_wedge(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 90.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        narrow_wedge = QgsGeometry.fromPolygonXY([[
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(100.0, 0.0),
+            QgsPointXY(100.0, 100.0),
+            QgsPointXY(50.25, 100.0),
+            QgsPointXY(50.0, 400.0),
+            QgsPointXY(49.75, 100.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(0.0, 0.0),
+        ]])
+
+        cleaned = engine._remove_zero_area_boundary_backtracks(narrow_wedge)
+
+        cleaned_vertices = [
+            (round(vertex.x(), 3), round(vertex.y(), 3))
+            for vertex in cleaned.vertices()
+        ]
+        self.assertIn((50.0, 400.0), cleaned_vertices)
+        self.assertAlmostEqual(cleaned.symDifference(narrow_wedge).area(), 0.0, places=6)
+
     def test_final_merge_clips_non_collinear_wrong_side_loss_area(self):
         """A final loss feature must satisfy its height sign, regardless of spike shape."""
         footprint = QgsGeometry.fromRect(QgsRectangle(-30.0, -5.0, 20.0, 15.0))

@@ -38,6 +38,7 @@ COMPARISON_SPIKE_HEIGHT_MIN_M = 25.0
 COMPARISON_SEVERE_SPIKE_DETOUR_RATIO = 8.0
 COMPARISON_SEVERE_SPIKE_ANGLE_DEGREES = 15.0
 COMPARISON_COLLINEAR_BACKTRACK_ANGLE_DEGREES = 0.1
+COMPARISON_FINAL_BACKTRACK_MAX_AREA_CHANGE_M2 = COMPARISON_MIN_AREA_M2
 COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO = 0.01
 COMPARISON_SPIKE_MAX_AREA_CHANGE_M2 = 25.0
 COMPARISON_DELTA_DECIMALS = 3
@@ -116,6 +117,11 @@ class OlsEnvelopeComparisonEngine:
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
         self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
         self._partition_classified_parts(result)
+        # Partition differences can reintroduce zero-area out-and-back ring
+        # edges after the earlier controller-aware cleanup.  Remove only
+        # boundary-equivalent backtracks here; genuine narrow polygons remain
+        # classified because the accepted symmetric-difference area is capped.
+        self._remove_final_boundary_backtracks(result)
         diagnostics = self.comparison_diagnostics()
         recovery = diagnostics["exceptional_recovery"]
         QgsMessageLog.logMessage(
@@ -1080,6 +1086,104 @@ class OlsEnvelopeComparisonEngine:
                     if merged_assigned is not None:
                         assigned = merged_assigned
             result[change] = partitioned
+
+    def _remove_final_boundary_backtracks(self, result) -> None:
+        """Remove zero-area ring tendrils introduced by the final partition."""
+        for change in ("gain", "loss", "no_change"):
+            cleaned_parts = []
+            for baseline, future, geometry in result.get(change, []):
+                cleaned = self._remove_zero_area_boundary_backtracks(geometry)
+                if self._has_area(cleaned):
+                    cleaned_parts.append((baseline, future, cleaned))
+            result[change] = cleaned_parts
+
+    def _remove_zero_area_boundary_backtracks(self, geometry: QgsGeometry) -> QgsGeometry:
+        """Simplify collinear out-and-back edges without suppressing thin areas."""
+        if geometry is None or geometry.isEmpty():
+            return geometry
+        try:
+            if QgsWkbTypes.geometryType(geometry.wkbType()) != Qgis.GeometryType.Polygon:
+                return geometry
+            if not geometry.isGeosValid():
+                return geometry
+            if geometry.isMultipart():
+                polygons = [
+                    self._remove_zero_area_polygon_backtracks(polygon)
+                    for polygon in geometry.asMultiPolygon()
+                ]
+                cleaned = QgsGeometry.fromMultiPolygonXY(
+                    [polygon for polygon in polygons if polygon]
+                )
+            else:
+                polygon = self._remove_zero_area_polygon_backtracks(geometry.asPolygon())
+                cleaned = QgsGeometry.fromPolygonXY(polygon) if polygon else QgsGeometry()
+            if cleaned.isEmpty() or not cleaned.isGeosValid():
+                return geometry
+            area_change = abs(cleaned.area() - geometry.area())
+            if area_change > COMPARISON_FINAL_BACKTRACK_MAX_AREA_CHANGE_M2:
+                return geometry
+            changed_area = geometry.symDifference(cleaned).area()
+            if changed_area > COMPARISON_FINAL_BACKTRACK_MAX_AREA_CHANGE_M2:
+                return geometry
+            return cleaned
+        except Exception:
+            return geometry
+
+    def _remove_zero_area_polygon_backtracks(self, polygon) -> list:
+        if not polygon:
+            return []
+        cleaned = [self._remove_zero_area_backtracks_from_ring(polygon[0])]
+        # Hole topology is deliberately preserved. Exterior zero-area tendrils
+        # are the artefact produced by final difference/partition operations.
+        cleaned.extend(
+            [[QgsPointXY(point) for point in ring] for ring in polygon[1:]]
+        )
+        return cleaned if len(cleaned[0]) >= 4 else []
+
+    def _remove_zero_area_backtracks_from_ring(self, ring) -> list:
+        points = [QgsPointXY(point) for point in ring]
+        if len(points) >= 2 and self._same_point(points[0], points[-1]):
+            points = points[:-1]
+        if len(points) < 3:
+            return []
+        for _ in range(len(points)):
+            removed = False
+            count = len(points)
+            if count < 4:
+                break
+            for index in range(count):
+                if self._is_zero_area_backtrack_vertex(
+                    points[(index - 1) % count],
+                    points[index],
+                    points[(index + 1) % count],
+                ):
+                    points.pop(index)
+                    removed = True
+                    break
+            if not removed:
+                break
+        return points + [points[0]]
+
+    @staticmethod
+    def _is_zero_area_backtrack_vertex(
+        previous_point: QgsPointXY,
+        current_point: QgsPointXY,
+        next_point: QgsPointXY,
+    ) -> bool:
+        ax = previous_point.x() - current_point.x()
+        ay = previous_point.y() - current_point.y()
+        bx = next_point.x() - current_point.x()
+        by = next_point.y() - current_point.y()
+        first_length = math.hypot(ax, ay)
+        second_length = math.hypot(bx, by)
+        if first_length <= 1e-9 or second_length <= 1e-9:
+            return False
+        cosine = (ax * bx + ay * by) / (first_length * second_length)
+        angle_degrees = math.degrees(math.acos(max(-1.0, min(1.0, cosine))))
+        if angle_degrees > COMPARISON_COLLINEAR_BACKTRACK_ANGLE_DEGREES:
+            return False
+        triangle_area = abs((ax * by) - (ay * bx)) / 2.0
+        return triangle_area <= COMPARISON_FINAL_BACKTRACK_MAX_AREA_CHANGE_M2
 
     def _merge_classified_parts(self, result) -> None:
         """Dissolve repaired fragments so spike remainders join their proper side."""
