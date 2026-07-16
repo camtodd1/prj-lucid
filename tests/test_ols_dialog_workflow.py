@@ -599,6 +599,33 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             (0.2, 1.5),
         )
 
+    def test_comparison_change_contours_are_available_for_conventional_rulesets(self):
+        for comparison_id in (
+            "uk_caa_cap168_edition_13",
+            "icao_annex14_vol1_current_ols",
+        ):
+            with self.subTest(comparison_id=comparison_id):
+                self.dialog._set_ols_ruleset_selection(
+                    "mos139_2019",
+                    comparison_id,
+                )
+                self.dialog._update_ols_workflow_ui()
+
+                button = self.dialog.toolButtonComparisonChangeContours
+                self.assertFalse(button.isHidden())
+                button.setChecked(True)
+                self.assertFalse(
+                    self.dialog._contour_interval_labels[
+                        "modernisation_ofs_change"
+                    ].isHidden()
+                )
+                self.assertFalse(
+                    self.dialog._contour_interval_labels[
+                        "modernisation_oes_change"
+                    ].isHidden()
+                )
+                button.setChecked(False)
+
     def test_contour_control_markup_behaviour(self):
         self.select_mode("modernisation_comparison")
         self.dialog.toolButtonContourOverrides.setChecked(False)

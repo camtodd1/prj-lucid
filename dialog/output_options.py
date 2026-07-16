@@ -489,7 +489,7 @@ class OutputOptionsMixin:
             else set()
         )
         visible_keys = baseline_keys | comparison_keys
-        change_applicable = comparison_profile is not None and annex_selected
+        change_applicable = comparison_profile is not None
         if change_applicable:
             visible_keys.update(MODERNISATION_CHANGE_CONTOUR_KEYS)
 
