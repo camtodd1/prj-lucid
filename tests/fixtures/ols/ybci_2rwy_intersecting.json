@@ -1,4 +1,6 @@
 {
+  "test_case_id": "ybci_2rwy_intersecting",
+  "test_case_name": "YBCI 2Rwy Intersecting",
   "icao_code": "YBCI",
   "runway_configuration": "intersecting",
   "iata_code": "",

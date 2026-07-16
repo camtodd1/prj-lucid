@@ -19,6 +19,11 @@ Stop the server with `Ctrl+C`.
 The page is self-contained and uses no external service or JavaScript library.
 Running the command without `--serve` simply rebuilds `dashboard/index.html`.
 
+For a User-versus-Codex comparison, load an unchanged JSON from
+`tests/fixtures/ols/` in QGIS and have Codex run that same fixture headlessly.
+The dashboard shows **Exact · User + Codex** only when the recorded input
+fingerprint matches across both runners.
+
 ## Data quality
 
 Runtime schema 4 records the test case, input filename, runway count, runway

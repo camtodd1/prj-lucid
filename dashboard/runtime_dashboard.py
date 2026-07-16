@@ -107,10 +107,8 @@ def _ruleset_name(identifier: str, label: str) -> str:
 def _run_source(agent: str) -> str:
     lowered = agent.lower()
     if "headless" in lowered or "codex" in lowered or "ci" == lowered:
-        return "Automated test"
-    if "qgis" in lowered:
-        return "QGIS"
-    return agent or "Not recorded"
+        return "Codex"
+    return "User"
 
 
 def _uppercase_icao_reference(value: object, airport: object) -> str:
@@ -483,7 +481,14 @@ HTML_TEMPLATE = r"""<!doctype html>
     function comparisonQuality(runs) {
       const setups = new Set(runs.map(run => run.exactSetup));
       const allExact = runs.length > 0 && runs.every(run => run.exactSetupRecorded);
-      if (allExact && setups.size === 1) return {label: 'Exact setup', kind: 'exact'};
+      if (allExact && setups.size === 1) {
+        const owners = new Set(allRuns.filter(run => run.exactSetup === runs[0].exactSetup).map(run => run.runBy));
+        const shared = owners.has('User') && owners.has('Codex');
+        return {
+          label: shared ? 'Exact · User + Codex' : `Exact · ${[...owners][0] || 'one runner'} only`,
+          kind: 'exact', shared
+        };
+      }
       if (setups.size === 1) return {label: 'Rough: old inputs missing', kind: 'rough'};
       return {label: 'Mixed setups: filter further', kind: 'rough'};
     }
@@ -515,7 +520,9 @@ HTML_TEMPLATE = r"""<!doctype html>
       document.getElementById('kpiLatestNote').textContent = latest ? `${latest.airport} · ${dateLabel(latest.timestamp)} · ${latest.commit}` : 'No completed matching run';
 
       document.getElementById('comparisonNotice').textContent = quality.kind === 'exact'
-        ? 'This view contains one exact recorded input setup, so the speed comparison is like-for-like.'
+        ? quality.shared
+          ? 'This is an exact shared setup: User and Codex ran identical input parameters.'
+          : `This is an exact input setup, but only ${quality.label.includes('Codex') ? 'Codex' : 'User'} has run it so far.`
         : quality.label.startsWith('Mixed')
           ? 'This view mixes input setups. Use the slicers to narrow it before treating faster/slower as a development result.'
           : 'This is a rough historical comparison: older rows did not record the exact input file and parameters.';
@@ -544,6 +551,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           <div class="run-card-top"><span>${escapeHtml(dateLabel(run.timestamp))}</span><span>${escapeHtml(run.status)}</span></div>
           <div class="run-time">${escapeHtml(seconds(run.elapsed))}</div>
           <div class="run-case">${escapeHtml(run.testCase)}</div>
+          <div class="run-meta"><strong>Ran by:</strong> ${escapeHtml(run.runBy)}</div>
           <div class="run-meta">${escapeHtml(run.airport)} · ${escapeHtml(runway)}</div>
           <div class="run-meta">${escapeHtml(run.olsSelection)}</div>
           <span class="delta ${deltaClass}">${escapeHtml(delta)}</span>

@@ -1,4 +1,6 @@
 {
+    "test_case_id": "ybbn_1rwy_single",
+    "test_case_name": "YBBN 1Rwy Single",
     "icao_code": "YBBN",
     "runway_configuration": "single",
     "iata_code": "BNE",

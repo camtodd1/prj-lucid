@@ -1,4 +1,6 @@
 {
+  "test_case_id": "ybpm_2rwy_parallel",
+  "test_case_name": "YBPM 2Rwy Parallel",
   "icao_code": "YBPM",
   "runway_configuration": "parallel",
   "iata_code": "",

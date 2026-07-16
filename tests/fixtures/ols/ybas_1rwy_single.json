@@ -1,4 +1,6 @@
 {
+  "test_case_id": "ybas_1rwy_single",
+  "test_case_name": "YBAS 1Rwy Single",
   "icao_code": "YBAS",
   "runway_configuration": "single",
   "iata_code": "",

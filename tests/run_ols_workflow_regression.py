@@ -779,9 +779,13 @@ def _run_case(
     project.clear()
     project.setCrs(QgsCoordinateReferenceSystem(case["project_crs"]))
     dialog = dialog_cls()
+    test_case_id = Path(case["file"]).stem
     dialog._runtime_test_context = {
-        "test_case_id": Path(case["file"]).stem,
-        "test_case_name": case["description"],
+        "test_case_id": test_case_id,
+        "test_case_name": dialog._test_case_name_from_stem(
+            test_case_id,
+            case["icao_code"],
+        ),
         "input_filename": fixture_path.name,
         "runway_count": case["payload_runway_count"],
         "runway_configuration": case["payload_runway_configuration"],

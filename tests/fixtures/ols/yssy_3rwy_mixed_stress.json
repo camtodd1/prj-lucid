@@ -1,4 +1,6 @@
 {
+    "test_case_id": "yssy_3rwy_mixed_stress",
+    "test_case_name": "YSSY 3Rwy Mixed Stress",
     "icao_code": "YSSY",
     "runway_configuration": "mixed",
     "iata_code": "SYD",

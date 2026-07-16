@@ -240,6 +240,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         payload = self.dialog._build_save_payload("YBBN")
 
         self.assertEqual(payload["runway_configuration"], "single")
+        self.assertEqual(payload["test_case_id"], "ybbn_1rwy_single")
+        self.assertEqual(payload["test_case_name"], "YBBN 1Rwy Single")
         self.assertEqual(
             self.dialog._suggested_input_filename(
                 payload["icao_code"],

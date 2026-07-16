@@ -72,7 +72,7 @@ class RuntimeDashboardTests(unittest.TestCase):
         self.assertEqual(run["testCase"], "YTEST parallel runways")
         self.assertEqual(run["runwayCount"], 2)
         self.assertEqual(run["scenario"], "Parallel")
-        self.assertEqual(run["runBy"], "Automated test")
+        self.assertEqual(run["runBy"], "Codex")
         self.assertTrue(run["exactSetupRecorded"])
         self.assertIn("MOS139", run["primaryOls"])
         self.assertIn("Annex 14 Modernised", run["comparedWith"])
@@ -94,6 +94,7 @@ class RuntimeDashboardTests(unittest.TestCase):
             "pivotBody",
         ):
             self.assertIn(f'id="{control}"', html)
+        self.assertIn("<strong>Ran by:</strong>", html)
         payload = re.search(
             r'<script id="runData" type="application/json">(.*?)</script>',
             html,
@@ -156,6 +157,7 @@ class RuntimeDashboardTests(unittest.TestCase):
 
         self.assertEqual(run["airport"], "YMML")
         self.assertEqual(run["testCase"], "YMML intersecting runway check")
+        self.assertEqual(run["runBy"], "User")
 
     def test_recent_window_compares_last_five_with_previous_five(self):
         runs = [

@@ -30,6 +30,20 @@ normal unit-test discovery because a full run is computationally expensive.
 When more than one fixture is selected, the runner isolates each fixture in a
 new QGIS process and combines the child reports into one matrix report.
 
+## Shared User/Codex benchmark
+
+For a fair performance comparison, User and Codex must run the **same JSON file
+from this folder** without changing its runways, scenario, or OLS selections.
+
+- User: in QGIS, choose **Load Inputs** and select the fixture JSON.
+- Codex/headless: run `tests/run_ols_workflow_regression.py --fixture <same-file>`.
+- In the dashboard, narrow to that test case. **Exact · User + Codex** confirms
+  that both runners have recorded the identical input fingerprint.
+
+Changing any test parameter is valid, but creates a different setup and should
+not be treated as a like-for-like speed comparison. Each fixture stores the same
+`test_case_id` and plain-English name used by both routes.
+
 The runner treats spatial indexes and other future optimizations only as filters.
 Exact geometry containment, elevation evaluation, tie-breaking, common-domain
 coverage, and mutually exclusive gain/loss/no-change outputs remain mandatory.

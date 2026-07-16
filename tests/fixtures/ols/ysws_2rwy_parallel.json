@@ -1,4 +1,6 @@
 {
+    "test_case_id": "ysws_2rwy_parallel",
+    "test_case_name": "YSWS 2Rwy Parallel",
     "icao_code": "YSWS",
     "runway_configuration": "parallel",
     "iata_code": "WSI",

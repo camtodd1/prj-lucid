@@ -1,4 +1,6 @@
 {
+  "test_case_id": "ybcp_1rwy_single_curved",
+  "test_case_name": "YBCP 1Rwy Single Curved",
   "icao_code": "YBCP",
   "runway_configuration": "single",
   "iata_code": "",

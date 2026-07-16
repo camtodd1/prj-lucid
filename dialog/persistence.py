@@ -204,11 +204,7 @@ class PersistenceMixin:
             return
         runway_count = len(data_to_save["runways"])
         scenario = data_to_save["runway_configuration"]
-        suggested_filename = self._suggested_input_filename(
-            icao_code,
-            runway_count,
-            scenario,
-        )
+        suggested_filename = f'{data_to_save["test_case_id"]}.json'
         file_path = self._pick_json_file(self.tr("Save Inputs"), QFileDialog.AcceptMode.AcceptSave, suggested_filename)
         if not file_path:
             return
@@ -220,11 +216,8 @@ class PersistenceMixin:
                 json.dump(data_to_save, f, indent=4, ensure_ascii=False)
             saved_path = Path(file_path)
             self._runtime_test_context = {
-                "test_case_id": saved_path.stem,
-                "test_case_name": self._test_case_name_from_stem(
-                    saved_path.stem,
-                    icao_code,
-                ),
+                "test_case_id": data_to_save["test_case_id"],
+                "test_case_name": data_to_save["test_case_name"],
                 "input_filename": saved_path.name,
                 "runway_count": runway_count,
                 "runway_configuration": scenario,
@@ -336,7 +329,20 @@ class PersistenceMixin:
             for idx in sorted(self._runway_groups.keys())
         ]
         runway_configuration = classify_runway_configuration(runways)
+        existing_context = getattr(self, "_runtime_test_context", {}) or {}
+        test_case_id = str(existing_context.get("test_case_id") or "").strip()
+        if not test_case_id:
+            test_case_id = Path(
+                self._suggested_input_filename(
+                    icao_code,
+                    len(runways),
+                    runway_configuration,
+                )
+            ).stem
+        test_case_name = self._test_case_name_from_stem(test_case_id, icao_code)
         data_to_save = {
+            "test_case_id": test_case_id,
+            "test_case_name": test_case_name,
             "icao_code": icao_code,
             "iata_code": self._line_text("lineEdit_iata_code").strip().upper(),
             "arp_easting": self._line_text("lineEdit_arp_easting"),

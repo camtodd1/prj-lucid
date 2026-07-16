@@ -1,4 +1,6 @@
 {
+    "test_case_id": "yssy_2rwy_intersecting",
+    "test_case_name": "YSSY 2Rwy Intersecting",
     "icao_code": "YSSY",
     "runway_configuration": "intersecting",
     "iata_code": "SYD",

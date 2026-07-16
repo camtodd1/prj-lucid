@@ -1,4 +1,6 @@
 {
+    "test_case_id": "ymml_2rwy_intersecting",
+    "test_case_name": "YMML 2Rwy Intersecting",
     "icao_code": "YMML",
     "runway_configuration": "intersecting",
   "iata_code": "MEL",

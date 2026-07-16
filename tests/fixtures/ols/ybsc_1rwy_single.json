@@ -1,4 +1,6 @@
 {
+  "test_case_id": "ybsc_1rwy_single",
+  "test_case_name": "YBSC 1Rwy Single",
   "icao_code": "YBSC",
   "runway_configuration": "single",
   "iata_code": "",

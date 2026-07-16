@@ -1,4 +1,6 @@
 {
+  "test_case_id": "ybai_2rwy_intersecting_reverse",
+  "test_case_name": "YBAI 2Rwy Intersecting Reverse",
   "icao_code": "YBAI",
   "runway_configuration": "intersecting",
   "iata_code": "",
