@@ -1,8 +1,44 @@
-# OLS Modernisation Comparison
+# OLS Ruleset And Modernisation Comparison
 
-The **OLS modernisation comparison** protected-airspace policy keeps the selected
-design ruleset as the baseline and additionally generates the modernised ICAO
-Annex 14 OFS/OES model applicable from 21 November 2030.
+The OLS tab provides independent **Baseline OLS** and **Comparison OLS**
+selectors. Choosing **None — baseline only** generates only the baseline.
+Rulesets are selectable when their controlling-envelope capability is available;
+incomplete rulesets remain visible but disabled.
+
+The OLS tab keeps the shared contour defaults visible and places detailed
+controls behind two disclosures. **Surface-specific overrides** repeats the
+same two-column baseline/comparison layout, reports whether overrides are in
+use, and only shows the surface families used by each selected ruleset.
+**Comparison change contours** is shown when an Annex 14 comparison is active
+and contains the independent OFS/OES signed-change intervals. The Reset action
+appears only after an interval differs from its default. With no comparison
+selected, the comparison column shows a baseline-only empty state.
+Annex 14 exposes separate OES intervals for Precision Approach, Take-off Climb,
+and Instrument Departure, plus separate OFS intervals for Approach,
+Transitional, Balked Landing, Inner Approach, and Inner Transitional surfaces.
+The previous family-wide OFS/OES values remain load-compatible fallbacks.
+MOS139 contour controls mirror the generated layer groups: Obstacle Free Zone
+(Inner Approach, Inner Transitional, Balked Landing), Primary Surfaces
+(Approach, Take-off Climb, Transitional), and Secondary (Conical). Controlling
+envelope contours continue to inherit their source-surface intervals.
+In the generated layer tree, the selected baseline is grouped under
+**Baseline OLS — [ruleset]**, alongside the optional **Comparison OLS —
+[ruleset]** group. Obstacle Free Zone, Primary, Secondary, and Controlling
+Surfaces sit inside the baseline group. OFZ layers are grouped by runway end
+before the individual surface and contour layers.
+
+The comparison engine solves both selected envelopes and calculates:
+
+`delta height = comparison elevation - baseline elevation`
+
+The selected direction is significant: reversing the two rulesets reverses the
+sign of gain and loss outputs. Conventional OLS rulesets share one comparison
+family. When modernised ICAO Annex 14 is on either side, the conventional OLS
+envelope is compared independently with the Annex 14 OFS and OES families.
+
+The established **OLS modernisation comparison** is the pairing of an existing
+OLS baseline with the modernised ICAO Annex 14 OFS/OES model applicable from
+21 November 2030. For this pairing:
 
 The calculation compares the two controlling lower envelopes point by point:
 
@@ -21,7 +57,7 @@ Outputs are grouped as follows:
     values indicate loss.
   - **Planar Transition / Equal Height** (dashed): approximate breakline where
     the two controlling elevations are equal.
-  - **No Future OLS Overlay** (grey): baseline controlling OLS area with no
+  - **No Comparison OLS Overlay** (grey): baseline controlling OLS area with no
     overlapping future Annex 14 comparison surface.
 - **OES — Assessment Trigger Change**
   - **Baseline OLS Wireframe** and **Future Annex 14 Wireframe**.
@@ -32,18 +68,19 @@ Outputs are grouped as follows:
   - **Trigger Height Unchanged** (neutral): the future aeronautical-study trigger
     is effectively equal to the baseline OLS.
   - **Change Contours**, **Planar Transition / Equal Height**, and
-    **No Future OLS Overlay**.
+    **No Comparison OLS Overlay**.
 
 OES layers are assessment-trigger comparisons, not development approval limits.
 Every comparison output feature has a readable, layer-qualified `comparison_id`
 (for example `OFS-GAIN-000001`) for reporting a specific test issue. Each change
-feature also retains the baseline and future controlling surface identifiers,
-surface types, ruleset identifier, sampled minimum and maximum change, and the
-interior classification sample as `delta_sample_m`. The interior sample is not
-an average or representative value. Gain/loss polygons are labelled with their
-minimum-to-maximum change range on larger map features. Areas outside the common
-domains are not classified as gains or losses; baseline-only areas are shown
-separately as **No Future OLS Overlay**.
+feature also retains the baseline and comparison ruleset identifiers, both
+controlling surface identifiers and types, sampled minimum and maximum change,
+and the interior classification sample as `delta_sample_m`. Generic
+`comparison_*` fields accompany the legacy `future_*` fields. The interior
+sample is not an average or representative value. Gain/loss polygons are
+labelled with their minimum-to-maximum change range on larger map features.
+Areas outside the common domains are not classified as gains or losses;
+baseline-only areas are shown separately as **No Comparison OLS Overlay**.
 
 The 0.01 m numerical comparison tolerance applies when a complete
 controller-pair region is effectively equivalent. It does not create a buffer
@@ -75,10 +112,14 @@ integer multiple of the intermediate interval.
 
 The comparison requires:
 
-- controlling OLS generation to be enabled;
-- an existing ruleset selected as the baseline;
+- different baseline and comparison rulesets, unless baseline-only is selected;
+- an available controlling-envelope capability for each selected ruleset;
 - an Aeroplane Design Group for every runway used by future Annex 14 generation;
 - complete runway operational and elevation inputs needed by both rulesets.
+
+Saved inputs now persist `baseline_ols_ruleset` and
+`comparison_ols_ruleset`. The earlier `protected_airspace_policy` values are
+still loaded and mapped onto the equivalent selector pair.
 
 ## Stability checkpoint — 11 July 2026
 

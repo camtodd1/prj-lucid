@@ -11,13 +11,13 @@ from qgis.core import (  # type: ignore
     Qgis,
     QgsCategorizedSymbolRenderer,
     QgsFeature,
+    QgsFeatureRequest,
     QgsFillSymbol,
     QgsFields,
     QgsLayerTreeGroup,
     QgsLayerTreeLayer,
     QgsLayerTreeNode,
     QgsLineSymbol,
-    QgsMessageLog,
     QgsPalLayerSettings,
     QgsProject,
     QgsRendererCategory,
@@ -33,6 +33,7 @@ from qgis.core import (  # type: ignore
 )
 
 from .constants import LAYER_FEATURE_BATCH_SIZE
+from .run_log import QgsMessageLog
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
@@ -133,13 +134,8 @@ class LayerMixin:
             batch = features[:batch_size]
             add_ok, _ = provider.addFeatures(batch)
             if not add_ok:
-                QgsMessageLog.logMessage(
-                    f"Failed to add feature batch to layer '{display_name}'. "
-                    "Retrying feature-by-feature for diagnostics.",
-                    plugin_tag,
-                    Qgis.Warning,
-                )
                 failed_features = 0
+                first_geometry_detail = None
                 for batch_index, feature in enumerate(batch):
                     single_ok, _ = provider.addFeatures([feature])
                     if single_ok:
@@ -158,15 +154,15 @@ class LayerMixin:
                             )
                         except Exception as geom_error:
                             geom_details = f"geometry detail error: {geom_error}"
+                    if first_geometry_detail is None:
+                        first_geometry_detail = f"index={batch_index}, {geom_details}"
+                if failed_features:
                     QgsMessageLog.logMessage(
-                        f"Failed to add feature {batch_index} to layer "
-                        f"'{display_name}': {geom_details}; "
-                        f"attr_count={len(feature.attributes())}; "
-                        f"attrs={feature.attributes()}",
+                        f"Layer '{display_name}' omitted: {failed_features}/{len(batch)} "
+                        f"features could not be written; first failure: {first_geometry_detail}.",
                         plugin_tag,
                         Qgis.Critical,
                     )
-                if failed_features:
                     return False
             del features[: len(batch)]
         return True
@@ -250,8 +246,6 @@ class LayerMixin:
                     )
                     return layer
 
-                QgsMessageLog.logMessage(f"display_name = '{display_name}'", plugin_tag, Qgis.Info)
-
                 name_without_ext = os.path.splitext(display_name)[0]
                 safe_name = self._sanitize_filename(name_without_ext)
                 full_path = os.path.join(self.output_path, f"{safe_name}{self.output_format_extension}")
@@ -265,11 +259,6 @@ class LayerMixin:
                 )
 
                 if isinstance(result, tuple) and result[0] == QgsVectorFileWriter.NoError:
-                    QgsMessageLog.logMessage(
-                        f"Layer '{display_name}' successfully written to '{full_path}'.",
-                        plugin_tag,
-                        Qgis.Info,
-                    )
                     loaded_layer = self.iface.addVectorLayer(full_path, display_name, "ogr")
                     if loaded_layer is not None and loaded_layer.isValid():
                         root = project.layerTreeRoot()
@@ -638,32 +627,47 @@ class LayerMixin:
             )
 
     def _prune_annex14_renderer_rules(self, layer: QgsVectorLayer):
-        """Keep only Annex 14 legend rules represented by features in this layer."""
+        """Keep only Annex 14 legend rules matching non-empty layer features."""
         if layer is None or not layer.isValid() or layer.fields().indexOf("surface") < 0:
             return
         renderer = layer.renderer()
         if renderer is None or renderer.type() != "RuleRenderer":
             return
-        def normalized_surface(value) -> str:
-            return str(value or "").strip().casefold().replace("-", "_").replace(" ", "_")
-
-        surface_values = {
-            normalized_surface(feature.attribute("surface"))
-            for feature in layer.getFeatures()
-        }
-        surface_values.discard("")
         root_rule = renderer.rootRule()
         for rule in list(root_rule.children()):
-            label = str(rule.label() or "").strip()
-            if rule.isElse() or normalized_surface(label) not in surface_values:
+            if rule.isElse():
+                root_rule.removeChild(rule)
+                continue
+            expression = str(rule.filterExpression() or "").strip()
+            request = QgsFeatureRequest()
+            if expression:
+                request.setFilterExpression(expression)
+            represented = False
+            try:
+                for feature in layer.getFeatures(request):
+                    geometry = feature.geometry()
+                    if geometry is not None and not geometry.isEmpty():
+                        represented = True
+                        break
+            except Exception:
+                represented = False
+            if not represented:
                 root_rule.removeChild(rule)
         remaining_rules = list(root_rule.children())
-        if len(surface_values) == 1 and len(remaining_rules) == 1:
+        if (
+            len(remaining_rules) == 1
+            and not str(layer.name()).startswith("Controlling ")
+        ):
             symbol = remaining_rules[0].symbol()
             if symbol is not None:
                 layer.setRenderer(QgsSingleSymbolRenderer(symbol.clone()))
                 return
-        layer.setRenderer(renderer)
+        # Assign a distinct renderer instance so the QGIS layer-tree model
+        # invalidates legend nodes created when the full QML was first loaded.
+        # Reassigning the same mutated object can leave absent surface rules
+        # visible in the legend even though the renderer no longer contains
+        # matching features.
+        layer.setRenderer(renderer.clone())
 
     def _apply_controlling_region_style(self, layer: QgsVectorLayer):
         """Apply complementary solid fills for controlling OLS regions."""

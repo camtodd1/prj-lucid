@@ -12,10 +12,14 @@ from qgis.core import (  # type: ignore
     QgsFields,
     QgsGeometry,
     QgsLayerTreeGroup,
-    QgsMessageLog,
     QgsPointXY,
     QgsVectorLayer,
 )
+
+try:
+    from ..core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 

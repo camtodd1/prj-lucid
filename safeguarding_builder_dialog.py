@@ -19,12 +19,18 @@ from urllib.request import Request, urlopen
 
 # --- QGIS Imports ---
 from qgis.core import (  # type: ignore
-    QgsMessageLog,
     Qgis,
+    QgsGeometry,
     QgsPointXY,
     QgsProject,
     QgsCoordinateReferenceSystem,
+    QgsWkbTypes,
 )
+
+try:
+    from .core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
 from qgis.PyQt import uic, QtWidgets, QtGui, QtCore  # type: ignore
 from qgis.PyQt.QtWidgets import (  # type: ignore
     QMessageBox,
@@ -52,7 +58,11 @@ try:
     from .dialog.agl_options import AglOptionsMixin
     from .dialog.persistence import PersistenceMixin
     from .frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles
-    from .rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile, iter_ruleset_profiles
+    from .rulesets.registry import (
+        DEFAULT_RULESET_ID,
+        get_ruleset_profile,
+        iter_design_standard_profiles,
+    )
 except ImportError:
     from dialog.dialog_constants import (  # type: ignore
         CALC_PLACEHOLDER,
@@ -75,7 +85,11 @@ except ImportError:
     from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
     from frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles  # type: ignore
-    from rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile, iter_ruleset_profiles  # type: ignore
+    from rulesets.registry import (  # type: ignore
+        DEFAULT_RULESET_ID,
+        get_ruleset_profile,
+        iter_design_standard_profiles,
+    )
 
 # Load the UI class from the .ui file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), "safeguarding_builder_dialog_base.ui"))
@@ -107,6 +121,7 @@ class SafeguardingBuilderDialog(
         self._processing_cancel_button: Optional[QtWidgets.QPushButton] = None
         self._processing_cancel_requested = False
         self._processing_elapsed_timer = QtCore.QElapsedTimer()
+        self._footer_status_full_text = ""
         self._airport_lookup_cache: Dict[str, Dict[str, str]] = {}
         self._airport_iata_cache: Dict[str, Dict[str, str]] = {}
         self._airport_dataset_loaded = False
@@ -245,6 +260,49 @@ class SafeguardingBuilderDialog(
         footer_layout.insertWidget(2, cancel_button)
         self._processing_cancel_button = cancel_button
 
+        footer_status = getattr(self, "label_footer_status", None)
+        if footer_status is not None:
+            footer_status.setWordWrap(False)
+            footer_status.setMinimumWidth(0)
+            footer_status.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Ignored,
+                QtWidgets.QSizePolicy.Policy.Fixed,
+            )
+            footer_layout.setStretch(0, 1)
+
+    def _set_footer_status(self, message: str) -> None:
+        """Display a bounded one-line footer message and retain its full text."""
+        self._footer_status_full_text = str(message or "")
+        label = getattr(self, "label_footer_status", None)
+        if label is None:
+            return
+        label.setToolTip(self._footer_status_full_text)
+        self._refresh_footer_status_elision()
+
+    def _refresh_footer_status_elision(self) -> None:
+        """Elide the footer message to the width allocated by its layout."""
+        label = getattr(self, "label_footer_status", None)
+        if label is None:
+            return
+        full_text = getattr(self, "_footer_status_full_text", "")
+        available_width = max(0, label.contentsRect().width() - 2)
+        display_text = (
+            label.fontMetrics().elidedText(
+                full_text,
+                QtCore.Qt.TextElideMode.ElideRight,
+                available_width,
+            )
+            if available_width > 0
+            else full_text
+        )
+        if label.text() != display_text:
+            label.setText(display_text)
+
+    def resizeEvent(self, event) -> None:
+        """Refresh bounded status text after a user-controlled resize."""
+        super().resizeEvent(event)
+        QtCore.QTimer.singleShot(0, self._refresh_footer_status_elision)
+
     def begin_processing(self, total_steps: int = 1) -> None:
         """Reset cancellation and start a determinate generation run."""
         self._processing_status_active = True
@@ -267,7 +325,7 @@ class SafeguardingBuilderDialog(
             self._processing_cancel_button.setEnabled(False)
             self._processing_cancel_button.setText(self.tr("Cancellation requested"))
         if hasattr(self, "label_footer_status"):
-            self.label_footer_status.setText(
+            self._set_footer_status(
                 self.tr("Cancellation requested — finishing the current phase safely...")
             )
 
@@ -289,7 +347,7 @@ class SafeguardingBuilderDialog(
             else 0.0
         )
         if hasattr(self, "label_footer_status"):
-            self.label_footer_status.setText(f"{message}  •  {elapsed_seconds:.1f}s")
+            self._set_footer_status(f"{message}  •  {elapsed_seconds:.1f}s")
         if self._processing_progress_bar is not None:
             if total_steps is not None:
                 self._processing_progress_bar.setRange(0, max(1, int(total_steps)))
@@ -324,7 +382,7 @@ class SafeguardingBuilderDialog(
             generate_button.setText("Generate Airport Layers")
         self.update_dialog_status()
         if final_message and hasattr(self, "label_footer_status"):
-            self.label_footer_status.setText(final_message)
+            self._set_footer_status(final_message)
 
     # --- Initialization Helpers ---
     def _setup_arp_validators(
@@ -744,7 +802,18 @@ class SafeguardingBuilderDialog(
         detail = QtWidgets.QLabel(readiness_frame)
         detail.setObjectName("label_generation_readiness_detail")
         detail.setStyleSheet("QLabel { color: #555555; font-size: 11px; }")
-        detail.setWordWrap(False)
+        title.setMinimumWidth(0)
+        title.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        detail.setWordWrap(True)
+        detail.setMinimumWidth(0)
+        detail.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Ignored,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        detail.setMaximumHeight(detail.fontMetrics().lineSpacing() * 2 + 2)
 
         text_block = QtWidgets.QFrame(readiness_frame)
         text_block_layout = QtWidgets.QVBoxLayout(text_block)
@@ -843,7 +912,7 @@ class SafeguardingBuilderDialog(
                 "tab": "tab_ols",
                 "title": "Protected airspace",
                 "summary": "Workflow mode, readiness, contours, and controlling output",
-                "feeds": ["Baseline OLS", "Future OFS/OES", "Modernisation comparison"],
+                "feeds": ["Baseline OLS", "Comparison OLS", "Contour settings"],
                 "functions": [
                     "get_contour_interval_options()",
                     "_process_airport_wide_ols_if_possible()",
@@ -895,6 +964,8 @@ class SafeguardingBuilderDialog(
         self._workflow_context_widgets: Dict[str, Dict[str, QtWidgets.QWidget]] = {}
         for spec in self._workflow_tab_specs():
             tab_name = str(spec["tab"])
+            if tab_name == "tab_ols":
+                continue
             layout = self._workflow_tab_layout(tab_name)
             if layout is None or getattr(self, f"_workflow_context_ready_{tab_name}", False):
                 continue
@@ -1040,6 +1111,7 @@ class SafeguardingBuilderDialog(
             title_label.setText(title)
         if detail_label is not None:
             detail_label.setText(detail)
+            detail_label.setToolTip(detail)
 
     def _line_value(self, widget_name: str) -> str:
         widget = getattr(self, widget_name, self.findChild(QtWidgets.QLineEdit, widget_name))
@@ -1055,13 +1127,15 @@ class SafeguardingBuilderDialog(
         return numeric
 
     def _current_policy_ids(self) -> Tuple[str, str]:
-        ruleset_combo = self._ruleset_combo_widget()
-        active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
+        baseline_ruleset_id = DEFAULT_RULESET_ID
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ruleset_id, _comparison_ruleset_id = self._current_ols_ruleset_ids()
         protected_airspace_policy = (
-            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+            self._legacy_ols_policy_for_selection()
+            if hasattr(self, "_legacy_ols_policy_for_selection")
+            else "ruleset_aligned"
         )
-        return str(active_ruleset_id or DEFAULT_RULESET_ID), str(protected_airspace_policy or "ruleset_aligned")
+        return str(baseline_ruleset_id or DEFAULT_RULESET_ID), str(protected_airspace_policy)
 
     def _airport_dependency_status(self, icao: str, iata: str) -> Dict[str, Any]:
         arp_values = [
@@ -1131,11 +1205,16 @@ class SafeguardingBuilderDialog(
         invalid = 0
         missing_elevations = 0
         missing_adg = 0
+        missing_track_geometry = 0
         runway_end_elevation_count = 0
-        requires_adg = (
-            active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
-            or protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}
-        )
+        longest_physical_length_m = 0.0
+        comparison_ruleset_id = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            _baseline_ruleset_id, comparison_ruleset_id = self._current_ols_ruleset_ids()
+        requires_adg = "icao_annex14_vol1_modernised_ofs_oes" in {
+            active_ruleset_id,
+            comparison_ruleset_id,
+        }
 
         for group in self._runway_groups.values():
             data = group.get_input_data()
@@ -1158,11 +1237,35 @@ class SafeguardingBuilderDialog(
             elif math.isclose(coords[0], coords[2], abs_tol=1e-6) and math.isclose(coords[1], coords[3], abs_tol=1e-6):
                 invalid += 1
                 missing_required = True
+            else:
+                displaced_1 = self._parse_status_float(data.get("thr_displaced_1"), minimum=0.0) or 0.0
+                displaced_2 = self._parse_status_float(data.get("thr_displaced_2"), minimum=0.0) or 0.0
+                threshold_length = math.hypot(coords[2] - coords[0], coords[3] - coords[1])
+                longest_physical_length_m = max(
+                    longest_physical_length_m,
+                    threshold_length + displaced_1 + displaced_2,
+                )
 
             adg = str(data.get("adg", data.get("design_group", "")) or "").strip().upper()
             if requires_adg and not adg:
                 missing_adg += 1
                 missing_required = True
+
+            for family in ("approach", "takeoff"):
+                for end_number in (1, 2):
+                    track_type = str(data.get(f"{family}_track_type_{end_number}") or "aligned")
+                    track_wkt = str(data.get(f"{family}_track_wkt_{end_number}") or "").strip()
+                    if track_type != "aligned":
+                        track_geometry = QgsGeometry.fromWkt(track_wkt) if track_wkt else QgsGeometry()
+                        if (
+                            not track_wkt
+                            or track_geometry.isNull()
+                            or track_geometry.isEmpty()
+                            or track_geometry.type() != QgsWkbTypes.LineGeometry
+                            or track_geometry.length() <= 0
+                        ):
+                            missing_track_geometry += 1
+                            missing_required = True
 
             end_elevations = [
                 self._parse_status_float(data.get("runway_end_elev_1")),
@@ -1187,6 +1290,8 @@ class SafeguardingBuilderDialog(
             issues.append("threshold coordinates must not be identical")
         if missing_adg:
             issues.append(f"ADG required for {missing_adg} runway{'s' if missing_adg != 1 else ''}")
+        if missing_track_geometry:
+            issues.append(f"path geometry required for {missing_track_geometry} non-aligned OLS track{'s' if missing_track_geometry != 1 else ''}")
 
         return {
             "total": total,
@@ -1196,7 +1301,9 @@ class SafeguardingBuilderDialog(
             "ready": ready,
             "runway_end_elevation_count": runway_end_elevation_count,
             "missing_elevations": missing_elevations,
+            "missing_track_geometry": missing_track_geometry,
             "red_elevation_ready": total > 0 and missing_elevations == 0,
+            "longest_physical_length_m": longest_physical_length_m,
             "issues": issues,
         }
 
@@ -1253,10 +1360,7 @@ class SafeguardingBuilderDialog(
         if not all(hasattr(self, name) for name in ["radioMemoryOutput", "radioFileOutput", "fileWidgetOutputPath", "comboOutputFormat"]):
             return {"ready": False, "state": "blocked", "summary": "Output controls are missing.", "path": ""}
         if self.radioMemoryOutput.isChecked():
-            controlling_note = ""
-            if hasattr(self, "checkBox_generateControllingOls") and not self.checkBox_generateControllingOls.isChecked():
-                controlling_note = " | controlling OLS off"
-            return {"ready": True, "state": "ready", "summary": "Memory layers" + controlling_note, "path": ""}
+            return {"ready": True, "state": "ready", "summary": "Memory layers", "path": ""}
         if not self.radioFileOutput.isChecked():
             return {"ready": False, "state": "blocked", "summary": "Select memory or file output.", "path": ""}
 
@@ -1349,12 +1453,23 @@ class SafeguardingBuilderDialog(
         active_ruleset_id: str,
         protected_airspace_policy: str,
     ) -> Dict[str, Any]:
-        if protected_airspace_policy == "modernisation_comparison" and active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes":
-            return {"state": "blocked", "summary": "Modernisation comparison needs a current baseline ruleset."}
+        comparison_ruleset_id = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            _baseline_ruleset_id, comparison_ruleset_id = self._current_ols_ruleset_ids()
+        if comparison_ruleset_id and comparison_ruleset_id == active_ruleset_id:
+            return {"state": "blocked", "summary": "Baseline and comparison OLS rulesets must be different."}
         if not airport_status.get("identity_ready"):
             return {"state": "blocked", "summary": "OLS needs a resolved ICAO airport identity."}
         if not runway_status.get("ready"):
-            if protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}:
+            if runway_status.get("missing_track_geometry"):
+                return {
+                    "state": "blocked",
+                    "summary": "Non-aligned OLS tracks need a LINESTRING path in the project CRS.",
+                }
+            if "icao_annex14_vol1_modernised_ofs_oes" in {
+                active_ruleset_id,
+                comparison_ruleset_id,
+            }:
                 adg_issues = [
                     str(issue)
                     for issue in runway_status.get("issues", [])
@@ -1371,37 +1486,80 @@ class SafeguardingBuilderDialog(
             ruleset_profile = get_ruleset_profile(active_ruleset_id)
             airport_wide_capability = ruleset_profile.capability_status("ols.airport_wide")
             controlling_capability = ruleset_profile.capability_status("ols.controlling_lower_envelope")
+            comparison_capability = (
+                get_ruleset_profile(comparison_ruleset_id).capability_status(
+                    "ols.controlling_lower_envelope"
+                )
+                if comparison_ruleset_id
+                else None
+            )
+            comparison_airport_wide_capability = (
+                get_ruleset_profile(comparison_ruleset_id).capability_status(
+                    "ols.airport_wide"
+                )
+                if comparison_ruleset_id
+                else None
+            )
         except Exception:
             airport_wide_capability = None
             controlling_capability = None
+            comparison_capability = None
+            comparison_airport_wide_capability = None
 
-        needs_red = airport_wide_capability not in {None, "unsupported"}
+        modernised_id = "icao_annex14_vol1_modernised_ofs_oes"
+        cap168_id = "uk_caa_cap168_edition_13"
+        needs_red = any(
+            ruleset_id
+            and ruleset_id not in {modernised_id, cap168_id}
+            and capability not in {None, "unsupported"}
+            for ruleset_id, capability in (
+                (active_ruleset_id, airport_wide_capability),
+                (comparison_ruleset_id, comparison_airport_wide_capability),
+            )
+        )
         red_ready = airport_status.get("arp_elev_ready") and runway_status.get("red_elevation_ready")
         review = []
-        if needs_red and not red_ready and protected_airspace_policy != "future_annex14_ofs_oes":
+        if needs_red and not red_ready:
             review.append("airport-wide/secondary OLS needs ARP elevation and runway-end elevations")
-        if not airport_status.get("arp_pair_ready") and airport_wide_capability not in {None, "unsupported"}:
+        if not airport_status.get("arp_pair_ready") and needs_red:
             review.append("ARP coordinates needed for airport-wide safeguarding references")
-        if hasattr(self, "checkBox_generateControllingOls") and self.checkBox_generateControllingOls.isChecked():
-            if controlling_capability == "unsupported":
-                review.append("controlling OLS is unsupported for this ruleset")
-            elif controlling_capability == "experimental":
-                review.append("controlling OLS is experimental")
+        cap168_selected = cap168_id in {active_ruleset_id, comparison_ruleset_id}
+        if (
+            cap168_selected
+            and float(runway_status.get("longest_physical_length_m") or 0.0) >= 1100.0
+            and not airport_status.get("arp_pair_ready")
+        ):
+            return {
+                "state": "blocked",
+                "summary": "CAP168 OHS needs ARP coordinates because the longest runway is at least 1,100 m.",
+            }
+        if controlling_capability == "unsupported":
+            review.append("controlling OLS is unsupported for this ruleset")
+        elif controlling_capability == "experimental":
+            review.append("controlling OLS is experimental")
+        if comparison_ruleset_id and comparison_capability in {None, "unsupported", "scaffold"}:
+            review.append("comparison controlling OLS is unavailable")
 
         if review:
             return {"state": "warning", "summary": "Runway OLS ready; review " + "; ".join(review) + "."}
-        return {"state": "ready", "summary": "OLS inputs are ready for the selected policy."}
+        return {"state": "ready", "summary": "OLS inputs are ready for the selected rulesets."}
 
     def _setup_ruleset_selector_ui(self) -> None:
         """Create global policy selectors."""
         self.ruleset_combo = QtWidgets.QComboBox()
         self.ruleset_combo.setObjectName("comboBox_ruleset")
-        for profile in iter_ruleset_profiles():
-            self.ruleset_combo.addItem(profile.display_name, userData=profile.id)
+        for profile in iter_design_standard_profiles():
+            self.ruleset_combo.addItem(
+                profile.design_standard_label,
+                userData=profile.id,
+            )
         default_index = self.ruleset_combo.findData(DEFAULT_RULESET_ID)
         self.ruleset_combo.setCurrentIndex(default_index if default_index >= 0 else 0)
         self.ruleset_combo.setEnabled(True)
-        self.ruleset_combo.setToolTip("Aerodrome design standard. Select EASA for current development testing.")
+        self.ruleset_combo.setToolTip(
+            "Aerodrome design standard for physical geometry, markings, lighting, "
+            "and declared-distance rules. Select protected-airspace rulesets on the OLS tab."
+        )
         self.ruleset_combo.setMinimumWidth(190)
         self.ruleset_combo.setMinimumHeight(28)
         self.ruleset_combo.setMaximumHeight(28)
@@ -1431,6 +1589,10 @@ class SafeguardingBuilderDialog(
         self.protected_airspace_policy_combo.addItem(
             "OLS modernisation comparison",
             userData="modernisation_comparison",
+        )
+        self.protected_airspace_policy_combo.addItem(
+            "Ruleset comparison",
+            userData="ruleset_comparison",
         )
         self.protected_airspace_policy_combo.setToolTip(
             "Protected airspace/OLS policy. Use Ruleset aligned for the selected design standard, "
@@ -1604,7 +1766,6 @@ class SafeguardingBuilderDialog(
             "groupBox_ruleset",
             "groupBox_CNS",
             "groupBox_olsWorkflow",
-            "groupBox_controllingOls",
             "groupBox_contourIntervals",
             "groupBox_outputOptions",
             "groupBox_agl_options",
@@ -2372,7 +2533,6 @@ class SafeguardingBuilderDialog(
             "radioFileOutput",
             "comboOutputFormat",
             "fileWidgetOutputPath",
-            "checkBox_generateControllingOls",
         ]:
             widget = getattr(self, name, None)
             if not widget:
@@ -2657,8 +2817,8 @@ class SafeguardingBuilderDialog(
                 footer_parts.append("AGL")
             footer_parts.append(output_text)
             footer_text = " | ".join(footer_parts)
-            if self.label_footer_status.text() != footer_text:
-                self.label_footer_status.setText(footer_text)
+            if self._footer_status_full_text != footer_text:
+                self._set_footer_status(footer_text)
 
     # --- Runway Group Management ---
     def _get_next_runway_id(self) -> int:
@@ -2682,7 +2842,6 @@ class SafeguardingBuilderDialog(
         """
         group_widget = self._runway_groups.get(runway_index)
         if not group_widget:
-            # QgsMessageLog.logMessage(f"Skipping calc update for index {runway_index}: Group not found.", DIALOG_LOG_TAG, level=Qgis.Debug)
             return
 
         input_data = group_widget.get_input_data()
@@ -2902,22 +3061,19 @@ class SafeguardingBuilderDialog(
             )
 
     def _update_dialog_height(self, initial: bool = False):
-        """Adjusts the dialog height to fit its contents."""
+        """Set the initial dialog size without overriding later user resizing."""
+        if not initial:
+            return
+
         def _apply_size():
-            current_width = self.width()
-            current_height = self.height()
             self.adjustSize()
             preferred_height = 760
             screen = self.screen() or QtWidgets.QApplication.primaryScreen()
             if screen is not None:
                 preferred_height = min(preferred_height, int(screen.availableGeometry().height() * 0.86))
-            if initial:
-                target_width = 824
-                target_height = min(self.height(), preferred_height)
-                self.resize(target_width, target_height)
-            else:
-                max_auto_height = preferred_height if current_height <= preferred_height else current_height
-                self.resize(current_width, min(self.height(), max_auto_height))
+            target_width = 824
+            target_height = min(self.height(), preferred_height)
+            self.resize(target_width, target_height)
         QtCore.QTimer.singleShot(0, _apply_size)
 
     def _focus_runway_group(self, group_widget: RunwayWidgetGroup) -> None:
@@ -2972,20 +3128,33 @@ class SafeguardingBuilderDialog(
 
         ruleset_combo = self._ruleset_combo_widget()
         framework_combo = self._framework_combo_widget()
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
         design_standard = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
         safeguarding_framework = framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID
+        baseline_ols_ruleset = design_standard
+        comparison_ols_ruleset = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
         protected_airspace_policy = (
-            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+            self._legacy_ols_policy_for_selection()
+            if hasattr(self, "_legacy_ols_policy_for_selection")
+            else "ruleset_aligned"
         )
-        if (
-            protected_airspace_policy == "modernisation_comparison"
-            and design_standard == "icao_annex14_vol1_modernised_ofs_oes"
+        if comparison_ols_ruleset and comparison_ols_ruleset == baseline_ols_ruleset:
+            validation_ok = False
+            error_messages.append(
+                "Baseline and comparison OLS rulesets must be different."
+            )
+        elif (
+            comparison_ols_ruleset
+            and hasattr(self, "_ols_pair_available")
+            and not self._ols_pair_available(
+                str(baseline_ols_ruleset),
+                str(comparison_ols_ruleset),
+            )
         ):
             validation_ok = False
             error_messages.append(
-                "OLS modernisation comparison requires an existing ruleset as the baseline; "
-                "select MOS 139, EASA, CAP 168, or current Annex 14."
+                "The selected OLS ruleset pair does not yet have a validated comparison adapter."
             )
         final_data.update(
             {
@@ -3000,6 +3169,8 @@ class SafeguardingBuilderDialog(
                 "ruleset": design_standard,
                 "safeguarding_framework": safeguarding_framework,
                 "protected_airspace_policy": protected_airspace_policy,
+                "baseline_ols_ruleset": baseline_ols_ruleset,
+                "comparison_ols_ruleset": comparison_ols_ruleset or None,
             }
         )
 
@@ -3107,11 +3278,6 @@ class SafeguardingBuilderDialog(
             final_data["contour_intervals"] = self.get_contour_interval_options()
         else:
             final_data["contour_intervals"] = {}
-        if hasattr(self, "checkBox_generateControllingOls"):
-            final_data["generate_controlling_ols"] = self.checkBox_generateControllingOls.isChecked()
-        else:
-            final_data["generate_controlling_ols"] = True
-
         return final_data
 
     def _validate_runway_data(self, index: int, inputs: Dict[str, str], errors: List[str]) -> Optional[Dict[str, Any]]:
@@ -3376,15 +3542,14 @@ class SafeguardingBuilderDialog(
             current_errors += 1
             adg = ""
         ruleset_combo = self._ruleset_combo_widget()
-        active_ruleset_id = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
-        protected_airspace_policy = (
-            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
-        )
-        if (
-            active_ruleset_id == "icao_annex14_vol1_modernised_ofs_oes"
-            or protected_airspace_policy in {"future_annex14_ofs_oes", "modernisation_comparison"}
-        ) and not adg:
+        baseline_ols_ruleset = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
+        comparison_ols_ruleset = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
+        if "icao_annex14_vol1_modernised_ofs_oes" in {
+            baseline_ols_ruleset,
+            comparison_ols_ruleset,
+        } and not adg:
             errors.append(f"Rwy {index}: ADG is required for Annex 14 OFS/OES generation.")
             current_errors += 1
         validated["adg"] = adg
@@ -3406,6 +3571,38 @@ class SafeguardingBuilderDialog(
         validated["surface_material"] = surface_material
         validated["type1"] = inputs.get("type1")
         validated["type2"] = inputs.get("type2")
+        validated["cap168_wide_runway"] = self._bool_from_input(
+            inputs.get("cap168_wide_runway", False)
+        )
+
+        valid_track_types = {"aligned", "offset", "curved", "curved_gt_15"}
+        for family in ("approach", "takeoff"):
+            for end_number in (1, 2):
+                type_key = f"{family}_track_type_{end_number}"
+                wkt_key = f"{family}_track_wkt_{end_number}"
+                track_type = str(inputs.get(type_key) or "aligned").strip().lower()
+                track_wkt = str(inputs.get(wkt_key) or "").strip()
+                if track_type not in valid_track_types:
+                    errors.append(
+                        f"Rwy {index}: Invalid {family} track type '{track_type}' for end {end_number}."
+                    )
+                    current_errors += 1
+                    track_type = "aligned"
+                if track_type != "aligned":
+                    geometry = QgsGeometry.fromWkt(track_wkt) if track_wkt else QgsGeometry()
+                    if (
+                        not track_wkt
+                        or geometry.isNull()
+                        or geometry.isEmpty()
+                        or geometry.type() != QgsWkbTypes.LineGeometry
+                        or geometry.length() <= 0
+                    ):
+                        errors.append(
+                            f"Rwy {index}: {family.title()} track {end_number} requires a valid non-empty LINESTRING WKT in the project CRS."
+                        )
+                        current_errors += 1
+                validated[type_key] = track_type
+                validated[wkt_key] = track_wkt
 
         return validated if current_errors == 0 else None
 

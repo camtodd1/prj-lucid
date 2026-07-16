@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from qgis.PyQt import QtWidgets
+from qgis.PyQt import QtCore, QtWidgets
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -26,44 +26,309 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.dialog.deleteLater()
 
     def select_mode(self, mode):
-        combo = self.dialog.protected_airspace_policy_combo
-        combo.setCurrentIndex(combo.findData(mode))
+        baseline_id = "mos139_2019"
+        comparison_id = ""
+        if mode == "future_annex14_ofs_oes":
+            baseline_id = "icao_annex14_vol1_modernised_ofs_oes"
+        elif mode == "modernisation_comparison":
+            comparison_id = "icao_annex14_vol1_modernised_ofs_oes"
+        self.dialog._set_ols_ruleset_selection(baseline_id, comparison_id)
         self.dialog._update_ols_workflow_ui(
             dependency_status={"state": "ready", "summary": "OLS ready."},
             runway_count=2,
         )
 
-    def test_persisted_policy_selector_is_presented_on_ols_tab(self):
-        combo = self.dialog.protected_airspace_policy_combo
+    def test_two_column_ruleset_selectors_are_presented_on_ols_tab(self):
+        baseline = self.dialog.baseline_ols_ruleset_combo
+        comparison = self.dialog.comparison_ols_ruleset_combo
 
-        self.assertIs(combo.parentWidget(), self.dialog.groupBox_olsWorkflow)
+        self.assertIs(baseline.parentWidget(), self.dialog.groupBox_olsWorkflow)
+        self.assertIs(comparison.parentWidget(), self.dialog.groupBox_olsWorkflow)
         self.assertTrue(self.dialog.label_protected_airspace_policy.isHidden())
-        self.assertEqual(combo.itemData(0), "ruleset_aligned")
-        self.assertEqual(combo.itemData(1), "future_annex14_ofs_oes")
-        self.assertEqual(combo.itemData(2), "modernisation_comparison")
+        self.assertTrue(self.dialog.protected_airspace_policy_combo.isHidden())
+        self.assertEqual(self.dialog.groupBox_olsWorkflow.title(), "OLS rulesets")
+        self.assertEqual(self.dialog.label_baselineOlsRuleset.text(), "Baseline")
+        self.assertEqual(self.dialog.label_comparisonOlsRuleset.text(), "Comparison")
+        self.assertIsNone(
+            self.dialog.findChild(QtWidgets.QLabel, "label_olsModeDescription")
+        )
+        self.assertIsNone(
+            self.dialog.findChild(QtWidgets.QFrame, "frame_workflow_context_tab_ols")
+        )
+        self.assertEqual(baseline.currentData(), "mos139_2019")
+        self.assertEqual(comparison.itemData(0), "")
+        self.assertEqual(comparison.itemText(0), "None — baseline only")
+        modernised_index = comparison.findData(
+            "icao_annex14_vol1_modernised_ofs_oes"
+        )
+        self.assertEqual(
+            comparison.itemText(modernised_index),
+            "Annex 14 Modernised OLS",
+        )
+        self.assertIsNone(
+            self.dialog.findChild(
+                QtWidgets.QCheckBox,
+                "checkBox_generateControllingOls",
+            )
+        )
+        self.assertIsNone(
+            self.dialog.findChild(
+                QtWidgets.QGroupBox,
+                "groupBox_controllingOls",
+            )
+        )
+
+    def test_design_standard_excludes_modernised_ols_profile(self):
+        design_standard = self.dialog.ruleset_combo
+
+        self.assertEqual(
+            design_standard.findData("icao_annex14_vol1_modernised_ofs_oes"),
+            -1,
+        )
+        current_annex_index = design_standard.findData(
+            "icao_annex14_vol1_current_ols"
+        )
+        self.assertGreaterEqual(current_annex_index, 0)
+        self.assertEqual(
+            design_standard.itemText(current_annex_index),
+            "ICAO Annex 14 Vol I (9th Edition, Amendment 18)",
+        )
+
+        self.assertGreaterEqual(
+            self.dialog.baseline_ols_ruleset_combo.findData(
+                "icao_annex14_vol1_modernised_ofs_oes"
+            ),
+            0,
+        )
+
+    def test_legacy_modernised_design_standard_loads_as_current_annex(self):
+        self.dialog._apply_loaded_payload(
+            {
+                "icao_code": "TEST",
+                "design_standard": "icao_annex14_vol1_modernised_ofs_oes",
+                "runways": [],
+            }
+        )
+
+        self.assertEqual(
+            self.dialog.ruleset_combo.currentData(),
+            "icao_annex14_vol1_current_ols",
+        )
+        self.assertEqual(
+            self.dialog.baseline_ols_ruleset_combo.currentData(),
+            "icao_annex14_vol1_modernised_ofs_oes",
+        )
+
+    def test_cap168_and_current_annex14_are_supported_while_easa_is_preview(self):
+        baseline = self.dialog.baseline_ols_ruleset_combo
+        cap168_index = baseline.findData("uk_caa_cap168_edition_13")
+        easa_index = baseline.findData("easa_cs_adr_dsn_issue_7")
+        current_annex_index = baseline.findData("icao_annex14_vol1_current_ols")
+
+        self.assertGreaterEqual(cap168_index, 0)
+        self.assertTrue(baseline.model().item(cap168_index).isEnabled())
+        self.assertTrue(baseline.model().item(easa_index).isEnabled())
+        self.assertNotIn("partial preview", baseline.itemText(cap168_index).lower())
+        self.assertEqual(baseline.itemText(cap168_index), "UK CAA CAP 168 (Edition 13)")
+        self.assertIn("partial preview", baseline.itemText(easa_index).lower())
+        self.assertEqual(
+            baseline.itemText(current_annex_index),
+            "ICAO Annex 14 Vol I - Current OLS",
+        )
+        self.assertTrue(baseline.model().item(current_annex_index).isEnabled())
+
+    def test_nominated_ols_track_options_round_trip_with_runway_data(self):
+        group = self.dialog._runway_groups[1]
+        saved = group.get_input_data()
+        saved.update(
+            {
+                "approach_track_type_1": "curved_gt_15",
+                "approach_track_wkt_1": "LINESTRING (0 0, 100 10, 200 40)",
+                "takeoff_track_type_2": "offset",
+                "takeoff_track_wkt_2": "LINESTRING (1000 0, 2000 100)",
+                "cap168_wide_runway": True,
+            }
+        )
+
+        group.set_input_data(saved)
+        restored = group.get_input_data()
+
+        self.assertEqual(restored["approach_track_type_1"], "curved_gt_15")
+        self.assertEqual(restored["approach_track_wkt_1"], saved["approach_track_wkt_1"])
+        self.assertEqual(restored["takeoff_track_type_2"], "offset")
+        self.assertEqual(restored["takeoff_track_wkt_2"], saved["takeoff_track_wkt_2"])
+        self.assertTrue(restored["cap168_wide_runway"])
+
+    def test_explicit_selection_keeps_legacy_policy_compatible(self):
+        self.select_mode("modernisation_comparison")
+
+        self.assertEqual(
+            self.dialog.protected_airspace_policy_combo.currentData(),
+            "modernisation_comparison",
+        )
+        self.assertEqual(
+            self.dialog._current_ols_ruleset_ids(),
+            ("mos139_2019", "icao_annex14_vol1_modernised_ofs_oes"),
+        )
+
+    def test_annex_baseline_can_select_mos_as_the_comparison(self):
+        self.dialog._set_ols_ruleset_selection(
+            "icao_annex14_vol1_modernised_ofs_oes",
+            "mos139_2019",
+        )
+
+        self.assertEqual(
+            self.dialog._current_ols_ruleset_ids(),
+            ("icao_annex14_vol1_modernised_ofs_oes", "mos139_2019"),
+        )
+        self.assertEqual(
+            self.dialog.protected_airspace_policy_combo.currentData(),
+            "ruleset_comparison",
+        )
+        self.dialog.toolButtonContourOverrides.setChecked(True)
+        self.assertFalse(
+            self.dialog._contour_interval_labels["annex14_ofs_approach"].isHidden()
+        )
+        self.assertFalse(
+            self.dialog._contour_interval_labels["comparison_approach"].isHidden()
+        )
+        self.assertTrue(self.dialog._contour_interval_labels["approach"].isHidden())
+        self.assertTrue(
+            self.dialog._contour_interval_labels[
+                "comparison_annex14_ofs_approach"
+            ].isHidden()
+        )
+
+    def test_reverse_annex_comparison_still_checks_conventional_red_inputs(self):
+        self.dialog._set_ols_ruleset_selection(
+            "icao_annex14_vol1_modernised_ofs_oes",
+            "mos139_2019",
+        )
+
+        status = self.dialog._ols_dependency_status(
+            airport_status={
+                "identity_ready": True,
+                "arp_pair_ready": True,
+                "arp_elev_ready": False,
+            },
+            runway_status={
+                "ready": True,
+                "red_elevation_ready": False,
+            },
+            active_ruleset_id="icao_annex14_vol1_modernised_ofs_oes",
+            protected_airspace_policy="ruleset_comparison",
+        )
+
+        self.assertEqual(status["state"], "warning")
+        self.assertIn("airport-wide/secondary OLS", status["summary"])
+
+    def test_save_payload_records_explicit_ols_ruleset_pair(self):
+        self.select_mode("modernisation_comparison")
+
+        payload = self.dialog._build_save_payload("TEST")
+
+        self.assertEqual(payload["baseline_ols_ruleset"], "mos139_2019")
+        self.assertEqual(
+            payload["comparison_ols_ruleset"],
+            "icao_annex14_vol1_modernised_ofs_oes",
+        )
+        self.assertEqual(payload["protected_airspace_policy"], "modernisation_comparison")
 
     def test_baseline_mode_hides_future_family_rows(self):
         self.select_mode("ruleset_aligned")
+        self.dialog.toolButtonContourOverrides.setChecked(True)
 
         self.assertTrue(self.dialog.frame_olsFamilyExplanation.isHidden())
-        self.assertTrue(self.dialog.widgetModernisationContourIntervals.isHidden())
+        self.assertTrue(self.dialog.toolButtonOlsFamilyHelp.isHidden())
         self.assertFalse(self.dialog._contour_interval_labels["approach"].isHidden())
         self.assertTrue(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
-        self.assertTrue(self.dialog.checkBox_generateControllingOls.isEnabled())
+        self.assertFalse(self.dialog.labelComparisonContourEmpty.isHidden())
+        self.assertTrue(
+            self.dialog._contour_interval_labels["comparison_approach"].isHidden()
+        )
 
-    def test_future_mode_shows_only_ofs_oes_family_rows(self):
+    def test_mos139_contours_follow_output_group_sections(self):
+        self.select_mode("ruleset_aligned")
+        self.dialog.toolButtonContourOverrides.setChecked(True)
+        expected_sections = (
+            (
+                "Obstacle Free Zone",
+                (
+                    ("inner_approach", "Inner approach"),
+                    ("inner_transitional", "Inner transitional"),
+                    ("baulked_landing", "Balked landing"),
+                ),
+            ),
+            (
+                "Primary Surfaces",
+                (
+                    ("approach", "Approach"),
+                    ("tocs", "Take-off climb"),
+                    ("transitional", "Transitional"),
+                ),
+            ),
+            ("Secondary", (("conical", "Conical"),)),
+        )
+        layout = self.dialog.frameBaselineContourSettings.layout()
+        previous_row = -1
+        for section, rows in expected_sections:
+            section_label = self.dialog._contour_conventional_section_labels[
+                "baseline"
+            ][section]
+            section_row = layout.getItemPosition(layout.indexOf(section_label))[0]
+            self.assertGreater(section_row, previous_row)
+            self.assertFalse(section_label.isHidden())
+            for key, text in rows:
+                label = self.dialog._contour_interval_labels[key]
+                row = layout.getItemPosition(layout.indexOf(label))[0]
+                self.assertGreater(row, section_row)
+                self.assertEqual(label.text(), text)
+                self.assertFalse(label.isHidden())
+                previous_row = row
+
+
+    def test_future_mode_shows_requested_granular_oes_and_ofs_rows(self):
         self.select_mode("future_annex14_ofs_oes")
+        self.dialog.toolButtonContourOverrides.setChecked(True)
 
+        self.assertFalse(self.dialog.toolButtonOlsFamilyHelp.isHidden())
+        self.assertTrue(self.dialog.frame_olsFamilyExplanation.isHidden())
+        self.dialog.toolButtonOlsFamilyHelp.setChecked(True)
         self.assertFalse(self.dialog.frame_olsFamilyExplanation.isHidden())
         self.assertEqual(self.dialog.label_olsOfsTitle.text(), "OFS — protected airspace")
         self.assertIn("Obstacle-free surface", self.dialog.label_olsOfsDetail.text())
         self.assertEqual(self.dialog.label_olsOesTitle.text(), "OES — assessment trigger")
         self.assertIn("not an approval limit", self.dialog.label_olsOesDetail.text())
-        self.assertFalse(self.dialog.widgetModernisationContourIntervals.isHidden())
-        self.assertTrue(self.dialog.toolButtonContourOverrides.isHidden())
+        self.assertFalse(self.dialog.frameBaselineContourSettings.isHidden())
+        self.assertFalse(self.dialog.toolButtonContourOverrides.isHidden())
         self.assertTrue(self.dialog._contour_interval_labels["approach"].isHidden())
-        self.assertFalse(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
-        self.assertFalse(self.dialog._contour_interval_labels["annex14_oes"].isHidden())
+        expected_rows = {
+            "annex14_oes_precision_approach": "Precision Approach",
+            "annex14_oes_take_off_climb": "Take-off Climb",
+            "annex14_oes_instrument_departure": "Instrument Departure",
+            "annex14_ofs_approach": "Approach",
+            "annex14_ofs_transitional": "Transitional",
+            "annex14_ofs_balked_landing": "Balked Landing",
+            "annex14_ofs_inner_approach": "Inner Approach",
+            "annex14_ofs_inner_transitional": "Inner Transitional",
+        }
+        for key, text in expected_rows.items():
+            self.assertEqual(self.dialog._contour_interval_labels[key].text(), text)
+            self.assertFalse(self.dialog._contour_interval_labels[key].isHidden())
+            self.assertIs(
+                self.dialog._contour_interval_labels[key].parentWidget(),
+                self.dialog.frameBaselineContourSettings,
+            )
+        self.assertEqual(
+            self.dialog._contour_annex_section_labels["baseline"]["OES"].text(),
+            "OES",
+        )
+        self.assertEqual(
+            self.dialog._contour_annex_section_labels["baseline"]["OFS"].text(),
+            "OFS",
+        )
+        self.assertTrue(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
+        self.assertTrue(self.dialog._contour_interval_labels["annex14_oes"].isHidden())
         self.assertTrue(
             self.dialog._contour_interval_labels["modernisation_ofs_change"].isHidden()
         )
@@ -71,35 +336,43 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             self.dialog._contour_interval_labels["modernisation_oes_change"].isHidden()
         )
 
-    def test_future_family_contours_are_directly_editable_and_used_by_generation(self):
+    def test_granular_annex_contours_are_directly_editable_and_used_by_generation(self):
         self.select_mode("future_annex14_ofs_oes")
-        ofs_primary = self.dialog._contour_primary_interval_spinboxes["annex14_ofs"]
-        ofs_intermediate = self.dialog._contour_interval_spinboxes["annex14_ofs"]
-        oes_primary = self.dialog._contour_primary_interval_spinboxes["annex14_oes"]
-        oes_intermediate = self.dialog._contour_interval_spinboxes["annex14_oes"]
+        self.dialog.toolButtonContourOverrides.setChecked(True)
+        intervals = {
+            "annex14_oes_precision_approach": 2.0,
+            "annex14_oes_take_off_climb": 3.0,
+            "annex14_oes_instrument_departure": 4.0,
+            "annex14_ofs_approach": 5.0,
+            "annex14_ofs_transitional": 6.0,
+            "annex14_ofs_balked_landing": 7.0,
+            "annex14_ofs_inner_approach": 8.0,
+            "annex14_ofs_inner_transitional": 9.0,
+        }
 
         self.assertIs(
-            self.dialog._contour_interval_labels["annex14_ofs"].parentWidget(),
-            self.dialog.widgetModernisationContourIntervals,
+            self.dialog._contour_interval_labels["annex14_ofs_approach"].parentWidget(),
+            self.dialog.frameBaselineContourSettings,
         )
-        for spinbox in (ofs_primary, ofs_intermediate, oes_primary, oes_intermediate):
+        for key, value in intervals.items():
+            spinbox = self.dialog._contour_interval_spinboxes[key]
             self.assertFalse(spinbox.isHidden())
             self.assertTrue(spinbox.isEnabled())
+            spinbox.setValue(value)
 
-        ofs_primary.setValue(40.0)
-        ofs_intermediate.setValue(8.0)
-        oes_primary.setValue(25.0)
-        oes_intermediate.setValue(5.0)
         options = self.dialog.get_contour_interval_options()
-
-        self.assertEqual(options["annex14_ofs"], {"primary": 40.0, "intermediate": 8.0})
-        self.assertEqual(options["annex14_oes"], {"primary": 25.0, "intermediate": 5.0})
         builder = object.__new__(SafeguardingBuilder)
         builder.contour_intervals = options
-        self.assertEqual(builder._annex14_contour_interval("approach", "OFS"), 8.0)
-        self.assertEqual(builder._annex14_contour_interval("approach", "OES"), 5.0)
+        self.assertEqual(builder._annex14_contour_interval("precision_approach", "OES"), 2.0)
+        self.assertEqual(builder._annex14_contour_interval("take_off_climb", "OES"), 3.0)
+        self.assertEqual(builder._annex14_contour_interval("instrument_departure", "OES"), 4.0)
+        self.assertEqual(builder._annex14_contour_interval("approach", "OFS"), 5.0)
+        self.assertEqual(builder._annex14_contour_interval("transitional", "OFS"), 6.0)
+        self.assertEqual(builder._annex14_contour_interval("balked_landing", "OFS"), 7.0)
+        self.assertEqual(builder._annex14_contour_interval("inner_approach", "OFS"), 8.0)
+        self.assertEqual(builder._annex14_contour_interval("inner_transitional", "OFS"), 9.0)
 
-    def test_saved_future_family_override_does_not_expand_regular_surface_settings(self):
+    def test_saved_future_family_override_expands_contextual_settings(self):
         self.dialog.set_contour_interval_options(
             {
                 "default": {"primary": 50.0, "intermediate": 10.0},
@@ -108,16 +381,20 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.select_mode("modernisation_comparison")
 
-        self.assertFalse(self.dialog.toolButtonContourOverrides.isChecked())
-        self.assertTrue(self.dialog.widgetContourOverrides.isHidden())
-        self.assertFalse(self.dialog.widgetModernisationContourIntervals.isHidden())
+        self.assertTrue(self.dialog.toolButtonContourOverrides.isChecked())
+        self.assertFalse(self.dialog.widgetContourOverrides.isHidden())
         self.assertEqual(
-            self.dialog._contour_interval_spinboxes["annex14_ofs"].value(),
+            self.dialog._contour_interval_spinboxes[
+                "comparison_annex14_ofs_approach"
+            ].value(),
             8.0,
         )
 
     def test_comparison_change_contours_are_directly_editable_per_family(self):
         self.select_mode("modernisation_comparison")
+        self.assertFalse(self.dialog.toolButtonComparisonChangeContours.isHidden())
+        self.assertFalse(self.dialog.toolButtonComparisonChangeContours.isChecked())
+        self.dialog.toolButtonComparisonChangeContours.setChecked(True)
         ofs_primary = self.dialog._contour_primary_interval_spinboxes[
             "modernisation_ofs_change"
         ]
@@ -138,7 +415,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             self.assertTrue(spinbox.isEnabled())
 
         ofs_primary.setValue(2.0)
-        ofs_intermediate.setValue(0.25)
+        ofs_intermediate.setValue(0.3)
         oes_primary.setValue(1.5)
         oes_intermediate.setValue(0.2)
         options = self.dialog.get_contour_interval_options()
@@ -147,12 +424,67 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.assertEqual(
             builder._modernisation_change_contour_intervals("OFS"),
-            (0.25, 2.0),
+            (0.3, 2.0),
         )
         self.assertEqual(
             builder._modernisation_change_contour_intervals("OES"),
             (0.2, 1.5),
         )
+
+    def test_contour_control_markup_behaviour(self):
+        self.select_mode("modernisation_comparison")
+        self.dialog.toolButtonContourOverrides.setChecked(False)
+
+        layout = self.dialog.groupBox_contourIntervals.layout()
+        change_label = self.dialog._contour_interval_labels[
+            "modernisation_ofs_change"
+        ]
+        change_row = layout.getItemPosition(layout.indexOf(change_label))[0]
+        change_disclosure_row = layout.getItemPosition(
+            layout.indexOf(self.dialog.toolButtonComparisonChangeContours)
+        )[0]
+        disclosure_row = layout.getItemPosition(
+            layout.indexOf(self.dialog.toolButtonContourOverrides)
+        )[0]
+        self.assertLess(change_disclosure_row, change_row)
+        self.assertLess(change_row, disclosure_row)
+        self.assertIs(change_label.parentWidget(), self.dialog.groupBox_contourIntervals)
+        self.assertTrue(change_label.isHidden())
+        self.dialog.toolButtonComparisonChangeContours.setChecked(True)
+        self.assertFalse(change_label.isHidden())
+        self.assertTrue(self.dialog.widgetContourOverrides.isHidden())
+
+        headers = [
+            self.dialog.labelContourPrimaryHeader,
+            self.dialog.labelContourIntermediateHeader,
+            *self.dialog._contour_column_interval_headers["baseline"],
+            *self.dialog._contour_column_interval_headers["comparison"],
+        ]
+        for header in headers:
+            self.assertTrue(
+                header.alignment() & QtCore.Qt.AlignmentFlag.AlignHCenter
+            )
+
+        spinboxes = [
+            self.dialog.doubleSpinBoxContourDefaultPrimary,
+            self.dialog.doubleSpinBoxContourDefault,
+            *self.dialog._contour_primary_interval_spinboxes.values(),
+            *self.dialog._contour_interval_spinboxes.values(),
+        ]
+        self.assertTrue(all(spinbox.decimals() == 1 for spinbox in spinboxes))
+
+        class WheelEvent:
+            ignored = False
+
+            def ignore(self):
+                self.ignored = True
+
+        spinbox = self.dialog.doubleSpinBoxContourDefault
+        original_value = spinbox.value()
+        event = WheelEvent()
+        spinbox.wheelEvent(event)
+        self.assertTrue(event.ignored)
+        self.assertEqual(spinbox.value(), original_value)
 
     def test_change_contour_defaults_are_not_overwritten_by_surface_default(self):
         self.dialog.doubleSpinBoxContourDefaultPrimary.setValue(100.0)
@@ -171,20 +503,20 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             1.0,
         )
 
-    def test_comparison_mode_requires_controlling_output_and_shows_all_rows(self):
-        self.dialog.checkBox_generateControllingOls.setChecked(False)
+    def test_comparison_selection_shows_all_comparison_rows(self):
         self.select_mode("modernisation_comparison")
+        self.dialog.toolButtonContourOverrides.setChecked(True)
 
-        self.assertTrue(self.dialog.checkBox_generateControllingOls.isChecked())
-        self.assertFalse(self.dialog.checkBox_generateControllingOls.isEnabled())
         self.assertFalse(self.dialog._contour_interval_labels["approach"].isHidden())
-        self.assertFalse(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
-        self.assertFalse(self.dialog.widgetModernisationContourIntervals.isHidden())
+        self.assertFalse(
+            self.dialog._contour_interval_labels[
+                "comparison_annex14_ofs_approach"
+            ].isHidden()
+        )
         self.assertFalse(self.dialog.toolButtonContourOverrides.isHidden())
-        self.assertIn("Highest workload", self.dialog.label_olsModeDescription.text())
+        self.assertTrue(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
         self.assertEqual(self.dialog.label_olsInlineStatus.text(), "OLS ready.")
         self.assertTrue(self.dialog.label_olsInlineStatus.isHidden())
-        self.assertEqual(self.dialog.groupBox_controllingOls.title(), "Generated Outputs")
 
     def test_ols_warning_is_shown_once_in_the_inline_status_area(self):
         self.dialog._update_ols_workflow_ui(
@@ -197,7 +529,30 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             self.dialog.label_olsInlineStatus.text(),
             "Controlling OLS is experimental.",
         )
-        self.assertNotIn("experimental", self.dialog.label_olsModeDescription.text().lower())
+
+    def test_contour_disclosures_report_state_and_reset_is_contextual(self):
+        self.assertEqual(self.dialog.groupBox_contourIntervals.title(), "Contour intervals")
+        self.assertEqual(
+            self.dialog.toolButtonContourOverrides.text(),
+            "Surface-specific overrides · Using defaults",
+        )
+        self.assertTrue(self.dialog.toolButtonResetContourIntervals.isHidden())
+
+        self.dialog._contour_interval_spinboxes["approach"].setValue(5.0)
+
+        self.assertEqual(
+            self.dialog.toolButtonContourOverrides.text(),
+            "Surface-specific overrides · 1 override",
+        )
+        self.assertFalse(self.dialog.toolButtonResetContourIntervals.isHidden())
+
+        self.dialog._reset_contour_interval_controls()
+
+        self.assertEqual(
+            self.dialog.toolButtonContourOverrides.text(),
+            "Surface-specific overrides · Using defaults",
+        )
+        self.assertTrue(self.dialog.toolButtonResetContourIntervals.isHidden())
 
     def test_partial_controlling_capability_is_not_a_readiness_warning(self):
         with patch(
@@ -221,13 +576,13 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(status["state"], "ready")
         self.assertNotIn("partial", status["summary"].lower())
 
-    def test_legacy_comparison_payload_cannot_disable_required_controlling_output(self):
+    def test_legacy_controlling_toggle_is_ignored_and_not_resaved(self):
         self.select_mode("modernisation_comparison")
 
         self.dialog._load_output_options({"generate_controlling_ols": False})
+        payload = self.dialog._build_save_payload("TEST")
 
-        self.assertTrue(self.dialog.checkBox_generateControllingOls.isChecked())
-        self.assertFalse(self.dialog.checkBox_generateControllingOls.isEnabled())
+        self.assertNotIn("generate_controlling_ols", payload["output_options"])
 
     def test_contour_defaults_remain_visible_outside_collapsed_overrides(self):
         self.assertTrue(self.dialog.widgetContourOverrides.isHidden())
@@ -235,12 +590,57 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertFalse(self.dialog.doubleSpinBoxContourDefault.isHidden())
         self.assertIs(
             self.dialog._contour_interval_labels["approach"].parentWidget(),
-            self.dialog.widgetContourOverrides,
+            self.dialog.frameBaselineContourSettings,
         )
 
         self.dialog.toolButtonContourOverrides.setChecked(True)
 
         self.assertFalse(self.dialog.widgetContourOverrides.isHidden())
+
+    def test_ruleset_columns_keep_baseline_and_comparison_intervals_independent(self):
+        self.select_mode("modernisation_comparison")
+        baseline = self.dialog._contour_interval_spinboxes["approach"]
+        comparison = self.dialog._contour_interval_spinboxes[
+            "comparison_annex14_ofs_approach"
+        ]
+        baseline.setValue(8.0)
+        comparison.setValue(6.0)
+        options = self.dialog.get_contour_interval_options()
+        builder = object.__new__(SafeguardingBuilder)
+        builder.contour_intervals = options
+
+        builder._contour_interval_ruleset_role = "baseline"
+        self.assertEqual(builder._get_contour_interval("approach", 10.0), 8.0)
+        builder._contour_interval_ruleset_role = "comparison"
+        self.assertEqual(builder._annex14_contour_interval("approach", "OFS"), 6.0)
+
+    def test_legacy_surface_intervals_seed_comparison_column_when_loading(self):
+        self.dialog.set_contour_interval_options(
+            {
+                "default": {"primary": 50.0, "intermediate": 10.0},
+                "annex14_ofs": {"primary": 40.0, "intermediate": 7.0},
+            }
+        )
+
+        self.assertEqual(
+            self.dialog._contour_interval_spinboxes[
+                "comparison_annex14_ofs_approach"
+            ].value(),
+            7.0,
+        )
+
+    def test_legacy_annex_family_value_remains_a_generation_fallback(self):
+        builder = object.__new__(SafeguardingBuilder)
+        builder.contour_intervals = {
+            "default": {"primary": 50.0, "intermediate": 10.0},
+            "annex14_ofs": {"primary": 40.0, "intermediate": 8.0},
+            "comparison_annex14_ofs": {"primary": 35.0, "intermediate": 7.0},
+        }
+
+        builder._contour_interval_ruleset_role = "baseline"
+        self.assertEqual(builder._annex14_contour_interval("inner_approach", "OFS"), 8.0)
+        builder._contour_interval_ruleset_role = "comparison"
+        self.assertEqual(builder._annex14_contour_interval("inner_approach", "OFS"), 7.0)
 
     def test_saved_individual_contour_override_expands_section(self):
         self.dialog.set_contour_interval_options(
@@ -271,7 +671,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.assertTrue(self.dialog.is_processing_cancel_requested())
         self.assertFalse(self.dialog._processing_cancel_button.isEnabled())
-        self.assertIn("finishing the current phase", self.dialog.label_footer_status.text())
+        self.assertIn(
+            "finishing the current phase",
+            self.dialog.label_footer_status.toolTip(),
+        )
 
         self.dialog.clear_processing_status("Generation cancelled — completed layers were kept.")
 
@@ -279,9 +682,70 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertFalse(self.dialog.is_processing_cancel_requested())
         self.assertTrue(self.dialog._processing_progress_bar.isHidden())
         self.assertEqual(
-            self.dialog.label_footer_status.text(),
+            self.dialog.label_footer_status.toolTip(),
             "Generation cancelled — completed layers were kept.",
         )
+
+    def test_dynamic_status_text_is_bounded_without_resizing_the_dialog(self):
+        self.dialog.show()
+        self.app.processEvents()
+        self.dialog.resize(824, 760)
+        self.app.processEvents()
+        original_size = self.dialog.size()
+
+        self.dialog.set_processing_status(
+            "Generating a deliberately long protected-airspace status message "
+            "that must remain inside the footer allocation",
+            step=8,
+            total_steps=10,
+        )
+        self.app.processEvents()
+
+        self.assertEqual(self.dialog.size(), original_size)
+        self.assertIn(
+            "deliberately long protected-airspace status message",
+            self.dialog.label_footer_status.toolTip(),
+        )
+        self.assertEqual(
+            self.dialog.label_footer_status.sizePolicy().horizontalPolicy(),
+            QtWidgets.QSizePolicy.Policy.Ignored,
+        )
+
+    def test_footer_status_elides_and_retains_full_message_in_tooltip(self):
+        message = "A long generation message that cannot fit into a narrow footer label"
+        self.dialog.label_footer_status.setFixedWidth(120)
+
+        self.dialog._set_footer_status(message)
+
+        self.assertEqual(self.dialog.label_footer_status.toolTip(), message)
+        self.assertNotEqual(self.dialog.label_footer_status.text(), message)
+        self.assertIn("…", self.dialog.label_footer_status.text())
+
+    def test_readiness_and_ols_warning_labels_wrap_with_shrinkable_widths(self):
+        readiness = self.dialog.label_generation_readiness_detail
+        ols_warning = self.dialog.label_olsInlineStatus
+
+        self.assertTrue(readiness.wordWrap())
+        self.assertEqual(readiness.minimumWidth(), 0)
+        self.assertEqual(
+            readiness.sizePolicy().horizontalPolicy(),
+            QtWidgets.QSizePolicy.Policy.Ignored,
+        )
+        self.assertTrue(ols_warning.wordWrap())
+        self.assertEqual(ols_warning.minimumWidth(), 0)
+        self.assertEqual(
+            ols_warning.sizePolicy().horizontalPolicy(),
+            QtWidgets.QSizePolicy.Policy.Ignored,
+        )
+
+    def test_post_initial_height_update_preserves_user_size(self):
+        self.dialog.resize(930, 710)
+        expected_size = self.dialog.size()
+
+        self.dialog._update_dialog_height()
+        self.app.processEvents()
+
+        self.assertEqual(self.dialog.size(), expected_size)
 
     def test_builder_stops_at_checkpoint_after_cancel_request(self):
         builder = object.__new__(SafeguardingBuilder)

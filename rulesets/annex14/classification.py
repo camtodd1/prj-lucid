@@ -60,6 +60,8 @@ ADG_ORDER = {"I": 1, "IIA": 2, "IIB": 3, "IIC": 4, "III": 5, "IV": 6, "V": 7}
 
 def get_runway_type_abbr(runway_type: Optional[str]) -> str:
     """Return the internal runway type code used by ruleset policy tables."""
+    if runway_type in {"NI", "NPA", "PA_I", "PA_II_III"}:
+        return str(runway_type)
     return RUNWAY_TYPE_MAP.get(runway_type, "NI")
 
 

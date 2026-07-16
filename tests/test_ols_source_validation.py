@@ -87,9 +87,15 @@ class OlsSourceValidationTests(unittest.TestCase):
         self.assertEqual(documents["mos139"]["compilation_date"], "2026-05-12")
         self.assertEqual(documents["mos139"]["authorised_version"], "F2026C00403")
         self.assertEqual(documents["annex14"]["edition"], "Ninth Edition")
+        self.assertEqual(documents["annex14"]["amendment"], "Amendment 18")
+        self.assertEqual(documents["annex14"]["current_ols_applicability_end"], "2030-11-20")
         self.assertEqual(documents["annex14"]["future_chapter_applicability"], "2030-11-21")
         self.assertEqual(documents["cap168"]["edition"], "Thirteenth Edition")
         self.assertEqual(documents["cap168"]["current_ols_applicability_end"], "2030-11-20")
+        self.assertEqual(documents["easa"]["edition"], "CS-ADR-DSN Issue 7")
+        self.assertIn("Table J-1", documents["easa"]["table_j1_ref"])
+        self.assertIn("Table J-2", documents["easa"]["table_j2_ref"])
+        self.assertEqual(documents["easa"]["outer_horizontal_ref"], "GM1 ADR-DSN.H.410")
         self.assertEqual(
             [item["corrected_m"] for item in documents["cap168"]["confirmed_corrections"]],
             [60.0, 3600.0, 2500.0],
@@ -97,6 +103,8 @@ class OlsSourceValidationTests(unittest.TestCase):
         self.assertEqual(documents["cap168"]["correction_confirmation"], "user-confirmed 2026-07-13")
         self.assertEqual(len(documents["mos139"]["sha256"]), 64)
         self.assertEqual(len(documents["annex14"]["sha256"]), 64)
+        self.assertEqual(len(documents["annex14"]["full_standard_sha256"]), 64)
+        self.assertEqual(len(documents["annex14"]["amendment_state_letter_sha256"]), 64)
         self.assertEqual(len(documents["cap168"]["sha256"]), 64)
 
     def test_cited_source_parameters_match_production_constants(self):
@@ -122,7 +130,7 @@ class OlsSourceValidationTests(unittest.TestCase):
         with self.assertLogs("rulesets.cap168.ols_surfaces", level="WARNING"):
             self.assertIsNone(ols_surfaces.get_ols_params(2, "NI", "IHS"))
 
-    def test_cap168_profile_remains_gated_while_source_lookups_are_detached(self):
+    def test_cap168_profile_exposes_source_lookups_as_detached_values(self):
         from rulesets.cap168 import ols_surfaces
         from rulesets.cap168.profile import CAP168_PROFILE
 
@@ -137,8 +145,11 @@ class OlsSourceValidationTests(unittest.TestCase):
         self.assertEqual(take_off["heading_change_gt_15_final_width"], 1800.0)
         self.assertEqual(ols_surfaces.get_ihs_base_height(), 45.0)
 
-        self.assertIsNone(CAP168_PROFILE.ols_parameters(1, "PA_I", "Approach"))
-        self.assertIsNone(CAP168_PROFILE.ihs_base_height())
+        profile_approach = CAP168_PROFILE.ols_parameters(1, "PA_I", "Approach")
+        self.assertEqual(profile_approach[0]["length"], 3000.0)
+        profile_approach[0]["length"] = -1.0
+        self.assertEqual(CAP168_PROFILE.ols_parameters(1, "PA_I", "Approach")[0]["length"], 3000.0)
+        self.assertEqual(CAP168_PROFILE.ihs_base_height(), 45.0)
 
     def test_independent_mos139_elevations_and_contour_locations(self):
         case = self.manifest["analytical_cases"]["mos139_npa_code3"]
@@ -304,6 +315,64 @@ class OlsSourceValidationTests(unittest.TestCase):
             delta=self.distance_tolerance,
         )
 
+    def test_independent_easa_resolved_approach_and_horizontal_surfaces(self):
+        case = self.manifest["analytical_cases"]["easa_npa_code3"]
+        approach = case["resolved_approach"]
+        threshold_elevation_m = case["assumptions"]["threshold_elevation_m"]
+        for checkpoint in approach["elevation_checkpoints"]:
+            self.assertAlmostEqual(
+                piecewise_axis_elevation(
+                    threshold_elevation_m,
+                    checkpoint["station_m"],
+                    approach["sections"],
+                ),
+                checkpoint["expected_elevation_m"],
+                delta=self.elevation_tolerance,
+            )
+
+        contour = approach["contour_checkpoint"]
+        station_m = first_station_for_elevation(
+            threshold_elevation_m,
+            contour["elevation_m"],
+            approach["sections"],
+        )
+        self.assertAlmostEqual(
+            station_m,
+            contour["expected_station_m"],
+            delta=self.distance_tolerance,
+        )
+        self.assertAlmostEqual(
+            half_width_at_station(
+                approach["inner_edge_length_m"],
+                station_m,
+                approach["sections"],
+            ),
+            contour["expected_half_width_m"],
+            delta=self.distance_tolerance,
+        )
+
+        conical = case["inner_horizontal_and_conical"]
+        ihs_elevation_m = case["assumptions"]["inner_horizontal_elevation_m"]
+        conical_contour = conical["contour_checkpoint"]
+        self.assertAlmostEqual(
+            conical_offset_for_elevation(
+                ihs_elevation_m,
+                conical_contour["elevation_m"],
+                conical["conical_slope"],
+            ),
+            conical_contour["expected_offset_from_ihs_m"],
+            delta=self.distance_tolerance,
+        )
+
+        ohs = case["outer_horizontal_guidance"]
+        self.assertAlmostEqual(
+            case["assumptions"]["reference_elevation_datum_m"]
+            + ohs["height_above_datum_m"],
+            ohs["expected_elevation_m"],
+            delta=self.elevation_tolerance,
+        )
+        self.assertEqual(ohs["applicability"], "guidance_only")
+
     def test_independent_annex14_future_elevations_and_contours(self):
         case = self.manifest["analytical_cases"]["annex14_future"]
         for surface_name in (
@@ -355,6 +424,70 @@ class OlsSourceValidationTests(unittest.TestCase):
             horizontal["aerodrome_elevation_m"] + horizontal["height_above_aerodrome_m"],
             horizontal["expected_elevation_m"],
             delta=self.elevation_tolerance,
+        )
+
+    def test_independent_annex14_current_elevations_and_contours(self):
+        case = self.manifest["analytical_cases"]["annex14_current_ni_code3"]
+        approach = case["approach"]
+        approach_base = case["assumptions"]["approach_inner_edge_elevation_m"]
+        for checkpoint in approach["elevation_checkpoints"]:
+            self.assertAlmostEqual(
+                piecewise_axis_elevation(
+                    approach_base,
+                    checkpoint["station_m"],
+                    approach["sections"],
+                ),
+                checkpoint["expected_elevation_m"],
+                delta=self.elevation_tolerance,
+            )
+        contour = approach["contour_checkpoint"]
+        station = first_station_for_elevation(
+            approach_base,
+            contour["elevation_m"],
+            approach["sections"],
+        )
+        self.assertAlmostEqual(station, contour["expected_station_m"], delta=self.distance_tolerance)
+        self.assertAlmostEqual(
+            (approach["inner_edge_length_m"] / 2.0)
+            + station * approach["sections"][0]["divergence"],
+            contour["expected_half_width_m"],
+            delta=self.distance_tolerance,
+        )
+
+        take_off = case["take_off_climb"]
+        take_off_base = case["assumptions"]["take_off_inner_edge_elevation_m"]
+        checkpoint = take_off["contour_checkpoint"]
+        self.assertAlmostEqual(
+            first_station_for_elevation(
+                take_off_base,
+                checkpoint["elevation_m"],
+                take_off["sections"],
+            ),
+            checkpoint["expected_station_m"],
+            delta=self.distance_tolerance,
+        )
+        end = take_off["end_checkpoint"]
+        self.assertAlmostEqual(
+            piecewise_axis_elevation(take_off_base, end["station_m"], take_off["sections"]),
+            end["expected_elevation_m"],
+            delta=self.elevation_tolerance,
+        )
+
+        horizontal = case["inner_horizontal_and_conical"]
+        ihs_elevation = (
+            case["assumptions"]["reference_elevation_datum_m"]
+            + horizontal["inner_horizontal_height_above_datum_m"]
+        )
+        self.assertAlmostEqual(
+            ihs_elevation,
+            horizontal["inner_horizontal_expected_elevation_m"],
+            delta=self.elevation_tolerance,
+        )
+        conical = horizontal["contour_checkpoint"]
+        self.assertAlmostEqual(
+            (conical["elevation_m"] - ihs_elevation) / horizontal["conical_slope"],
+            conical["expected_offset_from_ihs_m"],
+            delta=self.distance_tolerance,
         )
 
     def test_independent_comparison_contours_and_controlling_identity(self):

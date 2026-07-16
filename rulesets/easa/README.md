@@ -16,8 +16,12 @@ distances, clearway, stopway, OLS surface parameters, runway markings,
 airfield ground lighting, taxiway separation, and partial parallel runway
 separation.
 
-Controlling OLS remains registered as unsupported until its EASA integration
-path is added.
+Conventional and controlling OLS are selectable as a partial profile through
+the shared ruleset-owned construction contract. EASA J-1/J-2 dimensions,
+clearway-dependent TOCS origins and widths, OFZ families, and guidance-only OHS
+provenance are resolved without MOS parameter fallbacks. Production promotion
+remains gated on the source, QGIS topology, performance, and independent-review
+suites.
 
 ## Modules
 

@@ -5,6 +5,7 @@ import os.path
 import math
 import re
 import traceback
+from pathlib import Path
 
 # import functools # Not used directly
 from typing import Dict, Optional, List, Any, Tuple
@@ -28,7 +29,6 @@ from qgis.core import (  # type: ignore
     QgsLayerTreeGroup,
     QgsLayerTreeLayer,
     QgsLayerTreeNode,
-    QgsMessageLog,
     Qgis,
     QgsCoordinateReferenceSystem,
 )
@@ -36,7 +36,13 @@ from qgis.core import (  # type: ignore
 # --- Local Imports ---
 from .core.layers import LayerMixin
 from .core import output_structure
+from .core.run_log import QgsMessageLog, RunLog, set_active_run_log
 from .core.styles import DEFAULT_STYLE_MAP
+from .core.run_history import (
+    RuntimeRunRecorder,
+    classify_runway_configuration,
+    runtime_input_fingerprint,
+)
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.annex14_geometry import Annex14GeometryMixin
 from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
@@ -50,7 +56,12 @@ from .guidelines.ols_modernisation_comparison import OlsModernisationComparisonM
 from .reports.declared_distances import annotate_declared_distance_warnings, apply_declared_distance_overrides
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 from .frameworks.registry import get_framework_profile
-from .rulesets.context import RulesetContext
+from .rulesets.context import (
+    OlsConstructionContext,
+    OlsRunwayContext,
+    OlsRunwayEndContext,
+    RulesetContext,
+)
 from .rulesets.registry import get_ruleset_profile
 
 
@@ -60,8 +71,9 @@ try:
 
     resources_rc.qInitResources
 except ImportError:
-    # Fallback message if resources haven't been compiled
-    print("Note: resources_rc.py not found or generated. Icons might be missing.")
+    # Resource registration is optional; operational logging is not available
+    # during module import and import-time console noise is deliberately avoided.
+    resources_rc = None
 # Import the dialog class
 from .safeguarding_builder_dialog import SafeguardingBuilderDialog
 
@@ -105,11 +117,13 @@ class SafeguardingBuilder(
         self.output_format_driver: Optional[str] = None
         self.output_format_extension: Optional[str] = None
         self.contour_intervals: Dict[str, float] = {}
-        self.generate_controlling_ols: bool = True
         self.protected_airspace_policy: str = "ruleset_aligned"
-        self.debug_logging: bool = False
+        self._run_log: Optional[RunLog] = None
         self.ruleset = get_ruleset_profile()
-        self.protected_airspace_ruleset = self.ruleset
+        self.baseline_ols_ruleset = self.ruleset
+        self.comparison_ols_ruleset = None
+        self.protected_airspace_ruleset = self.baseline_ols_ruleset
+        self._contour_interval_ruleset_role = "baseline"
         self.framework = get_framework_profile()
         self.ruleset_context = RulesetContext(
             design_standard=self.ruleset,
@@ -122,12 +136,10 @@ class SafeguardingBuilder(
         """Force QGIS to initialise CRS subsystems by adding and removing a dummy layer."""
         plugin_tag = PLUGIN_TAG
         crs_authid = QgsProject.instance().crs().authid()
-        # QgsMessageLog.logMessage(f"Initialising CRS: {crs_authid}", plugin_tag, Qgis.Info)
         dummy = QgsVectorLayer(f"Point?crs={crs_authid}", "crs_init_dummy", "memory")
         if dummy.isValid():
             QgsProject.instance().addMapLayer(dummy, False)
             QgsProject.instance().removeMapLayer(dummy)
-            # QgsMessageLog.logMessage("CRS initialisation dummy layer added and removed successfully.", plugin_tag, Qgis.Info)
         else:
             QgsMessageLog.logMessage(
                 "CRS initialisation dummy layer failed to create.",
@@ -144,7 +156,6 @@ class SafeguardingBuilder(
             if self.translator.load(locale_path):
                 QCoreApplication.installTranslator(self.translator)
             else:
-                # QgsMessageLog.logMessage(f"Failed to load translation file: {locale_path}", PLUGIN_TAG, level=Qgis.Warning)
                 self.translator = None
 
     def tr(self, message: str) -> str:
@@ -155,43 +166,25 @@ class SafeguardingBuilder(
         return message
 
     def _log(self, message: str, level=Qgis.Info, notify_user: bool = False):
-        """Log plugin messages with QGIS 3/4 compatible notification hints."""
-        try:
-            QgsMessageLog.logMessage(
-                message,
-                PLUGIN_TAG,
-                level=level,
-                notifyUser=notify_user,
-            )
-        except TypeError:
-            QgsMessageLog.logMessage(message, PLUGIN_TAG, level=level)
-
-    def _log_success(self, message: str, notify_user: bool = False):
-        self._log(message, Qgis.Success, notify_user)
-
-    def _log_step(self, message: str):
-        self._log(f"[step] {message}", Qgis.Info, notify_user=False)
-
-    def _log_done(self, message: str):
-        self._log_success(f"[done] {message}", notify_user=False)
+        """Compatibility entry point routed through the structured run logger."""
+        del notify_user
+        QgsMessageLog.logMessage(message, PLUGIN_TAG, level=level)
 
     def _log_skip(self, message: str):
         self._log(f"[skip] {message}", Qgis.Info, notify_user=False)
 
     def _log_warning(self, message: str, notify_user: bool = True):
-        self._log(message, Qgis.Warning, notify_user)
+        del notify_user
+        self._log(message, Qgis.Warning)
 
     def _log_critical(self, message: str, notify_user: bool = True):
-        self._log(message, Qgis.Critical, notify_user)
+        del notify_user
+        self._log(message, Qgis.Critical)
 
-    def _log_dev_debug(self, message: str, topic: Optional[str] = None):
-        if not self.debug_logging:
-            return
-        prefix = "[temporary debug]" if not topic else f"[temporary debug:{topic}]"
-        self._log(f"{prefix} {message}", Qgis.Info, notify_user=False)
-
-    def _log_debug(self, message: str):
-        self._log_dev_debug(message)
+    def _diagnostic(self, message: str, topic: Optional[str] = None):
+        run_log = getattr(self, "_run_log", None)
+        if run_log is not None:
+            run_log.diagnostic(topic or "generation", message)
 
     def _crs_is_geographic(self, crs: QgsCoordinateReferenceSystem) -> bool:
         """Return True when a CRS uses angular units and is unsuitable for metre buffers."""
@@ -207,6 +200,179 @@ class SafeguardingBuilder(
     def get_active_protected_airspace_ruleset(self):
         """Return the ruleset profile used for protected airspace/OLS generation."""
         return getattr(self, "protected_airspace_ruleset", self.get_active_ruleset())
+
+    def _build_ols_construction_context(
+        self,
+        ruleset,
+        processed_runway_data_list: List[Dict[str, Any]],
+        arp_point=None,
+    ) -> OlsConstructionContext:
+        """Normalise runway inputs independently under one selected OLS ruleset."""
+
+        context_runways: List[OlsRunwayContext] = []
+        for source_runway in processed_runway_data_list:
+            runway_data = dict(source_runway)
+            runway_data.pop("_effective_clearway_specs", None)
+            runway_data.pop("_calculated_strip_ruleset_id", None)
+            runway_data.pop("calculated_strip_dims", None)
+            thr_point = runway_data.get("thr_point")
+            rec_thr_point = runway_data.get("rec_thr_point")
+            rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
+            if not rwy_params:
+                continue
+            physical_endpoints = self._get_physical_runway_endpoints(
+                thr_point,
+                rec_thr_point,
+                self._non_negative_float(runway_data.get("thr_displaced_1"), 0.0),
+                self._non_negative_float(runway_data.get("thr_displaced_2"), 0.0),
+                rwy_params,
+            )
+            if physical_endpoints is None:
+                continue
+            physical_primary, physical_reciprocal, physical_length = physical_endpoints
+            try:
+                arc_number = int(runway_data.get("arc_num"))
+            except (TypeError, ValueError):
+                continue
+            width_m = self._non_negative_float(runway_data.get("width"), 0.0)
+            classified_primary = ruleset.classify_runway_type(runway_data.get("type1"))
+            classified_reciprocal = ruleset.classify_runway_type(runway_data.get("type2"))
+            type_rank = {"NI": 0, "NPA": 1, "PA_I": 2, "PA_II_III": 3}
+            strip_classification = classified_primary
+            if getattr(ruleset, "id", "") != "mos139_2019":
+                strip_classification = max(
+                    (classified_primary, classified_reciprocal),
+                    key=lambda value: type_rank.get(value, -1),
+                )
+            strip_parameters = ruleset.strip_parameters(
+                arc_number,
+                strip_classification,
+                width_m or None,
+            ) or {}
+            runway_data["calculated_strip_dims"] = strip_parameters
+            runway_data["_calculated_strip_ruleset_id"] = ruleset.id
+            clearway_specs = self._calculate_effective_clearway_specs(
+                runway_data,
+                physical_length,
+                ruleset=ruleset,
+            )
+            declared_distances = self._calculate_declared_distances(runway_data, ruleset=ruleset)
+            runway_data["declared_distances"] = declared_distances
+            records_by_direction = {
+                str(record.get("direction") or ""): record
+                for record in declared_distances
+            }
+            runway_name = runway_data.get(
+                "short_name",
+                f"RWY_{runway_data.get('original_index', '?')}",
+            )
+            primary_designator, reciprocal_designator = (
+                runway_name.split("/", 1)
+                if "/" in runway_name
+                else (runway_name, "Reciprocal")
+            )
+
+            def end_context(
+                direction: str,
+                designator: str,
+                threshold_point,
+                threshold_elevation_key: str,
+                runway_end_elevation_key: str,
+                approach_type_key: str,
+                classified_type: str,
+                suffix: str,
+            ) -> OlsRunwayEndContext:
+                record = records_by_direction.get(direction, {})
+                return OlsRunwayEndContext(
+                    direction=direction,
+                    designator=designator,
+                    threshold_point=threshold_point,
+                    threshold_elevation_m=runway_data.get(threshold_elevation_key),
+                    runway_end_elevation_m=runway_data.get(runway_end_elevation_key),
+                    approach_type=str(runway_data.get(approach_type_key) or ""),
+                    classified_type=classified_type,
+                    clearway_length_m=float(record.get("clearway_m") or 0.0),
+                    stopway_length_m=float(record.get("stopway_m") or 0.0),
+                    tora_m=record.get("tora_m"),
+                    toda_m=record.get("toda_m"),
+                    asda_m=record.get("asda_m"),
+                    lda_m=record.get("lda_m"),
+                    approach_track_type=str(
+                        runway_data.get(f"approach_track_type_{suffix}") or "aligned"
+                    ),
+                    approach_track_wkt=str(
+                        runway_data.get(f"approach_track_wkt_{suffix}") or ""
+                    ),
+                    takeoff_track_type=str(
+                        runway_data.get(f"takeoff_track_type_{suffix}") or "aligned"
+                    ),
+                    takeoff_track_wkt=str(
+                        runway_data.get(f"takeoff_track_wkt_{suffix}") or ""
+                    ),
+                )
+
+            ends = (
+                end_context(
+                    "primary",
+                    primary_designator,
+                    thr_point,
+                    "threshold_elev_1",
+                    "runway_end_elev_1",
+                    "type1",
+                    classified_primary,
+                    "1",
+                ),
+                end_context(
+                    "reciprocal",
+                    reciprocal_designator,
+                    rec_thr_point,
+                    "threshold_elev_2",
+                    "runway_end_elev_2",
+                    "type2",
+                    classified_reciprocal,
+                    "2",
+                ),
+            )
+            context_runways.append(
+                OlsRunwayContext(
+                    runway_id=runway_name,
+                    original_index=int(runway_data.get("original_index") or 0),
+                    arc_number=arc_number,
+                    arc_letter=str(runway_data.get("arc_let") or "").strip().upper(),
+                    width_m=width_m,
+                    physical_length_m=float(physical_length),
+                    threshold_length_m=float(rwy_params.get("length") or 0.0),
+                    primary_threshold_point=thr_point,
+                    reciprocal_threshold_point=rec_thr_point,
+                    primary_physical_end_point=physical_primary,
+                    reciprocal_physical_end_point=physical_reciprocal,
+                    strip_parameters=dict(strip_parameters),
+                    ends=ends,
+                    is_wide_runway=bool(
+                        runway_data.get("cap168_wide_runway")
+                        or strip_parameters.get("wide_non_instrument_variation")
+                    ),
+                    generation_data=runway_data,
+                )
+            )
+        return OlsConstructionContext(
+            ruleset_id=ruleset.id,
+            runways=tuple(context_runways),
+            arp_point=arp_point,
+            arp_elevation_m=getattr(self, "arp_elevation_amsl", None),
+            reference_elevation_datum_m=getattr(self, "reference_elevation_datum", None),
+        )
+
+    def _activate_ols_construction_context(self, ruleset, context: OlsConstructionContext) -> bool:
+        """Install and validate the context consumed by conventional geometry."""
+
+        errors = tuple(ruleset.ols_construction_policy().validate(context))
+        self.ols_construction_context = context
+        if errors:
+            for error in errors:
+                self._log_warning(f"[skip] {ruleset.display_name} OLS: {error}")
+            return False
+        return True
 
     def get_active_framework(self):
         """Return the active safeguarding framework profile, defaulting to NASF."""
@@ -298,7 +464,6 @@ class SafeguardingBuilder(
         if self.dlg is not None and self.dlg.isVisible():
             self.dlg.raise_()
             self.dlg.activateWindow()
-            QgsMessageLog.logMessage("Dialog already open.", PLUGIN_TAG, level=Qgis.Info)
             return
 
         self.successfully_generated_layers = []  # Reset layers list
@@ -348,15 +513,10 @@ class SafeguardingBuilder(
             self.dlg.finished.connect(self.dialog_finished)
 
         self.dlg.show()
-        QgsMessageLog.logMessage("Safeguarding Builder dialog shown.", PLUGIN_TAG, level=Qgis.Info)
 
     def dialog_finished(self, result: int):
         """Slot connected to the dialog's finished signal for cleanup."""
-        QgsMessageLog.logMessage(
-            f"Dialog finished signal received (result code: {result})",
-            PLUGIN_TAG,
-            level=Qgis.Info,
-        )  # Use Info level
+        del result
         self.dlg = None
 
     # ============================================================
@@ -474,6 +634,7 @@ class SafeguardingBuilder(
         # Apply MOS 139 rule
         if abs(arp_elevation - avg_end_elev) <= 3.0:
             reference_elevation_unrounded = arp_elevation
+            red_basis = "ARP elevation"
             # Info: Log the basis for the RED value.
             QgsMessageLog.logMessage(
                 "RED based on ARP Elevation (within 3m of average runway-end elev).",
@@ -482,6 +643,7 @@ class SafeguardingBuilder(
             )
         else:
             reference_elevation_unrounded = avg_end_elev
+            red_basis = "average runway-end elevation"
             # Info: Log the basis for the RED value.
             QgsMessageLog.logMessage(
                 "RED based on Average Runway-End Elevation (>3m difference from ARP).",
@@ -501,11 +663,103 @@ class SafeguardingBuilder(
             plugin_tag,
             level=Qgis.Success,
         )
+        if self._run_log is not None:
+            self._run_log.output(
+                "reference elevation datum",
+                value_m=f"{reference_elevation_datum:.2f}",
+                basis=red_basis,
+                samples=len(runway_end_elevations),
+            )
         return reference_elevation_datum
 
     def run_safeguarding_processing(self):
+        """Run generation and always append one GUI/headless runtime record."""
+        run_log = RunLog()
+        self._run_log = run_log
+        set_active_run_log(run_log)
+        project_crs = QgsProject.instance().crs()
+        run_log.start(
+            crs=project_crs.authid()
+            if project_crs is not None and project_crs.isValid()
+            else None
+        )
+        recorder = RuntimeRunRecorder(
+            Path(self.plugin_dir),
+            qgis_version=getattr(Qgis, "QGIS_VERSION", "unknown"),
+        )
+        self._runtime_run_recorder = recorder
+        self._processing_run_status = "aborted"
+        recorder.set_context(
+            airport=None,
+            design_ruleset=getattr(getattr(self, "ruleset", None), "id", None),
+            baseline_ruleset=getattr(getattr(self, "baseline_ols_ruleset", None), "id", None),
+            comparison_ruleset=getattr(getattr(self, "comparison_ols_ruleset", None), "id", None),
+            design_ruleset_label=getattr(getattr(self, "ruleset", None), "display_name", None),
+            baseline_ruleset_label=getattr(
+                getattr(self, "baseline_ols_ruleset", None), "display_name", None
+            ),
+            comparison_ruleset_label=getattr(
+                getattr(self, "comparison_ols_ruleset", None), "display_name", None
+            ),
+            **dict(getattr(self.dlg, "_runtime_test_context", {}) or {}),
+        )
+        recorder.start_phase("startup")
+        try:
+            return self._run_safeguarding_processing()
+        except Exception:
+            self._processing_run_status = "failed"
+            raise
+        finally:
+            layer_count, feature_count = self._runtime_generated_output_counts()
+            try:
+                if not recorder._output_counts_set:
+                    recorder.set_output_counts(layer_count, feature_count)
+                recorder.finish(self._processing_run_status)
+            except Exception as exc:
+                self._log_warning(f"Could not append runtime test record: {exc}", notify_user=False)
+            finally:
+                self._runtime_run_recorder = None
+                output = (
+                    self.output_path
+                    if self.output_mode == "file" and self.output_path
+                    else self.output_mode or "unknown"
+                )
+                run_log.finish(
+                    self._processing_run_status,
+                    airport=getattr(self, "icao_code", None),
+                    runways=getattr(self, "_processing_runway_summary", None),
+                    layers=layer_count,
+                    features=feature_count,
+                    output=output,
+                )
+                set_active_run_log(None)
+                self._run_log = None
+
+    def _runtime_generated_output_counts(self) -> Tuple[int, int]:
+        """Return valid generated layer and feature totals for partial runs."""
+        layers = []
+        seen_layer_ids = set()
+        for layer in list(getattr(self, "successfully_generated_layers", []) or []):
+            try:
+                if layer is None or not layer.isValid():
+                    continue
+                layer_id = str(layer.id())
+                if layer_id in seen_layer_ids:
+                    continue
+                seen_layer_ids.add(layer_id)
+                layers.append(layer)
+            except Exception:
+                continue
+        feature_count = 0
+        for layer in layers:
+            try:
+                feature_count += max(0, int(layer.featureCount()))
+            except Exception:
+                continue
+        return len(layers), feature_count
+
+    def _run_safeguarding_processing(self):
         plugin_tag = PLUGIN_TAG
-        self._log_step("Safeguarding generation started.")
 
         self.successfully_generated_layers = []
         self.reference_elevation_datum = None
@@ -515,9 +769,10 @@ class SafeguardingBuilder(
         self.output_format_driver = None
         self.output_format_extension = None
         self.contour_intervals = {}
-        self.generate_controlling_ols = True
         self.protected_airspace_policy = "ruleset_aligned"
-        self.debug_logging = False
+        self.baseline_ols_ruleset = self.ruleset
+        self.comparison_ols_ruleset = None
+        self._contour_interval_ruleset_role = "baseline"
         self._processing_main_group = None
         self._processing_total_steps = 10
 
@@ -564,15 +819,11 @@ class SafeguardingBuilder(
             self._clear_processing_status()
             return
 
-        self._log_step(f"Using project CRS {target_crs_authid} ({target_crs.description()}).")
+        if self._run_log is not None:
+            self._run_log.start(crs=target_crs_authid)
 
         # Force CRS subsystem to initialise properly
         self._initialise_crs()
-        # QgsMessageLog.logMessage(
-        #     f"CRS initialisation complete. Project CRS is now active: {target_crs.authid()}",
-        #     plugin_tag,
-        #     level=Qgis.Info,
-        # )
 
         specialised_safeguarding_group = None
 
@@ -582,6 +833,7 @@ class SafeguardingBuilder(
                 self.tr("Reading and validating inputs..."),
                 1,
                 self._processing_total_steps,
+                phase_key="inputs",
             ):
                 return
             input_data = self.dlg.get_all_input_data()
@@ -608,28 +860,73 @@ class SafeguardingBuilder(
         self.output_format_driver = input_data.get("output_format_driver")
         self.output_format_extension = input_data.get("output_format_extension")
         self.contour_intervals = input_data.get("contour_intervals", {})
-        self.generate_controlling_ols = bool(input_data.get("generate_controlling_ols", True))
-        self.debug_logging = bool(input_data.get("debug_logging", False))
         self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
         protected_airspace_policy = input_data.get("protected_airspace_policy", "ruleset_aligned")
         self.protected_airspace_policy = protected_airspace_policy
-        self._processing_total_steps = 10 if protected_airspace_policy == "modernisation_comparison" else 9
-        if protected_airspace_policy == "future_annex14_ofs_oes":
-            self.protected_airspace_ruleset = get_ruleset_profile("icao_annex14_vol1_modernised_ofs_oes")
-        else:
-            self.protected_airspace_ruleset = self.ruleset
+        baseline_ols_ruleset_id = input_data.get("baseline_ols_ruleset")
+        comparison_ols_ruleset_id = input_data.get("comparison_ols_ruleset")
+        if not baseline_ols_ruleset_id:
+            baseline_ols_ruleset_id = (
+                "icao_annex14_vol1_modernised_ofs_oes"
+                if protected_airspace_policy == "future_annex14_ofs_oes"
+                else self.ruleset.id
+            )
+            if protected_airspace_policy == "modernisation_comparison":
+                comparison_ols_ruleset_id = "icao_annex14_vol1_modernised_ofs_oes"
+        self.baseline_ols_ruleset = get_ruleset_profile(baseline_ols_ruleset_id)
+        self.comparison_ols_ruleset = (
+            get_ruleset_profile(comparison_ols_ruleset_id)
+            if comparison_ols_ruleset_id
+            else None
+        )
+        self.protected_airspace_ruleset = self.baseline_ols_ruleset
+        self._processing_total_steps = 10 if self.comparison_ols_ruleset is not None else 9
         self.framework = get_framework_profile(input_data.get("safeguarding_framework"))
         self.ruleset_context = RulesetContext(
             design_standard=self.ruleset,
             safeguarding_framework=self.framework,
         )
 
+        runway_input_list = input_data.get("runways", [])
+        self._processing_runway_summary = f"0/{len(runway_input_list)}"
+        runtime_test_context = dict(
+            getattr(self.dlg, "_runtime_test_context", {}) or {}
+        )
+        runtime_test_context.setdefault("test_case_id", "manual_entry")
+        runtime_test_context.setdefault("test_case_name", "Manual entry")
+        runtime_test_context.setdefault(
+            "runway_configuration",
+            classify_runway_configuration(runway_input_list),
+        )
+        runtime_runway_count = runtime_test_context.pop(
+            "runway_count", len(runway_input_list)
+        )
+        runtime_fingerprint = runtime_test_context.pop(
+            "input_fingerprint", runtime_input_fingerprint(input_data)
+        )
+
+        recorder = getattr(self, "_runtime_run_recorder", None)
+        if recorder is not None:
+            recorder.set_context(
+                airport=input_data.get("icao_code"),
+                design_ruleset=self.ruleset.id,
+                baseline_ruleset=self.baseline_ols_ruleset.id,
+                comparison_ruleset=getattr(self.comparison_ols_ruleset, "id", None),
+                design_ruleset_label=self.ruleset.display_name,
+                baseline_ruleset_label=self.baseline_ols_ruleset.display_name,
+                comparison_ruleset_label=getattr(
+                    self.comparison_ols_ruleset, "display_name", None
+                ),
+                runway_count=runtime_runway_count,
+                input_fingerprint=runtime_fingerprint,
+                **runtime_test_context,
+            )
+
         icao_code = input_data.get("icao_code", "UNKNOWN")
         arp_point = input_data.get("arp_point")
         arp_east = input_data.get("arp_easting")
         arp_north = input_data.get("arp_northing")
         met_point = input_data.get("met_point")
-        runway_input_list = input_data.get("runways", [])
         cns_input_list = input_data.get("cns_facilities", [])
         agl_options = input_data.get("agl_options", {"enabled": False})
         self.arp_elevation_amsl = input_data.get("arp_elevation")
@@ -639,16 +936,29 @@ class SafeguardingBuilder(
             if self.output_mode == "memory"
             else f"{self.output_format_driver or 'file'} -> {self.output_path or 'N/A'}"
         )
-        self._log_step(
-            f"Inputs: ICAO={icao_code}, output={output_desc}, "
-            f"ARP={'yes' if arp_point is not None else 'no'}, "
-            f"MET={'yes' if met_point is not None else 'no'}, "
-            f"AGL={'enabled' if agl_options.get('enabled') else 'disabled'}, "
-            f"CNS={len(cns_input_list)}, runways={len(runway_input_list)}, "
-            f"design_standard={self.ruleset.id}, "
-            f"protected_airspace={self.protected_airspace_ruleset.id}, "
-            f"safeguarding_framework={self.framework.id}."
-        )
+        if self._run_log is not None:
+            self._run_log.update_context(
+                airport=icao_code,
+                ruleset=self.ruleset.id,
+                baseline=self.baseline_ols_ruleset.id,
+                comparison=getattr(self.comparison_ols_ruleset, "id", "none"),
+                framework=self.framework.id,
+                output=output_desc,
+            )
+            self._run_log.output(
+                "inputs",
+                airport=icao_code,
+                runways=len(runway_input_list),
+                arp="yes" if arp_point is not None else "no",
+                met="yes" if met_point is not None else "no",
+                agl="enabled" if agl_options.get("enabled") else "disabled",
+                cns=len(cns_input_list),
+                ruleset=self.ruleset.id,
+                baseline=self.baseline_ols_ruleset.id,
+                comparison=getattr(self.comparison_ols_ruleset, "id", "none"),
+                framework=self.framework.id,
+                output=output_desc,
+            )
 
         if not runway_input_list:
             self._log_warning("Processing aborted: no valid runway data found.")
@@ -666,6 +976,7 @@ class SafeguardingBuilder(
                 self.tr("Preparing output groups and reference layers..."),
                 2,
                 self._processing_total_steps,
+                phase_key="output_setup",
             ):
                 return
 
@@ -758,6 +1069,7 @@ class SafeguardingBuilder(
                 self.tr("Generating runway reference geometry..."),
                 3,
                 self._processing_total_steps,
+                phase_key="runway_reference_geometry",
             ):
                 return
             processed_runway_data_list, any_runway_base_data_ok = self._process_runways_part1(
@@ -780,6 +1092,7 @@ class SafeguardingBuilder(
                 self.tr("Generating physical and protection surfaces..."),
                 4,
                 self._processing_total_steps,
+                phase_key="physical_and_protection",
             ):
                 return
             (
@@ -803,6 +1116,7 @@ class SafeguardingBuilder(
                 self.tr("Generating supporting safeguarding layers..."),
                 5,
                 self._processing_total_steps,
+                phase_key="supporting_safeguarding",
             ):
                 return
             if agl_options.get("enabled"):
@@ -826,6 +1140,7 @@ class SafeguardingBuilder(
                 self.tr(self.get_active_framework().generation_status_message()),
                 5,
                 self._processing_total_steps,
+                phase_key="supporting_safeguarding",
             ):
                 return
             guideline_groups = self._create_guideline_groups(external_safeguarding_group, bool(cns_input_list))
@@ -834,7 +1149,7 @@ class SafeguardingBuilder(
 
             airport_wide_ols_group = None
             runway_ols_group = None
-            ofz_group = None
+            ofz_group = output_groups.get("obstacle_free_zone")
             if guideline_groups.get("F") is not None:
                 runway_ols_group = guideline_groups["F"]
                 airport_wide_ols_group = output_groups.get("airport_wide_ols")
@@ -842,10 +1157,31 @@ class SafeguardingBuilder(
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl, runway_input_list
             )
+            self._ols_source_runways = processed_runway_data_list
+            self._ols_arp_point = arp_point
+            baseline_ols_context = self._build_ols_construction_context(
+                self.baseline_ols_ruleset,
+                processed_runway_data_list,
+                arp_point=arp_point,
+            )
+            self._ols_construction_contexts = {
+                self.baseline_ols_ruleset.id: baseline_ols_context,
+            }
+            baseline_ols_context_ready = self._activate_ols_construction_context(
+                self.baseline_ols_ruleset,
+                baseline_ols_context,
+            )
+            baseline_airport_spec = self.baseline_ols_ruleset.ols_construction_policy().airport_wide_spec(
+                self.baseline_ols_ruleset,
+                baseline_ols_context,
+            )
+            baseline_ols_requires_red = (
+                baseline_airport_spec.get("datum_name") == "reference_elevation_datum"
+            )
             pa_runways_exist = any(
                 "PA" in rwy.get("type1", "") or "PA" in rwy.get("type2", "") for rwy in runway_input_list if rwy
             )
-            if self.reference_elevation_datum is None and pa_runways_exist:
+            if self.reference_elevation_datum is None and pa_runways_exist and baseline_ols_requires_red:
                 QgsMessageLog.logMessage(
                     "Aborting OLS generation: RED calculation failed and precision approach runways exist.",
                     plugin_tag,
@@ -874,6 +1210,7 @@ class SafeguardingBuilder(
                 self.tr("Generating runway OLS surfaces..."),
                 6,
                 self._processing_total_steps,
+                phase_key="runway_ols",
             ):
                 return
             any_guideline_processed_ok = self._process_runways_part2(
@@ -883,12 +1220,21 @@ class SafeguardingBuilder(
                 ofz_group,
                 runway_ols_group,
                 airport_wide_ols_group,
+                ols_runway_data_list=(
+                    processed_runway_data_list
+                    if getattr(self.baseline_ols_ruleset, "protected_airspace_model", "")
+                    == "annex14_modernised_ofs_oes"
+                    else baseline_ols_context.generation_runways()
+                    if baseline_ols_context_ready
+                    else []
+                ),
             )
 
             if not self._processing_checkpoint(
                 self.tr("Generating airport-wide OLS surfaces..."),
                 7,
                 self._processing_total_steps,
+                phase_key="airport_wide_ols",
             ):
                 return
             any_guideline_processed_ok = self._process_airport_wide_ols_if_possible(
@@ -903,9 +1249,10 @@ class SafeguardingBuilder(
                 self.tr("Solving controlling protected-airspace envelopes..."),
                 8,
                 self._processing_total_steps,
+                phase_key="controlling_envelope",
             ):
                 return
-            if guideline_groups.get("F") is not None and self.generate_controlling_ols:
+            if guideline_groups.get("F") is not None:
                 if self._is_future_annex14_protected_airspace():
                     self._set_processing_status(
                         self.tr("Solving controlling Annex 14 OFS/OES surfaces..."),
@@ -936,32 +1283,32 @@ class SafeguardingBuilder(
                     self._finish_processing_cancelled()
                     return
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
-                if self._is_modernisation_comparison() and not self._is_future_annex14_protected_airspace():
+                if getattr(self, "comparison_ols_ruleset", None) is not None:
                     if not self._processing_checkpoint(
-                        self.tr("Comparing baseline OLS with future Annex 14..."),
+                        self.tr("Generating and comparing the selected OLS ruleset..."),
                         9,
                         self._processing_total_steps,
+                        phase_key="ruleset_comparison",
                     ):
                         return
-                    comparison_ok = self._run_modernisation_comparison(
+                    comparison_ok = self._run_ols_ruleset_comparison(
                         icao_code,
                         processed_runway_data_list,
                         output_groups,
                         debug_group,
-                        solved_baseline_engine=solved_ols_engines.get("baseline"),
+                        solved_baseline_engines=solved_ols_engines,
                     )
                     if self._processing_cancel_requested():
                         self._finish_processing_cancelled()
                         return
                     any_guideline_processed_ok = any_guideline_processed_ok or comparison_ok
-            elif guideline_groups.get("F") is not None:
-                self._log_skip("Controlling OLS: output option disabled.")
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
             if not self._processing_checkpoint(
                 self.tr("Finalising generated layers and report..."),
                 self._processing_total_steps,
                 self._processing_total_steps,
+                phase_key="finalisation",
             ):
                 return
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
@@ -972,25 +1319,13 @@ class SafeguardingBuilder(
                 main_group,
                 root,
                 icao_code,
-                arp_layer_created,
-                met_layers_created_ok,
-                any_runway_base_data_ok,
-                wildlife_processed,
-                wind_turbine_processed,
-                cns_processed,
-                any_guideline_processed_ok,
                 len(processed_runway_data_list),
                 len(runway_input_list),
-                any_physical_or_protection_ok,
-                arp_point is not None,
-                met_point is not None,
-                bool(agl_options.get("enabled")),
-                len(cns_input_list),
-                self.reference_elevation_datum is not None,
-                pa_runways_exist,
             )
 
-            self._log_done("Safeguarding generation finished.")
+            self._processing_run_status = (
+                "completed" if self.successfully_generated_layers else "failed"
+            )
 
             if self.successfully_generated_layers:
                 if self.dlg:
@@ -1020,17 +1355,30 @@ class SafeguardingBuilder(
         message: str,
         step: int,
         total_steps: int,
+        phase_key: Optional[str] = None,
     ) -> bool:
         """Enter a phase unless cancellation was requested during the previous phase."""
         QCoreApplication.processEvents()
         if self._processing_cancel_requested():
             self._finish_processing_cancelled()
             return False
+        recorder = getattr(self, "_runtime_run_recorder", None)
+        if recorder is not None and phase_key:
+            recorder.start_phase(phase_key)
+        run_log = getattr(self, "_run_log", None)
+        if run_log is not None and phase_key and run_log.started:
+            run_log.phase(
+                step,
+                total_steps,
+                phase_key,
+                message.rstrip(". …"),
+            )
         self._set_processing_status(message, step=step, total_steps=total_steps)
         return True
 
     def _finish_processing_cancelled(self) -> None:
         """Keep completed layers and make a partial run safe to inspect or restart."""
+        self._processing_run_status = "cancelled"
         main_group = getattr(self, "_processing_main_group", None)
         if main_group is not None:
             try:
@@ -1038,7 +1386,10 @@ class SafeguardingBuilder(
                 self._remove_empty_generated_groups(main_group)
             except Exception as exc:
                 self._log_warning(f"Cancellation cleanup warning: {exc}")
-        self._log_warning("Safeguarding generation cancelled at a safe phase boundary; completed layers were kept.")
+        if self._run_log is not None:
+            self._run_log.update_context(
+                reason="cancelled at a safe phase boundary; completed layers were kept"
+            )
         if self.iface is not None:
             self.iface.messageBar().pushMessage(
                 self.tr("Cancelled"),
@@ -1082,7 +1433,10 @@ class SafeguardingBuilder(
         wind_turbine_processed = False
         cns_processed = False
         if arp_point is not None and guideline_groups.get("C") is not None:
-            self._log_step(f"Wildlife safeguarding: generating from ARP ({arp_point.x():.3f}, {arp_point.y():.3f}).")
+            self._diagnostic(
+                f"Wildlife safeguarding: generating from ARP "
+                f"({arp_point.x():.3f}, {arp_point.y():.3f})."
+            )
             wildlife_processed = self.process_wildlife_safeguarding(
                 arp_point,
                 icao_code,
@@ -1138,13 +1492,32 @@ class SafeguardingBuilder(
         ):
             self._log_skip("Airport-wide current OLS: protected airspace policy is future Annex 14 OFS/OES.")
             return False
-        if guideline_groups.get("F") is not None and processed_runway_data_list:
-            if self.reference_elevation_datum is not None:
+        active_context = getattr(self, "ols_construction_context", None)
+        active_policy = self.get_active_protected_airspace_ruleset().ols_construction_policy()
+        airport_spec = (
+            active_policy.airport_wide_spec(
+                self.get_active_protected_airspace_ruleset(),
+                active_context,
+            )
+            if active_context is not None
+            else {}
+        )
+        airport_wide_datum = airport_spec.get(
+            "datum_elevation_m",
+            self.reference_elevation_datum,
+        )
+        context_runways = (
+            active_context.generation_runways()
+            if active_context is not None
+            else processed_runway_data_list
+        )
+        if guideline_groups.get("F") is not None and context_runways:
+            if airport_spec.get("ihs_elevation_amsl") is not None:
                 try:
                     airport_wide_ols_processed = self._generate_airport_wide_ols(
-                        processed_runway_data_list,
+                        context_runways,
                         airport_wide_ols_group or guideline_groups["F"],
-                        self.reference_elevation_datum,
+                        float(airport_wide_datum or 0.0),
                         icao_code,
                         guideline_groups["F"],
                     )
@@ -1271,7 +1644,6 @@ class SafeguardingBuilder(
                 # if centreline_layer and centreline_layer.isValid() and project.mapLayer(centreline_layer.id()): project.removeMapLayer(centreline_layer.id())
                 continue  # Process next runway
 
-            # QgsMessageLog.logMessage(f"Finished processing centrelines. {len(processed_runway_data_list)}/{len(runway_input_list)} successful.", plugin_tag, level=Qgis.Info)
         return processed_runway_data_list, any_runway_base_data_ok
 
     def _write_runway_summary_report(
@@ -1295,13 +1667,17 @@ class SafeguardingBuilder(
             markdown = render_markdown_report(icao_code, None, summaries)
             with open(report_path, "w", encoding="utf-8") as report_file:
                 report_file.write(markdown)
-            self._log_success(f"Runway summary report written to '{report_path}'.")
+            self._diagnostic(f"Runway summary report written to '{report_path}'.")
             return report_path
         except Exception as e:
             self._log_warning(f"Runway summary report failed: {e}\n{traceback.format_exc()}")
             return None
 
-    def _calculate_declared_distances(self, runway_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _calculate_declared_distances(
+        self,
+        runway_data: Dict[str, Any],
+        ruleset=None,
+    ) -> List[Dict[str, Any]]:
         """Calculate baseline declared distances for both runway directions."""
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         thr_point = runway_data.get("thr_point")
@@ -1332,7 +1708,11 @@ class SafeguardingBuilder(
             primary_desig = runway_name
             reciprocal_desig = "Reciprocal"
 
-        clearway_specs = self._calculate_effective_clearway_specs(runway_data, physical_length)
+        clearway_specs = self._calculate_effective_clearway_specs(
+            runway_data,
+            physical_length,
+            ruleset=ruleset,
+        )
         clearway_primary_end = clearway_specs["primary"]["length_m"]
         clearway_reciprocal_end = clearway_specs["reciprocal"]["length_m"]
         clearway_primary_input = self._non_negative_float(runway_data.get("clearway1_len"), 0.0)
@@ -1392,7 +1772,7 @@ class SafeguardingBuilder(
                 "lda_m": reciprocal_lda,
             },
         ]
-        records = self._apply_declared_distance_policy(records)
+        records = self._apply_declared_distance_policy(records, ruleset=ruleset)
         records = apply_declared_distance_overrides(runway_data, records)
         warnings = annotate_declared_distance_warnings(runway_data, records)
         if warnings:
@@ -1402,8 +1782,13 @@ class SafeguardingBuilder(
                 QgsMessageLog.logMessage(warning, PLUGIN_TAG, level=Qgis.Warning)
         return records
 
-    def _apply_declared_distance_policy(self, records: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        declared_distance_parameters = getattr(self.get_active_ruleset(), "declared_distance_parameters", None)
+    def _apply_declared_distance_policy(
+        self,
+        records: List[Dict[str, Any]],
+        ruleset=None,
+    ) -> List[Dict[str, Any]]:
+        active_ruleset = ruleset or self.get_active_ruleset()
+        declared_distance_parameters = getattr(active_ruleset, "declared_distance_parameters", None)
         if not callable(declared_distance_parameters):
             return records
 
@@ -1423,10 +1808,11 @@ class SafeguardingBuilder(
         self,
         runway_data: Dict[str, Any],
         physical_length: Optional[float] = None,
+        ruleset=None,
     ) -> Dict[str, Dict[str, Any]]:
-        """Return active-ruleset clearway length and width specs for each runway end."""
+        """Return clearway specs under the explicitly selected ruleset."""
         cached_specs = runway_data.get("_effective_clearway_specs")
-        ruleset = self.get_active_ruleset()
+        ruleset = ruleset or self.get_active_ruleset()
         ruleset_id = getattr(ruleset, "id", None)
         if (
             isinstance(cached_specs, dict)
@@ -1451,17 +1837,22 @@ class SafeguardingBuilder(
             "PA_II_III",
         }
 
-        strip_dims = runway_data.get("calculated_strip_dims")
+        strip_dims = (
+            runway_data.get("calculated_strip_dims")
+            if runway_data.get("_calculated_strip_ruleset_id") in {None, ruleset_id}
+            else None
+        )
         if not strip_dims:
             strip_dims = ruleset.strip_parameters(arc_num, type1_abbr, runway_width or None)
             runway_data["calculated_strip_dims"] = strip_dims
+            runway_data["_calculated_strip_ruleset_id"] = ruleset_id
 
         strip_extension = self._non_negative_float((strip_dims or {}).get("extension_length"), 0.0)
         strip_overall_width = self._non_negative_float((strip_dims or {}).get("overall_width"), 0.0)
 
         clearway_parameters = getattr(ruleset, "clearway_parameters", None)
         if callable(clearway_parameters):
-            specs = clearway_parameters(
+            profile_specs = clearway_parameters(
                 runway_width=runway_width or None,
                 strip_extension=strip_extension,
                 strip_overall_width=strip_overall_width,
@@ -1473,6 +1864,15 @@ class SafeguardingBuilder(
                 is_instrument_runway=is_instrument_runway,
                 arc_num=arc_num,
             )
+        else:
+            profile_specs = None
+
+        if (
+            isinstance(profile_specs, dict)
+            and isinstance(profile_specs.get("primary"), dict)
+            and isinstance(profile_specs.get("reciprocal"), dict)
+        ):
+            specs = profile_specs
             specs["ruleset_id"] = ruleset_id
             for end_key in ("primary", "reciprocal"):
                 end_spec = specs.get(end_key, {})
@@ -1579,6 +1979,12 @@ class SafeguardingBuilder(
         self._stage_layer_tree_node(group)
         return group
 
+    def _baseline_ols_group_name(self) -> str:
+        """Return the layer-tree label for the selected baseline ruleset."""
+        profile = getattr(self, "baseline_ols_ruleset", None)
+        display_name = getattr(profile, "display_name", None) or self.tr("Selected ruleset")
+        return self.tr(f"Baseline OLS — {display_name}")
+
     def _find_direct_child_group(
         self,
         parent_group: QgsLayerTreeGroup,
@@ -1634,35 +2040,90 @@ class SafeguardingBuilder(
             )
         protected_airspace_group = groups["protected_airspace"]
         if protected_airspace_group is not None:
+            baseline_surface_group = self._ensure_layer_group(
+                protected_airspace_group,
+                self._baseline_ols_group_name(),
+            )
+            groups["baseline_ols"] = baseline_surface_group
             if self._is_future_annex14_protected_airspace():
-                groups["ols_surfaces"] = self._ensure_layer_group(protected_airspace_group, "OFS")
-                groups["airport_wide_ols"] = self._ensure_layer_group(protected_airspace_group, "OES")
+                groups["ols_surfaces"] = self._ensure_layer_group(baseline_surface_group, "OFS")
+                groups["airport_wide_ols"] = self._ensure_layer_group(baseline_surface_group, "OES")
             else:
+                groups["obstacle_free_zone"] = self._ensure_layer_group(
+                    baseline_surface_group, output_structure.OBSTACLE_FREE_ZONE
+                )
                 groups["ols_surfaces"] = self._ensure_layer_group(
-                    protected_airspace_group, output_structure.PRIMARY_SURFACES
+                    baseline_surface_group, output_structure.PRIMARY_SURFACES
                 )
                 groups["airport_wide_ols"] = self._ensure_layer_group(
-                    protected_airspace_group, output_structure.SECONDARY_SURFACES
+                    baseline_surface_group, output_structure.SECONDARY_SURFACES
                 )
                 groups["controlling_surfaces"] = self._ensure_layer_group(
-                    protected_airspace_group, output_structure.CONTROLLING_SURFACES
+                    baseline_surface_group, output_structure.CONTROLLING_SURFACES
                 )
                 groups["controlling_ols_surfaces"] = groups["controlling_surfaces"]
                 groups["controlling_contours"] = groups["controlling_surfaces"]
-                if self._is_modernisation_comparison():
-                    future_group = self._ensure_layer_group(
-                        protected_airspace_group, "Future Annex 14 OFS/OES"
+            comparison_ruleset = getattr(self, "comparison_ols_ruleset", None)
+            if comparison_ruleset is not None:
+                comparison_surface_group = self._ensure_layer_group(
+                    protected_airspace_group,
+                    f"Comparison OLS — {comparison_ruleset.display_name}",
+                )
+                comparison_is_annex14 = (
+                    getattr(comparison_ruleset, "protected_airspace_model", "")
+                    == "annex14_modernised_ofs_oes"
+                )
+                if comparison_is_annex14:
+                    groups["comparison_ols_surfaces"] = self._ensure_layer_group(
+                        comparison_surface_group,
+                        "OFS",
                     )
-                    groups["future_annex14_ofs"] = self._ensure_layer_group(future_group, "OFS")
-                    groups["future_annex14_oes"] = self._ensure_layer_group(future_group, "OES")
-                    comparison_group = self._ensure_layer_group(
-                        protected_airspace_group, "OLS Modernisation Comparison"
+                    groups["comparison_airport_wide_ols"] = self._ensure_layer_group(
+                        comparison_surface_group,
+                        "OES",
                     )
-                    groups["comparison_ofs"] = self._ensure_layer_group(
-                        comparison_group, "OFS — Protected Airspace Change"
+                    groups["comparison_controlling_surfaces"] = comparison_surface_group
+                    # Compatibility aliases for the established MOS-to-Annex workflow.
+                    groups["future_annex14_ofs"] = groups["comparison_ols_surfaces"]
+                    groups["future_annex14_oes"] = groups["comparison_airport_wide_ols"]
+                else:
+                    groups["comparison_obstacle_free_zone"] = self._ensure_layer_group(
+                        comparison_surface_group,
+                        output_structure.OBSTACLE_FREE_ZONE,
                     )
-                    groups["comparison_oes"] = self._ensure_layer_group(
-                        comparison_group, "OES — Assessment Trigger Change"
+                    groups["comparison_ols_surfaces"] = self._ensure_layer_group(
+                        comparison_surface_group,
+                        output_structure.PRIMARY_SURFACES,
+                    )
+                    groups["comparison_airport_wide_ols"] = self._ensure_layer_group(
+                        comparison_surface_group,
+                        output_structure.SECONDARY_SURFACES,
+                    )
+                    groups["comparison_controlling_surfaces"] = self._ensure_layer_group(
+                        comparison_surface_group,
+                        output_structure.CONTROLLING_SURFACES,
+                    )
+
+                result_group = self._ensure_layer_group(
+                    protected_airspace_group,
+                    "OLS Ruleset Comparison",
+                )
+                baseline_is_annex14 = self._is_future_annex14_protected_airspace()
+                if baseline_is_annex14 or comparison_is_annex14:
+                    groups["comparison_result_ofs"] = self._ensure_layer_group(
+                        result_group,
+                        "OFS — Protected Airspace Change",
+                    )
+                    groups["comparison_result_oes"] = self._ensure_layer_group(
+                        result_group,
+                        "OES — Assessment Trigger Change",
+                    )
+                    groups["comparison_ofs"] = groups["comparison_result_ofs"]
+                    groups["comparison_oes"] = groups["comparison_result_oes"]
+                else:
+                    groups["comparison_result_ols"] = self._ensure_layer_group(
+                        result_group,
+                        "OLS — Protected Airspace Change",
                     )
         return groups
 
@@ -1673,7 +2134,182 @@ class SafeguardingBuilder(
         )
 
     def _is_modernisation_comparison(self) -> bool:
-        return getattr(self, "protected_airspace_policy", "ruleset_aligned") == "modernisation_comparison"
+        comparison_ruleset = getattr(self, "comparison_ols_ruleset", None)
+        return (
+            comparison_ruleset is not None
+            and getattr(comparison_ruleset, "protected_airspace_model", "")
+            == "annex14_modernised_ofs_oes"
+            and not self._is_future_annex14_protected_airspace()
+        )
+
+    def _run_ols_ruleset_comparison(
+        self,
+        icao_code: str,
+        processed_runway_data_list: List[dict],
+        output_groups: Dict[str, Optional[QgsLayerTreeGroup]],
+        debug_group: QgsLayerTreeGroup,
+        solved_baseline_engines: Optional[Dict[str, Any]] = None,
+    ) -> bool:
+        """Generate the selected comparison ruleset and compare solved envelopes."""
+        comparison_ruleset = getattr(self, "comparison_ols_ruleset", None)
+        if comparison_ruleset is None:
+            return False
+        if self._is_modernisation_comparison():
+            return self._run_modernisation_comparison(
+                icao_code,
+                processed_runway_data_list,
+                output_groups,
+                debug_group,
+                solved_baseline_engine=(solved_baseline_engines or {}).get("baseline"),
+            )
+
+        baseline_candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+        baseline_exclusions = list(
+            getattr(self, "_controlling_ols_exclusion_geometries", []) or []
+        )
+        comparison_primary_group = output_groups.get("comparison_ols_surfaces")
+        comparison_secondary_group = output_groups.get("comparison_airport_wide_ols")
+        comparison_ofz_group = output_groups.get("comparison_obstacle_free_zone")
+        comparison_controlling_group = output_groups.get("comparison_controlling_surfaces")
+        if comparison_primary_group is None or comparison_secondary_group is None:
+            self._log_warning("[skip] OLS ruleset comparison: comparison output groups are unavailable.")
+            return False
+        if not baseline_candidates:
+            self._log_warning("[skip] OLS ruleset comparison: baseline envelope is empty.")
+            return False
+
+        original_protected_ruleset = self.protected_airspace_ruleset
+        original_ols_context = getattr(self, "ols_construction_context", None)
+        original_contour_role = getattr(
+            self, "_contour_interval_ruleset_role", "baseline"
+        )
+        try:
+            self.protected_airspace_ruleset = comparison_ruleset
+            self._contour_interval_ruleset_role = "comparison"
+            comparison_context = self._build_ols_construction_context(
+                comparison_ruleset,
+                processed_runway_data_list,
+                arp_point=getattr(self, "_ols_arp_point", None),
+            )
+            self._ols_construction_contexts[comparison_ruleset.id] = comparison_context
+            if not self._activate_ols_construction_context(
+                comparison_ruleset,
+                comparison_context,
+            ):
+                return False
+            comparison_runways = (
+                processed_runway_data_list
+                if getattr(comparison_ruleset, "protected_airspace_model", "")
+                == "annex14_modernised_ofs_oes"
+                else comparison_context.generation_runways()
+            )
+            self._reset_controlling_ols_engine()
+            comparison_is_annex14 = self._is_future_annex14_protected_airspace()
+            geometry_created = False
+            runway_total = len(comparison_runways)
+            for runway_index, runway_data in enumerate(comparison_runways, start=1):
+                self._set_processing_status(
+                    self.tr(
+                        f"Comparison OLS: creating {comparison_ruleset.display_name} candidates "
+                        f"({runway_index}/{runway_total})..."
+                    )
+                )
+                if self._processing_cancel_requested():
+                    return geometry_created
+                if comparison_is_annex14:
+                    created = self.process_annex14_geometry(
+                        runway_data,
+                        comparison_primary_group,
+                        comparison_secondary_group,
+                    )
+                else:
+                    created = self.process_runway_ols_surfaces(
+                        runway_data,
+                        comparison_primary_group,
+                        comparison_ofz_group,
+                    )
+                geometry_created = created or geometry_created
+
+            if (
+                not comparison_is_annex14
+                and comparison_context is not None
+            ):
+                comparison_spec = comparison_ruleset.ols_construction_policy().airport_wide_spec(
+                    comparison_ruleset,
+                    comparison_context,
+                )
+                geometry_created = self._generate_airport_wide_ols(
+                    comparison_runways,
+                    comparison_secondary_group,
+                    float(comparison_spec.get("datum_elevation_m") or 0.0),
+                    icao_code,
+                    comparison_primary_group,
+                ) or geometry_created
+
+            comparison_candidates = list(
+                getattr(self, "_controlling_ols_candidates", []) or []
+            )
+            comparison_exclusions = list(
+                getattr(self, "_controlling_ols_exclusion_geometries", []) or []
+            )
+            if not geometry_created or not comparison_candidates:
+                self._log_warning(
+                    "[skip] OLS ruleset comparison: the comparison ruleset produced no candidates."
+                )
+                return False
+
+            solved_comparison_engines: Dict[str, Any] = {}
+            if comparison_is_annex14:
+                controlling_created = self._create_annex14_controlling_surface_layers(
+                    icao_code,
+                    comparison_primary_group,
+                    comparison_secondary_group,
+                    debug_group,
+                    solved_engines=solved_comparison_engines,
+                )
+            else:
+                controlling_created = self._create_controlling_ols_layers(
+                    icao_code,
+                    debug_group,
+                    comparison_controlling_group,
+                    comparison_controlling_group,
+                    solved_engines=solved_comparison_engines,
+                )
+            if self._processing_cancel_requested():
+                return controlling_created
+
+            comparison_groups = {
+                "OFS": output_groups.get("comparison_result_ofs"),
+                "OES": output_groups.get("comparison_result_oes"),
+                "OLS": output_groups.get("comparison_result_ols"),
+            }
+            comparison_created = self._create_ols_ruleset_comparison_layers(
+                icao_code=icao_code,
+                baseline_ruleset_id=self.baseline_ols_ruleset.id,
+                comparison_ruleset_id=comparison_ruleset.id,
+                baseline_model=getattr(
+                    self.baseline_ols_ruleset,
+                    "protected_airspace_model",
+                    "ols_current",
+                ),
+                comparison_model=getattr(
+                    comparison_ruleset,
+                    "protected_airspace_model",
+                    "ols_current",
+                ),
+                baseline_candidates=baseline_candidates,
+                baseline_exclusions=baseline_exclusions,
+                comparison_candidates=comparison_candidates,
+                comparison_exclusions=comparison_exclusions,
+                output_groups=comparison_groups,
+                solved_baseline_engines=solved_baseline_engines,
+                solved_comparison_engines=solved_comparison_engines,
+            )
+            return controlling_created or comparison_created
+        finally:
+            self.protected_airspace_ruleset = original_protected_ruleset
+            self.ols_construction_context = original_ols_context
+            self._contour_interval_ruleset_role = original_contour_role
 
     def _run_modernisation_comparison(
         self,
@@ -1701,10 +2337,16 @@ class SafeguardingBuilder(
             return False
 
         original_protected_ruleset = self.protected_airspace_ruleset
+        original_contour_role = getattr(
+            self, "_contour_interval_ruleset_role", "baseline"
+        )
         try:
-            self.protected_airspace_ruleset = get_ruleset_profile(
-                "icao_annex14_vol1_modernised_ofs_oes"
-            )
+            self.protected_airspace_ruleset = getattr(
+                self,
+                "comparison_ols_ruleset",
+                None,
+            ) or get_ruleset_profile("icao_annex14_vol1_modernised_ofs_oes")
+            self._contour_interval_ruleset_role = "comparison"
             self._reset_controlling_ols_engine()
             future_geometry_created = False
             runway_total = len(processed_runway_data_list)
@@ -1740,7 +2382,7 @@ class SafeguardingBuilder(
                 return future_controlling_created
             comparison_created = self._create_ols_modernisation_comparison_layers(
                 icao_code,
-                self.ruleset.id,
+                self.baseline_ols_ruleset.id,
                 baseline_candidates,
                 baseline_exclusions,
                 future_candidates,
@@ -1748,10 +2390,12 @@ class SafeguardingBuilder(
                 comparison_oes_group,
                 solved_baseline_engine=solved_baseline_engine,
                 solved_future_engines=solved_future_engines,
+                comparison_ruleset_id=self.comparison_ols_ruleset.id,
             )
             return future_controlling_created or comparison_created
         finally:
             self.protected_airspace_ruleset = original_protected_ruleset
+            self._contour_interval_ruleset_role = original_contour_role
 
     def _move_layer_tree_node(
         self,
@@ -1842,22 +2486,31 @@ class SafeguardingBuilder(
         infrastructure_group = self._ensure_layer_group(main_group, output_structure.AERODROME_INFRASTRUCTURE)
         protection_group = self._ensure_layer_group(main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION)
         protected_airspace_group = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
+        baseline_surface_group = self._ensure_layer_group(
+            protected_airspace_group,
+            self._baseline_ols_group_name(),
+        )
         if self._is_future_annex14_protected_airspace():
-            primary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OFS")
-            secondary_surfaces_group = self._ensure_layer_group(protected_airspace_group, "OES")
-            controlling_surfaces_group = protected_airspace_group
+            obstacle_free_zone_group = None
+            primary_surfaces_group = self._ensure_layer_group(baseline_surface_group, "OFS")
+            secondary_surfaces_group = self._ensure_layer_group(baseline_surface_group, "OES")
+            controlling_surfaces_group = baseline_surface_group
         else:
+            obstacle_free_zone_group = self._ensure_layer_group(
+                baseline_surface_group,
+                output_structure.OBSTACLE_FREE_ZONE,
+            )
             primary_surfaces_group = (
-                self._ensure_layer_group(protected_airspace_group, output_structure.PRIMARY_SURFACES)
-                if protected_airspace_group is not None
+                self._ensure_layer_group(baseline_surface_group, output_structure.PRIMARY_SURFACES)
+                if baseline_surface_group is not None
                 else None
             )
             secondary_surfaces_group = self._ensure_layer_group(
-                protected_airspace_group,
+                baseline_surface_group,
                 output_structure.SECONDARY_SURFACES,
             )
             controlling_surfaces_group = self._ensure_layer_group(
-                protected_airspace_group,
+                baseline_surface_group,
                 output_structure.CONTROLLING_SURFACES,
             )
         framework = self.get_active_framework()
@@ -1868,6 +2521,11 @@ class SafeguardingBuilder(
             or infrastructure_group is None
             or protection_group is None
             or protected_airspace_group is None
+            or baseline_surface_group is None
+            or (
+                not self._is_future_annex14_protected_airspace()
+                and obstacle_free_zone_group is None
+            )
             or primary_surfaces_group is None
             or secondary_surfaces_group is None
             or controlling_surfaces_group is None
@@ -1875,6 +2533,21 @@ class SafeguardingBuilder(
             or debug_group is None
         ):
             return
+
+        baseline_child_names = (
+            output_structure.OBSTACLE_FREE_ZONE,
+            output_structure.PRIMARY_SURFACES,
+            output_structure.SECONDARY_SURFACES,
+            output_structure.CONTROLLING_SURFACES,
+            "OFS",
+            "OES",
+        )
+        for child_name in baseline_child_names:
+            self._merge_or_move_direct_group(
+                protected_airspace_group,
+                self.tr(child_name),
+                baseline_surface_group,
+            )
 
         for child in list(debug_group.children()):
             if not isinstance(child, QgsLayerTreeLayer):
@@ -1958,14 +2631,19 @@ class SafeguardingBuilder(
         legacy_ols_names = [output_structure.OLS_SURFACES, "Annex 14 Future OLS Standard"]
         legacy_primary_names = [
             self.get_active_framework().guideline_f_subgroup_names()["runway"],
-            self.get_active_framework().guideline_f_subgroup_names()["ofz"],
             "Future Annex 14 OLS Surfaces",
+        ]
+        legacy_ofz_names = [
+            self.get_active_framework().guideline_f_subgroup_names()["ofz"],
         ]
         airport_wide_legacy_name = self.get_active_framework().guideline_f_subgroup_names()["airport_wide"]
         for legacy_name, destination in [
             (airport_wide_legacy_name, secondary_surfaces_group),
             *((name, primary_surfaces_group) for name in legacy_primary_names),
+            *((name, obstacle_free_zone_group) for name in legacy_ofz_names),
         ]:
+            if destination is None:
+                continue
             legacy_group = self._find_direct_child_group(main_group, self.tr(legacy_name))
             if legacy_group is not None:
                 for child in list(legacy_group.children()):
@@ -1990,6 +2668,15 @@ class SafeguardingBuilder(
                         self._move_layer_tree_node(child, primary_surfaces_group)
                     if not primary_group.children():
                         legacy_group.removeChildNode(primary_group)
+            for ofz_name in legacy_ofz_names:
+                ofz_legacy_group = self._find_direct_child_group(
+                    legacy_group, self.tr(ofz_name)
+                )
+                if ofz_legacy_group is not None and obstacle_free_zone_group is not None:
+                    for child in list(ofz_legacy_group.children()):
+                        self._move_layer_tree_node(child, obstacle_free_zone_group)
+                    if not ofz_legacy_group.children():
+                        legacy_group.removeChildNode(ofz_legacy_group)
             for child in list(legacy_group.children()):
                 self._move_layer_tree_node(child, primary_surfaces_group)
             if not legacy_group.children():
@@ -2006,6 +2693,7 @@ class SafeguardingBuilder(
         self._repair_guideline_f_layer_tree(
             primary_surfaces_group,
             secondary_surfaces_group,
+            obstacle_free_zone_group,
             extra_source_groups=[main_group],
         )
         self._repair_debug_development_layer_tree(main_group, debug_group)
@@ -2045,6 +2733,7 @@ class SafeguardingBuilder(
         self,
         primary_surfaces_group: QgsLayerTreeGroup,
         secondary_surfaces_group: QgsLayerTreeGroup,
+        obstacle_free_zone_group: Optional[QgsLayerTreeGroup] = None,
         extra_source_groups: Optional[List[QgsLayerTreeGroup]] = None,
     ) -> None:
         """Move direct OLS layers into the reviewed primary/secondary folders."""
@@ -2087,6 +2776,14 @@ class SafeguardingBuilder(
                     "OLS Baulked Landing",
                 ]
             ):
+                if obstacle_free_zone_group is not None:
+                    runway_match = re.search(r"\bRWY\s+(\S+)$", layer_name)
+                    if runway_match:
+                        return self._ensure_layer_group(
+                            obstacle_free_zone_group,
+                            f"RWY {runway_match.group(1)}",
+                        )
+                    return obstacle_free_zone_group
                 return primary_surfaces_group
             if style_key in airport_wide_style_keys or any(
                 label in layer_name
@@ -2108,7 +2805,26 @@ class SafeguardingBuilder(
                 return primary_surfaces_group
             return None
 
+        if obstacle_free_zone_group is not None:
+            for runway_group in list(primary_surfaces_group.children()):
+                if not isinstance(runway_group, QgsLayerTreeGroup):
+                    continue
+                nested_ofz = self._find_direct_child_group(
+                    runway_group, self.tr(output_structure.OBSTACLE_FREE_ZONE)
+                )
+                if nested_ofz is None:
+                    continue
+                destination_runway = self._ensure_layer_group(
+                    obstacle_free_zone_group, runway_group.name()
+                )
+                for child in list(nested_ofz.children()):
+                    self._move_layer_tree_node(child, destination_runway)
+                if not nested_ofz.children():
+                    runway_group.removeChildNode(nested_ofz)
+
         source_groups = [primary_surfaces_group, secondary_surfaces_group]
+        if obstacle_free_zone_group is not None:
+            source_groups.append(obstacle_free_zone_group)
         source_groups.extend(group for group in (extra_source_groups or []) if group is not None)
         for group in source_groups:
             for child in list(group.children()):
@@ -2218,11 +2934,16 @@ class SafeguardingBuilder(
         ofz_group: Optional[QgsLayerTreeGroup],
         runway_ols_group: Optional[QgsLayerTreeGroup] = None,
         airport_wide_ols_group: Optional[QgsLayerTreeGroup] = None,
+        ols_runway_data_list: Optional[List[dict]] = None,
     ) -> bool:
         """Generate runway-specific safeguarding outputs."""
         any_guideline_processed_ok = False
         if not processed_runway_data_list:
             return False
+        ols_data_by_index = {
+            runway_data.get("original_index"): runway_data
+            for runway_data in (ols_runway_data_list or [])
+        }
         for runway_data in processed_runway_data_list:
             rwy_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
             run_success_flags = []
@@ -2232,21 +2953,29 @@ class SafeguardingBuilder(
                 if guideline_groups.get("E") is not None:
                     run_success_flags.append(self.process_lighting_control_zones(runway_data, guideline_groups["E"]))
                 if guideline_groups.get("F") is not None:
+                    ols_runway_data = ols_data_by_index.get(
+                        runway_data.get("original_index")
+                    )
+                    if ols_runway_data is None:
+                        self._log_skip(
+                            f"Runway OLS {rwy_name}: selected ruleset context is unavailable."
+                        )
+                        ols_runway_data = None
                     if (
                         getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
                         == "annex14_modernised_ofs_oes"
-                    ):
+                    ) and ols_runway_data is not None:
                         run_success_flags.append(
                             self.process_annex14_geometry(
-                                runway_data,
+                                ols_runway_data,
                                 runway_ols_group or guideline_groups["F"],
                                 airport_wide_ols_group,
                             )
                         )
-                    else:
+                    elif ols_runway_data is not None:
                         run_success_flags.append(
                             self.process_runway_ols_surfaces(
-                                runway_data,
+                                ols_runway_data,
                                 runway_ols_group or guideline_groups["F"],
                                 ofz_group,
                             )
@@ -2268,6 +2997,18 @@ class SafeguardingBuilder(
 
                 if any(run_success_flags):
                     any_guideline_processed_ok = True
+                if self._run_log is not None:
+                    generated_counts = runway_data.get("generated_feature_counts") or {}
+                    feature_total = sum(
+                        int(value)
+                        for value in generated_counts.values()
+                        if isinstance(value, (int, float))
+                    )
+                    self._run_log.output(
+                        "runway generation",
+                        runway=rwy_name,
+                        features=feature_total,
+                    )
             except Exception as e_guideline:
                 QgsMessageLog.logMessage(
                     f"Error processing guidelines/specialised for {rwy_name}: {e_guideline}",
@@ -2353,96 +3094,6 @@ class SafeguardingBuilder(
 
         prune(main_group)
 
-    def _empty_group_reason(self, group_name: str, met_ok: bool) -> str:
-        """Return a concise explanation for expected empty top-level groups."""
-        if group_name == self.tr(output_structure.REFERENCE_DATA):
-            return "no reference layers generated; check ARP, runway, MET, and CNS inputs"
-        if group_name == self.tr(output_structure.AERODROME_INFRASTRUCTURE):
-            return "no aerodrome infrastructure layers generated; check runway dimensions and coordinates"
-        if group_name == self.tr(output_structure.RUNWAY_PROTECTION_AND_SEPARATION):
-            return "no protection or separation layers generated; check runway inputs and preceding warnings"
-        if group_name == self.tr(output_structure.PROTECTED_AIRSPACE):
-            return "no protected airspace layers generated; check runway, approach, and RED inputs"
-        if group_name == self.tr(output_structure.PRIMARY_SURFACES):
-            return "no OLS layers generated; check runway, approach, and RED inputs"
-        if group_name == self.tr(output_structure.DEBUG_DEVELOPMENT):
-            return "no debug or development layers generated; enable debug outputs or controlling OLS"
-        framework_reason = self.get_active_framework().empty_group_reason(group_name)
-        if framework_reason:
-            return framework_reason
-        if group_name in {self.tr("Airfield Ground Lighting (AGL)"), self.tr(output_structure.AIRFIELD_GROUND_LIGHTING)}:
-            return "AGL was enabled, but no lighting points were generated; check Lighting tab inputs"
-        if group_name == self.tr(output_structure.MARKINGS):
-            return "no runway markings generated; check runway dimensions and marking prerequisites"
-        if group_name == self.tr(output_structure.PHYSICAL_GEOMETRY):
-            return "no physical geometry generated; check runway dimensions and coordinates"
-        if group_name == self.tr(output_structure.RUNWAY_PROTECTION_AREAS):
-            return "no protection areas generated; check runway inputs and preceding warnings"
-        if group_name == self.tr(output_structure.SPECIALISED_RUNWAY_SAFEGUARDING):
-            return "no specialised safeguarding layers generated; check runway inputs and preceding warnings"
-        if group_name == self.tr(output_structure.METEOROLOGICAL_STATION) and not met_ok:
-            return "MET coordinates not provided"
-        return "no populated layers generated; check preceding warnings for skipped prerequisites"
-
-    def _build_layer_tree_summary(
-        self,
-        main_group: Optional[QgsLayerTreeGroup],
-        met_ok: bool,
-    ) -> Tuple[List[str], List[str], int, int]:
-        """Summarise actual generated layer tree contents for final logging."""
-        if main_group is None:
-            return [], ["Main group missing"], 0, 0
-
-        populated: List[str] = []
-        empty: List[str] = []
-        total_layers = 0
-        total_features = 0
-
-        direct_layer_count = 0
-        direct_feature_count = 0
-        direct_empty_layers: List[str] = []
-
-        for child in main_group.children():
-            child_layers, child_features, child_empty = self._count_layer_tree_contents(child)
-            total_layers += child_layers
-            total_features += child_features
-
-            if isinstance(child, QgsLayerTreeLayer):
-                direct_layer_count += child_layers
-                direct_feature_count += child_features
-                direct_empty_layers.extend(child_empty)
-                continue
-
-            if isinstance(child, QgsLayerTreeGroup):
-                group_name = child.name()
-                if child_layers > 0 and child_features > 0:
-                    populated.append(f"{group_name}: {child_layers} layer(s), {child_features} feature(s)")
-                    if child_empty:
-                        empty.append(f"{group_name}: empty layer(s) {', '.join(child_empty)} (0 features)")
-                elif child_layers > 0:
-                    empty.append(f"{group_name}: {child_layers} empty layer(s) ({', '.join(child_empty)})")
-                else:
-                    empty.append(f"{group_name}: {self._empty_group_reason(group_name, met_ok)}")
-
-        if direct_layer_count:
-            if direct_feature_count:
-                populated.insert(
-                    0,
-                    f"Top-level layers: {direct_layer_count} layer(s), {direct_feature_count} feature(s)",
-                )
-                if direct_empty_layers:
-                    empty.insert(
-                        0,
-                        f"Top-level layers: empty layer(s) {', '.join(direct_empty_layers)} (0 features)",
-                    )
-            else:
-                empty.insert(
-                    0,
-                    f"Top-level layers: {direct_layer_count} empty layer(s) ({', '.join(direct_empty_layers)})",
-                )
-
-        return populated, empty, total_layers, total_features
-
     def _find_group_by_path(
         self,
         root_group: Optional[QgsLayerTreeGroup],
@@ -2456,355 +3107,13 @@ class SafeguardingBuilder(
             group = self._find_direct_child_group(group, self.tr(segment))
         return group
 
-    def _count_matching_layers(
-        self,
-        node: Optional[QgsLayerTreeNode],
-        style_keys: Optional[set] = None,
-        name_contains: Optional[List[str]] = None,
-    ) -> Tuple[int, int]:
-        """Count layers below node matching style keys or name fragments."""
-        if node is None:
-            return 0, 0
-
-        layer_count = 0
-        feature_count = 0
-        if isinstance(node, QgsLayerTreeLayer):
-            layer = node.layer()
-            if layer is None or not layer.isValid():
-                return 0, 0
-            style_key = str(layer.customProperty("safeguarding_style_key") or "")
-            layer_name = layer.name()
-            style_match = bool(style_keys and style_key in style_keys)
-            name_match = bool(name_contains and any(fragment in layer_name for fragment in name_contains))
-            if style_match or name_match:
-                layer_count = 1
-                try:
-                    feature_count = max(0, int(layer.featureCount()))
-                except Exception:
-                    feature_count = 0
-            return layer_count, feature_count
-
-        if isinstance(node, QgsLayerTreeGroup):
-            for child in node.children():
-                child_layers, child_features = self._count_matching_layers(child, style_keys, name_contains)
-                layer_count += child_layers
-                feature_count += child_features
-        return layer_count, feature_count
-
-    def _format_checklist_item(
-        self,
-        main_group: Optional[QgsLayerTreeGroup],
-        label: str,
-        path: List[str],
-        missing_reason: Optional[str] = None,
-        not_applicable_reason: Optional[str] = None,
-        failed_reason: Optional[str] = None,
-    ) -> str:
-        """Format one final-generation checklist line."""
-        group = self._find_group_by_path(main_group, path)
-        layer_count, feature_count, empty_layers = self._count_layer_tree_contents(group) if group else (0, 0, [])
-        if feature_count > 0:
-            return f"{label}: generated - {layer_count} layer(s), {feature_count} feature(s)"
-        if missing_reason:
-            return f"{label}: input not provided - {missing_reason}"
-        if not_applicable_reason:
-            return f"{label}: not applicable - {not_applicable_reason}"
-        if layer_count > 0:
-            empty_detail = f"; empty layer(s): {', '.join(empty_layers)}" if empty_layers else ""
-            return f"{label}: failed/check warnings - {layer_count} layer(s), 0 feature(s){empty_detail}"
-        return f"{label}: failed/check warnings - {failed_reason or 'expected output was not generated'}"
-
-    def _format_checklist_layer_item(
-        self,
-        main_group: Optional[QgsLayerTreeGroup],
-        label: str,
-        path: List[str],
-        style_keys: Optional[set] = None,
-        name_contains: Optional[List[str]] = None,
-        missing_reason: Optional[str] = None,
-        failed_reason: Optional[str] = None,
-    ) -> str:
-        """Format a checklist line for expected layers inside a broader group."""
-        group = self._find_group_by_path(main_group, path)
-        layer_count, feature_count = self._count_matching_layers(group, style_keys, name_contains)
-        if feature_count > 0:
-            return f"{label}: generated - {layer_count} layer(s), {feature_count} feature(s)"
-        if missing_reason:
-            return f"{label}: input not provided - {missing_reason}"
-        if layer_count > 0:
-            return f"{label}: failed/check warnings - {layer_count} layer(s), 0 feature(s)"
-        return f"{label}: failed/check warnings - {failed_reason or 'expected layer was not generated'}"
-
-    def _build_generation_checklist(
-        self,
-        main_group: Optional[QgsLayerTreeGroup],
-        arp_ok: bool,
-        met_ok: bool,
-        rwy_base_ok: bool,
-        wildlife_ok: bool,
-        wind_turbine_ok: bool,
-        cns_safeguarding_ok: bool,
-        runway_safeguarding_ok: bool,
-        processed_rwy_count: int,
-        total_runways_in_input: int,
-        physical_protection_ok: bool,
-        arp_input_provided: bool,
-        met_input_provided: bool,
-        agl_enabled: bool,
-        cns_count: int,
-        red_ok: bool,
-        pa_runways_exist: bool,
-    ) -> List[str]:
-        """Build an expanded final checklist with stats or clear skip reasons."""
-        no_runway_reason = None
-        if total_runways_in_input == 0:
-            no_runway_reason = "no runway definitions were provided"
-        elif not rwy_base_ok or processed_rwy_count == 0:
-            no_runway_reason = "runway input was provided but no valid runway centreline was generated"
-
-        arp_missing_reason = None if arp_input_provided else "ARP coordinates not provided"
-        red_missing_reason = None if red_ok else "RED unavailable; provide ARP elevation and runway-end elevations"
-        cns_missing_reason = None if cns_count else "no CNS facilities were entered"
-        framework = self.get_active_framework()
-        safeguarding_group_name = framework.safeguarding_group_name()
-        guideline_groups = framework.guideline_group_definitions(include_cns=True)
-        primary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.PRIMARY_SURFACES]
-        secondary_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.SECONDARY_SURFACES]
-        controlling_surfaces_path = [output_structure.PROTECTED_AIRSPACE, output_structure.CONTROLLING_SURFACES]
-
-        items = [
-            self._format_checklist_layer_item(
-                main_group,
-                "ARP",
-                [output_structure.REFERENCE_DATA],
-                style_keys={"ARP"},
-                name_contains=[f" {self.tr('ARP')}"],
-                missing_reason=arp_missing_reason,
-                failed_reason="ARP layer failed to create",
-            ),
-            self._format_checklist_item(
-                main_group,
-                "Runway centrelines",
-                [output_structure.REFERENCE_DATA, output_structure.RUNWAY_CENTRE_LINES],
-                missing_reason=no_runway_reason,
-                failed_reason="runway centreline layer failed to create",
-            ),
-            self._format_checklist_item(
-                main_group,
-                output_structure.METEOROLOGICAL_STATION,
-                [output_structure.REFERENCE_DATA, output_structure.METEOROLOGICAL_STATION],
-                missing_reason=None if met_input_provided else "MET coordinates not provided",
-                failed_reason="MET station surfaces failed to generate",
-            ),
-            self._format_checklist_item(
-                main_group,
-                output_structure.CNS_TECHNICAL_FACILITIES,
-                [output_structure.REFERENCE_DATA, output_structure.CNS_TECHNICAL_FACILITIES],
-                missing_reason=cns_missing_reason,
-                failed_reason="CNS source facility layer failed to create",
-            ),
-            self._format_checklist_item(
-                main_group,
-                output_structure.AIRFIELD_GROUND_LIGHTING,
-                [output_structure.AERODROME_INFRASTRUCTURE, output_structure.AIRFIELD_GROUND_LIGHTING],
-                missing_reason=no_runway_reason,
-                not_applicable_reason=None if agl_enabled else "AGL option is disabled",
-                failed_reason="AGL was enabled but no lighting features were generated",
-            ),
-            self._format_checklist_item(
-                main_group,
-                "Runway markings",
-                [output_structure.AERODROME_INFRASTRUCTURE, output_structure.MARKINGS],
-                missing_reason=no_runway_reason,
-                failed_reason="marking prerequisites were not met or generation failed",
-            ),
-            self._format_checklist_item(
-                main_group,
-                "Physical geometry",
-                [output_structure.AERODROME_INFRASTRUCTURE, output_structure.PHYSICAL_GEOMETRY],
-                missing_reason=no_runway_reason,
-                failed_reason="physical geometry prerequisites were not met or generation failed",
-            ),
-            self._format_checklist_item(
-                main_group,
-                "Runway protection areas",
-                [output_structure.RUNWAY_PROTECTION_AND_SEPARATION, output_structure.RUNWAY_PROTECTION_AREAS],
-                missing_reason=no_runway_reason,
-                failed_reason="runway protection areas failed to generate",
-            ),
-            self._format_checklist_item(
-                main_group,
-                "Specialised runway safeguarding",
-                [
-                    output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
-                    output_structure.SPECIALISED_RUNWAY_SAFEGUARDING,
-                ],
-                missing_reason=no_runway_reason,
-                failed_reason="specialised safeguarding failed to generate",
-            ),
-            self._format_checklist_item(
-                main_group,
-                guideline_groups["B"],
-                [safeguarding_group_name, guideline_groups["B"]],
-                missing_reason=no_runway_reason,
-                failed_reason="windshear zone generation failed",
-            ),
-            self._format_checklist_item(
-                main_group,
-                guideline_groups["C"],
-                [safeguarding_group_name, guideline_groups["C"]],
-                missing_reason=arp_missing_reason,
-                failed_reason="wildlife zone generation failed",
-            ),
-            self._format_checklist_item(
-                main_group,
-                guideline_groups["D"],
-                [safeguarding_group_name, guideline_groups["D"]],
-                missing_reason=arp_missing_reason,
-                failed_reason="wind turbine zone generation failed",
-            ),
-            self._format_checklist_item(
-                main_group,
-                guideline_groups["E"],
-                [safeguarding_group_name, guideline_groups["E"]],
-                missing_reason=no_runway_reason,
-                failed_reason="lighting control surface generation failed",
-            ),
-            self._format_checklist_item(
-                main_group,
-                output_structure.SECONDARY_SURFACES,
-                secondary_surfaces_path,
-                missing_reason=no_runway_reason or red_missing_reason,
-                failed_reason="airport-wide OLS failed; check RED, runway strip dimensions, ARP, and preceding warnings",
-            ),
-            self._format_checklist_item(
-                main_group,
-                output_structure.PRIMARY_SURFACES,
-                primary_surfaces_path,
-                missing_reason=no_runway_reason,
-                failed_reason="runway OLS generation failed; check runway type, elevations, clearway, OFZ prerequisites, and preceding warnings",
-            ),
-            self._format_checklist_item(
-                main_group,
-                output_structure.CONTROLLING_SURFACES,
-                controlling_surfaces_path,
-                not_applicable_reason=None if self.generate_controlling_ols else "controlling OLS option is disabled",
-                failed_reason="controlling OLS outputs failed to generate",
-            ),
-            self._format_checklist_item(
-                main_group,
-                guideline_groups["G"],
-                [safeguarding_group_name, guideline_groups["G"]],
-                missing_reason=cns_missing_reason,
-                failed_reason="CNS safeguarding generation failed",
-            ),
-            self._format_checklist_item(
-                main_group,
-                guideline_groups["I"],
-                [safeguarding_group_name, guideline_groups["I"]],
-                missing_reason=no_runway_reason,
-                failed_reason="public safety area generation failed",
-            ),
-        ]
-
-        # Keep these booleans referenced in the checklist builder so future readers
-        # can see they are intentionally part of the final diagnostic contract.
-        _ = (
-            met_ok,
-            wildlife_ok,
-            wind_turbine_ok,
-            cns_safeguarding_ok,
-            runway_safeguarding_ok,
-            physical_protection_ok,
-        )
-        return items
-
-    def _render_generation_summary(self, checklist_items: List[str]) -> List[str]:
-        """Render checklist items as a compact grouped final summary."""
-        safeguarding_section = self.get_active_framework().safeguarding_summary_section()
-        guideline_groups = self.get_active_framework().guideline_group_definitions(include_cns=True)
-        section_order = list(output_structure.SECTION_ORDER)
-        section_map = {
-            "ARP": output_structure.REFERENCE_DATA,
-            "Runway centrelines": output_structure.REFERENCE_DATA,
-            output_structure.METEOROLOGICAL_STATION: output_structure.REFERENCE_DATA,
-            output_structure.CNS_TECHNICAL_FACILITIES: output_structure.REFERENCE_DATA,
-            output_structure.AIRFIELD_GROUND_LIGHTING: output_structure.AERODROME_INFRASTRUCTURE,
-            "Runway markings": output_structure.AERODROME_INFRASTRUCTURE,
-            "Physical geometry": output_structure.AERODROME_INFRASTRUCTURE,
-            "Runway protection areas": output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
-            "Specialised runway safeguarding": output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
-            output_structure.SECONDARY_SURFACES: output_structure.PROTECTED_AIRSPACE,
-            output_structure.PRIMARY_SURFACES: output_structure.PROTECTED_AIRSPACE,
-            output_structure.CONTROLLING_SURFACES: output_structure.PROTECTED_AIRSPACE,
-            guideline_groups["B"]: safeguarding_section,
-            guideline_groups["C"]: safeguarding_section,
-            guideline_groups["D"]: safeguarding_section,
-            guideline_groups["E"]: safeguarding_section,
-            guideline_groups["G"]: safeguarding_section,
-            guideline_groups["I"]: safeguarding_section,
-        }
-        generated_by_section: Dict[str, List[str]] = {section: [] for section in section_order}
-        skipped: List[str] = []
-        attention: List[str] = []
-
-        for item in checklist_items:
-            label, separator, detail = item.partition(": ")
-            if not separator:
-                attention.append(item)
-                continue
-
-            if detail.startswith("generated - "):
-                stats = detail.replace("generated - ", "", 1)
-                section = section_map.get(label, output_structure.EXTERNAL_SAFEGUARDING)
-                generated_by_section.setdefault(section, []).append(f"  - {label}: {stats}")
-            elif detail.startswith("input not provided - "):
-                reason = detail.replace("input not provided - ", "", 1)
-                skipped.append(f"- {label}: input not provided ({reason})")
-            elif detail.startswith("not applicable - "):
-                reason = detail.replace("not applicable - ", "", 1)
-                skipped.append(f"- {label}: not applicable ({reason})")
-            elif detail.startswith("failed/check warnings - "):
-                reason = detail.replace("failed/check warnings - ", "", 1)
-                attention.append(f"- {label}: check warnings ({reason})")
-            else:
-                attention.append(item)
-
-        lines: List[str] = []
-        for section in section_order:
-            section_items = generated_by_section.get(section, [])
-            if section_items:
-                lines.append(f"{section}:")
-                lines.extend(section_items)
-        if skipped:
-            lines.append("Skipped / not applicable:")
-            lines.extend(skipped)
-        if attention:
-            lines.append("Needs attention:")
-            lines.extend(attention)
-        return lines
-
     def _final_feedback(
         self,
         main_group: Optional[QgsLayerTreeGroup],
         root_node: QgsLayerTreeNode,
         icao_code: str,
-        arp_ok: bool,
-        met_ok: bool,
-        rwy_base_ok: bool,
-        wildlife_ok: bool,
-        wind_turbine_ok: bool,
-        cns_safeguarding_ok: bool,
-        runway_safeguarding_ok: bool,
         processed_rwy_count: int,
         total_runways_in_input: int,
-        physical_protection_ok: bool,
-        arp_input_provided: bool,
-        met_input_provided: bool,
-        agl_enabled: bool,
-        cns_count: int,
-        red_ok: bool,
-        pa_runways_exist: bool,
     ):
         """Provides final user feedback."""
         if main_group is None and self.output_mode == "memory":  # If no group and memory, something is wrong
@@ -2819,39 +3128,20 @@ class SafeguardingBuilder(
 
         # Check if any layers were successfully generated and added to our tracking list
         anything_successfully_generated = bool(self.successfully_generated_layers)
+        self._processing_runway_summary = (
+            f"{processed_rwy_count}/{total_runways_in_input}"
+            if total_runways_in_input
+            else "0"
+        )
 
         if anything_successfully_generated:
-            (
-                _populated_summaries,
-                _empty_summaries,
-                tree_layer_count,
-                tree_feature_count,
-            ) = self._build_layer_tree_summary(main_group, met_ok)
-            generation_checklist = self._build_generation_checklist(
-                main_group,
-                arp_ok,
-                met_ok,
-                rwy_base_ok,
-                wildlife_ok,
-                wind_turbine_ok,
-                cns_safeguarding_ok,
-                runway_safeguarding_ok,
-                processed_rwy_count,
-                total_runways_in_input,
-                physical_protection_ok,
-                arp_input_provided,
-                met_input_provided,
-                agl_enabled,
-                cns_count,
-                red_ok,
-                pa_runways_exist,
+            tree_layer_count, tree_feature_count, _ = self._count_layer_tree_contents(
+                main_group
             )
-            generation_summary = self._render_generation_summary(generation_checklist)
             num_layers_created = tree_layer_count or len(self.successfully_generated_layers)
-            runway_summary = (
-                f"runways={processed_rwy_count}/{total_runways_in_input}" if total_runways_in_input else "runways=0"
-            )
-
+            recorder = getattr(self, "_runtime_run_recorder", None)
+            if recorder is not None:
+                recorder.set_output_counts(num_layers_created, tree_feature_count)
             if self.output_mode == "file" and self.output_path:
                 output_summary = f"files saved to {self.output_path}"
             elif self.output_mode == "memory":
@@ -2863,23 +3153,25 @@ class SafeguardingBuilder(
                 f"Processing complete for {icao_code}. "
                 f"{num_layers_created} layer(s), {tree_feature_count} feature(s); {output_summary}."
             )
-            final_log_message = (
-                f"Complete: {icao_code} - {num_layers_created} layer(s), "
-                f"{tree_feature_count} feature(s), {runway_summary}, {output_summary}."
-            )
-
             self.iface.messageBar().pushMessage(
                 self.tr("Success"), final_user_message, level=Qgis.Success, duration=10
             )  # Increased duration
-            self._log_success(final_log_message, notify_user=True)
-            if generation_summary:
-                self._log("Generation summary:\n" + "\n".join(generation_summary))
+            self._emit_section_outputs(main_group)
+            if self._run_log is not None:
+                self._run_log.update_context(
+                    airport=icao_code,
+                    runways=self._processing_runway_summary,
+                    output=(self.output_path if self.output_mode == "file" else self.output_mode),
+                )
 
             if (
                 main_group is not None
             ):  # Only expand group if it exists (it might not if only file output and no group made)
                 self._stage_layer_tree_node(main_group)
         else:
+            recorder = getattr(self, "_runtime_run_recorder", None)
+            if recorder is not None:
+                recorder.set_output_counts(0, 0)
             # This case means self.successfully_generated_layers is empty
             self.iface.messageBar().pushMessage(
                 self.tr("Process Finished"),
@@ -2896,6 +3188,23 @@ class SafeguardingBuilder(
                 self._remove_group_recursively(main_group, project)
                 if main_group.parent() is not None:
                     main_group.parent().removeChildNode(main_group)
+
+    def _emit_section_outputs(self, main_group: Optional[QgsLayerTreeGroup]) -> None:
+        """Emit one concise output line per populated user-facing section."""
+        if main_group is None or self._run_log is None:
+            return
+        debug_name = self.tr(output_structure.DEBUG_DEVELOPMENT)
+        for child in main_group.children():
+            if isinstance(child, QgsLayerTreeGroup):
+                if child.name() == debug_name:
+                    continue
+                layers, features, _ = self._count_layer_tree_contents(child)
+                if layers > 0 and features > 0:
+                    self._run_log.output(
+                        child.name(),
+                        layers=layers,
+                        features=features,
+                    )
 
     # --- Geometry Creation Helpers ---
     def create_arp_layer(

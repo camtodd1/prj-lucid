@@ -706,7 +706,17 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         dimensions_layout.addWidget(stopway_label, 3, 0)
         dimensions_layout.addWidget(self.stopway1_len_le, 3, 1)
         dimensions_layout.addWidget(self.stopway2_len_le, 3, 2)
-        self._standardize_form_rows(dimensions_layout, 4)
+
+        self.cap168_wide_runway_cb = QtWidgets.QCheckBox(
+            "Runway width exceeds the applicable CAP168 Table 3.2 minimum by 10%"
+        )
+        self.cap168_wide_runway_cb.setObjectName(f"checkBox_cap168_wide_runway_{self.index}")
+        self.cap168_wide_runway_cb.setToolTip(
+            "Applies CAP168 4.15/4.24 wide-runway inner-edge rules to approach and take-off climb surfaces."
+        )
+        dimensions_layout.addWidget(QtWidgets.QLabel("CAP168 wide runway:"), 4, 0)
+        dimensions_layout.addWidget(self.cap168_wide_runway_cb, 4, 1, 1, 2)
+        self._standardize_form_rows(dimensions_layout, 5)
 
         parent_layout.addWidget(dimensions_group)
 
@@ -720,9 +730,93 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._add_runway_availability_controls(operations_layout, 0)
         self._add_lahso_controls(operations_layout, 2)
         self._add_runway_type_controls(operations_layout, 3, 0, 1, reciprocal_input_col=2)
-        self._standardize_form_rows(operations_layout, 4)
+        self._add_ols_track_controls(operations_layout, 4)
+        self._standardize_form_rows(operations_layout, 8)
 
         parent_layout.addWidget(operations_group)
+
+    def _add_ols_track_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
+        """Add explicit plan-track inputs used by CAP168 conventional OLS."""
+
+        approach_label = QtWidgets.QLabel("OLS approach track:")
+        self.approach_track_1_combo = NoWheelComboBox()
+        self.approach_track_2_combo = NoWheelComboBox()
+        approach_choices = [
+            ("Aligned with runway", "aligned"),
+            ("Offset straight track", "offset"),
+            ("Curved / change up to 15°", "curved"),
+            ("Curved / change over 15°", "curved_gt_15"),
+        ]
+        for combo, suffix in (
+            (self.approach_track_1_combo, "1"),
+            (self.approach_track_2_combo, "2"),
+        ):
+            combo.setObjectName(f"comboBox_approach_track_{suffix}_{self.index}")
+            for label, value in approach_choices:
+                combo.addItem(label, userData=value)
+            combo.setToolTip(
+                "Nominate the CAP168 approach ground-track form. Non-aligned tracks require a project-CRS LINESTRING below."
+            )
+            self._set_control_width(combo)
+        layout.addWidget(approach_label, row, 0)
+        layout.addWidget(self.approach_track_1_combo, row, 1)
+        layout.addWidget(self.approach_track_2_combo, row, 2)
+
+        self.approach_track_wkt_1_le = self._track_wkt_line_edit(
+            "approach_track_wkt_1",
+            "Approach track from the primary threshold outward.",
+        )
+        self.approach_track_wkt_2_le = self._track_wkt_line_edit(
+            "approach_track_wkt_2",
+            "Approach track from the reciprocal threshold outward.",
+        )
+        layout.addWidget(QtWidgets.QLabel("Approach path WKT:"), row + 1, 0)
+        layout.addWidget(self.approach_track_wkt_1_le, row + 1, 1)
+        layout.addWidget(self.approach_track_wkt_2_le, row + 1, 2)
+
+        takeoff_label = QtWidgets.QLabel("OLS take-off track:")
+        self.takeoff_track_1_combo = NoWheelComboBox()
+        self.takeoff_track_2_combo = NoWheelComboBox()
+        takeoff_choices = [
+            ("Aligned with runway", "aligned"),
+            ("Offset straight track", "offset"),
+            ("Curved / change up to 15°", "curved"),
+            ("Heading change over 15°", "curved_gt_15"),
+        ]
+        for combo, suffix in (
+            (self.takeoff_track_1_combo, "1"),
+            (self.takeoff_track_2_combo, "2"),
+        ):
+            combo.setObjectName(f"comboBox_takeoff_track_{suffix}_{self.index}")
+            for label, value in takeoff_choices:
+                combo.addItem(label, userData=value)
+            combo.setToolTip(
+                "Nominate the CAP168 take-off ground-track form. The over-15° choice applies the conditional outer width."
+            )
+            self._set_control_width(combo)
+        layout.addWidget(takeoff_label, row + 2, 0)
+        layout.addWidget(self.takeoff_track_1_combo, row + 2, 1)
+        layout.addWidget(self.takeoff_track_2_combo, row + 2, 2)
+
+        self.takeoff_track_wkt_1_le = self._track_wkt_line_edit(
+            "takeoff_track_wkt_1",
+            "Take-off track from the primary-direction departure pavement end outward.",
+        )
+        self.takeoff_track_wkt_2_le = self._track_wkt_line_edit(
+            "takeoff_track_wkt_2",
+            "Take-off track from the reciprocal-direction departure pavement end outward.",
+        )
+        layout.addWidget(QtWidgets.QLabel("Take-off path WKT:"), row + 3, 0)
+        layout.addWidget(self.takeoff_track_wkt_1_le, row + 3, 1)
+        layout.addWidget(self.takeoff_track_wkt_2_le, row + 3, 2)
+
+    def _track_wkt_line_edit(self, suffix: str, tooltip: str) -> QtWidgets.QLineEdit:
+        line_edit = QtWidgets.QLineEdit()
+        line_edit.setObjectName(f"lineEdit_{suffix}_{self.index}")
+        line_edit.setPlaceholderText("LINESTRING (...) when non-aligned")
+        line_edit.setToolTip(f"{tooltip} Coordinates use the current project CRS.")
+        self._set_control_width(line_edit)
+        return line_edit
 
     def _add_runway_characteristics_controls(self, parent_layout: QtWidgets.QVBoxLayout) -> None:
         classification_group = QtWidgets.QGroupBox("Runway Characteristics")
@@ -825,6 +919,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.asda_override_2_le,
             self.lda_override_1_le,
             self.lda_override_2_le,
+            self.approach_track_wkt_1_le,
+            self.approach_track_wkt_2_le,
+            self.takeoff_track_wkt_1_le,
+            self.takeoff_track_wkt_2_le,
         ]:
             widget.textChanged.connect(self.inputChanged.emit)
         for checkbox in [
@@ -834,6 +932,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.landing_available_2_cb,
             self.lahso_applied_1_cb,
             self.lahso_applied_2_cb,
+            self.cap168_wide_runway_cb,
         ]:
             checkbox.stateChanged.connect(self.inputChanged.emit)
         for combo in [
@@ -844,6 +943,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.surface_material_combo,
             self.type1_combo,
             self.type2_combo,
+            self.approach_track_1_combo,
+            self.approach_track_2_combo,
+            self.takeoff_track_1_combo,
+            self.takeoff_track_2_combo,
         ]:
             combo.currentIndexChanged.connect(self.inputChanged.emit)
         self.surface_category_combo.currentIndexChanged.connect(self._handle_surface_category_changed)
@@ -900,6 +1003,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "landing_available_2": self.landing_available_2_cb.isChecked(),
             "lahso_applied_1": self.lahso_applied_1_cb.isChecked(),
             "lahso_applied_2": self.lahso_applied_2_cb.isChecked(),
+            "cap168_wide_runway": self.cap168_wide_runway_cb.isChecked(),
             "arc_num": self.arc_num_combo.currentData(),
             "arc_let": self.arc_let_combo.currentData(),
             "adg": self.adg_combo.currentData(),
@@ -908,6 +1012,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "surface_material": self.surface_material_combo.currentText(),
             "type1": self.type1_combo.currentText(),
             "type2": self.type2_combo.currentText(),
+            "approach_track_type_1": self.approach_track_1_combo.currentData(),
+            "approach_track_type_2": self.approach_track_2_combo.currentData(),
+            "approach_track_wkt_1": self.approach_track_wkt_1_le.text().strip(),
+            "approach_track_wkt_2": self.approach_track_wkt_2_le.text().strip(),
+            "takeoff_track_type_1": self.takeoff_track_1_combo.currentData(),
+            "takeoff_track_type_2": self.takeoff_track_2_combo.currentData(),
+            "takeoff_track_wkt_1": self.takeoff_track_wkt_1_le.text().strip(),
+            "takeoff_track_wkt_2": self.takeoff_track_wkt_2_le.text().strip(),
         }
 
     def set_input_data(self, data: Dict[str, str]):
@@ -950,6 +1062,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.landing_available_2_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_2", True)))
             self.lahso_applied_1_cb.setChecked(self._bool_from_saved_value(data.get("lahso_applied_1", False)))
             self.lahso_applied_2_cb.setChecked(self._bool_from_saved_value(data.get("lahso_applied_2", False)))
+            self.cap168_wide_runway_cb.setChecked(
+                self._bool_from_saved_value(data.get("cap168_wide_runway", False))
+            )
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
             self._set_combo_data(self.adg_combo, data.get("adg", data.get("design_group", "")))
@@ -963,6 +1078,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             )
             self._set_combo_text(self.type1_combo, data.get("type1", ""))
             self._set_combo_text(self.type2_combo, data.get("type2", ""))
+            self._set_combo_data(self.approach_track_1_combo, data.get("approach_track_type_1", "aligned"))
+            self._set_combo_data(self.approach_track_2_combo, data.get("approach_track_type_2", "aligned"))
+            self.approach_track_wkt_1_le.setText(data.get("approach_track_wkt_1", ""))
+            self.approach_track_wkt_2_le.setText(data.get("approach_track_wkt_2", ""))
+            self._set_combo_data(self.takeoff_track_1_combo, data.get("takeoff_track_type_1", "aligned"))
+            self._set_combo_data(self.takeoff_track_2_combo, data.get("takeoff_track_type_2", "aligned"))
+            self.takeoff_track_wkt_1_le.setText(data.get("takeoff_track_wkt_1", ""))
+            self.takeoff_track_wkt_2_le.setText(data.get("takeoff_track_wkt_2", ""))
         finally:
             for widget in widgets_to_block:
                 widget.blockSignals(False)
@@ -1025,6 +1148,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.landing_available_2_cb,
             self.lahso_applied_1_cb,
             self.lahso_applied_2_cb,
+            self.cap168_wide_runway_cb,
             self.arc_num_combo,
             self.arc_let_combo,
             self.adg_combo,
@@ -1032,6 +1156,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.surface_material_combo,
             self.type1_combo,
             self.type2_combo,
+            self.approach_track_1_combo,
+            self.approach_track_2_combo,
+            self.approach_track_wkt_1_le,
+            self.approach_track_wkt_2_le,
+            self.takeoff_track_1_combo,
+            self.takeoff_track_2_combo,
+            self.takeoff_track_wkt_1_le,
+            self.takeoff_track_wkt_2_le,
         ]
 
     def _handle_surface_category_changed(self):

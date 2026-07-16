@@ -5,7 +5,7 @@ ruleset metadata, implementation notes, tests, and TODO ledger. It is intended
 as a practical working list for deciding what to validate, consolidate, and
 build next.
 
-Last reviewed: 2026-07-12.
+Last reviewed: 2026-07-15.
 
 ## High Confidence Delivery
 
@@ -24,6 +24,17 @@ Last reviewed: 2026-07-12.
   - Capabilities marked supported include runway type classification, pavement,
     shoulders, strips, RESA, clearway, parallel runway separation, OLS, runway
     markings, AGL, approach lighting, and calculated declared distances.
+
+- [x] Current Annex 14 and CAP 168 conventional OLS are promoted profiles.
+
+  Notes:
+  - Current Annex 14 is registered as stable with supported conventional OLS,
+    OFZ, and controlling-lower-envelope capabilities through 20 November 2030.
+  - CAP 168 Edition 13 is registered as stable with supported conventional OLS,
+    including nominated offset and curved approach/take-off tracks.
+  - Both profiles are selectable in the shared baseline/comparison workflow and
+    are covered by dedicated QGIS fixtures. Their non-OLS capability gaps remain
+    explicitly gated; CAP 168 RESA, for example, is still unsupported.
 
 - [x] NASF Australia is the active external safeguarding framework.
 
@@ -61,6 +72,22 @@ Last reviewed: 2026-07-12.
   - Limitations around photometrics, circuiting, serviceability, object
     screening, and operational intent are documented.
 
+- [x] Operational logging is structured, concise, and regression-gated.
+
+  Notes:
+  - Run output uses stable `START`, numbered `PHASE`, `SKIP`, `OUTPUT`, `WARN`,
+    `ERROR`, and terminal event kinds with semantic QGIS severities.
+  - Expected omissions explain their reason at Info level; recoverable
+    degradation and failed output remain Warning/Critical respectively, and
+    only a completed run uses QGIS Success.
+  - Detailed solver and geometry messages are opt-in under the separate
+    `SafeguardingBuilder.Diagnostics` tag.
+  - Legacy emitters are routed through the central adapter, while import-time,
+    dialog-lifecycle, temporary development, per-layer file-success, and raw
+    feature-attribute messages have been removed.
+  - The obsolete expanded final-generation checklist and its unused helper
+    path were removed after section-level output summaries replaced it.
+
 ## Needs Testing And Consolidation
 
 - [x] Validate the modernised Annex 14 OFS/OES workflow in QGIS 4.
@@ -74,23 +101,28 @@ Last reviewed: 2026-07-12.
   - The integration audit checks layer structure, styles, labels, geometry
     validity, candidate coverage, region overlap, contour containment, and
     small interior rings.
-  - Committed regression fixtures cover YBBN single-runway, YSSY intersecting
-    dual-runway, YSWS parallel dual-runway, and a three-runway YSSY stress case.
+  - The complete workflow matrix now covers 13 cases across MOS139, CAP168,
+    current Annex 14, future Annex comparison, curved, single, intersecting,
+    parallel, stress, and dedicated file-output configurations.
   - `tests/run_ols_workflow_regression.py` exercises the complete dialog-to-layer
     workflow under QGIS 4 and checks candidate coverage, controlling-region
     overlap, comparison-domain coverage, class overlap, geometry validity,
     duplicate IDs, and performance stages.
-  - The 2026-07-11 QGIS 4.0.2 run passed all four cases with no invalid or empty
-    geometry and no duplicate comparison IDs.
+  - The 2026-07-15 QGIS 4.0.2 run passed all 13 cases. Multi-fixture runs now
+    isolate each case in a fresh QGIS process to prevent native project and
+    geometry state accumulating across the matrix.
   - Modernisation comparison gain/loss regions now meet directly at the
     zero-height line. The comparison tolerance is retained only for controller
     pairs that are wholly equivalent, preventing narrow no-change border strips.
 
   Remaining promotion work:
-  - Confirm whether candidate and transition layers remain diagnostic-only in
-    the promoted output contract.
-  - Reconcile `ols.controlling_lower_envelope` capability metadata after that
-    output-contract decision.
+  - Keep candidate and transition layers diagnostic-only; solved controlling
+    regions and clipped contours are the promoted user-facing contract.
+  - Retain the modernised profile's `ols.controlling_lower_envelope` capability
+    as `partial` until its separate source/topology/release gates pass.
+  - Document incomplete or approximated complex transitional components and
+    add TODA/clearway-aware departure starts.
+  - Remove Annex-specific final partition recovery before production promotion.
   - Retain JSON benchmark evidence for release candidates rather than committing
     every local profiling run.
 
@@ -138,19 +170,21 @@ Last reviewed: 2026-07-12.
     diagnostics under `99 Debug / Development`.
   - Legacy POC-labelled layers are still migrated into diagnostics when an old
     project tree is repaired. New output names contain no POC notation.
-  - The MOS139 and modernised Annex 14 lower-envelope capabilities are marked
-    `partial`, reflecting defined generated coverage rather than regulatory
-    completion. Remaining topology hardening stays tracked below.
+  - MOS139 lower-envelope capability is `supported` under its compatibility
+    lock. Modernised Annex 14 remains `partial` pending its separate promotion
+    workstream.
 
 - [x] Add automated tests around Controlling OLS geometry contracts.
 
   Focus:
-  - Unit coverage distinguishes unresolved `None` from resolved empty geometry.
+  - Unit coverage exercises resolved comparison geometry and the workflow gate
+    rejects unresolved comparisons; a focused `None` versus empty-geometry
+    return-contract regression remains open in `docs/TODO.md`.
   - Comparison tests cover affine equality splitting, curved fallback contours,
     common-domain repair, class exclusivity, solved-engine reuse, spatial
     prefiltering, transition-boundary caching, and contour cache reuse.
   - Explicit family and nested-surface priorities exist for relevant ties;
-    registration order remains the fallback for otherwise equivalent candidates.
+    stable `surface_id` ordering is the deterministic fallback.
 
 - [ ] Review runway marking assumptions in QGIS.
 
@@ -181,14 +215,16 @@ Last reviewed: 2026-07-12.
     verification is complete.
   - Declared distances, clearway, and stopway policy lookups are implemented
     and covered by unit tests; plugin UI/runtime behaviour still needs review.
-  - Controlling OLS remains explicitly unsupported.
+  - Conventional and controlling OLS are selectable as a partial preview;
+    production promotion remains gated on source, topology, performance, and
+    independent review evidence.
   - Open interpretation question: whether conditional/guidance provisions are
     applied "as is", exposed as designer-selected options, or used to identify
     variance from a compliant standard.
 
 ## In Development
 
-- [x] Consolidate modernised Annex 14 OFS/OES controlling output.
+- [ ] Close the modernised Annex 14 OFS/OES promotion boundary.
 
   Work items:
   - [x] Complete the QGIS 4 integration pass for single- and multi-runway cases.
@@ -226,6 +262,15 @@ Last reviewed: 2026-07-12.
   Remaining work is isolated from the locked MOS139 geometry and includes
   source-backed validation, complex transitional components, release timing,
   and removal of Annex-specific final partition recovery.
+
+- [x] Generalise the OLS comparison engine for ruleset-to-ruleset comparisons.
+
+  Baseline and comparison rulesets are selected independently in a two-column
+  OLS workflow card, with a baseline-only option. The engine preserves the
+  selected direction for signed change outputs and adapts conventional OLS and
+  Annex 14 OFS/OES families. MOS139, CAP 168, current Annex 14, modernised Annex
+  14, and the partial EASA profile now use the shared selection contract;
+  profiles without controlling-envelope capability remain disabled.
 
 - [x] Finish MOS139 stopway geometry.
 
@@ -313,11 +358,14 @@ Last reviewed: 2026-07-12.
 
 ## Scaffolded Or Future Enhancements
 
-- [ ] Annex 14 current OLS.
+- [x] Annex 14 current OLS.
 
   Status:
-  - Registered as a selectable profile.
-  - Current enforceable OLS dimensions and geometry are still scaffolded.
+  - Production-supported from the Ninth Edition, Amendment 18 source set for
+    the conventional OLS applicable until 20 November 2030.
+  - Current Table 4-1 and 4-2 surfaces, Chapter 3 strip/clearway dependencies,
+    controlling lower envelope, and bidirectional MOS139 comparison pass the
+    release gate.
 
 - [ ] Annex 14 modernised OFS/OES.
 
@@ -333,14 +381,14 @@ Last reviewed: 2026-07-12.
   - The modernisation comparison produces mutually exclusive gain, loss, and
     genuinely unchanged polygons over the common baseline/future domain, plus
     parent-linked signed change contours and equal-height transitions.
-  - Four committed end-to-end fixtures now cover single, intersecting, parallel,
-    and stress configurations under QGIS 4.
+  - Five modernisation fixtures cover single, intersecting, parallel, curved,
+    and stress configurations within the 13-case QGIS workflow matrix.
   - The workflow is mostly stable computationally; it remains a draft future
     standard and is not promoted as enforceable before 2030-11-21.
   - Full complex transitional and inner-transitional geometry, plus
     TODA/clearway-aware departure starts, remain incomplete.
-  - Physical, taxiway, markings, lighting, declared-distance, and current OLS
-    source tables remain incomplete or unsupported.
+  - Physical, taxiway, markings, lighting, and declared-distance source tables
+    outside the current OLS dependency scope remain incomplete or unsupported.
 
 - [ ] Aircraft characteristics registry.
 
@@ -361,24 +409,25 @@ Last reviewed: 2026-07-12.
 
 ## Suggested Working Order
 
-- [x] 1. QGIS smoke-test the current MOS139 workflow and record any runtime
-      issues before adding new capability.
-- [x] 2. Consolidate declared distances around warning/override behaviour,
-      because the first and second passes are implemented and user-facing.
-- [x] 3. Establish a reproducible Annex 14 baseline with representative fixtures
-      and a headless QGIS 4 end-to-end regression runner.
-- [ ] 4. Close the modernised Annex 14 branch by reconciling capability metadata,
-      regulatory-scope documentation, and the promoted/diagnostic layer contract.
-- [ ] 5. Decide whether the established MOS/NASF Controlling OLS remains
-      diagnostic-only or moves toward promoted output; then harden accordingly.
-- [ ] 6. Close the highest-value AGL and marking gaps that depend on missing UI
-      context.
-- [ ] 7. Add the aircraft characteristics registry as a new, isolated data
-      service and wire it into design-aircraft nomination.
-- [ ] 8. Continue EASA and Annex 14 expansion only with clear capability gating
-      so draft/scaffolded outputs cannot be mistaken for complete coverage.
+- [ ] 1. Resolve the GeoPackage Polygon/MultiPolygon declaration mismatch for
+      pre-threshold markings and make the file-output runner reject the GDAL
+      conformance warning.
+- [ ] 2. Close the modernised Annex 14 promotion boundary: document complex
+      transitional scope, reconcile the ruleset README/capability declarations,
+      add TODA/clearway-aware departure starts, and remove Annex-specific final
+      partition recovery.
+- [ ] 3. Turn the QGIS workflow matrix into release evidence with repeated
+      timing/determinism runs and production gates on supported QGIS releases.
+- [ ] 4. Add source-backed real/sample-airport declared-distance fixtures, which
+      also closes the remaining stopway consolidation item.
+- [ ] 5. Review and close the highest-value AGL and runway-marking gaps that
+      depend on missing UI or runway-context inputs.
+- [ ] 6. Complete EASA table-level traceability/UI validation and the remaining
+      CAP 168 non-OLS source scope without weakening capability gating.
+- [ ] 7. Resolve CNS height/specialised geometry gaps, then continue the isolated
+      aircraft-registry and placeholder-guideline enhancements.
 
-Immediate OLS working order after the 2026-07-11 stability checkpoint:
+Completed OLS workflow foundations:
 
 - [x] Improve the OLS dialog mode selection, OFS/OES explanation, validation
       placement, and workload explanation.
@@ -392,8 +441,16 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
   - Solved controlling regions and clipped contours are published under
     `Controlling Surfaces`; solver candidates and transition boundaries stay in
     `99 Debug / Development`.
-  - Capability metadata now records lower-envelope coverage as `partial`; it
-    does not imply complete regulatory or topology coverage.
+  - Capability metadata reflects the per-profile boundary: MOS139, CAP 168, and
+    current Annex 14 are supported within their locks, while modernised Annex
+    14 remains `partial`.
+- [x] Reform operational logging and enforce its schema and volume in the QGIS
+      workflow runner.
+
+  - Routine runs now show phases, explained omissions, section outputs, and one
+    terminal result without per-feature or per-layer development chatter.
+  - A dedicated temporary GeoPackage fixture checks concise logs and exact
+    generated-layer/file parity.
 
 ## Verification Snapshot
 
@@ -446,3 +503,12 @@ Immediate OLS working order after the 2026-07-11 stability checkpoint:
       exact owning-region boundary; a focused regression covers Transitional
       contours in both modes and the YMML audit measured a maximum sampled
       outside distance below `7e-10 m`.
+- [x] 2026-07-15: completed the Safeguarding Builder logging reform. The QGIS
+      operational log now uses a stable event schema, exact severity mapping,
+      aggregation, single-line rendering, opt-in diagnostics, one start, and
+      one terminal result. QGIS unittest discovery passed 147 tests.
+- [x] 2026-07-15: all 13 isolated workflow fixtures passed. Operational volume
+      ranged from 21 to 36 events with zero QGIS log warnings. The dedicated
+      file-output fixture produced 48 loaded layers and 48 GeoPackage files in
+      a temporary directory using 25 operational events and no per-layer file
+      success/debug messages.

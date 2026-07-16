@@ -15,7 +15,6 @@ from qgis.core import (  # type: ignore
     QgsFields,
     QgsGeometry,
     QgsLayerTreeGroup,
-    QgsMessageLog,
     QgsPointXY,
     QgsProject,
     QgsVectorLayer,
@@ -23,6 +22,7 @@ from qgis.core import (  # type: ignore
 )
 
 from ..reports.runway_summary import summarize_generated_elements
+from ..core.run_log import QgsMessageLog
 
 PLUGIN_TAG = "SafeguardingBuilder"
 
@@ -1563,6 +1563,10 @@ class PhysicalGeometryMixin:
         plugin_tag = PLUGIN_TAG
         generated: List[Tuple[str, QgsGeometry, dict]] = []
 
+        active_ruleset = self.get_active_ruleset()
+        if active_ruleset.capability_status("markings.runway") != "supported":
+            return generated
+
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
         runway_width = runway_data.get("width")
@@ -3042,7 +3046,8 @@ class PhysicalGeometryMixin:
                     phys_p_start,
                     rwy_params["azimuth_r_p"],
                     primary_desig,
-                    clearway_specs["primary"]["ref_mos"],
+                    clearway_specs["primary"].get("ref_mos")
+                    or clearway_specs["primary"].get("ref", "Active ruleset"),
                 ),
                 (
                     "Clearway",
@@ -3052,7 +3057,8 @@ class PhysicalGeometryMixin:
                     phys_p_end,
                     rwy_params["azimuth_p_r"],
                     reciprocal_desig,
-                    clearway_specs["reciprocal"]["ref_mos"],
+                    clearway_specs["reciprocal"].get("ref_mos")
+                    or clearway_specs["reciprocal"].get("ref", "Active ruleset"),
                 ),
             ]
 

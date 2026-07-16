@@ -98,6 +98,43 @@ class OlsSourceValidationQgisTests(unittest.TestCase):
             start_elevation_m += section["length_m"] * section["slope"]
             start_m = end_m
 
+    def test_production_evaluators_match_independent_current_annex14_checkpoints(self):
+        case = self.manifest["analytical_cases"]["annex14_current_ni_code3"]
+        assumptions = case["assumptions"]
+        approach = case["approach"]
+        approach_section = approach["sections"][0]
+        approach_evaluator = axis_elevation_evaluator(
+            QgsPointXY(0.0, 0.0),
+            90.0,
+            assumptions["approach_inner_edge_elevation_m"],
+            approach_section["slope"],
+            approach_section["length_m"],
+        )
+        for checkpoint in approach["elevation_checkpoints"]:
+            actual_m = approach_evaluator(QgsPointXY(checkpoint["station_m"], 25.0))
+            self.assertIsNotNone(actual_m)
+            self.assertAlmostEqual(
+                actual_m,
+                checkpoint["expected_elevation_m"],
+                delta=self.elevation_tolerance,
+            )
+
+        horizontal = case["inner_horizontal_and_conical"]
+        ihs_elevation_m = horizontal["inner_horizontal_expected_elevation_m"]
+        base = QgsGeometry.fromRect(QgsRectangle(-1000.0, -1000.0, 0.0, 1000.0))
+        conical_evaluator = conical_elevation_evaluator(
+            base,
+            ihs_elevation_m,
+            horizontal["conical_slope"],
+            horizontal["conical_height_extent_m"] / horizontal["conical_slope"],
+        )
+        contour = horizontal["contour_checkpoint"]
+        actual_m = conical_evaluator(
+            QgsPointXY(contour["expected_offset_from_ihs_m"], 0.0)
+        )
+        self.assertIsNotNone(actual_m)
+        self.assertAlmostEqual(actual_m, contour["elevation_m"], delta=self.elevation_tolerance)
+
     def test_production_curved_evaluators_agree_at_independent_intersection_points(self):
         case = self.manifest["analytical_cases"]["mos139_axis_conical_intersection"]
         assumptions = case["assumptions"]

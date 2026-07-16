@@ -116,6 +116,9 @@ dialog/dialog_constants.py       Shared dialog labels, placeholders, logging
                                  tag, and output format definitions.
 core/layers.py                   Layer creation, feature writing, output file
                                  handling, grouping, and style application.
+core/run_log.py                  Structured operational events, diagnostic
+                                 routing, aggregation, and QGIS severity mapping.
+core/run_history.py              Append-only GUI/headless runtime test ledger.
 core/styles.py                   Mapping between layer style keys and QML files.
 guidelines/guideline_constants.py
                                  Shared constants for guideline dimensions,
@@ -134,7 +137,7 @@ dimensions/ols_dimensions.py     Legacy compatibility shim for MOS139 OLS
                                  dimensions.
 dimensions/agl_dimensions.py     Legacy compatibility shim for MOS139 AGL
                                  dimensions.
-rulesets/mos139/                Current MOS139 metadata, OLS, physical,
+rulesets/mos139/                MOS139 C.07 2026 metadata, OLS, physical,
                                  marking, and lighting policy sources. See
                                  `rulesets/mos139/README.md`.
 rulesets/mos139/classification.py
@@ -152,6 +155,55 @@ styles/*.qml                     QGIS layer styling files.
 metadata.txt                     QGIS plugin metadata.
 resources.qrc                    Qt resource manifest.
 ```
+
+## Logging Contract
+
+The QGIS **SafeguardingBuilder** log is a concise operational trace intended for
+a quick scan. A run emits one `START`, numbered `PHASE` events, material `SKIP`,
+`OUTPUT`, `WARN`, or `ERROR` outcomes, and exactly one terminal `DONE`,
+`CANCELLED`, or `FAILED` event. Fields use a stable `key=value` format on one
+line. Skips state why an output was omitted; warnings state the consequence and,
+where useful, the corrective action. Repeated equivalent skips and warnings are
+aggregated rather than emitted once per feature or layer.
+
+Severity is semantic rather than numeric: routine progress, skips, and
+cancellation are QGIS Info; recoverable degradation is Warning; failed output is
+Critical; and only a successfully completed run is Success. User notifications
+remain in the message bar, so message-log events do not request duplicate QGIS
+pop-ups.
+
+Detailed solver, geometry, and legacy implementation messages use the separate
+**SafeguardingBuilder.Diagnostics** tag and are disabled by default. Set
+`SAFEGUARDING_BUILDER_DIAGNOSTICS=1` before starting QGIS to enable them. New
+code should use `RunLog` outcomes instead of calling QGIS logging directly. The
+workflow regression runner checks the event schema, exact severity mapping,
+single-line rendering, one start/terminal pair, and a volume ceiling of
+`32 + 3 × runway count`, with additional allowance for warnings and errors.
+
+## Runtime Test History
+
+Every safeguarding generation run appends one tab-separated row beneath stable
+column headers in `runtime_test_runs.txt` in the plugin directory. This includes
+QGIS runs and headless workflow runs. The columns record the actor (`qgis user`,
+`codex headless`, or an explicit override), airport, selected rulesets,
+completion status, total and key phase/module elapsed times, plugin/QGIS
+versions, Git commit, and whether the working tree was dirty. The final
+scenario columns also record the test case, input filename, runway count and
+layout, plus a short exact-input fingerprint. `module_timings_json` retains all
+module timings and call counts, including diagnostic modules that do not have
+dedicated columns.
+
+Set `SAFEGUARDING_BUILDER_RUN_AGENT` to override the actor,
+`SAFEGUARDING_BUILDER_COMMIT` for packaged builds without `.git`, or
+`SAFEGUARDING_BUILDER_RUN_HISTORY` to select another text-file path. The file
+uses a versioned TSV schema. Existing version 1 JSON Lines ledgers are converted
+automatically on the next write, preserving their original schema version and
+timing data.
+
+For a filterable, plain-English view of runtime by test case, airport, runway
+setup, and OLS selection, run `python3 dashboard/runtime_dashboard.py --serve`
+from this repository folder and open <http://127.0.0.1:8765>. It also compares
+the last five matching runs with the previous five. See `dashboard/README.md`.
 
 ## Development Notes
 

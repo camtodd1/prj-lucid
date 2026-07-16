@@ -67,7 +67,8 @@ Airport Safeguarding
       design standards, or a combination by topic.
 - [ ] Decide whether helicopter-site safeguarding belongs in the same generator
       family structure or should remain a separate future module.
-- [ ] Confirm which Annex 14 edition should be used for current OLS mapping.
+- [x] Use ICAO Annex 14 Volume I, Ninth Edition, Amendment 18 for current OLS
+      mapping applicable until 20 November 2030.
 - [ ] Confirm whether CNS protection should remain a supplementary framework
       rather than part of the aerodrome-standard ruleset for each jurisdiction.
 - [ ] Confirm whether MET station safeguarding belongs in this matrix or in a

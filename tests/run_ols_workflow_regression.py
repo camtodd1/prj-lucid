@@ -8,7 +8,9 @@ import json
 import math
 import os
 import statistics
+import subprocess
 import sys
+import tempfile
 import time
 from collections import defaultdict
 from contextlib import ExitStack
@@ -22,9 +24,9 @@ from qgis.core import (
     QgsApplication,
     QgsCoordinateReferenceSystem,
     QgsGeometry,
-    QgsMessageLog,
     QgsPointXY,
     QgsProject,
+    QgsVectorLayer,
 )
 
 
@@ -50,6 +52,12 @@ class _Iface:
 
     def mainWindow(self):
         return None
+
+    def addVectorLayer(self, path, name, provider):
+        layer = QgsVectorLayer(str(path), str(name), str(provider))
+        if layer.isValid():
+            QgsProject.instance().addMapLayer(layer)
+        return layer
 
 
 def _geometry_union(geometries: Iterable[QgsGeometry]) -> QgsGeometry:
@@ -445,10 +453,13 @@ def _comparison_metrics(engine, result) -> Dict[str, object]:
     family = next(
         (
             str((candidate.metadata or {}).get("annex14_family") or "").upper()
-            for candidate in engine.future_engine.candidates
+            for candidate in (
+                list(engine.future_engine.candidates)
+                + list(engine.baseline_engine.candidates)
+            )
             if (candidate.metadata or {}).get("annex14_family")
         ),
-        "UNKNOWN",
+        "OLS",
     )
     no_change_parts = []
     for baseline, future, geometry in result["no_change"]:
@@ -642,8 +653,14 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
                 f"{region_layer['layer']} has {region_layer['overlap_area_m2']:.6f} m2 "
                 "of cross-controller overlap"
             )
-    if set(comparisons) != {"OFS", "OES"}:
-        failures.append(f"comparison families were {sorted(comparisons)}")
+    expected_comparison_families = set(
+        case.get("expected_comparison_families", ["OFS", "OES"])
+    )
+    if set(comparisons) != expected_comparison_families:
+        failures.append(
+            f"comparison families were {sorted(comparisons)}; "
+            f"expected {sorted(expected_comparison_families)}"
+        )
 
     for family, metrics in comparisons.items():
         area_tolerance = max(
@@ -675,17 +692,93 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
     return failures
 
 
+def _logging_contract_failures(logs, runway_count: int) -> List[str]:
+    """Validate the concise, scan-oriented operational log contract."""
+    failures = []
+    normal = [entry for entry in logs if entry["tag"] == "SafeguardingBuilder"]
+    severe = [
+        entry
+        for entry in normal
+        if entry["level"] in {int(Qgis.Warning), int(Qgis.Critical)}
+    ]
+    maximum_events = 32 + (3 * runway_count) + len(severe)
+    if len(normal) > maximum_events:
+        failures.append(
+            f"operational log emitted {len(normal)} events; budget is {maximum_events}"
+        )
+
+    starts = [entry for entry in normal if entry["message"].startswith("START")]
+    terminals = [
+        entry
+        for entry in normal
+        if entry["message"].startswith(("DONE", "CANCELLED", "FAILED"))
+    ]
+    if len(starts) != 1:
+        failures.append(f"operational log has {len(starts)} START events instead of one")
+    if len(terminals) != 1:
+        failures.append(
+            f"operational log has {len(terminals)} terminal events instead of one"
+        )
+
+    expected_levels = {
+        "START": int(Qgis.Info),
+        "PHASE": int(Qgis.Info),
+        "SKIP": int(Qgis.Info),
+        "OUTPUT": int(Qgis.Info),
+        "WARN": int(Qgis.Warning),
+        "ERROR": int(Qgis.Critical),
+        "DONE": int(Qgis.Success),
+        "CANCELLED": int(Qgis.Info),
+        "FAILED": int(Qgis.Critical),
+    }
+    for entry in normal:
+        message = entry["message"]
+        token = message.split(" ", 1)[0]
+        expected = expected_levels.get(token)
+        if expected is None:
+            failures.append(f"operational log uses unknown event kind: {token}")
+        elif entry["level"] != expected:
+            failures.append(
+                f"{token} uses QGIS severity {entry['level']} instead of {expected}"
+            )
+        if "\n" in message or "\r" in message:
+            failures.append(f"{token} event is not a single readable line")
+    return failures
+
+
 def _run_case(
     case, manifest, builder_cls, dialog_cls, controlling_cls, comparison_cls,
     production_gates=False,
 ):
-    fixture_path = FIXTURE_DIR / case["file"]
+    fixture_path = FIXTURE_DIR / case.get("source_file", case["file"])
     payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+    output_directory_context = None
+    output_directory = None
+    if case.get("file_output_logging"):
+        output_directory_context = tempfile.TemporaryDirectory(
+            prefix="safeguarding-builder-file-output-"
+        )
+        output_directory = Path(output_directory_context.name)
+        output_options = dict(payload.get("output_options") or {})
+        output_options.update(
+            {
+                "mode": "file",
+                "path": str(output_directory),
+                "format": "GeoPackage",
+            }
+        )
+        payload["output_options"] = output_options
     case = {**case, "payload_runway_count": len(payload.get("runways", []))}
     project = QgsProject.instance()
     project.clear()
     project.setCrs(QgsCoordinateReferenceSystem(case["project_crs"]))
     dialog = dialog_cls()
+    dialog._runtime_test_context = {
+        "test_case_id": Path(case["file"]).stem,
+        "test_case_name": case["description"],
+        "input_filename": fixture_path.name,
+        "runway_configuration": case["runway_configuration"],
+    }
     if hasattr(dialog, "_airport_lookup_timer"):
         dialog._airport_lookup_timer.stop()
     dialog._apply_loaded_payload(payload)
@@ -756,22 +849,19 @@ def _run_case(
     builder.dlg = dialog
     qgis_logs = []
 
+    run_log_module = sys.modules[
+        f"{builder_cls.__module__.split('.', 1)[0]}.core.run_log"
+    ]
+    original_log_sink = run_log_module._qgis_sink
+
     def capture_log(message, tag, level):
-        text = str(message)
-        if int(level) >= int(Qgis.Warning) or "Controlling" in text or "controlling" in text:
-            qgis_logs.append({"message": text, "tag": str(tag), "level": int(level)})
+        qgis_logs.append(
+            {"message": str(message), "tag": str(tag), "level": int(level)}
+        )
+        original_log_sink(message, tag, level)
 
-    QgsApplication.messageLog().messageReceived.connect(capture_log)
     with ExitStack() as stack:
-        original_log_message = QgsMessageLog.logMessage
-
-        def recorded_log_message(message, tag="", level=Qgis.Info, notifyUser=False):
-            text = str(message)
-            if int(level) >= int(Qgis.Warning) or "Controlling" in text or "controlling" in text:
-                qgis_logs.append({"message": text, "tag": str(tag), "level": int(level)})
-            return original_log_message(message, tag, level, notifyUser)
-
-        stack.enter_context(patch.object(QgsMessageLog, "logMessage", recorded_log_message))
+        stack.enter_context(patch.object(run_log_module, "_qgis_sink", capture_log))
         for name in builder_methods:
             original = getattr(builder_cls, name)
             stack.enter_context(patch.object(builder_cls, name, timed(name, original)))
@@ -790,14 +880,30 @@ def _run_case(
         start = time.perf_counter()
         builder.run_safeguarding_processing()
         total_seconds = time.perf_counter() - start
-    QgsApplication.messageLog().messageReceived.disconnect(capture_log)
 
     layers = _layer_metrics(project)
+    file_output = None
+    if output_directory is not None:
+        output_files = sorted(path for path in output_directory.iterdir() if path.is_file())
+        geopackage_files = [path for path in output_files if path.suffix.lower() == ".gpkg"]
+        file_output = {
+            "format": "GeoPackage",
+            "files": len(output_files),
+            "geopackage_files": len(geopackage_files),
+            "sample": [path.name for path in geopackage_files[:5]],
+            "temporary_directory": True,
+        }
     solver_diagnostics = []
+    baseline_ruleset_id = getattr(
+        getattr(builder, "baseline_ols_ruleset", None), "id", "conventional_ols"
+    )
+    conventional_family = (
+        "MOS139" if baseline_ruleset_id == "mos139_2019" else baseline_ruleset_id
+    )
     for engine in engine_instances.values():
         engine.ensure_adjacency_diagnostics()
         families = sorted({
-            str((candidate.metadata or {}).get("annex14_family") or "MOS139")
+            str((candidate.metadata or {}).get("annex14_family") or conventional_family)
             for candidate in engine.candidates
         })
         diagnostics = {
@@ -808,10 +914,36 @@ def _run_case(
         transition_metrics = _axis_conical_transition_metrics(engine)
         if transition_metrics["features"]:
             diagnostics["axis_conical_transitions"] = transition_metrics
-        if families == ["MOS139"]:
+        if (
+            families == ["MOS139"]
+            and getattr(getattr(builder, "baseline_ols_ruleset", None), "id", "")
+            == "mos139_2019"
+        ):
             diagnostics["mos139_lock"] = _engine_lock_signature(engine)
         solver_diagnostics.append(diagnostics)
     failures = _case_failures(case, manifest, comparison_results, layers)
+    failures.extend(_logging_contract_failures(qgis_logs, case["payload_runway_count"]))
+    if case.get("file_output_logging"):
+        if getattr(builder, "output_mode", None) != "file":
+            failures.append("dedicated file-output fixture did not use file mode")
+        if not file_output or not file_output["geopackage_files"]:
+            failures.append("dedicated file-output fixture wrote no GeoPackage files")
+        elif file_output["geopackage_files"] != layers["layers"]:
+            failures.append(
+                "file-output layer/file mismatch: "
+                f"{layers['layers']} loaded layers and "
+                f"{file_output['geopackage_files']} GeoPackage files"
+            )
+        noisy_file_messages = [
+            entry["message"]
+            for entry in qgis_logs
+            if "successfully written" in entry["message"].lower()
+            or "display_name =" in entry["message"].lower()
+        ]
+        if noisy_file_messages:
+            failures.append(
+                f"file output emitted {len(noisy_file_messages)} per-layer debug messages"
+            )
     if production_gates:
         for index, diagnostics in enumerate(solver_diagnostics, start=1):
             exceptional = diagnostics["exceptional_recovery"]
@@ -904,12 +1036,38 @@ def _run_case(
         "description": case["description"],
         "icao_code": case["icao_code"],
         "runways": case["payload_runway_count"],
+        "baseline_ruleset": getattr(getattr(builder, "baseline_ols_ruleset", None), "id", None),
+        "comparison_ruleset": getattr(getattr(builder, "comparison_ols_ruleset", None), "id", None),
         "total_seconds": total_seconds,
         "stages": dict(sorted(stage_totals.items())),
         "comparisons": comparison_results,
         "layers": layers,
         "messages": iface.bar.messages,
         "qgis_logs": qgis_logs,
+        "qgis_warnings": [
+            entry
+            for entry in qgis_logs
+            if entry["level"] in {int(Qgis.Warning), int(Qgis.Critical)}
+        ],
+        "file_output": file_output,
+        "logging_contract": {
+            "normal_events": sum(
+                entry["tag"] == "SafeguardingBuilder" for entry in qgis_logs
+            ),
+            "diagnostic_events": sum(
+                entry["tag"] == "SafeguardingBuilder.Diagnostics"
+                for entry in qgis_logs
+            ),
+            "maximum_normal_events": (
+                32
+                + (3 * case["payload_runway_count"])
+                + sum(
+                    entry["tag"] == "SafeguardingBuilder"
+                    and entry["level"] in {int(Qgis.Warning), int(Qgis.Critical)}
+                    for entry in qgis_logs
+                )
+            ),
+        },
         "solver_diagnostics": solver_diagnostics,
         "mos139_lock": next(
             (
@@ -925,6 +1083,8 @@ def _run_case(
     }
     dialog.deleteLater()
     project.clear()
+    if output_directory_context is not None:
+        output_directory_context.cleanup()
     return result
 
 
@@ -936,6 +1096,11 @@ def _parse_args():
         help="Fixture filename from tests/fixtures/ols; repeat to select multiple cases.",
     )
     parser.add_argument("--output", type=Path, help="Optional JSON report path.")
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print the full JSON report even when --output is supplied.",
+    )
     parser.add_argument("--repeat", type=int, default=1, help="Runs per fixture; use 3 or more for release gates.")
     parser.add_argument("--baseline", type=Path, help="Performance baseline JSON used for release gates.")
     parser.add_argument(
@@ -1017,6 +1182,81 @@ def _release_gate_failures(fixture, runs, baseline, maximum_regression):
     return failures
 
 
+def _write_report(args, report) -> int:
+    if args.output:
+        args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
+    if args.verbose or not args.output:
+        print(json.dumps(report, indent=2))
+    else:
+        failed = sum(not fixture["passed"] for fixture in report["fixtures"])
+        status = "PASS" if report["passed"] else "FAIL"
+        print(
+            f"{status} | fixtures={len(report['fixtures'])} | "
+            f"failed={failed} | output={args.output}"
+        )
+    return 0 if report["passed"] else 1
+
+
+def _run_isolated_matrix(args, cases) -> int:
+    """Run each fixture in a fresh QGIS process to avoid native-state buildup."""
+    report = {
+        "qgis_version": None,
+        "repeat": args.repeat,
+        "baseline": str(args.baseline) if args.baseline else None,
+        "maximum_runtime_regression": args.maximum_runtime_regression,
+        "isolated_fixtures": True,
+        "fixtures": [],
+    }
+    script_path = Path(__file__).resolve()
+    with tempfile.TemporaryDirectory(prefix="safeguarding-builder-matrix-") as directory:
+        directory_path = Path(directory)
+        for index, case in enumerate(cases):
+            child_output = directory_path / f"{index:02d}.json"
+            command = [
+                sys.executable,
+                str(script_path),
+                "--fixture",
+                case["file"],
+                "--output",
+                str(child_output),
+                "--repeat",
+                str(args.repeat),
+                "--maximum-runtime-regression",
+                str(args.maximum_runtime_regression),
+            ]
+            if args.baseline:
+                command.extend(["--baseline", str(args.baseline.resolve())])
+            if args.production_gates:
+                command.append("--production-gates")
+            completed = subprocess.run(
+                command,
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            if child_output.exists():
+                child_report = json.loads(child_output.read_text(encoding="utf-8"))
+                report["qgis_version"] = report["qgis_version"] or child_report.get(
+                    "qgis_version"
+                )
+                report["fixtures"].extend(child_report.get("fixtures", []))
+                continue
+
+            details = (completed.stderr or completed.stdout or "no child output").strip()
+            report["fixtures"].append(
+                {
+                    "fixture": case["file"],
+                    "failures": [
+                        f"isolated QGIS process exited {completed.returncode}: "
+                        f"{details[-1000:]}"
+                    ],
+                    "passed": False,
+                }
+            )
+    report["passed"] = all(case["passed"] for case in report["fixtures"])
+    return _write_report(args, report)
+
+
 def main() -> int:
     args = _parse_args()
     if args.repeat < 1:
@@ -1037,6 +1277,9 @@ def main() -> int:
         missing = requested - {case["file"] for case in cases}
         if missing:
             raise SystemExit(f"Unknown fixture(s): {', '.join(sorted(missing))}")
+
+    if len(cases) > 1:
+        return _run_isolated_matrix(args, cases)
 
     workspace = Path(__file__).resolve().parents[1]
     sys.path.insert(0, str(workspace.parent))
@@ -1068,10 +1311,13 @@ def main() -> int:
             )
             for _run_number in range(args.repeat)
         ]
-        gate_failures = _release_gate_failures(
-            case["file"], runs, baseline, args.maximum_runtime_regression
+        case_baseline = (
+            baseline if case.get("performance_baseline_required", True) else None
         )
-        if mos139_lock is not None:
+        gate_failures = _release_gate_failures(
+            case["file"], runs, case_baseline, args.maximum_runtime_regression
+        )
+        if mos139_lock is not None and case.get("mos139_lock_required", True):
             expected_lock = mos139_lock.get("fixtures", {}).get(case["file"])
             for run in runs:
                 if expected_lock is None:
@@ -1092,11 +1338,8 @@ def main() -> int:
                 "passed": all(run["passed"] for run in runs) and not gate_failures,
             })
     report["passed"] = all(case["passed"] for case in report["fixtures"])
-    if args.output:
-        args.output.write_text(json.dumps(report, indent=2), encoding="utf-8")
-    print(json.dumps(report, indent=2))
     app.exitQgis()
-    return 0 if report["passed"] else 1
+    return _write_report(args, report)
 
 
 if __name__ == "__main__":

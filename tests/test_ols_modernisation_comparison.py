@@ -2,7 +2,17 @@ import math
 import unittest
 from unittest.mock import patch
 
-from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle
+from qgis.PyQt.QtCore import QVariant
+from qgis.core import (
+    QgsFeature,
+    QgsField,
+    QgsFields,
+    QgsGeometry,
+    QgsLayerTreeGroup,
+    QgsPointXY,
+    QgsRectangle,
+    QgsVectorLayer,
+)
 
 from guidelines.controlling_ols_engine import (
     ControllingOlsCandidate,
@@ -198,6 +208,89 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                 self.assertAlmostEqual(clipped.boundingBox().xMaximum(), 100.0, places=9)
                 self.assertTrue(clipped.difference(region).isEmpty())
 
+    def test_controlling_contours_recover_near_coincident_region_boundary(self):
+        region = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        candidate = ControllingOlsCandidate(
+            "approach",
+            "Precision Approach",
+            QgsGeometry(region),
+            constant_elevation_evaluator(5.3),
+            "constant",
+        )
+        engine = PlanarControllingOlsEngine([candidate])
+        engine._controlling_region_geometries_cache = [(candidate, QgsGeometry(region))]
+        contour = ControllingOlsContour(
+            surface_id=candidate.surface_id,
+            surface_type=candidate.surface_type,
+            geometry=QgsGeometry.fromPolylineXY(
+                [QgsPointXY(10.0, -0.01), QgsPointXY(90.0, -0.01)]
+            ),
+            contour_elevation_m=5.3,
+            source_layer="test",
+        )
+
+        capture = _ControllingLayerCapture()
+        self.assertTrue(
+            capture._create_controlling_contour_layer("TEST", None, engine, [contour])
+        )
+        recovered = capture.layers[0][4][0].geometry()
+        self.assertGreater(recovered.length(), 79.9)
+        self.assertLess(recovered.length(), 80.1)
+        self.assertAlmostEqual(recovered.boundingBox().yMinimum(), 0.0, places=9)
+        self.assertAlmostEqual(recovered.boundingBox().yMaximum(), 0.0, places=9)
+        self.assertTrue(recovered.difference(region).isEmpty())
+
+    def test_controlling_contour_registration_rejects_null_elevation_edges(self):
+        class _SourceFeature:
+            @staticmethod
+            def geometry():
+                return QgsGeometry.fromPolylineXY(
+                    [QgsPointXY(0.0, 0.0), QgsPointXY(100.0, 0.0)]
+                )
+
+            @staticmethod
+            def attribute(name):
+                return None if name == "contour_elev_am" else ""
+
+        capture = _ControllingLayerCapture()
+        capture._register_controlling_ols_contour(
+            "transition",
+            "Transitional",
+            _SourceFeature(),
+            "test",
+        )
+        self.assertEqual(capture._controlling_ols_contours, [])
+
+    def test_change_contour_group_reconciliation_uses_feature_family(self):
+        ofs_group = QgsLayerTreeGroup("OFS")
+        oes_group = QgsLayerTreeGroup("OES")
+        ofs_layer = QgsVectorLayer(
+            "LineString?field=future_family:string&field=delta_m:double",
+            "Change Contours",
+            "memory",
+        )
+        feature = QgsFeature(ofs_layer.fields())
+        feature.setGeometry(
+            QgsGeometry.fromPolylineXY(
+                [QgsPointXY(0.0, 0.0), QgsPointXY(100.0, 0.0)]
+            )
+        )
+        feature.setAttributes(["OFS", 5.0])
+        self.assertTrue(ofs_layer.dataProvider().addFeature(feature))
+
+        # Reproduce the reported tree state: an OFS-attributed contour layer
+        # has been reparented beneath the OES result group.
+        oes_group.addLayer(ofs_layer)
+        capture = _ComparisonLayerCapture()
+        capture._reconcile_modernisation_change_contour_groups(
+            {"OFS": ofs_group, "OES": oes_group}
+        )
+
+        self.assertEqual(len(ofs_group.children()), 1)
+        self.assertEqual(len(oes_group.children()), 0)
+        moved_layer = ofs_group.children()[0].layer()
+        self.assertIs(moved_layer, ofs_layer)
+
     def test_mos_tocs_conical_overlap_is_assigned_once(self):
         conical = ControllingOlsCandidate(
             "conical", "Conical", QgsGeometry.fromRect(QgsRectangle(40, 0, 100, 100)),
@@ -293,6 +386,181 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                         min(1.0, ((first_dx * second_dx) + (first_dy * second_dy)) / denominator),
                     )
                     self.assertLess(math.degrees(math.acos(cosine)), 150.0)
+
+    def test_numeric_sliver_is_reclassified_to_verified_near_tie_controller(self):
+        needle = QgsGeometry.fromRect(QgsRectangle(40.0, 49.99, 95.0, 50.01))
+        assigned = ControllingOlsCandidate(
+            "assigned",
+            "Assigned Surface",
+            needle,
+            constant_elevation_evaluator(100.005),
+            "plane",
+            {
+                "plane_a": 0.0,
+                "plane_b": 0.0,
+                "plane_c": 100.005,
+                "annex14_family": "OES",
+            },
+        )
+        controller = ControllingOlsCandidate(
+            "controller",
+            "Controller Surface",
+            needle,
+            constant_elevation_evaluator(100.0),
+            "plane",
+            {
+                "plane_a": 0.0,
+                "plane_b": 0.0,
+                "plane_c": 100.0,
+                "annex14_family": "OES",
+            },
+        )
+        engine = PlanarControllingOlsEngine([assigned, controller])
+
+        corrected = engine._reassign_numeric_sliver_parts([(assigned, needle)])
+
+        self.assertEqual(corrected[0][0].surface_id, "controller")
+        self.assertTrue(corrected[0][1].equals(needle))
+        self.assertEqual(
+            engine._region_solve_stats["numeric_sliver_reassigned_part_count"],
+            1.0,
+        )
+        self.assertAlmostEqual(
+            engine._region_solve_stats["numeric_sliver_reassigned_area_m2"],
+            needle.area(),
+            places=6,
+        )
+
+    def test_final_partition_preserves_an_existing_solved_narrow_region(self):
+        fields = QgsFields(
+            [
+                QgsField("region_id", QVariant.Int),
+                QgsField("surface_id", QVariant.String),
+                QgsField("surface", QVariant.String),
+                QgsField("elev_min", QVariant.Double),
+                QgsField("elev_max", QVariant.Double),
+            ]
+        )
+        main = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 40.0, 100.0))
+        needle = QgsGeometry.fromRect(QgsRectangle(40.0, 49.99, 95.0, 50.01))
+        solved = QgsGeometry.unaryUnion([main, needle])
+        candidate = ControllingOlsCandidate(
+            "solved",
+            "Solved Surface",
+            solved,
+            constant_elevation_evaluator(90.0),
+            "plane",
+            {
+                "plane_a": 0.0,
+                "plane_b": 0.0,
+                "plane_c": 90.0,
+                "annex14_family": "OES",
+            },
+        )
+        competitor = ControllingOlsCandidate(
+            "competitor",
+            "Competitor Surface",
+            needle,
+            constant_elevation_evaluator(100.0),
+            "plane",
+            {
+                "plane_a": 0.0,
+                "plane_b": 0.0,
+                "plane_c": 100.0,
+                "annex14_family": "OES",
+            },
+        )
+        engine = PlanarControllingOlsEngine([candidate, competitor])
+        item = QgsFeature(fields)
+        item.setAttributes(
+            [1, candidate.surface_id, candidate.surface_type, 90.0, 90.0]
+        )
+        item.setGeometry(solved)
+
+        corrected = engine._reassign_numeric_sliver_parts([(candidate, needle)])
+
+        repaired = _ControllingLayerCapture()._repair_final_controlling_partition(
+            [item], engine
+        )
+
+        self.assertEqual(corrected[0][0].surface_id, "solved")
+        self.assertEqual(len(repaired), 1)
+        self.assertAlmostEqual(repaired[0].geometry().area(), solved.area(), places=6)
+        self.assertNotIn("repair_sliver_reassigned_part_count", engine._region_solve_stats)
+
+    def test_final_partition_suppresses_numeric_line_spike(self):
+        fields = QgsFields(
+            [
+                QgsField("region_id", QVariant.Int),
+                QgsField("surface_id", QVariant.String),
+                QgsField("surface", QVariant.String),
+            ]
+        )
+        base = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 40.0, 100.0))
+        spike = QgsGeometry.fromRect(QgsRectangle(40.0, 49.995, 41.0, 50.005))
+        coverage = QgsGeometry.unaryUnion([base, spike])
+        candidate = ControllingOlsCandidate(
+            "surface",
+            "Surface",
+            coverage,
+            constant_elevation_evaluator(90.0),
+            "plane",
+            {"plane_a": 0.0, "plane_b": 0.0, "plane_c": 90.0},
+        )
+        engine = PlanarControllingOlsEngine([candidate])
+        item = QgsFeature(fields)
+        item.setAttributes([1, candidate.surface_id, candidate.surface_type])
+        item.setGeometry(base)
+
+        repaired = _ControllingLayerCapture()._repair_final_controlling_partition(
+            [item], engine
+        )
+
+        self.assertEqual(len(repaired), 1)
+        self.assertAlmostEqual(repaired[0].geometry().area(), base.area(), places=6)
+        self.assertEqual(
+            engine._region_solve_stats["repair_sliver_suppressed_part_count"],
+            1.0,
+        )
+
+    def test_final_partition_retains_numeric_gap_closure(self):
+        fields = QgsFields(
+            [
+                QgsField("region_id", QVariant.Int),
+                QgsField("surface_id", QVariant.String),
+                QgsField("surface", QVariant.String),
+                QgsField("elev_min", QVariant.Double),
+                QgsField("elev_max", QVariant.Double),
+            ]
+        )
+        coverage = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        notch = QgsGeometry.fromRect(QgsRectangle(40.0, 99.99, 41.0, 100.0))
+        solved = coverage.difference(notch)
+        candidate = ControllingOlsCandidate(
+            "surface",
+            "Surface",
+            coverage,
+            constant_elevation_evaluator(90.0),
+            "plane",
+            {"plane_a": 0.0, "plane_b": 0.0, "plane_c": 90.0},
+        )
+        engine = PlanarControllingOlsEngine([candidate])
+        item = QgsFeature(fields)
+        item.setAttributes(
+            [1, candidate.surface_id, candidate.surface_type, 90.0, 90.0]
+        )
+        item.setGeometry(solved)
+
+        repaired = _ControllingLayerCapture()._repair_final_controlling_partition(
+            [item], engine
+        )
+
+        self.assertEqual(len(repaired), 1)
+        self.assertAlmostEqual(repaired[0].geometry().area(), coverage.area(), places=6)
+        self.assertNotIn(
+            "repair_sliver_suppressed_part_count",
+            engine._region_solve_stats,
+        )
 
     def test_one_sided_surface_with_tolerance_edge_is_entirely_gain(self):
         baseline = self.constant("baseline", 100.0)
@@ -1350,6 +1618,63 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         for call in change_contours.call_args_list:
             self.assertEqual(call.kwargs["interval_m"], 0.25)
             self.assertEqual(call.kwargs["primary_interval_m"], 2.0)
+
+    def test_generic_ruleset_adapter_preserves_selected_baseline_direction(self):
+        annex_baseline = ControllingOlsCandidate(
+            surface_id="annex-ofs",
+            surface_type="Annex OFS",
+            footprint=QgsGeometry(self.domain),
+            elevation_at_xy=constant_elevation_evaluator(110.0),
+            model="constant",
+            metadata={"elevation_m": 110.0, "annex14_family": "OFS"},
+        )
+        mos_comparison = self.constant("mos-ols", 100.0)
+        capture = _ComparisonLayerCapture()
+
+        created = capture._create_ols_ruleset_comparison_layers(
+            icao_code="TEST",
+            baseline_ruleset_id="annex",
+            comparison_ruleset_id="mos",
+            baseline_model="annex14_modernised_ofs_oes",
+            comparison_model="ols_current",
+            baseline_candidates=[annex_baseline],
+            baseline_exclusions=[],
+            comparison_candidates=[mos_comparison],
+            comparison_exclusions=[],
+            output_groups={"OFS": object(), "OES": object(), "OLS": None},
+        )
+
+        self.assertTrue(created)
+        loss_layer = next(layer for layer in capture.layers if layer[2] == "Height Loss")
+        feature = loss_layer[4][0]
+        self.assertEqual(feature["baseline_ruleset"], "annex")
+        self.assertEqual(feature["comparison_ruleset"], "mos")
+        self.assertEqual(feature["change"], "loss")
+        self.assertEqual(feature["delta_sample_m"], -10.0)
+
+    def test_generic_ruleset_adapter_compares_two_conventional_ols_envelopes(self):
+        capture = _ComparisonLayerCapture()
+
+        created = capture._create_ols_ruleset_comparison_layers(
+            icao_code="TEST",
+            baseline_ruleset_id="cap168",
+            comparison_ruleset_id="mos139",
+            baseline_model="ols_current",
+            comparison_model="ols_current",
+            baseline_candidates=[self.constant("cap", 90.0)],
+            baseline_exclusions=[],
+            comparison_candidates=[self.constant("mos", 100.0)],
+            comparison_exclusions=[],
+            output_groups={"OFS": None, "OES": None, "OLS": object()},
+        )
+
+        self.assertTrue(created)
+        gain_layer = next(layer for layer in capture.layers if layer[2] == "Height Gain")
+        feature = gain_layer[4][0]
+        self.assertEqual(feature["future_family"], "OLS")
+        self.assertEqual(feature["baseline_ruleset"], "cap168")
+        self.assertEqual(feature["comparison_ruleset"], "mos139")
+        self.assertEqual(feature["delta_sample_m"], 10.0)
 
     def test_all_comparison_output_features_receive_unique_ids(self):
         baseline = self.constant("baseline", 100.0)

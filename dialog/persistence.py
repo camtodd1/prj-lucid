@@ -2,8 +2,9 @@
 
 import json
 import os
+from pathlib import Path
 
-from qgis.core import QgsMessageLog, Qgis  # type: ignore
+from qgis.core import Qgis  # type: ignore
 from qgis.PyQt import QtCore, QtWidgets  # type: ignore
 from qgis.PyQt.QtWidgets import (  # type: ignore
     QFileDialog,
@@ -23,11 +24,24 @@ from .dialog_constants import (
 )
 
 try:
+    from ..core.run_log import QgsMessageLog
+except ImportError:
+    from core.run_log import QgsMessageLog  # type: ignore
+
+try:
     from ..frameworks.registry import DEFAULT_FRAMEWORK_ID, normalize_framework_id
-    from ..rulesets.registry import DEFAULT_RULESET_ID, normalize_ruleset_id
+    from ..rulesets.registry import (
+        DEFAULT_RULESET_ID,
+        normalize_design_standard_id,
+        normalize_ruleset_id,
+    )
 except ImportError:
     from frameworks.registry import DEFAULT_FRAMEWORK_ID, normalize_framework_id  # type: ignore
-    from rulesets.registry import DEFAULT_RULESET_ID, normalize_ruleset_id  # type: ignore
+    from rulesets.registry import (  # type: ignore
+        DEFAULT_RULESET_ID,
+        normalize_design_standard_id,
+        normalize_ruleset_id,
+    )
 
 
 class PersistenceMixin:
@@ -84,6 +98,14 @@ class PersistenceMixin:
                 return None
         return None
 
+    def _baseline_ols_ruleset_combo_widget(self):
+        combo = getattr(self, "baseline_ols_ruleset_combo", None)
+        return combo if isinstance(combo, QComboBox) else None
+
+    def _comparison_ols_ruleset_combo_widget(self):
+        combo = getattr(self, "comparison_ols_ruleset_combo", None)
+        return combo if isinstance(combo, QComboBox) else None
+
     def _pick_json_file(self, title: str, accept_mode: QFileDialog.AcceptMode, initial_path: str = "") -> str:
         """Use a Qt file dialog that behaves reliably inside the plugin shell."""
         file_filter = self.tr("JSON Files (*.json)")
@@ -116,6 +138,8 @@ class PersistenceMixin:
             if reply == QtWidgets.QMessageBox.StandardButton.No:
                 return
 
+        self._runtime_test_context = {}
+
         cns_table = self._table("table_cns_facility")
         if cns_table:
             cns_table.setRowCount(0)
@@ -146,6 +170,8 @@ class PersistenceMixin:
         if isinstance(protected_airspace_combo, QComboBox):
             idx = protected_airspace_combo.findData("ruleset_aligned")
             protected_airspace_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        if hasattr(self, "_set_ols_ruleset_selection"):
+            self._set_ols_ruleset_selection(DEFAULT_RULESET_ID, "")
 
         for index in list(self._runway_groups.keys()):
             self._remove_runway_group_internal(index)
@@ -181,6 +207,12 @@ class PersistenceMixin:
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data_to_save, f, indent=4, ensure_ascii=False)
+            saved_path = Path(file_path)
+            self._runtime_test_context = {
+                "test_case_id": saved_path.stem,
+                "test_case_name": saved_path.stem.replace("_", " ").replace("-", " ").title(),
+                "input_filename": saved_path.name,
+            }
             QMessageBox.information(
                 self,
                 self.tr("Save Successful"),
@@ -213,6 +245,19 @@ class PersistenceMixin:
             self._validate_loaded_payload(loaded_data)
             self.clear_all_inputs(confirm=False)
             self._apply_loaded_payload(loaded_data)
+            loaded_path = Path(file_path)
+            self._runtime_test_context = {
+                "test_case_id": str(loaded_data.get("test_case_id") or loaded_path.stem),
+                "test_case_name": str(
+                    loaded_data.get("test_case_name")
+                    or loaded_path.stem.replace("_", " ").replace("-", " ").title()
+                ),
+                "input_filename": loaded_path.name,
+            }
+            if loaded_data.get("runway_configuration"):
+                self._runtime_test_context["runway_configuration"] = str(
+                    loaded_data["runway_configuration"]
+                )
             self._update_dialog_height()
             if hasattr(self, "queue_current_airport_lookup"):
                 self.queue_current_airport_lookup()
@@ -231,6 +276,10 @@ class PersistenceMixin:
         protected_airspace_policy = (
             protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
         )
+        baseline_ols_ruleset = design_standard
+        comparison_ols_ruleset = ""
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
         data_to_save = {
             "icao_code": icao_code,
             "iata_code": self._line_text("lineEdit_iata_code").strip().upper(),
@@ -244,6 +293,8 @@ class PersistenceMixin:
             "ruleset": design_standard,
             "safeguarding_framework": framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID,
             "protected_airspace_policy": protected_airspace_policy,
+            "baseline_ols_ruleset": baseline_ols_ruleset,
+            "comparison_ols_ruleset": comparison_ols_ruleset or None,
             "runways": [self._runway_groups[idx].get_input_data() for idx in sorted(self._runway_groups.keys())],
             "cns_facilities": self._get_cns_save_rows(),
         }
@@ -254,9 +305,6 @@ class PersistenceMixin:
             "mode": output_mode,
             "path": self.fileWidgetOutputPath.filePath().strip(),
             "format": self.comboOutputFormat.currentText(),
-            "generate_controlling_ols": self.checkBox_generateControllingOls.isChecked()
-            if hasattr(self, "checkBox_generateControllingOls")
-            else True,
         }
         if hasattr(self, "get_contour_interval_options"):
             data_to_save["output_options"]["contour_intervals"] = self.get_contour_interval_options()
@@ -315,6 +363,10 @@ class PersistenceMixin:
             and protected_airspace_combo.currentData() not in {None, "ruleset_aligned"}
         ):
             return True
+        if hasattr(self, "_current_ols_ruleset_ids"):
+            baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
+            if baseline_ols_ruleset != DEFAULT_RULESET_ID or comparison_ols_ruleset:
+                return True
         if any(self._runway_has_existing_input(group.get_input_data()) for group in self._runway_groups.values()):
             return True
         cns_table = self._table("table_cns_facility")
@@ -357,7 +409,7 @@ class PersistenceMixin:
         self._set_line_text("lineEdit_met_elevation", loaded_data.get("met_elevation", ""))
         ruleset_combo = self._ruleset_combo_widget()
         if isinstance(ruleset_combo, QComboBox):
-            ruleset_id = normalize_ruleset_id(
+            ruleset_id = normalize_design_standard_id(
                 loaded_data.get("design_standard", loaded_data.get("ruleset", DEFAULT_RULESET_ID))
             )
             idx = ruleset_combo.findData(ruleset_id)
@@ -372,6 +424,27 @@ class PersistenceMixin:
             policy_id = loaded_data.get("protected_airspace_policy", "ruleset_aligned")
             idx = protected_airspace_combo.findData(policy_id)
             protected_airspace_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        if hasattr(self, "_set_ols_ruleset_selection"):
+            baseline_ols_ruleset = loaded_data.get("baseline_ols_ruleset")
+            comparison_ols_ruleset = loaded_data.get("comparison_ols_ruleset")
+            if not baseline_ols_ruleset:
+                policy_id = loaded_data.get("protected_airspace_policy", "ruleset_aligned")
+                baseline_ols_ruleset = (
+                    "icao_annex14_vol1_modernised_ofs_oes"
+                    if policy_id == "future_annex14_ofs_oes"
+                    else loaded_data.get(
+                        "design_standard",
+                        loaded_data.get("ruleset", DEFAULT_RULESET_ID),
+                    )
+                )
+                if policy_id == "modernisation_comparison":
+                    comparison_ols_ruleset = "icao_annex14_vol1_modernised_ofs_oes"
+            self._set_ols_ruleset_selection(
+                normalize_ruleset_id(baseline_ols_ruleset),
+                normalize_ruleset_id(comparison_ols_ruleset)
+                if comparison_ols_ruleset
+                else "",
+            )
         self._load_runway_rows(loaded_data.get("runways", []))
         if hasattr(self, "_load_agl_options"):
             self._load_agl_options(loaded_data.get("agl_options", {}))
@@ -466,8 +539,6 @@ class PersistenceMixin:
         if hasattr(self, "fileWidgetOutputPath"):
             self.fileWidgetOutputPath.setFilePath(output_path)
 
-        if hasattr(self, "checkBox_generateControllingOls"):
-            self.checkBox_generateControllingOls.setChecked(bool(output_options.get("generate_controlling_ols", True)))
         if hasattr(self, "set_contour_interval_options"):
             self.set_contour_interval_options(output_options.get("contour_intervals", {}))
         if hasattr(self, "_update_ols_workflow_ui"):
@@ -481,8 +552,6 @@ class PersistenceMixin:
             self.fileWidgetOutputPath.setFilePath("")
         if hasattr(self, "comboOutputFormat") and DEFAULT_OUTPUT_FORMAT in OUTPUT_FORMATS:
             self.comboOutputFormat.setCurrentText(DEFAULT_OUTPUT_FORMAT)
-        if hasattr(self, "checkBox_generateControllingOls"):
-            self.checkBox_generateControllingOls.setChecked(True)
         if hasattr(self, "set_contour_interval_options"):
             self.set_contour_interval_options({})
         self._on_output_option_changed()
@@ -491,8 +560,6 @@ class PersistenceMixin:
         if hasattr(self, "radioFileOutput") and self.radioFileOutput.isChecked():
             return True
         if hasattr(self, "fileWidgetOutputPath") and self.fileWidgetOutputPath.filePath().strip():
-            return True
-        if hasattr(self, "checkBox_generateControllingOls") and not self.checkBox_generateControllingOls.isChecked():
             return True
         if hasattr(self, "get_contour_interval_options"):
             contour_options = self.get_contour_interval_options()
@@ -573,6 +640,15 @@ class PersistenceMixin:
         runway_data.setdefault("landing_available_2", True)
         runway_data.setdefault("lahso_applied_1", False)
         runway_data.setdefault("lahso_applied_2", False)
+        runway_data.setdefault("cap168_wide_runway", False)
+        runway_data.setdefault("approach_track_type_1", "aligned")
+        runway_data.setdefault("approach_track_type_2", "aligned")
+        runway_data.setdefault("approach_track_wkt_1", "")
+        runway_data.setdefault("approach_track_wkt_2", "")
+        runway_data.setdefault("takeoff_track_type_1", "aligned")
+        runway_data.setdefault("takeoff_track_type_2", "aligned")
+        runway_data.setdefault("takeoff_track_wkt_1", "")
+        runway_data.setdefault("takeoff_track_wkt_2", "")
         return runway_data
 
     def _line_edit(self, name: str):

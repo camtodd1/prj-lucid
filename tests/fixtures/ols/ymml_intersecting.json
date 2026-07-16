@@ -120,7 +120,6 @@
     "mode": "memory",
     "path": "",
     "format": "ESRI Shapefile",
-    "generate_controlling_ols": true,
     "contour_intervals": {
       "default": {"primary": 50.0, "intermediate": 10.0},
       "approach": {"primary": 50.0, "intermediate": 10.0},

@@ -51,5 +51,27 @@ def iter_ruleset_profiles() -> Iterable[RulesetProfile]:
     return tuple(_PROFILES.values())
 
 
+def iter_design_standard_profiles() -> Iterable[RulesetProfile]:
+    """Yield profiles that represent selectable aerodrome design standards."""
+
+    return tuple(
+        profile
+        for profile in _PROFILES.values()
+        if profile.selectable_as_design_standard
+    )
+
+
+def normalize_design_standard_id(value) -> str:
+    """Return a selectable design standard for current and legacy payloads."""
+
+    ruleset_id = normalize_ruleset_id(value)
+    profile = _PROFILES.get(ruleset_id)
+    if profile is not None and profile.selectable_as_design_standard:
+        return ruleset_id
+    if ruleset_id == ANNEX14_MODERNISED_OFS_OES_PROFILE.id:
+        return ANNEX14_CURRENT_OLS_PROFILE.id
+    return DEFAULT_RULESET_ID
+
+
 def is_known_ruleset(value) -> bool:
     return normalize_ruleset_id(value) in _PROFILES

@@ -32,6 +32,14 @@ class RulesetProfile:
     aliases: tuple[str, ...] = field(default_factory=tuple)
     capabilities: Mapping[str, RulesetCapability] = field(default_factory=dict)
     protected_airspace_model: str = "ols_current"
+    selectable_as_design_standard: bool = True
+    design_standard_display_name: str = ""
+
+    @property
+    def design_standard_label(self) -> str:
+        """Return the label used when this profile is an aerodrome standard."""
+
+        return self.design_standard_display_name or self.display_name
 
     def capability_status(self, key: str) -> Optional[CapabilityStatus]:
         capability = self.capabilities.get(key)
@@ -39,6 +47,13 @@ class RulesetProfile:
 
     def supports(self, key: str) -> bool:
         return self.capability_status(key) == "supported"
+
+    def ols_construction_policy(self):
+        """Return the conventional OLS policy owned by this ruleset."""
+
+        from .ols_construction import policy_for_ruleset
+
+        return policy_for_ruleset(self.id)
 
 
 def capability_map(status_by_key: Dict[str, str]) -> Dict[str, RulesetCapability]:

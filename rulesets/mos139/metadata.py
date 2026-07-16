@@ -1,10 +1,13 @@
 """MOS139 profile metadata and capability declarations."""
 
 RULESET_ID = "mos139_2019"
-DISPLAY_NAME = "MOS139 (current)"
-EDITION = "Part 139 MOS 2019"
+DISPLAY_NAME = "MOS139 (C.07 2026)"
+EDITION = "Part 139 MOS 2019, Compilation No. 7 (2026)"
 STATUS = "stable"
-DESCRIPTION = "Current CASA Part 139 MOS behaviour implemented by the plugin."
+DESCRIPTION = (
+    "CASA Part 139 MOS 2019, Compilation No. 7 (2026), behaviour "
+    "implemented by the plugin."
+)
 ALIASES = ("MOS139", "mos139", "CASA_MOS139", "casa_part139_mos_2019")
 
 CAPABILITY_STATUS_BY_KEY = {
