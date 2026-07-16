@@ -279,7 +279,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     .button:hover { border-color: var(--blue); }
     .panel { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: var(--shadow); }
     .panel-pad { padding: 16px; }
-    .filters { display: grid; grid-template-columns: repeat(7, minmax(135px, 1fr)); gap: 10px; }
+    .filters { display: grid; grid-template-columns: repeat(8, minmax(125px, 1fr)); gap: 10px; }
     .filter label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 650; }
     select { width: 100%; min-height: 38px; padding: 7px 28px 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
     select:focus, button:focus { outline: 3px solid rgba(23, 105, 170, .18); outline-offset: 1px; }
@@ -298,7 +298,10 @@ HTML_TEMPLATE = r"""<!doctype html>
     .ticker { display: grid; grid-template-columns: repeat(5, minmax(180px, 1fr)); gap: 10px; padding: 14px 16px 16px; overflow-x: auto; }
     .run-card { min-width: 180px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: #fbfcfd; }
     .run-card-top { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 11px; }
+    .run-time-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
     .run-time { margin: 6px 0 2px; font-size: 25px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .run-owner { display: inline-flex; align-items: center; padding: 3px 7px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 700; }
+    .run-owner.user { background: var(--green-soft); color: var(--green); }
     .run-case { min-height: 40px; font-weight: 650; }
     .run-meta { color: var(--muted); font-size: 12px; }
     .delta { display: inline-block; margin-top: 8px; padding: 3px 7px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 11px; font-weight: 650; }
@@ -359,6 +362,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         <div class="filter"><label for="filterBuiltTo">Built to</label><select id="filterBuiltTo" data-field="builtTo"></select></div>
         <div class="filter"><label for="filterPrimary">Primary OLS</label><select id="filterPrimary" data-field="primaryOls"></select></div>
         <div class="filter"><label for="filterComparison">Compared with</label><select id="filterComparison" data-field="comparedWith"></select></div>
+        <div class="filter"><label for="filterRunBy">Run by</label><select id="filterRunBy" data-field="runBy"></select></div>
       </div>
       <div class="filter-status"><span id="filterCount"></span><span id="generatedAt">Built __GENERATED_AT__</span></div>
       <div class="notice" id="comparisonNotice"></div>
@@ -541,7 +545,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         return;
       }
       host.innerHTML = latest.map(run => {
-        const prior = priorComparable(run, allRuns);
+        const prior = priorComparable(run, runs);
         const change = prior && Number.isFinite(run.elapsed) ? percentChange(run.elapsed, prior.elapsed) : null;
         const approximate = !run.exactSetupRecorded && Number.isFinite(change) ? '~' : '';
         const deltaClass = Number.isFinite(change) ? (change < -.02 ? 'positive' : change > .02 ? 'negative' : '') : '';
@@ -549,9 +553,8 @@ HTML_TEMPLATE = r"""<!doctype html>
         const runway = run.runwayCount ? `${run.runwayCount} · ${run.scenario}` : run.scenario;
         return `<article class="run-card">
           <div class="run-card-top"><span>${escapeHtml(dateLabel(run.timestamp))}</span><span>${escapeHtml(run.status)}</span></div>
-          <div class="run-time">${escapeHtml(seconds(run.elapsed))}</div>
+          <div class="run-time-row"><div class="run-time">${escapeHtml(seconds(run.elapsed))}</div><span class="run-owner ${run.runBy === 'User' ? 'user' : 'codex'}">${escapeHtml(run.runBy)}</span></div>
           <div class="run-case">${escapeHtml(run.testCase)}</div>
-          <div class="run-meta"><strong>Ran by:</strong> ${escapeHtml(run.runBy)}</div>
           <div class="run-meta">${escapeHtml(run.airport)} · ${escapeHtml(runway)}</div>
           <div class="run-meta">${escapeHtml(run.olsSelection)}</div>
           <span class="delta ${deltaClass}">${escapeHtml(delta)}</span>

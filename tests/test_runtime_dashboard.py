@@ -89,12 +89,15 @@ class RuntimeDashboardTests(unittest.TestCase):
             "filterBuiltTo",
             "filterPrimary",
             "filterComparison",
+            "filterRunBy",
             "lastFive",
             "trendChart",
             "pivotBody",
         ):
             self.assertIn(f'id="{control}"', html)
-        self.assertIn("<strong>Ran by:</strong>", html)
+        self.assertIn('class="run-owner', html)
+        self.assertIn("${escapeHtml(run.runBy)}", html)
+        self.assertIn("priorComparable(run, runs)", html)
         payload = re.search(
             r'<script id="runData" type="application/json">(.*?)</script>',
             html,
