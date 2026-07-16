@@ -22,6 +22,7 @@ from .dialog_constants import (
     ANNEX14_OES_SURFACE_CONTOUR_KEYS,
     ANNEX14_OFS_SURFACE_CONTOUR_KEYS,
     ANNEX14_SURFACE_CONTOUR_KEYS,
+    COMPARISON_CHANGE_CONTOUR_KEYS,
     COMPARISON_SURFACE_CONTOUR_KEYS,
     CONTOUR_INTERVAL_KEYS,
     CONTOUR_INTERVAL_KEY_DEFAULTS,
@@ -491,7 +492,11 @@ class OutputOptionsMixin:
         visible_keys = baseline_keys | comparison_keys
         change_applicable = comparison_profile is not None
         if change_applicable:
-            visible_keys.update(MODERNISATION_CHANGE_CONTOUR_KEYS)
+            visible_keys.update(
+                MODERNISATION_CHANGE_CONTOUR_KEYS
+                if annex_selected
+                else ("comparison_change",)
+            )
 
         change_button = getattr(self, "toolButtonComparisonChangeContours", None)
         if change_button is not None:
@@ -539,7 +544,7 @@ class OutputOptionsMixin:
 
         for key, label in getattr(self, "_contour_interval_labels", {}).items():
             visible = key in visible_keys
-            if key in MODERNISATION_CHANGE_CONTOUR_KEYS:
+            if key in COMPARISON_CHANGE_CONTOUR_KEYS:
                 visible = visible and change_expanded
             label.setVisible(visible)
             primary = getattr(self, "_contour_primary_interval_spinboxes", {}).get(key)
@@ -704,7 +709,7 @@ class OutputOptionsMixin:
                 "background: #f6f8fa; padding: 6px 8px; text-align: left; font-weight: 600; }"
                 "QToolButton:hover { background: #eef3f7; }"
             )
-            grid.addWidget(overrides_button, 5, 0, 1, 4)
+            grid.addWidget(overrides_button, 6, 0, 1, 4)
             self.toolButtonContourOverrides = overrides_button
 
         overrides_widget = getattr(self, "widgetContourOverrides", None)
@@ -718,7 +723,7 @@ class OutputOptionsMixin:
             overrides_grid.setVerticalSpacing(0)
             overrides_grid.setColumnStretch(0, 1)
             overrides_grid.setColumnStretch(1, 1)
-            grid.addWidget(overrides_widget, 6, 0, 1, 4)
+            grid.addWidget(overrides_widget, 7, 0, 1, 4)
             self.widgetContourOverrides = overrides_widget
             self.gridLayoutContourOverrides = overrides_grid
         else:
@@ -833,7 +838,7 @@ class OutputOptionsMixin:
         self._toggle_comparison_change_contours(change_button.isChecked())
 
         for key in CONTOUR_INTERVAL_KEYS:
-            is_change = key in MODERNISATION_CHANGE_CONTOUR_KEYS
+            is_change = key in COMPARISON_CHANGE_CONTOUR_KEYS
             if key.startswith("comparison_") or is_change:
                 role = "comparison"
                 base_key = key.removeprefix("comparison_")
@@ -842,7 +847,7 @@ class OutputOptionsMixin:
                 base_key = key
             target_grid = grid if is_change else column_grids[role]
             row = (
-                3 + list(MODERNISATION_CHANGE_CONTOUR_KEYS).index(key)
+                3 + list(COMPARISON_CHANGE_CONTOUR_KEYS).index(key)
                 if is_change
                 else surface_rows[base_key]
             )
@@ -933,7 +938,7 @@ class OutputOptionsMixin:
         return sum(
             1
             for key in CONTOUR_INTERVAL_KEYS
-            if key not in MODERNISATION_CHANGE_CONTOUR_KEYS
+            if key not in COMPARISON_CHANGE_CONTOUR_KEYS
             and key in primary_spinboxes
             and key in intermediate_spinboxes
             and (
@@ -956,7 +961,7 @@ class OutputOptionsMixin:
             return True
         if self._surface_contour_override_count():
             return True
-        for key in MODERNISATION_CHANGE_CONTOUR_KEYS:
+        for key in COMPARISON_CHANGE_CONTOUR_KEYS:
             defaults = CONTOUR_INTERVAL_KEY_DEFAULTS[key]
             if (
                 key not in self._contour_primary_interval_spinboxes
@@ -1012,8 +1017,11 @@ class OutputOptionsMixin:
             family_note = " Controls this Annex 14 obstacle free surface only."
         elif key.startswith("annex14_oes_"):
             family_note = " Controls this Annex 14 obstacle evaluation surface only."
-        elif key in MODERNISATION_CHANGE_CONTOUR_KEYS:
-            family = "OFS" if key == "modernisation_ofs_change" else "OES"
+        elif key in COMPARISON_CHANGE_CONTOUR_KEYS:
+            family = {
+                "modernisation_ofs_change": "OFS",
+                "modernisation_oes_change": "OES",
+            }.get(key, "OLS")
             family_note = f" Controls signed height-change isolines for the {family} comparison output."
         elif key.startswith("inner_") or key == "baulked_landing":
             family_note = " Used by precision inner-surface and OFZ-style outputs where available."
@@ -1050,7 +1058,7 @@ class OutputOptionsMixin:
             else "_contour_interval_spinboxes"
         )
         for key, spinbox in getattr(self, attr_name, {}).items():
-            if key in MODERNISATION_CHANGE_CONTOUR_KEYS:
+            if key in COMPARISON_CHANGE_CONTOUR_KEYS:
                 continue
             spinbox.blockSignals(True)
             spinbox.setValue(value)
@@ -1138,7 +1146,7 @@ class OutputOptionsMixin:
             abs(primary_spinboxes[key].value() - default_primary) > 1e-9
             or abs(intermediate_spinboxes[key].value() - default_intermediate) > 1e-9
             for key in CONTOUR_INTERVAL_KEYS
-            if key not in MODERNISATION_CHANGE_CONTOUR_KEYS
+            if key not in COMPARISON_CHANGE_CONTOUR_KEYS
             if key in primary_spinboxes and key in intermediate_spinboxes
         )
         if hasattr(self, "toolButtonContourOverrides"):

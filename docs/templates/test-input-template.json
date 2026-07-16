@@ -364,6 +364,10 @@
                 "primary": 50.0,
                 "intermediate": 10.0
             },
+            "comparison_change": {
+                "primary": 5.0,
+                "intermediate": 1.0
+            },
             "modernisation_ofs_change": {
                 "primary": 5.0,
                 "intermediate": 1.0

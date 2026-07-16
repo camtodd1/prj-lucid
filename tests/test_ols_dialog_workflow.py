@@ -616,15 +616,41 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 button.setChecked(True)
                 self.assertFalse(
                     self.dialog._contour_interval_labels[
+                        "comparison_change"
+                    ].isHidden()
+                )
+                self.assertTrue(
+                    self.dialog._contour_interval_labels[
                         "modernisation_ofs_change"
                     ].isHidden()
                 )
-                self.assertFalse(
+                self.assertTrue(
                     self.dialog._contour_interval_labels[
                         "modernisation_oes_change"
                     ].isHidden()
                 )
                 button.setChecked(False)
+
+    def test_conventional_change_contour_interval_is_saved_for_generation(self):
+        self.dialog._set_ols_ruleset_selection(
+            "mos139_2019",
+            "uk_caa_cap168_edition_13",
+        )
+        self.dialog._update_ols_workflow_ui()
+        self.dialog.toolButtonComparisonChangeContours.setChecked(True)
+        self.dialog._contour_primary_interval_spinboxes[
+            "comparison_change"
+        ].setValue(2.0)
+        self.dialog._contour_interval_spinboxes["comparison_change"].setValue(0.5)
+
+        options = self.dialog.get_contour_interval_options()
+        builder = object.__new__(SafeguardingBuilder)
+        builder.contour_intervals = options
+
+        self.assertEqual(
+            builder._modernisation_change_contour_intervals("OLS"),
+            (0.5, 2.0),
+        )
 
     def test_contour_control_markup_behaviour(self):
         self.select_mode("modernisation_comparison")

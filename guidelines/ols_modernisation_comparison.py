@@ -2217,6 +2217,7 @@ class OlsModernisationComparisonMixin:
         """Return intermediate and primary signed-change contour intervals."""
         family_key = str(family or "").strip().upper()
         contour_key = {
+            "OLS": "comparison_change",
             "OFS": "modernisation_ofs_change",
             "OES": "modernisation_oes_change",
         }.get(family_key)

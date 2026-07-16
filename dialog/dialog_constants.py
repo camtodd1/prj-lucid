@@ -74,14 +74,19 @@ MODERNISATION_CHANGE_CONTOUR_KEYS = (
     "modernisation_ofs_change",
     "modernisation_oes_change",
 )
+COMPARISON_CHANGE_CONTOUR_KEYS = (
+    "comparison_change",
+    *MODERNISATION_CHANGE_CONTOUR_KEYS,
+)
 CONTOUR_INTERVAL_KEY_DEFAULTS = {
+    "comparison_change": {"primary": 5.0, "intermediate": 1.0},
     "modernisation_ofs_change": {"primary": 5.0, "intermediate": 1.0},
     "modernisation_oes_change": {"primary": 5.0, "intermediate": 1.0},
 }
 CONTOUR_INTERVAL_KEYS = (
     SURFACE_CONTOUR_KEYS
     + COMPARISON_SURFACE_CONTOUR_KEYS
-    + MODERNISATION_CHANGE_CONTOUR_KEYS
+    + COMPARISON_CHANGE_CONTOUR_KEYS
 )
 CONTOUR_INTERVAL_LABELS = {
     "approach": "Approach",
@@ -101,6 +106,7 @@ CONTOUR_INTERVAL_LABELS = {
     "annex14_ofs_balked_landing": "Balked Landing",
     "annex14_ofs_inner_approach": "Inner Approach",
     "annex14_ofs_inner_transitional": "Inner Transitional",
+    "comparison_change": "OLS change contours",
     "modernisation_ofs_change": "OFS change contours",
     "modernisation_oes_change": "OES change contours",
 }
