@@ -1,7 +1,7 @@
 {
   "cases": [
     {
-      "file": "ybbn_single.json",
+      "file": "ybbn_1rwy_single.json",
       "description": "Single-runway modernisation comparison baseline",
       "icao_code": "YBBN",
       "runway_count": 1,
@@ -9,7 +9,7 @@
       "project_crs": "EPSG:28356"
     },
     {
-      "file": "yssy_dual_intersecting.json",
+      "file": "yssy_2rwy_intersecting.json",
       "description": "Two intersecting runways",
       "icao_code": "YSSY",
       "runway_count": 2,
@@ -17,7 +17,7 @@
       "project_crs": "EPSG:28356"
     },
     {
-      "file": "ysws_dual_parallel.json",
+      "file": "ysws_2rwy_parallel.json",
       "description": "Two parallel runways",
       "icao_code": "YSWS",
       "runway_count": 2,
@@ -25,7 +25,7 @@
       "project_crs": "EPSG:28356"
     },
     {
-      "file": "ymml_intersecting.json",
+      "file": "ymml_2rwy_intersecting.json",
       "description": "Two intersecting runways with visible Approach/TOCS-to-Conical arcs",
       "icao_code": "YMML",
       "runway_count": 2,
@@ -34,7 +34,7 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
-      "file": "yssy_multiple_stress.json",
+      "file": "yssy_3rwy_mixed_stress.json",
       "description": "Three-runway controlling-envelope stress case",
       "icao_code": "YSSY",
       "runway_count": 3,
@@ -42,7 +42,7 @@
       "project_crs": "EPSG:28356"
     },
     {
-      "file": "cap168_curved_single.json",
+      "file": "ybcp_1rwy_single_curved.json",
       "description": "CAP168 single runway with a nominated curved approach track",
       "icao_code": "YBCP",
       "runway_count": 1,
@@ -53,7 +53,7 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
-      "file": "cap168_short_single.json",
+      "file": "ybsc_1rwy_single.json",
       "description": "CAP168 short non-instrument runway and circular IHS",
       "icao_code": "YBSC",
       "runway_count": 1,
@@ -64,7 +64,7 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
-      "file": "cap168_parallel_main_subsidiary.json",
+      "file": "ybpm_2rwy_parallel.json",
       "description": "CAP168 parallel main and subsidiary runways with displaced thresholds",
       "icao_code": "YBPM",
       "runway_count": 2,
@@ -75,7 +75,7 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
-      "file": "cap168_intersecting.json",
+      "file": "ybci_2rwy_intersecting.json",
       "description": "CAP168 intersecting main and subsidiary runways",
       "icao_code": "YBCI",
       "runway_count": 2,
@@ -86,7 +86,7 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
-      "file": "annex14_current_short_single.json",
+      "file": "ybas_1rwy_single.json",
       "description": "Current Annex 14 non-instrument code 1 runway",
       "icao_code": "YBAS",
       "runway_count": 1,
@@ -97,7 +97,7 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
-      "file": "annex14_current_intersecting.json",
+      "file": "ybai_2rwy_intersecting.json",
       "description": "Current Annex 14 intersecting code 3 and code 2 runways",
       "icao_code": "YBAI",
       "runway_count": 2,
@@ -108,7 +108,7 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
-      "file": "annex14_current_intersecting_reverse.json",
+      "file": "ybai_2rwy_intersecting_reverse.json",
       "description": "Current Annex 14 and MOS139 intersecting comparison in reverse order",
       "icao_code": "YBAI",
       "runway_count": 2,
@@ -119,8 +119,8 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
-      "file": "file_output_logging.json",
-      "source_file": "cap168_short_single.json",
+      "file": "ybsc_1rwy_single_file_output.json",
+      "source_file": "ybsc_1rwy_single.json",
       "description": "Dedicated concise-logging check for GeoPackage file output",
       "icao_code": "YBSC",
       "runway_count": 1,

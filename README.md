@@ -173,7 +173,8 @@ QGIS runs and headless workflow runs. The columns record the actor (`qgis user`,
 completion status, total and key phase/module elapsed times, plugin/QGIS
 versions, Git commit, and whether the working tree was dirty. The final
 scenario columns also record the test case, input filename, runway count and
-layout, plus a short exact-input fingerprint. `module_timings_json` retains all
+scenario (`single`, `parallel`, `intersecting`, or `mixed`), plus a short
+exact-input fingerprint. `module_timings_json` retains all
 module timings and call counts, including diagnostic modules that do not have
 dedicated columns.
 

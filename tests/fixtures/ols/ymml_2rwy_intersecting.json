@@ -1,5 +1,6 @@
 {
-  "icao_code": "YMML",
+    "icao_code": "YMML",
+    "runway_configuration": "intersecting",
   "iata_code": "MEL",
   "arp_easting": "309809.470",
   "arp_northing": "5828240.188",

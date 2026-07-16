@@ -26,6 +26,7 @@ RUN_HISTORY_FILENAME = "runtime_test_runs.txt"
 AGENT_ENV_VAR = "SAFEGUARDING_BUILDER_RUN_AGENT"
 COMMIT_ENV_VAR = "SAFEGUARDING_BUILDER_COMMIT"
 HISTORY_PATH_ENV_VAR = "SAFEGUARDING_BUILDER_RUN_HISTORY"
+RUNWAY_CONFIGURATIONS = ("single", "parallel", "intersecting", "mixed")
 
 KEY_MODULE_COLUMNS = (
     ("phase_startup_seconds", "phase.startup"),
@@ -130,15 +131,15 @@ def _segments_intersect(
 
 
 def classify_runway_configuration(runways: Iterable[Mapping[str, object]]) -> str:
-    """Return a plain layout label from the runway centreline geometry."""
+    """Return the supported scenario derived from runway centreline geometry."""
     runway_list = list(runways)
     if not runway_list:
-        return "not recorded"
+        raise ValueError("A runway scenario requires at least one runway.")
     if len(runway_list) == 1:
         return "single"
     segments = [segment for segment in (_runway_segment(item) for item in runway_list) if segment]
     if len(segments) != len(runway_list):
-        return "multiple"
+        raise ValueError("Runway scenario cannot be determined from incomplete centrelines.")
 
     parallel_pairs = 0
     intersecting_pairs = 0
@@ -162,11 +163,34 @@ def classify_runway_configuration(runways: Iterable[Mapping[str, object]]) -> st
 
     if parallel_pairs == pair_count:
         return "parallel"
-    if intersecting_pairs and parallel_pairs:
-        return "mixed"
-    if intersecting_pairs:
+    if len(runway_list) == 2:
+        # The supported two-runway taxonomy is deliberately binary: a pair is
+        # parallel within tolerance, otherwise it is the intersecting scenario.
+        return "intersecting"
+    if intersecting_pairs == pair_count:
         return "intersecting"
     return "mixed"
+
+
+def validate_runway_configuration(value: object, runway_count: Optional[int] = None) -> str:
+    """Normalize a scenario and enforce its permitted runway count."""
+    scenario = str(value or "").strip().lower()
+    if scenario not in RUNWAY_CONFIGURATIONS:
+        allowed = ", ".join(RUNWAY_CONFIGURATIONS)
+        raise ValueError(f"Runway configuration must be one of: {allowed}.")
+    if runway_count is None:
+        return scenario
+
+    count = int(runway_count)
+    if count < 1:
+        raise ValueError("Runway count must be at least 1.")
+    if scenario == "single" and count != 1:
+        raise ValueError("The single scenario requires exactly 1 runway.")
+    if scenario in {"parallel", "intersecting"} and count < 2:
+        raise ValueError(f"The {scenario} scenario requires at least 2 runways.")
+    if scenario == "mixed" and count < 3:
+        raise ValueError("The mixed scenario requires at least 3 runways.")
+    return scenario
 
 
 def _fingerprint_value(value: object) -> object:
@@ -197,6 +221,7 @@ def runtime_input_fingerprint(input_data: Mapping[str, object]) -> str:
         "protected_airspace_policy",
         "baseline_ols_ruleset",
         "comparison_ols_ruleset",
+        "runway_configuration",
         "runways",
         "cns_facilities",
         "agl_options",
@@ -510,7 +535,10 @@ class RuntimeRunRecorder:
         if runway_count is not None:
             self.runway_count = max(0, int(runway_count))
         if runway_configuration is not None:
-            self.runway_configuration = str(runway_configuration).strip().lower() or None
+            self.runway_configuration = validate_runway_configuration(
+                runway_configuration,
+                self.runway_count,
+            )
         if input_fingerprint is not None:
             self.input_fingerprint = str(input_fingerprint).strip() or None
 
@@ -588,6 +616,7 @@ __all__ = [
     "RUN_HISTORY_COLUMNS",
     "RUN_HISTORY_FILENAME",
     "RUN_HISTORY_SCHEMA_VERSION",
+    "RUNWAY_CONFIGURATIONS",
     "RuntimeRunRecorder",
     "classify_runway_configuration",
     "default_history_path",
@@ -596,4 +625,5 @@ __all__ = [
     "migrate_history_file",
     "plugin_version",
     "runtime_input_fingerprint",
+    "validate_runway_configuration",
 ]

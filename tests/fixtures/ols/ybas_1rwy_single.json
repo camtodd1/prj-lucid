@@ -1,5 +1,6 @@
 {
-  "icao_code": "YBSC",
+  "icao_code": "YBAS",
+  "runway_configuration": "single",
   "iata_code": "",
   "arp_easting": "500400",
   "arp_northing": "7000000",
@@ -7,11 +8,11 @@
   "met_easting": "",
   "met_northing": "",
   "met_elevation": "",
-  "design_standard": "uk_caa_cap168_edition_13",
-  "ruleset": "uk_caa_cap168_edition_13",
+  "design_standard": "icao_annex14_vol1_current_ols",
+  "ruleset": "icao_annex14_vol1_current_ols",
   "safeguarding_framework": "nasf_aus",
   "protected_airspace_policy": "ruleset_aligned",
-  "baseline_ols_ruleset": "uk_caa_cap168_edition_13",
+  "baseline_ols_ruleset": "icao_annex14_vol1_current_ols",
   "comparison_ols_ruleset": "",
   "runways": [
     {
@@ -27,8 +28,8 @@
       "threshold_elev_2": "96",
       "thr_displaced_1": "0",
       "thr_displaced_2": "0",
-      "thr_pre_area_1": "60",
-      "thr_pre_area_2": "60",
+      "thr_pre_area_1": "30",
+      "thr_pre_area_2": "30",
       "width": "30",
       "shoulder": "0",
       "clearway1_len": "0",

@@ -22,10 +22,11 @@ Running the command without `--serve` simply rebuilds `dashboard/index.html`.
 ## Data quality
 
 Runtime schema 4 records the test case, input filename, runway count, runway
-setup, and a short exact-input fingerprint. The standard regression runner and
+scenario, and a short exact-input fingerprint. Scenarios are limited to
+`single` (one runway), `parallel` or `intersecting` (two or more), and `mixed`
+(three or more). The standard regression runner and
 saved-input workflow supply that information automatically.
 
 Older rows did not contain those fields. They remain useful for filtering by
 airport, OLS selection, commit, and run time, but the dashboard marks their
-speed comparisons as **rough** instead of guessing which runway configuration
-was used.
+speed comparisons as **rough** instead of guessing which scenario was used.

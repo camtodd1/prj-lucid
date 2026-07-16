@@ -31,7 +31,7 @@ The expensive QGIS workflow regression runner is opt-in and is excluded from
 normal unit-test discovery. Run a single relevant fixture while troubleshooting:
 
 ```bash
-tests/run_ols_workflow_regression.py --fixture ybbn_single.json
+tests/run_ols_workflow_regression.py --fixture ybbn_1rwy_single.json
 ```
 
 Run the complete fixture matrix and production gates only for release evidence

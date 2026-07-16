@@ -36,6 +36,7 @@ RULESET_NAMES = {
     "uk_caa_cap168_edition_13": "UK CAP 168 Edition 13",
     "easa_cs_adr_dsn_issue_7": "EASA CS-ADR-DSN Issue 7",
 }
+RUNWAY_SCENARIOS = {"single", "parallel", "intersecting", "mixed"}
 
 
 def _field(row: Mapping[str, object], name: str) -> str:
@@ -55,6 +56,21 @@ def _float(value: object) -> Optional[float]:
 def _integer(value: object) -> Optional[int]:
     number = _float(value)
     return int(number) if number is not None else None
+
+
+def _runway_scenario(value: object, runway_count: Optional[int]) -> str:
+    scenario = str(value or "").strip().lower()
+    if scenario not in RUNWAY_SCENARIOS:
+        return ""
+    if runway_count is None:
+        return scenario
+    if scenario == "single" and runway_count != 1:
+        return ""
+    if scenario in {"parallel", "intersecting"} and runway_count < 2:
+        return ""
+    if scenario == "mixed" and runway_count < 3:
+        return ""
+    return scenario
 
 
 def _bool(value: object) -> Optional[bool]:
@@ -131,7 +147,10 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
             else "No comparison"
         )
         runway_count = _integer(row.get("runway_count"))
-        runway_configuration = _field(row, "runway_configuration").lower()
+        runway_configuration = _runway_scenario(
+            row.get("runway_configuration"),
+            runway_count,
+        )
         fingerprint = _field(row, "input_fingerprint")
         test_case = _plain_case_name(row)
         airport = _field(row, "airport") or "Not recorded"
@@ -156,7 +175,7 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
                 "inputFilename": _field(row, "input_filename") or "Not recorded",
                 "runwayCount": runway_count,
                 "runwayCountLabel": str(runway_count) if runway_count is not None else "Not recorded",
-                "runwaySetup": runway_configuration.title() if runway_configuration else "Not recorded",
+                "scenario": runway_configuration.title() if runway_configuration else "Not recorded",
                 "builtTo": _ruleset_name(design_id, _field(row, "design_ruleset_label")),
                 "primaryOls": primary,
                 "comparedWith": comparison,
@@ -319,7 +338,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         <div class="filter"><label for="filterTestCase">Test case</label><select id="filterTestCase" data-field="testCase"></select></div>
         <div class="filter"><label for="filterAirport">Airport</label><select id="filterAirport" data-field="airport"></select></div>
         <div class="filter"><label for="filterRunways">Runways</label><select id="filterRunways" data-field="runwayCountLabel"></select></div>
-        <div class="filter"><label for="filterSetup">Runway setup</label><select id="filterSetup" data-field="runwaySetup"></select></div>
+        <div class="filter"><label for="filterScenario">Scenario</label><select id="filterScenario" data-field="scenario"></select></div>
         <div class="filter"><label for="filterBuiltTo">Built to</label><select id="filterBuiltTo" data-field="builtTo"></select></div>
         <div class="filter"><label for="filterPrimary">Primary OLS</label><select id="filterPrimary" data-field="primaryOls"></select></div>
         <div class="filter"><label for="filterComparison">Compared with</label><select id="filterComparison" data-field="comparedWith"></select></div>
@@ -383,7 +402,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     const filterElements = [...document.querySelectorAll('select[data-field]')];
     const groupOptions = [
       ['testCase', 'Test case'], ['airport', 'Airport'], ['runwayCountLabel', 'Runways'],
-      ['runwaySetup', 'Runway setup'], ['builtTo', 'Built to'], ['primaryOls', 'Primary OLS'],
+      ['scenario', 'Scenario'], ['builtTo', 'Built to'], ['primaryOls', 'Primary OLS'],
       ['comparedWith', 'Compared with'], ['runBy', 'Run by'], ['commit', 'Commit']
     ];
     const groupPrimary = document.getElementById('groupPrimary');
@@ -501,7 +520,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         const approximate = !run.exactSetupRecorded && Number.isFinite(change) ? '~' : '';
         const deltaClass = Number.isFinite(change) ? (change < -.02 ? 'positive' : change > .02 ? 'negative' : '') : '';
         const delta = Number.isFinite(change) ? `${approximate}${directionText(change)} vs prior` : 'No comparable prior run';
-        const runway = run.runwayCount ? `${run.runwayCount} · ${run.runwaySetup}` : run.runwaySetup;
+        const runway = run.runwayCount ? `${run.runwayCount} · ${run.scenario}` : run.scenario;
         return `<article class="run-card">
           <div class="run-card-top"><span>${escapeHtml(dateLabel(run.timestamp))}</span><span>${escapeHtml(run.status)}</span></div>
           <div class="run-time">${escapeHtml(seconds(run.elapsed))}</div>

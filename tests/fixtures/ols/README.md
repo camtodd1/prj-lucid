@@ -3,22 +3,25 @@
 These inputs exercise conventional OLS and the MOS139-to-future-Annex-14
 modernisation comparison workflow under QGIS 4.
 
-- `ybbn_single.json`: single runway.
-- `yssy_dual_intersecting.json`: intersecting runways.
-- `ysws_dual_parallel.json`: parallel runways.
-- `ymml_intersecting.json`: intersecting YMML runways with prominent
+Input filenames follow `<icao>_<count>rwy_<scenario>[_<variant>].json`, where
+scenario is limited to `single`, `parallel`, `intersecting`, or `mixed`.
+
+- `ybbn_1rwy_single.json`: single runway.
+- `yssy_2rwy_intersecting.json`: intersecting runways.
+- `ysws_2rwy_parallel.json`: parallel runways.
+- `ymml_2rwy_intersecting.json`: intersecting YMML runways with prominent
   Approach/TOCS-to-Conical equality arcs in EPSG:32755.
-- `yssy_multiple_stress.json`: three-runway stress case.
-- `annex14_current_short_single.json`: current Annex 14 non-instrument code 1
+- `yssy_3rwy_mixed_stress.json`: three-runway stress case.
+- `ybas_1rwy_single.json`: current Annex 14 non-instrument code 1
   runway and airport-wide OLS.
-- `annex14_current_intersecting.json`: current Annex 14 intersecting mixed-code
+- `ybai_2rwy_intersecting.json`: current Annex 14 intersecting mixed-code
   runways with precision OFZ, displaced thresholds, clearways and stopways.
-- `annex14_current_intersecting_reverse.json`: the same current Annex 14/MOS139
+- `ybai_2rwy_intersecting_reverse.json`: the same current Annex 14/MOS139
   comparison with the pair order reversed.
-- `file_output_logging.json`: a manifest-defined case based on the CAP168 short
-  runway input. The runner substitutes a temporary GeoPackage directory and
-  verifies generated-layer/file parity, concise log volume, and the absence of
-  per-layer file-success debug messages.
+- `ybsc_1rwy_single_file_output.json`: a manifest-defined case based on the
+  CAP168 short runway input. The runner substitutes a temporary GeoPackage
+  directory and verifies generated-layer/file parity, concise log volume, and
+  the absence of per-layer file-success debug messages.
 
 The files are normalized copies of the test inputs supplied for regression use.
 They use memory output and enable controlling OLS generation. Run them explicitly
@@ -89,7 +92,7 @@ PROJ_DATA=/Applications/QGIS-4.0.app/Contents/Resources/qgis/proj \
 GDAL_DATA=/Applications/QGIS-4.0.app/Contents/Resources/gdal \
 /Applications/QGIS-4.0.app/Contents/MacOS/python \
 tests/run_ols_workflow_regression.py \
-  --fixture ymml_intersecting.json \
+  --fixture ymml_2rwy_intersecting.json \
   --repeat 3 \
   --output /private/tmp/ymml_axis_conical_report.json
 ```

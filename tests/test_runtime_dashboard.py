@@ -71,7 +71,7 @@ class RuntimeDashboardTests(unittest.TestCase):
         run = runs[0]
         self.assertEqual(run["testCase"], "YTEST parallel runways")
         self.assertEqual(run["runwayCount"], 2)
-        self.assertEqual(run["runwaySetup"], "Parallel")
+        self.assertEqual(run["scenario"], "Parallel")
         self.assertEqual(run["runBy"], "Automated test")
         self.assertTrue(run["exactSetupRecorded"])
         self.assertIn("MOS139", run["primaryOls"])
@@ -85,7 +85,7 @@ class RuntimeDashboardTests(unittest.TestCase):
             "filterTestCase",
             "filterAirport",
             "filterRunways",
-            "filterSetup",
+            "filterScenario",
             "filterBuiltTo",
             "filterPrimary",
             "filterComparison",
@@ -118,9 +118,26 @@ class RuntimeDashboardTests(unittest.TestCase):
 
         self.assertEqual(run["testCase"], "Not recorded")
         self.assertIsNone(run["runwayCount"])
-        self.assertEqual(run["runwaySetup"], "Not recorded")
+        self.assertEqual(run["scenario"], "Not recorded")
         self.assertFalse(run["exactSetupRecorded"])
         self.assertTrue(str(run["exactSetup"]).startswith("legacy:"))
+
+    def test_invalid_scenario_count_is_not_offered_as_a_dashboard_scenario(self):
+        row = {
+            "timestamp_utc": "2026-01-01T00:00:00Z",
+            "status": "completed",
+            "airport": "YTEST",
+            "commit_ref": "invalid1",
+            "elapsed_seconds": "30",
+            "runway_count": "2",
+            "runway_configuration": "mixed",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "runs.tsv"
+            _write_ledger(ledger, [row])
+            run = load_runs(ledger)[0]
+
+        self.assertEqual(run["scenario"], "Not recorded")
 
     def test_recent_window_compares_last_five_with_previous_five(self):
         runs = [

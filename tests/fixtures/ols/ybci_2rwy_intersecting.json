@@ -1,5 +1,6 @@
 {
   "icao_code": "YBCI",
+  "runway_configuration": "intersecting",
   "iata_code": "",
   "arp_easting": "501300",
   "arp_northing": "7000000",

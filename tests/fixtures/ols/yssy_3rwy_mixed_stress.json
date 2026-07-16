@@ -1,5 +1,6 @@
 {
     "icao_code": "YSSY",
+    "runway_configuration": "mixed",
     "iata_code": "SYD",
     "arp_easting": "331542.932",
     "arp_northing": "6242334.695",
@@ -41,6 +42,8 @@
             "asda_override_2": "",
             "lda_override_1": "",
             "lda_override_2": "",
+            "declared_distance_source": "",
+            "declared_distance_notes": "",
             "takeoff_available_1": true,
             "takeoff_available_2": true,
             "landing_available_1": true,
@@ -54,6 +57,51 @@
             "surface_material": "Asphalt",
             "type1": "Precision Approach CAT II/III",
             "type2": "Precision Approach CAT II/III"
+        },
+        {
+            "designator_str": "34",
+            "suffix": "R",
+            "thr_easting": "333134.262",
+            "thr_northing": "6239616.942",
+            "rec_easting": "332637.926",
+            "rec_northing": "6241728.864",
+            "runway_end_elev_1": "3.1",
+            "runway_end_elev_2": "4.5",
+            "threshold_elev_1": "",
+            "threshold_elev_2": "",
+            "thr_displaced_1": "38",
+            "thr_displaced_2": "230",
+            "thr_pre_area_1": "90",
+            "thr_pre_area_2": "90",
+            "width": "45",
+            "shoulder": "7.5",
+            "clearway1_len": "",
+            "clearway2_len": "",
+            "stopway1_len": "30",
+            "stopway2_len": "",
+            "tora_override_1": "",
+            "tora_override_2": "",
+            "toda_override_1": "",
+            "toda_override_2": "",
+            "asda_override_1": "",
+            "asda_override_2": "",
+            "lda_override_1": "",
+            "lda_override_2": "",
+            "declared_distance_source": "",
+            "declared_distance_notes": "",
+            "takeoff_available_1": true,
+            "takeoff_available_2": true,
+            "landing_available_1": true,
+            "landing_available_2": true,
+            "lahso_applied_1": false,
+            "lahso_applied_2": false,
+            "arc_num": "4",
+            "arc_let": "E",
+            "adg": "V",
+            "surface_category": "Sealed",
+            "surface_material": "Asphalt",
+            "type1": "Precision Approach CAT I",
+            "type2": "Precision Approach CAT I"
         },
         {
             "designator_str": "07",
@@ -84,6 +132,8 @@
             "asda_override_2": "",
             "lda_override_1": "",
             "lda_override_2": "",
+            "declared_distance_source": "",
+            "declared_distance_notes": "",
             "takeoff_available_1": true,
             "takeoff_available_2": true,
             "landing_available_1": true,
@@ -153,14 +203,6 @@
                 "intermediate": 10.0
             },
             "baulked_landing": {
-                "primary": 50.0,
-                "intermediate": 10.0
-            },
-            "annex14_ofs": {
-                "primary": 50.0,
-                "intermediate": 10.0
-            },
-            "annex14_oes": {
                 "primary": 50.0,
                 "intermediate": 10.0
             }

@@ -42,6 +42,7 @@ from .core.run_history import (
     RuntimeRunRecorder,
     classify_runway_configuration,
     runtime_input_fingerprint,
+    validate_runway_configuration,
 )
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.annex14_geometry import Annex14GeometryMixin
@@ -894,12 +895,13 @@ class SafeguardingBuilder(
         )
         runtime_test_context.setdefault("test_case_id", "manual_entry")
         runtime_test_context.setdefault("test_case_name", "Manual entry")
-        runtime_test_context.setdefault(
-            "runway_configuration",
-            classify_runway_configuration(runway_input_list),
-        )
-        runtime_runway_count = runtime_test_context.pop(
-            "runway_count", len(runway_input_list)
+        runtime_test_context.pop("runway_count", None)
+        runtime_test_context.pop("runway_configuration", None)
+        runtime_runway_count = len(runway_input_list)
+        runtime_test_context["runway_configuration"] = validate_runway_configuration(
+            input_data.get("runway_configuration")
+            or classify_runway_configuration(runway_input_list),
+            runtime_runway_count,
         )
         runtime_fingerprint = runtime_test_context.pop(
             "input_fingerprint", runtime_input_fingerprint(input_data)

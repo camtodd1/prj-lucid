@@ -57,6 +57,7 @@ try:
     from .dialog.cns_table import CnsTableMixin
     from .dialog.agl_options import AglOptionsMixin
     from .dialog.persistence import PersistenceMixin
+    from .core.run_history import classify_runway_configuration
     from .frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles
     from .rulesets.registry import (
         DEFAULT_RULESET_ID,
@@ -84,6 +85,7 @@ except ImportError:
     from dialog.cns_table import CnsTableMixin  # type: ignore
     from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
+    from core.run_history import classify_runway_configuration  # type: ignore
     from frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles  # type: ignore
     from rulesets.registry import (  # type: ignore
         DEFAULT_RULESET_ID,
@@ -3205,6 +3207,9 @@ class SafeguardingBuilderDialog(
             )
             return None
         final_data["runways"] = runway_data_list
+        final_data["runway_configuration"] = classify_runway_configuration(
+            runway_data_list
+        )
 
         # --- Airfield Ground Lighting Inputs ---
         agl_options = self._get_agl_options(error_messages)

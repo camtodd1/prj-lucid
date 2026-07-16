@@ -18,7 +18,7 @@
     "stage_overlap_note": "Instrumented stage timings are nested and must not be added together. total_seconds is wall-clock workflow time."
   },
   "fixtures": {
-    "ybbn_single.json": {
+    "ybbn_1rwy_single.json": {
       "runways": 1,
       "total_seconds": 13.956,
       "stages": {
@@ -50,7 +50,7 @@
         }
       }
     },
-    "yssy_dual_intersecting.json": {
+    "yssy_2rwy_intersecting.json": {
       "runways": 2,
       "total_seconds": 21.660,
       "stages": {
@@ -82,7 +82,7 @@
         }
       }
     },
-    "ysws_dual_parallel.json": {
+    "ysws_2rwy_parallel.json": {
       "runways": 2,
       "total_seconds": 18.873,
       "stages": {
@@ -114,7 +114,7 @@
         }
       }
     },
-    "ymml_intersecting.json": {
+    "ymml_2rwy_intersecting.json": {
       "runways": 2,
       "total_seconds": 19.436,
       "stages": {
@@ -146,7 +146,7 @@
         }
       }
     },
-    "yssy_multiple_stress.json": {
+    "yssy_3rwy_mixed_stress.json": {
       "runways": 3,
       "total_seconds": 33.506,
       "stages": {

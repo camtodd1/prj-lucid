@@ -234,6 +234,31 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(payload["protected_airspace_policy"], "modernisation_comparison")
 
+    def test_save_payload_records_scenario_and_uses_standard_filename(self):
+        payload = self.dialog._build_save_payload("YBBN")
+
+        self.assertEqual(payload["runway_configuration"], "single")
+        self.assertEqual(
+            self.dialog._suggested_input_filename(
+                payload["icao_code"],
+                len(payload["runways"]),
+                payload["runway_configuration"],
+            ),
+            "ybbn_1rwy_single.json",
+        )
+
+    def test_loaded_scenario_must_match_runway_count(self):
+        payload = {"icao_code": "YTEST", "runways": [{}, {}]}
+        for scenario in ("parallel", "intersecting"):
+            payload["runway_configuration"] = scenario
+            self.dialog._validate_loaded_payload(payload)
+
+        for scenario in ("single", "mixed", "multiple"):
+            payload["runway_configuration"] = scenario
+            with self.subTest(scenario=scenario):
+                with self.assertRaises(ValueError):
+                    self.dialog._validate_loaded_payload(payload)
+
     def test_save_payload_uses_only_canonical_runway_elevation_fields(self):
         group = self.dialog._runway_groups[1]
         group.runway_end_elev_1_le.setText("3.3")

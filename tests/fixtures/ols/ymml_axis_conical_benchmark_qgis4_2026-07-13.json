@@ -10,7 +10,7 @@
     "output_mode": "memory"
   },
   "inputs": {
-    "fixture": "ymml_intersecting.json",
+    "fixture": "ymml_2rwy_intersecting.json",
     "fixture_sha256": "8c025c4676bf6531014bc3489189380e1e521fe1a3ebfd0abff7f3934dc6af8f",
     "supplied_input_sha256": "2d6a6b8bfd3996f720cf4095444ae045e4d1d4ef69dfac683d326c29b0436a0b",
     "supplied_transition_output_sha256": "dc1b21610ae2d318dc0e5e95ac07636fd56f656a4d1982ff93bc314a33b4c810",

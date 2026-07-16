@@ -17,6 +17,7 @@ from core.run_history import (
     detect_run_agent,
     migrate_history_file,
     runtime_input_fingerprint,
+    validate_runway_configuration,
 )
 
 
@@ -57,9 +58,9 @@ class RunHistoryTests(unittest.TestCase):
                 design_ruleset_label="MOS139 (C.07 2026)",
                 baseline_ruleset_label="MOS139 (C.07 2026)",
                 comparison_ruleset_label="EASA CS-ADR-DSN Issue 7",
-                test_case_id="ybbn_single",
+                test_case_id="ybbn_1rwy_single",
                 test_case_name="YBBN single runway",
-                input_filename="ybbn_single.json",
+                input_filename="ybbn_1rwy_single.json",
                 runway_count=1,
                 runway_configuration="single",
                 input_fingerprint="abc123",
@@ -81,9 +82,9 @@ class RunHistoryTests(unittest.TestCase):
             self.assertEqual(stored["qgis_version"], "4.0-test")
             self.assertEqual(stored["comparison_ols_ruleset"], "easa_cs_adr_dsn_issue_7")
             self.assertEqual(stored["design_ruleset_label"], "MOS139 (C.07 2026)")
-            self.assertEqual(stored["test_case_id"], "ybbn_single")
+            self.assertEqual(stored["test_case_id"], "ybbn_1rwy_single")
             self.assertEqual(stored["test_case_name"], "YBBN single runway")
-            self.assertEqual(stored["input_filename"], "ybbn_single.json")
+            self.assertEqual(stored["input_filename"], "ybbn_1rwy_single.json")
             self.assertEqual(stored["runway_count"], "1")
             self.assertEqual(stored["runway_configuration"], "single")
             self.assertEqual(stored["input_fingerprint"], "abc123")
@@ -182,6 +183,12 @@ class RunHistoryTests(unittest.TestCase):
         )
         self.assertEqual(
             classify_runway_configuration(
+                [runway((0, 0), (10, 0)), runway((20, 20), (30, 30))]
+            ),
+            "intersecting",
+        )
+        self.assertEqual(
+            classify_runway_configuration(
                 [
                     runway((0, 0), (10, 0)),
                     runway((0, 2), (10, 2)),
@@ -190,6 +197,33 @@ class RunHistoryTests(unittest.TestCase):
             ),
             "mixed",
         )
+
+    def test_runway_configuration_enforces_supported_scenario_counts(self):
+        accepted = (
+            ("single", 1),
+            ("parallel", 2),
+            ("intersecting", 2),
+            ("mixed", 3),
+            ("parallel", 4),
+        )
+        for scenario, count in accepted:
+            with self.subTest(scenario=scenario, count=count):
+                self.assertEqual(
+                    validate_runway_configuration(scenario.upper(), count),
+                    scenario,
+                )
+
+        rejected = (
+            ("single", 2),
+            ("parallel", 1),
+            ("intersecting", 1),
+            ("mixed", 2),
+            ("multiple", 3),
+        )
+        for scenario, count in rejected:
+            with self.subTest(scenario=scenario, count=count):
+                with self.assertRaises(ValueError):
+                    validate_runway_configuration(scenario, count)
 
     def test_input_fingerprint_is_stable_and_changes_with_parameters(self):
         first = {

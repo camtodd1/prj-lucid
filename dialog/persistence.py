@@ -25,8 +25,16 @@ from .dialog_constants import (
 
 try:
     from ..core.run_log import QgsMessageLog
+    from ..core.run_history import (
+        classify_runway_configuration,
+        validate_runway_configuration,
+    )
 except ImportError:
     from core.run_log import QgsMessageLog  # type: ignore
+    from core.run_history import (  # type: ignore
+        classify_runway_configuration,
+        validate_runway_configuration,
+    )
 
 try:
     from ..frameworks.registry import DEFAULT_FRAMEWORK_ID, normalize_framework_id
@@ -188,14 +196,24 @@ class PersistenceMixin:
 
     def save_input_data(self):
         icao_code = self._line_text("lineEdit_airport_name").strip().upper()
-        suggested_filename = f"{icao_code}_safeguarding_inputs.json" if icao_code else "safeguarding_inputs.json"
+        try:
+            data_to_save = self._build_save_payload(icao_code)
+        except (TypeError, ValueError) as error:
+            QMessageBox.critical(self, self.tr("Save Error"), str(error))
+            return
+        runway_count = len(data_to_save["runways"])
+        scenario = data_to_save["runway_configuration"]
+        suggested_filename = self._suggested_input_filename(
+            icao_code,
+            runway_count,
+            scenario,
+        )
         file_path = self._pick_json_file(self.tr("Save Inputs"), QFileDialog.AcceptMode.AcceptSave, suggested_filename)
         if not file_path:
             return
         if not file_path.lower().endswith(".json"):
             file_path += ".json"
 
-        data_to_save = self._build_save_payload(icao_code)
         try:
             with open(file_path, "w", encoding="utf-8") as f:
                 json.dump(data_to_save, f, indent=4, ensure_ascii=False)
@@ -204,6 +222,8 @@ class PersistenceMixin:
                 "test_case_id": saved_path.stem,
                 "test_case_name": saved_path.stem.replace("_", " ").replace("-", " ").title(),
                 "input_filename": saved_path.name,
+                "runway_count": runway_count,
+                "runway_configuration": scenario,
             }
             QMessageBox.information(
                 self,
@@ -214,6 +234,16 @@ class PersistenceMixin:
             error_msg = self.tr("Error saving data:") + f"\n{type(e).__name__}: {e}"
             QgsMessageLog.logMessage(f"Save error {file_path}: {e}", DIALOG_LOG_TAG, level=Qgis.Critical)
             QMessageBox.critical(self, self.tr("Save Error"), error_msg)
+
+    @staticmethod
+    def _suggested_input_filename(
+        icao_code: str,
+        runway_count: int,
+        runway_configuration: str,
+    ) -> str:
+        scenario = validate_runway_configuration(runway_configuration, runway_count)
+        airport_slug = str(icao_code or "").strip().lower() or "airport"
+        return f"{airport_slug}_{int(runway_count)}rwy_{scenario}.json"
 
     def load_input_data(self):
         if self._has_existing_input_data():
@@ -247,9 +277,13 @@ class PersistenceMixin:
                 "input_filename": loaded_path.name,
             }
             if loaded_data.get("runway_configuration"):
-                self._runtime_test_context["runway_configuration"] = str(
-                    loaded_data["runway_configuration"]
+                self._runtime_test_context["runway_configuration"] = (
+                    validate_runway_configuration(
+                        loaded_data["runway_configuration"],
+                        len(loaded_data["runways"]),
+                    )
                 )
+            self._runtime_test_context["runway_count"] = len(loaded_data["runways"])
             self._update_dialog_height()
             if hasattr(self, "queue_current_airport_lookup"):
                 self.queue_current_airport_lookup()
@@ -272,6 +306,11 @@ class PersistenceMixin:
         comparison_ols_ruleset = ""
         if hasattr(self, "_current_ols_ruleset_ids"):
             baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
+        runways = [
+            self._runway_groups[idx].get_input_data()
+            for idx in sorted(self._runway_groups.keys())
+        ]
+        runway_configuration = classify_runway_configuration(runways)
         data_to_save = {
             "icao_code": icao_code,
             "iata_code": self._line_text("lineEdit_iata_code").strip().upper(),
@@ -287,7 +326,8 @@ class PersistenceMixin:
             "protected_airspace_policy": protected_airspace_policy,
             "baseline_ols_ruleset": baseline_ols_ruleset,
             "comparison_ols_ruleset": comparison_ols_ruleset or None,
-            "runways": [self._runway_groups[idx].get_input_data() for idx in sorted(self._runway_groups.keys())],
+            "runway_configuration": runway_configuration,
+            "runways": runways,
             "cns_facilities": self._get_cns_save_rows(),
         }
         if hasattr(self, "_get_agl_save_options"):
@@ -387,6 +427,11 @@ class PersistenceMixin:
             raise ValueError(f"Missing required keys: {', '.join(missing)}")
         if not isinstance(loaded_data.get("runways"), list):
             raise ValueError("Invalid format: 'runways' key is not a list.")
+        if "runway_configuration" in loaded_data:
+            validate_runway_configuration(
+                loaded_data["runway_configuration"],
+                len(loaded_data["runways"]),
+            )
         if "cns_facilities" in loaded_data and not isinstance(loaded_data.get("cns_facilities"), list):
             raise ValueError("Invalid format: 'cns_facilities' key exists but is not a list.")
 

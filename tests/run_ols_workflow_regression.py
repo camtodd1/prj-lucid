@@ -640,6 +640,8 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
     failures: List[str] = []
     if int(case.get("runway_count", -1)) != int(case["payload_runway_count"]):
         failures.append("fixture runway count does not match manifest")
+    if case.get("runway_configuration") != case.get("payload_runway_configuration"):
+        failures.append("fixture runway scenario does not match manifest")
     if layers["invalid_geometries"] > tolerances["maximum_invalid_geometries"]:
         failures.append(f"{layers['invalid_geometries']} invalid geometries")
     if layers["empty_geometries"] > tolerances["maximum_empty_geometries"]:
@@ -768,7 +770,11 @@ def _run_case(
             }
         )
         payload["output_options"] = output_options
-    case = {**case, "payload_runway_count": len(payload.get("runways", []))}
+    case = {
+        **case,
+        "payload_runway_count": len(payload.get("runways", [])),
+        "payload_runway_configuration": payload.get("runway_configuration"),
+    }
     project = QgsProject.instance()
     project.clear()
     project.setCrs(QgsCoordinateReferenceSystem(case["project_crs"]))
@@ -777,7 +783,8 @@ def _run_case(
         "test_case_id": Path(case["file"]).stem,
         "test_case_name": case["description"],
         "input_filename": fixture_path.name,
-        "runway_configuration": case["runway_configuration"],
+        "runway_count": case["payload_runway_count"],
+        "runway_configuration": case["payload_runway_configuration"],
     }
     if hasattr(dialog, "_airport_lookup_timer"):
         dialog._airport_lookup_timer.stop()
