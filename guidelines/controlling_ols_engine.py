@@ -42,6 +42,7 @@ CONTROLLING_REGION_DISSOLVE_MAX_AREA_CHANGE_M2 = 0.01
 CONTROLLING_NUMERIC_COVERAGE_TOLERANCE_M2 = 0.02
 CONTROLLING_REGION_MIN_INTERIOR_RING_AREA_M2 = 0.01
 CONTROLLING_NUMERIC_SLIVER_MAX_EFFECTIVE_WIDTH_M = 0.05
+CONTROLLING_ZERO_CONTOUR_SEED_TOLERANCE_M = 0.01
 CONTROLLING_CONTOUR_CLIP_BUFFER_SEGMENTS = 4
 CONTROLLING_CONTOUR_BOUNDARY_RECOVERY_MIN_LENGTH_M = 0.25
 CONTROLLING_GLOBAL_CELL_SOLVER_ENABLED = True
@@ -3703,6 +3704,11 @@ class PlanarControllingOlsEngine:
                     conical_candidate,
                     overlap,
                     transition_curve,
+                    # Solver curves are already conditioned equality edges.
+                    # Re-simplifying one here creates a second chord beside
+                    # the source boundary and polygonizes the gap into
+                    # line-like comparison lenses.
+                    simplify_tolerance_m=0.0,
                 )
                 if combined is not None:
                     self._record_axis_exact_success(total_start)
@@ -3976,7 +3982,13 @@ class PlanarControllingOlsEngine:
                     ]
                     points = [_point_at(corner_column, corner_row) for corner_column, corner_row in corners]
                     values = [_value_at(corner_column, corner_row) for corner_column, corner_row in corners]
-                    zero_points = self._zero_crossings_for_grid_cell(points, values)
+                    zero_points = self._zero_crossings_for_grid_cell(
+                        points,
+                        values,
+                        zero_tolerance_m=(
+                            CONTROLLING_ZERO_CONTOUR_SEED_TOLERANCE_M
+                        ),
+                    )
                     if len(zero_points) < 2:
                         continue
                     for start_index in range(0, len(zero_points) - 1, 2):
@@ -5184,7 +5196,13 @@ class PlanarControllingOlsEngine:
         self,
         points: Sequence[QgsPointXY],
         values: Sequence[Optional[float]],
+        zero_tolerance_m: Optional[float] = None,
     ) -> List[QgsPointXY]:
+        zero_tolerance = (
+            self.tie_tolerance_m
+            if zero_tolerance_m is None
+            else max(0.0, float(zero_tolerance_m))
+        )
         zero_points: List[QgsPointXY] = []
 
         def _add(point_xy: QgsPointXY) -> None:
@@ -5201,8 +5219,8 @@ class PlanarControllingOlsEngine:
                 continue
             start_point = points[start_index]
             end_point = points[end_index]
-            start_is_zero = abs(start_value) <= self.tie_tolerance_m
-            end_is_zero = abs(end_value) <= self.tie_tolerance_m
+            start_is_zero = abs(start_value) <= zero_tolerance
+            end_is_zero = abs(end_value) <= zero_tolerance
             if start_is_zero:
                 _add(start_point)
             if end_is_zero:

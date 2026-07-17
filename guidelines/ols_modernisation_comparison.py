@@ -31,6 +31,10 @@ COMPARISON_MIN_AREA_M2 = 0.01
 COMPARISON_NO_OVERLAY_COVERAGE_TOLERANCE_M = 0.5
 COMPARISON_NO_OVERLAY_MIN_AREA_M2 = 5.0
 COMPARISON_NO_OVERLAY_GRID_M = 0.001
+COMPARISON_RECOVERY_SLIVER_MAX_EFFECTIVE_WIDTH_M = 0.10
+COMPARISON_RECOVERY_SLIVER_MIN_SHARED_BOUNDARY_FRACTION = 0.2
+COMPARISON_RECOVERY_SLIVER_MIN_SHARED_BOUNDARY_M = 1.0
+COMPARISON_RECOVERY_SLIVER_DOMINANT_CONTACT_RATIO = 1.5
 COMPARISON_SPIKE_ANGLE_DEGREES = 12.0
 COMPARISON_SPIKE_DETOUR_RATIO = 1.8
 COMPARISON_SPIKE_BASE_MAX_M = 175.0
@@ -66,6 +70,7 @@ class OlsEnvelopeComparisonEngine:
         self.future_engine = future_engine
         self.tolerance_m = max(0.0, float(tolerance_m))
         self._comparison_diagnostics: Dict[str, float] = {}
+        self._recovered_sliver_geometries: List[QgsGeometry] = []
 
     def comparison_diagnostics(self) -> Dict[str, object]:
         """Return structured attribution for approximation and recovery operations."""
@@ -83,6 +88,21 @@ class OlsEnvelopeComparisonEngine:
                 "final_remainder_parts": int(stats.get("final_remainder_parts", 0.0)),
                 "final_remainder_area_m2": stats.get("final_remainder_area_m2", 0.0),
             },
+            "local_recovery_normalisation": {
+                "reattached_parts": int(
+                    stats.get("recovered_sliver_reattached_parts", 0.0)
+                ),
+                "reattached_area_m2": stats.get(
+                    "recovered_sliver_reattached_area_m2",
+                    0.0,
+                ),
+                "reclassified_parts": int(
+                    stats.get("recovered_sliver_reclassified_parts", 0.0)
+                ),
+                "maximum_effective_width_m": (
+                    COMPARISON_RECOVERY_SLIVER_MAX_EFFECTIVE_WIDTH_M
+                ),
+            },
         }
 
     def comparison_parts(
@@ -90,6 +110,7 @@ class OlsEnvelopeComparisonEngine:
     ) -> Dict[str, List[Tuple[ControllingOlsCandidate, ControllingOlsCandidate, QgsGeometry]]]:
         """Return gain/loss/no-change polygons and transition lines for the common domain."""
         self._comparison_diagnostics = {}
+        self._recovered_sliver_geometries = []
         result = {"gain": [], "loss": [], "no_change": [], "transition": []}
         baseline_regions = self.baseline_engine._controlling_region_geometries()
         future_regions = self.future_engine._controlling_region_geometries()
@@ -122,12 +143,22 @@ class OlsEnvelopeComparisonEngine:
         # do not merge again, because doing so would repeat the same clipping.
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
         self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
+        self._reattach_tracked_recovered_sliver_parts(result)
         self._enforce_final_height_signs(result)
         self._partition_classified_parts(result)
+        self._reattach_tracked_recovered_sliver_parts(result)
         # Partition differences can reintroduce zero-area out-and-back ring
         # edges after the earlier controller-aware cleanup.  Remove only
         # boundary-equivalent backtracks here; genuine narrow polygons remain
         # classified because the accepted symmetric-difference area is capped.
+        self._remove_final_boundary_backtracks(result)
+        self._reattach_tracked_recovered_sliver_parts(result)
+        # Recovery normalisation is the last operation allowed to add area to
+        # a classified polygon. Close the pipeline with the public sign,
+        # exclusivity, and boundary invariants so no local attachment can
+        # bypass them.
+        self._enforce_final_height_signs(result)
+        self._partition_classified_parts(result)
         self._remove_final_boundary_backtracks(result)
         self._merge_comparison_transition_parts(result)
         diagnostics = self.comparison_diagnostics()
@@ -1013,6 +1044,10 @@ class OlsEnvelopeComparisonEngine:
                     self._comparison_diagnostics["common_domain_gap_area_m2"] = (
                         self._comparison_diagnostics.get("common_domain_gap_area_m2", 0.0) + part.area()
                     )
+                    starts = {
+                        change: len(result[change])
+                        for change in ("gain", "loss", "no_change")
+                    }
                     self._append_classified_overlap(
                         result,
                         baseline_candidate,
@@ -1021,6 +1056,427 @@ class OlsEnvelopeComparisonEngine:
                         clean_spikes=False,
                         include_transition=False,
                     )
+                    self._reattach_recovered_sliver_parts(result, starts)
+                    # Controller-region edges can overlap by numerical dust.
+                    # Carry each successful repair into the assigned union so
+                    # the same gap is not recovered again under a later pair.
+                    classified_union = self._union_geometries([
+                        geometry
+                        for classified_change in ("gain", "loss", "no_change")
+                        for _baseline, _future, geometry
+                        in result.get(classified_change, [])
+                        if geometry is not None and not geometry.isEmpty()
+                    ])
+
+    def _reattach_recovered_sliver_parts(self, result, starts) -> None:
+        """Join only narrow gap-recovery parts to their verified neighbour."""
+        recovered = []
+        for change in ("gain", "loss", "no_change"):
+            recovered.extend(
+                (change, baseline, future, geometry)
+                for baseline, future, geometry in result[change][starts[change]:]
+            )
+            del result[change][starts[change]:]
+
+        for change, baseline, future, geometry in recovered:
+            if not self._reattach_recovered_sliver_part(
+                result,
+                change,
+                baseline,
+                future,
+                geometry,
+            ):
+                self._track_recovered_sliver_geometry(geometry)
+                result[change].append((baseline, future, geometry))
+
+    def _track_recovered_sliver_geometry(self, geometry: QgsGeometry) -> None:
+        """Retain spatial provenance for a narrow recovery part across merges."""
+        perimeter = geometry.length()
+        if perimeter <= 0.0:
+            return
+        if (
+            (2.0 * geometry.area()) / perimeter
+            <= COMPARISON_RECOVERY_SLIVER_MAX_EFFECTIVE_WIDTH_M
+        ):
+            self._recovered_sliver_geometries.append(QgsGeometry(geometry))
+
+    def _track_new_recovered_sliver_parts(self, result, starts) -> None:
+        for change in ("gain", "loss", "no_change"):
+            for _baseline, _future, geometry in result[change][starts[change]:]:
+                self._track_recovered_sliver_geometry(geometry)
+
+    def _reattach_tracked_recovered_sliver_parts(self, result) -> None:
+        """Rejoin pending recovery slivers after every recovery target exists."""
+        if not self._recovered_sliver_geometries:
+            return
+        for _pass in range(2):
+            changed = False
+            for change in ("gain", "loss", "no_change"):
+                for index in range(len(result.get(change, [])) - 1, -1, -1):
+                    baseline, future, geometry = result[change][index]
+                    recovered_indexes = self._tracked_recovered_sliver_indexes(
+                        geometry
+                    )
+                    if not recovered_indexes:
+                        continue
+                    result[change].pop(index)
+                    if self._reattach_recovered_sliver_part(
+                        result,
+                        change,
+                        baseline,
+                        future,
+                        geometry,
+                    ):
+                        for recovered_index in reversed(recovered_indexes):
+                            self._recovered_sliver_geometries.pop(recovered_index)
+                        changed = True
+                    else:
+                        result[change].insert(index, (baseline, future, geometry))
+            if not changed:
+                break
+
+    def _tracked_recovered_sliver_indexes(
+        self,
+        geometry: QgsGeometry,
+    ) -> List[int]:
+        perimeter = geometry.length()
+        if perimeter <= 0.0:
+            return []
+        if (
+            (2.0 * geometry.area()) / perimeter
+            > COMPARISON_RECOVERY_SLIVER_MAX_EFFECTIVE_WIDTH_M
+        ):
+            return []
+        area = geometry.area()
+        if area <= 0.0:
+            return []
+        matching_indexes = []
+        matching_geometries = []
+        for index, recovered in enumerate(self._recovered_sliver_geometries):
+            if not self._bounding_boxes_intersect(geometry, recovered):
+                continue
+            try:
+                overlap_area = geometry.intersection(recovered).area()
+            except Exception:
+                continue
+            if overlap_area <= 0.0:
+                continue
+            matching_indexes.append(index)
+            matching_geometries.append(recovered)
+        if not matching_geometries:
+            return []
+        tracked_union = self._union_geometries(matching_geometries)
+        if tracked_union is None:
+            return []
+        try:
+            untracked_area = geometry.difference(tracked_union).area()
+        except Exception:
+            return []
+        # Provenance applies only to the recorded recovery geometry.  A
+        # percentage threshold lets a later merge carry an unrelated tail and
+        # then reclassifies that tail with the sliver.  Permit only the same
+        # absolute sub-threshold noise used by the comparison area contract.
+        return (
+            matching_indexes
+            if untracked_area <= COMPARISON_MIN_AREA_M2
+            else []
+        )
+
+    def _reattach_recovered_sliver_part(
+        self,
+        result,
+        change: str,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        geometry: QgsGeometry,
+    ) -> bool:
+        """Attach a line-like recovery remainder without dissolving other parts."""
+        perimeter = geometry.length()
+        if perimeter <= 0.0:
+            return False
+        effective_width = (2.0 * geometry.area()) / perimeter
+        if effective_width > COMPARISON_RECOVERY_SLIVER_MAX_EFFECTIVE_WIDTH_M:
+            return False
+
+        numeric_zero_m = 1e-9
+        sample_records = []
+        for sample, is_interior in self._recovery_classification_samples(geometry):
+            baseline_sample = self.baseline_engine.controlling_candidate_at_xy(
+                sample
+            )
+            future_sample = self.future_engine.controlling_candidate_at_xy(sample)
+            if baseline_sample is None or future_sample is None:
+                continue
+            sample_records.append(
+                (
+                    float(future_sample[1]) - float(baseline_sample[1]),
+                    (
+                        baseline_sample[0].surface_id,
+                        future_sample[0].surface_id,
+                    ),
+                    is_interior,
+                )
+            )
+        if not sample_records:
+            return False
+        envelope_deltas = [record[0] for record in sample_records]
+        has_gain = any(delta > numeric_zero_m for delta in envelope_deltas)
+        has_loss = any(delta < -numeric_zero_m for delta in envelope_deltas)
+        if has_gain and has_loss:
+            return False
+        if has_gain:
+            preferred_change = "gain"
+            actual_id_options = {
+                ids for delta, ids, is_interior in sample_records
+                if is_interior and delta > numeric_zero_m
+            }
+        elif has_loss:
+            preferred_change = "loss"
+            actual_id_options = {
+                ids for delta, ids, is_interior in sample_records
+                if is_interior and delta < -numeric_zero_m
+            }
+        else:
+            preferred_change = "no_change"
+            # Ring vertices lie on controller ties and can legitimately report
+            # either owner. Interior probes must agree before an all-zero
+            # recovery wedge can be attributed to one controller pair.
+            actual_id_options = {
+                ids for _delta, ids, is_interior in sample_records
+                if is_interior
+            }
+        if len(actual_id_options) == 1:
+            actual_ids = next(iter(actual_id_options))
+        elif actual_id_options:
+            return False
+        elif self._controller_pair_covers_recovery_geometry(
+            baseline,
+            future,
+            geometry,
+        ):
+            # A sub-resolution sign can exist only at the recovery ring.  In
+            # that case use the source pair only when the solved pair domain
+            # covers the whole wedge to numerical precision.
+            actual_ids = (baseline.surface_id, future.surface_id)
+        else:
+            return False
+
+        candidates = []
+        for target_change in (preferred_change,):
+            for target_index, (
+                target_baseline,
+                target_future,
+                target_geometry,
+            ) in enumerate(result.get(target_change, [])):
+                target_ids = (
+                    target_baseline.surface_id,
+                    target_future.surface_id,
+                )
+                if target_ids != actual_ids:
+                    continue
+                if not self._bounding_boxes_intersect(geometry, target_geometry):
+                    continue
+                shared_length = self._shared_boundary_length(
+                    geometry,
+                    target_geometry,
+                )
+                shared_fraction = shared_length / perimeter
+                if (
+                    shared_length
+                    >= max(
+                        COMPARISON_RECOVERY_SLIVER_MIN_SHARED_BOUNDARY_M,
+                        10.0 * effective_width,
+                    )
+                    and shared_fraction
+                    >= COMPARISON_RECOVERY_SLIVER_MIN_SHARED_BOUNDARY_FRACTION
+                ):
+                    candidates.append((
+                        -shared_length,
+                        -shared_fraction,
+                        -target_geometry.area(),
+                        target_change,
+                        target_index,
+                        target_baseline,
+                        target_future,
+                        target_geometry,
+                    ))
+        if not candidates:
+            return False
+
+        candidates.sort(key=lambda item: item[:3])
+        chosen = candidates[0]
+        chosen_shared_length = -chosen[0]
+        runner_up_shared_length = (
+            -candidates[1][0] if len(candidates) > 1 else 0.0
+        )
+        if (
+            runner_up_shared_length > 0.0
+            and chosen_shared_length
+            < (
+                runner_up_shared_length
+                * COMPARISON_RECOVERY_SLIVER_DOMINANT_CONTACT_RATIO
+            )
+        ):
+            return False
+
+        (
+            _negative_shared_length,
+            _negative_shared_fraction,
+            _negative_area,
+            target_change,
+            target_index,
+            target_baseline,
+            target_future,
+            target_geometry,
+        ) = chosen
+        unique = self._safe_difference(geometry, target_geometry)
+        if unique is None:
+            return False
+        if not self._has_area(unique):
+            result[target_change][target_index] = (
+                target_baseline,
+                target_future,
+                target_geometry,
+            )
+            return True
+        try:
+            combined = QgsGeometry.unaryUnion([target_geometry, unique])
+        except Exception:
+            return False
+        if combined is None or combined.isNull() or combined.isEmpty():
+            return False
+        if not combined.isGeosValid():
+            return False
+        if (
+            self.baseline_engine._polygon_part_count(combined)
+            > self.baseline_engine._polygon_part_count(target_geometry)
+        ):
+            return False
+        expected_area = target_geometry.area() + unique.area()
+        area_tolerance = max(COMPARISON_MIN_AREA_M2, expected_area * 1e-10)
+        if abs(combined.area() - expected_area) > area_tolerance:
+            return False
+
+        result[target_change][target_index] = (
+            target_baseline,
+            target_future,
+            combined,
+        )
+        self._comparison_diagnostics["recovered_sliver_reattached_parts"] = (
+            self._comparison_diagnostics.get(
+                "recovered_sliver_reattached_parts",
+                0.0,
+            )
+            + 1.0
+        )
+        self._comparison_diagnostics["recovered_sliver_reattached_area_m2"] = (
+            self._comparison_diagnostics.get(
+                "recovered_sliver_reattached_area_m2",
+                0.0,
+            )
+            + geometry.area()
+        )
+        if target_change != change:
+            self._comparison_diagnostics["recovered_sliver_reclassified_parts"] = (
+                self._comparison_diagnostics.get(
+                    "recovered_sliver_reclassified_parts",
+                    0.0,
+                )
+                + 1.0
+            )
+        return True
+
+    def _controller_pair_covers_recovery_geometry(
+        self,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        geometry: QgsGeometry,
+    ) -> bool:
+        """Confirm that a boundary-only recovery belongs wholly to its pair."""
+        baseline_coverage = self._union_geometries([
+            region for candidate, region
+            in self.baseline_engine._controlling_region_geometries()
+            if candidate.surface_id == baseline.surface_id
+        ])
+        future_coverage = self._union_geometries([
+            region for candidate, region
+            in self.future_engine._controlling_region_geometries()
+            if candidate.surface_id == future.surface_id
+        ])
+        if baseline_coverage is None or future_coverage is None:
+            return False
+        pair_coverage = self._safe_intersection(
+            baseline_coverage,
+            future_coverage,
+        )
+        if pair_coverage is None or pair_coverage.isEmpty():
+            return False
+        try:
+            outside_area = geometry.difference(pair_coverage).area()
+        except Exception:
+            return False
+        return outside_area <= max(1e-9, geometry.area() * 1e-9)
+
+    def _recovery_classification_samples(
+        self,
+        geometry: QgsGeometry,
+    ) -> List[Tuple[QgsPointXY, bool]]:
+        """Return boundary samples plus interior probes for controller checks."""
+        try:
+            representative_geometry = geometry.pointOnSurface()
+            representative = representative_geometry.asPoint()
+            interior_origin = QgsPointXY(representative.x(), representative.y())
+        except Exception:
+            return []
+
+        samples: List[Tuple[QgsPointXY, bool]] = []
+        seen = set()
+
+        def add(point_xy: QgsPointXY, is_interior: bool) -> None:
+            key = (round(point_xy.x(), 7), round(point_xy.y(), 7))
+            if key in seen:
+                return
+            seen.add(key)
+            samples.append((QgsPointXY(point_xy), is_interior))
+
+        add(interior_origin, True)
+        boundary_samples = self._sample_points(geometry)[1:]
+        for boundary in boundary_samples:
+            add(boundary, False)
+            for fraction in (0.25, 0.5, 0.75):
+                probe = QgsPointXY(
+                    interior_origin.x()
+                    + ((boundary.x() - interior_origin.x()) * fraction),
+                    interior_origin.y()
+                    + ((boundary.y() - interior_origin.y()) * fraction),
+                )
+                try:
+                    if geometry.contains(QgsGeometry.fromPointXY(probe)):
+                        add(probe, True)
+                except Exception:
+                    continue
+        return samples
+
+    @staticmethod
+    def _shared_boundary_length(
+        first: QgsGeometry,
+        second: QgsGeometry,
+    ) -> float:
+        """Return line contact only; polygon overlap perimeter is not contact."""
+        try:
+            first_boundary = first.convertToType(
+                Qgis.GeometryType.Line,
+                True,
+            )
+            second_boundary = second.convertToType(
+                Qgis.GeometryType.Line,
+                True,
+            )
+            shared = first_boundary.intersection(second_boundary)
+            length = float(shared.length())
+        except Exception:
+            return 0.0
+        return length if math.isfinite(length) and length > 0.0 else 0.0
 
     def _append_final_common_domain_remainders(
         self,
@@ -1090,6 +1546,7 @@ class OlsEnvelopeComparisonEngine:
                         clean_spikes=False,
                         include_transition=True,
                     )
+                    self._track_new_recovered_sliver_parts(result, starts)
                     newly_assigned = [
                         geometry
                         for change in ("gain", "loss", "no_change")

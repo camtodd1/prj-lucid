@@ -15,6 +15,7 @@ from qgis.core import (
 )
 
 from guidelines.controlling_ols_engine import (
+    CONTROLLING_ZERO_CONTOUR_SEED_TOLERANCE_M,
     ControllingOlsCandidate,
     ControllingOlsContour,
     ControllingOlsEngineMixin,
@@ -201,6 +202,95 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertLessEqual(
             baseline_domain.symDifference(coverage).area(),
             0.01,
+        )
+
+    def test_axis_conical_exact_split_does_not_resimplify_canonical_curve(self):
+        origin = QgsPointXY(0.0, 0.0)
+        axis = ControllingOlsCandidate(
+            "axis",
+            "Approach",
+            QgsGeometry(self.domain),
+            axis_elevation_evaluator(origin, 90.0, 100.0, 0.02, 100.0),
+            "axis",
+            {
+                "origin_x": 0.0,
+                "origin_y": 0.0,
+                "origin_elevation_m": 100.0,
+                "slope": 0.02,
+                "max_distance_m": 100.0,
+                "azimuth_degrees": 90.0,
+            },
+        )
+        conical = ControllingOlsCandidate(
+            "conical",
+            "Conical",
+            QgsGeometry(self.domain),
+            conical_elevation_evaluator(self.domain, 100.0, 0.05, 100.0),
+            "conical",
+            {
+                "base_footprint": QgsGeometry(self.domain),
+                "base_elevation_m": 100.0,
+                "slope": 0.05,
+                "max_distance_m": 100.0,
+            },
+        )
+        engine = PlanarControllingOlsEngine([axis, conical])
+        canonical_curve = QgsGeometry.fromPolylineXY(
+            [QgsPointXY(50.0, 0.0), QgsPointXY(50.0, 100.0)]
+        )
+
+        with patch.object(
+            engine,
+            "_axis_conical_transition_curves_for_solver",
+            return_value=[canonical_curve],
+        ), patch.object(
+            engine,
+            "_candidate_lower_region_from_transition_curve",
+            return_value=QgsGeometry(),
+        ) as split:
+            engine._axis_conical_exact_axis_lower_region(
+                axis,
+                conical,
+                engine._axis_model(axis),
+                self.domain,
+            )
+
+        self.assertEqual(split.call_count, 1)
+        self.assertEqual(split.call_args.kwargs["simplify_tolerance_m"], 0.0)
+
+    def test_zero_contour_seeding_is_independent_of_controller_tie_tolerance(self):
+        candidate = self.constant("candidate", 100.0)
+        exact = PlanarControllingOlsEngine([candidate], tie_tolerance_m=0.0)
+        controller = PlanarControllingOlsEngine(
+            [candidate],
+            tie_tolerance_m=0.01,
+        )
+        points = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(1.0, 0.0),
+            QgsPointXY(1.0, 1.0),
+            QgsPointXY(0.0, 1.0),
+        ]
+        values = [0.005, 1.0, -1.0, -0.005]
+
+        self.assertNotEqual(
+            len(exact._zero_crossings_for_grid_cell(points, values)),
+            len(controller._zero_crossings_for_grid_cell(points, values)),
+        )
+        exact_crossings = exact._zero_crossings_for_grid_cell(
+            points,
+            values,
+            zero_tolerance_m=CONTROLLING_ZERO_CONTOUR_SEED_TOLERANCE_M,
+        )
+        controller_crossings = controller._zero_crossings_for_grid_cell(
+            points,
+            values,
+            zero_tolerance_m=CONTROLLING_ZERO_CONTOUR_SEED_TOLERANCE_M,
+        )
+
+        self.assertEqual(
+            [(point.x(), point.y()) for point in exact_crossings],
+            [(point.x(), point.y()) for point in controller_crossings],
         )
 
     def test_conical_conical_comparison_uses_one_accurate_shared_transition(self):
@@ -1018,6 +1108,317 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(result["gain"]), 1)
         self.assertAlmostEqual(result["gain"][0][2].area(), self.domain.area(), places=3)
 
+    def test_recovery_sliver_reattaches_to_one_adjacent_part_only(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 99.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        target = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        sliver = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 50.05, 100.0))
+        unrelated = QgsGeometry.fromRect(QgsRectangle(75.0, 0.0, 100.0, 100.0))
+        result = {
+            "gain": [],
+            "loss": [
+                (baseline, future, target),
+                (baseline, future, unrelated),
+            ],
+            "no_change": [(baseline, future, sliver)],
+            "transition": [],
+        }
+        comparison._track_recovered_sliver_geometry(sliver)
+
+        comparison._reattach_tracked_recovered_sliver_parts(result)
+
+        self.assertEqual(result["no_change"], [])
+        self.assertEqual(len(result["loss"]), 2)
+        self.assertAlmostEqual(
+            sum(geometry.area() for _baseline, _future, geometry in result["loss"]),
+            target.area() + sliver.area() + unrelated.area(),
+            places=6,
+        )
+        self.assertTrue(any(
+            abs(geometry.area() - unrelated.area()) <= 1e-6
+            for _baseline, _future, geometry in result["loss"]
+        ))
+        diagnostics = comparison.comparison_diagnostics()[
+            "local_recovery_normalisation"
+        ]
+        self.assertEqual(diagnostics["reattached_parts"], 1)
+        self.assertEqual(diagnostics["reclassified_parts"], 1)
+
+    def test_untracked_narrow_part_is_not_dissolved(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 99.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        target = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        narrow = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 50.05, 100.0))
+        result = {
+            "gain": [],
+            "loss": [(baseline, future, target)],
+            "no_change": [(baseline, future, narrow)],
+            "transition": [],
+        }
+
+        comparison._reattach_tracked_recovered_sliver_parts(result)
+
+        self.assertEqual(len(result["loss"]), 1)
+        self.assertEqual(len(result["no_change"]), 1)
+        self.assertAlmostEqual(result["no_change"][0][2].area(), narrow.area())
+
+    def test_wide_recovery_part_is_not_absorbed(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 99.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        target = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        wide = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 51.0, 100.0))
+        result = {
+            "gain": [],
+            "loss": [(baseline, future, target)],
+            "no_change": [(baseline, future, wide)],
+            "transition": [],
+        }
+        comparison._track_recovered_sliver_geometry(wide)
+
+        comparison._reattach_tracked_recovered_sliver_parts(result)
+
+        self.assertEqual(len(result["loss"]), 1)
+        self.assertEqual(len(result["no_change"]), 1)
+        self.assertAlmostEqual(result["no_change"][0][2].area(), wide.area())
+
+    def test_ambiguous_recovery_sliver_keeps_canonical_classification(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 100.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        gain_side = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 49.95, 100.0))
+        sliver = QgsGeometry.fromRect(QgsRectangle(49.95, 0.0, 50.05, 100.0))
+        loss_side = QgsGeometry.fromRect(QgsRectangle(50.05, 0.0, 100.0, 100.0))
+        result = {
+            "gain": [(baseline, future, gain_side)],
+            "loss": [(baseline, future, loss_side)],
+            "no_change": [(baseline, future, sliver)],
+            "transition": [],
+        }
+        comparison._track_recovered_sliver_geometry(sliver)
+
+        comparison._reattach_tracked_recovered_sliver_parts(result)
+
+        self.assertEqual(len(result["gain"]), 1)
+        self.assertEqual(len(result["loss"]), 1)
+        self.assertEqual(len(result["no_change"]), 1)
+        self.assertAlmostEqual(result["no_change"][0][2].area(), sliver.area())
+
+    def test_recovery_source_is_consumed_after_one_local_attachment(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 99.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 0.05, 100.0))
+        sliver = QgsGeometry.fromRect(QgsRectangle(0.05, 0.0, 0.10, 100.0))
+        right = QgsGeometry.fromRect(QgsRectangle(0.10, 0.0, 0.15, 30.0))
+        result = {
+            "gain": [],
+            "loss": [
+                (baseline, future, left),
+                (baseline, future, right),
+            ],
+            "no_change": [(baseline, future, sliver)],
+            "transition": [],
+        }
+        comparison._track_recovered_sliver_geometry(sliver)
+
+        comparison._reattach_tracked_recovered_sliver_parts(result)
+
+        self.assertEqual(result["no_change"], [])
+        self.assertEqual(len(result["loss"]), 2)
+        self.assertAlmostEqual(
+            sum(geometry.area() for _baseline, _future, geometry in result["loss"]),
+            left.area() + sliver.area() + right.area(),
+            places=6,
+        )
+        diagnostics = comparison.comparison_diagnostics()[
+            "local_recovery_normalisation"
+        ]
+        self.assertEqual(diagnostics["reattached_parts"], 1)
+        self.assertAlmostEqual(diagnostics["reattached_area_m2"], sliver.area())
+
+    def test_tracked_recovery_cannot_absorb_untracked_merged_tail(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 99.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        target = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        tracked = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 50.05, 95.0))
+        untracked = QgsGeometry.fromRect(
+            QgsRectangle(50.0, 95.0, 50.05, 100.0)
+        )
+        merged = QgsGeometry.unaryUnion([tracked, untracked])
+        result = {
+            "gain": [],
+            "loss": [(baseline, future, target)],
+            "no_change": [(baseline, future, merged)],
+            "transition": [],
+        }
+        comparison._track_recovered_sliver_geometry(tracked)
+
+        comparison._reattach_tracked_recovered_sliver_parts(result)
+
+        self.assertEqual(len(result["no_change"]), 1)
+        self.assertEqual(len(result["loss"]), 1)
+
+    def test_recovery_crossing_actual_controller_boundary_is_not_attached_whole(self):
+        baseline_left = self.constant("b1", 100.0)
+        baseline_right = self.plane("b2", -1.0, 0.0, 150.0)
+        future = self.constant("future", 90.0)
+        baseline_engine = PlanarControllingOlsEngine(
+            [baseline_left, baseline_right]
+        )
+        comparison = OlsEnvelopeComparisonEngine(
+            baseline_engine,
+            PlanarControllingOlsEngine([future]),
+        )
+        left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 49.95, 100.0))
+        right = QgsGeometry.fromRect(
+            QgsRectangle(50.05, 0.0, 100.0, 100.0)
+        )
+        sliver = QgsGeometry.fromRect(
+            QgsRectangle(49.95, 0.0, 50.05, 100.0)
+        )
+        self.assertEqual(
+            baseline_engine.controlling_candidate_at_xy(
+                QgsPointXY(49.95, 50.0)
+            )[0].surface_id,
+            "b1",
+        )
+        self.assertEqual(
+            baseline_engine.controlling_candidate_at_xy(
+                QgsPointXY(50.05, 50.0)
+            )[0].surface_id,
+            "b2",
+        )
+        result = {
+            "gain": [],
+            "loss": [
+                (baseline_left, future, left),
+                (baseline_right, future, right),
+            ],
+            "no_change": [(baseline_left, future, sliver)],
+            "transition": [],
+        }
+        comparison._track_recovered_sliver_geometry(sliver)
+
+        comparison._reattach_tracked_recovered_sliver_parts(result)
+
+        self.assertEqual(len(result["no_change"]), 1)
+        self.assertAlmostEqual(
+            result["no_change"][0][2].area(),
+            sliver.area(),
+            places=6,
+        )
+
+    def test_recovery_overlap_perimeter_is_not_shared_boundary_contact(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 99.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        target = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        sliver = QgsGeometry.fromRect(QgsRectangle(49.96, 0.0, 50.04, 100.0))
+        result = {
+            "gain": [],
+            "loss": [(baseline, future, target)],
+            "no_change": [(baseline, future, sliver)],
+            "transition": [],
+        }
+        comparison._track_recovered_sliver_geometry(sliver)
+
+        comparison._reattach_tracked_recovered_sliver_parts(result)
+
+        self.assertEqual(len(result["loss"]), 1)
+        self.assertEqual(len(result["no_change"]), 1)
+
+    def test_equal_same_class_recovery_contacts_are_left_unchanged(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 99.0)
+
+        def normalise(targets):
+            comparison = OlsEnvelopeComparisonEngine(
+                PlanarControllingOlsEngine([baseline]),
+                PlanarControllingOlsEngine([future]),
+            )
+            sliver = QgsGeometry.fromRect(
+                QgsRectangle(49.95, 0.0, 50.05, 100.0)
+            )
+            result = {
+                "gain": [],
+                "loss": [(baseline, future, geometry) for geometry in targets],
+                "no_change": [(baseline, future, sliver)],
+                "transition": [],
+            }
+            comparison._track_recovered_sliver_geometry(sliver)
+            comparison._reattach_tracked_recovered_sliver_parts(result)
+            return result
+
+        left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 49.95, 100.0))
+        right = QgsGeometry.fromRect(QgsRectangle(50.05, 0.0, 100.0, 100.0))
+        forward = normalise([left, right])
+        reverse = normalise([right, left])
+
+        self.assertEqual(len(forward["no_change"]), 1)
+        self.assertEqual(len(reverse["no_change"]), 1)
+        self.assertEqual(len(forward["loss"]), 2)
+        self.assertEqual(len(reverse["loss"]), 2)
+
+    def test_final_recovery_mutation_is_closed_by_sign_and_partition_audit(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 90.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        original_reattach = comparison._reattach_tracked_recovered_sliver_parts
+        call_count = 0
+
+        def inject_after_last_retry(result):
+            nonlocal call_count
+            call_count += 1
+            original_reattach(result)
+            if call_count == 3:
+                wrong_sign = QgsGeometry.fromRect(
+                    QgsRectangle(0.0, 0.0, 1.0, 100.0)
+                )
+                result["gain"].append((baseline, future, wrong_sign))
+
+        with patch.object(
+            comparison,
+            "_reattach_tracked_recovered_sliver_parts",
+            side_effect=inject_after_last_retry,
+        ):
+            parts = comparison.comparison_parts()
+
+        self.assertEqual(call_count, 3)
+        self.assertEqual(parts["gain"], [])
+        self.assertAlmostEqual(
+            sum(geometry.area() for _baseline, _future, geometry in parts["loss"]),
+            self.domain.area(),
+            places=6,
+        )
+
     def test_tolerance_band_owns_numerical_cross_class_overlap(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 110.0)
@@ -1621,6 +2022,31 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(result["no_change"]), 0)
         self.assertEqual(result["gain"][0][0].surface_id, "baseline-left")
         self.assertEqual(result["loss"][0][0].surface_id, "baseline-right")
+
+    def test_gap_repair_does_not_recover_the_same_numerical_overlap_twice(self):
+        baseline_first = self.constant("baseline-first", 100.0)
+        baseline_second = self.constant("baseline-second", 100.0)
+        future = self.constant("future", 90.0)
+        baseline_engine = PlanarControllingOlsEngine(
+            [baseline_first, baseline_second]
+        )
+        future_engine = PlanarControllingOlsEngine([future])
+        baseline_regions = [
+            (baseline_first, QgsGeometry(self.domain)),
+            (baseline_second, QgsGeometry(self.domain)),
+        ]
+        future_regions = [(future, QgsGeometry(self.domain))]
+        engine = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
+        result = {"gain": [], "loss": [], "no_change": [], "transition": []}
+
+        engine._append_common_domain_gap_parts(
+            result,
+            baseline_regions,
+            future_regions,
+        )
+
+        self.assertEqual(len(result["loss"]), 1)
+        self.assertAlmostEqual(result["loss"][0][2].area(), self.domain.area())
 
     def test_unresolved_mixed_overlap_uses_triangulated_fallback(self):
         baseline = self.constant("baseline", 100.0)

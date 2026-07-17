@@ -25,6 +25,23 @@
       "project_crs": "EPSG:28356"
     },
     {
+      "file": "ybbn_2rwy_parallel_mos_cap.json",
+      "description": "YBBN dual-parallel MOS139 to CAP168 transition-boundary comparison",
+      "icao_code": "YBBN",
+      "runway_count": 2,
+      "runway_configuration": "parallel",
+      "project_crs": "EPSG:32756",
+      "expected_comparison_families": ["OLS"],
+      "expected_comparison_feature_counts": {
+        "OLS": {"gain": 34, "loss": 47, "no_change": 43, "transition": 8}
+      },
+      "mos139_lock_required": false,
+      "performance_baseline_required": false,
+      "maximum_region_overlap_m2": 0.2,
+      "comparison_line_like_width_m": 0.2,
+      "maximum_comparison_line_like_parts": 0
+    },
+    {
       "file": "ymml_2rwy_intersecting.json",
       "description": "Two intersecting runways with visible Approach/TOCS-to-Conical arcs",
       "icao_code": "YMML",

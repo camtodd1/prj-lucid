@@ -386,7 +386,11 @@ def _axis_conical_transition_metrics(engine) -> Dict[str, object]:
     }
 
 
-def _comparison_metrics(engine, result) -> Dict[str, object]:
+def _comparison_metrics(
+    engine,
+    result,
+    line_like_width_m: Optional[float] = None,
+) -> Dict[str, object]:
     baseline_regions = engine.baseline_engine._controlling_region_geometries()
     future_regions = engine.future_engine._controlling_region_geometries()
     baseline_union = _geometry_union(geometry for _candidate, geometry in baseline_regions)
@@ -483,6 +487,24 @@ def _comparison_metrics(engine, result) -> Dict[str, object]:
                 "future_surface_id": future.surface_id,
             }
         )
+    line_like_parts = []
+    if line_like_width_m is not None:
+        for change in ("gain", "loss", "no_change"):
+            for baseline, future, geometry in result[change]:
+                area = _area(geometry)
+                perimeter = geometry.length()
+                width = (2.0 * area / perimeter) if perimeter > 0.0 else None
+                if width is None or width > float(line_like_width_m):
+                    continue
+                line_like_parts.append(
+                    {
+                        "change": change,
+                        "area_m2": area,
+                        "strip_width_proxy_m": width,
+                        "baseline_surface_id": baseline.surface_id,
+                        "future_surface_id": future.surface_id,
+                    }
+                )
     return {
         "family": family,
         "baseline_regions": len(baseline_regions),
@@ -507,6 +529,10 @@ def _comparison_metrics(engine, result) -> Dict[str, object]:
         "gain_no_change_overlap_m2": _area(change_unions["gain"].intersection(change_unions["no_change"])),
         "loss_no_change_overlap_m2": _area(change_unions["loss"].intersection(change_unions["no_change"])),
         "feature_counts": {change: len(result[change]) for change in result},
+        "line_like_parts": sorted(
+            line_like_parts,
+            key=lambda item: item["strip_width_proxy_m"],
+        ),
         "no_change_parts": sorted(
             no_change_parts,
             key=lambda item: item["area_m2"],
@@ -664,6 +690,13 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
             f"expected {sorted(expected_comparison_families)}"
         )
 
+    line_like_width_m = case.get("comparison_line_like_width_m")
+    maximum_line_like_parts = case.get("maximum_comparison_line_like_parts")
+    if (line_like_width_m is None) != (maximum_line_like_parts is None):
+        failures.append(
+            "comparison line-like width and maximum-count gates must be configured together"
+        )
+
     for family, metrics in comparisons.items():
         area_tolerance = max(
             float(tolerances["minimum_area_m2"]),
@@ -679,6 +712,28 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
         ):
             if float(metrics[key]) > area_tolerance:
                 failures.append(f"{family} {key}={metrics[key]:.6f} m2 exceeds {area_tolerance:.6f} m2")
+        expected_feature_counts = case.get(
+            "expected_comparison_feature_counts",
+            {},
+        ).get(family)
+        if (
+            expected_feature_counts is not None
+            and metrics["feature_counts"] != expected_feature_counts
+        ):
+            failures.append(
+                f"{family} feature counts were {metrics['feature_counts']}; "
+                f"expected {expected_feature_counts}"
+            )
+        if (
+            line_like_width_m is not None and maximum_line_like_parts is not None
+            and len(metrics.get("line_like_parts", []))
+            > int(maximum_line_like_parts)
+        ):
+            failures.append(
+                f"{family} has {len(metrics['line_like_parts'])} comparison parts "
+                f"at or below {float(line_like_width_m):.3f} m "
+                f"effective width; maximum is {int(maximum_line_like_parts)}"
+            )
 
     for family, metrics in layers["controlling"].items():
         area_tolerance = max(
@@ -834,7 +889,11 @@ def _run_case(
         start = time.perf_counter()
         result = original_comparison_parts(engine)
         elapsed = time.perf_counter() - start
-        metrics = _comparison_metrics(engine, result)
+        metrics = _comparison_metrics(
+            engine,
+            result,
+            case.get("comparison_line_like_width_m"),
+        )
         metrics["diagnostics"] = engine.comparison_diagnostics()
         comparison_results[metrics["family"]] = metrics
         engine_instances[id(engine.baseline_engine)] = engine.baseline_engine

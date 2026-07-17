@@ -2,7 +2,7 @@
 
 **Status:** Current
 
-**Last reviewed:** 16 July 2026
+**Last reviewed:** 17 July 2026
 
 The OLS tab provides independent **Baseline OLS** and **Comparison OLS**
 selectors. Choosing **None — baseline only** generates only the baseline.
@@ -98,8 +98,9 @@ Axis/conical controlling regions sample an extended overlap on a fixed,
 globally aligned grid and project the resulting vertices onto the equality
 curve before clipping it to either ruleset footprint. Separate envelopes with
 the same surface models therefore use the same transition chords over their
-common domain; line-like polygons are not created and then hidden by change
-reclassification.
+common domain. Equality-contour seeding is independent of controller tie
+ownership, and a selected transition curve is reused without a second
+simplification when it partitions the overlap.
 
 Change contours are generated from the same baseline/future elevation functions
 and finalized controller-pair polygons used by the comparison. Affine candidate
@@ -121,8 +122,18 @@ MOS139/Annex 14 modernisation comparisons:
   equal-height locus. An interior `pointOnSurface()` sample can label a pure
   polygon, but must never classify an entire mixed-sign repair remainder.
 - Coverage-repair and cleanup passes must use the same controller-pair solver as
-  the initial partition. A final sign audit runs before output partitioning so
-  a late repair cannot reintroduce an opposite-sign area or contour.
+  the initial partition. Each repaired area is added to the assigned coverage
+  immediately so a numerical overlap cannot recover it again under another
+  controller pair. A final sign and exclusivity audit runs after all local
+  repairs so a late attachment cannot reintroduce an opposite-sign area,
+  overlap, or contour.
+- If common-domain recovery creates a numerical sliver, it may be reattached
+  locally to one verified adjacent controller-pair polygon. This ruleset-agnostic
+  rule is limited to recovery-tracked parts no more than 0.10 m wide whose
+  interior lower-envelope samples and substantial shared boundary identify one
+  unambiguous target. Provenance must cover the complete part; untracked, wider,
+  mixed-controller, ambiguous and unrelated segments remain separate. This is
+  not a class-wide dissolve.
 - Gain and loss share the same zero-height edge. The transition output is this
   common boundary, not two independently sampled approximations.
 - Opposite-sign contour levels are never emitted into a gain or loss feature.
