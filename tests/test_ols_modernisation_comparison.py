@@ -1185,121 +1185,50 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertIn((50.0, 400.0), cleaned_vertices)
         self.assertAlmostEqual(cleaned.symDifference(narrow_wedge).area(), 0.0, places=6)
 
-    def test_conventional_axis_conical_numeric_sliver_becomes_no_change(self):
+    def test_ybbn_axis_conical_boundary_parts_retain_signed_change(self):
         narrow = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 0.2, 100.0))
-        baseline = ControllingOlsCandidate(
-            "baseline-axis",
-            "TOCS",
-            narrow,
-            constant_elevation_evaluator(100.0),
-            "axis",
+        cases = (
+            ("TOCS", "gain", 100.016),
+            ("Approach", "loss", 99.984),
         )
-        future = ControllingOlsCandidate(
-            "future-conical",
-            "Conical",
-            narrow,
-            constant_elevation_evaluator(100.05),
-            "conical",
-        )
-        engine = OlsEnvelopeComparisonEngine(
-            PlanarControllingOlsEngine([baseline], ruleset_id="mos139_2019"),
-            PlanarControllingOlsEngine(
-                [future],
-                ruleset_id="uk_caa_cap168_edition_13",
-            ),
-        )
-        result = {
-            "gain": [(baseline, future, narrow)],
-            "loss": [],
-            "no_change": [],
-        }
+        for surface_type, expected_change, future_elevation in cases:
+            with self.subTest(surface_type=surface_type, change=expected_change):
+                baseline = ControllingOlsCandidate(
+                    f"baseline-{surface_type.lower()}",
+                    surface_type,
+                    narrow,
+                    constant_elevation_evaluator(100.0),
+                    "axis",
+                )
+                future = ControllingOlsCandidate(
+                    "comparison-conical",
+                    "Conical",
+                    narrow,
+                    constant_elevation_evaluator(future_elevation),
+                    "conical",
+                )
+                comparison = OlsEnvelopeComparisonEngine(
+                    PlanarControllingOlsEngine(
+                        [baseline],
+                        ruleset_id="mos139_2019",
+                    ),
+                    PlanarControllingOlsEngine(
+                        [future],
+                        ruleset_id="uk_caa_cap168_edition_13",
+                    ),
+                )
 
-        engine._reclassify_conventional_axis_conical_numeric_slivers(result)
+                parts = comparison.comparison_parts()
 
-        self.assertEqual(result["gain"], [])
-        self.assertEqual(len(result["no_change"]), 1)
-        diagnostics = engine.comparison_diagnostics()["numeric_sliver_reclassification"]
-        self.assertEqual(diagnostics["parts"], 1)
-        self.assertAlmostEqual(diagnostics["area_m2"], narrow.area(), places=6)
-        self.assertAlmostEqual(diagnostics["maximum_vertical_difference_m"], 0.05)
-
-    def test_numeric_sliver_reclassification_retains_material_or_modernised_change(self):
-        narrow = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 0.2, 100.0))
-        baseline = ControllingOlsCandidate(
-            "baseline-axis",
-            "TOCS",
-            narrow,
-            constant_elevation_evaluator(100.0),
-            "axis",
-        )
-        material_future = ControllingOlsCandidate(
-            "material-conical",
-            "Conical",
-            narrow,
-            constant_elevation_evaluator(106.0),
-            "conical",
-        )
-        conventional = OlsEnvelopeComparisonEngine(
-            PlanarControllingOlsEngine([baseline], ruleset_id="mos139_2019"),
-            PlanarControllingOlsEngine(
-                [material_future],
-                ruleset_id="uk_caa_cap168_edition_13",
-            ),
-        )
-        material_result = {
-            "gain": [(baseline, material_future, narrow)],
-            "loss": [],
-            "no_change": [],
-        }
-        conventional._reclassify_conventional_axis_conical_numeric_slivers(
-            material_result
-        )
-        self.assertEqual(len(material_result["gain"]), 1)
-        self.assertEqual(material_result["no_change"], [])
-
-        wide = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 2.0, 100.0))
-        near_tie_conventional = ControllingOlsCandidate(
-            "near-tie-conical",
-            "Conical",
-            wide,
-            constant_elevation_evaluator(100.05),
-            "conical",
-        )
-        wide_result = {
-            "gain": [(baseline, near_tie_conventional, wide)],
-            "loss": [],
-            "no_change": [],
-        }
-        conventional._reclassify_conventional_axis_conical_numeric_slivers(
-            wide_result
-        )
-        self.assertEqual(len(wide_result["gain"]), 1)
-        self.assertEqual(wide_result["no_change"], [])
-
-        near_tie_future = ControllingOlsCandidate(
-            "modernised-conical",
-            "Conical",
-            narrow,
-            constant_elevation_evaluator(100.05),
-            "conical",
-        )
-        modernised = OlsEnvelopeComparisonEngine(
-            PlanarControllingOlsEngine([baseline], ruleset_id="mos139_2019"),
-            PlanarControllingOlsEngine(
-                [near_tie_future],
-                ruleset_id="icao_annex14_vol1_modernised_ofs_oes",
-            ),
-        )
-        modernised_result = {
-            "gain": [(baseline, near_tie_future, narrow)],
-            "loss": [],
-            "no_change": [],
-        }
-        modernised._reclassify_conventional_axis_conical_numeric_slivers(
-            modernised_result
-        )
-        self.assertEqual(len(modernised_result["gain"]), 1)
-        self.assertEqual(modernised_result["no_change"], [])
+                opposite_change = "loss" if expected_change == "gain" else "gain"
+                self.assertEqual(parts["no_change"], [])
+                self.assertEqual(parts[opposite_change], [])
+                self.assertEqual(len(parts[expected_change]), 1)
+                self.assertAlmostEqual(
+                    parts[expected_change][0][2].area(),
+                    narrow.area(),
+                    places=6,
+                )
 
     def test_final_merge_clips_non_collinear_wrong_side_loss_area(self):
         """A final loss feature must satisfy its height sign, regardless of spike shape."""
