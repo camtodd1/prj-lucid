@@ -94,9 +94,12 @@ controller-pair region is effectively equivalent. It does not create a buffer
 or polygon band around an equal-height transition. Where future and baseline
 surfaces cross, gain and loss meet directly at the zero-height line; the line
 itself is represented by the transition output and has no polygonal area.
-Narrow axis/conical overlay fragments retain their solved gain or loss
-classification. A curve-approximation error bound never reclassifies those
-signed transition fragments as no-change.
+Axis/conical controlling regions sample an extended overlap on a fixed,
+globally aligned grid and project the resulting vertices onto the equality
+curve before clipping it to either ruleset footprint. Separate envelopes with
+the same surface models therefore use the same transition chords over their
+common domain; line-like polygons are not created and then hidden by change
+reclassification.
 
 Change contours are generated from the same baseline/future elevation functions
 and finalized controller-pair polygons used by the comparison. Affine candidate

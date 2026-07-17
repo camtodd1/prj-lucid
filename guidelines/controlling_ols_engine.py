@@ -61,6 +61,7 @@ AXIS_CONICAL_ZERO_CONTOUR_MIN_GRID_M = 20.0
 AXIS_CONICAL_ZERO_CONTOUR_MAX_GRID_M = 75.0
 AXIS_CONICAL_ZERO_CONTOUR_TARGET_STEPS = 160.0
 AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS = 80000
+AXIS_CONICAL_CANONICAL_GRID_M = 20.0
 AXIS_CONICAL_CURVE_SMOOTHING_ENABLED = True
 AXIS_CONICAL_CURVE_FIT_CONTROL_SPACING_M = 120.0
 AXIS_CONICAL_CURVE_FIT_OUTPUT_SPACING_M = 5.0
@@ -229,6 +230,9 @@ class PlanarControllingOlsEngine:
         self._last_conical_conical_transition: Optional[
             Tuple[Tuple[str, str, bytes], QgsGeometry]
         ] = None
+        self._axis_conical_canonical_curve_cache: Dict[
+            Tuple[str, str, bytes], QgsGeometry
+        ] = {}
         self._candidate_spatial_index: Optional[QgsSpatialIndex] = None
         self._candidate_by_spatial_id: Dict[int, ControllingOlsCandidate] = {}
         self._controlling_region_geometries_cache: Optional[List[Tuple[ControllingOlsCandidate, QgsGeometry]]] = None
@@ -2521,6 +2525,15 @@ class PlanarControllingOlsEngine:
             axis = self._axis_model(other_candidate)
             if conical_model is None or axis is None:
                 return None
+            canonical_curve = self._canonical_axis_conical_transition_curve(
+                other_candidate,
+                conical_candidate,
+                axis,
+                conical_model,
+                domain,
+            )
+            if canonical_curve is not None and not canonical_curve.isEmpty():
+                return canonical_curve
             sampled_curve = self._axis_conical_sampled_transition_curve(
                 other_candidate,
                 conical_candidate,
@@ -2530,7 +2543,7 @@ class PlanarControllingOlsEngine:
             )
             if sampled_curve is not None and not sampled_curve.isEmpty():
                 return sampled_curve
-            return self._axis_conical_transition_curve(axis, conical_model, domain)
+            return None
         return None
 
     def _conical_constant_equality_geometry(
@@ -3756,6 +3769,15 @@ class PlanarControllingOlsEngine:
     ) -> List[QgsGeometry]:
         """Return preferred conical/axis transition curves for splitting controlling regions."""
         curves: List[QgsGeometry] = []
+        canonical_curve = self._canonical_axis_conical_transition_curve(
+            axis_candidate,
+            conical_candidate,
+            axis,
+            conical_model,
+            overlap,
+        )
+        if canonical_curve is not None and not canonical_curve.isEmpty():
+            curves.append(canonical_curve)
         sampled_curve = self._axis_conical_sampled_transition_curve(
             axis_candidate,
             conical_candidate,
@@ -3765,10 +3787,95 @@ class PlanarControllingOlsEngine:
         )
         if sampled_curve is not None and not sampled_curve.isEmpty():
             curves.append(sampled_curve)
-        analytic_curve = self._axis_conical_transition_curve(axis, conical_model, overlap)
-        if analytic_curve is not None and not analytic_curve.isEmpty():
-            curves.append(analytic_curve)
         return curves
+
+    def _canonical_axis_conical_transition_curve(
+        self,
+        axis_candidate: ControllingOlsCandidate,
+        conical_candidate: ControllingOlsCandidate,
+        axis: dict,
+        conical_model: dict,
+        domain: QgsGeometry,
+    ) -> Optional[QgsGeometry]:
+        """Return one fixed-grid axis/conical curve independent of clip edges."""
+        if domain is None or domain.isEmpty():
+            return None
+        try:
+            construction_domain = domain.buffer(
+                AXIS_CONICAL_CURVE_ENDPOINT_EXTENSION_M,
+                CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS,
+            )
+            cache_key = (
+                axis_candidate.surface_id,
+                conical_candidate.surface_id,
+                bytes(construction_domain.asWkb()),
+            )
+        except Exception:
+            construction_domain = QgsGeometry(domain)
+            cache_key = None
+        curve = (
+            self._axis_conical_canonical_curve_cache.get(cache_key)
+            if cache_key is not None
+            else None
+        )
+        if curve is None:
+            sampled_curve = self._axis_conical_sampled_transition_curve(
+                axis_candidate,
+                conical_candidate,
+                axis,
+                conical_model,
+                construction_domain,
+                apply_smoothing=False,
+                fixed_grid_spacing_m=AXIS_CONICAL_CANONICAL_GRID_M,
+                align_grid=True,
+            )
+            projected_parts = []
+            for points in self._topology_clean_transition_line_parts(sampled_curve):
+                projected = [
+                    self._project_axis_conical_point_to_equality(
+                        axis,
+                        conical_model,
+                        point,
+                    )
+                    for point in points
+                ]
+                projected = self._remove_transition_curve_backtracking(projected)
+                if len(projected) < 2:
+                    continue
+                line = QgsGeometry.fromPolylineXY(projected)
+                residual = self._maximum_axis_conical_curve_residual(
+                    line,
+                    axis_candidate,
+                    conical_candidate,
+                )
+                if (
+                    residual is not None
+                    and residual
+                    <= AXIS_CONICAL_CURVE_SMOOTHING_MAX_EQUALITY_RESIDUAL_M
+                ):
+                    projected_parts.append(projected)
+            curve = (
+                QgsGeometry.fromMultiPolylineXY(projected_parts)
+                if projected_parts
+                else QgsGeometry()
+            )
+            if cache_key is not None:
+                self._axis_conical_canonical_curve_cache[cache_key] = QgsGeometry(
+                    curve
+                )
+        if curve is None or curve.isEmpty():
+            curve = self._axis_conical_transition_curve(
+                axis,
+                conical_model,
+                construction_domain,
+            )
+        if curve is None or curve.isEmpty():
+            return None
+        try:
+            clipped = curve.intersection(domain)
+        except Exception:
+            return None
+        return clipped if clipped is not None and not clipped.isEmpty() else None
 
     def _axis_conical_sampled_transition_curve(
         self,
@@ -3777,6 +3884,9 @@ class PlanarControllingOlsEngine:
         axis: dict,
         conical_model: dict,
         overlap: QgsGeometry,
+        apply_smoothing: bool = True,
+        fixed_grid_spacing_m: Optional[float] = None,
+        align_grid: bool = False,
     ) -> Optional[QgsGeometry]:
         """Build a zero-contour of axis elevation minus conical elevation over the overlap."""
         if not AXIS_CONICAL_ZERO_CONTOUR_ENABLED:
@@ -3791,22 +3901,49 @@ class PlanarControllingOlsEngine:
         )
         start_time = time.perf_counter()
         try:
-            spacing = self._axis_conical_zero_contour_spacing(overlap)
+            spacing = (
+                float(fixed_grid_spacing_m)
+                if fixed_grid_spacing_m is not None
+                else self._axis_conical_zero_contour_spacing(overlap)
+            )
             bbox = overlap.boundingBox()
-            if spacing <= 0.0 or bbox.width() <= 0.0 or bbox.height() <= 0.0:
+            if (
+                not math.isfinite(spacing)
+                or spacing <= 0.0
+                or bbox.width() <= 0.0
+                or bbox.height() <= 0.0
+            ):
                 self._region_solve_stats["axis_zero_contour_no_curve"] = (
                     self._region_solve_stats.get("axis_zero_contour_no_curve", 0.0) + 1.0
                 )
                 return None
 
-            columns = max(1, int(math.ceil(bbox.width() / spacing)))
-            rows = max(1, int(math.ceil(bbox.height() / spacing)))
+            if align_grid:
+                grid_x_min = math.floor(bbox.xMinimum() / spacing) * spacing
+                grid_y_min = math.floor(bbox.yMinimum() / spacing) * spacing
+                grid_x_max = math.ceil(bbox.xMaximum() / spacing) * spacing
+                grid_y_max = math.ceil(bbox.yMaximum() / spacing) * spacing
+            else:
+                grid_x_min = bbox.xMinimum()
+                grid_y_min = bbox.yMinimum()
+                grid_x_max = bbox.xMaximum()
+                grid_y_max = bbox.yMaximum()
+            columns = max(1, int(math.ceil((grid_x_max - grid_x_min) / spacing)))
+            rows = max(1, int(math.ceil((grid_y_max - grid_y_min) / spacing)))
             cell_count = columns * rows
             if cell_count > AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS:
+                if fixed_grid_spacing_m is not None:
+                    self._region_solve_stats["axis_zero_contour_no_curve"] = (
+                        self._region_solve_stats.get(
+                            "axis_zero_contour_no_curve", 0.0
+                        )
+                        + 1.0
+                    )
+                    return None
                 scale = math.sqrt(cell_count / AXIS_CONICAL_ZERO_CONTOUR_MAX_CELLS)
                 spacing *= scale
-                columns = max(1, int(math.ceil(bbox.width() / spacing)))
-                rows = max(1, int(math.ceil(bbox.height() / spacing)))
+                columns = max(1, int(math.ceil((grid_x_max - grid_x_min) / spacing)))
+                rows = max(1, int(math.ceil((grid_y_max - grid_y_min) / spacing)))
                 cell_count = columns * rows
             self._region_solve_stats["axis_zero_contour_cells"] = (
                 self._region_solve_stats.get("axis_zero_contour_cells", 0.0) + float(cell_count)
@@ -3816,8 +3953,8 @@ class PlanarControllingOlsEngine:
 
             def _point_at(column: int, row: int) -> QgsPointXY:
                 return QgsPointXY(
-                    min(bbox.xMaximum(), bbox.xMinimum() + (column * spacing)),
-                    min(bbox.yMaximum(), bbox.yMinimum() + (row * spacing)),
+                    min(grid_x_max, grid_x_min + (column * spacing)),
+                    min(grid_y_max, grid_y_min + (row * spacing)),
                 )
 
             def _value_at(column: int, row: int) -> Optional[float]:
@@ -3877,7 +4014,7 @@ class PlanarControllingOlsEngine:
                 )
             except Exception:
                 sampled_curve = segments[0]
-            if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED:
+            if AXIS_CONICAL_CURVE_SMOOTHING_ENABLED and apply_smoothing:
                 smoothed_curve = self._smoothed_axis_conical_zero_contour(
                     sampled_curve,
                     axis_candidate,
@@ -5221,7 +5358,10 @@ class PlanarControllingOlsEngine:
         curves: List[QgsGeometry] = []
         for sign in (-1.0, 1.0):
             current_points: List[QgsPointXY] = []
-            t = min_station
+            # Anchor samples to the runway-axis station grid so the same
+            # mathematical transition uses identical chords when separate
+            # rulesets clip it with slightly different overlap domains.
+            t = math.floor(min_station / station_step) * station_step
             while t <= max_station + 1e-6:
                 point_xy = self._axis_conical_vertex_curve_point(axis, tv, lv, a_offset, b_slope, t, sign)
                 if point_xy is not None and self._axis_conical_curve_point_is_valid(

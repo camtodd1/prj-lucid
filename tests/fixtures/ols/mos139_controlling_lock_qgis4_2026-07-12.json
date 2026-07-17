@@ -2,37 +2,37 @@
   "schema_version": 1,
   "ruleset_id": "mos139_2019",
   "qgis_version": "4.0.2-Norrk\u00f6ping",
-  "accepted_at": "2026-07-13",
-  "acceptance": "User-approved bounded least-squares partial-equality smoothing",
+  "accepted_at": "2026-07-17",
+  "acceptance": "Domain-stable fixed-grid axis/conical transition correction",
   "fixtures": {
     "ybbn_1rwy_single.json": {
       "regions": 21,
-      "area_m2": 721831580.7201921,
-      "geometry_digest": "6e7c5fb73974b63bc026b11c5240730dfad1c1c22c61138ae9dd2e9afaef07e9",
+      "area_m2": 721831580.7202755,
+      "geometry_digest": "cc56029ce5e13dd3aca60227189bfe9e680e8eea3d1ca492fddf7d502b96307b",
       "controller_ids_digest": "61dbbce4fdcc07736e3575943c79fbbd6e4179da72e213c6c24ea8ed42fa9450"
     },
     "yssy_2rwy_intersecting.json": {
       "regions": 41,
-      "area_m2": 736390346.1982054,
-      "geometry_digest": "0a835a0c3317e9a332ff297ac7081e513015fdc67d30ea28cb90c6d7df522c69",
+      "area_m2": 736390346.1978678,
+      "geometry_digest": "7cfc3ba273df1d537ab38df46891be36eb7b00e4be9795475fa1de02170607ea",
       "controller_ids_digest": "9058cf56c8eef341961a4ab329382ce5c3383cfa5b9ed1fd9c347a45d337c990"
     },
     "ysws_2rwy_parallel.json": {
       "regions": 39,
-      "area_m2": 730403864.2053959,
-      "geometry_digest": "51e8d88464314b5b42d927615c677ad89516efa65613c90f783381e85fa4de83",
+      "area_m2": 730403864.2056491,
+      "geometry_digest": "7472ced13b8fec81fb7e5fbe01c54c2ef86be5a1fef01696a024cf9d88886ba3",
       "controller_ids_digest": "0106316fcdb69893a723b546cd653d9c4d1099eff93275ae3a81bd4e1bec3f28"
     },
     "ymml_2rwy_intersecting.json": {
       "regions": 41,
-      "area_m2": 734359700.8357975,
-      "geometry_digest": "99ed24623672cfafbe7235d6f15ee167957586a0f40ef76976f033b0d7aeffc0",
+      "area_m2": 734359700.8355441,
+      "geometry_digest": "06d43fcfc91b9b5f17438a45606457695ec0bb06e7c44e55ff58024de9ec1ef6",
       "controller_ids_digest": "61717c210bcdbd3c780c85362ff844440c2a82ed9c3173a0248219c412e79866"
     },
     "yssy_3rwy_mixed.json": {
       "regions": 59,
-      "area_m2": 742334576.1840978,
-      "geometry_digest": "3bab21de2d56f0d4516978a78dfe3116c8ed2ac4b0f43d4d75d8208b529fee54",
+      "area_m2": 742334576.1835723,
+      "geometry_digest": "72d50c7480f0f8d14a8cadfb8f707caa81c53718e5dab9413eada35d120a2153",
       "controller_ids_digest": "00ec702d04330c205fba0fd305f96685d5cf4f9fe605a2e6acb184eb9eba94f2"
     }
   }

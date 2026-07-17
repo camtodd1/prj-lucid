@@ -128,6 +128,81 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             delta=1.0,
         )
 
+    def test_identical_axis_conical_envelopes_use_domain_stable_transition(self):
+        base = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        origin = QgsPointXY(100.0, 100.0)
+        baseline_domain = QgsGeometry.fromRect(
+            QgsRectangle(100.0, 100.0, 250.0, 250.0)
+        )
+        comparison_domain = QgsGeometry.fromRect(
+            QgsRectangle(90.0, 90.0, 250.0, 250.0)
+        )
+
+        def candidates(prefix, domain):
+            axis = ControllingOlsCandidate(
+                f"{prefix}-axis",
+                "Approach",
+                domain,
+                axis_elevation_evaluator(
+                    origin,
+                    90.0,
+                    105.0,
+                    0.02,
+                    150.0,
+                ),
+                "axis",
+                {
+                    "origin_x": 100.0,
+                    "origin_y": 100.0,
+                    "origin_elevation_m": 105.0,
+                    "slope": 0.02,
+                    "max_distance_m": 150.0,
+                    "azimuth_degrees": 90.0,
+                },
+            )
+            conical = ControllingOlsCandidate(
+                f"{prefix}-conical",
+                "Conical",
+                domain,
+                conical_elevation_evaluator(base, 100.0, 0.05, 200.0),
+                "conical",
+                {
+                    "base_footprint": base,
+                    "base_elevation_m": 100.0,
+                    "slope": 0.05,
+                    "max_distance_m": 200.0,
+                },
+            )
+            return [axis, conical]
+
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine(
+                candidates("baseline", baseline_domain),
+                ruleset_id="mos139_2019",
+            ),
+            PlanarControllingOlsEngine(
+                candidates("comparison", comparison_domain),
+                ruleset_id="uk_caa_cap168_edition_13",
+            ),
+        )
+
+        parts = comparison.comparison_parts()
+
+        self.assertEqual(parts["gain"], [])
+        self.assertEqual(parts["loss"], [])
+        self.assertTrue(parts["no_change"])
+        self.assertTrue(all(
+            baseline.surface_type == future.surface_type
+            for baseline, future, _geometry in parts["no_change"]
+        ))
+        coverage = QgsGeometry.unaryUnion(
+            [geometry for _baseline, _future, geometry in parts["no_change"]]
+        )
+        self.assertLessEqual(
+            baseline_domain.symDifference(coverage).area(),
+            0.01,
+        )
+
     def test_conical_conical_comparison_uses_one_accurate_shared_transition(self):
         domain = QgsGeometry.fromRect(QgsRectangle(250.0, 100.0, 650.0, 900.0))
         baseline_base = QgsGeometry.fromPolylineXY(
