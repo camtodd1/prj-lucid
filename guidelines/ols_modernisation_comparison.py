@@ -761,11 +761,28 @@ class OlsEnvelopeComparisonEngine:
             for level in levels:
                 if level < triangle_min - 1e-9 or level > triangle_max + 1e-9:
                     continue
-                for segment in self._triangle_change_contour_segments(
+                triangle_segments = self._triangle_change_contour_segments(
                     triangle_points,
                     numeric_values,
                     level,
-                ):
+                )
+                has_coincident_edge = any(
+                    abs(numeric_values[start_index] - level) <= 1e-9
+                    and abs(numeric_values[end_index] - level) <= 1e-9
+                    for start_index, end_index in ((0, 1), (1, 2), (2, 0))
+                )
+                for segment in triangle_segments:
+                    # Marching triangles treats an edge whose endpoint samples
+                    # both equal the level as a contour.  On curved surfaces the
+                    # value between those endpoints can depart from the level,
+                    # leaving a short wireframe-aligned spur in the output.
+                    if has_coincident_edge and not self._coincident_change_contour_edge_is_valid(
+                        segment,
+                        level,
+                        baseline,
+                        future,
+                    ):
+                        continue
                     try:
                         wholly_inside = bool(
                             prepared_geometry is not None
@@ -868,6 +885,33 @@ class OlsEnvelopeComparisonEngine:
                 key=lambda pair: pair[0].distance(pair[1]),
             )
         return [QgsGeometry.fromPolylineXY(crossings[:2])]
+
+    @classmethod
+    def _coincident_change_contour_edge_is_valid(
+        cls,
+        segment: QgsGeometry,
+        delta_m: float,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+    ) -> bool:
+        """Confirm that a sampled level edge is a real contour between its endpoints."""
+        try:
+            points = segment.asPolyline()
+        except (TypeError, RuntimeError):
+            return False
+        if len(points) < 2:
+            return False
+        start = points[0]
+        end = points[-1]
+        for fraction in (0.25, 0.5, 0.75):
+            point = QgsPointXY(
+                start.x() + ((end.x() - start.x()) * fraction),
+                start.y() + ((end.y() - start.y()) * fraction),
+            )
+            value = cls._delta_at_point(point, baseline, future)
+            if value is None or abs(value - delta_m) > 1e-7:
+                return False
+        return True
 
     @classmethod
     def _merged_change_contour_lines(

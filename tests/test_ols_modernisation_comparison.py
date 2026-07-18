@@ -1958,6 +1958,91 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         ]
         self.assertLessEqual(max(abs(value - 0.5) for value in sampled_deltas), 0.05)
 
+    def test_curved_change_contour_rejects_false_coincident_triangle_edge(self):
+        triangle_points = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(100.0, 0.0),
+        ]
+        triangle = QgsGeometry.fromPolygonXY([triangle_points + [triangle_points[0]]])
+        baseline = ControllingOlsCandidate(
+            surface_id="baseline-curved",
+            surface_type="Test Curved",
+            footprint=QgsGeometry(triangle),
+            elevation_at_xy=constant_elevation_evaluator(100.0),
+            model="curved",
+        )
+        future = ControllingOlsCandidate(
+            surface_id="future-curved",
+            surface_type="Test Curved",
+            footprint=QgsGeometry(triangle),
+            elevation_at_xy=lambda point: (
+                101.0
+                + (point.x() / 100.0)
+                + ((point.y() * (100.0 - point.y())) / 10000.0)
+            ),
+            model="curved",
+        )
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        with patch.object(
+            engine.baseline_engine,
+            "_triangulation_sample_points",
+            return_value=triangle_points,
+        ):
+            contours = engine._triangulated_change_contours(
+                triangle,
+                baseline,
+                future,
+                requested_levels=[1.0],
+            )
+
+        self.assertEqual(contours, [])
+
+    def test_curved_change_contour_keeps_genuine_coincident_triangle_edge(self):
+        triangle_points = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(100.0, 0.0),
+        ]
+        triangle = QgsGeometry.fromPolygonXY([triangle_points + [triangle_points[0]]])
+        baseline = ControllingOlsCandidate(
+            surface_id="baseline-curved",
+            surface_type="Test Curved",
+            footprint=QgsGeometry(triangle),
+            elevation_at_xy=constant_elevation_evaluator(100.0),
+            model="curved",
+        )
+        future = ControllingOlsCandidate(
+            surface_id="future-curved",
+            surface_type="Test Curved",
+            footprint=QgsGeometry(triangle),
+            elevation_at_xy=lambda point: 101.0 + (point.x() / 100.0),
+            model="curved",
+        )
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        with patch.object(
+            engine.baseline_engine,
+            "_triangulation_sample_points",
+            return_value=triangle_points,
+        ):
+            contours = engine._triangulated_change_contours(
+                triangle,
+                baseline,
+                future,
+                requested_levels=[1.0],
+            )
+
+        self.assertEqual(len(contours), 1)
+        self.assertAlmostEqual(contours[0][1].length(), 100.0, places=6)
+
     def test_comparison_labels_report_the_delta_range_not_the_interior_sample(self):
         capture = _ComparisonLayerCapture()
 
