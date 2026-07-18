@@ -2088,6 +2088,51 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
         self.assertEqual(contours, [])
 
+    def test_curved_change_contour_keeps_component_within_output_tolerance(self):
+        triangle_points = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(100.0, 0.0),
+            QgsPointXY(0.0, 100.0),
+        ]
+        triangle = QgsGeometry.fromPolygonXY([triangle_points + [triangle_points[0]]])
+        baseline = ControllingOlsCandidate(
+            surface_id="baseline-constant",
+            surface_type="Test Constant",
+            footprint=QgsGeometry(triangle),
+            elevation_at_xy=constant_elevation_evaluator(100.0),
+            model="constant",
+            metadata={"elevation_m": 100.0},
+        )
+        future = ControllingOlsCandidate(
+            surface_id="future-conical",
+            surface_type="Test Conical",
+            footprint=QgsGeometry(triangle),
+            elevation_at_xy=lambda point: (
+                100.0
+                + ((point.x() + point.y()) / 50.0)
+                + (0.045 * (point.x() * point.y()) / 625.0)
+            ),
+            model="conical",
+        )
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        with patch.object(
+            engine.baseline_engine,
+            "_triangulation_sample_points",
+            return_value=triangle_points,
+        ):
+            contours = engine._triangulated_change_contours(
+                triangle,
+                baseline,
+                future,
+                requested_levels=[1.0],
+            )
+
+        self.assertEqual(len(contours), 1)
+
     def test_comparison_labels_report_the_delta_range_not_the_interior_sample(self):
         capture = _ComparisonLayerCapture()
 

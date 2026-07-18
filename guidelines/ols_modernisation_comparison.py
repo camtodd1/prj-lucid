@@ -54,6 +54,7 @@ COMPARISON_CONTOUR_INTERVAL_M = 1.0
 COMPARISON_PRIMARY_CONTOUR_INTERVAL_M = 5.0
 COMPARISON_CONTOUR_MIN_LENGTH_M = 0.01
 COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M = 1.0
+COMPARISON_CURVED_CONTOUR_MAX_RESIDUAL_M = 0.05
 CONVENTIONAL_OLS_RULESET_IDS = frozenset({
     "mos139_2019",
     "uk_caa_cap168_edition_13",
@@ -873,7 +874,7 @@ class OlsEnvelopeComparisonEngine:
                     if (
                         source_residual is not None
                         and source_residual
-                        <= CONICAL_CONICAL_SMOOTHING_MAX_EQUALITY_RESIDUAL_M
+                        <= COMPARISON_CURVED_CONTOUR_MAX_RESIDUAL_M
                         and source_part.length()
                         > COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M
                     ):
