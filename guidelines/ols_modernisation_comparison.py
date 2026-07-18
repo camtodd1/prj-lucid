@@ -18,7 +18,11 @@ from qgis.core import (  # type: ignore
     QgsWkbTypes,
 )
 
-from .controlling_ols_engine import ControllingOlsCandidate, PlanarControllingOlsEngine
+from .controlling_ols_engine import (
+    CONICAL_CONICAL_SMOOTHING_MAX_EQUALITY_RESIDUAL_M,
+    ControllingOlsCandidate,
+    PlanarControllingOlsEngine,
+)
 
 try:
     from ..core.run_log import QgsMessageLog
@@ -49,6 +53,7 @@ COMPARISON_DELTA_DECIMALS = 3
 COMPARISON_CONTOUR_INTERVAL_M = 1.0
 COMPARISON_PRIMARY_CONTOUR_INTERVAL_M = 5.0
 COMPARISON_CONTOUR_MIN_LENGTH_M = 0.01
+COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M = 1.0
 CONVENTIONAL_OLS_RULESET_IDS = frozenset({
     "mos139_2019",
     "uk_caa_cap168_edition_13",
@@ -821,14 +826,39 @@ class OlsEnvelopeComparisonEngine:
                         geometry,
                         target_difference_m=level,
                     )
-                    fair_parts.append(
-                        fair_part
-                        if fair_part is not None and not fair_part.isEmpty()
-                        else source_part
+                    if (
+                        fair_part is not None
+                        and not fair_part.isEmpty()
+                        and fair_part.length()
+                        > COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M
+                    ):
+                        fair_parts.append(fair_part)
+                        continue
+                    source_residual = (
+                        conical_pair_engine._maximum_candidate_pair_curve_residual(
+                            source_part,
+                            future,
+                            baseline,
+                            level,
+                        )
                     )
+                    # A failed fairing attempt used to fall back to the sampled
+                    # component unconditionally.  That retained triangulation
+                    # fragments along controlling-region wireframes even when
+                    # they were metres away from the requested change level.
+                    if (
+                        source_residual is not None
+                        and source_residual
+                        <= CONICAL_CONICAL_SMOOTHING_MAX_EQUALITY_RESIDUAL_M
+                        and source_part.length()
+                        > COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M
+                    ):
+                        fair_parts.append(source_part)
                 fair_merged = self._merged_change_contour_lines(fair_parts)
                 if fair_merged is not None and not fair_merged.isEmpty():
                     merged = fair_merged
+                else:
+                    merged = None
             if merged is not None and not merged.isEmpty():
                 contours.append((level, merged))
         return contours
