@@ -860,6 +860,26 @@ class OlsEnvelopeComparisonEngine:
                 else:
                     merged = None
             if merged is not None and not merged.isEmpty():
+                accurate_parts = []
+                for source_part in self._line_parts(merged):
+                    source_residual = (
+                        self.baseline_engine._maximum_candidate_pair_curve_residual(
+                            source_part,
+                            future,
+                            baseline,
+                            level,
+                        )
+                    )
+                    if (
+                        source_residual is not None
+                        and source_residual
+                        <= CONICAL_CONICAL_SMOOTHING_MAX_EQUALITY_RESIDUAL_M
+                        and source_part.length()
+                        > COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M
+                    ):
+                        accurate_parts.append(source_part)
+                merged = self._merged_change_contour_lines(accurate_parts)
+            if merged is not None and not merged.isEmpty():
                 contours.append((level, merged))
         return contours
 

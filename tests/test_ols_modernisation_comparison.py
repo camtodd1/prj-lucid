@@ -2043,7 +2043,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(contours), 1)
         self.assertAlmostEqual(contours[0][1].length(), 100.0, places=6)
 
-    def test_conical_change_contour_rejects_inaccurate_fairing_fallback(self):
+    def test_curved_change_contour_rejects_inaccurate_output_component(self):
         triangle_points = [
             QgsPointXY(0.0, 0.0),
             QgsPointXY(100.0, 0.0),
@@ -2051,11 +2051,12 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         ]
         triangle = QgsGeometry.fromPolygonXY([triangle_points + [triangle_points[0]]])
         baseline = ControllingOlsCandidate(
-            surface_id="baseline-conical",
-            surface_type="Test Conical",
+            surface_id="baseline-constant",
+            surface_type="Test Constant",
             footprint=QgsGeometry(triangle),
             elevation_at_xy=constant_elevation_evaluator(100.0),
-            model="conical",
+            model="constant",
+            metadata={"elevation_m": 100.0},
         )
         future = ControllingOlsCandidate(
             surface_id="future-conical",
