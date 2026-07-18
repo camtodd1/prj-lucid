@@ -7126,7 +7126,7 @@ class ControllingOlsEngineMixin:
     def _create_controlling_ols_layers(
         self,
         icao_code: str,
-        debug_group: QgsLayerTreeGroup,
+        debug_group: Optional[QgsLayerTreeGroup],
         controlling_surfaces_group: Optional[QgsLayerTreeGroup] = None,
         controlling_contours_group: Optional[QgsLayerTreeGroup] = None,
         solved_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
@@ -7148,7 +7148,11 @@ class ControllingOlsEngineMixin:
             )
             return False
 
-        diagnostic_group = self._controlling_ols_diagnostic_group(debug_group)
+        diagnostic_group = (
+            self._controlling_ols_diagnostic_group(debug_group)
+            if debug_group is not None
+            else None
+        )
         region_output_group = controlling_surfaces_group if controlling_surfaces_group is not None else diagnostic_group
         contour_output_group = controlling_contours_group if controlling_contours_group is not None else diagnostic_group
         active_ruleset_getter = getattr(
@@ -7173,7 +7177,15 @@ class ControllingOlsEngineMixin:
         if not self._controlling_ols_subphase("Controlling OLS: preparing candidate surfaces..."):
             return False
         step_start = time.perf_counter()
-        candidate_layer_ok = self._create_controlling_candidate_layer(icao_code, diagnostic_group, planar_candidates)
+        candidate_layer_ok = (
+            self._create_controlling_candidate_layer(
+                icao_code,
+                diagnostic_group,
+                planar_candidates,
+            )
+            if diagnostic_group is not None
+            else False
+        )
         timing_splits["candidates"] = time.perf_counter() - step_start
 
         if not self._controlling_ols_subphase("Controlling OLS: solving lower-envelope regions..."):
@@ -7192,7 +7204,15 @@ class ControllingOlsEngineMixin:
         if not self._controlling_ols_subphase("Controlling OLS: constructing transition boundaries..."):
             return candidate_layer_ok or region_layer_ok
         step_start = time.perf_counter()
-        transition_layer_ok = self._create_controlling_transition_layer(icao_code, diagnostic_group, engine)
+        transition_layer_ok = (
+            self._create_controlling_transition_layer(
+                icao_code,
+                diagnostic_group,
+                engine,
+            )
+            if diagnostic_group is not None
+            else False
+        )
         timing_splits["transitions"] = time.perf_counter() - step_start
 
         if not self._controlling_ols_subphase("Controlling OLS: clipping source contours..."):
@@ -7232,7 +7252,7 @@ class ControllingOlsEngineMixin:
         icao_code: str,
         ofs_group: QgsLayerTreeGroup,
         oes_group: QgsLayerTreeGroup,
-        debug_group: QgsLayerTreeGroup,
+        debug_group: Optional[QgsLayerTreeGroup],
         solved_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
     ) -> bool:
         """Create independent future Annex 14 OFS and OES lower envelopes."""
@@ -7256,27 +7276,35 @@ class ControllingOlsEngineMixin:
             engine = PlanarControllingOlsEngine(family_candidates)
             if solved_engines is not None:
                 solved_engines[family] = engine
-            family_debug_group = self._ensure_layer_group(debug_group, f"Annex 14 {family} Controlling")
+            family_debug_group = (
+                self._ensure_layer_group(
+                    debug_group,
+                    f"Annex 14 {family} Controlling",
+                )
+                if debug_group is not None
+                else None
+            )
             if not self._controlling_ols_subphase(
                 f"Controlling {family}: preparing candidates and transition boundaries..."
             ):
                 return created
-            self._create_controlling_candidate_layer(
-                icao_code,
-                family_debug_group,
-                family_candidates,
-                internal_name=f"Annex14_{family}_Planar_Candidates_{icao_code}",
-                display_name=f"{family} — Planar Candidates",
-                style_key=f"Annex 14 Candidate {family}",
-            )
-            self._create_controlling_transition_layer(
-                icao_code,
-                family_debug_group,
-                engine,
-                internal_name=f"Annex14_{family}_Planar_Transitions_{icao_code}",
-                display_name=f"{family} — Planar Transitions",
-                style_key=f"Annex 14 Transition {family}",
-            )
+            if family_debug_group is not None:
+                self._create_controlling_candidate_layer(
+                    icao_code,
+                    family_debug_group,
+                    family_candidates,
+                    internal_name=f"Annex14_{family}_Planar_Candidates_{icao_code}",
+                    display_name=f"{family} — Planar Candidates",
+                    style_key=f"Annex 14 Candidate {family}",
+                )
+                self._create_controlling_transition_layer(
+                    icao_code,
+                    family_debug_group,
+                    engine,
+                    internal_name=f"Annex14_{family}_Planar_Transitions_{icao_code}",
+                    display_name=f"{family} — Planar Transitions",
+                    style_key=f"Annex 14 Transition {family}",
+                )
             if not self._controlling_ols_subphase(f"Controlling {family}: writing solved regions..."):
                 return created
             region_created = self._create_controlling_region_layer(

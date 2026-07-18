@@ -208,6 +208,7 @@ def run(input_path, audit_path, preview_path):
 
     iface = _Iface()
     builder = SafeguardingBuilder(iface)
+    builder._debug_development_outputs_enabled = lambda: True
     builder.dlg = dialog
     builder.run_safeguarding_processing()
 

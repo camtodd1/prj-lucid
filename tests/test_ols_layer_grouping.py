@@ -89,6 +89,31 @@ class OlsLayerGroupingTests(unittest.TestCase):
         self.assertIs(groups["comparison_ols_surfaces"].parent(), comparison)
         self.assertIs(groups["comparison_airport_wide_ols"].parent(), comparison)
 
+    def test_debug_development_group_is_suppressed_by_default(self):
+        self.builder.framework = get_framework_profile()
+        self.builder.baseline_ols_ruleset = get_ruleset_profile("mos139_2019")
+        self.builder.protected_airspace_ruleset = self.builder.baseline_ols_ruleset
+        self.builder.comparison_ols_ruleset = None
+        main_group = QgsLayerTreeGroup("TEST")
+
+        groups = self.builder._create_output_layer_groups(main_group, agl_enabled=False)
+
+        self.assertIsNone(groups["debug_development"])
+        self.assertIsNone(self.direct_group(main_group, "99 Debug / Development"))
+
+    def test_debug_development_group_can_be_enabled_for_diagnostics(self):
+        self.builder.framework = get_framework_profile()
+        self.builder.baseline_ols_ruleset = get_ruleset_profile("mos139_2019")
+        self.builder.protected_airspace_ruleset = self.builder.baseline_ols_ruleset
+        self.builder.comparison_ols_ruleset = None
+        self.builder._debug_development_outputs_enabled = lambda: True
+        main_group = QgsLayerTreeGroup("TEST")
+
+        groups = self.builder._create_output_layer_groups(main_group, agl_enabled=False)
+
+        self.assertIsNotNone(groups["debug_development"])
+        self.assertIsNotNone(self.direct_group(main_group, "99 Debug / Development"))
+
 
 if __name__ == "__main__":
     unittest.main()

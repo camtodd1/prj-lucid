@@ -187,6 +187,10 @@ class SafeguardingBuilder(
         if run_log is not None:
             run_log.diagnostic(topic or "generation", message)
 
+    def _debug_development_outputs_enabled(self) -> bool:
+        """Return whether development-only layer-tree outputs should be generated."""
+        return False
+
     def _crs_is_geographic(self, crs: QgsCoordinateReferenceSystem) -> bool:
         """Return True when a CRS uses angular units and is unsuitable for metre buffers."""
         try:
@@ -1007,14 +1011,12 @@ class SafeguardingBuilder(
             if ols_surfaces_group is None:
                 ols_surfaces_group = main_group
             debug_group = output_groups.get("debug_development")
-            if debug_group is None:
-                debug_group = main_group
             controlling_ols_surfaces_group = output_groups.get("controlling_ols_surfaces")
             if controlling_ols_surfaces_group is None:
-                controlling_ols_surfaces_group = debug_group
+                controlling_ols_surfaces_group = ols_surfaces_group
             controlling_contours_group = output_groups.get("controlling_contours")
             if controlling_contours_group is None:
-                controlling_contours_group = debug_group
+                controlling_contours_group = controlling_ols_surfaces_group
 
             arp_layer_created = False
             if arp_point is not None:
@@ -2019,7 +2021,11 @@ class SafeguardingBuilder(
             main_group, self.get_active_framework().safeguarding_group_name()
         )
         groups["nasf_guidelines"] = groups["external_safeguarding"]
-        groups["debug_development"] = self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
+        groups["debug_development"] = (
+            self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
+            if self._debug_development_outputs_enabled()
+            else None
+        )
 
         infrastructure_group = groups["aerodrome_infrastructure"]
         if infrastructure_group is not None:
@@ -2146,7 +2152,7 @@ class SafeguardingBuilder(
         icao_code: str,
         processed_runway_data_list: List[dict],
         output_groups: Dict[str, Optional[QgsLayerTreeGroup]],
-        debug_group: QgsLayerTreeGroup,
+        debug_group: Optional[QgsLayerTreeGroup],
         solved_baseline_engines: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Generate the selected comparison ruleset and compare solved envelopes."""
@@ -2315,7 +2321,7 @@ class SafeguardingBuilder(
         icao_code: str,
         processed_runway_data_list: List[dict],
         output_groups: Dict[str, Optional[QgsLayerTreeGroup]],
-        debug_group: QgsLayerTreeGroup,
+        debug_group: Optional[QgsLayerTreeGroup],
         solved_baseline_engine=None,
     ) -> bool:
         """Generate future OFS/OES beside the selected baseline and compare envelopes."""
@@ -2494,7 +2500,12 @@ class SafeguardingBuilder(
             )
         framework = self.get_active_framework()
         external_group = self._ensure_layer_group(main_group, framework.safeguarding_group_name())
-        debug_group = self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
+        debug_outputs_enabled = self._debug_development_outputs_enabled()
+        debug_group = (
+            self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
+            if debug_outputs_enabled
+            else None
+        )
         if (
             reference_group is None
             or infrastructure_group is None
@@ -2509,7 +2520,6 @@ class SafeguardingBuilder(
             or secondary_surfaces_group is None
             or controlling_surfaces_group is None
             or external_group is None
-            or debug_group is None
         ):
             return
 
@@ -2528,16 +2538,17 @@ class SafeguardingBuilder(
                 baseline_surface_group,
             )
 
-        for child in list(debug_group.children()):
-            if not isinstance(child, QgsLayerTreeLayer):
-                continue
-            layer = child.layer()
-            layer_name = layer.name() if layer is not None else child.name()
-            style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
-            if style_key == "OLS Controlling Planar Region" or "OLS Controlling Planar Regions" in layer_name:
-                self._move_layer_tree_node(child, controlling_surfaces_group)
-            elif style_key == "OLS Controlling Contour" or "OLS Controlling Contours" in layer_name:
-                self._move_layer_tree_node(child, controlling_surfaces_group)
+        if debug_group is not None:
+            for child in list(debug_group.children()):
+                if not isinstance(child, QgsLayerTreeLayer):
+                    continue
+                layer = child.layer()
+                layer_name = layer.name() if layer is not None else child.name()
+                style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
+                if style_key == "OLS Controlling Planar Region" or "OLS Controlling Planar Regions" in layer_name:
+                    self._move_layer_tree_node(child, controlling_surfaces_group)
+                elif style_key == "OLS Controlling Contour" or "OLS Controlling Contours" in layer_name:
+                    self._move_layer_tree_node(child, controlling_surfaces_group)
 
         runway_centreline_group = self._ensure_layer_group(reference_group, output_structure.RUNWAY_CENTRE_LINES)
         self._merge_or_move_direct_group(main_group, self.tr("Runway Centrelines"), reference_group)
@@ -2692,7 +2703,7 @@ class SafeguardingBuilder(
     def _repair_debug_development_layer_tree(
         self,
         root_group: QgsLayerTreeGroup,
-        debug_group: QgsLayerTreeGroup,
+        debug_group: Optional[QgsLayerTreeGroup],
     ) -> None:
         """Move legacy proof-of-concept layers into the diagnostic group."""
         if root_group is None or debug_group is None:
