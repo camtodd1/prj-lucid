@@ -180,6 +180,61 @@ class LayerStyleTests(unittest.TestCase):
                     renderer.stopRender(render_context)
             self.assertEqual(len(group.findLayers()), 2)
 
+    def test_baseline_and_comparison_layers_namespace_reused_internal_names(self):
+        fields = QgsFields()
+        fields.append(QgsField("ruleset", QVariant.String))
+
+        def ruleset_feature(name, y_offset):
+            feature = QgsFeature(fields)
+            feature.setAttribute("ruleset", name)
+            feature.setGeometry(QgsGeometry.fromMultiPolylineXY([[
+                QgsPointXY(0, y_offset),
+                QgsPointXY(10, y_offset),
+            ]]))
+            return feature
+
+        with tempfile.TemporaryDirectory() as output_path:
+            project = QgsProject.instance()
+            project.setCrs(QgsCoordinateReferenceSystem("EPSG:3857"))
+            baseline_group = project.layerTreeRoot().addGroup("Baseline OLS")
+            comparison_group = project.layerTreeRoot().addGroup("Comparison OLS")
+            harness = _FileLayerHarness(output_path)
+
+            harness._contour_interval_ruleset_role = "baseline"
+            baseline_layer = harness._create_and_add_layer(
+                "MultiLineString",
+                "OLS_Conical_TEST",
+                "Conical Contours",
+                fields,
+                [ruleset_feature("MOS139", 0)],
+                baseline_group,
+                "Default Line",
+            )
+            harness._contour_interval_ruleset_role = "comparison"
+            comparison_layer = harness._create_and_add_layer(
+                "MultiLineString",
+                "OLS_Conical_TEST",
+                "Conical Contours",
+                fields,
+                [ruleset_feature("CAP168", 10)],
+                comparison_group,
+                "Default Line",
+            )
+
+            self.assertIsNotNone(baseline_layer)
+            self.assertIsNotNone(comparison_layer)
+            self.assertTrue(Path(output_path, "OLS_Conical_TEST.shp").is_file())
+            self.assertTrue(Path(output_path, "Comparison_OLS_Conical_TEST.shp").is_file())
+            self.assertNotEqual(baseline_layer.source(), comparison_layer.source())
+            self.assertEqual(
+                next(baseline_layer.getFeatures()).attribute("ruleset"),
+                "MOS139",
+            )
+            self.assertEqual(
+                next(comparison_layer.getFeatures()).attribute("ruleset"),
+                "CAP168",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

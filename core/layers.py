@@ -252,6 +252,16 @@ class LayerMixin:
                 # output identifier; using the display name here caused the
                 # later family to overwrite the earlier family on disk.
                 output_name = internal_name_base or os.path.splitext(display_name)[0]
+                # Conventional baseline and comparison rulesets intentionally
+                # reuse the same construction helpers and internal layer names.
+                # Keep their datasources separate: otherwise the later
+                # comparison write replaces the file still referenced by the
+                # already-loaded baseline layer.
+                if str(
+                    getattr(self, "_contour_interval_ruleset_role", "baseline")
+                    or "baseline"
+                ).casefold() == "comparison":
+                    output_name = f"Comparison_{output_name}"
                 safe_name = self._sanitize_filename(output_name)
                 full_path = os.path.join(self.output_path, f"{safe_name}{self.output_format_extension}")
 
