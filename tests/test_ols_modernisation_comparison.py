@@ -1881,6 +1881,70 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(delta_max, 0.0)
         self.assertEqual(delta_sample, 0.0)
 
+    def test_affine_delta_range_keeps_extrema_on_high_vertex_count_polygon(self):
+        ring = []
+        subdivisions = 49
+        corners = (
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(100.0, 50.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(0.0, 0.0),
+        )
+        for start, end in zip(corners[:-1], corners[1:]):
+            for index in range(subdivisions):
+                fraction = index / subdivisions
+                ring.append(QgsPointXY(
+                    start.x() + ((end.x() - start.x()) * fraction),
+                    start.y() + ((end.y() - start.y()) * fraction),
+                ))
+        ring.append(QgsPointXY(ring[0]))
+        detailed_triangle = QgsGeometry.fromPolygonXY([ring])
+        baseline = self.constant("baseline", 0.0)
+        future = self.plane("future", 1.0, 0.0, 0.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        _delta_min, delta_max, _delta_sample = engine.delta_range(
+            detailed_triangle,
+            baseline,
+            future,
+            "gain",
+        )
+        contours = engine.change_contour_parts(
+            [(baseline, future, detailed_triangle)],
+            "gain",
+        )
+
+        self.assertEqual(delta_max, 100.0)
+        self.assertIn(99.0, [item[3] for item in contours])
+
+    def test_affine_delta_range_keeps_legitimate_acute_wedge_extremum(self):
+        acute_wedge = QgsGeometry.fromPolygonXY([[
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(50.0, 0.0),
+            QgsPointXY(1000.0, 50.0),
+            QgsPointXY(50.0, 100.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(0.0, 0.0),
+        ]])
+        baseline = self.constant("baseline", 0.0)
+        future = self.plane("future", 1.0, 0.0, 0.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        _delta_min, delta_max, _delta_sample = engine.delta_range(
+            acute_wedge,
+            baseline,
+            future,
+            "gain",
+        )
+
+        self.assertEqual(delta_max, 1000.0)
+
     def test_change_contours_are_signed_clipped_isolines_and_omit_zero(self):
         baseline = self.constant("baseline", 100.0)
         future = self.plane("future", 0.02, 0.0, 100.0)

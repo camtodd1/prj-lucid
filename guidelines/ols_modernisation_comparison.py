@@ -2116,6 +2116,12 @@ class OlsEnvelopeComparisonEngine:
         change: Optional[str] = None,
     ) -> List[QgsPointXY]:
         points: List[QgsPointXY] = []
+        affine_pair = bool(
+            baseline is not None
+            and future is not None
+            and self._candidate_affine_coefficients(baseline) is not None
+            and self._candidate_affine_coefficients(future) is not None
+        )
         try:
             representative = geometry.pointOnSurface()
             if representative is not None and not representative.isEmpty():
@@ -2124,13 +2130,45 @@ class OlsEnvelopeComparisonEngine:
         except Exception:
             pass
         if baseline is not None and future is not None and change:
-            comparison_vertices = self._comparison_sample_vertices(geometry, baseline, future, change)
+            if affine_pair:
+                # Affine differences attain their exact extrema at polygon
+                # vertices.  Do not run those vertices through the generic
+                # spike-shape filter: a long, acute but legitimate controller
+                # wedge (such as the YMML approach-adjacent transitional
+                # region) can look like a spike and lose its true maximum.
+                # Excluding only vertices on the wrong side of the classified
+                # change retains protection against zero-area GEOS tendrils.
+                affine_vertices = []
+                try:
+                    for vertex in geometry.vertices():
+                        point = QgsPointXY(vertex.x(), vertex.y())
+                        delta = self._delta_at_point(point, baseline, future)
+                        if delta is None:
+                            continue
+                        if change == "gain" and delta < -self.tolerance_m:
+                            continue
+                        if change == "loss" and delta > self.tolerance_m:
+                            continue
+                        if change == "no_change" and abs(delta) > self.tolerance_m:
+                            continue
+                        affine_vertices.append(point)
+                except Exception:
+                    affine_vertices = []
+                if affine_vertices:
+                    points.extend(affine_vertices)
+                    return points
+            comparison_vertices = self._comparison_sample_vertices(
+                geometry,
+                baseline,
+                future,
+                change,
+            )
             if comparison_vertices:
                 points.extend(comparison_vertices)
                 return points
         try:
             vertices = list(geometry.vertices())
-            if len(vertices) > 48:
+            if not affine_pair and len(vertices) > 48:
                 step = max(1, len(vertices) // 48)
                 vertices = vertices[::step]
             points.extend(QgsPointXY(vertex.x(), vertex.y()) for vertex in vertices)
