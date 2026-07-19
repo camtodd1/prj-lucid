@@ -2,21 +2,43 @@
 
 from __future__ import annotations
 
+import tempfile
 import unittest
+from pathlib import Path
 
+from qgis.PyQt.QtCore import QVariant
 from qgis.core import (
+    QgsCoordinateReferenceSystem,
     QgsFeature,
+    QgsField,
+    QgsFields,
     QgsFillSymbol,
     QgsGeometry,
     QgsPointXY,
+    QgsProject,
     QgsRuleBasedRenderer,
     QgsVectorLayer,
 )
 
 from core.layers import LayerMixin
+from core.styles import DEFAULT_STYLE_MAP
+
+
+class _FileLayerHarness(LayerMixin):
+    def __init__(self, output_path):
+        self.output_mode = "file"
+        self.output_path = output_path
+        self.output_format_driver = "GeoJSON"
+        self.output_format_extension = ".geojson"
+        self.plugin_dir = str(Path(__file__).resolve().parents[1])
+        self.style_map = dict(DEFAULT_STYLE_MAP)
+        self.successfully_generated_layers = []
 
 
 class LayerStyleTests(unittest.TestCase):
+    def tearDown(self):
+        QgsProject.instance().clear()
+
     @staticmethod
     def _surface_layer(surface_values):
         layer = QgsVectorLayer("Polygon?field=surface:string", "Controlling OES — Surface", "memory")
@@ -90,6 +112,59 @@ class LayerStyleTests(unittest.TestCase):
         LayerMixin()._prune_annex14_renderer_rules(layer)
 
         self.assertEqual(layer.renderer().type(), "singleSymbol")
+
+    def test_file_layers_with_same_display_name_use_unique_internal_paths(self):
+        fields = QgsFields()
+        fields.append(QgsField("change", QVariant.String))
+        fields.append(QgsField("contour_class", QVariant.String))
+        fields.append(QgsField("label_txt", QVariant.String))
+
+        def contour_feature(x_offset):
+            feature = QgsFeature(fields)
+            feature.setAttributes(["gain", "primary", "+5 m"])
+            feature.setGeometry(QgsGeometry.fromMultiPolylineXY([[
+                QgsPointXY(x_offset, 0),
+                QgsPointXY(x_offset + 1, 1),
+            ]]))
+            return feature
+
+        with tempfile.TemporaryDirectory() as output_path:
+            project = QgsProject.instance()
+            project.setCrs(QgsCoordinateReferenceSystem("EPSG:3857"))
+            group = project.layerTreeRoot().addGroup("Comparison")
+            harness = _FileLayerHarness(output_path)
+
+            ofs_layer = harness._create_and_add_layer(
+                "MultiLineString",
+                "OLS_Modernisation_OFS_change_contours_TEST",
+                "Change Contours",
+                fields,
+                [contour_feature(0)],
+                group,
+                "OLS Modernisation Change Contour",
+            )
+            oes_layer = harness._create_and_add_layer(
+                "MultiLineString",
+                "OLS_Modernisation_OES_change_contours_TEST",
+                "Change Contours",
+                fields,
+                [contour_feature(2)],
+                group,
+                "OLS Modernisation Change Contour",
+            )
+
+            self.assertIsNotNone(ofs_layer)
+            self.assertIsNotNone(oes_layer)
+            self.assertTrue(
+                Path(output_path, "OLS_Modernisation_OFS_change_contours_TEST.geojson").is_file()
+            )
+            self.assertTrue(
+                Path(output_path, "OLS_Modernisation_OES_change_contours_TEST.geojson").is_file()
+            )
+            self.assertNotEqual(ofs_layer.source(), oes_layer.source())
+            self.assertEqual(ofs_layer.renderer().type(), "RuleRenderer")
+            self.assertEqual(oes_layer.renderer().type(), "RuleRenderer")
+            self.assertEqual(len(group.findLayers()), 2)
 
 
 if __name__ == "__main__":

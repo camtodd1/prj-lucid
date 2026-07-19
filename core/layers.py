@@ -246,8 +246,13 @@ class LayerMixin:
                     )
                     return layer
 
-                name_without_ext = os.path.splitext(display_name)[0]
-                safe_name = self._sanitize_filename(name_without_ext)
+                # Display names are intentionally reused in parallel layer-tree
+                # groups (for example, OFS and OES both contain a layer named
+                # "Change Contours").  The internal name is the stable, unique
+                # output identifier; using the display name here caused the
+                # later family to overwrite the earlier family on disk.
+                output_name = internal_name_base or os.path.splitext(display_name)[0]
+                safe_name = self._sanitize_filename(output_name)
                 full_path = os.path.join(self.output_path, f"{safe_name}{self.output_format_extension}")
 
                 result = QgsVectorFileWriter.writeAsVectorFormat(
@@ -259,18 +264,19 @@ class LayerMixin:
                 )
 
                 if isinstance(result, tuple) and result[0] == QgsVectorFileWriter.NoError:
-                    loaded_layer = self.iface.addVectorLayer(full_path, display_name, "ogr")
+                    # Build and style the reloaded layer before adding its tree
+                    # node.  Adding it through iface first exposes QGIS' default
+                    # renderer to the layer-tree model; replacing that renderer
+                    # afterwards can leave a stale legend/render cache until the
+                    # user opens the Symbology panel.
+                    loaded_layer = QgsVectorLayer(full_path, display_name, "ogr")
                     if loaded_layer is not None and loaded_layer.isValid():
-                        root = project.layerTreeRoot()
-                        loaded_node = root.findLayer(loaded_layer.id())
-                        if loaded_node is not None:
-                            cloned_node = loaded_node.clone()
-                            self._stage_layer_tree_node(cloned_node)
-                            layer_group.insertChildNode(0, cloned_node)
-                            if loaded_node.parent() is not None:
-                                loaded_node.parent().removeChildNode(loaded_node)
                         loaded_layer.setCustomProperty("safeguarding_style_key", style_key)
                         self._apply_style(loaded_layer, self.style_map)
+                        project.addMapLayer(loaded_layer, False)
+                        loaded_node = layer_group.insertLayer(0, loaded_layer)
+                        self._stage_layer_tree_node(loaded_node)
+                        loaded_layer.triggerRepaint()
                         self.successfully_generated_layers.append(loaded_layer)
                         return loaded_layer
                     else:
