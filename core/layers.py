@@ -509,8 +509,35 @@ class LayerMixin:
         )
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
 
+    @staticmethod
+    def _persisted_field_name(layer: QgsVectorLayer, requested_name: str) -> str:
+        """Resolve a source field after formats such as Shapefile truncate it."""
+        field_names = [field.name() for field in layer.fields()]
+        requested_folded = str(requested_name).casefold()
+        for field_name in field_names:
+            if field_name.casefold() == requested_folded:
+                return field_name
+
+        # The ESRI Shapefile driver launders names to ten characters.  Prefer
+        # that deterministic form, then accept it as a unique prefix so this
+        # also works with providers that use a shorter limit.
+        truncated = requested_folded[:10]
+        for field_name in field_names:
+            if field_name.casefold() == truncated:
+                return field_name
+        prefix_matches = [
+            field_name
+            for field_name in field_names
+            if requested_folded.startswith(field_name.casefold())
+        ]
+        if len(prefix_matches) == 1:
+            return prefix_matches[0]
+        return requested_name
+
     def _apply_modernisation_change_contour_style(self, layer: QgsVectorLayer) -> None:
         """Render signed change contours by direction and primary/intermediate class."""
+        change_field = self._persisted_field_name(layer, "change")
+        contour_class_field = self._persisted_field_name(layer, "contour_class")
         root = QgsRuleBasedRenderer.Rule(None)
         symbol_definitions = (
             ("gain", "primary", "27,112,52,245", "0.42", "Raised — primary"),
@@ -529,20 +556,33 @@ class LayerMixin:
             )
             rule = QgsRuleBasedRenderer.Rule(symbol)
             rule.setFilterExpression(
-                f'"change" = \'{change}\' AND "contour_class" = \'{contour_class}\''
+                f'"{change_field}" = \'{change}\' AND '
+                f'"{contour_class_field}" = \'{contour_class}\''
             )
             rule.setLabel(label)
             root.appendChild(rule)
         layer.setRenderer(QgsRuleBasedRenderer(root))
-        self._apply_modernisation_change_contour_labels(layer)
+        self._apply_modernisation_change_contour_labels(
+            layer,
+            contour_class_field=contour_class_field,
+        )
 
-    def _apply_modernisation_change_contour_labels(self, layer: QgsVectorLayer) -> None:
+    def _apply_modernisation_change_contour_labels(
+        self,
+        layer: QgsVectorLayer,
+        contour_class_field: Optional[str] = None,
+    ) -> None:
         """Label signed change isolines while allowing QGIS to suppress collisions."""
-        if layer.fields().indexFromName("label_txt") < 0:
+        label_field = self._persisted_field_name(layer, "label_txt")
+        if layer.fields().indexFromName(label_field) < 0:
             return
+        contour_class_field = contour_class_field or self._persisted_field_name(
+            layer,
+            "contour_class",
+        )
         try:
             settings = QgsPalLayerSettings()
-            settings.fieldName = "label_txt"
+            settings.fieldName = label_field
             settings.placement = QgsPalLayerSettings.Line
             try:
                 line_settings = settings.lineSettings()
@@ -569,8 +609,8 @@ class LayerMixin:
             root = QgsRuleBasedLabeling.Rule(None)
             rule = QgsRuleBasedLabeling.Rule(settings)
             rule.setFilterExpression(
-                '"contour_class" = \'primary\' AND '
-                '"label_txt" IS NOT NULL AND "label_txt" <> \'\''
+                f'"{contour_class_field}" = \'primary\' AND '
+                f'"{label_field}" IS NOT NULL AND "{label_field}" <> \'\''
             )
             root.appendChild(rule)
             layer.setLabeling(QgsRuleBasedLabeling(root))

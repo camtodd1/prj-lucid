@@ -16,6 +16,7 @@ from qgis.core import (
     QgsGeometry,
     QgsPointXY,
     QgsProject,
+    QgsRenderContext,
     QgsRuleBasedRenderer,
     QgsVectorLayer,
 )
@@ -28,8 +29,8 @@ class _FileLayerHarness(LayerMixin):
     def __init__(self, output_path):
         self.output_mode = "file"
         self.output_path = output_path
-        self.output_format_driver = "GeoJSON"
-        self.output_format_extension = ".geojson"
+        self.output_format_driver = "ESRI Shapefile"
+        self.output_format_extension = ".shp"
         self.plugin_dir = str(Path(__file__).resolve().parents[1])
         self.style_map = dict(DEFAULT_STYLE_MAP)
         self.successfully_generated_layers = []
@@ -156,14 +157,27 @@ class LayerStyleTests(unittest.TestCase):
             self.assertIsNotNone(ofs_layer)
             self.assertIsNotNone(oes_layer)
             self.assertTrue(
-                Path(output_path, "OLS_Modernisation_OFS_change_contours_TEST.geojson").is_file()
+                Path(output_path, "OLS_Modernisation_OFS_change_contours_TEST.shp").is_file()
             )
             self.assertTrue(
-                Path(output_path, "OLS_Modernisation_OES_change_contours_TEST.geojson").is_file()
+                Path(output_path, "OLS_Modernisation_OES_change_contours_TEST.shp").is_file()
             )
             self.assertNotEqual(ofs_layer.source(), oes_layer.source())
             self.assertEqual(ofs_layer.renderer().type(), "RuleRenderer")
             self.assertEqual(oes_layer.renderer().type(), "RuleRenderer")
+            ofs_feature = next(ofs_layer.getFeatures())
+            oes_feature = next(oes_layer.getFeatures())
+            for persisted_layer, feature in (
+                (ofs_layer, ofs_feature),
+                (oes_layer, oes_feature),
+            ):
+                renderer = persisted_layer.renderer()
+                render_context = QgsRenderContext()
+                renderer.startRender(render_context, persisted_layer.fields())
+                try:
+                    self.assertTrue(renderer.symbolsForFeature(feature, render_context))
+                finally:
+                    renderer.stopRender(render_context)
             self.assertEqual(len(group.findLayers()), 2)
 
 
