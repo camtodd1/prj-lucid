@@ -559,6 +559,100 @@ class OlsEnvelopeComparisonEngine:
                 )
         return contours
 
+    def zero_change_contour_parts(
+        self,
+        parts: Dict[
+            str,
+            Sequence[
+                Tuple[
+                    ControllingOlsCandidate,
+                    ControllingOlsCandidate,
+                    QgsGeometry,
+                ]
+            ],
+        ],
+    ) -> List[
+        Tuple[
+            ControllingOlsCandidate,
+            ControllingOlsCandidate,
+            QgsGeometry,
+            float,
+            str,
+            int,
+        ]
+    ]:
+        """Return complete zero contours from finalized gain/loss adjacency."""
+        gain_union = self._union_geometries(
+            [geometry for _baseline, _future, geometry in parts.get("gain", [])]
+        )
+        loss_union = self._union_geometries(
+            [geometry for _baseline, _future, geometry in parts.get("loss", [])]
+        )
+        if gain_union is None or loss_union is None:
+            return []
+        if gain_union.isEmpty() or loss_union.isEmpty():
+            return []
+        try:
+            gain_boundary = gain_union.convertToType(Qgis.GeometryType.Line, True)
+            loss_boundary = loss_union.convertToType(Qgis.GeometryType.Line, True)
+            shared_boundary = gain_boundary.intersection(loss_boundary)
+        except Exception:
+            return []
+        shared_boundary = self._merged_change_contour_lines([shared_boundary])
+        if shared_boundary is None or shared_boundary.isEmpty():
+            return []
+
+        attributed_parts = list(parts.get("gain", [])) + list(parts.get("loss", []))
+        zero_contours = []
+        for sequence, geometry in enumerate(self._line_parts(shared_boundary), start=1):
+            if geometry.length() <= COMPARISON_CONTOUR_MIN_LENGTH_M:
+                continue
+            try:
+                midpoint_geometry = geometry.interpolate(geometry.length() / 2.0)
+                midpoint = midpoint_geometry.asPoint()
+                point = QgsPointXY(midpoint.x(), midpoint.y())
+            except Exception:
+                continue
+
+            baseline_result = None
+            future_result = None
+            try:
+                baseline_result = self.baseline_engine.controlling_candidate_at_xy(point)
+                future_result = self.future_engine.controlling_candidate_at_xy(point)
+            except Exception:
+                pass
+            if baseline_result is None or future_result is None:
+                def _pair_residual(pair) -> float:
+                    value = self._delta_at_point(point, pair[0], pair[1])
+                    return abs(value) if value is not None else float("inf")
+
+                fallback_pair = min(
+                    (
+                        (baseline, future)
+                        for baseline, future, source_geometry in attributed_parts
+                        if source_geometry.boundingBox().intersects(geometry.boundingBox())
+                    ),
+                    key=_pair_residual,
+                    default=None,
+                )
+                if fallback_pair is None:
+                    continue
+                baseline_candidate, future_candidate = fallback_pair
+            else:
+                baseline_candidate = baseline_result[0]
+                future_candidate = future_result[0]
+            zero_contours.append(
+                (
+                    baseline_candidate,
+                    future_candidate,
+                    QgsGeometry(geometry),
+                    0.0,
+                    "primary",
+                    sequence,
+                )
+            )
+        return zero_contours
+
     @staticmethod
     def _candidate_pair_bounds(
         baseline: ControllingOlsCandidate,
@@ -3011,7 +3105,11 @@ class OlsEnvelopeComparisonEngine:
             return []
         try:
             if QgsWkbTypes.geometryType(geometry.wkbType()) != Qgis.GeometryType.Line:
-                return []
+                parts: List[QgsGeometry] = []
+                if hasattr(geometry, "asGeometryCollection"):
+                    for part_geometry in geometry.asGeometryCollection():
+                        parts.extend(OlsEnvelopeComparisonEngine._line_parts(part_geometry))
+                return parts
         except Exception:
             return [geometry]
         if not geometry.isMultipart():
@@ -3189,20 +3287,8 @@ class OlsModernisationComparisonMixin:
                     )
                 )
             contour_parts.extend(
-                (
-                    "transition",
-                    baseline,
-                    future,
-                    geometry,
-                    0.0,
-                    "primary",
-                    sequence,
-                )
-                for sequence, (baseline, future, geometry) in enumerate(
-                    parts["transition"],
-                    start=1,
-                )
-                if geometry is not None and not geometry.isEmpty()
+                ("transition", *contour_part)
+                for contour_part in comparison.zero_change_contour_parts(parts)
             )
             if not self._modernisation_subphase(
                 f"Modernisation {family}: finalising transitions and baseline-only areas..."
@@ -3390,20 +3476,8 @@ class OlsModernisationComparisonMixin:
                     )
                 )
             contour_parts.extend(
-                (
-                    "transition",
-                    baseline,
-                    future,
-                    geometry,
-                    0.0,
-                    "primary",
-                    sequence,
-                )
-                for sequence, (baseline, future, geometry) in enumerate(
-                    parts["transition"],
-                    start=1,
-                )
-                if geometry is not None and not geometry.isEmpty()
+                ("transition", *contour_part)
+                for contour_part in comparison.zero_change_contour_parts(parts)
             )
             created = self._create_modernisation_change_contour_layer(
                 icao_code,
@@ -3652,7 +3726,11 @@ class OlsModernisationComparisonMixin:
             feature.setGeometry(geometry)
             feature.setAttributes([
                 self._modernisation_feature_id(family, "change_contour", sequence),
-                self._modernisation_feature_id(family, change, parent_sequence),
+                (
+                    ""
+                    if change == "transition"
+                    else self._modernisation_feature_id(family, change, parent_sequence)
+                ),
                 change,
                 family,
                 delta_m,

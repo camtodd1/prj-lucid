@@ -1966,6 +1966,26 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             for vertex in geometry.vertices():
                 self.assertAlmostEqual(vertex.x(), delta_m / 0.02, places=5)
 
+    def test_zero_change_contours_use_final_gain_loss_boundary_not_transition_records(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.2, 0.0, 90.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        parts = engine.comparison_parts()
+        parts["transition"] = []
+
+        zero_contours = engine.zero_change_contour_parts(parts)
+
+        self.assertEqual(len(zero_contours), 1)
+        _baseline, _future, geometry, delta_m, contour_class, _sequence = zero_contours[0]
+        self.assertEqual(delta_m, 0.0)
+        self.assertEqual(contour_class, "primary")
+        self.assertAlmostEqual(geometry.length(), 100.0, places=5)
+        for vertex in geometry.vertices():
+            self.assertAlmostEqual(vertex.x(), 50.0, places=5)
+
     def test_affine_change_contour_lines_are_reused_by_pair_and_level(self):
         baseline = self.constant("baseline", 100.0)
         future = self.plane("future", 0.02, 0.0, 100.0)
@@ -2801,7 +2821,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(zero_feature["delta_m"], 0.0)
         self.assertEqual(zero_feature["contour_class"], "primary")
         self.assertEqual(zero_feature["label_txt"], "0.0 m")
-        self.assertEqual(zero_feature["parent_id"], "OFS-TRANSITION-000001")
+        self.assertEqual(zero_feature["parent_id"], "")
 
         transition_layer_args = next(
             layer_args for layer_args in capture.layers
@@ -2939,7 +2959,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             feature for feature in contour_layer_args[4]
             if feature["change"] == "transition"
         )
-        self.assertEqual(zero_contour_feature["parent_id"], "OFS-TRANSITION-000001")
+        self.assertEqual(zero_contour_feature["parent_id"], "")
         self.assertEqual(zero_contour_feature["delta_m"], 0.0)
         self.assertEqual(zero_contour_feature["contour_class"], "primary")
         self.assertEqual(zero_contour_feature["label_txt"], "0.0 m")

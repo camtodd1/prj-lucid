@@ -400,6 +400,18 @@ def _comparison_metrics(
         change: _geometry_union(geometry for _baseline, _future, geometry in result[change])
         for change in ("gain", "loss", "no_change")
     }
+    try:
+        gain_boundary = change_unions["gain"].convertToType(
+            Qgis.GeometryType.Line,
+            True,
+        )
+        loss_boundary = change_unions["loss"].convertToType(
+            Qgis.GeometryType.Line,
+            True,
+        )
+        gain_loss_boundary = gain_boundary.intersection(loss_boundary)
+    except Exception:
+        gain_loss_boundary = QgsGeometry()
     classified_union = _geometry_union(change_unions.values())
     unclassified = common_domain.difference(classified_union)
     unclassified_parts = []
@@ -526,6 +538,11 @@ def _comparison_metrics(
         )[:20],
         "classified_outside_common_area_m2": _area(classified_union.difference(common_domain)),
         "gain_loss_overlap_m2": _area(change_unions["gain"].intersection(change_unions["loss"])),
+        "gain_loss_boundary_length_m": gain_loss_boundary.length(),
+        "gain_loss_boundary_components": sum(
+            part.length() > 0.01
+            for part in engine._line_parts(gain_loss_boundary)
+        ),
         "gain_no_change_overlap_m2": _area(change_unions["gain"].intersection(change_unions["no_change"])),
         "loss_no_change_overlap_m2": _area(change_unions["loss"].intersection(change_unions["no_change"])),
         "feature_counts": {change: len(result[change]) for change in result},
@@ -554,7 +571,7 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
     comparison_contours = defaultdict(set)
     comparison_contour_intervals = {}
     comparison_family_intervals = {}
-    zero_change_contours = defaultdict(int)
+    zero_change_contours = defaultdict(list)
     for node in project.layerTreeRoot().findLayers():
         layer = node.layer()
         if layer is None:
@@ -589,22 +606,22 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
                         }
             if "parent_id" in fields and "delta_m" in fields:
                 parent_id = str(feature.attribute("parent_id") or "")
+                delta_m = round(float(feature.attribute("delta_m")), 3)
+                future_family = str(feature.attribute("future_family") or "")
                 if parent_id:
-                    delta_m = round(float(feature.attribute("delta_m")), 3)
                     comparison_contours[parent_id].add(delta_m)
                     comparison_contour_intervals[parent_id] = float(
                         feature.attribute("contour_interval_m")
                     )
-                    future_family = str(feature.attribute("future_family") or "")
                     comparison_family_intervals[future_family] = float(
                         feature.attribute("contour_interval_m")
                     )
-                    if (
-                        delta_m == 0.0
-                        and str(feature.attribute("change") or "") == "transition"
-                        and str(feature.attribute("label_txt") or "") == "0.0 m"
-                    ):
-                        zero_change_contours[future_family] += 1
+                if (
+                    delta_m == 0.0
+                    and str(feature.attribute("change") or "") == "transition"
+                    and str(feature.attribute("label_txt") or "") == "0.0 m"
+                ):
+                    zero_change_contours[future_family].append(QgsGeometry(geometry))
             if "surface_id" in fields or "comparison_id" in fields:
                 identifiers = tuple(
                     str(feature.attribute(name) or "")
@@ -720,7 +737,13 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
         "controlling": controlling,
         "controlling_region_layers": controlling_region_layers,
         "missing_interior_change_contours": missing_interior_contours,
-        "zero_change_contours": dict(sorted(zero_change_contours.items())),
+        "zero_change_contours": {
+            family: {
+                "features": len(geometries),
+                "length_m": _geometry_union(geometries).length(),
+            }
+            for family, geometries in sorted(zero_change_contours.items())
+        },
     }
 
 
@@ -748,12 +771,16 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
         )
     zero_change_contours = layers.get("zero_change_contours", {})
     for family, metrics in comparisons.items():
-        expected_zero_contours = int(metrics["feature_counts"].get("transition", 0))
-        actual_zero_contours = int(zero_change_contours.get(family, 0))
-        if actual_zero_contours != expected_zero_contours:
+        expected_length_m = float(metrics["gain_loss_boundary_length_m"])
+        actual = zero_change_contours.get(family, {})
+        actual_components = int(actual.get("features", 0))
+        actual_length_m = float(actual.get("length_m", 0.0))
+        length_tolerance_m = max(0.05, expected_length_m * 1e-6)
+        if abs(actual_length_m - expected_length_m) > length_tolerance_m:
             failures.append(
-                f"{family} has {actual_zero_contours} labelled zero change contours; "
-                f"expected {expected_zero_contours} transition boundaries"
+                f"{family} labelled zero contours cover {actual_components} components / "
+                f"{actual_length_m:.3f} m; expected {expected_length_m:.3f} m of "
+                "finalized gain/loss boundary"
             )
     maximum_region_overlap_m2 = float(case.get("maximum_region_overlap_m2", 1e-3))
     for region_layer in layers.get("controlling_region_layers", []):
@@ -1026,6 +1053,14 @@ def _run_case(
                 comparison_cls,
                 "change_contour_parts",
                 timed("change_contour_parts", original_change_contours),
+            )
+        )
+        original_zero_contours = comparison_cls.zero_change_contour_parts
+        stack.enter_context(
+            patch.object(
+                comparison_cls,
+                "zero_change_contour_parts",
+                timed("zero_change_contour_parts", original_zero_contours),
             )
         )
         start = time.perf_counter()
