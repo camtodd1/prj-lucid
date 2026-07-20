@@ -73,6 +73,95 @@ def _area(geometry: Optional[QgsGeometry]) -> float:
     return 0.0 if geometry is None or geometry.isEmpty() else geometry.area()
 
 
+def _length(geometry: Optional[QgsGeometry]) -> float:
+    if geometry is None or geometry.isEmpty():
+        return 0.0
+    return max(0.0, geometry.length())
+
+
+def _controlling_metrics_from_engines(
+    engines: Iterable[object],
+    published_regions_by_family: Optional[Dict[str, List[QgsGeometry]]] = None,
+) -> Dict[str, object]:
+    """Measure candidate-domain coverage from solver inputs and final regions.
+
+    Candidate debug layers are optional presentation output and may be disabled.
+    Solver candidates define the expected domain; published regions define the
+    delivered result. The solver region cache is used only by unit-level callers
+    that do not provide published output.
+    """
+    candidates_by_family: Dict[str, List[QgsGeometry]] = defaultdict(list)
+    regions_by_family: Dict[str, List[QgsGeometry]] = defaultdict(list)
+    seen_engines = set()
+    for engine in engines:
+        if engine is None or id(engine) in seen_engines:
+            continue
+        seen_engines.add(id(engine))
+        for candidate in getattr(engine, "candidates", []):
+            family = str(
+                (getattr(candidate, "metadata", None) or {}).get("annex14_family")
+                or ""
+            ).strip().upper()
+            effective_footprint = getattr(engine, "_effective_footprint", None)
+            footprint = (
+                effective_footprint(candidate)
+                if callable(effective_footprint)
+                else getattr(candidate, "footprint", None)
+            )
+            if (
+                family in {"OFS", "OES"}
+                and footprint is not None
+                and not footprint.isEmpty()
+            ):
+                candidates_by_family[family].append(QgsGeometry(footprint))
+        if published_regions_by_family is None:
+            for candidate, geometry in engine._controlling_region_geometries():
+                family = str(
+                    (getattr(candidate, "metadata", None) or {}).get("annex14_family")
+                    or ""
+                ).strip().upper()
+                if (
+                    family in {"OFS", "OES"}
+                    and geometry is not None
+                    and not geometry.isEmpty()
+                ):
+                    regions_by_family[family].append(QgsGeometry(geometry))
+
+    metrics = {}
+    for family in ("OFS", "OES"):
+        candidate_union = _geometry_union(candidates_by_family[family])
+        controlling_geometries = (
+            published_regions_by_family.get(family, [])
+            if published_regions_by_family is not None
+            else regions_by_family[family]
+        )
+        controlling_union = _geometry_union(controlling_geometries)
+        if candidate_union.isEmpty():
+            coverage_difference = QgsGeometry(controlling_union)
+        elif controlling_union.isEmpty():
+            coverage_difference = QgsGeometry(candidate_union)
+        else:
+            coverage_difference = candidate_union.symDifference(controlling_union)
+        metrics[family] = {
+            "source": (
+                "solver_candidates+published_regions"
+                if published_regions_by_family is not None
+                else "solver"
+            ),
+            "candidates": len(candidates_by_family[family]),
+            "regions": len(controlling_geometries),
+            "candidate_area_m2": _area(candidate_union),
+            "controlling_area_m2": _area(controlling_union),
+            "coverage_difference_m2": _area(coverage_difference),
+            "region_overlap_m2": max(
+                0.0,
+                sum(_area(geometry) for geometry in controlling_geometries)
+                - _area(controlling_union),
+            ),
+        }
+    return metrics
+
+
 def _engine_lock_signature(engine) -> Dict[str, object]:
     """Fingerprint exact controller identity and geometry for a locked ruleset."""
     records = []
@@ -544,12 +633,12 @@ def _comparison_metrics(
         )[:20],
         "classified_outside_common_area_m2": _area(classified_union.difference(common_domain)),
         "gain_loss_overlap_m2": _area(change_unions["gain"].intersection(change_unions["loss"])),
-        "gain_loss_boundary_length_m": gain_loss_boundary.length(),
+        "gain_loss_boundary_length_m": _length(gain_loss_boundary),
         "gain_loss_boundary_components": sum(
             part.length() > 0.01
             for part in engine._line_parts(gain_loss_boundary)
         ),
-        "zero_contour_length_m": verified_zero_union.length(),
+        "zero_contour_length_m": _length(verified_zero_union),
         "zero_contour_components": len(verified_zero_parts),
         "gain_no_change_overlap_m2": _area(change_unions["gain"].intersection(change_unions["no_change"])),
         "loss_no_change_overlap_m2": _area(change_unions["loss"].intersection(change_unions["no_change"])),
@@ -565,7 +654,10 @@ def _comparison_metrics(
     }
 
 
-def _layer_metrics(project: QgsProject) -> Dict[str, object]:
+def _layer_metrics(
+    project: QgsProject,
+    controlling_engines: Optional[Iterable[object]] = None,
+) -> Dict[str, object]:
     style_counts: Dict[str, int] = defaultdict(int)
     styles_to_geometries: Dict[str, List[QgsGeometry]] = defaultdict(list)
     invalid = 0
@@ -679,28 +771,39 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
                 "overlap_pairs": overlap_pairs,
             })
 
-    controlling = {}
-    for family in ("OFS", "OES"):
-        candidate_style = f"Annex 14 Candidate {family}"
-        controlling_style = f"Annex 14 Controlling {family}"
-        candidate_union = _geometry_union(styles_to_geometries[candidate_style])
-        controlling_geometries = styles_to_geometries[controlling_style]
-        controlling_union = _geometry_union(controlling_geometries)
-        if candidate_union.isEmpty():
-            coverage_difference = QgsGeometry(controlling_union)
-        elif controlling_union.isEmpty():
-            coverage_difference = QgsGeometry(candidate_union)
-        else:
-            coverage_difference = candidate_union.symDifference(controlling_union)
-        controlling[family] = {
-            "candidate_area_m2": _area(candidate_union),
-            "controlling_area_m2": _area(controlling_union),
-            "coverage_difference_m2": _area(coverage_difference),
-            "region_overlap_m2": max(
-                0.0,
-                sum(_area(geometry) for geometry in controlling_geometries) - _area(controlling_union),
-            ),
-        }
+    if controlling_engines is not None:
+        controlling = _controlling_metrics_from_engines(
+            controlling_engines,
+            {
+                family: styles_to_geometries[f"Annex 14 Controlling {family}"]
+                for family in ("OFS", "OES")
+            },
+        )
+    else:
+        controlling = {}
+        for family in ("OFS", "OES"):
+            candidate_style = f"Annex 14 Candidate {family}"
+            controlling_style = f"Annex 14 Controlling {family}"
+            candidate_union = _geometry_union(styles_to_geometries[candidate_style])
+            controlling_geometries = styles_to_geometries[controlling_style]
+            controlling_union = _geometry_union(controlling_geometries)
+            if candidate_union.isEmpty():
+                coverage_difference = QgsGeometry(controlling_union)
+            elif controlling_union.isEmpty():
+                coverage_difference = QgsGeometry(candidate_union)
+            else:
+                coverage_difference = candidate_union.symDifference(controlling_union)
+            controlling[family] = {
+                "source": "published_layers",
+                "candidate_area_m2": _area(candidate_union),
+                "controlling_area_m2": _area(controlling_union),
+                "coverage_difference_m2": _area(coverage_difference),
+                "region_overlap_m2": max(
+                    0.0,
+                    sum(_area(geometry) for geometry in controlling_geometries)
+                    - _area(controlling_union),
+                ),
+            }
 
     missing_interior_contours = []
     for parent_id, region in comparison_regions.items():
@@ -748,7 +851,7 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
         "zero_change_contours": {
             family: {
                 "features": len(geometries),
-                "length_m": _geometry_union(geometries).length(),
+                "length_m": _length(_geometry_union(geometries)),
             }
             for family, geometries in sorted(zero_change_contours.items())
         },
@@ -1075,7 +1178,7 @@ def _run_case(
         builder.run_safeguarding_processing()
         total_seconds = time.perf_counter() - start
 
-    layers = _layer_metrics(project)
+    layers = _layer_metrics(project, engine_instances.values())
     file_output = None
     if output_directory is not None:
         output_files = sorted(path for path in output_directory.iterdir() if path.is_file())
