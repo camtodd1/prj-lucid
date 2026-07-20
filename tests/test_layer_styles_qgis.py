@@ -16,6 +16,7 @@ from qgis.core import (
     QgsGeometry,
     QgsPointXY,
     QgsProject,
+    QgsRectangle,
     QgsRenderContext,
     QgsRuleBasedRenderer,
     QgsVectorLayer,
@@ -132,6 +133,12 @@ class LayerStyleTests(unittest.TestCase):
 
         self.assertTrue(layer.labelsEnabled())
         renderer = layer.renderer()
+        zero_rule = next(
+            rule
+            for rule in renderer.rootRule().children()
+            if rule.label() == "0.0 m / equal height"
+        )
+        self.assertEqual(zero_rule.symbol().color().getRgb(), (76, 84, 88, 235))
         render_context = QgsRenderContext()
         renderer.startRender(render_context, layer.fields())
         try:
@@ -143,6 +150,58 @@ class LayerStyleTests(unittest.TestCase):
         label_rules = labeling.rootRule().children()
         self.assertEqual(len(label_rules), 1)
         self.assertEqual(label_rules[0].settings().fieldName, "label_txt")
+
+    def test_modernisation_no_change_style_is_neutral_and_subdued(self):
+        layer = QgsVectorLayer(
+            "Polygon?field=label_txt:string",
+            "No Change",
+            "memory",
+        )
+        feature = QgsFeature(layer.fields())
+        feature.setAttribute("label_txt", "0.0 m no change")
+        feature.setGeometry(
+            QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        )
+        layer.dataProvider().addFeature(feature)
+
+        LayerMixin()._apply_modernisation_comparison_style(
+            layer,
+            "OLS Modernisation No Change",
+        )
+
+        self.assertEqual(layer.renderer().symbol().color().getRgb(), (138, 145, 148, 58))
+        self.assertTrue(layer.labelsEnabled())
+        label_rule = layer.labeling().rootRule().children()[0]
+        self.assertEqual(
+            label_rule.settings().format().color().getRgb(),
+            (74, 82, 86, 255),
+        )
+
+    def test_modernisation_no_overlay_style_is_neutral_and_distinct(self):
+        layer = QgsVectorLayer(
+            "Polygon?field=label_txt:string",
+            "No Comparison Overlay",
+            "memory",
+        )
+        feature = QgsFeature(layer.fields())
+        feature.setAttribute("label_txt", "No comparison overlay")
+        feature.setGeometry(
+            QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        )
+        layer.dataProvider().addFeature(feature)
+
+        LayerMixin()._apply_modernisation_comparison_style(
+            layer,
+            "OLS Modernisation No Future Overlay",
+        )
+
+        self.assertEqual(layer.renderer().symbol().color().getRgb(), (112, 118, 121, 42))
+        self.assertTrue(layer.labelsEnabled())
+        label_rule = layer.labeling().rootRule().children()[0]
+        self.assertEqual(
+            label_rule.settings().format().color().getRgb(),
+            (68, 74, 78, 255),
+        )
 
     def test_file_layers_with_same_display_name_use_unique_internal_paths(self):
         fields = QgsFields()

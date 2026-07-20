@@ -463,8 +463,11 @@ class LayerMixin:
             fill = QColor(214, 63, 63, 95)
             outline = QColor(155, 32, 32, 230)
         elif style_key == "OLS Modernisation No Change":
-            fill = QColor(63, 169, 245, 125)
-            outline = QColor(12, 95, 150, 245)
+            fill = QColor(138, 145, 148, 58)
+            outline = QColor(92, 99, 103, 190)
+        elif style_key == "OLS Modernisation No Future Overlay":
+            fill = QColor(112, 118, 121, 42)
+            outline = QColor(78, 85, 89, 175)
         else:
             fill = QColor(150, 150, 150, 45)
             outline = QColor(95, 95, 95, 210)
@@ -478,8 +481,16 @@ class LayerMixin:
             symbol_options.update(
                 {
                     "style": "diagonal_x",
-                    "outline_width": "0.65",
+                    "outline_width": "0.35",
                     "outline_style": "dash",
+                }
+            )
+        elif style_key == "OLS Modernisation No Future Overlay":
+            symbol_options.update(
+                {
+                    "style": "b_diagonal",
+                    "outline_width": "0.32",
+                    "outline_style": "dot",
                 }
             )
         symbol = QgsFillSymbol.createSimple(symbol_options)
@@ -550,7 +561,7 @@ class LayerMixin:
         contour_class_field = self._persisted_field_name(layer, "contour_class")
         root = QgsRuleBasedRenderer.Rule(None)
         symbol_definitions = (
-            ("transition", "primary", "32,32,32,245", "0.46", "dash", "0.0 m / equal height"),
+            ("transition", "primary", "76,84,88,235", "0.38", "dash", "0.0 m / equal height"),
             ("gain", "primary", "27,112,52,245", "0.42", "solid", "Raised — primary"),
             ("gain", "intermediate", "55,168,82,205", "0.22", "solid", "Raised — intermediate"),
             ("loss", "primary", "155,32,32,245", "0.42", "solid", "Lowered — primary"),
@@ -659,7 +670,9 @@ class LayerMixin:
             elif style_key == "OLS Modernisation Loss":
                 text_format.setColor(QColor(132, 29, 29))
             elif style_key == "OLS Modernisation No Change":
-                text_format.setColor(QColor(8, 78, 126))
+                text_format.setColor(QColor(74, 82, 86))
+            elif style_key == "OLS Modernisation No Future Overlay":
+                text_format.setColor(QColor(68, 74, 78))
             else:
                 text_format.setColor(QColor(80, 80, 80))
 
