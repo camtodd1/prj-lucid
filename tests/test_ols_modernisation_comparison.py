@@ -1528,6 +1528,93 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         engine._append_parts(repaired_parts, baseline, future, spike_remainder, "gain", clean_spikes=False)
         self.assertEqual(len(repaired_parts), 1)
 
+    def test_cleanup_rejects_a_new_height_sign_violation(self):
+        baseline = self.constant("baseline", 0.0)
+        future = ControllingOlsCandidate(
+            surface_id="future-local-peak",
+            surface_type="Future",
+            footprint=QgsGeometry(self.domain),
+            elevation_at_xy=lambda point: 10.0 - math.hypot(
+                point.x() - 50.0,
+                point.y() - 90.0,
+            ),
+            model="custom",
+        )
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        proposed = QgsGeometry.fromPolygonXY([[
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(100.0, 0.0),
+            QgsPointXY(100.0, 100.0),
+            QgsPointXY(50.0, 90.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(0.0, 0.0),
+        ]])
+
+        with patch.object(
+            engine,
+            "_remove_comparison_ring_spikes",
+            return_value=(proposed, True),
+        ):
+            cleaned = engine._clean_comparison_part(
+                self.domain,
+                baseline,
+                future,
+                "loss",
+            )
+
+        self.assertAlmostEqual(cleaned.symDifference(self.domain).area(), 0.0, places=6)
+
+    def test_sign_enforcement_does_not_restore_known_invalid_source(self):
+        footprint = QgsGeometry.fromRect(QgsRectangle(-30.0, -5.0, 20.0, 15.0))
+        baseline = ControllingOlsCandidate(
+            "baseline",
+            "Baseline",
+            footprint,
+            constant_elevation_evaluator(0.0),
+            "constant",
+            {"elevation_m": 0.0},
+        )
+        future = ControllingOlsCandidate(
+            "future",
+            "Future",
+            footprint,
+            plane_elevation_evaluator(1.0, 0.0, 0.0),
+            "plane",
+            {"plane_a": 1.0, "plane_b": 0.0, "plane_c": 0.0},
+        )
+        mixed_loss = QgsGeometry.fromRect(QgsRectangle(-20.0, 0.0, 10.0, 10.0))
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        result = {
+            "gain": [],
+            "loss": [(baseline, future, mixed_loss)],
+            "no_change": [],
+            "transition": [],
+        }
+
+        with patch.object(engine, "_union_geometries", return_value=None):
+            engine._enforce_final_height_signs(result)
+
+        self.assertTrue(result["gain"])
+        self.assertTrue(result["loss"])
+        for change in ("gain", "loss"):
+            for _baseline, _future, geometry in result[change]:
+                delta_min, delta_max, _sample = engine.delta_range(
+                    geometry,
+                    baseline,
+                    future,
+                )
+                if change == "gain":
+                    self.assertGreaterEqual(delta_min, -engine.tolerance_m)
+                else:
+                    self.assertLessEqual(delta_max, engine.tolerance_m)
+        self.assertEqual(engine.comparison_diagnostics()["unresolved_comparisons"], 1)
+
     def test_final_cleanup_removes_same_side_severe_boundary_spike(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 90.0)

@@ -84,6 +84,7 @@ class OlsEnvelopeComparisonEngine:
         stats = self._comparison_diagnostics
         return {
             "unresolved_comparisons": int(stats.get("unresolved_comparisons", 0.0)),
+            "unresolved_sign_area_m2": stats.get("unresolved_sign_area_m2", 0.0),
             "bounded_approximations": {
                 "fallback_lower_region_calls": int(stats.get("fallback_lower_region_calls", 0.0)),
                 "sampled_whole_overlap_calls": int(stats.get("sampled_whole_overlap_calls", 0.0)),
@@ -458,8 +459,20 @@ class OlsEnvelopeComparisonEngine:
             if baseline_z is None or future_z is None:
                 continue
             delta = float(future_z) - float(baseline_z)
-            if math.isfinite(delta):
-                values.append(self._round_delta(delta))
+            if not math.isfinite(delta):
+                continue
+            # A classified range describes the interior side represented by the
+            # feature. GEOS overlays can retain zero-area boundary vertices from
+            # the opposite side, particularly on curved conical/constant splits.
+            # Raw calls (change=None) retain every sample and are used by the
+            # final analytic sign-area audit.
+            if change == "gain" and delta < -self.tolerance_m:
+                continue
+            if change == "loss" and delta > self.tolerance_m:
+                continue
+            if change == "no_change" and abs(delta) > self.tolerance_m:
+                continue
+            values.append(self._round_delta(delta))
         if not values:
             return None, None, None
         # The first sample is pointOnSurface().  It is an interior classification
@@ -1961,9 +1974,8 @@ class OlsEnvelopeComparisonEngine:
                     geometry,
                     baseline,
                     future,
-                    source_change,
                 )
-                wrong_side = (
+                potential_wrong_side = (
                     source_change == "gain"
                     and delta_min is not None
                     and delta_min < -self.tolerance_m
@@ -1972,7 +1984,7 @@ class OlsEnvelopeComparisonEngine:
                     and delta_max is not None
                     and delta_max > self.tolerance_m
                 )
-                if not wrong_side:
+                if not potential_wrong_side:
                     rebuilt[source_change].append((baseline, future, geometry))
                     continue
 
@@ -1996,15 +2008,37 @@ class OlsEnvelopeComparisonEngine:
                         geometry,
                     )
                 if gain_geometry is None:
+                    self._comparison_diagnostics["unresolved_comparisons"] = (
+                        self._comparison_diagnostics.get("unresolved_comparisons", 0.0)
+                        + 1.0
+                    )
                     rebuilt[source_change].append((baseline, future, geometry))
                     continue
 
                 gain_geometry = self._safe_intersection(geometry, gain_geometry)
                 if gain_geometry is None:
+                    self._comparison_diagnostics["unresolved_comparisons"] = (
+                        self._comparison_diagnostics.get("unresolved_comparisons", 0.0)
+                        + 1.0
+                    )
                     rebuilt[source_change].append((baseline, future, geometry))
                     continue
                 loss_geometry = self._safe_difference(geometry, gain_geometry)
                 if loss_geometry is None:
+                    self._comparison_diagnostics["unresolved_comparisons"] = (
+                        self._comparison_diagnostics.get("unresolved_comparisons", 0.0)
+                        + 1.0
+                    )
+                    rebuilt[source_change].append((baseline, future, geometry))
+                    continue
+
+                wrong_side_geometry = (
+                    loss_geometry if source_change == "gain" else gain_geometry
+                )
+                if not self._has_area(wrong_side_geometry):
+                    # Raw vertex extrema can include a zero-area GEOS boundary
+                    # backtrack. Preserve the polygon when the analytic sign
+                    # partition confirms that it has no wrong-side area.
                     rebuilt[source_change].append((baseline, future, geometry))
                     continue
 
@@ -2040,9 +2074,14 @@ class OlsEnvelopeComparisonEngine:
                 )
                 allowed_error = max(0.01, geometry.area() * 1e-9)
                 if coverage_error > allowed_error:
-                    for change in ("gain", "loss"):
-                        del rebuilt[change][starts[change]:]
-                    rebuilt[source_change].append((baseline, future, geometry))
+                    self._comparison_diagnostics["unresolved_comparisons"] = (
+                        self._comparison_diagnostics.get("unresolved_comparisons", 0.0)
+                        + 1.0
+                    )
+                    self._comparison_diagnostics["unresolved_sign_area_m2"] = (
+                        self._comparison_diagnostics.get("unresolved_sign_area_m2", 0.0)
+                        + coverage_error
+                    )
                     continue
                 self._append_transition_parts(
                     result["transition"],
@@ -2619,9 +2658,50 @@ class OlsEnvelopeComparisonEngine:
             COMPARISON_SPIKE_MAX_AREA_CHANGE_M2,
             original_area * COMPARISON_SPIKE_MAX_AREA_CHANGE_RATIO,
         )
+        source_violation = self._comparison_sign_violation_m(
+            geometry,
+            baseline,
+            future,
+            change,
+        )
+        cleaned_violation = self._comparison_sign_violation_m(
+            cleaned,
+            baseline,
+            future,
+            change,
+        )
+        if (
+            cleaned_violation is not None
+            and source_violation is not None
+            and cleaned_violation > max(self.tolerance_m, source_violation) + 1e-9
+        ):
+            return geometry
         if removed_severe_spike or area_change <= allowed_change:
             return cleaned
         return geometry
+
+    def _comparison_sign_violation_m(
+        self,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        change: str,
+    ) -> Optional[float]:
+        """Return the sampled height-sign violation without class-specific filtering."""
+        delta_min, delta_max, _delta_sample = self.delta_range(
+            geometry,
+            baseline,
+            future,
+        )
+        if delta_min is None or delta_max is None:
+            return None
+        if change == "gain":
+            return max(0.0, -delta_min)
+        if change == "loss":
+            return max(0.0, delta_max)
+        if change == "no_change":
+            return max(abs(delta_min), abs(delta_max))
+        return None
 
     def _remove_comparison_ring_spikes(
         self,
