@@ -168,6 +168,8 @@ class LayerStyleTests(unittest.TestCase):
                 self.assertIn(label_fragment, settings.fieldName)
                 self.assertTrue(settings.isExpression)
                 self.assertTrue(settings.scaleVisibility)
+                self.assertEqual(settings.maximumScale, 1)
+                self.assertGreater(settings.minimumScale, settings.maximumScale)
                 self.assertEqual(settings.geometryGenerator, "point_on_surface($geometry)")
 
                 symbol_layer = layer.renderer().symbol().symbolLayer(0)
