@@ -463,8 +463,8 @@ class LayerMixin:
             fill = QColor(214, 63, 63, 95)
             outline = QColor(155, 32, 32, 230)
         elif style_key == "OLS Modernisation No Change":
-            fill = QColor(138, 145, 148, 58)
-            outline = QColor(92, 99, 103, 190)
+            fill = QColor(91, 143, 174, 68)
+            outline = QColor(53, 104, 135, 195)
         elif style_key == "OLS Modernisation No Future Overlay":
             fill = QColor(112, 118, 121, 42)
             outline = QColor(78, 85, 89, 175)
@@ -670,7 +670,7 @@ class LayerMixin:
             elif style_key == "OLS Modernisation Loss":
                 text_format.setColor(QColor(132, 29, 29))
             elif style_key == "OLS Modernisation No Change":
-                text_format.setColor(QColor(74, 82, 86))
+                text_format.setColor(QColor(43, 86, 112))
             elif style_key == "OLS Modernisation No Future Overlay":
                 text_format.setColor(QColor(68, 74, 78))
             else:

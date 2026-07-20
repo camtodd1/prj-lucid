@@ -151,7 +151,7 @@ class LayerStyleTests(unittest.TestCase):
         self.assertEqual(len(label_rules), 1)
         self.assertEqual(label_rules[0].settings().fieldName, "label_txt")
 
-    def test_modernisation_no_change_style_is_neutral_and_subdued(self):
+    def test_modernisation_no_change_style_is_muted_blue_and_subdued(self):
         layer = QgsVectorLayer(
             "Polygon?field=label_txt:string",
             "No Change",
@@ -169,12 +169,12 @@ class LayerStyleTests(unittest.TestCase):
             "OLS Modernisation No Change",
         )
 
-        self.assertEqual(layer.renderer().symbol().color().getRgb(), (138, 145, 148, 58))
+        self.assertEqual(layer.renderer().symbol().color().getRgb(), (91, 143, 174, 68))
         self.assertTrue(layer.labelsEnabled())
         label_rule = layer.labeling().rootRule().children()[0]
         self.assertEqual(
             label_rule.settings().format().color().getRgb(),
-            (74, 82, 86, 255),
+            (43, 86, 112, 255),
         )
 
     def test_modernisation_no_overlay_style_is_neutral_and_distinct(self):
