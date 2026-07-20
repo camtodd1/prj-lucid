@@ -1966,7 +1966,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             for vertex in geometry.vertices():
                 self.assertAlmostEqual(vertex.x(), delta_m / 0.02, places=5)
 
-    def test_zero_change_contours_use_final_gain_loss_boundary_not_transition_records(self):
+    def test_zero_change_contours_recover_equal_height_boundary_without_transition_records(self):
         baseline = self.constant("baseline", 100.0)
         future = self.plane("future", 0.2, 0.0, 90.0)
         engine = OlsEnvelopeComparisonEngine(
@@ -1985,6 +1985,39 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertAlmostEqual(geometry.length(), 100.0, places=5)
         for vertex in geometry.vertices():
             self.assertAlmostEqual(vertex.x(), 50.0, places=5)
+
+    def test_zero_change_contours_exclude_nonzero_controller_seams(self):
+        baseline = self.constant("baseline", 100.0)
+        loss_domain = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        gain_domain = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))
+        future_loss = ControllingOlsCandidate(
+            surface_id="future-loss",
+            surface_type="Test",
+            footprint=QgsGeometry(loss_domain),
+            elevation_at_xy=constant_elevation_evaluator(90.0),
+            model="constant",
+        )
+        future_gain = ControllingOlsCandidate(
+            surface_id="future-gain",
+            surface_type="Test",
+            footprint=QgsGeometry(gain_domain),
+            elevation_at_xy=constant_elevation_evaluator(110.0),
+            model="constant",
+        )
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future_loss, future_gain]),
+        )
+        parts = {
+            "gain": [(baseline, future_gain, gain_domain)],
+            "loss": [(baseline, future_loss, loss_domain)],
+            "no_change": [],
+            "transition": [],
+        }
+
+        zero_contours = engine.zero_change_contour_parts(parts)
+
+        self.assertEqual(zero_contours, [])
 
     def test_affine_change_contour_lines_are_reused_by_pair_and_level(self):
         baseline = self.constant("baseline", 100.0)

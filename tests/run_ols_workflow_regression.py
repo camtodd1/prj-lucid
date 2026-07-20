@@ -412,6 +412,12 @@ def _comparison_metrics(
         gain_loss_boundary = gain_boundary.intersection(loss_boundary)
     except Exception:
         gain_loss_boundary = QgsGeometry()
+    verified_zero_parts = engine.zero_change_contour_parts(result)
+    verified_zero_union = _geometry_union(
+        geometry
+        for _baseline, _future, geometry, _delta, _contour_class, _sequence
+        in verified_zero_parts
+    )
     classified_union = _geometry_union(change_unions.values())
     unclassified = common_domain.difference(classified_union)
     unclassified_parts = []
@@ -543,6 +549,8 @@ def _comparison_metrics(
             part.length() > 0.01
             for part in engine._line_parts(gain_loss_boundary)
         ),
+        "zero_contour_length_m": verified_zero_union.length(),
+        "zero_contour_components": len(verified_zero_parts),
         "gain_no_change_overlap_m2": _area(change_unions["gain"].intersection(change_unions["no_change"])),
         "loss_no_change_overlap_m2": _area(change_unions["loss"].intersection(change_unions["no_change"])),
         "feature_counts": {change: len(result[change]) for change in result},
@@ -771,7 +779,7 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
         )
     zero_change_contours = layers.get("zero_change_contours", {})
     for family, metrics in comparisons.items():
-        expected_length_m = float(metrics["gain_loss_boundary_length_m"])
+        expected_length_m = float(metrics["zero_contour_length_m"])
         actual = zero_change_contours.get(family, {})
         actual_components = int(actual.get("features", 0))
         actual_length_m = float(actual.get("length_m", 0.0))
@@ -780,7 +788,7 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
             failures.append(
                 f"{family} labelled zero contours cover {actual_components} components / "
                 f"{actual_length_m:.3f} m; expected {expected_length_m:.3f} m of "
-                "finalized gain/loss boundary"
+                "verified equal-height boundary"
             )
     maximum_region_overlap_m2 = float(case.get("maximum_region_overlap_m2", 1e-3))
     for region_layer in layers.get("controlling_region_layers", []):

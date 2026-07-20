@@ -581,7 +581,14 @@ class OlsEnvelopeComparisonEngine:
             int,
         ]
     ]:
-        """Return complete zero contours from finalized gain/loss adjacency."""
+        """Return verified zero contours from finalized gain/loss adjacency.
+
+        A gain/loss boundary is only a candidate contour.  Where the applicable
+        controlling surfaces change at a footprint or controller seam, the
+        envelope difference can jump across zero without ever equalling zero on
+        the boundary.  Verify every boundary edge against the actual solved
+        envelopes before publishing it as an equal-height contour.
+        """
         gain_union = self._union_geometries(
             [geometry for _baseline, _future, geometry in parts.get("gain", [])]
         )
@@ -598,59 +605,81 @@ class OlsEnvelopeComparisonEngine:
             shared_boundary = gain_boundary.intersection(loss_boundary)
         except Exception:
             return []
-        shared_boundary = self._merged_change_contour_lines([shared_boundary])
         if shared_boundary is None or shared_boundary.isEmpty():
             return []
 
-        attributed_parts = list(parts.get("gain", [])) + list(parts.get("loss", []))
-        zero_contours = []
-        for sequence, geometry in enumerate(self._line_parts(shared_boundary), start=1):
-            if geometry.length() <= COMPARISON_CONTOUR_MIN_LENGTH_M:
-                continue
-            try:
-                midpoint_geometry = geometry.interpolate(geometry.length() / 2.0)
-                midpoint = midpoint_geometry.asPoint()
-                point = QgsPointXY(midpoint.x(), midpoint.y())
-            except Exception:
-                continue
-
-            baseline_result = None
-            future_result = None
-            try:
-                baseline_result = self.baseline_engine.controlling_candidate_at_xy(point)
-                future_result = self.future_engine.controlling_candidate_at_xy(point)
-            except Exception:
-                pass
-            if baseline_result is None or future_result is None:
-                def _pair_residual(pair) -> float:
-                    value = self._delta_at_point(point, pair[0], pair[1])
-                    return abs(value) if value is not None else float("inf")
-
-                fallback_pair = min(
-                    (
-                        (baseline, future)
-                        for baseline, future, source_geometry in attributed_parts
-                        if source_geometry.boundingBox().intersects(geometry.boundingBox())
-                    ),
-                    key=_pair_residual,
-                    default=None,
-                )
-                if fallback_pair is None:
+        residual_tolerance_m = max(
+            self.tolerance_m,
+            COMPARISON_CURVED_CONTOUR_MAX_RESIDUAL_M,
+        )
+        verified_by_pair = {}
+        controllers = {}
+        for geometry in self._line_parts(shared_boundary):
+            vertices = [QgsPointXY(vertex.x(), vertex.y()) for vertex in geometry.vertices()]
+            for start, end in zip(vertices[:-1], vertices[1:]):
+                segment = QgsGeometry.fromPolylineXY([start, end])
+                segment_length = segment.length()
+                if segment_length <= COMPARISON_CONTOUR_MIN_LENGTH_M:
                     continue
-                baseline_candidate, future_candidate = fallback_pair
-            else:
-                baseline_candidate = baseline_result[0]
-                future_candidate = future_result[0]
-            zero_contours.append(
-                (
-                    baseline_candidate,
-                    future_candidate,
-                    QgsGeometry(geometry),
-                    0.0,
-                    "primary",
-                    sequence,
+                midpoint = QgsPointXY(
+                    (start.x() + end.x()) / 2.0,
+                    (start.y() + end.y()) / 2.0,
                 )
-            )
+                try:
+                    baseline_result = self.baseline_engine.controlling_candidate_at_xy(midpoint)
+                    future_result = self.future_engine.controlling_candidate_at_xy(midpoint)
+                except Exception:
+                    continue
+                if baseline_result is None or future_result is None:
+                    continue
+                baseline_candidate, baseline_z = baseline_result
+                future_candidate, future_z = future_result
+                midpoint_residual = float(future_z) - float(baseline_z)
+                if (
+                    not math.isfinite(midpoint_residual)
+                    or abs(midpoint_residual) > residual_tolerance_m
+                ):
+                    continue
+
+                # Guard against a non-zero seam whose residual happens to cross
+                # zero at the midpoint of one long straight boundary edge.
+                residuals = []
+                for fraction in (0.25, 0.75):
+                    sample = QgsPointXY(
+                        start.x() + ((end.x() - start.x()) * fraction),
+                        start.y() + ((end.y() - start.y()) * fraction),
+                    )
+                    residuals.append(
+                        self._delta_at_point(sample, baseline_candidate, future_candidate)
+                    )
+                if any(
+                    residual is None or abs(residual) > residual_tolerance_m
+                    for residual in residuals
+                ):
+                    continue
+                key = (baseline_candidate.surface_id, future_candidate.surface_id)
+                verified_by_pair.setdefault(key, []).append(segment)
+                controllers[key] = (baseline_candidate, future_candidate)
+
+        zero_contours = []
+        for key, geometries in verified_by_pair.items():
+            merged = self._merged_change_contour_lines(geometries)
+            if merged is None or merged.isEmpty():
+                continue
+            baseline_candidate, future_candidate = controllers[key]
+            for geometry in self._line_parts(merged):
+                if geometry.length() <= COMPARISON_CONTOUR_MIN_LENGTH_M:
+                    continue
+                zero_contours.append(
+                    (
+                        baseline_candidate,
+                        future_candidate,
+                        QgsGeometry(geometry),
+                        0.0,
+                        "primary",
+                        len(zero_contours) + 1,
+                    )
+                )
         return zero_contours
 
     @staticmethod
