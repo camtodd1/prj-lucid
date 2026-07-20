@@ -1022,6 +1022,29 @@ def _logging_contract_failures(logs, runway_count: int) -> List[str]:
     return failures
 
 
+def _build_outcome_failures(
+    outcomes: List[Dict[str, object]],
+    required_scopes: Iterable[str],
+) -> List[str]:
+    """Validate authoritative production build outcomes for requested OLS stages."""
+    failures = []
+    by_scope = {str(outcome.get("scope") or ""): outcome for outcome in outcomes}
+    for scope in required_scopes:
+        outcome = by_scope.get(scope)
+        if outcome is None:
+            failures.append(f"explicit build outcome is missing for {scope}")
+            continue
+        status = str(outcome.get("status") or "")
+        if status == "failed":
+            failures.append(
+                f"{scope} build failed: "
+                f"{outcome.get('reason') or 'no reason was provided'}"
+            )
+        elif status not in {"generated", "degraded"}:
+            failures.append(f"{scope} build ended with unexpected status {status or 'missing'}")
+    return failures
+
+
 def _run_case(
     case, manifest, builder_cls, dialog_cls, controlling_cls, comparison_cls,
     production_gates=False,
@@ -1218,8 +1241,15 @@ def _run_case(
         ):
             diagnostics["mos139_lock"] = _engine_lock_signature(engine)
         solver_diagnostics.append(diagnostics)
+    build_outcomes = builder.generation_outcome_snapshot()
     failures = _case_failures(case, manifest, comparison_results, layers)
     failures.extend(_logging_contract_failures(qgis_logs, case["payload_runway_count"]))
+    required_outcome_scopes = {"controlling protected-airspace envelope"}
+    if getattr(builder, "comparison_ols_ruleset", None) is not None:
+        required_outcome_scopes.add("OLS ruleset comparison")
+    failures.extend(
+        _build_outcome_failures(build_outcomes, sorted(required_outcome_scopes))
+    )
     if case.get("file_output_logging"):
         if getattr(builder, "output_mode", None) != "file":
             failures.append("dedicated file-output fixture did not use file mode")
@@ -1366,6 +1396,7 @@ def _run_case(
             ),
         },
         "solver_diagnostics": solver_diagnostics,
+        "build_outcomes": build_outcomes,
         "mos139_lock": next(
             (
                 diagnostics["mos139_lock"]
@@ -1426,6 +1457,7 @@ def _stable_signature(result: Dict[str, object]) -> Dict[str, object]:
         )
     } | {
         "solver_diagnostics": result.get("solver_diagnostics", []),
+        "build_outcomes": result.get("build_outcomes", []),
         "comparisons": {
             family: {
                 key: metrics[key]

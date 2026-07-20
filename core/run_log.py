@@ -16,7 +16,7 @@ import traceback
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 from qgis.core import Qgis, QgsMessageLog as _QgsMessageLog  # type: ignore
 
@@ -192,6 +192,7 @@ class RunLog:
         self.skip_count = 0
         self.warning_count = 0
         self.error_count = 0
+        self.outcomes: List[GenerationOutcome] = []
         configure_standard_logging(self.diagnostics_enabled)
 
     def _emit(self, event: LogEvent, *, diagnostic: bool = False) -> None:
@@ -324,7 +325,15 @@ class RunLog:
             diagnostic=True,
         )
 
-    def record_outcome(self, outcome: GenerationOutcome) -> None:
+    def record_outcome(
+        self,
+        outcome: GenerationOutcome,
+        *,
+        emit: bool = True,
+    ) -> None:
+        self.outcomes.append(outcome)
+        if not emit:
+            return
         facts = dict(outcome.facts)
         if outcome.status == OutcomeStatus.GENERATED:
             self.output(

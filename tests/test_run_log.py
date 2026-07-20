@@ -123,6 +123,20 @@ class RunLogTests(unittest.TestCase):
         self.assertTrue(self.records[0][0].startswith("OUTPUT"))
         self.assertTrue(self.records[1][0].startswith("SKIP"))
 
+    def test_generation_outcome_can_be_retained_without_duplicate_event(self):
+        run_log = RunLog(self.sink, diagnostics_enabled=False)
+        outcome = GenerationOutcome(
+            "controlling envelope",
+            OutcomeStatus.GENERATED,
+            layers=2,
+            features=12,
+        )
+
+        run_log.record_outcome(outcome, emit=False)
+
+        self.assertEqual(run_log.outcomes, [outcome])
+        self.assertEqual(self.records, [])
+
     def test_failed_zero_output_terminal_explains_the_omission(self):
         run_log = RunLog(self.sink, diagnostics_enabled=False)
         run_log.start()

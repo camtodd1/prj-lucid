@@ -36,7 +36,13 @@ from qgis.core import (  # type: ignore
 # --- Local Imports ---
 from .core.layers import LayerMixin
 from .core import output_structure
-from .core.run_log import QgsMessageLog, RunLog, set_active_run_log
+from .core.run_log import (
+    GenerationOutcome,
+    OutcomeStatus,
+    QgsMessageLog,
+    RunLog,
+    set_active_run_log,
+)
 from .core.styles import DEFAULT_STYLE_MAP
 from .core.run_history import (
     RuntimeRunRecorder,
@@ -120,6 +126,7 @@ class SafeguardingBuilder(
         self.contour_intervals: Dict[str, float] = {}
         self.protected_airspace_policy: str = "ruleset_aligned"
         self._run_log: Optional[RunLog] = None
+        self._generation_outcomes: List[GenerationOutcome] = []
         self.ruleset = get_ruleset_profile()
         self.baseline_ols_ruleset = self.ruleset
         self.comparison_ols_ruleset = None
@@ -679,6 +686,7 @@ class SafeguardingBuilder(
 
     def run_safeguarding_processing(self):
         """Run generation and always append one GUI/headless runtime record."""
+        self._generation_outcomes = []
         run_log = RunLog()
         self._run_log = run_log
         set_active_run_log(run_log)
@@ -739,6 +747,55 @@ class SafeguardingBuilder(
                 )
                 set_active_run_log(None)
                 self._run_log = None
+
+    def _record_generation_outcome(
+        self,
+        scope: str,
+        status: OutcomeStatus,
+        *,
+        reason: Optional[str] = None,
+        layers: Optional[int] = None,
+        features: Optional[int] = None,
+        facts: Optional[Dict[str, Any]] = None,
+    ) -> GenerationOutcome:
+        """Retain a machine-readable build result without duplicating run-log events."""
+        outcome = GenerationOutcome(
+            scope=scope,
+            status=status,
+            reason=reason,
+            layers=layers,
+            features=features,
+            facts=dict(facts or {}),
+        )
+        self._generation_outcomes.append(outcome)
+        if self._run_log is not None:
+            self._run_log.record_outcome(outcome, emit=False)
+        return outcome
+
+    def generation_outcome_snapshot(self) -> List[Dict[str, Any]]:
+        """Return JSON-safe outcomes for runtime tests and external callers."""
+        return [
+            {
+                "scope": outcome.scope,
+                "status": outcome.status.value,
+                "reason": outcome.reason,
+                "layers": outcome.layers,
+                "features": outcome.features,
+                "facts": dict(outcome.facts),
+            }
+            for outcome in self._generation_outcomes
+        ]
+
+    def _generated_output_delta(self, start_index: int) -> Tuple[int, int]:
+        """Count layers and features added after a construction stage began."""
+        layers = self.successfully_generated_layers[max(0, int(start_index)) :]
+        feature_count = 0
+        for layer in layers:
+            try:
+                feature_count += int(layer.featureCount())
+            except Exception:
+                continue
+        return len(layers), feature_count
 
     def _runtime_generated_output_counts(self) -> Tuple[int, int]:
         """Return valid generated layer and feature totals for partial runs."""
@@ -1257,6 +1314,7 @@ class SafeguardingBuilder(
             ):
                 return
             if guideline_groups.get("F") is not None:
+                controlling_output_start = len(self.successfully_generated_layers)
                 if self._is_future_annex14_protected_airspace():
                     self._set_processing_status(
                         self.tr("Solving controlling Annex 14 OFS/OES surfaces..."),
@@ -1283,6 +1341,28 @@ class SafeguardingBuilder(
                         controlling_contours_group,
                         solved_engines=solved_ols_engines,
                     )
+                controlling_layers, controlling_features = self._generated_output_delta(
+                    controlling_output_start
+                )
+                self._record_generation_outcome(
+                    "controlling protected-airspace envelope",
+                    (
+                        OutcomeStatus.GENERATED
+                        if controlling_ols_ok
+                        else OutcomeStatus.FAILED
+                    ),
+                    reason=(
+                        None
+                        if controlling_ols_ok
+                        else "no controlling envelope output was generated"
+                    ),
+                    layers=controlling_layers,
+                    features=controlling_features,
+                    facts={
+                        "ruleset": getattr(self.baseline_ols_ruleset, "id", None),
+                        "solved_families": sorted(solved_ols_engines),
+                    },
+                )
                 if self._processing_cancel_requested():
                     self._finish_processing_cancelled()
                     return
@@ -1295,12 +1375,43 @@ class SafeguardingBuilder(
                         phase_key="ruleset_comparison",
                     ):
                         return
+                    comparison_output_start = len(self.successfully_generated_layers)
                     comparison_ok = self._run_ols_ruleset_comparison(
                         icao_code,
                         processed_runway_data_list,
                         output_groups,
                         debug_group,
                         solved_baseline_engines=solved_ols_engines,
+                    )
+                    comparison_layers, comparison_features = self._generated_output_delta(
+                        comparison_output_start
+                    )
+                    self._record_generation_outcome(
+                        "OLS ruleset comparison",
+                        (
+                            OutcomeStatus.GENERATED
+                            if comparison_ok
+                            else OutcomeStatus.FAILED
+                        ),
+                        reason=(
+                            None
+                            if comparison_ok
+                            else "no ruleset comparison output was generated"
+                        ),
+                        layers=comparison_layers,
+                        features=comparison_features,
+                        facts={
+                            "baseline_ruleset": getattr(
+                                self.baseline_ols_ruleset,
+                                "id",
+                                None,
+                            ),
+                            "comparison_ruleset": getattr(
+                                self.comparison_ols_ruleset,
+                                "id",
+                                None,
+                            ),
+                        },
                     )
                     if self._processing_cancel_requested():
                         self._finish_processing_cancelled()
