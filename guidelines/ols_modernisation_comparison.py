@@ -55,6 +55,7 @@ COMPARISON_PRIMARY_CONTOUR_INTERVAL_M = 5.0
 COMPARISON_CONTOUR_MIN_LENGTH_M = 0.01
 COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M = 1.0
 COMPARISON_CURVED_CONTOUR_MAX_RESIDUAL_M = 0.05
+COMPARISON_CURVED_CONTOUR_OUTPUT_SPACING_M = 5.0
 CONVENTIONAL_OLS_RULESET_IDS = frozenset({
     "mos139_2019",
     "uk_caa_cap168_edition_13",
@@ -818,6 +819,18 @@ class OlsEnvelopeComparisonEngine:
                 and not merged.isEmpty()
                 and conical_pair_engine is not None
             ):
+                merged = self._project_change_contour_to_level(
+                    merged,
+                    geometry,
+                    baseline,
+                    future,
+                    level,
+                )
+            if (
+                merged is not None
+                and not merged.isEmpty()
+                and conical_pair_engine is not None
+            ):
                 fair_parts = []
                 for source_part in self._line_parts(merged):
                     fair_part = conical_pair_engine._smoothed_conical_conical_contour(
@@ -879,10 +892,131 @@ class OlsEnvelopeComparisonEngine:
                         > COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M
                     ):
                         accurate_parts.append(source_part)
+                        continue
+                    projected = self._project_change_contour_to_level(
+                        source_part,
+                        geometry,
+                        baseline,
+                        future,
+                        level,
+                    )
+                    for projected_part in self._line_parts(projected):
+                        projected_residual = (
+                            self.baseline_engine._maximum_candidate_pair_curve_residual(
+                                projected_part,
+                                future,
+                                baseline,
+                                level,
+                            )
+                        )
+                        if (
+                            projected_residual is not None
+                            and projected_residual
+                            <= COMPARISON_CURVED_CONTOUR_MAX_RESIDUAL_M
+                            and projected_part.length()
+                            > COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M
+                        ):
+                            accurate_parts.append(projected_part)
                 merged = self._merged_change_contour_lines(accurate_parts)
             if merged is not None and not merged.isEmpty():
                 contours.append((level, merged))
         return contours
+
+    def _project_change_contour_to_level(
+        self,
+        sampled_contour: QgsGeometry,
+        geometry: QgsGeometry,
+        baseline: ControllingOlsCandidate,
+        future: ControllingOlsCandidate,
+        delta_m: float,
+    ) -> Optional[QgsGeometry]:
+        """Project a triangulated isoline onto the exact signed-change level."""
+        def _shifted_future_elevation(point: QgsPointXY) -> Optional[float]:
+            elevation = future.elevation_at_xy(point)
+            return None if elevation is None else float(elevation) - float(delta_m)
+
+        shifted_future = ControllingOlsCandidate(
+            surface_id=f"{future.surface_id}:change:{delta_m:.3f}",
+            surface_type=future.surface_type,
+            footprint=future.footprint,
+            elevation_at_xy=_shifted_future_elevation,
+            model=future.model,
+            metadata=future.metadata,
+        )
+        projected_parts: List[QgsGeometry] = []
+        for source_part in self._line_parts(sampled_contour):
+            source_residual = self.baseline_engine._maximum_candidate_pair_curve_residual(
+                source_part,
+                future,
+                baseline,
+                delta_m,
+            )
+            if (
+                source_residual is not None
+                and source_residual <= COMPARISON_CURVED_CONTOUR_MAX_RESIDUAL_M
+            ):
+                projected_parts.append(source_part)
+                continue
+            try:
+                densified = source_part.densifyByDistance(
+                    COMPARISON_CURVED_CONTOUR_OUTPUT_SPACING_M
+                )
+            except Exception:
+                densified = source_part
+            for dense_part in self._line_parts(densified):
+                try:
+                    source_points = dense_part.asPolyline()
+                except (TypeError, RuntimeError):
+                    continue
+                projected_points: List[QgsPointXY] = []
+                for point in source_points:
+                    projected = (
+                        self.baseline_engine._project_candidate_pair_point_to_equality(
+                            shifted_future,
+                            baseline,
+                            point,
+                        )
+                    )
+                    if (
+                        not projected_points
+                        or projected.distance(projected_points[-1]) > 1e-6
+                    ):
+                        projected_points.append(projected)
+                if len(projected_points) < 2:
+                    continue
+
+                refined_points: List[QgsPointXY] = []
+                for start_point, end_point in zip(
+                    projected_points[:-1], projected_points[1:]
+                ):
+                    segment_points = (
+                        self.baseline_engine._refine_candidate_pair_equality_segment(
+                            shifted_future,
+                            baseline,
+                            start_point,
+                            end_point,
+                        )
+                    )
+                    if not segment_points:
+                        continue
+                    if refined_points:
+                        refined_points.extend(segment_points[1:])
+                    else:
+                        refined_points.extend(segment_points)
+                refined_points = self.baseline_engine._remove_transition_curve_backtracking(
+                    refined_points
+                )
+                if len(refined_points) < 2:
+                    continue
+                projected_part = QgsGeometry.fromPolylineXY(refined_points)
+                try:
+                    projected_part = projected_part.intersection(geometry)
+                except Exception:
+                    pass
+                for clipped_part in self._line_parts(projected_part):
+                    if clipped_part.length() > COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M:
+                        projected_parts.append(clipped_part)
+        return self._merged_change_contour_lines(projected_parts)
 
     @staticmethod
     def _triangle_change_contour_segments(
@@ -3602,6 +3736,9 @@ class OlsModernisationComparisonMixin:
         fields = QgsFields([
             QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
             QgsField("future_family", QVariant.String, self.tr("Future Family"), 8),
+            QgsField("delta_m", QVariant.Double, self.tr("Change Contour (m)"), 12, 3),
+            QgsField("contour_class", QVariant.String, self.tr("Contour Class"), 20),
+            QgsField("label_txt", QVariant.String, self.tr("Map Label"), 24),
             QgsField("baseline_ruleset", QVariant.String, self.tr("Baseline Ruleset"), 80),
             QgsField("baseline_id", QVariant.String, self.tr("Baseline Surface ID"), 160),
             QgsField("baseline_surface", QVariant.String, self.tr("Baseline Surface"), 50),
@@ -3620,6 +3757,9 @@ class OlsModernisationComparisonMixin:
             feature.setAttributes([
                 self._modernisation_feature_id(family, "transition", sequence),
                 family,
+                0.0,
+                "primary",
+                "0.0 m",
                 baseline_ruleset_id,
                 baseline.surface_id,
                 baseline.surface_type,

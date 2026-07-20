@@ -207,6 +207,14 @@
             "baulked_landing": {
                 "primary": 50.0,
                 "intermediate": 10.0
+            },
+            "modernisation_ofs_change": {
+                "primary": 10.0,
+                "intermediate": 0.5
+            },
+            "modernisation_oes_change": {
+                "primary": 10.0,
+                "intermediate": 0.5
             }
         }
     }

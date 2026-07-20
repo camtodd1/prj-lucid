@@ -66,6 +66,8 @@ MOS139/CAP168 comparison. It guards against two coupled failure modes:
 Promotion checks must confirm that material gain/loss ranges do not cross zero,
 no opposite-sign contours are generated, the transition follows the shared
 zero-height locus, and conical contours pass both residual and smoothness gates.
+The fixture uses 0.5 m intermediate and 10 m primary modernisation change
+contours so the workflow gate also detects missing material interior levels.
 
 ## Source-backed analytical fixture
 

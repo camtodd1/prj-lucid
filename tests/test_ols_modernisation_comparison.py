@@ -2107,7 +2107,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(contours), 1)
         self.assertAlmostEqual(contours[0][1].length(), 100.0, places=6)
 
-    def test_curved_change_contour_rejects_inaccurate_output_component(self):
+    def test_curved_change_contour_projects_inaccurate_sampled_component(self):
         triangle_points = [
             QgsPointXY(0.0, 0.0),
             QgsPointXY(100.0, 0.0),
@@ -2150,7 +2150,18 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                 requested_levels=[1.0],
             )
 
-        self.assertEqual(contours, [])
+        self.assertEqual(len(contours), 1)
+        contour = contours[0][1]
+        sampled = contour.densifyByDistance(2.5)
+        residuals = [
+            abs(
+                future.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+                - baseline.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+                - 1.0
+            )
+            for vertex in sampled.vertices()
+        ]
+        self.assertLessEqual(max(residuals), 0.05)
 
     def test_curved_change_contour_keeps_component_within_output_tolerance(self):
         triangle_points = [
@@ -2878,6 +2889,15 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(contour_feature["label_txt"], "+10.0 m")
         self.assertEqual(contour_feature["contour_interval_m"], 0.25)
         self.assertEqual(contour_feature["primary_interval_m"], 2.0)
+        transition_layer_args = next(
+            layer_args for layer_args in capture.layers
+            if "delta_m" in layer_args[3].names()
+            and "parent_id" not in layer_args[3].names()
+        )
+        transition_feature = transition_layer_args[4][0]
+        self.assertEqual(transition_feature["delta_m"], 0.0)
+        self.assertEqual(transition_feature["contour_class"], "primary")
+        self.assertEqual(transition_feature["label_txt"], "0.0 m")
         self.assertEqual(len(comparison_ids), 5)
         self.assertEqual(len(set(comparison_ids)), 5)
         self.assertIn("OFS-GAIN-000001", comparison_ids)

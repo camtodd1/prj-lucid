@@ -550,6 +550,10 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
     feature_count = 0
     deterministic_records = []
     controlling_region_layers = []
+    comparison_regions = {}
+    comparison_contours = defaultdict(set)
+    comparison_contour_intervals = {}
+    comparison_family_intervals = {}
     for node in project.layerTreeRoot().findLayers():
         layer = node.layer()
         if layer is None:
@@ -573,6 +577,27 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
                 comparison_id = str(feature.attribute("comparison_id") or "")
                 if comparison_id:
                     comparison_ids.append(comparison_id)
+                    if "delta_min_m" in fields and "delta_max_m" in fields:
+                        comparison_regions[comparison_id] = {
+                            "family": str(feature.attribute("future_family") or ""),
+                            "change": str(feature.attribute("change") or ""),
+                            "delta_min_m": float(feature.attribute("delta_min_m")),
+                            "delta_max_m": float(feature.attribute("delta_max_m")),
+                            "baseline_id": str(feature.attribute("baseline_id") or ""),
+                            "future_id": str(feature.attribute("future_id") or ""),
+                        }
+            if "parent_id" in fields and "delta_m" in fields:
+                parent_id = str(feature.attribute("parent_id") or "")
+                if parent_id:
+                    comparison_contours[parent_id].add(
+                        round(float(feature.attribute("delta_m")), 3)
+                    )
+                    comparison_contour_intervals[parent_id] = float(
+                        feature.attribute("contour_interval_m")
+                    )
+                    comparison_family_intervals[
+                        str(feature.attribute("future_family") or "")
+                    ] = float(feature.attribute("contour_interval_m"))
             if "surface_id" in fields or "comparison_id" in fields:
                 identifiers = tuple(
                     str(feature.attribute(name) or "")
@@ -645,6 +670,35 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
             ),
         }
 
+    missing_interior_contours = []
+    for parent_id, region in comparison_regions.items():
+        actual_levels = comparison_contours.get(parent_id, set())
+        interval_m = comparison_contour_intervals.get(
+            parent_id,
+            comparison_family_intervals.get(region["family"]),
+        )
+        if interval_m is None:
+            continue
+        lower = min(region["delta_min_m"], region["delta_max_m"])
+        upper = max(region["delta_min_m"], region["delta_max_m"])
+        start = int(math.floor(lower / interval_m)) + 1
+        end = int(math.ceil(upper / interval_m)) - 1
+        expected_levels = {
+            round(multiple * interval_m, 3)
+            for multiple in range(start, end + 1)
+            if abs(multiple * interval_m) > 0.01
+            and multiple * interval_m > lower + 0.05
+            and multiple * interval_m < upper - 0.05
+        }
+        missing_levels = sorted(expected_levels - actual_levels)
+        if missing_levels:
+            missing_interior_contours.append({
+                "parent_id": parent_id,
+                **region,
+                "interval_m": interval_m,
+                "missing_levels_m": missing_levels,
+            })
+
     return {
         "layers": layer_count,
         "features": feature_count,
@@ -658,6 +712,7 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
         ).hexdigest(),
         "controlling": controlling,
         "controlling_region_layers": controlling_region_layers,
+        "missing_interior_change_contours": missing_interior_contours,
     }
 
 
@@ -674,6 +729,15 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
         failures.append(f"{layers['empty_geometries']} empty geometries")
     if layers["duplicate_comparison_ids"]:
         failures.append(f"{layers['duplicate_comparison_ids']} duplicate comparison IDs")
+    missing_change_contours = layers.get("missing_interior_change_contours", [])
+    if missing_change_contours:
+        missing_level_count = sum(
+            len(item["missing_levels_m"])
+            for item in missing_change_contours
+        )
+        failures.append(
+            f"{missing_level_count} interior modernisation change contour levels are missing"
+        )
     maximum_region_overlap_m2 = float(case.get("maximum_region_overlap_m2", 1e-3))
     for region_layer in layers.get("controlling_region_layers", []):
         if float(region_layer["overlap_area_m2"]) > maximum_region_overlap_m2:

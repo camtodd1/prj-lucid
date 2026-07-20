@@ -508,7 +508,7 @@ class LayerMixin:
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
 
     def _apply_modernisation_transition_style(self, layer: QgsVectorLayer) -> None:
-        """Render baseline/future equal-height breaklines as dashed transition guides."""
+        """Render and label baseline/future equal-height breaklines as zero contours."""
         symbol = QgsLineSymbol.createSimple(
             {
                 "line_color": "32,32,32,245",
@@ -518,6 +518,7 @@ class LayerMixin:
             }
         )
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
+        self._apply_modernisation_change_contour_labels(layer)
 
     @staticmethod
     def _persisted_field_name(layer: QgsVectorLayer, requested_name: str) -> str:
