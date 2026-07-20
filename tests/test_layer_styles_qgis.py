@@ -114,23 +114,30 @@ class LayerStyleTests(unittest.TestCase):
 
         self.assertEqual(layer.renderer().type(), "singleSymbol")
 
-    def test_modernisation_transition_style_labels_zero_contour(self):
+    def test_modernisation_change_contour_style_renders_and_labels_zero_contour(self):
         layer = QgsVectorLayer(
-            "MultiLineString?field=contour_class:string&field=label_txt:string",
-            "Planar Transition / Equal Height",
+            "MultiLineString?field=change:string&field=contour_class:string&field=label_txt:string",
+            "Change Contours",
             "memory",
         )
         feature = QgsFeature(layer.fields())
-        feature.setAttributes(["primary", "0.0 m"])
+        feature.setAttributes(["transition", "primary", "0.0 m"])
         feature.setGeometry(QgsGeometry.fromMultiPolylineXY([[
             QgsPointXY(0.0, 0.0),
             QgsPointXY(100.0, 0.0),
         ]]))
         layer.dataProvider().addFeature(feature)
 
-        LayerMixin()._apply_modernisation_transition_style(layer)
+        LayerMixin()._apply_modernisation_change_contour_style(layer)
 
         self.assertTrue(layer.labelsEnabled())
+        renderer = layer.renderer()
+        render_context = QgsRenderContext()
+        renderer.startRender(render_context, layer.fields())
+        try:
+            self.assertTrue(renderer.symbolsForFeature(feature, render_context))
+        finally:
+            renderer.stopRender(render_context)
         labeling = layer.labeling()
         self.assertIsNotNone(labeling)
         label_rules = labeling.rootRule().children()

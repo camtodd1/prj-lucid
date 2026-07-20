@@ -508,7 +508,7 @@ class LayerMixin:
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
 
     def _apply_modernisation_transition_style(self, layer: QgsVectorLayer) -> None:
-        """Render and label baseline/future equal-height breaklines as zero contours."""
+        """Render baseline/future equal-height breaklines as dashed transition guides."""
         symbol = QgsLineSymbol.createSimple(
             {
                 "line_color": "32,32,32,245",
@@ -518,7 +518,6 @@ class LayerMixin:
             }
         )
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
-        self._apply_modernisation_change_contour_labels(layer)
 
     @staticmethod
     def _persisted_field_name(layer: QgsVectorLayer, requested_name: str) -> str:
@@ -551,18 +550,19 @@ class LayerMixin:
         contour_class_field = self._persisted_field_name(layer, "contour_class")
         root = QgsRuleBasedRenderer.Rule(None)
         symbol_definitions = (
-            ("gain", "primary", "27,112,52,245", "0.42", "Raised — primary"),
-            ("gain", "intermediate", "55,168,82,205", "0.22", "Raised — intermediate"),
-            ("loss", "primary", "155,32,32,245", "0.42", "Lowered — primary"),
-            ("loss", "intermediate", "214,63,63,205", "0.22", "Lowered — intermediate"),
+            ("transition", "primary", "32,32,32,245", "0.46", "dash", "0.0 m / equal height"),
+            ("gain", "primary", "27,112,52,245", "0.42", "solid", "Raised — primary"),
+            ("gain", "intermediate", "55,168,82,205", "0.22", "solid", "Raised — intermediate"),
+            ("loss", "primary", "155,32,32,245", "0.42", "solid", "Lowered — primary"),
+            ("loss", "intermediate", "214,63,63,205", "0.22", "solid", "Lowered — intermediate"),
         )
-        for change, contour_class, color, width, label in symbol_definitions:
+        for change, contour_class, color, width, line_style, label in symbol_definitions:
             symbol = QgsLineSymbol.createSimple(
                 {
                     "line_color": color,
                     "line_width": width,
                     "line_width_unit": "MM",
-                    "line_style": "solid",
+                    "line_style": line_style,
                 }
             )
             rule = QgsRuleBasedRenderer.Rule(symbol)

@@ -3188,6 +3188,22 @@ class OlsModernisationComparisonMixin:
                         primary_interval_m=primary_contour_interval_m,
                     )
                 )
+            contour_parts.extend(
+                (
+                    "transition",
+                    baseline,
+                    future,
+                    geometry,
+                    0.0,
+                    "primary",
+                    sequence,
+                )
+                for sequence, (baseline, future, geometry) in enumerate(
+                    parts["transition"],
+                    start=1,
+                )
+                if geometry is not None and not geometry.isEmpty()
+            )
             if not self._modernisation_subphase(
                 f"Modernisation {family}: finalising transitions and baseline-only areas..."
             ):
@@ -3373,6 +3389,22 @@ class OlsModernisationComparisonMixin:
                         primary_interval_m=primary_contour_interval_m,
                     )
                 )
+            contour_parts.extend(
+                (
+                    "transition",
+                    baseline,
+                    future,
+                    geometry,
+                    0.0,
+                    "primary",
+                    sequence,
+                )
+                for sequence, (baseline, future, geometry) in enumerate(
+                    parts["transition"],
+                    start=1,
+                )
+                if geometry is not None and not geometry.isEmpty()
+            )
             created = self._create_modernisation_change_contour_layer(
                 icao_code,
                 baseline_ruleset_id,
@@ -3736,9 +3768,6 @@ class OlsModernisationComparisonMixin:
         fields = QgsFields([
             QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
             QgsField("future_family", QVariant.String, self.tr("Future Family"), 8),
-            QgsField("delta_m", QVariant.Double, self.tr("Change Contour (m)"), 12, 3),
-            QgsField("contour_class", QVariant.String, self.tr("Contour Class"), 20),
-            QgsField("label_txt", QVariant.String, self.tr("Map Label"), 24),
             QgsField("baseline_ruleset", QVariant.String, self.tr("Baseline Ruleset"), 80),
             QgsField("baseline_id", QVariant.String, self.tr("Baseline Surface ID"), 160),
             QgsField("baseline_surface", QVariant.String, self.tr("Baseline Surface"), 50),
@@ -3757,9 +3786,6 @@ class OlsModernisationComparisonMixin:
             feature.setAttributes([
                 self._modernisation_feature_id(family, "transition", sequence),
                 family,
-                0.0,
-                "primary",
-                "0.0 m",
                 baseline_ruleset_id,
                 baseline.surface_id,
                 baseline.surface_type,

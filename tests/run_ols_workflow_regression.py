@@ -554,6 +554,7 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
     comparison_contours = defaultdict(set)
     comparison_contour_intervals = {}
     comparison_family_intervals = {}
+    zero_change_contours = defaultdict(int)
     for node in project.layerTreeRoot().findLayers():
         layer = node.layer()
         if layer is None:
@@ -589,15 +590,21 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
             if "parent_id" in fields and "delta_m" in fields:
                 parent_id = str(feature.attribute("parent_id") or "")
                 if parent_id:
-                    comparison_contours[parent_id].add(
-                        round(float(feature.attribute("delta_m")), 3)
-                    )
+                    delta_m = round(float(feature.attribute("delta_m")), 3)
+                    comparison_contours[parent_id].add(delta_m)
                     comparison_contour_intervals[parent_id] = float(
                         feature.attribute("contour_interval_m")
                     )
-                    comparison_family_intervals[
-                        str(feature.attribute("future_family") or "")
-                    ] = float(feature.attribute("contour_interval_m"))
+                    future_family = str(feature.attribute("future_family") or "")
+                    comparison_family_intervals[future_family] = float(
+                        feature.attribute("contour_interval_m")
+                    )
+                    if (
+                        delta_m == 0.0
+                        and str(feature.attribute("change") or "") == "transition"
+                        and str(feature.attribute("label_txt") or "") == "0.0 m"
+                    ):
+                        zero_change_contours[future_family] += 1
             if "surface_id" in fields or "comparison_id" in fields:
                 identifiers = tuple(
                     str(feature.attribute(name) or "")
@@ -713,6 +720,7 @@ def _layer_metrics(project: QgsProject) -> Dict[str, object]:
         "controlling": controlling,
         "controlling_region_layers": controlling_region_layers,
         "missing_interior_change_contours": missing_interior_contours,
+        "zero_change_contours": dict(sorted(zero_change_contours.items())),
     }
 
 
@@ -738,6 +746,15 @@ def _case_failures(case, manifest, comparisons, layers) -> List[str]:
         failures.append(
             f"{missing_level_count} interior modernisation change contour levels are missing"
         )
+    zero_change_contours = layers.get("zero_change_contours", {})
+    for family, metrics in comparisons.items():
+        expected_zero_contours = int(metrics["feature_counts"].get("transition", 0))
+        actual_zero_contours = int(zero_change_contours.get(family, 0))
+        if actual_zero_contours != expected_zero_contours:
+            failures.append(
+                f"{family} has {actual_zero_contours} labelled zero change contours; "
+                f"expected {expected_zero_contours} transition boundaries"
+            )
     maximum_region_overlap_m2 = float(case.get("maximum_region_overlap_m2", 1e-3))
     for region_layer in layers.get("controlling_region_layers", []):
         if float(region_layer["overlap_area_m2"]) > maximum_region_overlap_m2:

@@ -2771,6 +2771,49 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             self.assertEqual(call.kwargs["interval_m"], 0.25)
             self.assertEqual(call.kwargs["primary_interval_m"], 2.0)
 
+    def test_comparison_generation_puts_zero_transition_in_change_contours(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future-ofs", 0.2, 0.0, 90.0)
+        future.metadata["annex14_family"] = "OFS"
+        capture = _ComparisonLayerCapture()
+
+        created = capture._create_ols_modernisation_comparison_layers(
+            "TEST",
+            "baseline-rules",
+            [baseline],
+            [],
+            [future],
+            object(),
+            object(),
+        )
+
+        self.assertTrue(created)
+        contour_layer_args = next(
+            layer_args for layer_args in capture.layers
+            if "parent_id" in layer_args[3].names()
+        )
+        zero_features = [
+            feature for feature in contour_layer_args[4]
+            if feature["change"] == "transition"
+        ]
+        self.assertEqual(len(zero_features), 1)
+        zero_feature = zero_features[0]
+        self.assertEqual(zero_feature["delta_m"], 0.0)
+        self.assertEqual(zero_feature["contour_class"], "primary")
+        self.assertEqual(zero_feature["label_txt"], "0.0 m")
+        self.assertEqual(zero_feature["parent_id"], "OFS-TRANSITION-000001")
+
+        transition_layer_args = next(
+            layer_args for layer_args in capture.layers
+            if layer_args[4]
+            and layer_args[4][0]["comparison_id"] == "OFS-TRANSITION-000001"
+        )
+        transition_geometry = transition_layer_args[4][0].geometry()
+        self.assertLessEqual(
+            zero_feature.geometry().hausdorffDistance(transition_geometry),
+            1e-6,
+        )
+
     def test_generic_ruleset_adapter_preserves_selected_baseline_direction(self):
         annex_baseline = ControllingOlsCandidate(
             surface_id="annex-ofs",
@@ -2853,7 +2896,10 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             "TEST",
             "baseline-rules",
             "OFS",
-            [("gain", baseline, future, contour_geometry, 10.0, "primary", 1)],
+            [
+                ("gain", baseline, future, contour_geometry, 10.0, "primary", 1),
+                ("transition", baseline, future, contour_geometry, 0.0, "primary", 1),
+            ],
             object(),
             contour_interval_m=0.25,
             primary_interval_m=2.0,
@@ -2889,17 +2935,24 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(contour_feature["label_txt"], "+10.0 m")
         self.assertEqual(contour_feature["contour_interval_m"], 0.25)
         self.assertEqual(contour_feature["primary_interval_m"], 2.0)
+        zero_contour_feature = next(
+            feature for feature in contour_layer_args[4]
+            if feature["change"] == "transition"
+        )
+        self.assertEqual(zero_contour_feature["parent_id"], "OFS-TRANSITION-000001")
+        self.assertEqual(zero_contour_feature["delta_m"], 0.0)
+        self.assertEqual(zero_contour_feature["contour_class"], "primary")
+        self.assertEqual(zero_contour_feature["label_txt"], "0.0 m")
         transition_layer_args = next(
             layer_args for layer_args in capture.layers
-            if "delta_m" in layer_args[3].names()
-            and "parent_id" not in layer_args[3].names()
+            if "future_family" in layer_args[3].names()
+            and "delta_m" not in layer_args[3].names()
+            and layer_args[4]
+            and layer_args[4][0]["comparison_id"] == "OFS-TRANSITION-000001"
         )
-        transition_feature = transition_layer_args[4][0]
-        self.assertEqual(transition_feature["delta_m"], 0.0)
-        self.assertEqual(transition_feature["contour_class"], "primary")
-        self.assertEqual(transition_feature["label_txt"], "0.0 m")
-        self.assertEqual(len(comparison_ids), 5)
-        self.assertEqual(len(set(comparison_ids)), 5)
+        self.assertNotIn("label_txt", transition_layer_args[3].names())
+        self.assertEqual(len(comparison_ids), 6)
+        self.assertEqual(len(set(comparison_ids)), 6)
         self.assertIn("OFS-GAIN-000001", comparison_ids)
 
 
