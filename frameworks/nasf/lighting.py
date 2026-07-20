@@ -216,8 +216,6 @@ class LightingGuidelineMixin:
                             display_name = f"{self.tr('LCZ Area')} {runway_name}"
                             internal_name = f"LCZ_Area_{runway_name.replace('/', '_')}"
                             style_key_lcz_area = "LCZ Area"
-                            if style_key_lcz_area not in self.style_map:
-                                self.style_map[style_key_lcz_area] = "default_zone_polygon.qml"
 
                             layer = self._create_and_add_layer(
                                 "Polygon",

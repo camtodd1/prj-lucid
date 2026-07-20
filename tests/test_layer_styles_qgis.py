@@ -115,6 +115,70 @@ class LayerStyleTests(unittest.TestCase):
 
         self.assertEqual(layer.renderer().type(), "singleSymbol")
 
+    def test_nasf_styles_are_distinct_legible_and_labeled(self):
+        style_cases = {
+            "WSZ Runway": ("rwy_name:string&field=end_desig:string", "WSZ"),
+            "PSA Runway": ("rwy:string&field=end_desig:string", "PSA"),
+            "WMZ A": (
+                "zone:string&field=inner_rad_km:double&field=outer_rad_km:double",
+                "inner_rad_km",
+            ),
+            "WMZ B": (
+                "zone:string&field=inner_rad_km:double&field=outer_rad_km:double",
+                "inner_rad_km",
+            ),
+            "WMZ C": (
+                "zone:string&field=inner_rad_km:double&field=outer_rad_km:double",
+                "inner_rad_km",
+            ),
+            "Wind Turbine Assessment Zone": (
+                "icao_code:string&field=radius_km:double",
+                "Wind turbine assessment",
+            ),
+            "LCZ A": ("rwy:string&field=zone:string&field=max_intensity:string", "LCZ"),
+            "LCZ B": ("rwy:string&field=zone:string&field=max_intensity:string", "LCZ"),
+            "LCZ C": ("rwy:string&field=zone:string&field=max_intensity:string", "LCZ"),
+            "LCZ D": ("rwy:string&field=zone:string&field=max_intensity:string", "LCZ"),
+            "LCZ Area": ("rwy:string&field=radius_m:double", "Lighting Control Area"),
+            "CNS Circle Zone": (
+                "sourcefacid:string&field=surfname:string&field=reqheight:double",
+                "surfname",
+            ),
+            "CNS Donut Zone": (
+                "sourcefacid:string&field=surfname:string&field=reqheight:double",
+                "surfname",
+            ),
+            "Default CNS": (
+                "sourcefacid:string&field=surfname:string&field=reqheight:double",
+                "surfname",
+            ),
+        }
+        styles_dir = Path(__file__).resolve().parents[1] / "styles"
+        outline_colors = set()
+
+        for style_key, (fields, label_fragment) in style_cases.items():
+            with self.subTest(style_key=style_key):
+                style_path = styles_dir / DEFAULT_STYLE_MAP[style_key]
+                self.assertTrue(style_path.is_file())
+                layer = QgsVectorLayer(f"Polygon?field={fields}", style_key, "memory")
+                message, loaded = layer.loadNamedStyle(str(style_path))
+                self.assertTrue(loaded, message)
+                self.assertTrue(layer.labelsEnabled())
+                settings = layer.labeling().settings()
+                self.assertIn(label_fragment, settings.fieldName)
+                self.assertTrue(settings.isExpression)
+                self.assertTrue(settings.scaleVisibility)
+                self.assertEqual(settings.geometryGenerator, "point_on_surface($geometry)")
+
+                symbol_layer = layer.renderer().symbol().symbolLayer(0)
+                self.assertLess(symbol_layer.fillColor().alpha(), 80)
+                self.assertEqual(symbol_layer.strokeColor().alpha(), 255)
+                self.assertGreaterEqual(symbol_layer.strokeWidth(), 0.5)
+                outline_colors.add(symbol_layer.strokeColor().name())
+
+        # Families are intentionally coordinated, but not collapsed to one generic red style.
+        self.assertGreaterEqual(len(outline_colors), 10)
+
     def test_modernisation_change_contour_style_renders_and_labels_zero_contour(self):
         layer = QgsVectorLayer(
             "MultiLineString?field=change:string&field=contour_class:string&field=label_txt:string",

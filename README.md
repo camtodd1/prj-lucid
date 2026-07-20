@@ -83,7 +83,9 @@ depending on the selected dialog options.
 
 QGIS style files in `styles/` are applied automatically where a matching style
 key is available. The mapping between logical layer categories and QML files is
-defined in `core/styles.py`.
+defined in `core/styles.py`. NASF guideline layers use coordinated, guideline-
+specific palettes, translucent fills, high-contrast boundaries, and scale-aware
+labels sourced from their runway, zone, radius, intensity, or facility fields.
 
 AGL layers use point symbols to represent light fittings. The generated
 attributes distinguish omnidirectional, unidirectional, bidirectional, and
