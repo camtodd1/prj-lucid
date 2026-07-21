@@ -79,9 +79,9 @@ COMPARISON_CHANGE_CONTOUR_KEYS = (
     *MODERNISATION_CHANGE_CONTOUR_KEYS,
 )
 CONTOUR_INTERVAL_KEY_DEFAULTS = {
-    "comparison_change": {"primary": 5.0, "intermediate": 1.0},
-    "modernisation_ofs_change": {"primary": 5.0, "intermediate": 1.0},
-    "modernisation_oes_change": {"primary": 5.0, "intermediate": 1.0},
+    "comparison_change": {"primary": 10.0, "intermediate": 1.0},
+    "modernisation_ofs_change": {"primary": 10.0, "intermediate": 1.0},
+    "modernisation_oes_change": {"primary": 10.0, "intermediate": 1.0},
 }
 CONTOUR_INTERVAL_KEYS = (
     SURFACE_CONTOUR_KEYS
