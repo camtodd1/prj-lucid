@@ -86,6 +86,11 @@ and the interior classification sample as `delta_sample_m`. Generic
 `comparison_*` fields accompany the legacy `future_*` fields. The interior
 sample is not an average or representative value. Gain/loss polygons are
 labelled with their minimum-to-maximum change range on larger map features.
+Adjacent or disjoint parts are emitted as one (potentially multipart) feature
+when their baseline surfaces are co-planar, their comparison surfaces are
+co-planar, and their three-decimal minimum-to-maximum change ranges match.
+Where such a dissolve spans multiple controller IDs, the relevant ID and
+surface fields list the contributing values separated by semicolons.
 Areas outside the common domains are not classified as gains or losses;
 baseline-only areas are shown separately as **No Comparison OLS Overlay**.
 

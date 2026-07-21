@@ -168,6 +168,7 @@ class OlsEnvelopeComparisonEngine:
         self._enforce_final_height_signs(result)
         self._partition_classified_parts(result)
         self._remove_final_boundary_backtracks(result)
+        self._dissolve_coplanar_classified_parts(result)
         self._merge_comparison_transition_parts(result)
         diagnostics = self.comparison_diagnostics()
         recovery = diagnostics["exceptional_recovery"]
@@ -2274,6 +2275,92 @@ class OlsEnvelopeComparisonEngine:
                             continue
                         merged_parts.append((baseline, future, QgsGeometry(classified_part)))
             result[change] = merged_parts
+
+    def _dissolve_coplanar_classified_parts(self, result) -> None:
+        """Dissolve equal-range output parts carried by the same pair of planes.
+
+        Controller IDs often change at an internal OLS seam even though the
+        baseline and comparison elevations continue on exactly the same planes.
+        Those seams add no information to a change layer. Grouping by both
+        source planes and the exported change range removes them without
+        merging merely parallel surfaces or regions with different values.
+        """
+        for change in ("gain", "loss", "no_change"):
+            grouped = {}
+            unchanged = []
+            for baseline, future, geometry in result.get(change, []):
+                if not self._has_area(geometry):
+                    continue
+                baseline_plane = self._candidate_affine_coefficients(baseline)
+                future_plane = self._candidate_affine_coefficients(future)
+                delta_min, delta_max, _delta_sample = self.delta_range(
+                    geometry,
+                    baseline,
+                    future,
+                    change,
+                )
+                if (
+                    baseline_plane is None
+                    or future_plane is None
+                    or delta_min is None
+                    or delta_max is None
+                ):
+                    unchanged.append((baseline, future, geometry))
+                    continue
+                key = (
+                    self._comparison_plane_key(baseline_plane),
+                    self._comparison_plane_key(future_plane),
+                    delta_min,
+                    delta_max,
+                )
+                grouped.setdefault(key, []).append((baseline, future, geometry))
+
+            dissolved = list(unchanged)
+            for items in grouped.values():
+                if len(items) == 1:
+                    dissolved.append(items[0])
+                    continue
+                merged = self._union_geometries([item[2] for item in items])
+                if not self._has_area(merged):
+                    dissolved.extend(items)
+                    continue
+                baseline = self._combined_coplanar_candidate(
+                    [item[0] for item in items],
+                    merged,
+                )
+                future = self._combined_coplanar_candidate(
+                    [item[1] for item in items],
+                    merged,
+                )
+                dissolved.append((baseline, future, QgsGeometry(merged)))
+            result[change] = dissolved
+
+    @staticmethod
+    def _comparison_plane_key(
+        coefficients: Tuple[float, float, float],
+    ) -> Tuple[float, float, float]:
+        """Return a stable key for planes derived through equivalent formulas."""
+        return tuple(round(float(value), 9) for value in coefficients)
+
+    @staticmethod
+    def _combined_coplanar_candidate(
+        candidates: Sequence[ControllingOlsCandidate],
+        footprint: QgsGeometry,
+    ) -> ControllingOlsCandidate:
+        """Retain all source IDs while using one equivalent plane evaluator."""
+        representative = candidates[0]
+        surface_ids = sorted({candidate.surface_id for candidate in candidates})
+        surface_types = sorted({candidate.surface_type for candidate in candidates})
+        if len(surface_ids) == 1 and len(surface_types) == 1:
+            return representative
+        return ControllingOlsCandidate(
+            surface_id="; ".join(surface_ids),
+            surface_type="; ".join(surface_types),
+            footprint=QgsGeometry(footprint),
+            elevation_at_xy=representative.elevation_at_xy,
+            model=representative.model,
+            metadata=dict(representative.metadata or {}),
+        )
 
     def _clip_geometry_to_change(
         self,

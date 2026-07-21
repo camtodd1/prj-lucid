@@ -101,6 +101,82 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(parts["no_change"]), 0)
         self.assertAlmostEqual(parts["loss"][0][2].area(), 10000.0, places=3)
 
+    def test_coplanar_parts_with_the_same_change_range_are_dissolved(self):
+        left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        right = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))
+        baseline_left = self.constant("baseline-left", 100.0)
+        baseline_right = self.constant("baseline-right", 100.0)
+        future_left = self.constant("future-left", 110.0)
+        future_right = self.constant("future-right", 110.0)
+        baseline_engine = PlanarControllingOlsEngine(
+            [baseline_left, baseline_right]
+        )
+        future_engine = PlanarControllingOlsEngine([future_left, future_right])
+        baseline_engine._controlling_region_geometries_cache = [
+            (baseline_left, left),
+            (baseline_right, right),
+        ]
+        future_engine._controlling_region_geometries_cache = [
+            (future_left, left),
+            (future_right, right),
+        ]
+
+        result = OlsEnvelopeComparisonEngine(
+            baseline_engine,
+            future_engine,
+        ).comparison_parts()
+
+        self.assertEqual(len(result["gain"]), 1)
+        baseline, future, geometry = result["gain"][0]
+        self.assertAlmostEqual(geometry.area(), 10000.0, places=3)
+        self.assertEqual(baseline.surface_id, "baseline-left; baseline-right")
+        self.assertEqual(future.surface_id, "future-left; future-right")
+
+    def test_coplanar_parts_with_different_change_ranges_remain_separate(self):
+        left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        right = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))
+        baseline = self.constant("baseline", 0.0)
+        future = self.plane("future", 1.0, 0.0, 1.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        result = {
+            "gain": [(baseline, future, left), (baseline, future, right)],
+            "loss": [],
+            "no_change": [],
+            "transition": [],
+        }
+
+        engine._dissolve_coplanar_classified_parts(result)
+
+        self.assertEqual(len(result["gain"]), 2)
+
+    def test_equal_delta_does_not_merge_distinct_source_planes(self):
+        left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        right = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))
+        baseline_low = self.constant("baseline-low", 100.0)
+        baseline_high = self.constant("baseline-high", 120.0)
+        future_low = self.constant("future-low", 110.0)
+        future_high = self.constant("future-high", 130.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline_low, baseline_high]),
+            PlanarControllingOlsEngine([future_low, future_high]),
+        )
+        result = {
+            "gain": [
+                (baseline_low, future_low, left),
+                (baseline_high, future_high, right),
+            ],
+            "loss": [],
+            "no_change": [],
+            "transition": [],
+        }
+
+        engine._dissolve_coplanar_classified_parts(result)
+
+        self.assertEqual(len(result["gain"]), 2)
+
     def test_crossing_surface_splits_gain_and_loss(self):
         parts = self.compare(self.constant("baseline", 100.0), self.plane("future", 0.2, 0.0, 90.0))
         gain_area = sum(part[2].area() for part in parts["gain"])
