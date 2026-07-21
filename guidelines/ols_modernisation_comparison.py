@@ -2324,6 +2324,7 @@ class OlsEnvelopeComparisonEngine:
                 if not self._has_area(merged):
                     dissolved.extend(items)
                     continue
+                merged = self._remove_dissolve_remnant_holes(merged)
                 baseline = self._combined_coplanar_candidate(
                     [item[0] for item in items],
                     merged,
@@ -2334,6 +2335,43 @@ class OlsEnvelopeComparisonEngine:
                 )
                 dissolved.append((baseline, future, QgsGeometry(merged)))
             result[change] = dissolved
+
+    @staticmethod
+    def _remove_dissolve_remnant_holes(geometry: QgsGeometry) -> QgsGeometry:
+        """Remove collapsed interior rings left by a polygon union."""
+        if geometry is None or geometry.isEmpty():
+            return geometry
+        try:
+            polygons = (
+                geometry.asMultiPolygon()
+                if geometry.isMultipart()
+                else [geometry.asPolygon()]
+            )
+            cleaned_polygons = []
+            removed = False
+            for polygon in polygons:
+                if not polygon:
+                    continue
+                cleaned = [polygon[0]]
+                for ring in polygon[1:]:
+                    ring_geometry = QgsGeometry.fromPolygonXY([ring])
+                    if abs(ring_geometry.area()) < COMPARISON_MIN_AREA_M2:
+                        removed = True
+                        continue
+                    cleaned.append(ring)
+                cleaned_polygons.append(cleaned)
+            if not removed or not cleaned_polygons:
+                return geometry
+            cleaned_geometry = (
+                QgsGeometry.fromMultiPolygonXY(cleaned_polygons)
+                if geometry.isMultipart()
+                else QgsGeometry.fromPolygonXY(cleaned_polygons[0])
+            )
+            if cleaned_geometry.isEmpty() or not cleaned_geometry.isGeosValid():
+                return geometry
+            return cleaned_geometry
+        except (TypeError, RuntimeError):
+            return geometry
 
     @staticmethod
     def _comparison_plane_key(

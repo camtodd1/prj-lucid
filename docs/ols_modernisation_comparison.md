@@ -90,7 +90,9 @@ Adjacent or disjoint parts are emitted as one (potentially multipart) feature
 when their baseline surfaces are co-planar, their comparison surfaces are
 co-planar, and their three-decimal minimum-to-maximum change ranges match.
 Where such a dissolve spans multiple controller IDs, the relevant ID and
-surface fields list the contributing values separated by semicolons.
+surface fields list the contributing values separated by semicolons. Collapsed
+interior rings below the comparison minimum-area threshold are removed from the
+dissolved geometry; material holes are preserved.
 Areas outside the common domains are not classified as gains or losses;
 baseline-only areas are shown separately as **No Comparison OLS Overlay**.
 

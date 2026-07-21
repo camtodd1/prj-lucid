@@ -177,6 +177,54 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
         self.assertEqual(len(result["gain"]), 2)
 
+    def test_coplanar_dissolve_removes_collapsed_interior_ring(self):
+        exterior = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(1000.0, 0.0),
+            QgsPointXY(1000.0, 100.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(0.0, 0.0),
+        ]
+        collapsed_hole = [
+            QgsPointXY(100.0, 50.0),
+            QgsPointXY(900.0, 50.0),
+            QgsPointXY(500.0, 50.0000001),
+            QgsPointXY(100.0, 50.0),
+        ]
+        geometry = QgsGeometry.fromPolygonXY([exterior, collapsed_hole])
+
+        cleaned = OlsEnvelopeComparisonEngine._remove_dissolve_remnant_holes(
+            geometry
+        )
+
+        self.assertTrue(cleaned.isGeosValid())
+        self.assertEqual(len(cleaned.asPolygon()), 1)
+        self.assertAlmostEqual(cleaned.area(), 100000.0, places=3)
+
+    def test_coplanar_dissolve_preserves_material_interior_ring(self):
+        exterior = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(100.0, 0.0),
+            QgsPointXY(100.0, 100.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(0.0, 0.0),
+        ]
+        material_hole = [
+            QgsPointXY(40.0, 40.0),
+            QgsPointXY(60.0, 40.0),
+            QgsPointXY(60.0, 60.0),
+            QgsPointXY(40.0, 60.0),
+            QgsPointXY(40.0, 40.0),
+        ]
+        geometry = QgsGeometry.fromPolygonXY([exterior, material_hole])
+
+        cleaned = OlsEnvelopeComparisonEngine._remove_dissolve_remnant_holes(
+            geometry
+        )
+
+        self.assertEqual(len(cleaned.asPolygon()), 2)
+        self.assertAlmostEqual(cleaned.area(), 9600.0, places=3)
+
     def test_crossing_surface_splits_gain_and_loss(self):
         parts = self.compare(self.constant("baseline", 100.0), self.plane("future", 0.2, 0.0, 90.0))
         gain_area = sum(part[2].area() for part in parts["gain"])
