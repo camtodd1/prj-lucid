@@ -24,13 +24,6 @@ data. The main workflow is:
 The generated outputs are grouped under an airport-specific Safeguarding Builder
 group in the QGIS layer tree.
 
-## Internal Operating Model
-
-Safeguarding Builder is maintained for internal QGIS use. Routine confidence
-comes from targeted unit tests, affected QGIS fixture runs, and practical visual
-review of material output changes. The project does not require formal
-public-product performance certification.
-
 ## Main Functions
 
 The plugin can generate:
@@ -216,7 +209,7 @@ python3 -m unittest \
 
 Run full discovery from a QGIS-configured Python environment; QGIS-dependent
 modules cannot be imported by a normal system Python. For QGIS workflow fixtures
-and targeted regression commands, see [`tests/README.md`](tests/README.md) and
+and release-gate commands, see [`tests/README.md`](tests/README.md) and
 [`tests/fixtures/ols/README.md`](tests/fixtures/ols/README.md).
 
 For AGL rule changes, also review

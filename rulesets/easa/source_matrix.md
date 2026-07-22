@@ -38,13 +38,11 @@ value does not by itself make an entire generated-output family supported.
 - Runway-holding position geometry is not inferred from the marking-pattern
   clause alone; the current helper returns no fixed distance.
 - Conditional and guidance values need a consistent designer-selection versus
-  variance-assessment policy before those choices can be treated as broadly
-  supported for internal planning.
+  variance-assessment policy before the profile can be promoted.
 
-## Internal-Use Confidence Checks
+## Promotion Gate
 
-Before relying on a capability for an internal planning decision, confirm
-table-level traceability for that capability, source-linked value tests,
-representative QGIS UI validation, and an agreed interpretation policy. A formal
-promotion package or independent sign-off is not required by default. See
+Promotion requires table-level traceability for every advertised capability,
+tests that assert source references as well as values, representative QGIS UI
+validation, and an agreed interpretation policy. See
 [`docs/roadmap.md`](../../docs/roadmap.md).

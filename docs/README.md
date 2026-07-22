@@ -38,9 +38,9 @@ Maintained reference documents begin with a short status line:
   open decisions.
 - **Roadmap**: contains incomplete work only.
 
-Dated test evidence belongs in versioned fixtures or dated implementation notes,
-not in the maintained documentation set. Completed plans and checklists should
-be removed; Git history preserves them.
+Dated test evidence belongs in versioned fixtures or release notes, not in the
+maintained documentation set. Completed plans and checklists should be removed;
+Git history preserves them.
 
 ## Markdown and Notation
 

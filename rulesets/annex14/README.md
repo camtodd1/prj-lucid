@@ -31,7 +31,7 @@ date.
 
 The baseline/comparison behavior is described in
 [`docs/ols_modernisation_comparison.md`](../../docs/ols_modernisation_comparison.md).
-Open scope and validation work is listed in [`docs/roadmap.md`](../../docs/roadmap.md).
+Open promotion work is listed in [`docs/roadmap.md`](../../docs/roadmap.md).
 
 ## Source and Ownership
 

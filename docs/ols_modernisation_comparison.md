@@ -217,10 +217,10 @@ comparison IDs, and staged runtime. The 11 July run passed all four cases with
 no invalid or empty geometry and no duplicate comparison IDs. The accompanying
 unit suite passed 110 tests.
 
-Remaining work is targeted internal hardening rather than a calculation rewrite:
-OLS-tab clarity, phase-based progress/cancellation, regulatory-scope
-documentation, and the promoted-versus-diagnostic layer contract. Performance
-comparisons are optional diagnostics rather than release gates.
+Remaining work is primarily productisation rather than a calculation rewrite:
+OLS-tab clarity, phase-based progress/cancellation, release performance gates,
+regulatory-scope documentation, and the promoted-versus-diagnostic layer
+contract.
 
 ## Comparison-refactor baseline — 22 July 2026
 

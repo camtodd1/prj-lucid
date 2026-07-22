@@ -27,8 +27,6 @@ suite covers:
 Ruleset source notes remain beside their implementations. Review the relevant
 source matrix whenever a source edition or policy value changes.
 
-The documented operating target is the team's configured QGIS 4.x environment.
-
 The expensive QGIS workflow regression runner is opt-in and is excluded from
 normal unit-test discovery. Run a single relevant fixture while troubleshooting:
 
@@ -36,11 +34,8 @@ normal unit-test discovery. Run a single relevant fixture while troubleshooting:
 tests/run_ols_workflow_regression.py --fixture ybbn_1rwy_single.json
 ```
 
-Run only the fixture affected by a change as the normal check. Run the complete
-matrix when shared OLS geometry or comparison code changes, or before a
-significant internal rollout. Repeat runs and `--production-gates` are optional
-diagnostics for suspected geometry recovery, state leakage, or material
-performance regression; they are not routine acceptance gates. See
+Run the complete fixture matrix and production gates only for release evidence
+or when shared OLS geometry code changes. See
 [`fixtures/ols/README.md`](fixtures/ols/README.md) for
 the QGIS environment and baseline commands. Multi-fixture runs automatically
 use a fresh QGIS process per fixture so native geometry and project state cannot
