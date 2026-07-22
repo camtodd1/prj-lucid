@@ -2,6 +2,7 @@
 """Derived comparison products for current and modernised OLS envelopes."""
 
 import math
+from dataclasses import dataclass
 from typing import Dict, List, Optional, Sequence, Tuple
 
 from qgis.PyQt.QtCore import QVariant  # type: ignore
@@ -66,6 +67,35 @@ CONVENTIONAL_OLS_RULESET_IDS = frozenset({
     "icao_annex14_vol1_current_ols",
 })
 
+ComparisonPart = Tuple[
+    ControllingOlsCandidate,
+    ControllingOlsCandidate,
+    QgsGeometry,
+]
+
+
+@dataclass(frozen=True)
+class ComparisonFinalizationResult:
+    """Explicit publishable comparison output and its finalization evidence."""
+
+    gain: Tuple[ComparisonPart, ...]
+    loss: Tuple[ComparisonPart, ...]
+    no_change: Tuple[ComparisonPart, ...]
+    transitions: Tuple[ComparisonPart, ...]
+    diagnostics: Dict[str, object]
+    recovery: Dict[str, object]
+    invariants: Dict[str, object]
+
+    @property
+    def parts(self) -> Dict[str, List[ComparisonPart]]:
+        """Return the legacy mutable container expected by layer writers."""
+        return {
+            "gain": list(self.gain),
+            "loss": list(self.loss),
+            "no_change": list(self.no_change),
+            "transition": list(self.transitions),
+        }
+
 
 class OlsEnvelopeComparisonEngine:
     """Compare two already-solved lower envelopes over their common domain."""
@@ -125,29 +155,22 @@ class OlsEnvelopeComparisonEngine:
     def comparison_parts(
         self,
     ) -> Dict[str, List[Tuple[ControllingOlsCandidate, ControllingOlsCandidate, QgsGeometry]]]:
-        """Return gain/loss/no-change polygons and transition lines for the common domain."""
+        """Compatibility wrapper returning only finalized comparison parts."""
+        return self.finalize_comparison().parts
+
+    def finalize_comparison(self) -> ComparisonFinalizationResult:
+        """Return publishable comparison parts with diagnostics and invariant evidence."""
         self._comparison_diagnostics = {}
         self._comparison_invariant_report = {}
         self._recovered_sliver_geometries = []
-        result = {"gain": [], "loss": [], "no_change": [], "transition": []}
         baseline_regions = self.baseline_engine._controlling_region_geometries()
         future_regions = self.future_engine._controlling_region_geometries()
         strict_conventional = self._strict_conventional_partition_enabled()
-
-        for baseline_candidate, baseline_region in baseline_regions:
-            for future_candidate, future_region in future_regions:
-                if not self._bounding_boxes_intersect(baseline_region, future_region):
-                    continue
-                overlap = self._safe_intersection(baseline_region, future_region)
-                if not self._has_area(overlap):
-                    continue
-                self._append_classified_overlap(
-                    result,
-                    baseline_candidate,
-                    future_candidate,
-                    overlap,
-                    clean_spikes=not strict_conventional,
-                )
+        result = self._raw_comparison_parts(
+            baseline_regions,
+            future_regions,
+            clean_spikes=not strict_conventional,
+        )
         if not strict_conventional:
             self._finalise_comparison_parts(result)
         # Final cleanup can legitimately remove split artefacts.  Repair the
@@ -198,6 +221,48 @@ class OlsEnvelopeComparisonEngine:
             PLUGIN_TAG,
             Qgis.Info,
         )
+        return ComparisonFinalizationResult(
+            gain=tuple(result["gain"]),
+            loss=tuple(result["loss"]),
+            no_change=tuple(result["no_change"]),
+            transitions=tuple(result["transition"]),
+            diagnostics=diagnostics,
+            recovery={
+                "exceptional": dict(diagnostics["exceptional_recovery"]),
+                "local_normalisation": dict(
+                    diagnostics["local_recovery_normalisation"]
+                ),
+            },
+            invariants=dict(invariants),
+        )
+
+    def _raw_comparison_parts(
+        self,
+        baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+        future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+        clean_spikes: bool,
+    ) -> Dict[str, List[ComparisonPart]]:
+        """Solve controller-pair overlaps before any finalization or recovery."""
+        result: Dict[str, List[ComparisonPart]] = {
+            "gain": [],
+            "loss": [],
+            "no_change": [],
+            "transition": [],
+        }
+        for baseline_candidate, baseline_region in baseline_regions:
+            for future_candidate, future_region in future_regions:
+                if not self._bounding_boxes_intersect(baseline_region, future_region):
+                    continue
+                overlap = self._safe_intersection(baseline_region, future_region)
+                if not self._has_area(overlap):
+                    continue
+                self._append_classified_overlap(
+                    result,
+                    baseline_candidate,
+                    future_candidate,
+                    overlap,
+                    clean_spikes=clean_spikes,
+                )
         return result
 
     def _audit_comparison_invariants(
@@ -3767,7 +3832,8 @@ class OlsModernisationComparisonMixin:
             ):
                 return created
             comparison = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
-            parts = comparison.comparison_parts()
+            finalization = comparison.finalize_comparison()
+            parts = finalization.parts
             contour_interval_m, primary_contour_interval_m = (
                 self._modernisation_change_contour_intervals(family)
             )
@@ -3942,7 +4008,8 @@ class OlsModernisationComparisonMixin:
                 baseline_engine,
                 comparison_engine,
             )
-            parts = comparison.comparison_parts()
+            finalization = comparison.finalize_comparison()
+            parts = finalization.parts
             contour_interval_m, primary_contour_interval_m = (
                 self._modernisation_change_contour_intervals(family)
             )

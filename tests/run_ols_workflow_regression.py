@@ -1125,25 +1125,25 @@ def _run_case(
                 item["seconds"] += time.perf_counter() - start
         return wrapper
 
-    original_comparison_parts = comparison_cls.comparison_parts
+    original_finalize_comparison = comparison_cls.finalize_comparison
 
-    def captured_comparison_parts(engine):
+    def captured_finalize_comparison(engine):
         start = time.perf_counter()
-        result = original_comparison_parts(engine)
+        finalization = original_finalize_comparison(engine)
         elapsed = time.perf_counter() - start
         metrics = _comparison_metrics(
             engine,
-            result,
+            finalization.parts,
             case.get("comparison_line_like_width_m"),
         )
-        metrics["diagnostics"] = engine.comparison_diagnostics()
+        metrics["diagnostics"] = finalization.diagnostics
         comparison_results[metrics["family"]] = metrics
         engine_instances[id(engine.baseline_engine)] = engine.baseline_engine
         engine_instances[id(engine.future_engine)] = engine.future_engine
         item = stage_totals["comparison_parts"]
         item["calls"] += 1
         item["seconds"] += elapsed
-        return result
+        return finalization
 
     builder_methods = (
         "_create_controlling_ols_layers",
@@ -1180,7 +1180,13 @@ def _run_case(
         for name in engine_methods:
             original = getattr(controlling_cls, name)
             stack.enter_context(patch.object(controlling_cls, name, timed(name, original)))
-        stack.enter_context(patch.object(comparison_cls, "comparison_parts", captured_comparison_parts))
+        stack.enter_context(
+            patch.object(
+                comparison_cls,
+                "finalize_comparison",
+                captured_finalize_comparison,
+            )
+        )
         original_change_contours = comparison_cls.change_contour_parts
         stack.enter_context(
             patch.object(

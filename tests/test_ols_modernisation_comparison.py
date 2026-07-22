@@ -26,6 +26,7 @@ from guidelines.controlling_ols_engine import (
     plane_elevation_evaluator,
 )
 from guidelines.ols_modernisation_comparison import (
+    ComparisonFinalizationResult,
     OlsEnvelopeComparisonEngine,
     OlsModernisationComparisonMixin,
 )
@@ -117,6 +118,27 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(invariants["exclusivity"]["class_overlap_area_m2"], 0.0)
         self.assertEqual(invariants["height_sign"]["violation_parts"], 0)
         self.assertEqual(invariants["geometry"]["invalid_parts"], 0)
+
+    def test_finalize_comparison_returns_explicit_result(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        finalization = comparison.finalize_comparison()
+
+        self.assertIsInstance(finalization, ComparisonFinalizationResult)
+        self.assertEqual(len(finalization.gain), 1)
+        self.assertEqual(finalization.loss, ())
+        self.assertEqual(finalization.no_change, ())
+        self.assertEqual(finalization.transitions, ())
+        self.assertTrue(finalization.invariants["passed"])
+        self.assertEqual(
+            finalization.recovery["exceptional"],
+            finalization.diagnostics["exceptional_recovery"],
+        )
 
     def test_invariant_audit_detects_overlap_and_wrong_height_sign(self):
         baseline = self.constant("baseline", 100.0)
