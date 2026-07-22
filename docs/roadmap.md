@@ -19,12 +19,6 @@ fixtures.
 - [ ] Review AGL and runway-marking output in QGIS using representative runway
   configurations.
 
-## Maintenance
-
-- [ ] Replace remaining legacy `AeroSense` branding with `Safeguarding Builder`
-  in the dialog title, runtime dashboard implementation and documentation, and
-  dashboard tests.
-
 ## Protected Airspace
 
 - [x] Complete the OLS comparison refactor: explicit finalization results,
