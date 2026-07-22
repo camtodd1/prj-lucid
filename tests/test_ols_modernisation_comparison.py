@@ -308,6 +308,36 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(cleaned.asPolygon()), 2)
         self.assertAlmostEqual(cleaned.area(), 9600.0, places=3)
 
+    def test_dissolve_removes_backtrack_inside_material_hole(self):
+        exterior = [
+            QgsPointXY(0.0, 0.0),
+            QgsPointXY(100.0, 0.0),
+            QgsPointXY(100.0, 100.0),
+            QgsPointXY(0.0, 100.0),
+            QgsPointXY(0.0, 0.0),
+        ]
+        hole_with_backtrack = [
+            QgsPointXY(20.0, 20.0),
+            QgsPointXY(80.0, 20.0),
+            QgsPointXY(90.0, 20.001),
+            QgsPointXY(85.0, 20.0),
+            QgsPointXY(80.0, 10.0),
+            QgsPointXY(20.0, 10.0),
+            QgsPointXY(20.0, 20.0),
+        ]
+        geometry = QgsGeometry.fromPolygonXY([exterior, hole_with_backtrack])
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([]),
+            PlanarControllingOlsEngine([]),
+        )
+
+        cleaned = engine._remove_zero_area_boundary_backtracks(geometry)
+
+        self.assertTrue(cleaned.isGeosValid())
+        self.assertEqual(len(cleaned.asPolygon()), 2)
+        self.assertEqual(len(cleaned.asPolygon()[1]), len(hole_with_backtrack) - 1)
+        self.assertLessEqual(abs(cleaned.area() - geometry.area()), 0.01)
+
     def test_crossing_surface_splits_gain_and_loss(self):
         parts = self.compare(self.constant("baseline", 100.0), self.plane("future", 0.2, 0.0, 90.0))
         gain_area = sum(part[2].area() for part in parts["gain"])

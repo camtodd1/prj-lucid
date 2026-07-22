@@ -2180,11 +2180,10 @@ class OlsEnvelopeComparisonEngine:
         if not polygon:
             return []
         cleaned = [self._remove_zero_area_backtracks_from_ring(polygon[0])]
-        # Hole topology is deliberately preserved. Exterior zero-area tendrils
-        # are the artefact produced by final difference/partition operations.
-        cleaned.extend(
-            [[QgsPointXY(point) for point in ring] for ring in polygon[1:]]
-        )
+        for ring in polygon[1:]:
+            cleaned_ring = self._remove_zero_area_backtracks_from_ring(ring)
+            if len(cleaned_ring) >= 4:
+                cleaned.append(cleaned_ring)
         return cleaned if len(cleaned[0]) >= 4 else []
 
     def _remove_zero_area_backtracks_from_ring(self, ring) -> list:
