@@ -139,8 +139,11 @@ class MarkingService:
     def centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str):
         return marking_policy.centreline_marking_width(arc_num, type_primary, type_reciprocal)
 
-    def threshold_marking_params(self, runway_width: float):
-        return marking_policy.threshold_marking_params(runway_width)
+    def threshold_marking_params(self, runway_width: float, runway_type: Optional[str] = None):
+        return marking_policy.threshold_marking_params(runway_width, runway_type)
+
+    def threshold_marking_ref(self) -> str:
+        return marking_policy.threshold_marking_ref()
 
     def aiming_point_rule(self, runway_width: float, lda_m: float, runway_type: str):
         return marking_policy.aiming_point_rule(runway_width, lda_m, runway_type)

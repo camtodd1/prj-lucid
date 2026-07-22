@@ -16,6 +16,7 @@ applicable until 20 November 2030.
 | Conical | 4.53-4.55, printed pp.240-241 / PDF pp.17-18 | `CONICAL_RULES`, `Cap168OlsConstructionPolicy` | Integrated: 5%; 105 m above IHS normally, 55 m NI Code 2, 35 m NI Code 1. |
 | Outer horizontal | 4.56-4.58, printed p.241 / PDF p.18 | `OUTER_HORIZONTAL_RULES` | Loaded. Applicability/radius depends on actual main-runway length, so legacy ARC-only lookup is intentionally not used. |
 | OFZ / inner surfaces | 4.59-4.73, printed pp.241-244 / PDF pp.18-21 | `INNER_APPROACH_PARAMS`, `INNER_TRANSITIONAL_PARAMS`, `BAULKED_LANDING_PARAMS`, `OFZ_APPLICABILITY_RULES` | Source-loaded for precision runway combinations, including Cat I versus Cat II/III establishment language, and exercised by the CAP168 workflow fixtures. |
+| Runway threshold markings | 7.207-7.210, Table 7.3 | `markings.py`, `generate_detailed_runway_markings` | Loaded for paved runways. Threshold bars and Table 7.3 piano keys use the CAP168 source reference; standard width rows are 18, 23, 30 and 45 m. Widths outside those rows retain an explicit QA skip for the piano-key layout. |
 | Independent validation | Chapter 4 source facts above | `tests/fixtures/ols/source_validation_v1.json` | Representative source constants, independently calculated approach elevations/contour, IHS elevation and conical contour are locked. Production promotion was approved by the project owner on 14 July 2026; a secondary independent source review remains recommended release governance. |
 
 ## Confirmed source corrections and retained interpretations

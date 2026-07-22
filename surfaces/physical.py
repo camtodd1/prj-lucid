@@ -1386,8 +1386,21 @@ class PhysicalGeometryMixin:
                 )
             )
 
-    def _threshold_marking_params(self, runway_width: float) -> Optional[Tuple[int, float]]:
-        return self.get_active_ruleset().threshold_marking_params(runway_width)
+    def _threshold_marking_params(
+        self, runway_width: float, runway_type: Optional[str] = None
+    ) -> Optional[Tuple[int, float]]:
+        ruleset = self.get_active_ruleset()
+        params_getter = ruleset.threshold_marking_params
+        if runway_type is not None:
+            try:
+                return params_getter(runway_width, runway_type)
+            except TypeError:
+                pass
+        return params_getter(runway_width)
+
+    def _threshold_marking_ref(self, fallback: str) -> str:
+        ref_getter = getattr(self.get_active_ruleset(), "threshold_marking_ref", None)
+        return ref_getter() if callable(ref_getter) else fallback
 
     def _centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str) -> float:
         return self.get_active_ruleset().centreline_marking_width(arc_num, type_primary, type_reciprocal)
@@ -1605,6 +1618,7 @@ class PhysicalGeometryMixin:
         type_reciprocal = runway_data.get("type2", "")
         centreline_width = self._centreline_marking_width(arc_num, type_primary, type_reciprocal)
         surface_markings_applicable = self._is_marking_surface_applicable(runway_data)
+        threshold_marking_ref = self._threshold_marking_ref("MOS 8.17(2); Table 8.17(2)")
 
         end_specs = [
             (
@@ -1653,7 +1667,7 @@ class PhysicalGeometryMixin:
         for qa in qa_records.values():
             qa["assumptions"].update(
                 {
-                    self._surface_trigger_note("MOS 8.17", runway_data),
+                    self._surface_trigger_note(threshold_marking_ref, runway_data),
                     self._surface_trigger_note("MOS 8.21", runway_data),
                     self._surface_trigger_note("MOS 8.22", runway_data),
                     self._surface_trigger_note("MOS 8.23", runway_data),
@@ -1741,17 +1755,17 @@ class PhysicalGeometryMixin:
                                 "Transverse Line",
                                 1.2,
                                 runway_width,
-                                "MOS 8.17(2)(a)",
+                                threshold_marking_ref,
                                 offset_m=0.0,
                                 mandatory=True,
-                                notes=self._surface_trigger_note("MOS 8.17", runway_data),
+                                notes=self._surface_trigger_note(threshold_marking_ref, runway_data),
                             ),
                         )
                     )
                 else:
                     skipped.append("Threshold transverse line: geometry generation failed.")
 
-                threshold_params = self._threshold_marking_params(runway_width)
+                threshold_params = self._threshold_marking_params(runway_width, runway_type)
                 if threshold_params is not None:
                     stripe_count, gap_m = threshold_params
                     stripe_width = 1.8
@@ -1791,13 +1805,13 @@ class PhysicalGeometryMixin:
                                         "Piano Key",
                                         30.0,
                                         stripe_width,
-                                        "MOS 8.17(2)(b); Table 8.17(2)",
+                                        threshold_marking_ref,
                                         stripe_no=stripe_idx + 1,
                                         offset_m=piano_start,
                                         spacing_m=gap_m,
                                         mandatory=True,
                                         notes=(
-                                            self._surface_trigger_note("MOS 8.17", runway_data)
+                                            self._surface_trigger_note(threshold_marking_ref, runway_data)
                                             + f" Edge space {edge_space:.3f} m; central gap {central_gap_m:.3f} m; "
                                             "stripe width 1.8 m unless adjusted to keep edge spaces >= a."
                                         ),
@@ -1817,7 +1831,7 @@ class PhysicalGeometryMixin:
                         level=Qgis.Info,
                     )
             else:
-                skipped.append("Threshold markings: MOS 8.17 sealed-surface trigger not met.")
+                skipped.append(f"Threshold markings: {threshold_marking_ref} sealed-surface trigger not met.")
 
             designation_edge_offset = self._runway_designation_start_offset()
             angle_deg = azimuth % 360.0

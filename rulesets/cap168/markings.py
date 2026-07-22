@@ -200,11 +200,20 @@ def get_marking_traceability() -> Dict[str, Any]:
     return MARKING_TRACEABILITY.copy()
 
 
-def threshold_marking_params(runway_width: float) -> Optional[Tuple[int, float]]:
-    params = threshold_marking_params_for_type(runway_width, "Precision Approach CAT I")
+def threshold_marking_params(
+    runway_width: float, runway_type: Optional[str] = None
+) -> Optional[Tuple[int, float]]:
+    params = threshold_marking_params_for_type(
+        runway_width, runway_type or "Precision Approach CAT I"
+    )
     if not params:
         return None
     return params["stripe_count"], params["gap_m"]
+
+
+def threshold_marking_ref() -> str:
+    """Return the CAP 168 source for threshold markings."""
+    return CAP168_THRESHOLD_MARKING_REF
 
 
 def threshold_marking_params_for_type(runway_width: float, runway_type: str):
@@ -318,6 +327,7 @@ __all__ = [
     "MARKING_TRACEABILITY_ITEMS",
     "get_marking_traceability",
     "threshold_marking_params",
+    "threshold_marking_ref",
     "threshold_marking_params_for_type",
     "centreline_marking_width",
     "aiming_point_rule",

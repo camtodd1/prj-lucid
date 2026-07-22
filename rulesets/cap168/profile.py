@@ -138,8 +138,11 @@ class Cap168RulesetProfile(RulesetProfile):
     def centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str):
         return self.markings.centreline_marking_width(arc_num, type_primary, type_reciprocal)
 
-    def threshold_marking_params(self, runway_width: float):
-        return self.markings.threshold_marking_params(runway_width)
+    def threshold_marking_params(self, runway_width: float, runway_type: Optional[str] = None):
+        return self.markings.threshold_marking_params(runway_width, runway_type)
+
+    def threshold_marking_ref(self) -> str:
+        return self.markings.threshold_marking_ref()
 
     def aiming_point_rule(self, runway_width: float, lda_m: float, runway_type: str):
         return self.markings.aiming_point_rule(runway_width, lda_m, runway_type)
