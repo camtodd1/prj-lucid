@@ -10,25 +10,11 @@ fixtures.
 
 ## Priorities
 
-- [x] Resolve GeoPackage `Polygon`/`MultiPolygon` declaration mismatches without
-  changing generated geometry.
-- [x] Maintain a representative QGIS workflow smoke set for shared geometry
-  changes. Repeat isolated runs when investigating suspected performance or
-  state-leak regressions.
-- [x] Validate declared distances and stopway behavior against source-backed
-  sample airports. CAP 168 checkpoints now cover YBPM and YBCP, including
-  TORA/TODA/ASDA/LDA relationships, displaced thresholds, clearways, stopway
-  polygon dimensions and placement, and active-ruleset source provenance.
 - [ ] Review AGL and runway-marking output in QGIS using representative runway
   configurations.
 
 ## Protected Airspace
 
-- [x] Complete the OLS comparison refactor: explicit finalization results,
-  invariant auditing, a single ordered repair/finalization pass, transitions
-  derived from the finalized partition, numerical-sliver normalization, and
-  per-run comparison caches. The 103-test comparison suite and 14-fixture
-  workflow matrix pass.
 - [ ] Complete the modernised ICAO Annex 14 OFS/OES boundary:
   document complex transitional coverage, reconcile capability declarations,
   and keep the profile `partial` where source or topology evidence is still
