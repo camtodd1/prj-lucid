@@ -27,6 +27,11 @@ fixtures.
 
 ## Protected Airspace
 
+- [x] Complete the OLS comparison refactor: explicit finalization results,
+  invariant auditing, a single ordered repair/finalization pass, transitions
+  derived from the finalized partition, numerical-sliver normalization, and
+  per-run comparison caches. The 103-test comparison suite and 14-fixture
+  workflow matrix pass.
 - [ ] Complete the modernised ICAO Annex 14 OFS/OES promotion boundary:
   document complex transitional coverage, reconcile capability declarations,
   and keep the profile `partial` until source, topology, and review gates pass.
