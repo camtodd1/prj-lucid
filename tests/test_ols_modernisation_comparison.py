@@ -366,6 +366,32 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             delta=1.0,
         )
 
+    def test_contour_clip_rejoins_boundary_transition_fragments(self):
+        domain = QgsGeometry.fromPolygonXY([[
+            QgsPointXY(0.0, -10.0),
+            QgsPointXY(100.0, -10.0),
+            QgsPointXY(100.0, 0.001),
+            QgsPointXY(80.0, -0.001),
+            QgsPointXY(60.0, 0.001),
+            QgsPointXY(40.0, -0.001),
+            QgsPointXY(20.0, 0.001),
+            QgsPointXY(0.0, -0.001),
+            QgsPointXY(0.0, -10.0),
+        ]])
+        contour = QgsGeometry.fromPolylineXY([
+            QgsPointXY(-10.0, 0.0),
+            QgsPointXY(110.0, 0.0),
+        ])
+
+        clipped = OlsEnvelopeComparisonEngine._clip_change_contour_line(
+            contour,
+            domain,
+        )
+
+        self.assertIsNotNone(clipped)
+        self.assertEqual(len(OlsEnvelopeComparisonEngine._line_parts(clipped)), 1)
+        self.assertAlmostEqual(clipped.length(), 100.0, delta=0.05)
+
     def test_identical_axis_conical_envelopes_use_domain_stable_transition(self):
         base = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
         origin = QgsPointXY(100.0, 100.0)

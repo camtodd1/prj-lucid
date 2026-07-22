@@ -118,6 +118,8 @@ simplification when it partitions the overlap.
 Change contours are generated from the same baseline/future elevation functions
 and finalized controller-pair polygons used by the comparison. Affine candidate
 pairs use exact isolines; curved pairs use a clipped triangulated approximation.
+When an affine isoline lands on a controller transition, a 0.01 m clipping retry
+rejoins fragments caused solely by small boundary-coordinate residuals.
 The zero contour is omitted because it is already represented by the separate
 equal-height transition layer, and only primary contours are labelled to limit
 map clutter. Each contour has a unique `comparison_id`, its

@@ -55,6 +55,7 @@ COMPARISON_DELTA_DECIMALS = 3
 COMPARISON_CONTOUR_INTERVAL_M = 1.0
 COMPARISON_PRIMARY_CONTOUR_INTERVAL_M = 5.0
 COMPARISON_CONTOUR_MIN_LENGTH_M = 0.01
+COMPARISON_CONTOUR_CLIP_TOLERANCE_M = 0.01
 COMPARISON_CURVED_CONTOUR_MIN_LENGTH_M = 1.0
 COMPARISON_CURVED_CONTOUR_MAX_RESIDUAL_M = 0.05
 COMPARISON_CURVED_CONTOUR_OUTPUT_SPACING_M = 5.0
@@ -826,7 +827,29 @@ class OlsEnvelopeComparisonEngine:
             clipped = line.intersection(geometry)
         except Exception:
             return None
-        return cls._merged_change_contour_lines([clipped])
+        exact = cls._merged_change_contour_lines([clipped])
+        try:
+            tolerant_domain = geometry.buffer(
+                COMPARISON_CONTOUR_CLIP_TOLERANCE_M,
+                4,
+            )
+            tolerant_clipped = line.intersection(tolerant_domain)
+            tolerant = cls._merged_change_contour_lines([tolerant_clipped])
+        except Exception:
+            tolerant = None
+        if tolerant is None or tolerant.isEmpty():
+            return exact
+        if exact is None or exact.isEmpty():
+            return tolerant
+        exact_parts = len(cls._line_parts(exact))
+        tolerant_parts = len(cls._line_parts(tolerant))
+        recovered_length = tolerant.length() - exact.length()
+        if (
+            tolerant_parts < exact_parts
+            or recovered_length > (4.0 * COMPARISON_CONTOUR_CLIP_TOLERANCE_M)
+        ):
+            return tolerant
+        return exact
 
     def _triangulated_change_contour(
         self,
