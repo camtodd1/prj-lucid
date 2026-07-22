@@ -2,7 +2,7 @@
 
 **Status:** Current
 
-**Last reviewed:** 17 July 2026
+**Last reviewed:** 22 July 2026
 
 The OLS tab provides independent **Baseline OLS** and **Comparison OLS**
 selectors. Choosing **None — baseline only** generates only the baseline.
@@ -120,6 +120,10 @@ and finalized controller-pair polygons used by the comparison. Affine candidate
 pairs use exact isolines; curved pairs use a clipped triangulated approximation.
 When an affine isoline lands on a controller transition, a 0.01 m clipping retry
 rejoins fragments caused solely by small boundary-coordinate residuals.
+Curved comparison contours can still appear patchy or truncated where a
+conical baseline meets a controller transition or horizontal plane. This is a
+known limitation tracked under
+[Protected Airspace in the roadmap](roadmap.md#protected-airspace).
 The zero contour is omitted because it is already represented by the separate
 equal-height transition layer, and only primary contours are labelled to limit
 map clutter. Each contour has a unique `comparison_id`, its

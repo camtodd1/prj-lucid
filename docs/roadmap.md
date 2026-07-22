@@ -2,7 +2,7 @@
 
 **Status:** Roadmap
 
-**Last reviewed:** 16 July 2026
+**Last reviewed:** 22 July 2026
 
 This file is the single project documentation backlog. It lists incomplete
 work only; completed implementation history belongs in Git and regression
@@ -32,6 +32,10 @@ fixtures.
   and keep the profile `partial` until source, topology, and review gates pass.
 - [ ] Reduce exceptional geometry recovery and unresolved curved-surface
   comparisons in the modernised OFS/OES and comparison paths.
+- [ ] Resolve patchy or truncated comparison change contours where a curved
+  baseline surface, particularly a conical surface, meets a controller
+  transition or horizontal plane. Keep the repair bounded and avoid repeating
+  full-domain buffering for individual triangulated segments.
 - [ ] Prove comparison gain, loss, no-change, transition, and baseline-only
   outputs are exclusive and cover their intended domains.
 - [ ] Expand independent source checkpoints and representative fixtures for
