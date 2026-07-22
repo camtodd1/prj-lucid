@@ -204,6 +204,37 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(baseline.surface_id, "baseline-left; baseline-right")
         self.assertEqual(future.surface_id, "future-left; future-right")
 
+    def test_congruous_dissolve_snaps_numerical_join_seam(self):
+        left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
+        right = QgsGeometry.fromRect(
+            QgsRectangle(50.0000004, 0.0, 100.0, 100.0)
+        )
+        baseline_left = self.constant("baseline-left", 100.0)
+        baseline_right = self.constant("baseline-right", 100.0)
+        future_left = self.constant("future-left", 110.0)
+        future_right = self.constant("future-right", 110.0)
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline_left, baseline_right]),
+            PlanarControllingOlsEngine([future_left, future_right]),
+        )
+        result = {
+            "gain": [
+                (baseline_left, future_left, left),
+                (baseline_right, future_right, right),
+            ],
+            "loss": [],
+            "no_change": [],
+            "transition": [],
+        }
+
+        engine._dissolve_congruous_classified_parts(result)
+
+        self.assertEqual(len(result["gain"]), 1)
+        geometry = result["gain"][0][2]
+        self.assertFalse(geometry.isMultipart())
+        self.assertTrue(geometry.isGeosValid())
+        self.assertAlmostEqual(geometry.area(), 10000.0, places=3)
+
     def test_equal_delta_does_not_merge_distinct_source_planes(self):
         left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
         right = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))

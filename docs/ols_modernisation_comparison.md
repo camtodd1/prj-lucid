@@ -95,7 +95,9 @@ slopes, and maximum distances match.
 Where such a dissolve spans multiple controller IDs, the relevant ID and
 surface fields list the contributing values separated by semicolons. Collapsed
 interior rings below the comparison minimum-area threshold are removed from the
-dissolved geometry; material holes are preserved.
+dissolved geometry; material holes are preserved. Joined boundaries are snapped
+to a one-micrometre grid and re-unioned when this removes a numerical seam
+without materially changing the output area.
 Areas outside the common domains are not classified as gains or losses;
 baseline-only areas are shown separately as **No Comparison OLS Overlay**.
 

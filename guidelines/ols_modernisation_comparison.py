@@ -35,6 +35,8 @@ COMPARISON_MIN_AREA_M2 = 0.01
 COMPARISON_NO_OVERLAY_COVERAGE_TOLERANCE_M = 0.5
 COMPARISON_NO_OVERLAY_MIN_AREA_M2 = 5.0
 COMPARISON_NO_OVERLAY_GRID_M = 0.001
+COMPARISON_DISSOLVE_GRID_M = 0.000001
+COMPARISON_DISSOLVE_MAX_RELATIVE_AREA_CHANGE = 1e-9
 COMPARISON_RECOVERY_SLIVER_MAX_EFFECTIVE_WIDTH_M = 0.10
 COMPARISON_RECOVERY_SLIVER_MIN_SHARED_BOUNDARY_FRACTION = 0.2
 COMPARISON_RECOVERY_SLIVER_MIN_SHARED_BOUNDARY_M = 1.0
@@ -2324,7 +2326,10 @@ class OlsEnvelopeComparisonEngine:
                 if not self._has_area(merged):
                     dissolved.extend(items)
                     continue
-                merged = self._remove_dissolve_remnant_holes(merged)
+                merged = self._finalize_congruous_dissolve(
+                    merged,
+                    [item[2] for item in items],
+                )
                 baseline = self._combined_congruous_candidate(
                     [item[0] for item in items],
                     merged,
@@ -2339,6 +2344,59 @@ class OlsEnvelopeComparisonEngine:
     def _dissolve_coplanar_classified_parts(self, result) -> None:
         """Compatibility wrapper for the former plane-only dissolve name."""
         self._dissolve_congruous_classified_parts(result)
+
+    def _finalize_congruous_dissolve(
+        self,
+        geometry: QgsGeometry,
+        source_geometries: Sequence[QgsGeometry],
+    ) -> QgsGeometry:
+        """Collapse numerical seams between congruous joined polygons."""
+        source_area = geometry.area()
+        allowed_area_change = max(
+            COMPARISON_MIN_AREA_M2,
+            source_area * COMPARISON_DISSOLVE_MAX_RELATIVE_AREA_CHANGE,
+        )
+        candidates = [QgsGeometry(geometry)]
+        try:
+            snapped_parts = [
+                source.snappedToGrid(
+                    COMPARISON_DISSOLVE_GRID_M,
+                    COMPARISON_DISSOLVE_GRID_M,
+                )
+                for source in source_geometries
+                if source is not None and not source.isEmpty()
+            ]
+            snapped_union = QgsGeometry.unaryUnion(snapped_parts)
+            if snapped_union is not None and not snapped_union.isEmpty():
+                candidates.append(snapped_union)
+        except Exception:
+            pass
+
+        finalized = []
+        for candidate in candidates:
+            try:
+                buffered = candidate.buffer(0.0, 8)
+                if buffered is not None and not buffered.isEmpty():
+                    candidate = buffered
+            except Exception:
+                pass
+            candidate = self._remove_zero_area_boundary_backtracks(candidate)
+            candidate = self._remove_dissolve_remnant_holes(candidate)
+            if (
+                self._has_area(candidate)
+                and candidate.isGeosValid()
+                and abs(candidate.area() - source_area) <= allowed_area_change
+            ):
+                finalized.append(candidate)
+        if not finalized:
+            return geometry
+        return min(
+            finalized,
+            key=lambda candidate: (
+                len(self.baseline_engine._polygon_parts(candidate)),
+                abs(candidate.area() - source_area),
+            ),
+        )
 
     def _comparison_surface_key(
         self,
