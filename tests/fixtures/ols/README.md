@@ -63,7 +63,8 @@ MOS139/CAP168 comparison. It guards against two coupled failure modes:
 - a triangulated conical isoline satisfying the requested height while retaining
   a visible saw-tooth path.
 
-Promotion checks must confirm that material gain/loss ranges do not cross zero,
+Targeted regression checks should confirm that material gain/loss ranges do
+not cross zero,
 no opposite-sign contours are generated, the transition follows the shared
 zero-height locus, and conical contours pass both residual and smoothness gates.
 The fixture uses 0.5 m intermediate and 10 m primary modernisation change
@@ -87,8 +88,8 @@ This fixture is intentionally portable and runs without QGIS:
 python3 -m unittest tests.test_ols_source_validation -v
 ```
 
-The fixture itself is the machine-readable evidence record. Current promotion
-gaps are tracked in [`docs/roadmap.md`](../../../docs/roadmap.md).
+The fixture itself is the machine-readable evidence record. Current scope gaps
+are tracked in [`docs/roadmap.md`](../../../docs/roadmap.md).
 
 ## YMML axis/conical benchmark
 
@@ -114,7 +115,8 @@ The benchmark deliberately treats two concepts separately:
   points and should be near zero for projected axis/conical transitions; and
 - `reversal_count`, `duplicate_segment_count`, `short_component_count`, and
   `topology_excess_length_m` detect doubled-back paths, reverse duplicates,
-  sub-resolution fragments, and sliver loops. Production gates require zero.
+  sub-resolution fragments, and sliver loops. The strict geometry checks require
+  zero when `--production-gates` is explicitly selected.
 - `maximum_abs_curvature_change_per_m2` and its RMS counterpart measure
   curvature continuity. The smoother must improve both values locally before
   its guide is accepted.
@@ -132,14 +134,14 @@ tests/run_ols_workflow_regression.py \
   --output /private/tmp/ymml_axis_conical_report.json
 ```
 
-## Performance baseline
+## Optional performance reference
 
 `performance_baseline_qgis4_2026-07-11.json` records the current QGIS 4.0.2
 wall-clock and key nested-stage timings, output counts, and comparison accuracy
-metrics for all five fixtures. It is a reference checkpoint, not a hard timing
-gate: compare medians from at least three runs on the same machine/runtime and
-investigate changes above 20%. Geometry validity, coverage, exclusivity, and ID
-checks remain hard failures.
+metrics for all five fixtures. It is an optional reference checkpoint: use
+medians from at least three runs on the same machine/runtime when investigating
+a suspected runtime regression. Geometry validity, coverage, exclusivity, and
+ID checks remain the important correctness checks.
 
 Generate a fresh raw report with:
 
@@ -151,8 +153,8 @@ GDAL_DATA=/Applications/QGIS-4.0.app/Contents/Resources/gdal \
 tests/run_ols_workflow_regression.py --output /private/tmp/ols_regression.json
 ```
 
-Run the production non-regression gate (three-run medians, deterministic output,
-exact baseline counts, and a maximum 20% runtime regression) with:
+Run the optional strict non-regression check (three-run medians, deterministic
+output, exact baseline counts, and a maximum 20% runtime regression) with:
 
 ```bash
 QT_QPA_PLATFORM=offscreen \
@@ -162,10 +164,11 @@ GDAL_DATA=/Applications/QGIS-4.0.app/Contents/Resources/gdal \
 tests/run_ols_workflow_regression.py \
   --repeat 3 \
   --baseline tests/fixtures/ols/performance_baseline_qgis4_2026-07-11.json \
-  --output /private/tmp/ols_production_readiness.json
+  --output /private/tmp/ols_strict_regression.json
 ```
 
-Add `--production-gates` for promotion evidence. This intentionally fails while
-any solver or comparison activates an exceptional recovery repair or leaves an
-unresolved comparison; ordinary benchmark runs continue to record those
-diagnostics without changing generated geometry.
+Add `--production-gates` only when deliberately checking solver recovery or
+unresolved comparisons. It intentionally fails while either condition is
+present; ordinary benchmark runs continue to record those diagnostics without
+changing generated geometry. This is an investigation aid, not a routine
+internal-use acceptance gate.

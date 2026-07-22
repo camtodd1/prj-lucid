@@ -102,7 +102,7 @@ existing data:
 | Pre-threshold area chevrons | Implemented | Generated yellow polygon geometry |
 | Marking QA report | Implemented as compact point/table layer | One feature per runway end |
 
-## Promotion And Legacy Layer Policy
+## Output And Legacy Layer Policy
 
 - The `Detailed Runway Markings` group is the primary output for generated
   MOS139 runway markings.

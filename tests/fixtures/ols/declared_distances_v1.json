@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "description": "Source-backed CAP 168 declared-distance and stopway checkpoints.",
+  "source": {
+    "publication": "CAP 168 Edition 13",
+    "declared_distances": "CAP 168 3.19",
+    "clearway": "CAP 168 3.176-3.185",
+    "stopway": "CAP 168 3.186-3.195",
+    "interpretation": "TODA adds the clearway at the departure end; ASDA adds the stopway at the departure end. Stopway width follows the runway width."
+  },
+  "cases": [
+    {
+      "input_fixture": "ybpm_2rwy_parallel.json",
+      "runway_index": 0,
+      "runway_name": "09L/27R",
+      "expected": {
+        "threshold_length_m": 3000.0,
+        "physical_length_m": 3120.0,
+        "directions": {
+          "09L": {"disp_thr_m": 120.0, "clearway_m": 120.0, "stopway_m": 30.0, "tora_m": 3120.0, "toda_m": 3240.0, "asda_m": 3150.0, "lda_m": 3000.0},
+          "27R": {"disp_thr_m": 0.0, "clearway_m": 180.0, "stopway_m": 60.0, "tora_m": 3120.0, "toda_m": 3300.0, "asda_m": 3180.0, "lda_m": 3120.0}
+        },
+        "stopways": [
+          {"end_desig": "09L", "length_m": 60.0, "width_m": 45.0, "area_m2": 2700.0, "centroid_distance_from_physical_end_m": 30.0},
+          {"end_desig": "27R", "length_m": 30.0, "width_m": 45.0, "area_m2": 1350.0, "centroid_distance_from_physical_end_m": 15.0}
+        ]
+      }
+    },
+    {
+      "input_fixture": "ybpm_2rwy_parallel.json",
+      "runway_index": 1,
+      "runway_name": "09R/27L",
+      "expected": {
+        "threshold_length_m": 1600.0,
+        "physical_length_m": 1680.0,
+        "directions": {
+          "09R": {"disp_thr_m": 0.0, "clearway_m": 0.0, "stopway_m": 30.0, "tora_m": 1680.0, "toda_m": 1680.0, "asda_m": 1710.0, "lda_m": 1680.0},
+          "27L": {"disp_thr_m": 80.0, "clearway_m": 60.0, "stopway_m": 0.0, "tora_m": 1680.0, "toda_m": 1740.0, "asda_m": 1680.0, "lda_m": 1600.0}
+        },
+        "stopways": [
+          {"end_desig": "27L", "length_m": 30.0, "width_m": 30.0, "area_m2": 900.0, "centroid_distance_from_physical_end_m": 15.0}
+        ]
+      }
+    },
+    {
+      "input_fixture": "ybcp_1rwy_single_curved.json",
+      "runway_index": 0,
+      "runway_name": "01L/19R",
+      "expected": {
+        "threshold_length_m": 3297.659848258359,
+        "physical_length_m": 3417.659848258178,
+        "directions": {
+          "01L": {"disp_thr_m": 120.0, "clearway_m": 120.0, "stopway_m": 30.0, "tora_m": 3417.659848258178, "toda_m": 3537.659848258178, "asda_m": 3447.659848258178, "lda_m": 3297.659848258359},
+          "19R": {"disp_thr_m": 0.0, "clearway_m": 180.0, "stopway_m": 60.0, "tora_m": 3417.659848258178, "toda_m": 3597.659848258178, "asda_m": 3477.659848258178, "lda_m": 3417.659848258359}
+        },
+        "stopways": [
+          {"end_desig": "01L", "length_m": 60.0, "width_m": 60.0, "area_m2": 3600.0, "centroid_distance_from_physical_end_m": 30.0},
+          {"end_desig": "19R", "length_m": 30.0, "width_m": 60.0, "area_m2": 1800.0, "centroid_distance_from_physical_end_m": 15.0}
+        ]
+      }
+    }
+  ]
+}

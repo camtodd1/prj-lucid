@@ -6,8 +6,9 @@
 
 This package implements a draft EASA CS-ADR-DSN Issue 7 design-standard
 profile. It is selectable for preview and validation, but its conventional and
-controlling OLS capabilities remain `partial` until the source, topology,
-performance, interpretation, and independent-review gates are complete.
+controlling OLS capabilities remain `partial` while source, topology,
+performance, interpretation, or coverage gaps remain. Formal product promotion
+is not required for routine internal use.
 
 ## Capability Summary
 
@@ -31,5 +32,5 @@ horizontal surface provenance without MOS139 parameter fallbacks.
 - `ols.py` is a compatibility wrapper around `ols_surfaces.py`.
 
 [`source_matrix.md`](source_matrix.md) records the verification state and known
-interpretations. Remaining promotion work is tracked in
+interpretations. Remaining scope work is tracked in
 [`docs/roadmap.md`](../../docs/roadmap.md).

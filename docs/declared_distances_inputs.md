@@ -60,10 +60,19 @@ unusual.
 - Lengths must be non-negative.
 - Displaced thresholds must fit within the physical runway model.
 - `TODA` and `ASDA` must be at least `TORA` when take-off is available.
+- `TODA - TORA` must equal the effective departure-end clearway, and
+  `ASDA - TORA` must equal the effective departure-end stopway.
 - `LDA` must be positive when landing is available.
 - Values for unavailable operations should be blank or zero.
 - Supplied overrides must be positive and are annotated when they conflict with
   the calculated geometry or normal declared-distance relationships.
+
+The source-backed CAP 168 checkpoints in
+[`tests/fixtures/ols/declared_distances_v1.json`](../tests/fixtures/ols/declared_distances_v1.json)
+cover straight and curved sample runways, displaced thresholds, clearways,
+stopways, declared-distance relationships, and stopway polygon placement. Run
+them with `tests.test_declared_distances_qgis` under the configured QGIS
+interpreter.
 
 ## Outputs and Ownership
 
@@ -75,5 +84,5 @@ unusual.
 - `rulesets/*/physical_data.py` owns ruleset-specific clearway and stopway
   policy.
 
-Source-backed sample-airport validation and stopway polygon consolidation are
-tracked in [`roadmap.md`](roadmap.md).
+Stopway policy remains ruleset-owned; cross-ruleset consolidation is tracked in
+[`roadmap.md`](roadmap.md).

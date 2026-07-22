@@ -31,8 +31,8 @@ contract.
 [`source_matrix.md`](source_matrix.md) records clause-level scope, confirmed
 numeric corrections, and retained source interpretations. Regression fixtures
 and accepted geometry evidence live under
-[`tests/fixtures/ols`](../../tests/fixtures/ols/README.md); dated release results
-are preserved by Git history and the runtime ledger.
+[`tests/fixtures/ols`](../../tests/fixtures/ols/README.md); dated test results
+and runtime evidence are preserved by Git history and the runtime ledger.
 
 `profile.py` exposes the public facade. Policy values belong in the relevant
 domain module (`classification.py`, `physical_data.py`, `taxiway.py`,

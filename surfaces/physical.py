@@ -2999,6 +2999,18 @@ class PhysicalGeometryMixin:
         try:
             primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
             reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
+            stopway_ref = "MOS 6.25"
+            stopway_parameters = getattr(self.get_active_ruleset(), "stopway_parameters", None)
+            if callable(stopway_parameters):
+                try:
+                    stopway_spec = stopway_parameters(
+                        runway_width=runway_width,
+                        stopway_length=0.0,
+                    )
+                    if isinstance(stopway_spec, dict) and stopway_spec.get("ref"):
+                        stopway_ref = str(stopway_spec["ref"])
+                except Exception:
+                    pass
             clearway_specs = self._calculate_effective_clearway_specs(
                 runway_data,
                 physical_length,
@@ -3015,7 +3027,7 @@ class PhysicalGeometryMixin:
                         phys_p_start,
                         rwy_params["azimuth_r_p"],
                         primary_desig,
-                        "MOS 6.25",
+                        stopway_ref,
                     ),
                     (
                         "Stopway",
@@ -3025,7 +3037,7 @@ class PhysicalGeometryMixin:
                         phys_p_end,
                         rwy_params["azimuth_p_r"],
                         reciprocal_desig,
-                        "MOS 6.25",
+                        stopway_ref,
                     ),
                 ]
             elif self._non_negative_float(runway_data.get("stopway1_len"), 0.0) > 1e-6 or self._non_negative_float(
