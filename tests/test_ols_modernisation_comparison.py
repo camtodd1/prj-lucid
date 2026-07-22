@@ -101,6 +101,47 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(parts["no_change"]), 0)
         self.assertAlmostEqual(parts["loss"][0][2].area(), 10000.0, places=3)
 
+    def test_published_partition_reports_satisfied_invariants(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        comparison.comparison_parts()
+
+        invariants = comparison.comparison_invariants()
+        self.assertTrue(invariants["passed"])
+        self.assertEqual(invariants["coverage"]["unclassified_area_m2"], 0.0)
+        self.assertEqual(invariants["exclusivity"]["class_overlap_area_m2"], 0.0)
+        self.assertEqual(invariants["height_sign"]["violation_parts"], 0)
+        self.assertEqual(invariants["geometry"]["invalid_parts"], 0)
+
+    def test_invariant_audit_detects_overlap_and_wrong_height_sign(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        result = {
+            "gain": [(baseline, future, QgsGeometry(self.domain))],
+            "loss": [(baseline, future, QgsGeometry(self.domain))],
+            "no_change": [],
+            "transition": [],
+        }
+
+        invariants = comparison._audit_comparison_invariants(
+            result,
+            [(baseline, self.domain)],
+            [(future, self.domain)],
+        )
+
+        self.assertFalse(invariants["passed"])
+        self.assertGreater(invariants["exclusivity"]["class_overlap_area_m2"], 0.0)
+        self.assertEqual(invariants["height_sign"]["violation_parts"], 1)
+
     def test_coplanar_parts_with_the_same_change_range_are_dissolved(self):
         left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
         right = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))

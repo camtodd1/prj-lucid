@@ -221,3 +221,22 @@ Remaining work is primarily productisation rather than a calculation rewrite:
 OLS-tab clarity, phase-based progress/cancellation, release performance gates,
 regulatory-scope documentation, and the promoted-versus-diagnostic layer
 contract.
+
+## Comparison-refactor baseline — 22 July 2026
+
+The invariant-audit slice established a one-run QGIS 4.0 checkpoint before the
+comparison repair pipeline is consolidated. Counts are gain/loss/no-change/
+transition; boundary components measure the complete gain/loss adjacency and
+zero components measure the verified published zero contour.
+
+| Fixture/family | Runtime | Features | Common domain | Unclassified | Boundary/zero components | Recovery parts | Invariants |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| YBBN/OFS | 17.93 s fixture | 25/0/0/0 | 8,981,676.99 m2 | 0.0002 m2 | 0/0 | 4 | pass |
+| YBBN/OES | 17.93 s fixture | 33/59/2/12 | 471,236,515.02 m2 | 716.4341 m2 | 475/30 | 26 | fail: coverage and transition adjacency |
+| YMML/OFS | 25.60 s fixture | 73/15/0/8 | 18,172,243.18 m2 | 0.0022 m2 | 18/15 | 16 | fail: transition adjacency |
+| YMML/OES | 25.60 s fixture | 62/176/5/18 | 536,044,732.51 m2 | 0.0028 m2 | 1083/32 | 36 | fail: transition adjacency |
+
+All four partitions had zero material class overlap, zero height-sign
+violations, and zero invalid or empty comparison parts. The YBBN/OES coverage
+gap and transition lines that no longer coincide with final gain/loss adjacency
+are now explicit pre-refactor failures; they are not repaired by the audit.

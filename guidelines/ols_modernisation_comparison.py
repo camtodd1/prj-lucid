@@ -80,6 +80,7 @@ class OlsEnvelopeComparisonEngine:
         self.future_engine = future_engine
         self.tolerance_m = max(0.0, float(tolerance_m))
         self._comparison_diagnostics: Dict[str, float] = {}
+        self._comparison_invariant_report: Dict[str, object] = {}
         self._recovered_sliver_geometries: List[QgsGeometry] = []
 
     def comparison_diagnostics(self) -> Dict[str, object]:
@@ -114,13 +115,19 @@ class OlsEnvelopeComparisonEngine:
                     COMPARISON_RECOVERY_SLIVER_MAX_EFFECTIVE_WIDTH_M
                 ),
             },
+            "invariants": dict(self._comparison_invariant_report),
         }
+
+    def comparison_invariants(self) -> Dict[str, object]:
+        """Return the non-mutating audit of the published comparison partition."""
+        return dict(self._comparison_invariant_report)
 
     def comparison_parts(
         self,
     ) -> Dict[str, List[Tuple[ControllingOlsCandidate, ControllingOlsCandidate, QgsGeometry]]]:
         """Return gain/loss/no-change polygons and transition lines for the common domain."""
         self._comparison_diagnostics = {}
+        self._comparison_invariant_report = {}
         self._recovered_sliver_geometries = []
         result = {"gain": [], "loss": [], "no_change": [], "transition": []}
         baseline_regions = self.baseline_engine._controlling_region_geometries()
@@ -173,10 +180,17 @@ class OlsEnvelopeComparisonEngine:
         self._remove_final_boundary_backtracks(result)
         self._dissolve_congruous_classified_parts(result)
         self._merge_comparison_transition_parts(result)
+        self._comparison_invariant_report = self._audit_comparison_invariants(
+            result,
+            baseline_regions,
+            future_regions,
+        )
         diagnostics = self.comparison_diagnostics()
         recovery = diagnostics["exceptional_recovery"]
+        invariants = diagnostics["invariants"]
         QgsMessageLog.logMessage(
             "[diagnostics] OLS comparison: "
+            f"invariants={'pass' if invariants.get('passed') else 'fail'}, "
             f"unresolved={diagnostics['unresolved_comparisons']}, "
             f"fallbacks={diagnostics['bounded_approximations']['fallback_lower_region_calls']}, "
             f"recovery_parts={int(recovery['common_domain_gap_parts']) + int(recovery['final_remainder_parts'])}, "
@@ -185,6 +199,175 @@ class OlsEnvelopeComparisonEngine:
             Qgis.Info,
         )
         return result
+
+    def _audit_comparison_invariants(
+        self,
+        result,
+        baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+        future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> Dict[str, object]:
+        """Measure final partition guarantees without repairing or reclassifying it."""
+        baseline_union = self._union_geometries(
+            [geometry for _candidate, geometry in baseline_regions]
+        )
+        future_union = self._union_geometries(
+            [geometry for _candidate, geometry in future_regions]
+        )
+        common_domain = (
+            self._safe_intersection(baseline_union, future_union)
+            if baseline_union is not None and future_union is not None
+            else None
+        )
+        class_unions = {
+            change: self._union_geometries([
+                geometry
+                for _baseline, _future, geometry in result.get(change, [])
+                if geometry is not None and not geometry.isEmpty()
+            ])
+            for change in ("gain", "loss", "no_change")
+        }
+        classified_geometries = [
+            geometry
+            for change in ("gain", "loss", "no_change")
+            for _baseline, _future, geometry in result.get(change, [])
+            if geometry is not None and not geometry.isEmpty()
+        ]
+        classified_union = self._union_geometries(classified_geometries)
+        common_area = common_domain.area() if self._has_area(common_domain) else 0.0
+        area_tolerance = max(COMPARISON_MIN_AREA_M2, common_area * 1e-9)
+        unclassified = (
+            self._safe_difference(common_domain, classified_union)
+            if common_domain is not None and classified_union is not None
+            else common_domain
+        )
+        outside = (
+            self._safe_difference(classified_union, common_domain)
+            if classified_union is not None and common_domain is not None
+            else classified_union
+        )
+
+        class_overlap_area = 0.0
+        for first, second in (("gain", "loss"), ("gain", "no_change"), ("loss", "no_change")):
+            first_union = class_unions[first]
+            second_union = class_unions[second]
+            if first_union is None or second_union is None:
+                continue
+            overlap = self._safe_intersection(first_union, second_union)
+            if overlap is not None:
+                class_overlap_area += max(0.0, overlap.area())
+
+        invalid_parts = 0
+        empty_parts = 0
+        sign_violation_parts = 0
+        sign_violation_area = 0.0
+        for change in ("gain", "loss", "no_change"):
+            for baseline, future, geometry in result.get(change, []):
+                if geometry is None or geometry.isEmpty():
+                    empty_parts += 1
+                    continue
+                try:
+                    if not geometry.isGeosValid():
+                        invalid_parts += 1
+                except Exception:
+                    invalid_parts += 1
+                delta_min, delta_max, delta_sample = self.delta_range(
+                    geometry,
+                    baseline,
+                    future,
+                    change,
+                )
+                violation = delta_min is None or delta_max is None or delta_sample is None
+                if change == "gain" and delta_min is not None:
+                    violation = delta_min < -self.tolerance_m
+                elif change == "loss" and delta_max is not None:
+                    violation = delta_max > self.tolerance_m
+                elif change == "no_change" and delta_min is not None and delta_max is not None:
+                    violation = (
+                        abs(delta_min) > self.tolerance_m
+                        or abs(delta_max) > self.tolerance_m
+                    )
+                if violation:
+                    sign_violation_parts += 1
+                    sign_violation_area += max(0.0, geometry.area())
+
+        transition_geometries = [
+            geometry
+            for _baseline, _future, geometry in result.get("transition", [])
+            if geometry is not None and not geometry.isEmpty()
+        ]
+        try:
+            transition_union = (
+                QgsGeometry.unaryUnion(transition_geometries)
+                if transition_geometries
+                else None
+            )
+        except Exception:
+            transition_union = (
+                QgsGeometry(transition_geometries[0])
+                if transition_geometries
+                else None
+            )
+        gain_union = class_unions["gain"]
+        loss_union = class_unions["loss"]
+        shared_boundary = None
+        if gain_union is not None and loss_union is not None:
+            try:
+                shared_boundary = gain_union.boundary().intersection(loss_union.boundary())
+            except Exception:
+                shared_boundary = None
+        transition_outside_boundary_length = 0.0
+        if transition_union is not None and not transition_union.isEmpty():
+            if shared_boundary is None or shared_boundary.isEmpty():
+                transition_outside_boundary_length = max(0.0, transition_union.length())
+            else:
+                try:
+                    boundary_buffer = shared_boundary.buffer(
+                        max(COMPARISON_CONTOUR_CLIP_TOLERANCE_M, self.tolerance_m),
+                        4,
+                    )
+                    transition_outside_boundary_length = max(
+                        0.0,
+                        transition_union.difference(boundary_buffer).length(),
+                    )
+                except Exception:
+                    transition_outside_boundary_length = max(0.0, transition_union.length())
+
+        unclassified_area = unclassified.area() if self._has_area(unclassified) else 0.0
+        outside_area = outside.area() if self._has_area(outside) else 0.0
+        passed = (
+            unclassified_area <= area_tolerance
+            and outside_area <= area_tolerance
+            and class_overlap_area <= area_tolerance
+            and invalid_parts == 0
+            and empty_parts == 0
+            and sign_violation_parts == 0
+            and transition_outside_boundary_length <= COMPARISON_CONTOUR_CLIP_TOLERANCE_M
+        )
+        return {
+            "passed": passed,
+            "area_tolerance_m2": area_tolerance,
+            "coverage": {
+                "common_domain_area_m2": common_area,
+                "classified_union_area_m2": (
+                    classified_union.area() if self._has_area(classified_union) else 0.0
+                ),
+                "unclassified_area_m2": unclassified_area,
+                "outside_common_domain_area_m2": outside_area,
+            },
+            "exclusivity": {"class_overlap_area_m2": class_overlap_area},
+            "height_sign": {
+                "violation_parts": sign_violation_parts,
+                "violation_area_m2": sign_violation_area,
+            },
+            "geometry": {
+                "invalid_parts": invalid_parts,
+                "empty_parts": empty_parts,
+            },
+            "transitions": {
+                "parts": len(transition_geometries),
+                "outside_gain_loss_boundary_length_m": transition_outside_boundary_length,
+            },
+        }
 
     def _strict_conventional_partition_enabled(self) -> bool:
         """Preserve exact controller-pair coverage for current-OLS comparisons."""
