@@ -1374,11 +1374,22 @@ class Annex14GeometryMixin:
 
     def _annex14_polygon_layer_type(self, features: List[QgsFeature]) -> str:
         try:
-            if features and all(QgsWkbTypes.hasZ(feature.geometry().wkbType()) for feature in features):
-                return "PolygonZ"
+            geometries = [
+                feature.geometry()
+                for feature in features
+                if feature.geometry() is not None
+                and not feature.geometry().isNull()
+                and not feature.geometry().isEmpty()
+            ]
+            if not geometries:
+                return "Polygon"
+            multipart = any(geometry.isMultipart() for geometry in geometries)
+            has_z = all(QgsWkbTypes.hasZ(geometry.wkbType()) for geometry in geometries)
+            has_m = all(QgsWkbTypes.hasM(geometry.wkbType()) for geometry in geometries)
+            dimension_suffix = "ZM" if has_z and has_m else "Z" if has_z else "M" if has_m else ""
+            return f"{'Multi' if multipart else ''}Polygon{dimension_suffix}"
         except Exception:
             return "Polygon"
-        return "Polygon"
 
     def _annex14_contour_layer_type(self, features: List[QgsFeature]) -> str:
         return "MultiLineString" if any(feature.geometry().isMultipart() for feature in features) else "LineString"

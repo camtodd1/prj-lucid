@@ -10,7 +10,7 @@ fixtures.
 
 ## Release Priorities
 
-- [ ] Resolve GeoPackage `Polygon`/`MultiPolygon` declaration mismatches without
+- [x] Resolve GeoPackage `Polygon`/`MultiPolygon` declaration mismatches without
   changing generated geometry.
 - [ ] Turn the QGIS workflow matrix into release evidence with repeated,
   isolated runs and stable performance comparisons.

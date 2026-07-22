@@ -20,6 +20,7 @@ from qgis.core import (
     QgsRenderContext,
     QgsRuleBasedRenderer,
     QgsVectorLayer,
+    QgsWkbTypes,
 )
 
 from core.layers import LayerMixin
@@ -27,11 +28,11 @@ from core.styles import DEFAULT_STYLE_MAP
 
 
 class _FileLayerHarness(LayerMixin):
-    def __init__(self, output_path):
+    def __init__(self, output_path, driver="ESRI Shapefile", extension=".shp"):
         self.output_mode = "file"
         self.output_path = output_path
-        self.output_format_driver = "ESRI Shapefile"
-        self.output_format_extension = ".shp"
+        self.output_format_driver = driver
+        self.output_format_extension = extension
         self.plugin_dir = str(Path(__file__).resolve().parents[1])
         self.style_map = dict(DEFAULT_STYLE_MAP)
         self.successfully_generated_layers = []
@@ -334,6 +335,80 @@ class LayerStyleTests(unittest.TestCase):
                 finally:
                     renderer.stopRender(render_context)
             self.assertEqual(len(group.findLayers()), 2)
+
+    def test_geopackage_promotes_polygon_declaration_for_multipart_features(self):
+        fields = QgsFields()
+        fields.append(QgsField("surface", QVariant.String))
+
+        def feature(surface, geometry):
+            item = QgsFeature(fields)
+            item.setAttribute("surface", surface)
+            item.setGeometry(geometry)
+            return item
+
+        single_geometry = QgsGeometry.fromPolygonXY(
+            [[
+                QgsPointXY(0.0, 0.0),
+                QgsPointXY(10.0, 0.0),
+                QgsPointXY(10.0, 10.0),
+                QgsPointXY(0.0, 0.0),
+            ]]
+        )
+        multipart_geometry = QgsGeometry.fromMultiPolygonXY([
+            [[
+                QgsPointXY(20.0, 0.0),
+                QgsPointXY(25.0, 0.0),
+                QgsPointXY(25.0, 10.0),
+                QgsPointXY(20.0, 0.0),
+            ]],
+            [[
+                QgsPointXY(30.0, 0.0),
+                QgsPointXY(35.0, 0.0),
+                QgsPointXY(35.0, 10.0),
+                QgsPointXY(30.0, 0.0),
+            ]],
+        ])
+        features = [
+            feature("single", single_geometry),
+            feature("multipart", multipart_geometry),
+        ]
+        expected_areas = sorted(item.geometry().area() for item in features)
+
+        with tempfile.TemporaryDirectory() as output_path:
+            project = QgsProject.instance()
+            project.setCrs(QgsCoordinateReferenceSystem("EPSG:3857"))
+            group = project.layerTreeRoot().addGroup("GeoPackage")
+            harness = _FileLayerHarness(output_path, "GPKG", ".gpkg")
+
+            layer = harness._create_and_add_layer(
+                "Polygon",
+                "mixed_polygon_TEST",
+                "Mixed Polygon",
+                fields,
+                features,
+                group,
+                "Default Polygon",
+            )
+
+            self.assertIsNotNone(layer)
+            self.assertTrue(Path(output_path, "mixed_polygon_TEST.gpkg").is_file())
+            self.assertEqual(layer.wkbType(), QgsWkbTypes.MultiPolygon)
+            persisted_features = list(layer.getFeatures())
+            self.assertEqual(len(persisted_features), 2)
+            self.assertTrue(
+                all(
+                    item.geometry().wkbType() == QgsWkbTypes.MultiPolygon
+                    for item in persisted_features
+                )
+            )
+            self.assertEqual(
+                sorted(item.geometry().area() for item in persisted_features),
+                expected_areas,
+            )
+            self.assertEqual(
+                sorted(item.attribute("surface") for item in persisted_features),
+                ["multipart", "single"],
+            )
 
     def test_baseline_and_comparison_layers_namespace_reused_internal_names(self):
         fields = QgsFields()

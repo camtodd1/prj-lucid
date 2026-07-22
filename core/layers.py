@@ -167,6 +167,35 @@ class LayerMixin:
             del features[: len(batch)]
         return True
 
+    @staticmethod
+    def _promote_polygon_layer_type_for_features(
+        geometry_type_str: str,
+        features: List[QgsFeature],
+    ) -> str:
+        """Use a multipart polygon declaration when any feature needs it.
+
+        GeoPackage records a layer-level geometry type.  QGIS' memory provider
+        accepts a multipart polygon in a ``Polygon`` layer, but that produces a
+        non-conformant GeoPackage declaration when the layer is written.  Keep
+        the generated footprints unchanged and promote only the declaration;
+        the GeoPackage writer will represent single polygons as one-part
+        multipolygons in the resulting layer.
+        """
+        if not str(geometry_type_str or "").startswith("Polygon"):
+            return geometry_type_str
+        try:
+            has_multipart = any(
+                feature.geometry() is not None
+                and not feature.geometry().isNull()
+                and feature.geometry().isMultipart()
+                for feature in features
+            )
+        except Exception:
+            return geometry_type_str
+        if not has_multipart:
+            return geometry_type_str
+        return f"Multi{geometry_type_str}"
+
     def _create_and_add_layer(
         self,
         geometry_type_str: str,
@@ -197,6 +226,10 @@ class LayerMixin:
             return None
 
         try:
+            geometry_type_str = self._promote_polygon_layer_type_for_features(
+                geometry_type_str,
+                features,
+            )
             uri = f"{geometry_type_str}?crs={target_crs.authid()}"
             layer = QgsVectorLayer(uri, display_name, "memory")
             if not layer.isValid():
