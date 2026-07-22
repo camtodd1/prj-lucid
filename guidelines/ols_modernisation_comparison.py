@@ -171,38 +171,12 @@ class OlsEnvelopeComparisonEngine:
             future_regions,
             clean_spikes=not strict_conventional,
         )
-        if not strict_conventional:
-            self._finalise_comparison_parts(result)
-        # Final cleanup can legitimately remove split artefacts.  Repair the
-        # remaining common domain afterwards so that cleanup cannot leave a
-        # valid comparison region unclassified.
-        self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
-        if not strict_conventional:
-            self._merge_classified_parts(result)
-        # Pair-level dissolves re-check the height-sign invariant and can trim
-        # narrow residual strips. Repair once more after that destructive pass;
-        # do not merge again, because doing so would repeat the same clipping.
-        self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
-        self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
-        self._reattach_tracked_recovered_sliver_parts(result)
-        self._enforce_final_height_signs(result)
-        self._partition_classified_parts(result)
-        self._reattach_tracked_recovered_sliver_parts(result)
-        # Partition differences can reintroduce zero-area out-and-back ring
-        # edges after the earlier controller-aware cleanup.  Remove only
-        # boundary-equivalent backtracks here; genuine narrow polygons remain
-        # classified because the accepted symmetric-difference area is capped.
-        self._remove_final_boundary_backtracks(result)
-        self._reattach_tracked_recovered_sliver_parts(result)
-        # Recovery normalisation is the last operation allowed to add area to
-        # a classified polygon. Close the pipeline with the public sign,
-        # exclusivity, and boundary invariants so no local attachment can
-        # bypass them.
-        self._enforce_final_height_signs(result)
-        self._partition_classified_parts(result)
-        self._remove_final_boundary_backtracks(result)
-        self._dissolve_congruous_classified_parts(result)
-        self._merge_comparison_transition_parts(result)
+        self._finalize_comparison_partition(
+            result,
+            baseline_regions,
+            future_regions,
+            strict_conventional=strict_conventional,
+        )
         self._comparison_invariant_report = self._audit_comparison_invariants(
             result,
             baseline_regions,
@@ -236,6 +210,35 @@ class OlsEnvelopeComparisonEngine:
             invariants=dict(invariants),
         )
 
+    def _finalize_comparison_partition(
+        self,
+        result: Dict[str, List[ComparisonPart]],
+        baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+        future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+        strict_conventional: bool,
+    ) -> None:
+        """Finalize one partition; no caller may mutate geometry after this pass."""
+        if not strict_conventional:
+            self._finalise_comparison_parts(result)
+
+        # Recover coverage once, after controller-aware cleanup. Pair-level
+        # re-merging used to clip the same geometries again and force a second
+        # recovery cycle; sign normalization and the final congruous dissolve
+        # now provide those guarantees without that intermediate mutation.
+        # Both recovery helpers use the canonical pair solver; the second only
+        # handles a residual that could not be attributed in the pair loop.
+        self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
+        self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
+        self._reattach_tracked_recovered_sliver_parts(result)
+
+        # These are the only final destructive polygon stages. Each invariant
+        # is enforced once, in dependency order, before transitions are derived.
+        self._enforce_final_height_signs(result)
+        self._partition_classified_parts(result)
+        self._remove_final_boundary_backtracks(result)
+        self._dissolve_congruous_classified_parts(result)
+        self._derive_final_transition_parts(result)
+
     def _raw_comparison_parts(
         self,
         baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
@@ -262,8 +265,20 @@ class OlsEnvelopeComparisonEngine:
                     future_candidate,
                     overlap,
                     clean_spikes=clean_spikes,
+                    include_transition=False,
                 )
         return result
+
+    def _derive_final_transition_parts(
+        self,
+        result: Dict[str, List[ComparisonPart]],
+    ) -> None:
+        """Derive verified transitions once from finalized gain/loss adjacency."""
+        result["transition"] = [
+            (baseline, future, geometry)
+            for baseline, future, geometry, _delta, _contour_class, _sequence
+            in self.zero_change_contour_parts(result)
+        ]
 
     def _audit_comparison_invariants(
         self,
@@ -377,7 +392,15 @@ class OlsEnvelopeComparisonEngine:
         shared_boundary = None
         if gain_union is not None and loss_union is not None:
             try:
-                shared_boundary = gain_union.boundary().intersection(loss_union.boundary())
+                gain_boundary = gain_union.convertToType(
+                    Qgis.GeometryType.Line,
+                    True,
+                )
+                loss_boundary = loss_union.convertToType(
+                    Qgis.GeometryType.Line,
+                    True,
+                )
+                shared_boundary = gain_boundary.intersection(loss_boundary)
             except Exception:
                 shared_boundary = None
         transition_outside_boundary_length = 0.0
@@ -1596,10 +1619,10 @@ class OlsEnvelopeComparisonEngine:
             if delta_sample is None:
                 continue
             if change == "gain":
-                if delta_sample <= 0.0:
+                if delta_max is None or delta_max <= 0.0:
                     continue
             if change == "loss":
-                if delta_sample >= 0.0:
+                if delta_min is None or delta_min >= 0.0:
                     continue
             if change == "no_change":
                 if delta_min is None or delta_max is None:
@@ -2183,7 +2206,7 @@ class OlsEnvelopeComparisonEngine:
                         future,
                         part,
                         clean_spikes=False,
-                        include_transition=True,
+                        include_transition=False,
                     )
                     self._track_new_recovered_sliver_parts(result, starts)
                     newly_assigned = [
@@ -2357,15 +2380,6 @@ class OlsEnvelopeComparisonEngine:
                         + coverage_error
                     )
                     continue
-                self._append_transition_parts(
-                    result["transition"],
-                    pair_engine,
-                    baseline,
-                    future,
-                    geometry,
-                    gain_geometry,
-                    loss_geometry,
-                )
         result["gain"] = rebuilt["gain"]
         result["loss"] = rebuilt["loss"]
 

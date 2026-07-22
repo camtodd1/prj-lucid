@@ -1,5 +1,6 @@
 import math
 import unittest
+from contextlib import ExitStack
 from unittest.mock import patch
 
 from qgis.PyQt.QtCore import QVariant
@@ -140,6 +141,65 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             finalization.diagnostics["exceptional_recovery"],
         )
 
+    def test_finalizer_derives_transition_from_final_partition_once(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.2, 0.0, 90.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        finalization = comparison.finalize_comparison()
+
+        self.assertTrue(finalization.gain)
+        self.assertTrue(finalization.loss)
+        self.assertTrue(finalization.transitions)
+        self.assertTrue(finalization.invariants["passed"])
+        self.assertEqual(
+            finalization.invariants["transitions"][
+                "outside_gain_loss_boundary_length_m"
+            ],
+            0.0,
+        )
+
+    def test_finalizer_runs_each_mutating_partition_stage_once(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        stage_names = (
+            "_append_common_domain_gap_parts",
+            "_append_final_common_domain_remainders",
+            "_reattach_tracked_recovered_sliver_parts",
+            "_enforce_final_height_signs",
+            "_partition_classified_parts",
+            "_remove_final_boundary_backtracks",
+            "_dissolve_congruous_classified_parts",
+            "_derive_final_transition_parts",
+        )
+
+        with ExitStack() as stack:
+            stages = {
+                name: stack.enter_context(
+                    patch.object(comparison, name, wraps=getattr(comparison, name))
+                )
+                for name in stage_names
+            }
+            redundant_merge = stack.enter_context(
+                patch.object(
+                    comparison,
+                    "_merge_classified_parts",
+                    wraps=comparison._merge_classified_parts,
+                )
+            )
+            comparison.finalize_comparison()
+
+        for stage in stages.values():
+            self.assertEqual(stage.call_count, 1)
+        redundant_merge.assert_not_called()
+
     def test_invariant_audit_detects_overlap_and_wrong_height_sign(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 110.0)
@@ -163,6 +223,31 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertFalse(invariants["passed"])
         self.assertGreater(invariants["exclusivity"]["class_overlap_area_m2"], 0.0)
         self.assertEqual(invariants["height_sign"]["violation_parts"], 1)
+
+    def test_loss_part_uses_full_range_when_first_sample_is_zero(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 90.0)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        parts = []
+
+        with patch.object(
+            comparison,
+            "delta_range",
+            return_value=(-1.43, 0.0, 0.0),
+        ):
+            comparison._append_parts(
+                parts,
+                baseline,
+                future,
+                self.domain,
+                "loss",
+                clean_spikes=False,
+            )
+
+        self.assertEqual(len(parts), 1)
 
     def test_coplanar_parts_with_the_same_change_range_are_dissolved(self):
         left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
@@ -798,6 +883,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
         self.assertTrue(result["gain"])
         self.assertTrue(result["loss"])
+        self.assertEqual(result["transition"], [])
+        engine._derive_final_transition_parts(result)
         self.assertTrue(result["transition"])
         coverage = QgsGeometry.unaryUnion(
             [item[2] for change in ("gain", "loss") for item in result[change]]
@@ -827,6 +914,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             [item[2] for change in ("gain", "loss") for item in repaired[change]]
         )
         self.assertLessEqual(domain.symDifference(repaired_coverage).area(), 0.01)
+        self.assertEqual(repaired["transition"], [])
+        engine._derive_final_transition_parts(repaired)
         self.assertTrue(repaired["transition"])
 
     def test_conical_conical_regularisation_removes_sampling_wave(self):
@@ -1720,11 +1809,11 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         original_reattach = comparison._reattach_tracked_recovered_sliver_parts
         call_count = 0
 
-        def inject_after_last_retry(result):
+        def inject_after_recovery(result):
             nonlocal call_count
             call_count += 1
             original_reattach(result)
-            if call_count == 3:
+            if call_count == 1:
                 wrong_sign = QgsGeometry.fromRect(
                     QgsRectangle(0.0, 0.0, 1.0, 100.0)
                 )
@@ -1733,11 +1822,11 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         with patch.object(
             comparison,
             "_reattach_tracked_recovered_sliver_parts",
-            side_effect=inject_after_last_retry,
+            side_effect=inject_after_recovery,
         ):
             parts = comparison.comparison_parts()
 
-        self.assertEqual(call_count, 3)
+        self.assertEqual(call_count, 1)
         self.assertEqual(parts["gain"], [])
         self.assertAlmostEqual(
             sum(geometry.area() for _baseline, _future, geometry in parts["loss"]),
