@@ -152,6 +152,58 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
         self.assertEqual(len(result["gain"]), 2)
 
+    def test_congruous_conical_parts_with_the_same_range_are_dissolved(self):
+        left = QgsGeometry.fromRect(QgsRectangle(0.0, 40.0, 30.0, 60.0))
+        right = QgsGeometry.fromRect(QgsRectangle(70.0, 40.0, 100.0, 60.0))
+        base = QgsGeometry.fromRect(QgsRectangle(40.0, 40.0, 60.0, 60.0))
+        baseline_left = self.constant("baseline-left", 90.0)
+        baseline_right = self.constant("baseline-right", 90.0)
+
+        def conical(surface_id):
+            return ControllingOlsCandidate(
+                surface_id=surface_id,
+                surface_type="Conical",
+                footprint=QgsGeometry(self.domain),
+                elevation_at_xy=conical_elevation_evaluator(
+                    base,
+                    100.0,
+                    0.1,
+                    100.0,
+                ),
+                model="conical",
+                metadata={
+                    "base_footprint": QgsGeometry(base),
+                    "base_elevation_m": 100.0,
+                    "slope": 0.1,
+                    "max_distance_m": 100.0,
+                },
+            )
+
+        future_left = conical("future-left")
+        future_right = conical("future-right")
+        engine = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline_left, baseline_right]),
+            PlanarControllingOlsEngine([future_left, future_right]),
+        )
+        result = {
+            "gain": [
+                (baseline_left, future_left, left),
+                (baseline_right, future_right, right),
+            ],
+            "loss": [],
+            "no_change": [],
+            "transition": [],
+        }
+
+        engine._dissolve_congruous_classified_parts(result)
+
+        self.assertEqual(len(result["gain"]), 1)
+        baseline, future, geometry = result["gain"][0]
+        self.assertTrue(geometry.isMultipart())
+        self.assertAlmostEqual(geometry.area(), 1200.0, places=3)
+        self.assertEqual(baseline.surface_id, "baseline-left; baseline-right")
+        self.assertEqual(future.surface_id, "future-left; future-right")
+
     def test_equal_delta_does_not_merge_distinct_source_planes(self):
         left = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 50.0, 100.0))
         right = QgsGeometry.fromRect(QgsRectangle(50.0, 0.0, 100.0, 100.0))

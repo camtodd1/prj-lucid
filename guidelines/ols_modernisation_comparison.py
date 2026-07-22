@@ -168,7 +168,7 @@ class OlsEnvelopeComparisonEngine:
         self._enforce_final_height_signs(result)
         self._partition_classified_parts(result)
         self._remove_final_boundary_backtracks(result)
-        self._dissolve_coplanar_classified_parts(result)
+        self._dissolve_congruous_classified_parts(result)
         self._merge_comparison_transition_parts(result)
         diagnostics = self.comparison_diagnostics()
         recovery = diagnostics["exceptional_recovery"]
@@ -773,7 +773,7 @@ class OlsEnvelopeComparisonEngine:
                     elevation = candidate.elevation_at_xy(QgsPointXY(point.x(), point.y()))
                 if elevation is not None and math.isfinite(float(elevation)):
                     return 0.0, 0.0, float(elevation)
-        except (KeyError, TypeError, ValueError, RuntimeError):
+        except (KeyError, TypeError, ValueError, RuntimeError, AttributeError):
             return None
         return None
 
@@ -2276,14 +2276,14 @@ class OlsEnvelopeComparisonEngine:
                         merged_parts.append((baseline, future, QgsGeometry(classified_part)))
             result[change] = merged_parts
 
-    def _dissolve_coplanar_classified_parts(self, result) -> None:
-        """Dissolve equal-range output parts carried by the same pair of planes.
+    def _dissolve_congruous_classified_parts(self, result) -> None:
+        """Dissolve equal-range output parts carried by congruous surfaces.
 
         Controller IDs often change at an internal OLS seam even though the
-        baseline and comparison elevations continue on exactly the same planes.
-        Those seams add no information to a change layer. Grouping by both
-        source planes and the exported change range removes them without
-        merging merely parallel surfaces or regions with different values.
+        baseline and comparison elevation functions remain the same. Those
+        seams add no information to a change layer. Grouping by both source
+        surface definitions and the exported change range removes them without
+        merging surfaces with different elevations or shapes.
         """
         for change in ("gain", "loss", "no_change"):
             grouped = {}
@@ -2291,8 +2291,8 @@ class OlsEnvelopeComparisonEngine:
             for baseline, future, geometry in result.get(change, []):
                 if not self._has_area(geometry):
                     continue
-                baseline_plane = self._candidate_affine_coefficients(baseline)
-                future_plane = self._candidate_affine_coefficients(future)
+                baseline_surface = self._comparison_surface_key(baseline)
+                future_surface = self._comparison_surface_key(future)
                 delta_min, delta_max, _delta_sample = self.delta_range(
                     geometry,
                     baseline,
@@ -2300,16 +2300,16 @@ class OlsEnvelopeComparisonEngine:
                     change,
                 )
                 if (
-                    baseline_plane is None
-                    or future_plane is None
+                    baseline_surface is None
+                    or future_surface is None
                     or delta_min is None
                     or delta_max is None
                 ):
                     unchanged.append((baseline, future, geometry))
                     continue
                 key = (
-                    self._comparison_plane_key(baseline_plane),
-                    self._comparison_plane_key(future_plane),
+                    baseline_surface,
+                    future_surface,
                     delta_min,
                     delta_max,
                 )
@@ -2325,16 +2325,47 @@ class OlsEnvelopeComparisonEngine:
                     dissolved.extend(items)
                     continue
                 merged = self._remove_dissolve_remnant_holes(merged)
-                baseline = self._combined_coplanar_candidate(
+                baseline = self._combined_congruous_candidate(
                     [item[0] for item in items],
                     merged,
                 )
-                future = self._combined_coplanar_candidate(
+                future = self._combined_congruous_candidate(
                     [item[1] for item in items],
                     merged,
                 )
                 dissolved.append((baseline, future, QgsGeometry(merged)))
             result[change] = dissolved
+
+    def _dissolve_coplanar_classified_parts(self, result) -> None:
+        """Compatibility wrapper for the former plane-only dissolve name."""
+        self._dissolve_congruous_classified_parts(result)
+
+    def _comparison_surface_key(
+        self,
+        candidate: ControllingOlsCandidate,
+    ) -> Optional[Tuple[object, ...]]:
+        """Return a model-aware key for an equivalent elevation function."""
+        plane = self._candidate_affine_coefficients(candidate)
+        if plane is not None:
+            return ("affine", *self._comparison_plane_key(plane))
+        if candidate.model != "conical":
+            return None
+        metadata = candidate.metadata or {}
+        try:
+            base_footprint = QgsGeometry(metadata["base_footprint"])
+            if base_footprint.isEmpty():
+                return None
+            base_footprint.normalize()
+            max_distance = metadata.get("max_distance_m")
+            return (
+                "conical",
+                bytes(base_footprint.asWkb()),
+                round(float(metadata["base_elevation_m"]), 9),
+                round(float(metadata["slope"]), 9),
+                None if max_distance is None else round(float(max_distance), 9),
+            )
+        except (KeyError, TypeError, ValueError, RuntimeError):
+            return None
 
     @staticmethod
     def _remove_dissolve_remnant_holes(geometry: QgsGeometry) -> QgsGeometry:
@@ -2381,11 +2412,11 @@ class OlsEnvelopeComparisonEngine:
         return tuple(round(float(value), 9) for value in coefficients)
 
     @staticmethod
-    def _combined_coplanar_candidate(
+    def _combined_congruous_candidate(
         candidates: Sequence[ControllingOlsCandidate],
         footprint: QgsGeometry,
     ) -> ControllingOlsCandidate:
-        """Retain all source IDs while using one equivalent plane evaluator."""
+        """Retain all source IDs while using one equivalent surface evaluator."""
         representative = candidates[0]
         surface_ids = sorted({candidate.surface_id for candidate in candidates})
         surface_types = sorted({candidate.surface_type for candidate in candidates})

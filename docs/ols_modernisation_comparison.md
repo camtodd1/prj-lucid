@@ -87,8 +87,11 @@ and the interior classification sample as `delta_sample_m`. Generic
 sample is not an average or representative value. Gain/loss polygons are
 labelled with their minimum-to-maximum change range on larger map features.
 Adjacent or disjoint parts are emitted as one (potentially multipart) feature
-when their baseline surfaces are co-planar, their comparison surfaces are
-co-planar, and their three-decimal minimum-to-maximum change ranges match.
+when their baseline surfaces are congruous, their comparison surfaces are
+congruous, and their three-decimal minimum-to-maximum change ranges match.
+Planar surfaces are congruous when their plane equations match. Conical
+surfaces are congruous when their normalized base footprints, base elevations,
+slopes, and maximum distances match.
 Where such a dissolve spans multiple controller IDs, the relevant ID and
 surface fields list the contributing values separated by semicolons. Collapsed
 interior rings below the comparison minimum-area threshold are removed from the
