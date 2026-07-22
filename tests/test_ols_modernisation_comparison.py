@@ -170,9 +170,11 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             PlanarControllingOlsEngine([future]),
         )
         stage_names = (
+            "_normalize_raw_classified_parts",
             "_append_common_domain_gap_parts",
             "_append_final_common_domain_remainders",
             "_reattach_tracked_recovered_sliver_parts",
+            "_normalize_numerical_no_change_slivers",
             "_enforce_final_height_signs",
             "_partition_classified_parts",
             "_remove_final_boundary_backtracks",
@@ -187,18 +189,68 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                 )
                 for name in stage_names
             }
-            redundant_merge = stack.enter_context(
-                patch.object(
-                    comparison,
-                    "_merge_classified_parts",
-                    wraps=comparison._merge_classified_parts,
-                )
-            )
             comparison.finalize_comparison()
 
         for stage in stages.values():
             self.assertEqual(stage.call_count, 1)
-        redundant_merge.assert_not_called()
+
+    def test_finalization_caches_pair_domains_unions_and_delta_ranges(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.constant("future", 110.0)
+        baseline_region = QgsGeometry(self.domain)
+        future_region = QgsGeometry(self.domain)
+        baseline_regions = [(baseline, baseline_region)]
+        future_regions = [(future, future_region)]
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+
+        with patch.object(
+            comparison,
+            "_safe_intersection",
+            wraps=comparison._safe_intersection,
+        ) as intersection:
+            first_domain = comparison._pair_domain(baseline_region, future_region)
+            second_domain = comparison._pair_domain(baseline_region, future_region)
+        self.assertIs(first_domain, second_domain)
+        self.assertEqual(intersection.call_count, 1)
+
+        with patch.object(
+            comparison,
+            "_union_geometries",
+            wraps=comparison._union_geometries,
+        ) as union:
+            first_common = comparison._common_domain(
+                baseline_regions,
+                future_regions,
+            )
+            second_common = comparison._common_domain(
+                baseline_regions,
+                future_regions,
+            )
+        self.assertIs(first_common, second_common)
+        self.assertEqual(union.call_count, 2)
+
+        with patch.object(
+            comparison,
+            "_sample_points",
+            wraps=comparison._sample_points,
+        ) as samples:
+            first_range = comparison.delta_range(
+                baseline_region,
+                baseline,
+                future,
+                "gain",
+            )
+            second_range = comparison.delta_range(
+                baseline_region,
+                baseline,
+                future,
+                "gain",
+            )
+        self.assertEqual(first_range, second_range)
+        self.assertEqual(samples.call_count, 1)
 
     def test_invariant_audit_detects_overlap_and_wrong_height_sign(self):
         baseline = self.constant("baseline", 100.0)
@@ -1479,20 +1531,24 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(parts["no_change"]), 1)
         self.assertAlmostEqual(parts["no_change"][0][2].area(), 10000.0, places=3)
 
-    def test_post_merge_coverage_repair_restores_trimmed_domain(self):
+    def test_post_cleanup_coverage_repair_restores_trimmed_domain(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 110.0)
         engine = OlsEnvelopeComparisonEngine(
             PlanarControllingOlsEngine([baseline]),
             PlanarControllingOlsEngine([future]),
         )
-        original_merge = engine._merge_classified_parts
+        original_cleanup = engine._finalise_comparison_parts
 
-        def trim_after_merge(result):
-            original_merge(result)
+        def trim_after_cleanup(result):
+            original_cleanup(result)
             result["gain"] = []
 
-        with patch.object(engine, "_merge_classified_parts", side_effect=trim_after_merge):
+        with patch.object(
+            engine,
+            "_finalise_comparison_parts",
+            side_effect=trim_after_cleanup,
+        ):
             parts = engine.comparison_parts()
 
         self.assertAlmostEqual(
@@ -2208,7 +2264,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                     places=6,
                 )
 
-    def test_final_merge_clips_non_collinear_wrong_side_loss_area(self):
+    def test_final_sign_enforcement_clips_non_collinear_wrong_side_loss_area(self):
         """A final loss feature must satisfy its height sign, regardless of spike shape."""
         footprint = QgsGeometry.fromRect(QgsRectangle(-30.0, -5.0, 20.0, 15.0))
         baseline = ControllingOlsCandidate(
@@ -2246,7 +2302,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             "transition": [],
         }
 
-        engine._merge_classified_parts(result)
+        engine._enforce_final_height_signs(result)
 
         self.assertEqual(len(result["loss"]), 1)
         corrected = result["loss"][0][2]
@@ -2820,7 +2876,6 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         result = {"gain": [], "loss": [], "no_change": [], "transition": []}
 
         engine._append_common_domain_gap_parts(result, baseline_regions, future_regions)
-        engine._merge_classified_parts(result)
 
         self.assertAlmostEqual(sum(item[2].area() for item in result["gain"]), 5000.0, places=3)
         self.assertAlmostEqual(sum(item[2].area() for item in result["loss"]), 5000.0, places=3)

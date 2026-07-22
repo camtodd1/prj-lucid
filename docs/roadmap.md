@@ -36,6 +36,8 @@ fixtures.
   baseline surface, particularly a conical surface, meets a controller
   transition or horizontal plane. Keep the repair bounded and avoid repeating
   full-domain buffering for individual triangulated segments.
+  Deferred after the July 2026 comparison-finalization refactor; the existing
+  bounded clipping repair and documented limitation remain unchanged.
 - [ ] Prove comparison gain, loss, no-change, transition, and baseline-only
   outputs are exclusive and cover their intended domains.
 - [ ] Expand independent source checkpoints and representative fixtures for

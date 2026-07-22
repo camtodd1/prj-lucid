@@ -33,7 +33,7 @@
       "project_crs": "EPSG:32756",
       "expected_comparison_families": ["OLS"],
       "expected_comparison_feature_counts": {
-        "OLS": {"gain": 34, "loss": 47, "no_change": 43, "transition": 8}
+        "OLS": {"gain": 31, "loss": 40, "no_change": 32, "transition": 11}
       },
       "mos139_lock_required": false,
       "performance_baseline_required": false,

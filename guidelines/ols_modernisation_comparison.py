@@ -112,6 +112,16 @@ class OlsEnvelopeComparisonEngine:
         self._comparison_diagnostics: Dict[str, float] = {}
         self._comparison_invariant_report: Dict[str, object] = {}
         self._recovered_sliver_geometries: List[QgsGeometry] = []
+        self._pair_domain_cache: Dict[Tuple[int, int], QgsGeometry] = {}
+        self._region_union_cache: Dict[Tuple[int, ...], Optional[QgsGeometry]] = {}
+        self._common_domain_cache: Dict[
+            Tuple[Tuple[int, ...], Tuple[int, ...]],
+            Optional[QgsGeometry],
+        ] = {}
+        self._delta_range_cache: Dict[
+            Tuple[int, int, int, Optional[str]],
+            Tuple[QgsGeometry, Tuple[Optional[float], Optional[float], Optional[float]]],
+        ] = {}
 
     def comparison_diagnostics(self) -> Dict[str, object]:
         """Return structured attribution for approximation and recovery operations."""
@@ -141,6 +151,12 @@ class OlsEnvelopeComparisonEngine:
                 "reclassified_parts": int(
                     stats.get("recovered_sliver_reclassified_parts", 0.0)
                 ),
+                "merged_no_change_slivers": int(
+                    stats.get("merged_no_change_slivers", 0.0)
+                ),
+                "suppressed_no_change_slivers": int(
+                    stats.get("suppressed_no_change_slivers", 0.0)
+                ),
                 "maximum_effective_width_m": (
                     COMPARISON_RECOVERY_SLIVER_MAX_EFFECTIVE_WIDTH_M
                 ),
@@ -163,6 +179,10 @@ class OlsEnvelopeComparisonEngine:
         self._comparison_diagnostics = {}
         self._comparison_invariant_report = {}
         self._recovered_sliver_geometries = []
+        self._pair_domain_cache = {}
+        self._region_union_cache = {}
+        self._common_domain_cache = {}
+        self._delta_range_cache = {}
         baseline_regions = self.baseline_engine._controlling_region_geometries()
         future_regions = self.future_engine._controlling_region_geometries()
         strict_conventional = self._strict_conventional_partition_enabled()
@@ -221,15 +241,20 @@ class OlsEnvelopeComparisonEngine:
         if not strict_conventional:
             self._finalise_comparison_parts(result)
 
-        # Recover coverage once, after controller-aware cleanup. Pair-level
-        # re-merging used to clip the same geometries again and force a second
-        # recovery cycle; sign normalization and the final congruous dissolve
-        # now provide those guarantees without that intermediate mutation.
-        # Both recovery helpers use the canonical pair solver; the second only
-        # handles a residual that could not be attributed in the pair loop.
+        # Recover pair-attributed coverage once after controller-aware cleanup,
+        # then normalize the complete raw/recovered partition once. The final
+        # remainder pass only restores any area trimmed by normalization.
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
+        if not strict_conventional:
+            self._normalize_raw_classified_parts(result)
         self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
         self._reattach_tracked_recovered_sliver_parts(result)
+        common_domain = self._common_domain(baseline_regions, future_regions)
+        common_area = common_domain.area() if self._has_area(common_domain) else 0.0
+        self._normalize_numerical_no_change_slivers(
+            result,
+            area_tolerance_m2=max(COMPARISON_MIN_AREA_M2, common_area * 1e-9),
+        )
 
         # These are the only final destructive polygon stages. Each invariant
         # is enforced once, in dependency order, before transitions are derived.
@@ -254,9 +279,10 @@ class OlsEnvelopeComparisonEngine:
         }
         for baseline_candidate, baseline_region in baseline_regions:
             for future_candidate, future_region in future_regions:
-                if not self._bounding_boxes_intersect(baseline_region, future_region):
-                    continue
-                overlap = self._safe_intersection(baseline_region, future_region)
+                overlap = self._pair_domain(
+                    baseline_region,
+                    future_region,
+                )
                 if not self._has_area(overlap):
                     continue
                 self._append_classified_overlap(
@@ -265,9 +291,58 @@ class OlsEnvelopeComparisonEngine:
                     future_candidate,
                     overlap,
                     clean_spikes=clean_spikes,
-                    include_transition=False,
                 )
         return result
+
+    def _pair_domain(
+        self,
+        baseline_region: QgsGeometry,
+        future_region: QgsGeometry,
+    ) -> QgsGeometry:
+        """Return one cached controller-region overlap for this finalization run."""
+        key = (id(baseline_region), id(future_region))
+        cached = self._pair_domain_cache.get(key)
+        if cached is not None:
+            return cached
+        if not self._bounding_boxes_intersect(baseline_region, future_region):
+            overlap = QgsGeometry()
+        else:
+            overlap = self._safe_intersection(baseline_region, future_region)
+            if overlap is None:
+                overlap = QgsGeometry()
+        self._pair_domain_cache[key] = overlap
+        return overlap
+
+    def _region_union(
+        self,
+        regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> Optional[QgsGeometry]:
+        """Return a cached union for an unchanged controlling-region sequence."""
+        key = tuple(id(geometry) for _candidate, geometry in regions)
+        if key not in self._region_union_cache:
+            self._region_union_cache[key] = self._union_geometries(
+                [geometry for _candidate, geometry in regions]
+            )
+        return self._region_union_cache[key]
+
+    def _common_domain(
+        self,
+        baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+        future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
+    ) -> Optional[QgsGeometry]:
+        """Return the cached common domain for the current finalization run."""
+        baseline_key = tuple(id(geometry) for _candidate, geometry in baseline_regions)
+        future_key = tuple(id(geometry) for _candidate, geometry in future_regions)
+        key = (baseline_key, future_key)
+        if key not in self._common_domain_cache:
+            baseline_union = self._region_union(baseline_regions)
+            future_union = self._region_union(future_regions)
+            self._common_domain_cache[key] = (
+                self._safe_intersection(baseline_union, future_union)
+                if baseline_union is not None and future_union is not None
+                else None
+            )
+        return self._common_domain_cache[key]
 
     def _derive_final_transition_parts(
         self,
@@ -287,17 +362,7 @@ class OlsEnvelopeComparisonEngine:
         future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
     ) -> Dict[str, object]:
         """Measure final partition guarantees without repairing or reclassifying it."""
-        baseline_union = self._union_geometries(
-            [geometry for _candidate, geometry in baseline_regions]
-        )
-        future_union = self._union_geometries(
-            [geometry for _candidate, geometry in future_regions]
-        )
-        common_domain = (
-            self._safe_intersection(baseline_union, future_union)
-            if baseline_union is not None and future_union is not None
-            else None
-        )
+        common_domain = self._common_domain(baseline_regions, future_regions)
         class_unions = {
             change: self._union_geometries([
                 geometry
@@ -475,7 +540,6 @@ class OlsEnvelopeComparisonEngine:
         future_candidate: ControllingOlsCandidate,
         overlap: QgsGeometry,
         clean_spikes: bool = True,
-        include_transition: bool = True,
     ) -> None:
         """Classify one controller-pair overlap without losing mixed fallback areas."""
         if not self._has_area(overlap):
@@ -515,16 +579,6 @@ class OlsEnvelopeComparisonEngine:
                 "no_change",
                 clean_spikes,
             )
-            if include_transition:
-                self._append_transition_parts(
-                    result["transition"],
-                    pair_engine,
-                    baseline_candidate,
-                    future_candidate,
-                    overlap,
-                    gain_geometry,
-                    loss_geometry,
-                )
             return
 
         # A higher future surface is a gain, so the baseline is the lower
@@ -584,17 +638,6 @@ class OlsEnvelopeComparisonEngine:
         self._append_parts(
             result["loss"], baseline_candidate, future_candidate, future_lower, "loss", clean_spikes
         )
-        if include_transition:
-            self._append_transition_parts(
-                result["transition"],
-                pair_engine,
-                baseline_candidate,
-                future_candidate,
-                overlap,
-                baseline_lower,
-                future_lower,
-            )
-
     def _affine_change_regions(
         self,
         pair_engine: PlanarControllingOlsEngine,
@@ -727,6 +770,15 @@ class OlsEnvelopeComparisonEngine:
         future_candidate: ControllingOlsCandidate,
         change: Optional[str] = None,
     ) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+        cache_key = (
+            id(geometry),
+            id(baseline_candidate),
+            id(future_candidate),
+            change,
+        )
+        cached = self._delta_range_cache.get(cache_key)
+        if cached is not None and cached[0] is geometry:
+            return cached[1]
         values: List[float] = []
         for point in self._sample_points(geometry, baseline_candidate, future_candidate, change):
             baseline_z = baseline_candidate.elevation_at_xy(point)
@@ -749,10 +801,14 @@ class OlsEnvelopeComparisonEngine:
                 continue
             values.append(self._round_delta(delta))
         if not values:
-            return None, None, None
+            result = (None, None, None)
+            self._delta_range_cache[cache_key] = (geometry, result)
+            return result
         # The first sample is pointOnSurface().  It is an interior classification
         # sample only; it is not an area-weighted or otherwise representative value.
-        return min(values), max(values), values[0]
+        result = (min(values), max(values), values[0])
+        self._delta_range_cache[cache_key] = (geometry, result)
+        return result
 
     def change_contour_parts(
         self,
@@ -1631,41 +1687,6 @@ class OlsEnvelopeComparisonEngine:
                     continue
             destination.append((baseline, future, QgsGeometry(part)))
 
-    def _append_transition_parts(
-        self,
-        destination,
-        pair_engine,
-        baseline,
-        future,
-        overlap,
-        gain_geometry,
-        loss_geometry,
-    ) -> None:
-        if (
-            gain_geometry is None
-            or gain_geometry.isEmpty()
-            or loss_geometry is None
-            or loss_geometry.isEmpty()
-        ):
-            return
-        try:
-            boundary = pair_engine._equality_line_for_pair(overlap, baseline, future)
-        except Exception:
-            boundary = None
-        if boundary is None or boundary.isEmpty():
-            try:
-                boundary = gain_geometry.boundary().intersection(loss_geometry.boundary())
-            except Exception:
-                return
-        if boundary is None or boundary.isEmpty():
-            return
-        for part in self._line_parts(boundary):
-            try:
-                if part.length() > 0.01:
-                    destination.append((baseline, future, QgsGeometry(part)))
-            except Exception:
-                continue
-
     def _append_common_domain_gap_parts(
         self,
         result,
@@ -1685,9 +1706,10 @@ class OlsEnvelopeComparisonEngine:
         # incorrectly attributed comparison features.
         for baseline_candidate, baseline_region in baseline_regions:
             for future_candidate, future_region in future_regions:
-                if not self._bounding_boxes_intersect(baseline_region, future_region):
-                    continue
-                pair_domain = self._safe_intersection(baseline_region, future_region)
+                pair_domain = self._pair_domain(
+                    baseline_region,
+                    future_region,
+                )
                 if not self._has_area(pair_domain):
                     continue
                 pair_remainder = (
@@ -1716,7 +1738,6 @@ class OlsEnvelopeComparisonEngine:
                         future_candidate,
                         part,
                         clean_spikes=False,
-                        include_transition=False,
                     )
                     self._reattach_recovered_sliver_parts(result, starts)
                     # Controller-region edges can overlap by numerical dust.
@@ -2147,11 +2168,9 @@ class OlsEnvelopeComparisonEngine:
         future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
     ) -> None:
         """Assign numerical residuals after all destructive cleanup has finished."""
-        baseline_union = self._union_geometries([geometry for _candidate, geometry in baseline_regions])
-        future_union = self._union_geometries([geometry for _candidate, geometry in future_regions])
-        if baseline_union is None or future_union is None:
+        common_domain = self._common_domain(baseline_regions, future_regions)
+        if common_domain is None:
             return
-        common_domain = self._safe_intersection(baseline_union, future_union)
         classified_union = self._union_geometries(
             [
                 geometry
@@ -2173,9 +2192,12 @@ class OlsEnvelopeComparisonEngine:
             for future, future_region in future_regions:
                 if not self._has_area(remaining):
                     break
-                if not self._bounding_boxes_intersect(baseline_region, future_region):
+                pair_domain = self._pair_domain(
+                    baseline_region,
+                    future_region,
+                )
+                if not self._has_area(pair_domain):
                     continue
-                pair_domain = self._safe_intersection(baseline_region, future_region)
                 pair_remaining = self._safe_intersection(remaining, pair_domain)
                 if not self._has_area(pair_remaining):
                     continue
@@ -2206,7 +2228,6 @@ class OlsEnvelopeComparisonEngine:
                         future,
                         part,
                         clean_spikes=False,
-                        include_transition=False,
                     )
                     self._track_new_recovered_sliver_parts(result, starts)
                     newly_assigned = [
@@ -2383,42 +2404,6 @@ class OlsEnvelopeComparisonEngine:
         result["gain"] = rebuilt["gain"]
         result["loss"] = rebuilt["loss"]
 
-    def _merge_comparison_transition_parts(self, result) -> None:
-        """Node and deduplicate transition segments added during repair."""
-        grouped = {}
-        controllers = {}
-        for baseline, future, geometry in result.get("transition", []):
-            if geometry is None or geometry.isEmpty():
-                continue
-            key = (baseline.surface_id, future.surface_id)
-            grouped.setdefault(key, []).append(geometry)
-            controllers[key] = (baseline, future)
-        merged_parts = []
-        for key, geometries in grouped.items():
-            try:
-                merged = (
-                    QgsGeometry.unaryUnion(geometries)
-                    if len(geometries) > 1
-                    else QgsGeometry(geometries[0])
-                )
-            except Exception:
-                merged = QgsGeometry(geometries[0])
-            if merged is None or merged.isEmpty():
-                continue
-            try:
-                line_merged = merged.mergeLines()
-                if line_merged is not None and not line_merged.isEmpty():
-                    merged = line_merged
-            except Exception:
-                pass
-            baseline, future = controllers[key]
-            if merged.length() > 0.01:
-                # The output layer accepts multipart lines. Keep one noded,
-                # deduplicated feature per controller pair instead of turning
-                # every crossing into a separate transition record.
-                merged_parts.append((baseline, future, QgsGeometry(merged)))
-        result["transition"] = merged_parts
-
     def _remove_final_boundary_backtracks(self, result) -> None:
         """Remove zero-area ring tendrils introduced by the final partition."""
         for change in ("gain", "loss", "no_change"):
@@ -2428,6 +2413,202 @@ class OlsEnvelopeComparisonEngine:
                 if self._has_area(cleaned):
                     cleaned_parts.append((baseline, future, cleaned))
             result[change] = cleaned_parts
+
+    def _normalize_raw_classified_parts(self, result) -> None:
+        """Normalize each raw controller pair once before coverage recovery."""
+        for change in ("gain", "loss", "no_change"):
+            grouped: Dict[Tuple[str, str], list] = {}
+            controllers: Dict[
+                Tuple[str, str],
+                Tuple[ControllingOlsCandidate, ControllingOlsCandidate],
+            ] = {}
+            for baseline, future, geometry in result.get(change, []):
+                if not self._has_area(geometry):
+                    continue
+                key = (baseline.surface_id, future.surface_id)
+                grouped.setdefault(key, []).append(geometry)
+                controllers[key] = (baseline, future)
+            normalized_parts = []
+            for key, geometries in grouped.items():
+                merged = self._union_geometries(geometries)
+                if not self._has_area(merged):
+                    continue
+                baseline, future = controllers[key]
+                for part in self.baseline_engine._polygon_parts(merged):
+                    if not self._has_area(part):
+                        continue
+                    classified = self._clip_geometry_to_change(
+                        part,
+                        baseline,
+                        future,
+                        change,
+                    )
+                    for classified_part in self.baseline_engine._polygon_parts(classified):
+                        if not self._has_area(classified_part):
+                            continue
+                        delta_min, delta_max, delta_sample = self.delta_range(
+                            classified_part,
+                            baseline,
+                            future,
+                            change,
+                        )
+                        if delta_sample is None:
+                            continue
+                        if change == "gain" and (
+                            delta_max is None or delta_max <= 0.0
+                        ):
+                            continue
+                        if change == "loss" and (
+                            delta_min is None or delta_min >= 0.0
+                        ):
+                            continue
+                        if change == "no_change" and (
+                            delta_min is None
+                            or delta_max is None
+                            or abs(delta_min) > self.tolerance_m
+                            or abs(delta_max) > self.tolerance_m
+                        ):
+                            continue
+                        normalized_parts.append(
+                            (baseline, future, QgsGeometry(classified_part))
+                        )
+            result[change] = normalized_parts
+
+    def _normalize_numerical_no_change_slivers(
+        self,
+        result,
+        area_tolerance_m2: float,
+    ) -> None:
+        """Merge or suppress verified no-change remnants within audit tolerance."""
+        items = list(result.get("no_change", []))
+        while True:
+            merged_one = False
+            for source_index, (baseline, future, geometry) in enumerate(items):
+                perimeter = geometry.length()
+                if perimeter <= 0.0:
+                    continue
+                effective_width = (2.0 * geometry.area()) / perimeter
+                if effective_width > COMPARISON_RECOVERY_SLIVER_MAX_EFFECTIVE_WIDTH_M:
+                    continue
+                candidates = []
+                for target_index, (
+                    target_baseline,
+                    target_future,
+                    target_geometry,
+                ) in enumerate(items):
+                    if target_index == source_index:
+                        continue
+                    if not self._bounding_boxes_intersect(geometry, target_geometry):
+                        continue
+                    shared_length = self._shared_boundary_length(
+                        geometry,
+                        target_geometry,
+                    )
+                    shared_fraction = shared_length / perimeter
+                    if (
+                        shared_length
+                        < max(
+                            COMPARISON_RECOVERY_SLIVER_MIN_SHARED_BOUNDARY_M,
+                            10.0 * effective_width,
+                        )
+                        or shared_fraction
+                        < COMPARISON_RECOVERY_SLIVER_MIN_SHARED_BOUNDARY_FRACTION
+                    ):
+                        continue
+                    candidates.append((
+                        -shared_length,
+                        -target_geometry.area(),
+                        target_index,
+                        target_baseline,
+                        target_future,
+                        target_geometry,
+                    ))
+                if not candidates:
+                    if geometry.area() <= area_tolerance_m2:
+                        items.pop(source_index)
+                        self._comparison_diagnostics[
+                            "suppressed_no_change_slivers"
+                        ] = (
+                            self._comparison_diagnostics.get(
+                                "suppressed_no_change_slivers",
+                                0.0,
+                            )
+                            + 1.0
+                        )
+                        merged_one = True
+                        break
+                    continue
+                candidates.sort(key=lambda item: item[:2])
+                chosen = candidates[0]
+                if (
+                    len(candidates) > 1
+                    and -chosen[0]
+                    < -candidates[1][0]
+                    * COMPARISON_RECOVERY_SLIVER_DOMINANT_CONTACT_RATIO
+                ):
+                    continue
+                (
+                    _negative_shared_length,
+                    _negative_target_area,
+                    target_index,
+                    target_baseline,
+                    target_future,
+                    target_geometry,
+                ) = chosen
+                combined_geometry = self._union_geometries(
+                    [geometry, target_geometry]
+                )
+                if (
+                    not self._has_area(combined_geometry)
+                    or not combined_geometry.isGeosValid()
+                    or self.baseline_engine._polygon_part_count(combined_geometry)
+                    > self.baseline_engine._polygon_part_count(target_geometry)
+                ):
+                    continue
+                combined_baseline = self._combined_envelope_candidate(
+                    [baseline, target_baseline],
+                    combined_geometry,
+                )
+                combined_future = self._combined_envelope_candidate(
+                    [future, target_future],
+                    combined_geometry,
+                )
+                delta_min, delta_max, delta_sample = self.delta_range(
+                    combined_geometry,
+                    combined_baseline,
+                    combined_future,
+                    "no_change",
+                )
+                if (
+                    delta_sample is None
+                    or delta_min is None
+                    or delta_max is None
+                    or abs(delta_min) > self.tolerance_m
+                    or abs(delta_max) > self.tolerance_m
+                ):
+                    continue
+                items = [
+                    item
+                    for index, item in enumerate(items)
+                    if index not in {source_index, target_index}
+                ]
+                items.append((
+                    combined_baseline,
+                    combined_future,
+                    QgsGeometry(combined_geometry),
+                ))
+                self._comparison_diagnostics["merged_no_change_slivers"] = (
+                    self._comparison_diagnostics.get(
+                        "merged_no_change_slivers",
+                        0.0,
+                    )
+                    + 1.0
+                )
+                merged_one = True
+                break
+            if not merged_one:
+                break
+        result["no_change"] = items
 
     def _remove_zero_area_boundary_backtracks(self, geometry: QgsGeometry) -> QgsGeometry:
         """Simplify collinear out-and-back edges without suppressing thin areas."""
@@ -2515,52 +2696,6 @@ class OlsEnvelopeComparisonEngine:
             return False
         triangle_area = abs((ax * by) - (ay * bx)) / 2.0
         return triangle_area <= COMPARISON_FINAL_BACKTRACK_MAX_AREA_CHANGE_M2
-
-    def _merge_classified_parts(self, result) -> None:
-        """Dissolve repaired fragments so spike remainders join their proper side."""
-        for change in ("gain", "loss", "no_change"):
-            grouped: Dict[Tuple[str, str], list] = {}
-            controllers: Dict[Tuple[str, str], Tuple[ControllingOlsCandidate, ControllingOlsCandidate]] = {}
-            for baseline, future, geometry in result.get(change, []):
-                if not self._has_area(geometry):
-                    continue
-                key = (baseline.surface_id, future.surface_id)
-                grouped.setdefault(key, []).append(geometry)
-                controllers[key] = (baseline, future)
-            merged_parts = []
-            for key, geometries in grouped.items():
-                merged = self._union_geometries(geometries)
-                if not self._has_area(merged):
-                    continue
-                baseline, future = controllers[key]
-                for part in self.baseline_engine._polygon_parts(merged):
-                    if not self._has_area(part):
-                        continue
-                    classified = self._clip_geometry_to_change(part, baseline, future, change)
-                    for classified_part in self.baseline_engine._polygon_parts(classified):
-                        if not self._has_area(classified_part):
-                            continue
-                        delta_min, delta_max, delta_sample = self.delta_range(
-                            classified_part,
-                            baseline,
-                            future,
-                            change,
-                        )
-                        if delta_sample is None:
-                            continue
-                        if change == "gain" and delta_sample <= 0.0:
-                            continue
-                        if change == "loss" and delta_sample >= 0.0:
-                            continue
-                        if change == "no_change" and (
-                            delta_min is None
-                            or delta_max is None
-                            or abs(delta_min) > self.tolerance_m
-                            or abs(delta_max) > self.tolerance_m
-                        ):
-                            continue
-                        merged_parts.append((baseline, future, QgsGeometry(classified_part)))
-            result[change] = merged_parts
 
     def _dissolve_congruous_classified_parts(self, result) -> None:
         """Dissolve equal-range output parts carried by congruous surfaces.
@@ -2771,6 +2906,48 @@ class OlsEnvelopeComparisonEngine:
             elevation_at_xy=representative.elevation_at_xy,
             model=representative.model,
             metadata=dict(representative.metadata or {}),
+        )
+
+    @staticmethod
+    def _combined_envelope_candidate(
+        candidates: Sequence[ControllingOlsCandidate],
+        footprint: QgsGeometry,
+    ) -> ControllingOlsCandidate:
+        """Combine adjacent controller provenance using their lower envelope."""
+        unique = {
+            candidate.surface_id: candidate
+            for candidate in candidates
+        }
+        ordered = [unique[surface_id] for surface_id in sorted(unique)]
+        if len(ordered) == 1:
+            return ordered[0]
+
+        def elevation_at_xy(point: QgsPointXY) -> Optional[float]:
+            elevations = []
+            for candidate in ordered:
+                try:
+                    if not candidate.contains_xy(point):
+                        continue
+                    elevation = candidate.elevation_at_xy(point)
+                except Exception:
+                    continue
+                if elevation is not None and math.isfinite(float(elevation)):
+                    elevations.append(float(elevation))
+            return min(elevations) if elevations else None
+
+        return ControllingOlsCandidate(
+            surface_id="; ".join(candidate.surface_id for candidate in ordered),
+            surface_type="; ".join(sorted({
+                candidate.surface_type for candidate in ordered
+            })),
+            footprint=QgsGeometry(footprint),
+            elevation_at_xy=elevation_at_xy,
+            model="composite",
+            metadata={
+                "source_surface_ids": [
+                    candidate.surface_id for candidate in ordered
+                ],
+            },
         )
 
     def _clip_geometry_to_change(
