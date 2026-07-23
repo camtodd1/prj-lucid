@@ -27,11 +27,6 @@ fixtures.
   full-domain buffering for individual triangulated segments.
   Deferred after the July 2026 comparison-finalization refactor; the existing
   bounded clipping repair and documented limitation remain unchanged.
-- [ ] Prove comparison gain, loss, no-change, transition, and baseline-only
-  outputs are exclusive and cover their intended domains.
-- [ ] Add targeted source checkpoints and representative fixtures when a change
-  affects complex transitional, conical/axis, displaced-threshold, clearway,
-  stopway, parallel, converging, or intersecting configurations.
 - [ ] Evaluate vertex-count reduction for smoothed MOS139 axis/conical
   intersections only if observed runtimes make it worthwhile; do not
   change the accepted compatibility lock solely for benchmark improvement.
