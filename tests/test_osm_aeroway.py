@@ -2,6 +2,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from qgis.PyQt import QtWidgets
 from qgis.core import QgsApplication, QgsCoordinateReferenceSystem, QgsProject
@@ -12,7 +13,9 @@ sys.path.insert(0, str(WORKSPACE.parent))
 
 from safeguarding_builder.core.osm_aeroway import (
     AEROWAY_RADIUS_M,
+    OVERPASS_ENDPOINTS,
     build_aeroway_query,
+    fetch_aeroway_osm,
 )
 from safeguarding_builder.safeguarding_builder_dialog import SafeguardingBuilderDialog
 from safeguarding_builder.safeguarding_builder import SafeguardingBuilder
@@ -42,7 +45,39 @@ class OsmAerowayTests(unittest.TestCase):
             'relation["aeroway"](around:10000,-33.9461000,151.1772000)',
             query,
         )
-        self.assertTrue(query.endswith("out body;"))
+        self.assertTrue(query.endswith("out body qt;"))
+
+    def test_download_fails_over_to_second_endpoint(self):
+        valid_osm = b'<osm version="0.6" generator="test"/>'
+        attempts = []
+        with patch(
+            "safeguarding_builder.core.osm_aeroway._post_overpass",
+            side_effect=[RuntimeError("HTTP 504"), valid_osm],
+        ) as post:
+            result = fetch_aeroway_osm(
+                -33.9461,
+                151.1772,
+                attempt_callback=lambda attempt, total: attempts.append(
+                    (attempt, total)
+                ),
+            )
+
+        self.assertEqual(result, valid_osm)
+        self.assertEqual(attempts, [(1, 2), (2, 2)])
+        self.assertEqual(post.call_count, 2)
+        self.assertEqual(post.call_args_list[0].args[0], OVERPASS_ENDPOINTS[0])
+        self.assertEqual(post.call_args_list[1].args[0], OVERPASS_ENDPOINTS[1])
+
+    def test_download_reports_failure_after_all_endpoints(self):
+        with patch(
+            "safeguarding_builder.core.osm_aeroway._post_overpass",
+            side_effect=RuntimeError("gateway timeout"),
+        ):
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "All Overpass endpoints failed",
+            ):
+                fetch_aeroway_osm(-33.9461, 151.1772)
 
     def test_query_rejects_invalid_coordinates(self):
         with self.assertRaises(ValueError):

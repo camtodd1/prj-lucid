@@ -564,6 +564,18 @@ class SafeguardingBuilder(
             )
             return
 
+        osm_button = self.dlg.findChild(QPushButton, "pushButton_DownloadOsmAeroway")
+        original_button_text = osm_button.text() if osm_button else ""
+
+        def update_download_status(attempt: int, total: int):
+            if osm_button:
+                osm_button.setText(
+                    self.tr(
+                        "Downloading OSM aeroway features… server {attempt}/{total}"
+                    ).format(attempt=attempt, total=total)
+                )
+            QCoreApplication.processEvents()
+
         try:
             arp_wgs84 = QgsCoordinateTransform(
                 source_crs,
@@ -574,7 +586,14 @@ class SafeguardingBuilder(
             self.dlg.setEnabled(False)
             cursor_shapes = getattr(Qt, "CursorShape", Qt)
             self.dlg.setCursor(cursor_shapes.WaitCursor)
-            osm_content = fetch_aeroway_osm(arp_wgs84.y(), arp_wgs84.x())
+            osm_content = fetch_aeroway_osm(
+                arp_wgs84.y(),
+                arp_wgs84.x(),
+                attempt_callback=update_download_status,
+            )
+            if osm_button:
+                osm_button.setText(self.tr("Preparing OSM aeroway layers…"))
+            QCoreApplication.processEvents()
             osm_path = QgsProcessingUtils.generateTempFilename("aeroway_10km.osm")
             Path(osm_path).write_bytes(osm_content)
             loaded = self._load_osm_aeroway_layers(osm_path)
@@ -593,6 +612,8 @@ class SafeguardingBuilder(
             )
             return
         finally:
+            if osm_button:
+                osm_button.setText(original_button_text)
             self.dlg.unsetCursor()
             self.dlg.setEnabled(True)
 

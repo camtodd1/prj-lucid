@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """Small Overpass client for downloading OSM aeroway features."""
 
+from typing import Callable, Optional
 from urllib.parse import urlencode
 from xml.etree import ElementTree
 
@@ -17,7 +18,10 @@ from qgis.core import (  # type: ignore
 )
 
 
-OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter"
+OVERPASS_ENDPOINTS = (
+    "https://overpass-api.de/api/interpreter",
+    "https://overpass.private.coffee/api/interpreter",
+)
 AEROWAY_RADIUS_M = 10_000
 OSM_SUBLAYERS = (
     ("points", "points"),
@@ -122,22 +126,22 @@ def build_aeroway_query(latitude: float, longitude: float) -> str:
 
     around = f"around:{AEROWAY_RADIUS_M},{latitude:.7f},{longitude:.7f}"
     return (
-        "[out:xml][timeout:60];\n"
+        "[out:xml][timeout:45];\n"
         "(\n"
         f'  node["aeroway"]({around});\n'
         f'  way["aeroway"]({around});\n'
         f'  relation["aeroway"]({around});\n'
         ");\n"
         "(._;>;);\n"
-        "out body;"
+        "out body qt;"
     )
 
 
-def fetch_aeroway_osm(latitude: float, longitude: float) -> bytes:
-    """Download an OSM XML response using QGIS network/proxy settings."""
-    request = QNetworkRequest(QUrl(OVERPASS_ENDPOINT))
+def _post_overpass(endpoint: str, payload: QByteArray) -> bytes:
+    """Post one query to an Overpass endpoint and validate its OSM response."""
+    request = QNetworkRequest(QUrl(endpoint))
     if hasattr(request, "setTransferTimeout"):
-        request.setTransferTimeout(70_000)
+        request.setTransferTimeout(50_000)
     known_headers = getattr(QNetworkRequest, "KnownHeaders", QNetworkRequest)
     request.setHeader(
         known_headers.ContentTypeHeader,
@@ -145,10 +149,10 @@ def fetch_aeroway_osm(latitude: float, longitude: float) -> bytes:
     )
     request.setRawHeader(
         QByteArray(b"User-Agent"),
-        QByteArray(b"SafeguardingBuilder-QGIS/0.1 (OSM aeroway import)"),
-    )
-    payload = QByteArray(
-        urlencode({"data": build_aeroway_query(latitude, longitude)}).encode("utf-8")
+        QByteArray(
+            b"SafeguardingBuilder-QGIS/0.1 "
+            b"(https://github.com/camtodd1/prj-lucid)"
+        ),
     )
 
     network = QgsBlockingNetworkRequest()
@@ -168,3 +172,24 @@ def fetch_aeroway_osm(latitude: float, longitude: float) -> bytes:
         detail = remark.text.strip() if remark is not None and remark.text else "unknown error"
         raise RuntimeError(f"Overpass could not complete the query: {detail}")
     return content
+
+
+def fetch_aeroway_osm(
+    latitude: float,
+    longitude: float,
+    attempt_callback: Optional[Callable[[int, int], None]] = None,
+) -> bytes:
+    """Download OSM XML, failing over when a public Overpass instance is busy."""
+    payload = QByteArray(
+        urlencode({"data": build_aeroway_query(latitude, longitude)}).encode("utf-8")
+    )
+    errors = []
+    endpoint_count = len(OVERPASS_ENDPOINTS)
+    for attempt, endpoint in enumerate(OVERPASS_ENDPOINTS, start=1):
+        if attempt_callback is not None:
+            attempt_callback(attempt, endpoint_count)
+        try:
+            return _post_overpass(endpoint, payload)
+        except RuntimeError as exc:
+            errors.append(f"{endpoint}: {exc}")
+    raise RuntimeError("All Overpass endpoints failed. " + " | ".join(errors))
