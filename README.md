@@ -34,7 +34,8 @@ The plugin can generate:
   aerodrome reference point, split into tag-specific layers such as taxiways,
   parking positions, and holding positions. Additional OSM tags are promoted to
   layer attributes, so navigation-aid features retain values such as `papi`,
-  `als`, and `vasi`.
+  `als`, and `vasi`. Geometry-aware styling distinguishes operational surfaces,
+  movement paths, positions, and navigation aids.
 - Physical runway geometry, including runway pavement, shoulders, strips,
   runway-end safety areas, stopways, pre-threshold runway areas, and displaced
   threshold marking references.

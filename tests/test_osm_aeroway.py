@@ -142,6 +142,34 @@ class OsmAerowayTests(unittest.TestCase):
             navigation_layer.fields().indexOf("other_tags"),
             0,
         )
+        layers_by_name = {
+            layer.name(): layer for layer in project.mapLayers().values()
+        }
+        for name, layer in layers_by_name.items():
+            self.assertEqual(
+                layer.customProperty("safeguarding_builder/osm_aeroway_style"),
+                name,
+            )
+        self.assertEqual(
+            layers_by_name["taxiway"].renderer().symbol().color().name(),
+            "#d99a14",
+        )
+        self.assertAlmostEqual(
+            layers_by_name["taxiway"].renderer().symbol().width(),
+            1.7,
+        )
+        self.assertEqual(
+            layers_by_name["navigationaid"].renderer().symbol().color().name(),
+            "#7c3aed",
+        )
+        self.assertAlmostEqual(
+            layers_by_name["navigationaid"].renderer().symbol().size(),
+            3.8,
+        )
+        self.assertEqual(
+            layers_by_name["apron"].renderer().symbol().color().name(),
+            "#8fa3b5",
+        )
         self.assertIsNotNone(
             project.layerTreeRoot().findGroup("OSM aeroway — 10 km from ARP")
         )

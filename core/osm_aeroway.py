@@ -6,7 +6,15 @@ from xml.etree import ElementTree
 
 from qgis.PyQt.QtCore import QByteArray, QUrl  # type: ignore
 from qgis.PyQt.QtNetwork import QNetworkRequest  # type: ignore
-from qgis.core import QgsBlockingNetworkRequest  # type: ignore
+from qgis.core import (  # type: ignore
+    QgsBlockingNetworkRequest,
+    QgsFillSymbol,
+    QgsLineSymbol,
+    QgsMarkerSymbol,
+    QgsSingleSymbolRenderer,
+    QgsVectorLayer,
+    QgsWkbTypes,
+)
 
 
 OVERPASS_ENDPOINT = "https://overpass-api.de/api/interpreter"
@@ -17,6 +25,90 @@ OSM_SUBLAYERS = (
     ("multilinestrings", "multilinestrings"),
     ("multipolygons", "multipolygons"),
 )
+
+AEROWAY_STYLES = {
+    "aerodrome": {"color": "#2563EB", "shape": "circle", "size": "4.0"},
+    "apron": {"color": "#8FA3B5", "outline": "#526678"},
+    "beacon": {"color": "#DB2777", "shape": "star", "size": "4.0"},
+    "gate": {"color": "#2563EB", "shape": "square", "size": "3.4"},
+    "hangar": {"color": "#64748B", "outline": "#334155"},
+    "helipad": {"color": "#DC2626", "shape": "cross2", "size": "4.0"},
+    "holding_position": {
+        "color": "#D1495B",
+        "shape": "triangle",
+        "size": "4.0",
+    },
+    "navigationaid": {
+        "color": "#7C3AED",
+        "shape": "diamond",
+        "size": "3.8",
+    },
+    "parking_position": {
+        "color": "#1496A5",
+        "shape": "circle",
+        "size": "3.4",
+    },
+    "runway": {"color": "#4B5563", "outline": "#F8FAFC", "width": "2.4"},
+    "taxilane": {
+        "color": "#EAB308",
+        "outline": "#A16207",
+        "width": "1.2",
+        "line_style": "dash",
+    },
+    "taxiway": {"color": "#D99A14", "outline": "#8A5E00", "width": "1.7"},
+    "terminal": {"color": "#475569", "outline": "#1E293B"},
+    "windsock": {"color": "#F97316", "shape": "triangle", "size": "4.0"},
+}
+DEFAULT_AEROWAY_STYLE = {
+    "color": "#2D7F78",
+    "outline": "#18534F",
+    "shape": "circle",
+    "size": "3.2",
+    "width": "1.2",
+    "line_style": "solid",
+}
+
+
+def apply_aeroway_style(layer: QgsVectorLayer, category: str) -> None:
+    """Apply a compact geometry-aware style for an OSM aeroway category."""
+    style = dict(DEFAULT_AEROWAY_STYLE)
+    style.update(AEROWAY_STYLES.get(category, {}))
+    geometry_type = layer.geometryType()
+
+    if geometry_type == QgsWkbTypes.PointGeometry:
+        symbol = QgsMarkerSymbol.createSimple(
+            {
+                "name": style["shape"],
+                "color": style["color"],
+                "outline_color": "#FFFFFF",
+                "outline_width": "0.4",
+                "size": style["size"],
+            }
+        )
+    elif geometry_type == QgsWkbTypes.LineGeometry:
+        symbol = QgsLineSymbol.createSimple(
+            {
+                "color": style["color"],
+                "width": style["width"],
+                "line_style": style["line_style"],
+            }
+        )
+    elif geometry_type == QgsWkbTypes.PolygonGeometry:
+        symbol = QgsFillSymbol.createSimple(
+            {
+                "color": style["color"],
+                "outline_color": style["outline"],
+                "outline_width": "0.7",
+            }
+        )
+        if symbol is not None:
+            symbol.setOpacity(0.55)
+    else:
+        return
+
+    if symbol is not None:
+        layer.setRenderer(QgsSingleSymbolRenderer(symbol))
+        layer.setCustomProperty("safeguarding_builder/osm_aeroway_style", category)
 
 
 def build_aeroway_query(latitude: float, longitude: float) -> str:

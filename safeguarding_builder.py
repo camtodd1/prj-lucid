@@ -54,7 +54,11 @@ from .core.run_history import (
     runtime_input_fingerprint,
     validate_runway_configuration,
 )
-from .core.osm_aeroway import OSM_SUBLAYERS, fetch_aeroway_osm
+from .core.osm_aeroway import (
+    OSM_SUBLAYERS,
+    apply_aeroway_style,
+    fetch_aeroway_osm,
+)
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.annex14_geometry import Annex14GeometryMixin
 from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
@@ -711,6 +715,7 @@ class SafeguardingBuilder(
                     ["© OpenStreetMap contributors — https://www.openstreetmap.org/copyright"]
                 )
                 layer.setMetadata(metadata)
+                apply_aeroway_style(layer, category)
                 project.addMapLayer(layer, False)
                 group.addLayer(layer)
                 loaded += 1
