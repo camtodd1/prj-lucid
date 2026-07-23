@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 
 from qgis.PyQt import QtWidgets
-from qgis.core import QgsApplication, QgsProject
+from qgis.core import QgsApplication, QgsCoordinateReferenceSystem, QgsProject
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -104,6 +104,7 @@ class OsmAerowayTests(unittest.TestCase):
 """
         project = QgsProject.instance()
         project.clear()
+        project.setCrs(QgsCoordinateReferenceSystem("EPSG:3857"))
         builder = SafeguardingBuilder.__new__(SafeguardingBuilder)
         builder.translator = None
         with tempfile.NamedTemporaryFile(suffix=".osm") as osm_file:
@@ -122,7 +123,9 @@ class OsmAerowayTests(unittest.TestCase):
             },
         )
         self.assertEqual(loaded, 5)
+        self.assertEqual(project.crs().authid(), "EPSG:3857")
         for layer in project.mapLayers().values():
+            self.assertEqual(layer.crs().authid(), "EPSG:3857")
             self.assertGreaterEqual(layer.fields().indexOf("aeroway"), 0)
             self.assertGreaterEqual(layer.featureCount(), 1)
         navigation_layer = next(
@@ -142,6 +145,9 @@ class OsmAerowayTests(unittest.TestCase):
             navigation_layer.fields().indexOf("other_tags"),
             0,
         )
+        navigation_point = next(navigation_layer.getFeatures()).geometry().asPoint()
+        self.assertGreater(abs(navigation_point.x()), 1_000_000)
+        self.assertGreater(abs(navigation_point.y()), 1_000_000)
         layers_by_name = {
             layer.name(): layer for layer in project.mapLayers().values()
         }

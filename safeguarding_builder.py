@@ -612,6 +612,7 @@ class SafeguardingBuilder(
     def _load_osm_aeroway_layers(self, osm_path: str) -> int:
         """Load layers split by aeroway tag beneath one project group."""
         project = QgsProject.instance()
+        target_crs = project.crs()
         root = project.layerTreeRoot()
         group = root.addGroup(self.tr("OSM aeroway — 10 km from ARP"))
         category_sources: Dict[
@@ -663,14 +664,22 @@ class SafeguardingBuilder(
                 if len(sources) > 1:
                     display_name = f"{category} — {geometry_name}"
                 geometry_type = QgsWkbTypes.displayString(source.wkbType())
-                crs_authid = source.crs().authid() or "EPSG:4326"
                 layer = QgsVectorLayer(
-                    f"{geometry_type}?crs={crs_authid}",
+                    geometry_type,
                     display_name,
                     "memory",
                 )
                 if not layer.isValid():
                     continue
+                output_crs = target_crs if target_crs.isValid() else source.crs()
+                layer.setCrs(output_crs)
+                coordinate_transform = None
+                if source.crs() != output_crs:
+                    coordinate_transform = QgsCoordinateTransform(
+                        source.crs(),
+                        output_crs,
+                        project.transformContext(),
+                    )
                 provider = layer.dataProvider()
                 output_fields = QgsFields(source.fields())
                 if output_fields.indexOf("aeroway") < 0:
@@ -693,7 +702,10 @@ class SafeguardingBuilder(
                 source_field_count = source.fields().count()
                 for feature, tags in tagged_features:
                     output_feature = QgsFeature(layer.fields())
-                    output_feature.setGeometry(feature.geometry())
+                    geometry = QgsGeometry(feature.geometry())
+                    if coordinate_transform is not None:
+                        geometry.transform(coordinate_transform)
+                    output_feature.setGeometry(geometry)
                     attributes = feature.attributes() + [None] * (
                         layer.fields().count() - source_field_count
                     )
@@ -721,6 +733,8 @@ class SafeguardingBuilder(
                 loaded += 1
         if loaded == 0:
             root.removeChildNode(group)
+        elif target_crs.isValid() and project.crs() != target_crs:
+            project.setCrs(target_crs)
         return loaded
 
     def dialog_finished(self, result: int):

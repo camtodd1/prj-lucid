@@ -35,7 +35,8 @@ The plugin can generate:
   parking positions, and holding positions. Additional OSM tags are promoted to
   layer attributes, so navigation-aid features retain values such as `papi`,
   `als`, and `vasi`. Geometry-aware styling distinguishes operational surfaces,
-  movement paths, positions, and navigation aids.
+  movement paths, positions, and navigation aids. Imported geometries are
+  transformed into the existing project CRS without changing the project CRS.
 - Physical runway geometry, including runway pavement, shoulders, strips,
   runway-end safety areas, stopways, pre-threshold runway areas, and displaced
   threshold marking references.
