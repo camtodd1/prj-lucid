@@ -611,7 +611,14 @@ class SafeguardingBuilder(
         root = project.layerTreeRoot()
         group = root.addGroup(self.tr("OSM aeroway — 10 km from ARP"))
         category_sources: Dict[
-            str, List[Tuple[str, QgsVectorLayer, List[QgsFeature]]]
+            str,
+            List[
+                Tuple[
+                    str,
+                    QgsVectorLayer,
+                    List[Tuple[QgsFeature, Dict[str, Any]]],
+                ]
+            ],
         ] = {}
 
         for sublayer, geometry_name in OSM_SUBLAYERS:
@@ -624,15 +631,21 @@ class SafeguardingBuilder(
                 continue
             aeroway_index = source.fields().indexOf("aeroway")
             other_tags_index = source.fields().indexOf("other_tags")
-            category_features: Dict[str, List[QgsFeature]] = {}
+            category_features: Dict[
+                str, List[Tuple[QgsFeature, Dict[str, Any]]]
+            ] = {}
             for feature in source.getFeatures():
-                value = feature[aeroway_index] if aeroway_index >= 0 else None
-                if (value is None or not str(value).strip()) and other_tags_index >= 0:
+                tags: Dict[str, Any] = {}
+                if other_tags_index >= 0:
                     tags = QgsHstoreUtils.parse(str(feature[other_tags_index]))
+                value = feature[aeroway_index] if aeroway_index >= 0 else None
+                if value is None or not str(value).strip():
                     value = tags.get("aeroway")
                 category = str(value).strip() if value is not None else ""
                 if category:
-                    category_features.setdefault(category, []).append(feature)
+                    category_features.setdefault(category, []).append(
+                        (feature, tags)
+                    )
             for category, features in category_features.items():
                 category_sources.setdefault(category, []).append(
                     (geometry_name, source, features)
@@ -641,7 +654,7 @@ class SafeguardingBuilder(
         loaded = 0
         for category in sorted(category_sources):
             sources = category_sources[category]
-            for geometry_name, source, features in sources:
+            for geometry_name, source, tagged_features in sources:
                 display_name = category
                 if len(sources) > 1:
                     display_name = f"{category} — {geometry_name}"
@@ -656,20 +669,39 @@ class SafeguardingBuilder(
                     continue
                 provider = layer.dataProvider()
                 output_fields = QgsFields(source.fields())
-                add_aeroway_field = output_fields.indexOf("aeroway") < 0
-                if add_aeroway_field:
+                if output_fields.indexOf("aeroway") < 0:
                     output_fields.append(QgsField("aeroway", QVariant.String))
+                tag_keys = sorted(
+                    {
+                        str(key)
+                        for _, tags in tagged_features
+                        for key in tags
+                        if str(key)
+                    }
+                )
+                for tag_key in tag_keys:
+                    if output_fields.indexOf(tag_key) < 0:
+                        output_fields.append(QgsField(tag_key, QVariant.String))
                 if not provider.addAttributes(output_fields):
                     continue
                 layer.updateFields()
                 output_features = []
-                for feature in features:
+                source_field_count = source.fields().count()
+                for feature, tags in tagged_features:
                     output_feature = QgsFeature(layer.fields())
                     output_feature.setGeometry(feature.geometry())
-                    attributes = feature.attributes()
-                    if add_aeroway_field:
-                        attributes.append(category)
+                    attributes = feature.attributes() + [None] * (
+                        layer.fields().count() - source_field_count
+                    )
                     output_feature.setAttributes(attributes)
+                    output_feature.setAttribute("aeroway", category)
+                    for tag_key, tag_value in tags.items():
+                        field_index = layer.fields().indexOf(str(tag_key))
+                        if field_index >= 0:
+                            output_feature.setAttribute(
+                                field_index,
+                                None if tag_value is None else str(tag_value),
+                            )
                     output_features.append(output_feature)
                 features_added, _ = provider.addFeatures(output_features)
                 if not features_added:

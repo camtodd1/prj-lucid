@@ -75,6 +75,18 @@ class OsmAerowayTests(unittest.TestCase):
   <node id="5" lat="-33.9440" lon="151.1780"/>
   <node id="6" lat="-33.9440" lon="151.1790"/>
   <node id="7" lat="-33.9450" lon="151.1790"/>
+  <node id="8" lat="-33.9438" lon="151.1778">
+    <tag k="aeroway" v="navigationaid"/>
+    <tag k="navigationaid" v="als"/>
+  </node>
+  <node id="9" lat="-33.9436" lon="151.1776">
+    <tag k="aeroway" v="navigationaid"/>
+    <tag k="navigationaid" v="papi"/>
+  </node>
+  <node id="12" lat="-33.9434" lon="151.1774">
+    <tag k="aeroway" v="navigationaid"/>
+    <tag k="navigationaid" v="vasi"/>
+  </node>
   <way id="10">
     <nd ref="2"/>
     <nd ref="3"/>
@@ -101,12 +113,35 @@ class OsmAerowayTests(unittest.TestCase):
 
         self.assertEqual(
             {layer.name() for layer in project.mapLayers().values()},
-            {"apron", "holding_position", "parking_position", "taxiway"},
+            {
+                "apron",
+                "holding_position",
+                "navigationaid",
+                "parking_position",
+                "taxiway",
+            },
         )
-        self.assertEqual(loaded, 4)
+        self.assertEqual(loaded, 5)
         for layer in project.mapLayers().values():
             self.assertGreaterEqual(layer.fields().indexOf("aeroway"), 0)
-            self.assertEqual(layer.featureCount(), 1)
+            self.assertGreaterEqual(layer.featureCount(), 1)
+        navigation_layer = next(
+            layer
+            for layer in project.mapLayers().values()
+            if layer.name() == "navigationaid"
+        )
+        self.assertGreaterEqual(
+            navigation_layer.fields().indexOf("navigationaid"),
+            0,
+        )
+        self.assertEqual(
+            {feature["navigationaid"] for feature in navigation_layer.getFeatures()},
+            {"als", "papi", "vasi"},
+        )
+        self.assertGreaterEqual(
+            navigation_layer.fields().indexOf("other_tags"),
+            0,
+        )
         self.assertIsNotNone(
             project.layerTreeRoot().findGroup("OSM aeroway — 10 km from ARP")
         )

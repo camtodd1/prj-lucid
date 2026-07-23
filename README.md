@@ -32,7 +32,9 @@ The plugin can generate:
   layers.
 - OpenStreetMap features carrying the `aeroway` key within 10 km of the entered
   aerodrome reference point, split into tag-specific layers such as taxiways,
-  parking positions, and holding positions.
+  parking positions, and holding positions. Additional OSM tags are promoted to
+  layer attributes, so navigation-aid features retain values such as `papi`,
+  `als`, and `vasi`.
 - Physical runway geometry, including runway pavement, shoulders, strips,
   runway-end safety areas, stopways, pre-threshold runway areas, and displaced
   threshold marking references.
