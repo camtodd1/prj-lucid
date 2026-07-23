@@ -394,6 +394,13 @@
           <item row="1" column="5">
            <widget class="QLineEdit" name="lineEdit_arp_elevation"/>
           </item>
+          <item row="2" column="0" colspan="6">
+           <widget class="QPushButton" name="pushButton_DownloadOsmAeroway">
+            <property name="text">
+             <string>Download OSM aeroway features within 10 km</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

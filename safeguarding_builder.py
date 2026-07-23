@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Dict, Optional, List, Any, Tuple
 
 # --- Qt Imports ---
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant  # type: ignore
+from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant, Qt  # type: ignore
 from qgis.PyQt.QtGui import QIcon  # type: ignore
 from qgis.PyQt.QtWidgets import QAction, QMessageBox, QPushButton  # type: ignore
 
@@ -23,6 +23,7 @@ from qgis.core import (  # type: ignore
     QgsField,
     QgsFeature,
     QgsGeometry,
+    QgsHstoreUtils,
     QgsLineString,
     QgsPointXY,
     QgsPolygon,
@@ -31,6 +32,9 @@ from qgis.core import (  # type: ignore
     QgsLayerTreeNode,
     Qgis,
     QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
+    QgsProcessingUtils,
+    QgsWkbTypes,
 )
 
 # --- Local Imports ---
@@ -50,6 +54,7 @@ from .core.run_history import (
     runtime_input_fingerprint,
     validate_runway_configuration,
 )
+from .core.osm_aeroway import OSM_SUBLAYERS, fetch_aeroway_osm
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.annex14_geometry import Annex14GeometryMixin
 from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
@@ -520,11 +525,166 @@ class SafeguardingBuilder(
                 self.dlg = None
                 return
 
+            osm_button = self.dlg.findChild(QPushButton, "pushButton_DownloadOsmAeroway")
+            if osm_button:
+                osm_button.clicked.connect(self.download_osm_aeroway)
+
             # The dialog's built-in close mechanisms (X button, Esc key)
             # will emit the finished signal.
             self.dlg.finished.connect(self.dialog_finished)
 
         self.dlg.show()
+
+    def download_osm_aeroway(self):
+        """Download aeroway-tagged OSM elements within 10 km of the entered ARP."""
+        if self.dlg is None:
+            return
+        try:
+            arp_easting = float(self.dlg.lineEdit_arp_easting.text().strip())
+            arp_northing = float(self.dlg.lineEdit_arp_northing.text().strip())
+        except (AttributeError, TypeError, ValueError):
+            QMessageBox.warning(
+                self.dlg,
+                self.tr("ARP required"),
+                self.tr("Enter valid ARP easting and northing coordinates first."),
+            )
+            return
+
+        project = QgsProject.instance()
+        source_crs = project.crs()
+        if not source_crs.isValid():
+            QMessageBox.warning(
+                self.dlg,
+                self.tr("Project CRS required"),
+                self.tr("Set a valid project CRS before downloading OSM data."),
+            )
+            return
+
+        try:
+            arp_wgs84 = QgsCoordinateTransform(
+                source_crs,
+                QgsCoordinateReferenceSystem("EPSG:4326"),
+                project.transformContext(),
+            ).transform(QgsPointXY(arp_easting, arp_northing))
+
+            self.dlg.setEnabled(False)
+            cursor_shapes = getattr(Qt, "CursorShape", Qt)
+            self.dlg.setCursor(cursor_shapes.WaitCursor)
+            osm_content = fetch_aeroway_osm(arp_wgs84.y(), arp_wgs84.x())
+            osm_path = QgsProcessingUtils.generateTempFilename("aeroway_10km.osm")
+            Path(osm_path).write_bytes(osm_content)
+            loaded = self._load_osm_aeroway_layers(osm_path)
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"OSM aeroway download failed: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+            QMessageBox.warning(
+                self.dlg,
+                self.tr("OSM download failed"),
+                self.tr("Could not download OSM aeroway data:\n\n{error}").format(
+                    error=exc
+                ),
+            )
+            return
+        finally:
+            self.dlg.unsetCursor()
+            self.dlg.setEnabled(True)
+
+        if loaded:
+            self.iface.messageBar().pushSuccess(
+                self.tr("OSM aeroway"),
+                self.tr("Added {count} layer(s) for the 10 km ARP search.").format(
+                    count=loaded
+                ),
+            )
+        else:
+            self.iface.messageBar().pushInfo(
+                self.tr("OSM aeroway"),
+                self.tr("No aeroway features were found within 10 km of the ARP."),
+            )
+
+    def _load_osm_aeroway_layers(self, osm_path: str) -> int:
+        """Load layers split by aeroway tag beneath one project group."""
+        project = QgsProject.instance()
+        root = project.layerTreeRoot()
+        group = root.addGroup(self.tr("OSM aeroway — 10 km from ARP"))
+        category_sources: Dict[
+            str, List[Tuple[str, QgsVectorLayer, List[QgsFeature]]]
+        ] = {}
+
+        for sublayer, geometry_name in OSM_SUBLAYERS:
+            source = QgsVectorLayer(
+                f"{osm_path}|layername={sublayer}",
+                f"OSM aeroway {geometry_name}",
+                "ogr",
+            )
+            if not source.isValid():
+                continue
+            aeroway_index = source.fields().indexOf("aeroway")
+            other_tags_index = source.fields().indexOf("other_tags")
+            category_features: Dict[str, List[QgsFeature]] = {}
+            for feature in source.getFeatures():
+                value = feature[aeroway_index] if aeroway_index >= 0 else None
+                if (value is None or not str(value).strip()) and other_tags_index >= 0:
+                    tags = QgsHstoreUtils.parse(str(feature[other_tags_index]))
+                    value = tags.get("aeroway")
+                category = str(value).strip() if value is not None else ""
+                if category:
+                    category_features.setdefault(category, []).append(feature)
+            for category, features in category_features.items():
+                category_sources.setdefault(category, []).append(
+                    (geometry_name, source, features)
+                )
+
+        loaded = 0
+        for category in sorted(category_sources):
+            sources = category_sources[category]
+            for geometry_name, source, features in sources:
+                display_name = category
+                if len(sources) > 1:
+                    display_name = f"{category} — {geometry_name}"
+                geometry_type = QgsWkbTypes.displayString(source.wkbType())
+                crs_authid = source.crs().authid() or "EPSG:4326"
+                layer = QgsVectorLayer(
+                    f"{geometry_type}?crs={crs_authid}",
+                    display_name,
+                    "memory",
+                )
+                if not layer.isValid():
+                    continue
+                provider = layer.dataProvider()
+                output_fields = QgsFields(source.fields())
+                add_aeroway_field = output_fields.indexOf("aeroway") < 0
+                if add_aeroway_field:
+                    output_fields.append(QgsField("aeroway", QVariant.String))
+                if not provider.addAttributes(output_fields):
+                    continue
+                layer.updateFields()
+                output_features = []
+                for feature in features:
+                    output_feature = QgsFeature(layer.fields())
+                    output_feature.setGeometry(feature.geometry())
+                    attributes = feature.attributes()
+                    if add_aeroway_field:
+                        attributes.append(category)
+                    output_feature.setAttributes(attributes)
+                    output_features.append(output_feature)
+                features_added, _ = provider.addFeatures(output_features)
+                if not features_added:
+                    continue
+                metadata = layer.metadata()
+                metadata.setRights(
+                    ["© OpenStreetMap contributors — https://www.openstreetmap.org/copyright"]
+                )
+                layer.setMetadata(metadata)
+                project.addMapLayer(layer, False)
+                group.addLayer(layer)
+                loaded += 1
+        if loaded == 0:
+            root.removeChildNode(group)
+        return loaded
 
     def dialog_finished(self, result: int):
         """Slot connected to the dialog's finished signal for cleanup."""

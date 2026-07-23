@@ -30,6 +30,9 @@ The plugin can generate:
 
 - Airport reference point, runway centreline, and CNS source facility reference
   layers.
+- OpenStreetMap features carrying the `aeroway` key within 10 km of the entered
+  aerodrome reference point, split into tag-specific layers such as taxiways,
+  parking positions, and holding positions.
 - Physical runway geometry, including runway pavement, shoulders, strips,
   runway-end safety areas, stopways, pre-threshold runway areas, and displaced
   threshold marking references.

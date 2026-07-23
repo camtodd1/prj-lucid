@@ -1,0 +1,117 @@
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+from qgis.PyQt import QtWidgets
+from qgis.core import QgsApplication, QgsProject
+
+
+WORKSPACE = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(WORKSPACE.parent))
+
+from safeguarding_builder.core.osm_aeroway import (
+    AEROWAY_RADIUS_M,
+    build_aeroway_query,
+)
+from safeguarding_builder.safeguarding_builder_dialog import SafeguardingBuilderDialog
+from safeguarding_builder.safeguarding_builder import SafeguardingBuilder
+
+
+class OsmAerowayTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        existing = QtWidgets.QApplication.instance()
+        cls._owns_qgis_app = existing is None
+        cls.app = existing or QgsApplication([], True)
+        if cls._owns_qgis_app:
+            cls.app.initQgis()
+
+    @classmethod
+    def tearDownClass(cls):
+        if cls._owns_qgis_app:
+            cls.app.exitQgis()
+
+    def test_query_covers_all_element_types_at_fixed_radius(self):
+        query = build_aeroway_query(-33.9461, 151.1772)
+
+        self.assertEqual(AEROWAY_RADIUS_M, 10_000)
+        self.assertIn('node["aeroway"](around:10000,-33.9461000,151.1772000)', query)
+        self.assertIn('way["aeroway"](around:10000,-33.9461000,151.1772000)', query)
+        self.assertIn(
+            'relation["aeroway"](around:10000,-33.9461000,151.1772000)',
+            query,
+        )
+        self.assertTrue(query.endswith("out body;"))
+
+    def test_query_rejects_invalid_coordinates(self):
+        with self.assertRaises(ValueError):
+            build_aeroway_query(91, 0)
+        with self.assertRaises(ValueError):
+            build_aeroway_query(0, 181)
+
+    def test_dialog_exposes_arp_download_button(self):
+        dialog = SafeguardingBuilderDialog()
+        try:
+            self.assertEqual(
+                dialog.pushButton_DownloadOsmAeroway.text(),
+                "Download OSM aeroway features within 10 km",
+            )
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_qgis_splits_downloaded_features_into_aeroway_layers(self):
+        osm = b"""<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="test">
+  <node id="1" lat="-33.9461" lon="151.1772">
+    <tag k="aeroway" v="parking_position"/>
+  </node>
+  <node id="2" lat="-33.9460" lon="151.1770"/>
+  <node id="3" lat="-33.9450" lon="151.1780"/>
+  <node id="4" lat="-33.9462" lon="151.1774">
+    <tag k="aeroway" v="holding_position"/>
+  </node>
+  <node id="5" lat="-33.9440" lon="151.1780"/>
+  <node id="6" lat="-33.9440" lon="151.1790"/>
+  <node id="7" lat="-33.9450" lon="151.1790"/>
+  <way id="10">
+    <nd ref="2"/>
+    <nd ref="3"/>
+    <tag k="aeroway" v="taxiway"/>
+  </way>
+  <way id="11">
+    <nd ref="3"/>
+    <nd ref="5"/>
+    <nd ref="6"/>
+    <nd ref="7"/>
+    <nd ref="3"/>
+    <tag k="aeroway" v="apron"/>
+  </way>
+</osm>
+"""
+        project = QgsProject.instance()
+        project.clear()
+        builder = SafeguardingBuilder.__new__(SafeguardingBuilder)
+        builder.translator = None
+        with tempfile.NamedTemporaryFile(suffix=".osm") as osm_file:
+            osm_file.write(osm)
+            osm_file.flush()
+            loaded = builder._load_osm_aeroway_layers(osm_file.name)
+
+        self.assertEqual(
+            {layer.name() for layer in project.mapLayers().values()},
+            {"apron", "holding_position", "parking_position", "taxiway"},
+        )
+        self.assertEqual(loaded, 4)
+        for layer in project.mapLayers().values():
+            self.assertGreaterEqual(layer.fields().indexOf("aeroway"), 0)
+            self.assertEqual(layer.featureCount(), 1)
+        self.assertIsNotNone(
+            project.layerTreeRoot().findGroup("OSM aeroway — 10 km from ARP")
+        )
+        project.clear()
+
+
+if __name__ == "__main__":
+    unittest.main()
