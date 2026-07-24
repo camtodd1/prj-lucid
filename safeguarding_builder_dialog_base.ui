@@ -401,36 +401,6 @@
             </property>
            </widget>
           </item>
-          <item row="3" column="0" colspan="6">
-           <layout class="QHBoxLayout" name="horizontalLayout_osmDownloadStatus">
-            <item>
-             <widget class="QLabel" name="label_osmDownloadStatus">
-              <property name="visible">
-               <bool>false</bool>
-              </property>
-              <property name="text">
-               <string>Downloading OSM aeroway features…</string>
-              </property>
-             </widget>
-            </item>
-            <item>
-             <widget class="QProgressBar" name="progressBar_osmDownload">
-              <property name="visible">
-               <bool>false</bool>
-              </property>
-              <property name="minimum">
-               <number>0</number>
-              </property>
-              <property name="maximum">
-               <number>0</number>
-              </property>
-              <property name="textVisible">
-               <bool>false</bool>
-              </property>
-             </widget>
-            </item>
-           </layout>
-          </item>
          </layout>
         </widget>
        </item>

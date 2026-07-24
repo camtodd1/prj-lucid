@@ -2,7 +2,7 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 from qgis.PyQt import QtWidgets
 from qgis.core import QgsApplication, QgsCoordinateReferenceSystem, QgsProject
@@ -92,10 +92,64 @@ class OsmAerowayTests(unittest.TestCase):
                 dialog.pushButton_DownloadOsmAeroway.text(),
                 "Download OSM aeroway features within 10 km",
             )
-            self.assertTrue(dialog.label_osmDownloadStatus.isHidden())
-            self.assertTrue(dialog.progressBar_osmDownload.isHidden())
-            self.assertEqual(dialog.progressBar_osmDownload.minimum(), 0)
-            self.assertEqual(dialog.progressBar_osmDownload.maximum(), 0)
+        finally:
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_download_uses_an_immediate_indeterminate_progress_dialog(self):
+        dialog = SafeguardingBuilderDialog()
+        builder = SafeguardingBuilder.__new__(SafeguardingBuilder)
+        builder.translator = None
+        builder.dlg = dialog
+        progress = builder._create_osm_download_progress_dialog()
+        try:
+            self.assertEqual(progress.windowTitle(), "OSM aeroway download")
+            self.assertEqual(progress.minimum(), 0)
+            self.assertEqual(progress.maximum(), 0)
+            self.assertEqual(progress.minimumDuration(), 0)
+            self.assertFalse(progress.autoClose())
+            self.assertFalse(progress.autoReset())
+        finally:
+            progress.close()
+            progress.deleteLater()
+            dialog.close()
+            dialog.deleteLater()
+
+    def test_download_starts_in_background_and_leaves_progress_visible(self):
+        dialog = SafeguardingBuilderDialog()
+        dialog.lineEdit_arp_easting.setText("507000")
+        dialog.lineEdit_arp_northing.setText("5707000")
+        QgsProject.instance().setCrs(QgsCoordinateReferenceSystem("EPSG:32630"))
+        builder = SafeguardingBuilder.__new__(SafeguardingBuilder)
+        builder.translator = None
+        builder.dlg = dialog
+        builder.iface = MagicMock()
+        progress = MagicMock()
+        task = MagicMock()
+        manager = MagicMock()
+        manager.addTask.return_value = True
+        try:
+            with (
+                patch.object(
+                    builder,
+                    "_create_osm_download_progress_dialog",
+                    return_value=progress,
+                ),
+                patch(
+                    "safeguarding_builder.safeguarding_builder.QgsTask.fromFunction",
+                    return_value=task,
+                ),
+                patch(
+                    "safeguarding_builder.safeguarding_builder.QgsApplication.taskManager",
+                    return_value=manager,
+                ),
+            ):
+                builder.download_osm_aeroway()
+
+            progress.show.assert_called_once()
+            manager.addTask.assert_called_once_with(task)
+            task.progressChanged.connect.assert_called_once()
+            self.assertFalse(dialog.pushButton_DownloadOsmAeroway.isEnabled())
         finally:
             dialog.close()
             dialog.deleteLater()

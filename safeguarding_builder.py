@@ -15,14 +15,14 @@ from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant,
 from qgis.PyQt.QtGui import QIcon  # type: ignore
 from qgis.PyQt.QtWidgets import (  # type: ignore
     QAction,
-    QLabel,
     QMessageBox,
-    QProgressBar,
+    QProgressDialog,
     QPushButton,
 )
 
 # --- QGIS Imports ---
 from qgis.core import (  # type: ignore
+    QgsApplication,
     QgsProject,
     QgsVectorLayer,
     QgsFields,
@@ -40,6 +40,7 @@ from qgis.core import (  # type: ignore
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
     QgsProcessingUtils,
+    QgsTask,
     QgsWkbTypes,
 )
 
@@ -62,6 +63,7 @@ from .core.run_history import (
 )
 from .core.osm_aeroway import (
     OSM_SUBLAYERS,
+    OVERPASS_ENDPOINTS,
     apply_aeroway_style,
     fetch_aeroway_osm,
 )
@@ -572,24 +574,7 @@ class SafeguardingBuilder(
 
         osm_button = self.dlg.findChild(QPushButton, "pushButton_DownloadOsmAeroway")
         original_button_text = osm_button.text() if osm_button else ""
-        status_label = self.dlg.findChild(QLabel, "label_osmDownloadStatus")
-        progress_bar = self.dlg.findChild(QProgressBar, "progressBar_osmDownload")
-
-        def show_download_status(message: str):
-            if status_label:
-                status_label.setText(message)
-                status_label.show()
-            if progress_bar:
-                progress_bar.show()
-            QCoreApplication.processEvents()
-
-        def update_download_status(attempt: int, total: int):
-            message = self.tr(
-                "Downloading OSM aeroway features… server {attempt}/{total}"
-            ).format(attempt=attempt, total=total)
-            if osm_button:
-                osm_button.setText(message)
-            show_download_status(message)
+        progress_dialog = self._create_osm_download_progress_dialog()
 
         try:
             arp_wgs84 = QgsCoordinateTransform(
@@ -597,58 +582,125 @@ class SafeguardingBuilder(
                 QgsCoordinateReferenceSystem("EPSG:4326"),
                 project.transformContext(),
             ).transform(QgsPointXY(arp_easting, arp_northing))
+        except Exception as exc:
+            progress_dialog.deleteLater()
+            QMessageBox.warning(
+                self.dlg,
+                self.tr("Coordinate transformation failed"),
+                str(exc),
+            )
+            return
 
-            self.dlg.setEnabled(False)
-            cursor_shapes = getattr(Qt, "CursorShape", Qt)
-            self.dlg.setCursor(cursor_shapes.WaitCursor)
-            osm_content = fetch_aeroway_osm(
+        cursor_shapes = getattr(Qt, "CursorShape", Qt)
+        progress_dialog.setCursor(cursor_shapes.WaitCursor)
+        progress_dialog.show()
+        progress_dialog.raise_()
+        progress_dialog.activateWindow()
+        if osm_button:
+            osm_button.setEnabled(False)
+        QCoreApplication.processEvents()
+
+        def update_download_progress(progress: float):
+            total = len(OVERPASS_ENDPOINTS)
+            attempt = max(1, min(total, round(progress * total / 100.0)))
+            message = self.tr(
+                "Downloading OSM aeroway features… server {attempt}/{total}"
+            ).format(attempt=attempt, total=total)
+            progress_dialog.setLabelText(message)
+            if osm_button:
+                osm_button.setText(message)
+
+        def fetch_task(task: QgsTask):
+            return fetch_aeroway_osm(
                 arp_wgs84.y(),
                 arp_wgs84.x(),
-                attempt_callback=update_download_status,
+                attempt_callback=lambda attempt, total: task.setProgress(
+                    100.0 * attempt / total
+                ),
             )
-            preparing_message = self.tr("Preparing OSM aeroway layers…")
+
+        def finish_download(exception, osm_content=None):
+            loaded = 0
+            try:
+                if exception is not None:
+                    raise exception
+                preparing_message = self.tr("Preparing OSM aeroway layers…")
+                progress_dialog.setLabelText(preparing_message)
+                if osm_button:
+                    osm_button.setText(preparing_message)
+                QCoreApplication.processEvents()
+                osm_path = QgsProcessingUtils.generateTempFilename("aeroway_10km.osm")
+                Path(osm_path).write_bytes(osm_content)
+                loaded = self._load_osm_aeroway_layers(osm_path)
+            except Exception as exc:
+                QgsMessageLog.logMessage(
+                    f"OSM aeroway download failed: {exc}",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
+                QMessageBox.warning(
+                    self.dlg,
+                    self.tr("OSM download failed"),
+                    self.tr(
+                        "Could not download OSM aeroway data:\n\n{error}"
+                    ).format(error=exc),
+                )
+                return
+            finally:
+                if osm_button:
+                    osm_button.setText(original_button_text)
+                    osm_button.setEnabled(True)
+                progress_dialog.close()
+                progress_dialog.deleteLater()
+                self._osm_download_task = None
+
+            if loaded:
+                self.iface.messageBar().pushSuccess(
+                    self.tr("OSM aeroway"),
+                    self.tr(
+                        "Added {count} layer(s) for the 10 km ARP search."
+                    ).format(count=loaded),
+                )
+            else:
+                self.iface.messageBar().pushInfo(
+                    self.tr("OSM aeroway"),
+                    self.tr(
+                        "No aeroway features were found within 10 km of the ARP."
+                    ),
+                )
+
+        task = QgsTask.fromFunction(
+            self.tr("Download OSM aeroway features"),
+            fetch_task,
+            on_finished=finish_download,
+        )
+        task.progressChanged.connect(update_download_progress)
+        self._osm_download_task = task
+        if not QgsApplication.taskManager().addTask(task):
             if osm_button:
-                osm_button.setText(preparing_message)
-            show_download_status(preparing_message)
-            osm_path = QgsProcessingUtils.generateTempFilename("aeroway_10km.osm")
-            Path(osm_path).write_bytes(osm_content)
-            loaded = self._load_osm_aeroway_layers(osm_path)
-        except Exception as exc:
-            QgsMessageLog.logMessage(
-                f"OSM aeroway download failed: {exc}",
-                PLUGIN_TAG,
-                level=Qgis.Warning,
-            )
+                osm_button.setText(original_button_text)
+                osm_button.setEnabled(True)
+            progress_dialog.deleteLater()
+            self._osm_download_task = None
             QMessageBox.warning(
                 self.dlg,
                 self.tr("OSM download failed"),
-                self.tr("Could not download OSM aeroway data:\n\n{error}").format(
-                    error=exc
-                ),
+                self.tr("QGIS could not start the background download task."),
             )
-            return
-        finally:
-            if osm_button:
-                osm_button.setText(original_button_text)
-            if status_label:
-                status_label.hide()
-            if progress_bar:
-                progress_bar.hide()
-            self.dlg.unsetCursor()
-            self.dlg.setEnabled(True)
 
-        if loaded:
-            self.iface.messageBar().pushSuccess(
-                self.tr("OSM aeroway"),
-                self.tr("Added {count} layer(s) for the 10 km ARP search.").format(
-                    count=loaded
-                ),
-            )
-        else:
-            self.iface.messageBar().pushInfo(
-                self.tr("OSM aeroway"),
-                self.tr("No aeroway features were found within 10 km of the ARP."),
-            )
+    def _create_osm_download_progress_dialog(self) -> QProgressDialog:
+        """Create the always-visible busy dialog for an OSM download."""
+        progress = QProgressDialog(self.dlg)
+        progress.setWindowTitle(self.tr("OSM aeroway download"))
+        progress.setLabelText(self.tr("Starting OSM aeroway download…"))
+        progress.setCancelButton(None)
+        progress.setRange(0, 0)
+        progress.setMinimumDuration(0)
+        progress.setAutoClose(False)
+        progress.setAutoReset(False)
+        window_modalities = getattr(Qt, "WindowModality", Qt)
+        progress.setWindowModality(window_modalities.WindowModal)
+        return progress
 
     def _load_osm_aeroway_layers(self, osm_path: str) -> int:
         """Load layers split by aeroway tag beneath one project group."""

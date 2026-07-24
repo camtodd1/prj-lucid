@@ -38,8 +38,8 @@ The plugin can generate:
   movement paths, positions, and navigation aids. Imported geometries are
   transformed into the existing project CRS without changing the project CRS.
   Transient Overpass failures automatically fail over to a second public
-  endpoint, with an inline busy indicator showing the active attempt and layer
-  preparation status beneath the ARP download button.
+  endpoint. Downloads run as background QGIS tasks while a modal busy dialog
+  shows the active server attempt and layer-preparation status.
 - Physical runway geometry, including runway pavement, shoulders, strips,
   runway-end safety areas, stopways, pre-threshold runway areas, and displaced
   threshold marking references.
