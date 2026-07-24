@@ -142,7 +142,7 @@ class OsmAerowayTests(unittest.TestCase):
                     len(settings.fieldName),
                 )
                 self.assertTrue(settings.scaleVisibility)
-                self.assertEqual(settings.minimumScale, 7_500)
+                self.assertEqual(settings.minimumScale, 3_000)
                 self.assertEqual(settings.maximumScale, 1)
 
     def test_dialog_exposes_arp_download_button(self):

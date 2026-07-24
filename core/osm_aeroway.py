@@ -250,7 +250,7 @@ AEROWAY_LABEL_STYLES = {
         "color": "#29343E",
     },
 }
-AEROWAY_LABEL_MINIMUM_SCALE = 7_500
+AEROWAY_LABEL_MINIMUM_SCALE = 3_000
 
 
 def _marker_symbol(style: dict) -> QgsMarkerSymbol:
