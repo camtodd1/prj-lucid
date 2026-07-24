@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 from xml.etree import ElementTree
 
 from qgis.PyQt.QtCore import QByteArray, QUrl  # type: ignore
+from qgis.PyQt.QtGui import QColor, QFont  # type: ignore
 from qgis.PyQt.QtNetwork import QNetworkRequest  # type: ignore
 from qgis.core import (  # type: ignore
     QgsBlockingNetworkRequest,
@@ -13,10 +14,14 @@ from qgis.core import (  # type: ignore
     QgsFillSymbol,
     QgsLineSymbol,
     QgsMarkerSymbol,
+    QgsPalLayerSettings,
     QgsRendererCategory,
     QgsSimpleLineSymbolLayer,
     QgsSingleSymbolRenderer,
+    QgsTextBufferSettings,
+    QgsTextFormat,
     QgsVectorLayer,
+    QgsVectorLayerSimpleLabeling,
     QgsWkbTypes,
 )
 
@@ -223,6 +228,30 @@ AEROWAY_MINIMUM_SCALES = {
     "jet_bridge": 10_000,
 }
 
+AEROWAY_LABEL_STYLES = {
+    "taxiway": {
+        "fields": ("ref", "name"),
+        "size": 8.0,
+        "color": "#303840",
+    },
+    "parking_position": {
+        "fields": ("ref", "name"),
+        "size": 7.5,
+        "color": "#315664",
+    },
+    "gate": {
+        "fields": ("ref", "name"),
+        "size": 7.5,
+        "color": "#2E5E80",
+    },
+    "terminal": {
+        "fields": ("name", "ref"),
+        "size": 9.0,
+        "color": "#29343E",
+    },
+}
+AEROWAY_LABEL_MINIMUM_SCALE = 7_500
+
 
 def _marker_symbol(style: dict) -> QgsMarkerSymbol:
     """Create a compact marker with color and shape differentiation."""
@@ -264,6 +293,75 @@ def _apply_navigationaid_style(layer: QgsVectorLayer, style: dict) -> bool:
         )
     layer.setRenderer(QgsCategorizedSymbolRenderer("navigationaid", categories))
     return True
+
+
+def _label_expression(layer: QgsVectorLayer, field_names: tuple[str, ...]) -> str:
+    """Build a first-nonempty expression from fields present on the layer."""
+    fields = [
+        field_name
+        for field_name in field_names
+        if layer.fields().indexOf(field_name) >= 0
+    ]
+    values = [
+        f'nullif(trim(to_string("{field_name}")), \'\')'
+        for field_name in fields
+    ]
+    if not values:
+        return ""
+    if len(values) == 1:
+        return values[0]
+    return f"coalesce({', '.join(values)})"
+
+
+def _apply_aeroway_labels(layer: QgsVectorLayer, category: str) -> None:
+    """Enable collision-aware labels only at close working scales."""
+    label_style = AEROWAY_LABEL_STYLES.get(category)
+    if label_style is None:
+        return
+    expression = _label_expression(layer, label_style["fields"])
+    if not expression:
+        return
+
+    settings = QgsPalLayerSettings()
+    settings.fieldName = expression
+    settings.isExpression = True
+    settings.scaleVisibility = True
+    settings.minimumScale = float(AEROWAY_LABEL_MINIMUM_SCALE)
+    settings.maximumScale = 1.0
+    settings.priority = 7
+    settings.obstacle = False
+
+    geometry_type = layer.geometryType()
+    if geometry_type == QgsWkbTypes.LineGeometry:
+        settings.placement = QgsPalLayerSettings.Line
+        try:
+            line_settings = settings.lineSettings()
+            if hasattr(line_settings, "setMergeLines"):
+                line_settings.setMergeLines(True)
+            if hasattr(settings, "labelPerPart"):
+                settings.labelPerPart = False
+        except Exception:
+            pass
+    elif geometry_type == QgsWkbTypes.PolygonGeometry:
+        settings.placement = QgsPalLayerSettings.Horizontal
+        settings.centroidInside = True
+        settings.centroidWhole = False
+    else:
+        settings.placement = QgsPalLayerSettings.OrderedPositionsAroundPoint
+
+    text_format = QgsTextFormat()
+    text_format.setFont(QFont("Helvetica", int(label_style["size"])))
+    text_format.setSize(float(label_style["size"]))
+    text_format.setColor(QColor(label_style["color"]))
+    buffer = QgsTextBufferSettings()
+    buffer.setEnabled(True)
+    buffer.setSize(0.75)
+    buffer.setColor(QColor(255, 255, 255, 225))
+    text_format.setBuffer(buffer)
+    settings.setFormat(text_format)
+
+    layer.setLabeling(QgsVectorLayerSimpleLabeling(settings))
+    layer.setLabelsEnabled(True)
 
 
 def apply_aeroway_style(layer: QgsVectorLayer, category: str) -> None:
@@ -319,6 +417,7 @@ def apply_aeroway_style(layer: QgsVectorLayer, category: str) -> None:
         layer.setScaleBasedVisibility(True)
         layer.setMinimumScale(float(minimum_scale))
         layer.setMaximumScale(0.0)
+    _apply_aeroway_labels(layer, category)
     layer.setCustomProperty("safeguarding_builder/osm_aeroway_style", category)
 
 

@@ -114,6 +114,37 @@ class OsmAerowayTests(unittest.TestCase):
         )
         self.assertAlmostEqual(aerodrome.renderer().symbol().opacity(), 0.18)
 
+    def test_airfield_labels_use_attributes_only_at_close_scale(self):
+        cases = (
+            ("LineString", "taxiway", ("ref", "name"), '"ref"'),
+            ("Point", "parking_position", ("ref", "name"), '"ref"'),
+            ("Point", "gate", ("ref", "name"), '"ref"'),
+            ("Polygon", "terminal", ("ref", "name"), '"name"'),
+        )
+        for geometry, category, fields, preferred_field in cases:
+            with self.subTest(category=category):
+                field_query = "&".join(
+                    f"field={field}:string" for field in fields
+                )
+                layer = QgsVectorLayer(
+                    f"{geometry}?crs=EPSG:3857&{field_query}",
+                    category,
+                    "memory",
+                )
+                apply_aeroway_style(layer, category)
+
+                self.assertTrue(layer.labelsEnabled())
+                settings = layer.labeling().settings()
+                self.assertTrue(settings.isExpression)
+                self.assertTrue(settings.fieldName.startswith("coalesce("))
+                self.assertLess(
+                    settings.fieldName.index(preferred_field),
+                    len(settings.fieldName),
+                )
+                self.assertTrue(settings.scaleVisibility)
+                self.assertEqual(settings.minimumScale, 7_500)
+                self.assertEqual(settings.maximumScale, 1)
+
     def test_dialog_exposes_arp_download_button(self):
         dialog = SafeguardingBuilderDialog()
         try:
