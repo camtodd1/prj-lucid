@@ -103,12 +103,18 @@ class OsmAerowayTests(unittest.TestCase):
         builder.dlg = dialog
         progress = builder._create_osm_download_progress_dialog()
         try:
+            progress.show()
+            QtWidgets.QApplication.processEvents()
             self.assertEqual(progress.windowTitle(), "OSM aeroway download")
             self.assertEqual(progress.minimum(), 0)
             self.assertEqual(progress.maximum(), 0)
             self.assertEqual(progress.minimumDuration(), 0)
             self.assertFalse(progress.autoClose())
             self.assertFalse(progress.autoReset())
+            self.assertGreaterEqual(progress.minimumWidth(), 520)
+            self.assertGreaterEqual(progress.minimumHeight(), 96)
+            self.assertGreaterEqual(progress.width(), 520)
+            self.assertGreaterEqual(progress.height(), 96)
         finally:
             progress.close()
             progress.deleteLater()

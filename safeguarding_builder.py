@@ -698,6 +698,8 @@ class SafeguardingBuilder(
         progress.setMinimumDuration(0)
         progress.setAutoClose(False)
         progress.setAutoReset(False)
+        progress.setMinimumSize(520, 96)
+        progress.resize(520, 96)
         window_modalities = getattr(Qt, "WindowModality", Qt)
         progress.setWindowModality(window_modalities.WindowModal)
         return progress
