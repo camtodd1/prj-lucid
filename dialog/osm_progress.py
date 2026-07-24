@@ -55,7 +55,7 @@ class OsmDownloadProgressDialog(QDialog):
             QFrame#osmDownloadPanel {
                 background-color: white;
                 border: 1px solid rgba(80, 80, 80, 90);
-                border-radius: 12px;
+                border-radius: 10px;
             }
             QLabel {
                 color: #202124;

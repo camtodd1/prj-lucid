@@ -669,8 +669,8 @@ class SafeguardingBuilder(
                     self.dlg,
                     self.tr("Airport map download failed"),
                     self.tr(
-                        "Both map servers are unavailable right now. "
-                        "Please try again in a few minutes."
+                        "Both map servers failed. This can happen occasionally; "
+                        "please try again in a few moments."
                     ),
                 )
                 return

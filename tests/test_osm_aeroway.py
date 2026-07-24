@@ -129,7 +129,7 @@ class OsmAerowayTests(unittest.TestCase):
                     widget_attributes.WA_TranslucentBackground
                 )
             )
-            self.assertIn("border-radius: 12px", progress.styleSheet())
+            self.assertIn("border-radius: 10px", progress.styleSheet())
         finally:
             progress.close()
             progress.deleteLater()
