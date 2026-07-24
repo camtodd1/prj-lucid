@@ -13,7 +13,13 @@ from typing import Dict, Optional, List, Any, Tuple
 # --- Qt Imports ---
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant, Qt  # type: ignore
 from qgis.PyQt.QtGui import QIcon  # type: ignore
-from qgis.PyQt.QtWidgets import QAction, QMessageBox, QPushButton  # type: ignore
+from qgis.PyQt.QtWidgets import (  # type: ignore
+    QAction,
+    QLabel,
+    QMessageBox,
+    QProgressBar,
+    QPushButton,
+)
 
 # --- QGIS Imports ---
 from qgis.core import (  # type: ignore
@@ -566,15 +572,24 @@ class SafeguardingBuilder(
 
         osm_button = self.dlg.findChild(QPushButton, "pushButton_DownloadOsmAeroway")
         original_button_text = osm_button.text() if osm_button else ""
+        status_label = self.dlg.findChild(QLabel, "label_osmDownloadStatus")
+        progress_bar = self.dlg.findChild(QProgressBar, "progressBar_osmDownload")
+
+        def show_download_status(message: str):
+            if status_label:
+                status_label.setText(message)
+                status_label.show()
+            if progress_bar:
+                progress_bar.show()
+            QCoreApplication.processEvents()
 
         def update_download_status(attempt: int, total: int):
+            message = self.tr(
+                "Downloading OSM aeroway features… server {attempt}/{total}"
+            ).format(attempt=attempt, total=total)
             if osm_button:
-                osm_button.setText(
-                    self.tr(
-                        "Downloading OSM aeroway features… server {attempt}/{total}"
-                    ).format(attempt=attempt, total=total)
-                )
-            QCoreApplication.processEvents()
+                osm_button.setText(message)
+            show_download_status(message)
 
         try:
             arp_wgs84 = QgsCoordinateTransform(
@@ -591,9 +606,10 @@ class SafeguardingBuilder(
                 arp_wgs84.x(),
                 attempt_callback=update_download_status,
             )
+            preparing_message = self.tr("Preparing OSM aeroway layers…")
             if osm_button:
-                osm_button.setText(self.tr("Preparing OSM aeroway layers…"))
-            QCoreApplication.processEvents()
+                osm_button.setText(preparing_message)
+            show_download_status(preparing_message)
             osm_path = QgsProcessingUtils.generateTempFilename("aeroway_10km.osm")
             Path(osm_path).write_bytes(osm_content)
             loaded = self._load_osm_aeroway_layers(osm_path)
@@ -614,6 +630,10 @@ class SafeguardingBuilder(
         finally:
             if osm_button:
                 osm_button.setText(original_button_text)
+            if status_label:
+                status_label.hide()
+            if progress_bar:
+                progress_bar.hide()
             self.dlg.unsetCursor()
             self.dlg.setEnabled(True)
 

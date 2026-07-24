@@ -92,6 +92,10 @@ class OsmAerowayTests(unittest.TestCase):
                 dialog.pushButton_DownloadOsmAeroway.text(),
                 "Download OSM aeroway features within 10 km",
             )
+            self.assertTrue(dialog.label_osmDownloadStatus.isHidden())
+            self.assertTrue(dialog.progressBar_osmDownload.isHidden())
+            self.assertEqual(dialog.progressBar_osmDownload.minimum(), 0)
+            self.assertEqual(dialog.progressBar_osmDownload.maximum(), 0)
         finally:
             dialog.close()
             dialog.deleteLater()
