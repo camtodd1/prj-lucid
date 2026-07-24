@@ -291,6 +291,11 @@ class OsmAerowayTests(unittest.TestCase):
     <nd ref="3"/>
     <tag k="aeroway" v="apron"/>
   </way>
+  <way id="13">
+    <nd ref="5"/>
+    <nd ref="6"/>
+    <tag k="aeroway" v="parking_position"/>
+  </way>
 </osm>
 """
         project = QgsProject.instance()
@@ -306,14 +311,15 @@ class OsmAerowayTests(unittest.TestCase):
         self.assertEqual(
             {layer.name() for layer in project.mapLayers().values()},
             {
-                "apron",
-                "holding_position",
-                "navigationaid",
-                "parking_position",
-                "taxiway",
+                "Aprons",
+                "Holding Positions",
+                "Navigation Aids",
+                "Parking Positions",
+                "Stand Guidance Lines",
+                "Taxiways",
             },
         )
-        self.assertEqual(loaded, 5)
+        self.assertEqual(loaded, 6)
         self.assertEqual(project.crs().authid(), "EPSG:3857")
         for layer in project.mapLayers().values():
             self.assertEqual(layer.crs().authid(), "EPSG:3857")
@@ -322,7 +328,7 @@ class OsmAerowayTests(unittest.TestCase):
         navigation_layer = next(
             layer
             for layer in project.mapLayers().values()
-            if layer.name() == "navigationaid"
+            if layer.name() == "Navigation Aids"
         )
         self.assertGreaterEqual(
             navigation_layer.fields().indexOf("navigationaid"),
@@ -342,20 +348,28 @@ class OsmAerowayTests(unittest.TestCase):
         layers_by_name = {
             layer.name(): layer for layer in project.mapLayers().values()
         }
+        expected_categories = {
+            "Aprons": "apron",
+            "Holding Positions": "holding_position",
+            "Navigation Aids": "navigationaid",
+            "Parking Positions": "parking_position",
+            "Stand Guidance Lines": "parking_position",
+            "Taxiways": "taxiway",
+        }
         for name, layer in layers_by_name.items():
             self.assertEqual(
                 layer.customProperty("safeguarding_builder/osm_aeroway_style"),
-                name,
+                expected_categories[name],
             )
         self.assertEqual(
-            layers_by_name["taxiway"].renderer().symbol().color().name(),
+            layers_by_name["Taxiways"].renderer().symbol().color().name(),
             "#7c858e",
         )
         self.assertAlmostEqual(
-            layers_by_name["taxiway"].renderer().symbol().width(),
+            layers_by_name["Taxiways"].renderer().symbol().width(),
             1.8,
         )
-        taxiway_symbol = layers_by_name["taxiway"].renderer().symbol()
+        taxiway_symbol = layers_by_name["Taxiways"].renderer().symbol()
         self.assertEqual(taxiway_symbol.symbolLayerCount(), 2)
         self.assertEqual(
             taxiway_symbol.symbolLayer(1).color().name(),
@@ -365,7 +379,7 @@ class OsmAerowayTests(unittest.TestCase):
             taxiway_symbol.symbolLayer(1).width(),
             0.28,
         )
-        navigation_renderer = layers_by_name["navigationaid"].renderer()
+        navigation_renderer = layers_by_name["Navigation Aids"].renderer()
         self.assertEqual(navigation_renderer.type(), "categorizedSymbol")
         self.assertEqual(
             {
@@ -379,25 +393,25 @@ class OsmAerowayTests(unittest.TestCase):
             },
         )
         self.assertTrue(
-            layers_by_name["navigationaid"].hasScaleBasedVisibility()
+            layers_by_name["Navigation Aids"].hasScaleBasedVisibility()
         )
         self.assertEqual(
-            layers_by_name["navigationaid"].minimumScale(),
+            layers_by_name["Navigation Aids"].minimumScale(),
             25_000,
         )
         self.assertTrue(
-            layers_by_name["parking_position"].hasScaleBasedVisibility()
+            layers_by_name["Parking Positions"].hasScaleBasedVisibility()
         )
         self.assertEqual(
-            layers_by_name["parking_position"].minimumScale(),
+            layers_by_name["Parking Positions"].minimumScale(),
             10_000,
         )
         self.assertEqual(
-            layers_by_name["apron"].renderer().symbol().color().name(),
+            layers_by_name["Aprons"].renderer().symbol().color().name(),
             "#c7cdd2",
         )
         self.assertAlmostEqual(
-            layers_by_name["apron"].renderer().symbol().opacity(),
+            layers_by_name["Aprons"].renderer().symbol().opacity(),
             0.68,
         )
         group = project.layerTreeRoot().findGroup(
@@ -407,12 +421,28 @@ class OsmAerowayTests(unittest.TestCase):
         self.assertEqual(
             [child.name() for child in group.children()],
             [
-                "navigationaid",
-                "holding_position",
-                "parking_position",
-                "taxiway",
-                "apron",
+                "Operational Aids",
+                "Stands and Gates",
+                "Movement Areas",
             ],
+        )
+        operational_group = group.findGroup("Operational Aids")
+        stands_group = group.findGroup("Stands and Gates")
+        movement_group = group.findGroup("Movement Areas")
+        self.assertFalse(operational_group.isExpanded())
+        self.assertFalse(stands_group.isExpanded())
+        self.assertTrue(movement_group.isExpanded())
+        self.assertEqual(
+            [child.name() for child in operational_group.children()],
+            ["Navigation Aids", "Holding Positions"],
+        )
+        self.assertEqual(
+            [child.name() for child in stands_group.children()],
+            ["Parking Positions", "Stand Guidance Lines"],
+        )
+        self.assertEqual(
+            [child.name() for child in movement_group.children()],
+            ["Taxiways", "Aprons"],
         )
         project.clear()
 

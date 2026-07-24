@@ -112,6 +112,65 @@ from .safeguarding_builder_dialog import SafeguardingBuilderDialog
 # Plugin-specific constant for logging
 PLUGIN_TAG = "SafeguardingBuilder"
 
+OSM_AEROWAY_LAYER_NAMES = {
+    "aerodrome": "Aerodrome",
+    "aerodrome_marking": "Aerodrome Markings",
+    "apron": "Aprons",
+    "beacon": "Beacons",
+    "extended-takeoff_area": "Extended Take-off Areas",
+    "gate": "Gates",
+    "hangar": "Hangars",
+    "helipad": "Helipads",
+    "holding_position": "Holding Positions",
+    "jet_bridge": "Jet Bridges",
+    "navigationaid": "Navigation Aids",
+    "parking_position": "Parking Positions",
+    "runway": "Runways",
+    "stopway": "Stopways",
+    "taxilane": "Taxilanes",
+    "taxiway": "Taxiways",
+    "terminal": "Terminals",
+    "windsock": "Windsocks",
+}
+
+OSM_AEROWAY_GROUPS = (
+    (
+        "operational",
+        "Operational Aids",
+        {
+            "beacon",
+            "helipad",
+            "holding_position",
+            "navigationaid",
+            "windsock",
+        },
+    ),
+    (
+        "stands",
+        "Stands and Gates",
+        {"gate", "jet_bridge", "parking_position"},
+    ),
+    (
+        "buildings",
+        "Buildings",
+        {"hangar", "terminal"},
+    ),
+    (
+        "movement",
+        "Movement Areas",
+        {
+            "aerodrome_marking",
+            "apron",
+            "extended-takeoff_area",
+            "runway",
+            "stopway",
+            "taxilane",
+            "taxiway",
+        },
+    ),
+    ("boundary", "Airport Boundary", {"aerodrome"}),
+)
+
 
 # ============================================================
 # Main Plugin Class - SafeguardingBuilder
@@ -803,15 +862,45 @@ class SafeguardingBuilder(
                 item,
             ),
         )
+        category_group = {
+            category: group_key
+            for group_key, _, group_categories in OSM_AEROWAY_GROUPS
+            for category in group_categories
+        }
+        subgroups = {}
+        for group_key, group_name, group_categories in OSM_AEROWAY_GROUPS:
+            if any(category in category_sources for category in group_categories):
+                subgroup = group.addGroup(self.tr(group_name))
+                subgroup.setExpanded(group_key == "movement")
+                subgroups[group_key] = subgroup
+        unknown_categories = set(category_sources) - set(category_group)
+        if unknown_categories:
+            other_group = group.addGroup(self.tr("Other Aeroway Elements"))
+            other_group.setExpanded(False)
+            subgroups["other"] = other_group
+
         for category in categories:
             sources = sorted(
                 category_sources[category],
                 key=lambda item: (item[0] != "points", item[0]),
             )
             for geometry_name, source, tagged_features in sources:
-                display_name = category
-                if len(sources) > 1:
-                    display_name = f"{category} — {geometry_name}"
+                display_name = self.tr(
+                    OSM_AEROWAY_LAYER_NAMES.get(
+                        category,
+                        category.replace("_", " ").replace("-", " ").title(),
+                    )
+                )
+                if category == "parking_position":
+                    if geometry_name == "points":
+                        display_name = self.tr("Parking Positions")
+                    elif geometry_name in {"lines", "multilinestrings"}:
+                        display_name = self.tr("Stand Guidance Lines")
+                    elif geometry_name == "multipolygons":
+                        display_name = self.tr("Parking Position Areas")
+                elif len(sources) > 1:
+                    geometry_label = geometry_name.replace("_", " ").title()
+                    display_name = f"{display_name} — {geometry_label}"
                 geometry_type = QgsWkbTypes.displayString(source.wkbType())
                 layer = QgsVectorLayer(
                     geometry_type,
@@ -878,8 +967,12 @@ class SafeguardingBuilder(
                 layer.setMetadata(metadata)
                 apply_aeroway_style(layer, category)
                 project.addMapLayer(layer, False)
-                group.addLayer(layer)
+                group_key = category_group.get(category, "other")
+                subgroups[group_key].addLayer(layer)
                 loaded += 1
+        for subgroup in tuple(subgroups.values()):
+            if not subgroup.children():
+                group.removeChildNode(subgroup)
         if loaded == 0:
             root.removeChildNode(group)
         elif target_crs.isValid() and project.crs() != target_crs:
