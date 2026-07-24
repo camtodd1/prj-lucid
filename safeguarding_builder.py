@@ -812,7 +812,7 @@ class SafeguardingBuilder(
         project = QgsProject.instance()
         target_crs = project.crs()
         root = project.layerTreeRoot()
-        group = root.addGroup(self.tr("OSM aeroway — 5 km from ARP"))
+        group = root.addGroup(self.tr("Airport Layout Elements"))
         category_sources: Dict[
             str,
             List[

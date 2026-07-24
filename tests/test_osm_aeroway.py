@@ -414,9 +414,7 @@ class OsmAerowayTests(unittest.TestCase):
             layers_by_name["Aprons"].renderer().symbol().opacity(),
             0.68,
         )
-        group = project.layerTreeRoot().findGroup(
-            "OSM aeroway — 5 km from ARP"
-        )
+        group = project.layerTreeRoot().findGroup("Airport Layout Elements")
         self.assertIsNotNone(group)
         self.assertEqual(
             [child.name() for child in group.children()],
