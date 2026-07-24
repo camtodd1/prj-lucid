@@ -11,12 +11,18 @@ from pathlib import Path
 from typing import Dict, Optional, List, Any, Tuple
 
 # --- Qt Imports ---
-from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication, QVariant, Qt  # type: ignore
+from qgis.PyQt.QtCore import (  # type: ignore
+    QSettings,
+    QTranslator,
+    QCoreApplication,
+    QTimer,
+    QVariant,
+    Qt,
+)
 from qgis.PyQt.QtGui import QIcon  # type: ignore
 from qgis.PyQt.QtWidgets import (  # type: ignore
     QAction,
     QMessageBox,
-    QProgressDialog,
     QPushButton,
 )
 
@@ -67,6 +73,7 @@ from .core.osm_aeroway import (
     apply_aeroway_style,
     fetch_aeroway_osm,
 )
+from .dialog.osm_progress import OsmDownloadProgressDialog
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.annex14_geometry import Annex14GeometryMixin
 from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
@@ -599,16 +606,34 @@ class SafeguardingBuilder(
         if osm_button:
             osm_button.setEnabled(False)
         QCoreApplication.processEvents()
+        download_state = {"attempt": 0, "finished": False}
+
+        def set_download_status(message: str):
+            progress_dialog.setLabelText(message)
+            if osm_button:
+                osm_button.setText(self.tr("Downloading airport map elements…"))
 
         def update_download_progress(progress: float):
             total = len(OVERPASS_ENDPOINTS)
             attempt = max(1, min(total, round(progress * total / 100.0)))
-            message = self.tr(
-                "Downloading OSM aeroway features… server {attempt}/{total}"
-            ).format(attempt=attempt, total=total)
-            progress_dialog.setLabelText(message)
-            if osm_button:
-                osm_button.setText(message)
+            download_state["attempt"] = attempt
+            set_download_status(
+                self._osm_download_attempt_message(attempt, total)
+            )
+
+            def show_slow_status(expected_attempt=attempt):
+                if (
+                    not download_state["finished"]
+                    and download_state["attempt"] == expected_attempt
+                ):
+                    set_download_status(
+                        self._osm_download_slow_message(
+                            expected_attempt,
+                            total,
+                        )
+                    )
+
+            QTimer.singleShot(8_000, show_slow_status)
 
         def fetch_task(task: QgsTask):
             return fetch_aeroway_osm(
@@ -624,7 +649,9 @@ class SafeguardingBuilder(
             try:
                 if exception is not None:
                     raise exception
-                preparing_message = self.tr("Preparing OSM aeroway layers…")
+                preparing_message = self.tr(
+                    "Download complete. Organising the airport features…"
+                )
                 progress_dialog.setLabelText(preparing_message)
                 if osm_button:
                     osm_button.setText(preparing_message)
@@ -640,13 +667,15 @@ class SafeguardingBuilder(
                 )
                 QMessageBox.warning(
                     self.dlg,
-                    self.tr("OSM download failed"),
+                    self.tr("Airport map download failed"),
                     self.tr(
-                        "Could not download OSM aeroway data:\n\n{error}"
-                    ).format(error=exc),
+                        "Both map servers are unavailable right now. "
+                        "Please try again in a few minutes."
+                    ),
                 )
                 return
             finally:
+                download_state["finished"] = True
                 if osm_button:
                     osm_button.setText(original_button_text)
                     osm_button.setEnabled(True)
@@ -656,52 +685,66 @@ class SafeguardingBuilder(
 
             if loaded:
                 self.iface.messageBar().pushSuccess(
-                    self.tr("OSM aeroway"),
+                    self.tr("Airport map elements"),
                     self.tr(
-                        "Added {count} layer(s) for the 10 km ARP search."
+                        "Added {count} airport feature layer(s) from the "
+                        "10 km search."
                     ).format(count=loaded),
                 )
             else:
                 self.iface.messageBar().pushInfo(
-                    self.tr("OSM aeroway"),
+                    self.tr("Airport map elements"),
                     self.tr(
-                        "No aeroway features were found within 10 km of the ARP."
+                        "No airport map features were found within 10 km "
+                        "of the ARP."
                     ),
                 )
 
         task = QgsTask.fromFunction(
-            self.tr("Download OSM aeroway features"),
+            self.tr("Download airport map elements"),
             fetch_task,
             on_finished=finish_download,
         )
         task.progressChanged.connect(update_download_progress)
         self._osm_download_task = task
         if not QgsApplication.taskManager().addTask(task):
+            download_state["finished"] = True
             if osm_button:
                 osm_button.setText(original_button_text)
                 osm_button.setEnabled(True)
+            progress_dialog.close()
             progress_dialog.deleteLater()
             self._osm_download_task = None
             QMessageBox.warning(
                 self.dlg,
-                self.tr("OSM download failed"),
-                self.tr("QGIS could not start the background download task."),
+                self.tr("Airport map download failed"),
+                self.tr("The download could not be started. Please try again."),
             )
 
-    def _create_osm_download_progress_dialog(self) -> QProgressDialog:
+    def _osm_download_attempt_message(self, attempt: int, total: int) -> str:
+        """Return plain-English status text for the active map server."""
+        if attempt <= 1:
+            return self.tr("Getting the airport map elements…")
+        return self.tr(
+            "The first map server did not respond. Trying a second server…"
+        )
+
+    def _osm_download_slow_message(self, attempt: int, total: int) -> str:
+        """Return plain-English status text for a slow server response."""
+        del total
+        if attempt <= 1:
+            return self.tr(
+                "Still working… The first map server is taking longer than usual."
+            )
+        return self.tr(
+            "Still working… The second map server is taking longer than usual."
+        )
+
+    def _create_osm_download_progress_dialog(self) -> OsmDownloadProgressDialog:
         """Create the always-visible busy dialog for an OSM download."""
-        progress = QProgressDialog(self.dlg)
-        progress.setWindowTitle(self.tr("OSM aeroway download"))
-        progress.setLabelText(self.tr("Starting OSM aeroway download…"))
-        progress.setCancelButton(None)
-        progress.setRange(0, 0)
-        progress.setMinimumDuration(0)
-        progress.setAutoClose(False)
-        progress.setAutoReset(False)
-        progress.setMinimumSize(520, 96)
-        progress.resize(520, 96)
-        window_modalities = getattr(Qt, "WindowModality", Qt)
-        progress.setWindowModality(window_modalities.WindowModal)
+        progress = OsmDownloadProgressDialog(self.dlg)
+        progress.setWindowTitle(self.tr("Downloading airport map elements"))
+        progress.setLabelText(self.tr("Starting the airport map download…"))
         return progress
 
     def _load_osm_aeroway_layers(self, osm_path: str) -> int:

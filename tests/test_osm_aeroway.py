@@ -4,7 +4,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from qgis.PyQt import QtWidgets
+from qgis.PyQt import QtCore, QtWidgets
 from qgis.core import QgsApplication, QgsCoordinateReferenceSystem, QgsProject
 
 
@@ -105,21 +105,53 @@ class OsmAerowayTests(unittest.TestCase):
         try:
             progress.show()
             QtWidgets.QApplication.processEvents()
-            self.assertEqual(progress.windowTitle(), "OSM aeroway download")
-            self.assertEqual(progress.minimum(), 0)
-            self.assertEqual(progress.maximum(), 0)
-            self.assertEqual(progress.minimumDuration(), 0)
-            self.assertFalse(progress.autoClose())
-            self.assertFalse(progress.autoReset())
+            self.assertEqual(
+                progress.windowTitle(),
+                "Downloading airport map elements",
+            )
+            self.assertEqual(progress.progress_bar.minimum(), 0)
+            self.assertEqual(progress.progress_bar.maximum(), 0)
             self.assertGreaterEqual(progress.minimumWidth(), 520)
             self.assertGreaterEqual(progress.minimumHeight(), 96)
             self.assertGreaterEqual(progress.width(), 520)
             self.assertGreaterEqual(progress.height(), 96)
+            window_types = getattr(QtCore.Qt, "WindowType", QtCore.Qt)
+            widget_attributes = getattr(
+                QtCore.Qt,
+                "WidgetAttribute",
+                QtCore.Qt,
+            )
+            self.assertTrue(
+                progress.windowFlags() & window_types.FramelessWindowHint
+            )
+            self.assertTrue(
+                progress.testAttribute(
+                    widget_attributes.WA_TranslucentBackground
+                )
+            )
+            self.assertIn("border-radius: 12px", progress.styleSheet())
         finally:
             progress.close()
             progress.deleteLater()
             dialog.close()
             dialog.deleteLater()
+
+    def test_download_status_messages_use_plain_english(self):
+        builder = SafeguardingBuilder.__new__(SafeguardingBuilder)
+        builder.translator = None
+
+        self.assertEqual(
+            builder._osm_download_attempt_message(1, 2),
+            "Getting the airport map elements…",
+        )
+        self.assertEqual(
+            builder._osm_download_attempt_message(2, 2),
+            "The first map server did not respond. Trying a second server…",
+        )
+        self.assertIn(
+            "taking longer than usual",
+            builder._osm_download_slow_message(1, 2),
+        )
 
     def test_download_starts_in_background_and_leaves_progress_visible(self):
         dialog = SafeguardingBuilderDialog()
