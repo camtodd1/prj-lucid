@@ -22,7 +22,7 @@ OVERPASS_ENDPOINTS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
-AEROWAY_RADIUS_M = 10_000
+AEROWAY_RADIUS_M = 5_000
 OSM_SUBLAYERS = (
     ("points", "points"),
     ("lines", "lines"),

@@ -38,11 +38,11 @@ class OsmAerowayTests(unittest.TestCase):
     def test_query_covers_all_element_types_at_fixed_radius(self):
         query = build_aeroway_query(-33.9461, 151.1772)
 
-        self.assertEqual(AEROWAY_RADIUS_M, 10_000)
-        self.assertIn('node["aeroway"](around:10000,-33.9461000,151.1772000)', query)
-        self.assertIn('way["aeroway"](around:10000,-33.9461000,151.1772000)', query)
+        self.assertEqual(AEROWAY_RADIUS_M, 5_000)
+        self.assertIn('node["aeroway"](around:5000,-33.9461000,151.1772000)', query)
+        self.assertIn('way["aeroway"](around:5000,-33.9461000,151.1772000)', query)
         self.assertIn(
-            'relation["aeroway"](around:10000,-33.9461000,151.1772000)',
+            'relation["aeroway"](around:5000,-33.9461000,151.1772000)',
             query,
         )
         self.assertTrue(query.endswith("out body qt;"))
@@ -90,7 +90,7 @@ class OsmAerowayTests(unittest.TestCase):
         try:
             self.assertEqual(
                 dialog.pushButton_DownloadOsmAeroway.text(),
-                "Download OSM aeroway features within 10 km",
+                "Download OSM aeroway features within 5 km",
             )
         finally:
             dialog.close()
@@ -308,7 +308,7 @@ class OsmAerowayTests(unittest.TestCase):
             "#8fa3b5",
         )
         self.assertIsNotNone(
-            project.layerTreeRoot().findGroup("OSM aeroway — 10 km from ARP")
+            project.layerTreeRoot().findGroup("OSM aeroway — 5 km from ARP")
         )
         project.clear()
 

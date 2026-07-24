@@ -397,7 +397,7 @@
           <item row="2" column="0" colspan="6">
            <widget class="QPushButton" name="pushButton_DownloadOsmAeroway">
             <property name="text">
-             <string>Download OSM aeroway features within 10 km</string>
+             <string>Download OSM aeroway features within 5 km</string>
             </property>
            </widget>
           </item>

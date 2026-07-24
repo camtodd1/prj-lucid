@@ -30,7 +30,7 @@ The plugin can generate:
 
 - Airport reference point, runway centreline, and CNS source facility reference
   layers.
-- OpenStreetMap features carrying the `aeroway` key within 10 km of the entered
+- OpenStreetMap features carrying the `aeroway` key within 5 km of the entered
   aerodrome reference point, split into tag-specific layers such as taxiways,
   parking positions, and holding positions. Additional OSM tags are promoted to
   layer attributes, so navigation-aid features retain values such as `papi`,

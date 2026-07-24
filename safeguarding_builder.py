@@ -555,7 +555,7 @@ class SafeguardingBuilder(
         self.dlg.show()
 
     def download_osm_aeroway(self):
-        """Download aeroway-tagged OSM elements within 10 km of the entered ARP."""
+        """Download aeroway-tagged OSM elements within 5 km of the entered ARP."""
         if self.dlg is None:
             return
         try:
@@ -656,7 +656,7 @@ class SafeguardingBuilder(
                 if osm_button:
                     osm_button.setText(preparing_message)
                 QCoreApplication.processEvents()
-                osm_path = QgsProcessingUtils.generateTempFilename("aeroway_10km.osm")
+                osm_path = QgsProcessingUtils.generateTempFilename("aeroway_5km.osm")
                 Path(osm_path).write_bytes(osm_content)
                 loaded = self._load_osm_aeroway_layers(osm_path)
             except Exception as exc:
@@ -688,14 +688,14 @@ class SafeguardingBuilder(
                     self.tr("Airport map elements"),
                     self.tr(
                         "Added {count} airport feature layer(s) from the "
-                        "10 km search."
+                        "5 km search."
                     ).format(count=loaded),
                 )
             else:
                 self.iface.messageBar().pushInfo(
                     self.tr("Airport map elements"),
                     self.tr(
-                        "No airport map features were found within 10 km "
+                        "No airport map features were found within 5 km "
                         "of the ARP."
                     ),
                 )
@@ -752,7 +752,7 @@ class SafeguardingBuilder(
         project = QgsProject.instance()
         target_crs = project.crs()
         root = project.layerTreeRoot()
-        group = root.addGroup(self.tr("OSM aeroway — 10 km from ARP"))
+        group = root.addGroup(self.tr("OSM aeroway — 5 km from ARP"))
         category_sources: Dict[
             str,
             List[
