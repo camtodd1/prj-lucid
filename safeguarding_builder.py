@@ -68,6 +68,7 @@ from .core.run_history import (
     validate_runway_configuration,
 )
 from .core.osm_aeroway import (
+    AEROWAY_DRAW_PRIORITY,
     OSM_SUBLAYERS,
     OVERPASS_ENDPOINTS,
     apply_aeroway_style,
@@ -795,8 +796,18 @@ class SafeguardingBuilder(
                 )
 
         loaded = 0
-        for category in sorted(category_sources):
-            sources = category_sources[category]
+        categories = sorted(
+            category_sources,
+            key=lambda item: (
+                -AEROWAY_DRAW_PRIORITY.get(item, 45),
+                item,
+            ),
+        )
+        for category in categories:
+            sources = sorted(
+                category_sources[category],
+                key=lambda item: (item[0] != "points", item[0]),
+            )
             for geometry_name, source, tagged_features in sources:
                 display_name = category
                 if len(sources) > 1:

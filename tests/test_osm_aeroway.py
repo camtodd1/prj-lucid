@@ -5,7 +5,12 @@ from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from qgis.PyQt import QtCore, QtWidgets
-from qgis.core import QgsApplication, QgsCoordinateReferenceSystem, QgsProject
+from qgis.core import (
+    QgsApplication,
+    QgsCoordinateReferenceSystem,
+    QgsProject,
+    QgsVectorLayer,
+)
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -14,6 +19,7 @@ sys.path.insert(0, str(WORKSPACE.parent))
 from safeguarding_builder.core.osm_aeroway import (
     AEROWAY_RADIUS_M,
     OVERPASS_ENDPOINTS,
+    apply_aeroway_style,
     build_aeroway_query,
     fetch_aeroway_osm,
 )
@@ -84,6 +90,29 @@ class OsmAerowayTests(unittest.TestCase):
             build_aeroway_query(91, 0)
         with self.assertRaises(ValueError):
             build_aeroway_query(0, 181)
+
+    def test_airfield_plan_style_prioritizes_movement_surfaces(self):
+        runway = QgsVectorLayer("LineString?crs=EPSG:3857", "runway", "memory")
+        apply_aeroway_style(runway, "runway")
+        runway_symbol = runway.renderer().symbol()
+        self.assertEqual(runway_symbol.color().name(), "#454c54")
+        self.assertEqual(runway_symbol.symbolLayerCount(), 2)
+        self.assertEqual(
+            runway_symbol.symbolLayer(1).color().name(),
+            "#f7f7f3",
+        )
+
+        aerodrome = QgsVectorLayer(
+            "Polygon?crs=EPSG:3857",
+            "aerodrome",
+            "memory",
+        )
+        apply_aeroway_style(aerodrome, "aerodrome")
+        self.assertEqual(
+            aerodrome.renderer().symbol().color().name(),
+            "#e8edf2",
+        )
+        self.assertAlmostEqual(aerodrome.renderer().symbol().opacity(), 0.18)
 
     def test_dialog_exposes_arp_download_button(self):
         dialog = SafeguardingBuilderDialog()
@@ -289,26 +318,70 @@ class OsmAerowayTests(unittest.TestCase):
             )
         self.assertEqual(
             layers_by_name["taxiway"].renderer().symbol().color().name(),
-            "#d99a14",
+            "#7c858e",
         )
         self.assertAlmostEqual(
             layers_by_name["taxiway"].renderer().symbol().width(),
-            1.7,
+            1.8,
         )
+        taxiway_symbol = layers_by_name["taxiway"].renderer().symbol()
+        self.assertEqual(taxiway_symbol.symbolLayerCount(), 2)
         self.assertEqual(
-            layers_by_name["navigationaid"].renderer().symbol().color().name(),
-            "#7c3aed",
+            taxiway_symbol.symbolLayer(1).color().name(),
+            "#f2c230",
         )
         self.assertAlmostEqual(
-            layers_by_name["navigationaid"].renderer().symbol().size(),
-            3.8,
+            taxiway_symbol.symbolLayer(1).width(),
+            0.28,
+        )
+        navigation_renderer = layers_by_name["navigationaid"].renderer()
+        self.assertEqual(navigation_renderer.type(), "categorizedSymbol")
+        self.assertEqual(
+            {
+                str(category.value()): category.symbol().color().name()
+                for category in navigation_renderer.categories()
+            },
+            {
+                "als": "#d18b00",
+                "papi": "#7557b8",
+                "vasi": "#9868c8",
+            },
+        )
+        self.assertTrue(
+            layers_by_name["navigationaid"].hasScaleBasedVisibility()
+        )
+        self.assertEqual(
+            layers_by_name["navigationaid"].minimumScale(),
+            25_000,
+        )
+        self.assertTrue(
+            layers_by_name["parking_position"].hasScaleBasedVisibility()
+        )
+        self.assertEqual(
+            layers_by_name["parking_position"].minimumScale(),
+            10_000,
         )
         self.assertEqual(
             layers_by_name["apron"].renderer().symbol().color().name(),
-            "#8fa3b5",
+            "#c7cdd2",
         )
-        self.assertIsNotNone(
-            project.layerTreeRoot().findGroup("OSM aeroway — 5 km from ARP")
+        self.assertAlmostEqual(
+            layers_by_name["apron"].renderer().symbol().opacity(),
+            0.68,
+        )
+        group = project.layerTreeRoot().findGroup(
+            "OSM aeroway — 5 km from ARP"
+        )
+        self.assertIsNotNone(group)
+        self.assertEqual(
+            [child.name() for child in group.children()],
+            [
+                "navigationaid",
+                "holding_position",
+                "parking_position",
+                "taxiway",
+                "apron",
+            ],
         )
         project.clear()
 

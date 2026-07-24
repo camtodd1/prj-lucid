@@ -9,9 +9,12 @@ from qgis.PyQt.QtCore import QByteArray, QUrl  # type: ignore
 from qgis.PyQt.QtNetwork import QNetworkRequest  # type: ignore
 from qgis.core import (  # type: ignore
     QgsBlockingNetworkRequest,
+    QgsCategorizedSymbolRenderer,
     QgsFillSymbol,
     QgsLineSymbol,
     QgsMarkerSymbol,
+    QgsRendererCategory,
+    QgsSimpleLineSymbolLayer,
     QgsSingleSymbolRenderer,
     QgsVectorLayer,
     QgsWkbTypes,
@@ -31,88 +34,292 @@ OSM_SUBLAYERS = (
 )
 
 AEROWAY_STYLES = {
-    "aerodrome": {"color": "#2563EB", "shape": "circle", "size": "4.0"},
-    "apron": {"color": "#8FA3B5", "outline": "#526678"},
-    "beacon": {"color": "#DB2777", "shape": "star", "size": "4.0"},
-    "gate": {"color": "#2563EB", "shape": "square", "size": "3.4"},
-    "hangar": {"color": "#64748B", "outline": "#334155"},
-    "helipad": {"color": "#DC2626", "shape": "cross2", "size": "4.0"},
+    "aerodrome": {
+        "fill": "#E8EDF2",
+        "outline": "#788896",
+        "opacity": "0.18",
+    },
+    "aerodrome_marking": {
+        "line_color": "#F2C230",
+        "width": "0.35",
+        "fill": "#F2C230",
+        "outline": "#A77900",
+        "opacity": "0.90",
+    },
+    "apron": {
+        "fill": "#C7CDD2",
+        "outline": "#89939C",
+        "opacity": "0.68",
+    },
+    "beacon": {
+        "color": "#B83B78",
+        "outline": "#FFFFFF",
+        "shape": "star",
+        "size": "2.6",
+    },
+    "extended-takeoff_area": {
+        "line_color": "#747E87",
+        "width": "1.8",
+        "line_style": "dash",
+        "fill": "#B7BEC4",
+        "outline": "#747E87",
+        "opacity": "0.50",
+    },
+    "gate": {
+        "color": "#F8FBFD",
+        "outline": "#2E6F9E",
+        "shape": "square",
+        "size": "2.0",
+    },
+    "hangar": {
+        "fill": "#87929C",
+        "outline": "#5E6871",
+        "opacity": "0.86",
+    },
+    "helipad": {
+        "color": "#C43D4D",
+        "outline": "#FFFFFF",
+        "shape": "cross2",
+        "size": "2.8",
+    },
     "holding_position": {
-        "color": "#D1495B",
-        "shape": "triangle",
-        "size": "4.0",
+        "color": "#F2C230",
+        "outline": "#2F343A",
+        "shape": "square",
+        "size": "2.2",
+    },
+    "jet_bridge": {
+        "line_color": "#687886",
+        "width": "0.65",
     },
     "navigationaid": {
-        "color": "#7C3AED",
+        "color": "#7557B8",
+        "outline": "#FFFFFF",
         "shape": "diamond",
-        "size": "3.8",
+        "size": "2.5",
     },
     "parking_position": {
-        "color": "#1496A5",
+        "color": "#E8EDF2",
+        "outline": "#3D8791",
         "shape": "circle",
-        "size": "3.4",
+        "size": "1.8",
+        "line_color": "#7D98A0",
+        "width": "0.45",
     },
-    "runway": {"color": "#4B5563", "outline": "#F8FAFC", "width": "2.4"},
-    "taxilane": {
-        "color": "#EAB308",
-        "outline": "#A16207",
-        "width": "1.2",
+    "runway": {
+        "line_color": "#454C54",
+        "width": "3.4",
+        "center_color": "#F7F7F3",
+        "center_width": "0.28",
+        "center_style": "dash",
+        "fill": "#454C54",
+        "outline": "#242A30",
+        "opacity": "0.96",
+    },
+    "stopway": {
+        "line_color": "#69727B",
+        "width": "2.7",
         "line_style": "dash",
+        "fill": "#AAB1B7",
+        "outline": "#69727B",
+        "opacity": "0.58",
     },
-    "taxiway": {"color": "#D99A14", "outline": "#8A5E00", "width": "1.7"},
-    "terminal": {"color": "#475569", "outline": "#1E293B"},
-    "windsock": {"color": "#F97316", "shape": "triangle", "size": "4.0"},
+    "taxilane": {
+        "line_color": "#9AA3AC",
+        "width": "1.2",
+        "center_color": "#F2C230",
+        "center_width": "0.22",
+        "center_style": "dash",
+        "fill": "#A4ACB3",
+        "outline": "#737C84",
+        "opacity": "0.82",
+    },
+    "taxiway": {
+        "line_color": "#7C858E",
+        "width": "1.8",
+        "center_color": "#F2C230",
+        "center_width": "0.28",
+        "center_style": "solid",
+        "fill": "#858E97",
+        "outline": "#626A71",
+        "opacity": "0.90",
+    },
+    "terminal": {
+        "fill": "#566575",
+        "outline": "#35424D",
+        "opacity": "0.92",
+    },
+    "windsock": {
+        "color": "#E87516",
+        "outline": "#FFFFFF",
+        "shape": "triangle",
+        "size": "2.6",
+    },
 }
 DEFAULT_AEROWAY_STYLE = {
-    "color": "#2D7F78",
-    "outline": "#18534F",
+    "color": "#647985",
+    "outline": "#40525C",
+    "fill": "#AEB8BE",
+    "line_color": "#647985",
     "shape": "circle",
-    "size": "3.2",
-    "width": "1.2",
+    "size": "2.2",
+    "width": "0.8",
     "line_style": "solid",
+    "opacity": "0.72",
 }
+
+NAVIGATIONAID_STYLES = {
+    "als": {
+        "color": "#D18B00",
+        "outline": "#D18B00",
+        "shape": "cross2",
+        "size": "2.4",
+    },
+    "papi": {
+        "color": "#7557B8",
+        "outline": "#FFFFFF",
+        "shape": "diamond",
+        "size": "2.5",
+    },
+    "vasi": {
+        "color": "#9868C8",
+        "outline": "#FFFFFF",
+        "shape": "diamond",
+        "size": "2.5",
+    },
+}
+
+AEROWAY_DRAW_PRIORITY = {
+    "aerodrome": 0,
+    "apron": 10,
+    "runway": 20,
+    "stopway": 21,
+    "extended-takeoff_area": 22,
+    "taxiway": 30,
+    "taxilane": 31,
+    "hangar": 40,
+    "terminal": 41,
+    "jet_bridge": 50,
+    "aerodrome_marking": 60,
+    "parking_position": 70,
+    "gate": 71,
+    "holding_position": 80,
+    "navigationaid": 81,
+    "helipad": 82,
+    "windsock": 83,
+    "beacon": 84,
+}
+
+AEROWAY_MINIMUM_SCALES = {
+    "taxilane": 25_000,
+    "holding_position": 25_000,
+    "navigationaid": 25_000,
+    "helipad": 25_000,
+    "windsock": 25_000,
+    "beacon": 25_000,
+    "aerodrome_marking": 10_000,
+    "parking_position": 10_000,
+    "gate": 10_000,
+    "jet_bridge": 10_000,
+}
+
+
+def _marker_symbol(style: dict) -> QgsMarkerSymbol:
+    """Create a compact marker with color and shape differentiation."""
+    return QgsMarkerSymbol.createSimple(
+        {
+            "name": style["shape"],
+            "color": style["color"],
+            "outline_color": style["outline"],
+            "outline_width": "0.35",
+            "size": style["size"],
+        }
+    )
+
+
+def _apply_navigationaid_style(layer: QgsVectorLayer, style: dict) -> bool:
+    """Categorize navigation aids by their preserved subtype attribute."""
+    field_index = layer.fields().indexOf("navigationaid")
+    if field_index < 0:
+        return False
+    values = sorted(
+        {
+            str(value).strip().lower()
+            for value in layer.uniqueValues(field_index)
+            if value is not None and str(value).strip()
+        }
+    )
+    if not values:
+        return False
+    categories = []
+    for value in values:
+        category_style = dict(style)
+        category_style.update(NAVIGATIONAID_STYLES.get(value, {}))
+        categories.append(
+            QgsRendererCategory(
+                value,
+                _marker_symbol(category_style),
+                value.upper().replace("_", " "),
+            )
+        )
+    layer.setRenderer(QgsCategorizedSymbolRenderer("navigationaid", categories))
+    return True
 
 
 def apply_aeroway_style(layer: QgsVectorLayer, category: str) -> None:
-    """Apply a compact geometry-aware style for an OSM aeroway category."""
+    """Apply a restrained, airport-plan style for an OSM aeroway category."""
     style = dict(DEFAULT_AEROWAY_STYLE)
     style.update(AEROWAY_STYLES.get(category, {}))
     geometry_type = layer.geometryType()
 
     if geometry_type == QgsWkbTypes.PointGeometry:
-        symbol = QgsMarkerSymbol.createSimple(
-            {
-                "name": style["shape"],
-                "color": style["color"],
-                "outline_color": "#FFFFFF",
-                "outline_width": "0.4",
-                "size": style["size"],
-            }
-        )
+        if category == "navigationaid" and _apply_navigationaid_style(
+            layer,
+            style,
+        ):
+            symbol = None
+        else:
+            symbol = _marker_symbol(style)
     elif geometry_type == QgsWkbTypes.LineGeometry:
         symbol = QgsLineSymbol.createSimple(
             {
-                "color": style["color"],
+                "color": style["line_color"],
                 "width": style["width"],
                 "line_style": style["line_style"],
             }
         )
+        center_color = style.get("center_color")
+        if symbol is not None and center_color:
+            center_line = QgsSimpleLineSymbolLayer.create(
+                {
+                    "color": center_color,
+                    "width": style["center_width"],
+                    "line_style": style["center_style"],
+                }
+            )
+            if center_line is not None:
+                symbol.appendSymbolLayer(center_line)
     elif geometry_type == QgsWkbTypes.PolygonGeometry:
         symbol = QgsFillSymbol.createSimple(
             {
-                "color": style["color"],
+                "color": style["fill"],
                 "outline_color": style["outline"],
-                "outline_width": "0.7",
+                "outline_width": "0.45",
             }
         )
         if symbol is not None:
-            symbol.setOpacity(0.55)
+            symbol.setOpacity(float(style["opacity"]))
     else:
         return
 
     if symbol is not None:
         layer.setRenderer(QgsSingleSymbolRenderer(symbol))
-        layer.setCustomProperty("safeguarding_builder/osm_aeroway_style", category)
+    minimum_scale = AEROWAY_MINIMUM_SCALES.get(category)
+    if minimum_scale is not None:
+        layer.setScaleBasedVisibility(True)
+        layer.setMinimumScale(float(minimum_scale))
+        layer.setMaximumScale(0.0)
+    layer.setCustomProperty("safeguarding_builder/osm_aeroway_style", category)
 
 
 def build_aeroway_query(latitude: float, longitude: float) -> str:
