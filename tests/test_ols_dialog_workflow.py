@@ -103,6 +103,37 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             0,
         )
 
+    def test_agl_dialog_reflects_selected_design_ruleset(self):
+        design_standard = self.dialog.ruleset_combo
+        easa_index = design_standard.findData("easa_cs_adr_dsn_issue_7")
+        mos_index = design_standard.findData("mos139_2019")
+
+        self.assertGreaterEqual(easa_index, 0)
+        self.assertGreaterEqual(mos_index, 0)
+
+        self.dialog.checkBox_agl_enabled.setChecked(True)
+        design_standard.setCurrentIndex(easa_index)
+        self.assertEqual(
+            self.dialog.groupBox_agl_elements.title(),
+            "EASA visual-aid options",
+        )
+        self.assertIn("EASA CS-ADR-DSN Issue 7", self.dialog.label_agl_ruleset_caveat.text())
+        self.assertFalse(self.dialog.checkBox_agl_rtil.isEnabled())
+        self.assertFalse(self.dialog.checkBox_agl_temp_displaced_threshold.isEnabled())
+        self.assertFalse(self.dialog._get_agl_element_options()["rtil"])
+        self.assertFalse(
+            self.dialog._get_agl_element_options()["temp_displaced_threshold"]
+        )
+
+        design_standard.setCurrentIndex(mos_index)
+        self.assertEqual(self.dialog.groupBox_agl_elements.title(), "MOS optional elements")
+        self.assertTrue(self.dialog.checkBox_agl_rtil.isEnabled())
+        self.assertTrue(self.dialog.checkBox_agl_temp_displaced_threshold.isEnabled())
+        self.assertEqual(
+            self.dialog.label_agl_edge_spacing.text(),
+            "MOS edge spacing baseline (m)",
+        )
+
     def test_legacy_modernised_design_standard_loads_as_current_annex(self):
         self.dialog._apply_loaded_payload(
             {

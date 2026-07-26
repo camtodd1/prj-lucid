@@ -353,7 +353,13 @@ class AirfieldGroundLightingMixin:
                         azimuth,
                         params["azimuth_perp_l"],
                         params["azimuth_perp_r"],
-                        self._tdz_lighting_extent(runway_data, end_desig, runway_type, physical_length),
+                        self._tdz_lighting_extent(
+                            runway_data,
+                            end_desig,
+                            runway_type,
+                            physical_length,
+                            arc_num=runway_data.get("arc_num"),
+                        ),
                     )
         if reciprocal_type_supported:
             self._append_threshold_lights(
@@ -1343,6 +1349,7 @@ class AirfieldGroundLightingMixin:
         end_desig: str,
         runway_type: str,
         runway_length_m: float,
+        arc_num: int | None = None,
     ) -> float:
         """Return MOS 9.72 TDZ light extent: lesser of 900 m and MOS 8.24 TDZ marking length."""
         rendered_extents = runway_data.get("tdz_marking_extents") or {}
@@ -1359,7 +1366,12 @@ class AirfieldGroundLightingMixin:
             return 0.0
 
         aim_offset = None
-        aim_rule = self._aiming_point_rule(runway_data.get("width") or 0.0, lda_m, runway_type)
+        aim_rule = self._aiming_point_rule(
+            runway_data.get("width") or 0.0,
+            lda_m,
+            runway_type,
+            arc_num=arc_num,
+        )
         if aim_rule is not None:
             aim_offset = aim_rule[0]
 

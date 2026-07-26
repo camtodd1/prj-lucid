@@ -166,22 +166,22 @@ def centreline_marking_width(arc_num: int, type_primary: str, type_reciprocal: s
 
 
 def aiming_point_rule(
-    runway_width: float, lda_m: float, runway_type: str
+    runway_width: float,
+    lda_m: float,
+    runway_type: str,
+    arc_num: Optional[int] = None,
+    additional_conspicuity: bool = False,
 ) -> Optional[Tuple[float, float, float, float, str]]:
     """Return the aiming point marking parameters.
 
     On instrument runways, the location and dimensions of the
     aiming point marking depend on the landing distance available
-    (LDA).  This function returns the first
-    applicable rule from :data:`AIMING_POINT_RULES` when the runway
-    type corresponds to an instrument runway (NPA, PA_I or PA_II_III).
+    (LDA).  The marking is mandatory for code numbers 2, 3 and 4;
+    code 1 requires an explicit additional-conspicuity decision.
 
-    On non-instrument or non-precision runways, EASA permits the
-    provision of aiming point markings where increased conspicuity is
-    desired.  For runways 30 m in width or
-    greater, a default rule is returned that mirrors the values for
-    the 1 200 m-<2 400 m LDA band (offset 300 m, length 45 m, width
-    9 m, spacing 18 m).  In other cases, ``None`` is returned.
+    On non-instrument runways, EASA permits additional-conspicuity
+    aiming point markings for code numbers 3 and 4.  The caller can
+    request that optional case with ``additional_conspicuity``.
 
     Parameters
     ----------
@@ -192,6 +192,12 @@ def aiming_point_rule(
     runway_type : str
         The operational classification of the runway (e.g., "NI",
         "NPA", "PA_I", "PA_II_III").
+    arc_num : Optional[int]
+        Aerodrome reference code number.  When supplied, it is used to
+        enforce CS ADR-DSN.L.540 applicability.
+    additional_conspicuity : bool
+        Whether an optional code-1 or non-instrument additional-
+        conspicuity marking has been selected.
 
     Returns
     -------
@@ -201,18 +207,22 @@ def aiming_point_rule(
         Returns ``None`` if no aiming point marking is required.
     """
     type_abbr = ols.classify_runway_type(runway_type)
-    # Apply instrument runway rules. The interface does not carry code
-    # number, so the code 1 additional-conspicuity distinction is handled
-    # by callers/policy rather than this dimensional table lookup.
     if type_abbr in {"NPA", "PA_I", "PA_II_III"}:
+        if arc_num is not None and arc_num not in {2, 3, 4} and not additional_conspicuity:
+            return None
         for max_lda_m, offset_m, length_m, width_m, spacing_m, ref in AIMING_POINT_RULES:
             if max_lda_m is None or lda_m < max_lda_m:
                 return offset_m, length_m, width_m, spacing_m, ref
-    # For non-instrument and non-precision runways of substantial width,
-    # provide a default aiming point marking to enhance conspicuity.
-    if runway_width >= 30.0:
+    # CS ADR-DSN.L.540 permits this optional case for non-instrument code
+    # 3/4 runways, and for code-1 instrument runways when selected.
+    if type_abbr == "NI" and (arc_num is None or arc_num in {3, 4} or additional_conspicuity) and runway_width >= 30.0:
         return 300.0, 45.0, 9.0, 18.0, "CS ADR-DSN.L.540 (default)"
     return None
+
+
+def threshold_marking_ref() -> str:
+    """Return the EASA source used by the shared runway-marking generator."""
+    return EASA_THRESHOLD_MARKING_REF
 
 
 def touchdown_zone_offsets(lda_m: float) -> List[float]:

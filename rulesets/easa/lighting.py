@@ -75,8 +75,34 @@ TDZ_BARRETTE_SPACING_M = 1.5
 TDZ_BARRETTE_LENGTH_MIN_M = 3.0
 TDZ_BARRETTE_LENGTH_MAX_M = 4.5
 TDZ_INNER_OFFSET_M = 9.0
+TDZ_FIRST_ROW_OFFSET_M = TDZ_ROW_SPACING_M
+TDZ_MARKING_LENGTH_M = 22.5
+
+# Shared AGL generation uses these names for rule values.  Keep the aliases
+# local to this ruleset so generated features retain EASA provenance where a
+# source-backed rule exists; compatibility-only values remain labelled as such.
+MOS_REF_RUNWAY_EDGE = EASA_REF_RUNWAY_EDGE
+MOS_REF_DISPLACED_THRESHOLD_EDGE = EASA_REF_RUNWAY_EDGE
+MOS_REF_THRESHOLD_LOCATION = EASA_REF_THRESHOLD
+MOS_REF_THRESHOLD_PRECISION = EASA_REF_THRESHOLD
+MOS_REF_THRESHOLD_NON_PRECISION = EASA_REF_THRESHOLD
+MOS_REF_THRESHOLD_WING_BARS = EASA_REF_THRESHOLD
+MOS_REF_RTIL = "compatibility fallback"
+MOS_REF_TEMP_DISPLACED_THRESHOLD = "compatibility fallback"
+MOS_REF_RUNWAY_END = EASA_REF_RUNWAY_END
+MOS_REF_STOPWAY = "CS ADR-DSN.M.705"
+MOS_REF_RUNWAY_CENTRELINE = EASA_REF_RUNWAY_CENTRELINE
+MOS_REF_TDZ = EASA_REF_TDZ
+
+# The shared generator's optional feature controls are represented here using
+# the EASA source rules.  The 2.5 m wing-bar interval is a derived placement
+# of five lights over the required 10 m extension.
+RTIL_DEFAULT_LATERAL_FROM_EDGE_LIGHTS_M = 10.0
+TEMP_DISPLACED_THRESHOLD_SPACING_M = THRESHOLD_WING_BAR_SPACING_M
+STOPWAY_END_MIN_LIGHTS = 4
 
 LIGHT_COLOUR_VARIABLE_WHITE = "variable white"
+LIGHT_COLOUR_WHITE = "white"
 LIGHT_COLOUR_YELLOW = "yellow"
 LIGHT_COLOUR_GREEN = "green"
 LIGHT_COLOUR_RED = "red"
@@ -114,6 +140,7 @@ APPROACH_PROFILES = (
             "side_row_inner_spacing_m": CAT_II_III_SIDE_ROW_INNER_SPACING_M,
             "approach_type": "cat_ii_iii",
             "ref_easa": EASA_REF_APPROACH_CAT_II_III,
+            "ref_mos": EASA_REF_APPROACH_CAT_II_III,
         },
     ),
     (
@@ -134,6 +161,7 @@ APPROACH_PROFILES = (
             "side_row_inner_spacing_m": 0.0,
             "approach_type": "cat_i",
             "ref_easa": EASA_REF_APPROACH_CAT_I,
+            "ref_mos": EASA_REF_APPROACH_CAT_I,
         },
     ),
     (
@@ -148,6 +176,7 @@ APPROACH_PROFILES = (
             "side_row_inner_spacing_m": 0.0,
             "approach_type": "sals",
             "ref_easa": EASA_REF_SIMPLE_APPROACH,
+            "ref_mos": EASA_REF_SIMPLE_APPROACH,
         },
     ),
 )
@@ -373,9 +402,9 @@ def runway_centreline_recommended(runway_type_1: str, runway_type_2: str, edge_l
 
 def runway_centreline_spacing(rvr_below_350: bool) -> float:
     """Return the runway centre line light spacing in metres."""
-    if rvr_below_350:
-        return RUNWAY_CENTRELINE_DEFAULT_SPACING_M
-    return RUNWAY_CENTRELINE_LOW_VIS_SPACING_M
+    # CS ADR-DSN.M.690 permits approximately 30 m only for RVR 350 m or
+    # greater; low-visibility operation retains the approximately 15 m case.
+    return RUNWAY_CENTRELINE_DEFAULT_SPACING_M if rvr_below_350 else RUNWAY_CENTRELINE_LOW_VIS_SPACING_M
 
 
 def approach_profile_for_runway(runway_type: str) -> Dict:

@@ -108,8 +108,24 @@ class EasaRulesetProfile(RulesetProfile):
     def threshold_marking_params(self, runway_width: float):
         return self.markings.threshold_marking_params(runway_width)
 
-    def aiming_point_rule(self, runway_width: float, lda_m: float, runway_type: str):
-        return self.markings.aiming_point_rule(runway_width, lda_m, runway_type)
+    def aiming_point_rule(
+        self,
+        runway_width: float,
+        lda_m: float,
+        runway_type: str,
+        arc_num: Optional[int] = None,
+        additional_conspicuity: bool = False,
+    ):
+        return self.markings.aiming_point_rule(
+            runway_width,
+            lda_m,
+            runway_type,
+            arc_num=arc_num,
+            additional_conspicuity=additional_conspicuity,
+        )
+
+    def threshold_marking_ref(self) -> str:
+        return self.markings.threshold_marking_ref()
 
     def touchdown_zone_offsets(self, lda_m: float):
         return self.markings.touchdown_zone_offsets(lda_m)

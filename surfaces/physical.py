@@ -1415,9 +1415,13 @@ class PhysicalGeometryMixin:
         return fallback_length
 
     def _aiming_point_rule(
-        self, runway_width: float, lda_m: float, runway_type: str
+        self, runway_width: float, lda_m: float, runway_type: str, arc_num: Optional[int] = None
     ) -> Optional[Tuple[float, float, float, float, str]]:
-        return self.get_active_ruleset().aiming_point_rule(runway_width, lda_m, runway_type)
+        getter = self.get_active_ruleset().aiming_point_rule
+        try:
+            return getter(runway_width, lda_m, runway_type, arc_num=arc_num)
+        except TypeError:
+            return getter(runway_width, lda_m, runway_type)
 
     def _touchdown_zone_offsets(self, lda_m: float) -> List[float]:
         return self.get_active_ruleset().touchdown_zone_offsets(lda_m)
@@ -1875,7 +1879,11 @@ class PhysicalGeometryMixin:
             if not landing_available:
                 skipped.append("Aiming point and touchdown zone markings: landing not available for this runway end.")
             lda_m = self._declared_lda_for_end(runway_data, end_desig, runway_length) if landing_available else None
-            aiming_rule = self._aiming_point_rule(runway_width, lda_m, runway_type) if landing_available else None
+            aiming_rule = (
+                self._aiming_point_rule(runway_width, lda_m, runway_type, arc_num=arc_num)
+                if landing_available
+                else None
+            )
             if not surface_markings_applicable:
                 skipped.append(
                     "Aiming point and touchdown zone markings: MOS 8.22/8.23 " "sealed-surface triggers not met."

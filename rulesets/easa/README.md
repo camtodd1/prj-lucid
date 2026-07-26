@@ -12,10 +12,11 @@ performance, interpretation, and independent-review gates are complete.
 ## Capability Summary
 
 Supported policy services include runway strips, RESA, clearway, stopway,
-taxiway separation, and calculated declared distances. Pavement, shoulders,
-parallel-runway separation, OLS, markings, and lighting contain verified values
-but remain partial at the profile level because applicability or geometry is
-not yet a complete operational contract.
+taxiway separation, calculated declared distances, runway markings, runway
+lighting, and approach lighting. The visual-aid capability is supported for
+the runway and approach families implemented by `markings.py` and `lighting.py`;
+optional compatibility-only displaced-threshold lighting remains explicitly
+identified in traceability metadata.
 
 The EASA OLS path uses CS-ADR-DSN J-1/J-2 dimensions, clearway-dependent take-off
 climb origins and widths, obstacle free zone families, and guidance-only outer

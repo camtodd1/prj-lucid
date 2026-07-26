@@ -1,0 +1,76 @@
+{
+  "source": {
+    "publication": "EASA Easy Access Rules for Aerodromes, March 2026 revision, CS-ADR-DSN Issue 7",
+    "url": "https://www.easa.europa.eu/en/document-library/easy-access-rules/online-publications/easy-access-rules-aerodromes-regulation-eu",
+    "markings": {
+      "centreline": "CS ADR-DSN.L.530",
+      "threshold": "CS ADR-DSN.L.535",
+      "aiming_point": "CS ADR-DSN.L.540 Table L-1",
+      "touchdown_zone": "CS ADR-DSN.L.545"
+    },
+    "lighting": {
+      "simple_approach": "CS ADR-DSN.M.626",
+      "precision_cat_i": "CS ADR-DSN.M.630",
+      "precision_cat_ii_iii": "CS ADR-DSN.M.635",
+      "runway_edge": "CS ADR-DSN.M.675",
+      "threshold": "CS ADR-DSN.M.680",
+      "runway_end": "CS ADR-DSN.M.685",
+      "runway_centreline": "CS ADR-DSN.M.690",
+      "touchdown_zone": "CS ADR-DSN.M.695",
+      "stopway": "CS ADR-DSN.M.705"
+    }
+  },
+  "markings": {
+    "centreline_width_m": {
+      "NI_code_1": 0.3,
+      "NPA_code_2": 0.3,
+      "NPA_code_3": 0.45,
+      "PA_I": 0.45,
+      "PA_II_III": 0.9
+    },
+    "threshold_stripes_by_width_m": {
+      "18": 4,
+      "23": 6,
+      "30": 8,
+      "45": 12,
+      "60": 16
+    },
+    "aiming_point_offsets_by_lda_m": {
+      "700": 150,
+      "1000": 250,
+      "1800": 300,
+      "3000": 400
+    },
+    "touchdown_zone_offsets_m": {
+      "799": [300],
+      "900": [150, 450],
+      "1200": [150, 450, 600],
+      "2400": [150, 300, 600, 750, 900, 1050]
+    }
+  },
+  "lighting": {
+    "edge_spacing_m": {
+      "non_instrument": 100,
+      "instrument": 60
+    },
+    "threshold_minimum_lights": 6,
+    "precision_threshold_max_spacing_m": 3,
+    "runway_end_minimum_lights": 6,
+    "cat_iii_runway_end_max_spacing_m": 6,
+    "stopway_end_minimum_lights": 4,
+    "centreline_spacing_m": {
+      "rvr_below_350": 15,
+      "rvr_at_or_above_350": 30
+    },
+    "approach_lengths_m": {
+      "simple": 420,
+      "cat_i": 900,
+      "cat_ii_iii": 900
+    },
+    "approach_crossbar_lengths_m": {
+      "simple": 30,
+      "cat_i": 30,
+      "cat_ii_iii": 30
+    }
+  }
+}

@@ -20,8 +20,8 @@ value does not by itself make an entire generated-output family supported.
 | Parallel runways | CS ADR-DSN.B.050, B.055 | Partial profile capability |
 | Conventional OLS and OFZ | CS ADR-DSN Chapters H/J, Tables J-1/J-2 | Values verified; generated contract partial |
 | Outer horizontal surface | GM1 ADR-DSN.H.410 | Verified guidance-only values |
-| Runway markings | CS ADR-DSN.L.530-L.575 | Values verified; profile capability partial |
-| Approach and runway lighting | CS ADR-DSN.M.626-M.695 | Values verified; profile capability partial |
+| Runway markings | CS ADR-DSN.L.530-L.575 | Supported for runway centreline, threshold, aiming-point, touchdown-zone, and generated runway marking policy; source-backed applicability tests cover code-number and LDA bands. Runway-holding-position distance remains intentionally ungenerated because CS ADR-DSN.D.335, not Chapter L, determines its location. |
+| Approach and runway lighting | CS ADR-DSN.M.626-M.695, M.705 | Supported for simple/CAT I/CAT II-III approach systems and runway edge, threshold, end, centreline, touchdown-zone, and stopway light policy; source-backed spacing, count, profile, and applicability tests are locked in `tests/fixtures/ols/easa_visual_aids_v1.json`. RETIL and temporary displaced-threshold options remain compatibility-only and are labelled accordingly. |
 | Declared distances | CS ADR-DSN.B.035 | Supported calculation |
 | Clearway | CS ADR-DSN.B.195 | Supported policy |
 | Stopway | CS ADR-DSN.B.200 | Supported policy; polygon consolidation open |
