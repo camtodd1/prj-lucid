@@ -107,9 +107,11 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         design_standard = self.dialog.ruleset_combo
         easa_index = design_standard.findData("easa_cs_adr_dsn_issue_7")
         mos_index = design_standard.findData("mos139_2019")
+        cap168_index = design_standard.findData("uk_caa_cap168_edition_13")
 
         self.assertGreaterEqual(easa_index, 0)
         self.assertGreaterEqual(mos_index, 0)
+        self.assertGreaterEqual(cap168_index, 0)
 
         self.dialog.checkBox_agl_enabled.setChecked(True)
         design_standard.setCurrentIndex(easa_index)
@@ -133,6 +135,17 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             self.dialog.label_agl_edge_spacing.text(),
             "MOS edge spacing baseline (m)",
         )
+
+        design_standard.setCurrentIndex(cap168_index)
+        self.assertEqual(
+            self.dialog.groupBox_agl_elements.title(),
+            "CAP 168 source-backed options",
+        )
+        self.assertIn("RVR ≥300 m", self.dialog.label_agl_ruleset_caveat.text())
+        self.assertIn("wider than 50 m", self.dialog.label_agl_ruleset_caveat.text())
+        self.assertIn("not generated or validated", self.dialog.label_agl_ruleset_caveat.text())
+        self.assertIn("RVR <300 m", self.dialog.checkBox_agl_centreline_low_visibility.text())
+        self.assertIn(">50 m", self.dialog.checkBox_agl_cat_i_centreline_lights.text())
 
     def test_legacy_modernised_design_standard_loads_as_current_annex(self):
         self.dialog._apply_loaded_payload(

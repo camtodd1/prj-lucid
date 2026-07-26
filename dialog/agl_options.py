@@ -16,6 +16,7 @@ class AglOptionsMixin:
 
     EASA_RULESET_ID = "easa_cs_adr_dsn_issue_7"
     MOS139_RULESET_ID = "mos139_2019"
+    CAP168_RULESET_ID = "uk_caa_cap168_edition_13"
 
     AGL_DEFAULTS = {
         "edge_spacing_m": "60",
@@ -609,6 +610,7 @@ class AglOptionsMixin:
         profile = self._agl_ruleset()
         is_easa = profile.id == self.EASA_RULESET_ID
         is_mos139 = profile.id == self.MOS139_RULESET_ID
+        is_cap168 = profile.id == self.CAP168_RULESET_ID
 
         if is_easa:
             self.groupBox_agl_elements.setTitle("EASA visual-aid options")
@@ -693,6 +695,50 @@ class AglOptionsMixin:
             ):
                 widget.setEnabled(True)
                 widget.setToolTip("")
+
+            if is_cap168:
+                self.groupBox_agl_elements.setTitle("CAP 168 source-backed options")
+                self.groupBox_agl_approach.setTitle("Per-end approach lighting (CAP 168 profile)")
+                self.label_agl_edge_spacing.setText("CAP 168 runway edge spacing baseline (m)")
+                self.label_agl_threshold_spacing.setText(
+                    "CAP 168 precision threshold max spacing (m)"
+                )
+                self.checkBox_agl_threshold_wing_bars.setText(
+                    "Threshold wing bars (L1/L2 required; L3/L4 recommended)"
+                )
+                self.checkBox_agl_rtil.setText(
+                    "RTIL for displaced thresholds (operational review)"
+                )
+                self.checkBox_agl_temp_displaced_threshold.setText(
+                    "Temporary displaced threshold arrays (operational review)"
+                )
+                self.checkBox_agl_stopway_lights.setText(
+                    "Stopway lights where stopway length is entered (review applicability)"
+                )
+                self.checkBox_agl_centreline_lights.setText(
+                    "Runway centreline lights (CAT II/III and low-RVR take-off)"
+                )
+                self.checkBox_agl_centreline_low_visibility.setText(
+                    "Low-RVR operations: RVR <300 m / CAP 168 spacing condition"
+                )
+                self.checkBox_agl_cat_i_centreline_lights.setText(
+                    "Centreline review for CAT I / runway width >50 m"
+                )
+                self.checkBox_agl_tdz_lights.setText("TDZ lights for CAT II/III")
+                self.checkBox_agl_cat_i_tdz_lights.setText(
+                    "Optional TDZ lights for CAT I (operational review)"
+                )
+                self.label_agl_ruleset_caveat.setText(
+                    "CAP 168 Edition 13, Chapter 6: core runway and approach arrays are "
+                    "source-backed. The 30 m centreline spacing case depends on RVR ≥300 m "
+                    "and maintenance objectives; CAT II/III and low-RVR take-off cases need "
+                    "centreline lighting. Runways wider than 50 m require CAA review. "
+                    "Low-RVR is an operator declaration; this dialog does not capture RVR "
+                    "or maintenance evidence. Starter-extension lighting, strobe alternatives, "
+                    "and intensity-balance checks are documented in the CAP168 profile but are "
+                    "not generated or validated here. Wing-bar applicability by runway scale "
+                    "also remains a review item."
+                )
 
     def _update_agl_view_state(self) -> None:
         """Keep optional AGL controls and actions visually aligned with their state."""
