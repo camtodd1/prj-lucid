@@ -109,6 +109,9 @@ class MarkingService:
     def threshold_marking_params(self, runway_width: float):
         return marking_policy.threshold_marking_params(runway_width)
 
+    def threshold_marking_ref(self) -> str:
+        return marking_policy.threshold_marking_ref()
+
     def aiming_point_rule(
         self,
         runway_width: float,

@@ -38,6 +38,9 @@ class EasaVisualAidsTests(unittest.TestCase):
         self.assertEqual(lighting.EASA_REF_TDZ, self.fixture["source"]["lighting"]["touchdown_zone"])
         self.assertEqual(lighting.MOS_REF_STOPWAY, self.fixture["source"]["lighting"]["stopway"])
 
+    def test_threshold_marking_reference_is_exposed_by_profile(self):
+        self.assertEqual(EASA_PROFILE.threshold_marking_ref(), markings.EASA_THRESHOLD_MARKING_REF)
+
     def test_centreline_and_threshold_marking_dimensions(self):
         expected = self.fixture["markings"]["centreline_width_m"]
         self.assertEqual(markings.centreline_marking_width(1, "NI", "NI"), expected["NI_code_1"])
