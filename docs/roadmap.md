@@ -33,9 +33,10 @@ fixtures.
 
 ## Rulesets and Frameworks
 
-- [ ] Complete EASA CS-ADR-DSN Issue 7 table-level traceability, interpretation
-  policy, and targeted plugin UI validation for the capabilities being
-  implemented.
+- [ ] Complete the remaining EASA CS-ADR-DSN Issue 7 scope: pavement/shoulder
+  decision-tree coverage, parallel-runway separation, and controlling-envelope
+  evidence. Chapter H/J airport-wide OLS and Category II/III OFZ are supported;
+  retain the explicit CAT I guidance and outer-horizontal guidance caveats.
 - [ ] Complete CAP 168 scope outside the supported OLS contract, beginning with
   RESA and approach-adjacent transitional behavior on curved tracks.
 - [ ] Resolve remaining ruleset/framework ownership boundaries before adding a

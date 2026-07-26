@@ -190,6 +190,23 @@ class Cap168ConstructionPolicyTests(unittest.TestCase):
 
 
 class OtherConventionalPolicyTests(unittest.TestCase):
+    def test_easa_approach_and_takeoff_capabilities_are_source_backed(self):
+        self.assertEqual(EASA_PROFILE.capability_status("ols.runway_approach"), "supported")
+        self.assertEqual(EASA_PROFILE.capability_status("ols.takeoff_climb"), "supported")
+
+        from rulesets.easa.ols_surfaces import OLS_TRACEABILITY_ITEMS
+
+        self.assertEqual(OLS_TRACEABILITY_ITEMS["approach_surface"]["status"], "operational_verified")
+        self.assertEqual(OLS_TRACEABILITY_ITEMS["take_off_climb_surface"]["status"], "operational_verified")
+        self.assertEqual(
+            OLS_TRACEABILITY_ITEMS["airport_wide_ols"]["status"],
+            "operational_verified_with_guidance_caveat",
+        )
+        self.assertEqual(
+            OLS_TRACEABILITY_ITEMS["ofz_applicability"]["status"],
+            "operational_verified_with_guidance_caveat",
+        )
+
     def test_easa_tocs_clearway_turning_and_guidance_ohs(self):
         item = runway(
             1,
@@ -209,6 +226,26 @@ class OtherConventionalPolicyTests(unittest.TestCase):
         spec = EASA_OLS_CONSTRUCTION_POLICY.airport_wide_spec(EASA_PROFILE, ctx)
         self.assertEqual(spec["ohs"]["applicability"], "guidance_only")
         self.assertFalse(spec["extend_conical_to_ohs"])
+
+    def test_easa_airport_wide_and_ofz_applicability_are_source_backed(self):
+        item = runway(1, 2200.0, arc=3, runway_type="PA_II_III")
+        ctx = replace(context(item), ruleset_id="easa_cs_adr_dsn_issue_7")
+        spec = EASA_OLS_CONSTRUCTION_POLICY.airport_wide_spec(EASA_PROFILE, ctx)
+        self.assertEqual(EASA_PROFILE.capability_status("ols.airport_wide"), "supported")
+        self.assertTrue(spec["ihs_ref"].startswith("CS ADR-DSN.J.470/J.475/J.480"))
+        self.assertEqual(spec["ohs"]["applicability"], "guidance_only")
+
+        required = EASA_OLS_CONSTRUCTION_POLICY.parameters(
+            EASA_PROFILE, ctx, item, item.ends[0], 3, "PA_II_III", "InnerApproach"
+        )
+        guidance = EASA_OLS_CONSTRUCTION_POLICY.parameters(
+            EASA_PROFILE, ctx, item, item.ends[0], 3, "PA_I", "InnerApproach"
+        )
+        self.assertEqual(EASA_PROFILE.capability_status("ols.ofz"), "supported")
+        self.assertEqual(required["applicability"], "required")
+        self.assertEqual(required["applicability_ref"], "CS ADR-DSN.H.445(a)-(b)")
+        self.assertEqual(guidance["applicability"], "guidance_only")
+        self.assertEqual(guidance["applicability_ref"], "GM1 ADR-DSN.J.480(a)")
 
     def test_easa_variable_approach_meets_ihs_then_uses_remaining_length(self):
         item = runway(1, 2200.0, arc=3, runway_type="NPA", elevation=100.0)

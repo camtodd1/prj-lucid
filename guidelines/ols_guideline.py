@@ -1778,6 +1778,7 @@ class OlsGuidelineMixin:
             "outerw_m": final_width,
             "divergence_perc": divergence * 100.0,
             "origin_offset": resolved_start_dist,
+            "applicability": bls_param_dict.get("applicability"),
         }
         for name, value in attr_map.items():
             idx = fields.indexFromName(name)
@@ -1989,6 +1990,7 @@ class OlsGuidelineMixin:
         panel_description: str,
         ref_mos: str,
         ols_fields: QgsFields,
+        applicability: Optional[str] = None,
     ) -> Optional[QgsFeature]:
         plugin_tag = PLUGIN_TAG
 
@@ -2075,6 +2077,7 @@ class OlsGuidelineMixin:
             "slope_perc": its_slope * 100.0,
             "ref_mos": ref_mos,
             "side": side_label,
+            "applicability": applicability,
         }
         final_attr_map = {k: v for k, v in attr_map.items() if ols_fields.indexFromName(k) != -1}
         for name, value in final_attr_map.items():
@@ -3620,6 +3623,8 @@ class OlsGuidelineMixin:
             QgsField("slope_perc", QVariant.Double, self.tr("Slope (%)"), 6, 3),
             QgsField("ref_mos", QVariant.String, self.tr("Reference"), 100),
         ]
+        if surface_type in ["InnerApproach", "InnerTransitional", "BaulkedLanding"]:
+            fields_list.append(QgsField("applicability", QVariant.String, self.tr("Applicability"), 30))
         if surface_type in ["Approach", "TOCS", "Conical"]:
             fields_list.extend(
                 [
@@ -3684,6 +3689,7 @@ class OlsGuidelineMixin:
             fields_list.extend(
                 [
                     QgsField("radius_m", QVariant.Double, self.tr("Radius (m)"), 12, 2),
+                    QgsField("applicability", QVariant.String, self.tr("Applicability"), 30),
                 ]
             )
         elif surface_type == "Transitional":
@@ -4910,6 +4916,7 @@ class OlsGuidelineMixin:
                                     "innerw_m": ia_width_param_val,
                                     "outerw_m": ia_width_param_val,
                                     "origin_offset": ia_start_dist_param,
+                                    "applicability": ia_params.get("applicability"),
                                 }
                                 for n, v_attr in attrs.items():
                                     if fields.indexFromName(n) != -1:
@@ -5039,6 +5046,7 @@ class OlsGuidelineMixin:
                 if it_params_dict:
                     its_slope = it_params_dict.get("slope")
                     its_ref_mos = it_params_dict.get("ref", "MOS Ref ITS")
+                    its_applicability = it_params_dict.get("applicability")
 
                     if its_slope is not None and its_slope > 1e-9:
                         its_fields = self._get_ols_fields("InnerTransitional")
@@ -5143,6 +5151,7 @@ class OlsGuidelineMixin:
                                     "IA Adjacent",
                                     its_ref_mos,
                                     its_fields,
+                                    applicability=its_applicability,
                                 )
                                 if panel_feat:
                                     ofz_inner_trans_features.append(panel_feat)
@@ -5182,6 +5191,7 @@ class OlsGuidelineMixin:
                                     "BLS Adjacent",
                                     its_ref_mos,
                                     its_fields,
+                                    applicability=its_applicability,
                                 )
                                 if panel_feat:
                                     ofz_inner_trans_features.append(panel_feat)
@@ -5233,6 +5243,7 @@ class OlsGuidelineMixin:
                                         "Strip Adjacent",
                                         its_ref_mos,
                                         its_fields,
+                                        applicability=its_applicability,
                                     )
                                     if panel_feat:
                                         ofz_inner_trans_features.append(panel_feat)

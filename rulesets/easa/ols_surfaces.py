@@ -683,6 +683,18 @@ OLS_TRACEABILITY_ITEMS = {
         "implementation": "OHS_PARAMS",
         "notes": "GM1 ADR-DSN.H.410 broad specification, not a Table J-1 certification surface.",
     },
+    "airport_wide_ols": {
+        "source": "CS ADR-DSN.H.415/H.420/H.430; CS ADR-DSN.J.470/J.475/J.480 Table J-1",
+        "status": "operational_verified_with_guidance_caveat",
+        "implementation": "EasaOlsConstructionPolicy.airport_wide_spec / _generate_airport_wide_ols",
+        "notes": "IHS, conical, and transitional surfaces are source-backed; OHS is emitted only as GM1 H.410 guidance.",
+    },
+    "ofz_applicability": {
+        "source": "CS ADR-DSN.H.445(a)-(b); CS ADR-DSN.J.480(a)-(b); GM1 ADR-DSN.J.480(a)",
+        "status": "operational_verified_with_guidance_caveat",
+        "implementation": "EasaOlsConstructionPolicy.ofz_applicability",
+        "notes": "Category II/III OFZ components are required; Category I inner-surface parameters are guidance-only.",
+    },
     "pa_cat_i_ofz_family_applicability": {
         "source": "GM1 ADR-DSN.J.480(a)",
         "status": "interpretive",

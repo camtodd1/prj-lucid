@@ -96,6 +96,18 @@ class OlsSourceValidationTests(unittest.TestCase):
         self.assertIn("Table J-1", documents["easa"]["table_j1_ref"])
         self.assertIn("Table J-2", documents["easa"]["table_j2_ref"])
         self.assertEqual(documents["easa"]["outer_horizontal_ref"], "GM1 ADR-DSN.H.410")
+        supplied_chapters = documents["easa"]["supporting_chapters_issue6"]
+        self.assertEqual(supplied_chapters["scope"], "Chapter H and Chapter J OLS, printed pages 104-123")
+        self.assertEqual(len(supplied_chapters["sha256"]), 64)
+        self.assertEqual(
+            supplied_chapters["applicability_refs"],
+            [
+                "CS ADR-DSN.H.445(a)-(b)",
+                "CS ADR-DSN.J.480(a)-(b)",
+                "GM1 ADR-DSN.J.480(a)",
+                "GM1 ADR-DSN.H.410",
+            ],
+        )
         self.assertEqual(
             [item["corrected_m"] for item in documents["cap168"]["confirmed_corrections"]],
             [60.0, 3600.0, 2500.0],

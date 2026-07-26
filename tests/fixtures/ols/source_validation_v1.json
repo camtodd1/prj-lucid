@@ -36,6 +36,17 @@
       "table_j1_ref": "CS ADR-DSN.J.470/J.475/J.480 Table J-1",
       "table_j2_ref": "CS ADR-DSN.J.485 Table J-2",
       "outer_horizontal_ref": "GM1 ADR-DSN.H.410",
+      "supporting_chapters_issue6": {
+        "supplied_filename": "EASA CS-ADR-DSN Issue 6 - Chapter H & J (OLS).pdf",
+        "scope": "Chapter H and Chapter J OLS, printed pages 104-123",
+        "sha256": "d02d22f790923845d2dd7c9b055281b196878d104026119e50e6c0c0090c8d29",
+        "applicability_refs": [
+          "CS ADR-DSN.H.445(a)-(b)",
+          "CS ADR-DSN.J.480(a)-(b)",
+          "GM1 ADR-DSN.J.480(a)",
+          "GM1 ADR-DSN.H.410"
+        ]
+      },
       "source_url": "https://www.easa.europa.eu/en/document-library/easy-access-rules/online-publications/easy-access-rules-aerodromes-regulation-eu"
     },
     "annex14": {

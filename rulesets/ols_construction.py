@@ -252,6 +252,26 @@ class EasaOlsConstructionPolicy(ConventionalOlsConstructionPolicy):
 
     key = "easa_issue_7"
 
+    @staticmethod
+    def ofz_applicability(runway_type: Optional[str]) -> Mapping[str, str]:
+        """Return EASA OFZ applicability, including the CAT I caveat."""
+
+        normalized = "".join(char for char in str(runway_type or "").upper() if char.isalnum())
+        if normalized in {"PAIIIII", "CATIIIII", "CATII", "CATIII"} or "II" in normalized or "III" in normalized:
+            return {
+                "status": "required",
+                "ref": "CS ADR-DSN.H.445(a)-(b)",
+            }
+        if normalized in {"PAI", "CATI"} or "PRECISION" in normalized:
+            return {
+                "status": "guidance_only",
+                "ref": "GM1 ADR-DSN.J.480(a)",
+            }
+        return {
+            "status": "not_applicable",
+            "ref": "CS ADR-DSN.H.445(a)-(b)",
+        }
+
     def validate(self, context: OlsConstructionContext) -> Tuple[str, ...]:
         errors = list(super().validate(context))
         if context.reference_elevation_datum_m is None:
@@ -274,6 +294,21 @@ class EasaOlsConstructionPolicy(ConventionalOlsConstructionPolicy):
         normalized = "".join(character for character in str(surface_type).upper() if character.isalnum())
         if normalized in {"APPROACH", "APPROACHSURFACE"}:
             return self._resolve_variable_approach(profile, context, end, params)
+        if normalized in {
+            "INNERAPPROACH",
+            "INNERAPPROACHSURFACE",
+            "INNERTRANSITIONAL",
+            "INNERTRANSITIONALSURFACE",
+            "BALKEDLANDING",
+            "BALKEDLANDINGSURFACE",
+            "BAULKEDLANDING",
+            "BAULKEDLANDINGSURFACE",
+        } and isinstance(params, Mapping):
+            resolved = dict(params)
+            applicability = self.ofz_applicability(profile.classify_runway_type(runway_type))
+            resolved["applicability"] = applicability["status"]
+            resolved["applicability_ref"] = applicability["ref"]
+            return resolved
         if normalized not in {"TOCS", "TAKEOFFCLIMB", "TAKEOFFCLIMBSURFACE"}:
             return params
         resolved = dict(params)

@@ -5,6 +5,7 @@ from __future__ import annotations
 import unittest
 import sys
 from pathlib import Path
+from types import MethodType
 
 from qgis.PyQt.QtCore import QVariant
 from qgis.core import (
@@ -12,7 +13,10 @@ from qgis.core import (
     QgsField,
     QgsFields,
     QgsGeometry,
+    QgsCoordinateReferenceSystem,
+    QgsLayerTreeGroup,
     QgsPointXY,
+    QgsProject,
     QgsRectangle,
 )
 
@@ -113,6 +117,196 @@ def cap_context(track_wkt: str) -> OlsConstructionContext:
 
 
 class OlsConstructionQgisTests(unittest.TestCase):
+    @staticmethod
+    def _easa_generation_fixture():
+        primary = OlsRunwayEndContext(
+            direction="primary",
+            designator="09",
+            threshold_point=QgsPointXY(0.0, 0.0),
+            threshold_elevation_m=100.0,
+            runway_end_elevation_m=100.0,
+            approach_type="Non-Precision Approach (NPA)",
+            classified_type="NPA",
+            clearway_length_m=200.0,
+        )
+        reciprocal = OlsRunwayEndContext(
+            direction="reciprocal",
+            designator="27",
+            threshold_point=QgsPointXY(3000.0, 0.0),
+            threshold_elevation_m=101.0,
+            runway_end_elevation_m=101.0,
+            approach_type="Non-Precision Approach (NPA)",
+            classified_type="NPA",
+        )
+        runway = OlsRunwayContext(
+            runway_id="09/27",
+            original_index=1,
+            arc_number=3,
+            arc_letter="C",
+            width_m=45.0,
+            physical_length_m=3000.0,
+            threshold_length_m=3000.0,
+            primary_threshold_point=primary.threshold_point,
+            reciprocal_threshold_point=reciprocal.threshold_point,
+            primary_physical_end_point=primary.threshold_point,
+            reciprocal_physical_end_point=reciprocal.threshold_point,
+            strip_parameters={
+                "overall_width": 280.0,
+                "graded_width": 150.0,
+                "extension_length": 60.0,
+            },
+            ends=(primary, reciprocal),
+            generation_data={"original_index": 1},
+        )
+        context = OlsConstructionContext(
+            ruleset_id=EASA_PROFILE.id,
+            runways=(runway,),
+            reference_elevation_datum_m=123.0,
+            arp_point=QgsPointXY(1500.0, 500.0),
+        )
+        builder = object.__new__(SafeguardingBuilder)
+        builder.ruleset = EASA_PROFILE
+        builder.baseline_ols_ruleset = EASA_PROFILE
+        builder.protected_airspace_ruleset = EASA_PROFILE
+        builder.ols_construction_context = context
+        builder.translator = None
+        builder.contour_intervals = {}
+        builder._contour_interval_ruleset_role = "baseline"
+        return builder, runway, primary, context
+
+    def test_easa_approach_and_tocs_generate_source_referenced_valid_geometry(self):
+        builder, runway, primary, _context = self._easa_generation_fixture()
+        runway_data = {
+            "short_name": "09/27",
+            "original_index": 1,
+            "arc_num": "3",
+            "type1": "Non-Precision Approach (NPA)",
+            "type2": "Non-Precision Approach (NPA)",
+            "thr_point": runway.primary_threshold_point,
+            "rec_thr_point": runway.reciprocal_threshold_point,
+            "thr_displaced_1": 0.0,
+            "thr_displaced_2": 0.0,
+            "calculated_strip_dims": dict(runway.strip_parameters),
+        }
+        rwy_params = builder._get_runway_parameters(
+            runway.primary_threshold_point,
+            runway.reciprocal_threshold_point,
+        )
+        self.assertIsNotNone(rwy_params)
+
+        approach_features, approach_contours = builder._generate_approach_surface(
+            runway_data,
+            rwy_params,
+            3,
+            primary.approach_type,
+            primary.threshold_point,
+            rwy_params["azimuth_r_p"],
+            primary.designator,
+            primary.threshold_elevation_m,
+            direction=primary.direction,
+        )
+        self.assertEqual(
+            [feature.attribute("len_m") for feature in approach_features],
+            [3000.0, 320.0, 11680.0],
+        )
+        self.assertTrue(all(feature.geometry().isGeosValid() for feature in approach_features))
+        self.assertTrue(
+            all(str(feature.attribute("ref_mos")).startswith("CS ADR-DSN.J.") for feature in approach_features)
+        )
+        self.assertGreater(len(approach_contours), 0)
+
+        tocs_feature, tocs_contours = builder._generate_tocs(
+            runway_data,
+            rwy_params,
+            3,
+            None,
+            runway.reciprocal_threshold_point,
+            primary.clearway_length_m,
+            rwy_params["azimuth_p_r"],
+            primary.designator,
+            primary.threshold_elevation_m,
+            direction=primary.direction,
+        )
+        self.assertIsNotNone(tocs_feature)
+        self.assertTrue(tocs_feature.geometry().isGeosValid())
+        self.assertEqual(tocs_feature.attribute("origin_offset"), 200.0)
+        self.assertEqual(tocs_feature.attribute("len_m"), 15000.0)
+        self.assertIn("CS ADR-DSN.J.485", tocs_feature.attribute("ref_mos"))
+        self.assertGreater(len(tocs_contours), 0)
+
+    def test_easa_airport_wide_and_cat23_ofz_geometry_is_source_referenced(self):
+        builder, runway, _primary, context = self._easa_generation_fixture()
+        runway_data = {
+            "short_name": "09/27",
+            "original_index": 1,
+            "arc_num": "3",
+            "arc_let": "C",
+            "type1": "Precision Approach CAT II/III",
+            "type2": "Precision Approach CAT II/III",
+            "thr_point": runway.primary_threshold_point,
+            "rec_thr_point": runway.reciprocal_threshold_point,
+            "thr_displaced_1": 0.0,
+            "thr_displaced_2": 0.0,
+            "threshold_elev_1": 100.0,
+            "threshold_elev_2": 101.0,
+            "runway_end_elev_1": 100.0,
+            "runway_end_elev_2": 101.0,
+            "width": 45.0,
+            "clearway1_len": 200.0,
+            "clearway2_len": 0.0,
+            "calculated_strip_dims": dict(runway.strip_parameters),
+        }
+        project = QgsProject.instance()
+        project.setCrs(QgsCoordinateReferenceSystem("EPSG:3857"))
+        captured = []
+
+        def capture_layer(self, _geometry_type, layer_id, _layer_name, _fields, features, _group, _style):
+            captured.append((layer_id, list(features)))
+            return object()
+
+        builder._create_and_add_layer = MethodType(capture_layer, builder)
+        builder._generate_transitional_features = MethodType(
+            lambda self, _runways, _elevation, _crs: ([], []), builder
+        )
+        group = QgsLayerTreeGroup("EASA OLS")
+        self.assertTrue(
+            builder._generate_airport_wide_ols(
+                [runway_data], group, context.reference_elevation_datum_m, "TEST"
+            )
+        )
+
+        generated = {
+            feature.attribute("surface"): feature
+            for _layer_id, features in captured
+            for feature in features
+            if feature.fields().indexFromName("surface") != -1
+            and feature.attribute("surface") in {"IHS", "Conical", "OHS"}
+        }
+        self.assertTrue({"IHS", "Conical", "OHS"}.issubset(generated))
+        self.assertTrue(all(feature.geometry().isGeosValid() for feature in generated.values()))
+        self.assertTrue(str(generated["IHS"].attribute("ref_mos")).startswith("CS ADR-DSN.J."))
+        self.assertTrue(str(generated["Conical"].attribute("ref_mos")).startswith("CS ADR-DSN.J."))
+        self.assertEqual(generated["OHS"].attribute("ref_mos"), "GM1 ADR-DSN.H.410")
+        self.assertEqual(generated["OHS"].attribute("applicability"), "guidance_only")
+
+        cat23_ofz = EASA_PROFILE.ols_parameters(3, "PA_II_III", "BalkedLanding")
+        bls_result = builder._generate_baulked_landing_surface(
+            runway_data,
+            builder._get_runway_parameters(runway.primary_threshold_point, runway.reciprocal_threshold_point),
+            runway.primary_threshold_point,
+            builder._get_runway_parameters(runway.primary_threshold_point, runway.reciprocal_threshold_point)[
+                "azimuth_p_r"
+            ],
+            {**cat23_ofz, "applicability": "required"},
+            "09",
+            168.0,
+            strip_end_distance_from_thr=3060.0,
+        )
+        self.assertIsNotNone(bls_result)
+        self.assertTrue(bls_result[0].geometry().isGeosValid())
+        self.assertTrue(str(bls_result[0].attribute("ref_mos")).startswith("CS ADR-DSN.J."))
+        self.assertEqual(bls_result[0].attribute("applicability"), "required")
+
     def test_annex14_elevation_fallback_preserves_zero_threshold(self):
         builder = object.__new__(SafeguardingBuilder)
 
