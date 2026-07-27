@@ -132,6 +132,23 @@ class OlsSourceValidationTests(unittest.TestCase):
                     actual = actual[key]
                 self.assertSourceSubset(actual, check["expected"], check["id"])
 
+    def test_easa_output_traceability_uses_supplied_chapter_hj_extract(self):
+        from rulesets.easa import ols_surfaces
+        from rulesets.easa.profile import EASA_PROFILE
+
+        traceability = ols_surfaces.get_ols_output_traceability("Approach")
+        self.assertIn("CS ADR-DSN.J.", traceability["source_ref"])
+        self.assertEqual(traceability["source_status"], "operational_verified")
+        self.assertEqual(
+            traceability["source_hash"],
+            self.manifest["documents"]["easa"]["supporting_chapters_issue6"]["sha256"],
+        )
+        self.assertIn("Issue 6 - Chapter H & J", traceability["source_extract"])
+        self.assertEqual(
+            EASA_PROFILE.ols_output_traceability("OHS")["source_status"],
+            "guidance_only",
+        )
+
     def test_cap168_corrected_code2_ni_ihs_is_recorded_but_context_gated(self):
         from rulesets.cap168 import ols_surfaces
 

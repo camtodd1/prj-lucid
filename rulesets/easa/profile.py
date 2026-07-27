@@ -4,6 +4,7 @@ from typing import Optional
 
 from ..base import RulesetProfile, capability_map
 from . import metadata
+from . import ols_surfaces as ols_policy
 from .services import ClassificationService, LightingService, MarkingService, OlsService, PhysicalService
 
 
@@ -68,6 +69,9 @@ class EasaRulesetProfile(RulesetProfile):
 
     def ols_parameters(self, arc_num: int, runway_type: Optional[str], surface_type: str):
         return self.ols.parameters(arc_num, runway_type, surface_type)
+
+    def ols_output_traceability(self, surface_type: str):
+        return ols_policy.get_ols_output_traceability(surface_type)
 
     def taxiway_separation_offset(self, arc_num: int, arc_let: Optional[str], runway_type: Optional[str]):
         return self.physical.taxiway_separation_offset(arc_num, arc_let, runway_type)

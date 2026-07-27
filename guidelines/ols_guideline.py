@@ -793,7 +793,10 @@ class OlsGuidelineMixin:
                             footprint=QgsGeometry(ihs_base_geom),
                             elevation_at_xy=constant_elevation_evaluator(IHS_ELEVATION_AMSL),
                             model="constant",
-                            metadata={"elevation_m": IHS_ELEVATION_AMSL},
+                            metadata={
+                                "elevation_m": IHS_ELEVATION_AMSL,
+                                "source_ref": ref_text,
+                            },
                         )
                     )
             except Exception as e_ihs_layer:
@@ -913,6 +916,7 @@ class OlsGuidelineMixin:
                                                 "upper_edge_z_m": conical_outer_elevation,
                                                 "surface_axis": "distance_from_inner_ring",
                                                 "edge_elevation_source": OLS_EDGE_ELEVATION_SOURCE,
+                                                "source_ref": ref,
                                             },
                                         )
                                     )
@@ -2323,6 +2327,10 @@ class OlsGuidelineMixin:
         }
         if metadata:
             candidate_metadata.update(metadata)
+        candidate_metadata.setdefault(
+            "source_ref",
+            candidate_metadata.get("ref_mos") or candidate_metadata.get("ref"),
+        )
         self._register_controlling_ols_candidate(
             ControllingOlsCandidate(
                 surface_id=surface_id,
@@ -4075,6 +4083,7 @@ class OlsGuidelineMixin:
                                             "end": end_desig,
                                             "section": i + 1,
                                             "track_type": "nominated",
+                                            "source_ref": ref,
                                             **section_vertical_attrs,
                                         },
                                     )
@@ -4102,6 +4111,7 @@ class OlsGuidelineMixin:
                                     "runway": runway_data.get("short_name", "N/A"),
                                     "end": end_desig,
                                     "section": i + 1,
+                                    "source_ref": ref,
                                     **section_vertical_attrs,
                                 },
                             ))
@@ -4500,6 +4510,7 @@ class OlsGuidelineMixin:
                             "runway": runway_data.get("short_name", "N/A"),
                             "end": end_desig,
                             "track_type": "nominated",
+                            "source_ref": ref,
                         },
                     ))
             else:
@@ -4533,6 +4544,7 @@ class OlsGuidelineMixin:
                         "upper_edge_z_m": elevation_amsl,
                         "surface_axis": "distance_along_centerline_from_narrow_edge",
                         "edge_elevation_source": OLS_EDGE_ELEVATION_SOURCE,
+                        "source_ref": ref,
                     },
                 ))
             for candidate in candidates_to_register:

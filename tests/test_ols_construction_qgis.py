@@ -21,6 +21,7 @@ from qgis.core import (
 )
 
 from guidelines.ols_guideline import OlsGuidelineMixin
+from guidelines.controlling_ols_engine import ControllingOlsCandidate
 from rulesets.annex14.profile import (
     ANNEX14_CURRENT_OLS_PROFILE,
     ANNEX14_MODERNISED_OFS_OES_PROFILE,
@@ -320,6 +321,24 @@ class OlsConstructionQgisTests(unittest.TestCase):
         )
 
         self.assertEqual(elevations, (0.0, 5.0))
+
+    def test_easa_controlling_candidate_provenance_is_flattened_for_output(self):
+        builder = object.__new__(SafeguardingBuilder)
+        builder.get_active_protected_airspace_ruleset = lambda: EASA_PROFILE
+        candidate = ControllingOlsCandidate(
+            surface_id="APP:09:09:S1",
+            surface_type="Approach",
+            footprint=QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 10.0, 10.0)),
+            elevation_at_xy=lambda _point: 100.0,
+            model="axis",
+        )
+
+        provenance = builder._controlling_candidate_provenance(candidate)
+
+        self.assertIn("CS ADR-DSN.J.", provenance["source_ref"])
+        self.assertEqual(provenance["source_status"], "operational_verified")
+        self.assertIn("Issue 6 - Chapter H & J", provenance["source_extract"])
+        self.assertEqual(len(provenance["source_hash"]), 64)
 
     def test_conventional_partition_is_exclusive_without_annex_optional_fields(self):
         fields = QgsFields(

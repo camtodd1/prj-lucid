@@ -32,6 +32,15 @@ except ImportError:
     from core.run_log import QgsMessageLog  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
+CONTROLLING_PROVENANCE_FIELD_NAMES = (
+    "source_ref",
+    "source_status",
+    "source_doc",
+    "source_extract",
+    "source_hash",
+    "source_url",
+    "source_note",
+)
 CONTROLLING_REGION_GEOMETRY_REPAIR_SEGMENTS = 8
 CONTROLLING_REGION_MAX_NEW_SEGMENT_M = 50.0
 CONTROLLING_REGION_BOUNDARY_DISTANCE_TOLERANCE_M = 0.02
@@ -7041,6 +7050,65 @@ class PlanarControllingOlsEngine:
 class ControllingOlsEngineMixin:
     """Register planar OLS candidates and emit milestone-1 controlling outputs."""
 
+    def _controlling_provenance_fields(self) -> List[QgsField]:
+        return [
+            QgsField("source_ref", QVariant.String, self.tr("Source Reference"), 254),
+            QgsField("source_status", QVariant.String, self.tr("Source Status"), 60),
+            QgsField("source_doc", QVariant.String, self.tr("Source Publication"), 120),
+            QgsField("source_extract", QVariant.String, self.tr("Supporting Extract"), 180),
+            QgsField("source_hash", QVariant.String, self.tr("Supporting Extract SHA-256"), 64),
+            QgsField("source_url", QVariant.String, self.tr("Source URL"), 254),
+            QgsField("source_note", QVariant.String, self.tr("Source Note"), 254),
+        ]
+
+    def _controlling_candidate_provenance(self, candidate: ControllingOlsCandidate) -> Dict[str, str]:
+        metadata = candidate.metadata or {}
+        provenance = {
+            "source_ref": metadata.get("source_ref") or metadata.get("ref") or metadata.get("ref_mos"),
+            "source_status": metadata.get("source_status"),
+            "source_doc": metadata.get("source_doc") or metadata.get("source_publication"),
+            "source_extract": metadata.get("source_extract"),
+            "source_hash": metadata.get("source_hash"),
+            "source_url": metadata.get("source_url"),
+            "source_note": metadata.get("source_note"),
+        }
+        active_getter = getattr(self, "get_active_protected_airspace_ruleset", None)
+        active_ruleset = active_getter() if callable(active_getter) else None
+        traceability_getter = getattr(active_ruleset, "ols_output_traceability", None)
+        if callable(traceability_getter):
+            try:
+                traceability = traceability_getter(candidate.surface_type) or {}
+            except Exception:
+                traceability = {}
+            for field_name in CONTROLLING_PROVENANCE_FIELD_NAMES:
+                if not provenance[field_name] and traceability.get(field_name):
+                    provenance[field_name] = traceability[field_name]
+        return {
+            field_name: str(provenance.get(field_name) or "")
+            for field_name in CONTROLLING_PROVENANCE_FIELD_NAMES
+        }
+
+    def _controlling_feature_provenance(
+        self,
+        feature: QgsFeature,
+        candidates_by_id: Dict[str, ControllingOlsCandidate],
+    ) -> Dict[str, str]:
+        source_ids = str(feature.attribute("surface_id") or "").split("|")
+        provenance_items = [
+            self._controlling_candidate_provenance(candidates_by_id[source_id])
+            for source_id in source_ids
+            if source_id in candidates_by_id
+        ]
+        result = {}
+        for field_name in CONTROLLING_PROVENANCE_FIELD_NAMES:
+            values = []
+            for item in provenance_items:
+                value = item[field_name]
+                if value and value not in values:
+                    values.append(value)
+            result[field_name] = "; ".join(values)[:254]
+        return result
+
     def _reset_controlling_ols_engine(self) -> None:
         self._controlling_ols_candidates: List[ControllingOlsCandidate] = []
         self._controlling_ols_exclusion_geometries: List[QgsGeometry] = []
@@ -7403,12 +7471,15 @@ class ControllingOlsEngineMixin:
                 QgsField("edge_src", QVariant.String, self.tr("Edge Elevation Source"), 80),
             ]
         )
+        for field in self._controlling_provenance_fields():
+            fields.append(field)
         features: List[QgsFeature] = []
         for candidate in candidates:
             feature = QgsFeature(fields)
             feature.setGeometry(QgsGeometry(candidate.footprint))
             min_elev, max_elev = self._candidate_elevation_range(candidate)
             metadata = candidate.metadata or {}
+            provenance = self._controlling_candidate_provenance(candidate)
             feature.setAttributes(
                 [
                     candidate.surface_id,
@@ -7424,6 +7495,7 @@ class ControllingOlsEngineMixin:
                     metadata.get("upper_edge_z_m"),
                     metadata.get("surface_axis"),
                     metadata.get("edge_elevation_source"),
+                    *[provenance[field_name] for field_name in CONTROLLING_PROVENANCE_FIELD_NAMES],
                 ]
             )
             features.append(feature)
@@ -7469,6 +7541,8 @@ class ControllingOlsEngineMixin:
                 QgsField("method", QVariant.String, self.tr("Method"), 50),
             ]
         )
+        for field in self._controlling_provenance_fields():
+            fields.append(field)
         if display_name is not None:
             for field in [
                 QgsField("family", QVariant.String, self.tr("Family"), 10),
@@ -7486,12 +7560,16 @@ class ControllingOlsEngineMixin:
         if partition_overlaps:
             features = self._partition_controlling_region_features(features, engine)
             engine._region_solve_stats["partitioned_output_union_area_m2"] = self._feature_union_area(features)
+        candidates_by_id = {candidate.surface_id: candidate for candidate in engine.candidates}
+        for feature in features:
+            attributes = list(feature.attributes())
+            if len(attributes) < fields.count():
+                feature.setAttributes(attributes + [None] * (fields.count() - len(attributes)))
+            provenance = self._controlling_feature_provenance(feature, candidates_by_id)
+            for field_name in CONTROLLING_PROVENANCE_FIELD_NAMES:
+                feature.setAttribute(field_name, provenance[field_name])
         if display_name is not None:
-            candidates_by_id = {candidate.surface_id: candidate for candidate in engine.candidates}
             for feature in features:
-                attributes = list(feature.attributes())
-                if len(attributes) < fields.count():
-                    feature.setAttributes(attributes + [None] * (fields.count() - len(attributes)))
                 candidate = candidates_by_id.get(str(feature.attribute("surface_id") or ""))
                 metadata = candidate.metadata if candidate is not None else {}
                 feature.setAttribute("family", metadata.get("annex14_family"))

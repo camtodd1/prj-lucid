@@ -70,6 +70,12 @@ TABLE_J1_SOURCE_URL = f"{SOURCE_URL}?erules-id=ERULES-1963177438-2238"
 TABLE_J2_SOURCE_URL = f"{SOURCE_URL}?erules-id=ERULES-1963177438-2239"
 OHS_GUIDANCE_SOURCE_URL = f"{SOURCE_URL}?erules-id=ERULES-1963177438-2214"
 
+SUPPLIED_OLS_EXTRACT = {
+    "filename": "EASA CS-ADR-DSN Issue 6 - Chapter H & J (OLS).pdf",
+    "scope": "Chapter H and Chapter J OLS, printed pages 104-123",
+    "sha256": "d02d22f790923845d2dd7c9b055281b196878d104026119e50e6c0c0090c8d29",
+}
+
 IHS_BASE_HEIGHT_AGL = 45.0
 OHS_GUIDANCE_HEIGHT_AGL = 150.0
 OHS_GUIDANCE_RADIUS_M = 15000.0
@@ -706,6 +712,7 @@ OLS_TRACEABILITY_ITEMS = {
 OLS_TRACEABILITY = {
     "source_publication": SOURCE_PUBLICATION,
     "source_url": SOURCE_URL,
+    "supporting_extract": dict(SUPPLIED_OLS_EXTRACT),
     "table_j1_source_url": TABLE_J1_SOURCE_URL,
     "table_j2_source_url": TABLE_J2_SOURCE_URL,
     "outer_horizontal_source_url": OHS_GUIDANCE_SOURCE_URL,
@@ -725,6 +732,50 @@ def get_ihs_base_height() -> Optional[float]:
 def get_ols_traceability() -> Dict[str, Any]:
     """Return source traceability metadata for EASA OLS rules."""
     return detached_params(OLS_TRACEABILITY)
+
+
+_OUTPUT_TRACEABILITY_KEYS = {
+    "APPROACH": "approach_surface",
+    "APPROACHSURFACE": "approach_surface",
+    "INNERAPPROACH": "inner_approach_surface",
+    "INNERAPPROACHSURFACE": "inner_approach_surface",
+    "INNERTRANSITIONAL": "inner_transitional_surface",
+    "INNERTRANSITIONALSURFACE": "inner_transitional_surface",
+    "BALKEDLANDING": "balked_landing_surface",
+    "BALKEDLANDINGSURFACE": "balked_landing_surface",
+    "BAULKEDLANDING": "balked_landing_surface",
+    "BAULKEDLANDINGSURFACE": "balked_landing_surface",
+    "IHS": "inner_horizontal_surface",
+    "INNERHORIZONTAL": "inner_horizontal_surface",
+    "INNERHORIZONTALSURFACE": "inner_horizontal_surface",
+    "CONICAL": "conical_surface",
+    "CONICALSURFACE": "conical_surface",
+    "TRANSITIONAL": "transitional_surface",
+    "TRANSITIONALSURFACE": "transitional_surface",
+    "TOCS": "take_off_climb_surface",
+    "TAKEOFFCLIMB": "take_off_climb_surface",
+    "TAKEOFFCLIMBSURFACE": "take_off_climb_surface",
+    "OHS": "outer_horizontal_surface",
+    "OUTERHORIZONTAL": "outer_horizontal_surface",
+    "OUTERHORIZONTALSURFACE": "outer_horizontal_surface",
+}
+
+
+def get_ols_output_traceability(surface_type: str) -> Dict[str, Any]:
+    """Return flattened provenance fields for a generated OLS surface family."""
+    normalized = _normalize_surface_type(surface_type)
+    item_key = _OUTPUT_TRACEABILITY_KEYS.get(normalized)
+    item = OLS_TRACEABILITY_ITEMS.get(item_key, {}) if item_key else {}
+    extract = SUPPLIED_OLS_EXTRACT
+    return {
+        "source_ref": item.get("source", EASA_OLS_REF),
+        "source_status": item.get("status", "source_loaded"),
+        "source_doc": SOURCE_PUBLICATION,
+        "source_extract": f"{extract['filename']} ({extract['scope']})",
+        "source_hash": extract["sha256"],
+        "source_url": SOURCE_URL,
+        "source_note": item.get("notes", "EASA Chapters H/J source-backed OLS output."),
+    }
 
 
 def get_tocs_params(
@@ -824,6 +875,7 @@ __all__ = [
     "TABLE_J1_SOURCE_URL",
     "TABLE_J2_SOURCE_URL",
     "OHS_GUIDANCE_SOURCE_URL",
+    "SUPPLIED_OLS_EXTRACT",
     "IHS_BASE_HEIGHT_AGL",
     "APPROACH_PARAMS",
     "INNER_APPROACH_PARAMS",
@@ -839,6 +891,7 @@ __all__ = [
     "OLS_TRACEABILITY_ITEMS",
     "get_ihs_base_height",
     "get_ols_traceability",
+    "get_ols_output_traceability",
     "get_tocs_params",
     "get_ols_params",
 ]
