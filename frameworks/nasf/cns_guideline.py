@@ -15,7 +15,11 @@ from qgis.core import (  # type: ignore
     QgsPointXY,
 )
 
-from .cns import RADIO_LINK_POLICY, slope_contour_levels
+from .cns import (
+    RADIO_LINK_POLICY,
+    RADAR_SITE_MONITOR_TYPE_A_POLICY,
+    slope_contour_levels,
+)
 from .processor_base import NasfGuidelineProcessorBase
 
 try:
@@ -70,11 +74,18 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
 
         if self._process_radio_link_areas(cns_facilities_data, icao_code, layer_group, fields):
             overall_success = True
+        if self._process_radar_site_monitor_type_a_areas(
+            cns_facilities_data, icao_code, layer_group, fields
+        ):
+            overall_success = True
 
         for facility_data in cns_facilities_data:
             facility_id = facility_data.get("id", "N/A")
             facility_type = facility_data.get("type", "Unknown")
-            if str(facility_type).strip().casefold() == "radio link":
+            if str(facility_type).strip().casefold() in {
+                "radio link",
+                RADAR_SITE_MONITOR_TYPE_A_POLICY["MonitorType"].casefold(),
+            }:
                 continue
             facility_geom = facility_data.get("geom")
             facility_elev = facility_data.get("elevation")
@@ -273,6 +284,123 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             except Exception as error:
                 QgsMessageLog.logMessage(
                     f"Radio Link '{link_id}' skipped: {error}",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
+        return created
+
+    def _process_radar_site_monitor_type_a_areas(
+        self,
+        facilities: List[dict],
+        icao_code: str,
+        layer_group: QgsLayerTreeGroup,
+        fields: QgsFields,
+    ) -> bool:
+        """Generate paired line-of-sight and monitor areas for Type A site monitors."""
+        policy = RADAR_SITE_MONITOR_TYPE_A_POLICY
+        monitor_type = policy["MonitorType"].casefold()
+        radar_types = {facility_type.casefold() for facility_type in policy["RadarTypes"]}
+        grouped: dict[str, List[dict]] = {}
+        for facility in facilities:
+            link_id = self._radio_link_id(facility)
+            if link_id:
+                grouped.setdefault(link_id, []).append(facility)
+
+        created = False
+        for link_id, endpoints in sorted(grouped.items()):
+            monitors = [
+                facility
+                for facility in endpoints
+                if str(facility.get("type", "")).strip().casefold() == monitor_type
+            ]
+            if not monitors:
+                continue
+            radars = [
+                facility
+                for facility in endpoints
+                if str(facility.get("type", "")).strip().casefold() in radar_types
+            ]
+            if len(monitors) != 1 or len(radars) != 1:
+                QgsMessageLog.logMessage(
+                    f"Radar Site Monitor Type A '{link_id}' skipped: exactly one Type A monitor and one PSR or SSR endpoint are required.",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
+                continue
+            try:
+                monitor, radar = monitors[0], radars[0]
+                monitor_geom = monitor.get("geom")
+                radar_geom = radar.get("geom")
+                if any(
+                    geometry is None or geometry.isNull() or geometry.isEmpty()
+                    for geometry in (monitor_geom, radar_geom)
+                ):
+                    raise ValueError("paired endpoint geometry is missing")
+                monitor_point = monitor_geom.asPoint()
+                radar_point = radar_geom.asPoint()
+                line_of_sight = QgsGeometry.fromPolylineXY(
+                    [
+                        QgsPointXY(radar_point.x(), radar_point.y()),
+                        QgsPointXY(monitor_point.x(), monitor_point.y()),
+                    ]
+                )
+                zone_a = line_of_sight.buffer(float(policy["LineOfSightWidth_m"]), 36)
+                zone_b = monitor_geom.buffer(float(policy["ZoneBRadius_m"]), 36)
+                if any(
+                    geometry is None or geometry.isEmpty() or not geometry.isGeosValid()
+                    for geometry in (zone_a, zone_b)
+                ):
+                    raise ValueError("could not create valid Type A site-monitor geometry")
+
+                monitor_id = monitor.get("id", "N/A")
+                safe_link_id = "".join(char if char.isalnum() else "_" for char in link_id)
+                zone_definitions = (
+                    ("Zone A", zone_a, "CORRIDOR", policy["LineOfSightWidth_m"], policy["ZoneACondition"]),
+                    ("Zone B", zone_b, "CIRCLE", policy["ZoneBRadius_m"], policy["ZoneBCondition"]),
+                )
+                for surface_name, geometry, shape, outer_radius, condition in zone_definitions:
+                    feature = QgsFeature(fields)
+                    feature.setGeometry(geometry)
+                    feature.setAttributes(
+                        [
+                            monitor_id,
+                            link_id,
+                            policy["MonitorType"],
+                            surface_name,
+                            None,
+                            "G",
+                            shape,
+                            None,
+                            outer_radius,
+                            policy["HeightRule"],
+                            policy["HeightBasis"],
+                            None,
+                            None,
+                            None,
+                            None,
+                            None,
+                            policy["ActionRequired"],
+                            condition,
+                            policy["SourceRef"],
+                            policy["Guidance"],
+                        ]
+                    )
+                    layer = self._create_and_add_layer(
+                        "Polygon",
+                        f"G_CNS_{icao_code}_Radar_Site_Monitor_Type_A_{safe_link_id}_{surface_name.replace(' ', '_')}",
+                        f"Radar Site Monitor Type A {link_id} {surface_name}",
+                        fields,
+                        [feature],
+                        layer_group,
+                        "Default CNS",
+                    )
+                    if layer:
+                        self._set_cns_field_alias(layer, "actionreq", "Action required")
+                        self._set_cns_field_alias(layer, "link_id", "Link ID")
+                        created = True
+            except Exception as error:
+                QgsMessageLog.logMessage(
+                    f"Radar Site Monitor Type A '{link_id}' skipped: {error}",
                     PLUGIN_TAG,
                     level=Qgis.Warning,
                 )
