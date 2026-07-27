@@ -3846,6 +3846,7 @@ class SafeguardingBuilder(
                 QgsField("coord_east", QVariant.Double, self.tr("Easting"), 12, 3),
                 QgsField("coord_north", QVariant.Double, self.tr("Northing"), 12, 3),
                 QgsField("elev_m", QVariant.Double, self.tr("Elevation AMSL (m)"), 12, 3),
+                QgsField("link_id", QVariant.String, self.tr("Link ID"), 50),
             ]
         )
         features: List[QgsFeature] = []
@@ -3869,6 +3870,7 @@ class SafeguardingBuilder(
                     point.x(),
                     point.y(),
                     facility_data.get("elevation"),
+                    facility_data.get("link_id", ""),
                 ]
             )
             features.append(feature)

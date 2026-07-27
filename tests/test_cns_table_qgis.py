@@ -26,7 +26,7 @@ class CnsTableOrderTests(unittest.TestCase):
                 "Secondary Surveillance Radar (SSR)",
                 "Ground Based Augmentation System (GBAS) - RSMU",
                 "GBAS - VDB",
-                "Link Dishes",
+                "Radio Link",
                 "Radar Site Monitor - Type A",
                 "Radar Site Monitor - Type B",
             ],

@@ -38,6 +38,16 @@ class CnsGuidelineQgisTests(unittest.TestCase):
             "elevation": 50,
         }
 
+    @staticmethod
+    def _radio_link_endpoint(identifier, easting, northing):
+        return {
+            "id": identifier,
+            "type": "Radio Link",
+            "link_id": "RL-01",
+            "geom": QgsGeometry.fromPointXY(QgsPointXY(easting, northing)),
+            "elevation": None,
+        }
+
     def test_satellite_ground_station_generates_three_explicit_bands(self):
         harness = _CnsHarness()
 
@@ -58,8 +68,13 @@ class CnsGuidelineQgisTests(unittest.TestCase):
         self.assertEqual(set(attributes), {"Zone A", "Zone B", "Area of Interest"})
         self.assertEqual(attributes["Zone B"].attribute("maxagl_m"), 10.0)
         self.assertEqual(attributes["Zone B"].attribute("heightcmp"), "<")
+        self.assertEqual(attributes["Zone B"].attribute("actionreq"), "No requirements.")
         self.assertEqual(attributes["Area of Interest"].attribute("minagl_m"), 10.0)
         self.assertEqual(attributes["Area of Interest"].attribute("heightcmp"), ">")
+        self.assertEqual(
+            attributes["Area of Interest"].attribute("actionreq"),
+            "All applications must be referred to Airservices Australia for assessment.",
+        )
         self.assertTrue(
             attributes["Zone B"].geometry().equals(attributes["Area of Interest"].geometry())
         )
@@ -88,6 +103,10 @@ class CnsGuidelineQgisTests(unittest.TestCase):
         self.assertEqual(polygon_attributes["Area of Interest"].attribute("minagl_m"), 10.0)
         self.assertEqual(polygon_attributes["Area of Interest"].attribute("innerrad_m"), 100.0)
         self.assertEqual(polygon_attributes["Area of Interest"].attribute("outerrad_m"), 2000.0)
+        self.assertEqual(
+            polygon_attributes["Zone B"].attribute("actionreq"),
+            "No requirements. Airservices Australia should be advised of proposals for large obstructions.",
+        )
         self.assertTrue(
             polygon_attributes["Zone A - 2.5 Degree Slope"].geometry().intersects(
                 polygon_attributes["Area of Interest"].geometry()
@@ -98,6 +117,52 @@ class CnsGuidelineQgisTests(unittest.TestCase):
             [feature.attribute("contagl_m") for feature in contours[0]["features"]],
             [10.0, 15.0, 20.0, 25.0, 30.0],
         )
+
+    def test_radio_link_generates_a_30_m_all_height_corridor_from_two_endpoints(self):
+        harness = _CnsHarness()
+
+        self.assertTrue(
+            harness.process_cns_building_restricted_areas(
+                [
+                    self._radio_link_endpoint("Dish A", 500000, 6000000),
+                    self._radio_link_endpoint("Dish B", 501000, 6000000),
+                ],
+                "YTEST",
+                None,
+                None,
+            )
+        )
+
+        self.assertEqual(len(harness.created_layers), 1)
+        layer = harness.created_layers[0]
+        feature = layer["features"][0]
+        self.assertEqual(layer["geometry_type"], "Polygon")
+        self.assertEqual(feature.attribute("link_id"), "RL-01")
+        self.assertEqual(feature.attribute("shape"), "CORRIDOR")
+        self.assertEqual(feature.attribute("outerrad_m"), 30.0)
+        self.assertEqual(feature.attribute("heightrule"), "All Heights")
+        self.assertEqual(
+            feature.attribute("guidance"),
+            "No temporary or permanent obstructions should infringe Zone A.",
+        )
+        self.assertEqual(
+            feature.attribute("actionreq"),
+            "All applications must be referred to Airservices Australia for assessment.",
+        )
+        self.assertGreater(feature.geometry().area(), 60000)
+
+    def test_radio_link_requires_exactly_two_endpoints_for_each_link_id(self):
+        harness = _CnsHarness()
+
+        self.assertFalse(
+            harness.process_cns_building_restricted_areas(
+                [self._radio_link_endpoint("Dish A", 500000, 6000000)],
+                "YTEST",
+                None,
+                None,
+            )
+        )
+        self.assertEqual(harness.created_layers, [])
 
 
 if __name__ == "__main__":

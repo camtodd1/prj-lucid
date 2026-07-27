@@ -388,6 +388,7 @@ class PersistenceMixin:
                         "easting_x": self._table_text(cns_table, row, 1),
                         "northing_y": self._table_text(cns_table, row, 2),
                         "elevation": self._table_text(cns_table, row, 3),
+                        "link_id": self._table_text(cns_table, row, 4),
                     }
                 )
             except Exception as e:
@@ -580,6 +581,7 @@ class PersistenceMixin:
                 cns_table.setItem(row, 1, QTableWidgetItem(item_data.get("easting_x", "")))
                 cns_table.setItem(row, 2, QTableWidgetItem(item_data.get("northing_y", "")))
                 cns_table.setItem(row, 3, QTableWidgetItem(item_data.get("elevation", "")))
+                cns_table.setItem(row, 4, QTableWidgetItem(item_data.get("link_id", "")))
             except Exception as e:
                 QgsMessageLog.logMessage(
                     f"Load CNS error item {item_data}: {e}",

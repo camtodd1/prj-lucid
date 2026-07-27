@@ -15,7 +15,7 @@ from qgis.core import (  # type: ignore
     QgsPointXY,
 )
 
-from .cns import slope_contour_levels
+from .cns import RADIO_LINK_POLICY, slope_contour_levels
 from .processor_base import NasfGuidelineProcessorBase
 
 try:
@@ -46,6 +46,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
         fields = QgsFields(
             [
                 QgsField("sourcefacid", QVariant.String),
+                QgsField("link_id", QVariant.String),
                 QgsField("factype", QVariant.String),
                 QgsField("surfname", QVariant.String),
                 QgsField("reqheight", QVariant.Double),
@@ -62,12 +63,18 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 QgsField("actionreq", QVariant.String),
                 QgsField("condition", QVariant.String),
                 QgsField("source_ref", QVariant.String),
+                QgsField("guidance", QVariant.String),
             ]
         )
+
+        if self._process_radio_link_areas(cns_facilities_data, icao_code, layer_group, fields):
+            overall_success = True
 
         for facility_data in cns_facilities_data:
             facility_id = facility_data.get("id", "N/A")
             facility_type = facility_data.get("type", "Unknown")
+            if str(facility_type).strip().casefold() == "radio link":
+                continue
             facility_geom = facility_data.get("geom")
             facility_elev = facility_data.get("elevation")
             if not facility_geom or not facility_geom.isGeosValid():
@@ -120,6 +127,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     feature.setAttributes(
                         [
                             facility_id,
+                            self._radio_link_id(facility_data),
                             facility_type,
                             surface_name,
                             req_height,
@@ -133,9 +141,10 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                             surface_spec.get("MaxHeightAGL_m"),
                             surface_spec.get("HeightComparator"),
                             surface_spec.get("SlopeDegrees"),
-                            surface_spec.get("Referral"),
+                            surface_spec.get("ActionRequired"),
                             surface_spec.get("Condition"),
                             surface_spec.get("SourceRef"),
+                            surface_spec.get("Guidance"),
                         ]
                     )
                     if shape_type == "CIRCLE":
@@ -154,6 +163,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                         style_key,
                     )
                     if layer_created:
+                        self._set_cns_field_alias(layer_created, "actionreq", "Action required")
                         overall_success = True
                     if self._create_cns_slope_contours(
                         facility_geom,
@@ -179,6 +189,99 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 level=Qgis.Info,
             )
         return overall_success
+
+    def _process_radio_link_areas(
+        self,
+        facilities: List[dict],
+        icao_code: str,
+        layer_group: QgsLayerTreeGroup,
+        fields: QgsFields,
+    ) -> bool:
+        """Generate the all-height 30 m corridor for paired radio-link dishes."""
+        grouped: dict[str, List[dict]] = {}
+        for facility in facilities:
+            if str(facility.get("type", "")).strip().casefold() != "radio link":
+                continue
+            link_id = self._radio_link_id(facility)
+            if link_id:
+                grouped.setdefault(link_id, []).append(facility)
+
+        created = False
+        for link_id, endpoints in sorted(grouped.items()):
+            if len(endpoints) != 2:
+                QgsMessageLog.logMessage(
+                    f"Radio Link '{link_id}' skipped: exactly two endpoints are required.",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
+                continue
+            try:
+                points = []
+                for endpoint in endpoints:
+                    geometry = endpoint.get("geom")
+                    if geometry is None or geometry.isNull() or geometry.isEmpty():
+                        raise ValueError("endpoint geometry is missing")
+                    point = geometry.asPoint()
+                    points.append(QgsPointXY(point.x(), point.y()))
+                link_line = QgsGeometry.fromPolylineXY(points)
+                corridor = link_line.buffer(float(RADIO_LINK_POLICY["Width_m"]), 36)
+                if corridor is None or corridor.isEmpty() or not corridor.isGeosValid():
+                    raise ValueError("could not create a valid 30 m corridor")
+
+                feature = QgsFeature(fields)
+                feature.setGeometry(corridor)
+                feature.setAttributes(
+                    [
+                        link_id,
+                        link_id,
+                        "Radio Link",
+                        RADIO_LINK_POLICY["SurfaceName"],
+                        None,
+                        "G",
+                        "CORRIDOR",
+                        None,
+                        RADIO_LINK_POLICY["Width_m"],
+                        RADIO_LINK_POLICY["HeightRule"],
+                        RADIO_LINK_POLICY["HeightBasis"],
+                        None,
+                        None,
+                        None,
+                        None,
+                        RADIO_LINK_POLICY["ActionRequired"],
+                        RADIO_LINK_POLICY["Condition"],
+                        RADIO_LINK_POLICY["SourceRef"],
+                        RADIO_LINK_POLICY["Guidance"],
+                    ]
+                )
+                safe_link_id = "".join(char if char.isalnum() else "_" for char in link_id)
+                layer = self._create_and_add_layer(
+                    "Polygon",
+                    f"G_CNS_{icao_code}_Radio_Link_{safe_link_id}_Zone_A",
+                    f"Radio Link {link_id} Zone A",
+                    fields,
+                    [feature],
+                    layer_group,
+                    "Default CNS",
+                )
+                if layer:
+                    self._set_cns_field_alias(layer, "actionreq", "Action required")
+                    self._set_cns_field_alias(layer, "link_id", "Link ID")
+                    created = True
+            except Exception as error:
+                QgsMessageLog.logMessage(
+                    f"Radio Link '{link_id}' skipped: {error}",
+                    PLUGIN_TAG,
+                    level=Qgis.Warning,
+                )
+        return created
+
+    @staticmethod
+    def _radio_link_id(facility: dict) -> str:
+        """Return a Radio Link identifier from current or persisted CNS input."""
+        link_id = facility.get("link_id")
+        if not link_id and isinstance(facility.get("params"), dict):
+            link_id = facility["params"].get("link_id")
+        return str(link_id or "").strip()
 
     def _create_cns_slope_contours(
         self,
@@ -232,7 +335,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     contour["height_agl_m"],
                     contour["radius_m"],
                     surface_spec.get("SlopeDegrees"),
-                    surface_spec.get("Referral"),
+                    surface_spec.get("ActionRequired"),
                     surface_spec.get("SourceRef"),
                 ]
             )
@@ -249,7 +352,21 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             layer_group,
             "Default Line",
         )
+        self._set_cns_field_alias(contour_layer, "actionreq", "Action required")
         return contour_layer is not None
+
+    @staticmethod
+    def _set_cns_field_alias(layer: Any, field_name: str, field_alias: str) -> None:
+        """Apply readable QGIS aliases while preserving portable field names."""
+        if layer is None:
+            return
+        fields = getattr(layer, "fields", None)
+        set_alias = getattr(layer, "setFieldAlias", None)
+        if not callable(fields) or not callable(set_alias):
+            return
+        field_index = fields().indexFromName(field_name)
+        if field_index >= 0:
+            set_alias(field_index, field_alias)
 
     def _generate_circular_or_donut(
         self, facility_point_geom: QgsGeometry, surface_spec: dict, description: str

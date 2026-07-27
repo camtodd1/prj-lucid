@@ -41,7 +41,7 @@ CNS_FACILITY_TYPES = [
     "Secondary Surveillance Radar (SSR)",
     "Ground Based Augmentation System (GBAS) - RSMU",
     "GBAS - VDB",
-    "Link Dishes",
+    "Radio Link",
     "Radar Site Monitor - Type A",
     "Radar Site Monitor - Type B",
 ]
@@ -80,8 +80,8 @@ class CnsTableMixin:
         if isinstance(cns_tab_layout, QtWidgets.QVBoxLayout):
             cns_tab_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
-        cns_table.setColumnCount(4)
-        cns_table.setHorizontalHeaderLabels(["Facility Type", "Easting", "Northing", "Elev (AMSL)"])
+        cns_table.setColumnCount(5)
+        cns_table.setHorizontalHeaderLabels(["Facility Type", "Easting", "Northing", "Elev (AMSL)", "Link ID"])
         cns_table.setAlternatingRowColors(True)
         cns_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         cns_table.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
@@ -100,6 +100,7 @@ class CnsTableMixin:
             cns_table.setColumnWidth(1, 140)
             cns_table.setColumnWidth(2, 140)
             cns_table.setColumnWidth(3, 110)
+            cns_table.setColumnWidth(4, 120)
 
         cns_table.setMinimumHeight(168)
         cns_table.setMaximumHeight(168)
@@ -233,6 +234,10 @@ class CnsTableMixin:
             item_elev.setToolTip("Enter Elevation AMSL (Optional). Leave blank if unknown.")
             cns_table.setItem(row_position, 3, item_elev)
 
+            item_link_id = QTableWidgetItem("")
+            item_link_id.setToolTip("Required for Radio Link endpoints. Enter the same Link ID for both dishes.")
+            cns_table.setItem(row_position, 4, item_link_id)
+
             cns_table.scrollToItem(item_x, QAbstractItemView.ScrollHint.EnsureVisible)
             combo_type.setFocus()
             self._update_cns_view_state()
@@ -320,8 +325,35 @@ class CnsTableMixin:
             else:
                 skipped_rows += 1
 
+        cns_facilities_data, invalid_radio_link_rows = self._exclude_unpaired_radio_links(cns_facilities_data)
+        if invalid_radio_link_rows:
+            rows_with_errors += invalid_radio_link_rows
+            skipped_rows += invalid_radio_link_rows
+
         self._show_cns_skip_message(rows_with_errors, skipped_rows, total_rows)
         return cns_facilities_data
+
+    def _exclude_unpaired_radio_links(self, facilities: List[Dict[str, Any]]) -> tuple[List[Dict[str, Any]], int]:
+        """Omit radio-link endpoints unless exactly two rows share a Link ID."""
+        grouped: Dict[str, List[Dict[str, Any]]] = {}
+        for facility in facilities:
+            if facility.get("type") == "Radio Link":
+                grouped.setdefault(str(facility.get("link_id", "")).strip(), []).append(facility)
+        invalid_ids = {link_id for link_id, endpoints in grouped.items() if not link_id or len(endpoints) != 2}
+        if not invalid_ids:
+            return facilities, 0
+        for link_id in sorted(invalid_ids):
+            QgsMessageLog.logMessage(
+                f"Radio Link '{link_id or '(missing Link ID)'}' requires exactly two endpoints; skipped.",
+                DIALOG_LOG_TAG,
+                level=Qgis.Warning,
+            )
+        retained = [
+            facility
+            for facility in facilities
+            if facility.get("type") != "Radio Link" or str(facility.get("link_id", "")).strip() not in invalid_ids
+        ]
+        return retained, sum(len(grouped[link_id]) for link_id in invalid_ids)
 
     def _read_cns_row(self, cns_table, row: int) -> Dict[str, Any]:
         facility_type = ""
@@ -364,6 +396,15 @@ class CnsTableMixin:
                     except ValueError:
                         error_in_row = True
                         self._log_cns_row_warning(row, "Invalid elev, ignoring.")
+
+            link_id = ""
+            if valid_row:
+                link_item = cns_table.item(row, 4)
+                link_id = link_item.text().strip() if link_item else ""
+                if facility_type == "Radio Link" and not link_id:
+                    valid_row = False
+                    error_in_row = True
+                    self._log_cns_row_warning(row, "Radio Link requires a Link ID shared by both endpoints.")
         except Exception as e:
             valid_row = False
             error_in_row = True
@@ -378,6 +419,7 @@ class CnsTableMixin:
                     "type": facility_type,
                     "geom": point_geom_project_crs,
                     "elevation": facility_elevation,
+                    "link_id": link_id,
                     "params": {},
                 },
             }
