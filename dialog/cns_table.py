@@ -36,7 +36,7 @@ CNS_FACILITY_TYPES = [
     "Elevated Counterpoise Conventional VHF Omni-Directional Range (CVOR)",
     "Doppler VHF Omni-Directional Range (DVOR) - Elevated",
     "Doppler VHF Omni-Directional Range (DVOR) - Ground Mounted",
-    "Middle and Outer Marker",
+    "Middle and Outer Marker Beacon",
     "Automatic Dependent Surveillance Broadcast (ADS-B)",
     "Wide Area Multilateration (WAM)",
     "Primary Surveillance Radar (PSR)",

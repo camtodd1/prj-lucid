@@ -2,7 +2,7 @@
 
 **Status:** Roadmap
 
-**Last reviewed:** 22 July 2026
+**Last reviewed:** 27 July 2026
 
 This file is the single project documentation backlog. It lists incomplete
 work only; completed implementation history belongs in Git and regression
@@ -41,8 +41,6 @@ fixtures.
   RESA and approach-adjacent transitional behavior on curved tracks.
 - [ ] Resolve remaining ruleset/framework ownership boundaries before adding a
   second supplementary safeguarding framework.
-- [ ] Complete the generic safeguarding terminology refactor while retaining
-  NASF source provenance.
 
 ## Physical, Marking, and Lighting Outputs
 
@@ -57,7 +55,6 @@ fixtures.
 
 ## CNS and Future Generators
 
-- [ ] Replace CNS `HeightRule = "TBD"` values with implemented vertical logic.
 - [ ] Implement specialised glide path and localiser geometry.
 - [ ] Add an aircraft-characteristics registry and design-aircraft nomination.
 - [ ] Implement NASF Guideline A aircraft-noise generation.

@@ -640,6 +640,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 "Below Radial Slope",
                 "Does Not Cross Zone Boundary",
                 "No Additional Height Limit",
+                "N/A",
             }:
                 # These Guideline G limits are expressed as AGL conditions.
                 # A single AMSL value would be misleading without terrain data.

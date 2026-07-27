@@ -188,6 +188,31 @@ class CnsGuidelineQgisTests(unittest.TestCase):
         )
         self.assertEqual(len(contours[0]["features"]), 52)
 
+    def test_marker_beacon_generates_inner_slope_zone_b_and_contours(self):
+        harness = _CnsHarness()
+
+        self.assertTrue(
+            harness.process_cns_building_restricted_areas(
+                [self._facility("Middle and Outer Marker Beacon")],
+                "YTEST",
+                None,
+                None,
+            )
+        )
+
+        polygons = [layer for layer in harness.created_layers if layer["geometry_type"] == "Polygon"]
+        contours = [layer for layer in harness.created_layers if layer["geometry_type"] == "LineString"]
+        self.assertEqual(len(polygons), 3)
+        self.assertEqual(len(contours), 1)
+        self.assertEqual(contours[0]["display_name"], "Zone A - 50 Degree Slope Contours")
+        attributes = {
+            layer["features"][0].attribute("surfname"): layer["features"][0]
+            for layer in polygons
+        }
+        self.assertEqual(attributes["Zone A - Inner"].attribute("heightrule"), "All Heights")
+        self.assertEqual(attributes["Zone A - 50 Degree Slope"].attribute("slope_deg"), 50)
+        self.assertEqual(attributes["Zone B"].attribute("actionreq"), "No requirements.")
+
     def test_radio_link_generates_a_30_m_all_height_corridor_from_two_endpoints(self):
         harness = _CnsHarness()
         cns_group = QgsLayerTreeGroup("CNS / Technical Safeguarding")

@@ -100,6 +100,45 @@ class CnsGuidelineTests(unittest.TestCase):
             "No requirements. Airservices Australia should be advised of proposals for large obstructions.",
         )
 
+    def test_marker_beacon_has_inner_referral_and_50_degree_boundary(self):
+        specs = get_cns_spec("Middle and Outer Marker Beacon")
+        self.assertIsNotNone(specs)
+        by_name = {spec["SurfaceName"]: spec for spec in specs}
+
+        inner = by_name["Zone A - Inner"]
+        self.assertEqual((inner["InnerRadius_m"], inner["OuterRadius_m"]), (0, 5))
+        self.assertEqual(inner["HeightRule"], "All Heights")
+        self.assertEqual(
+            inner["ActionRequired"],
+            "All applications must be referred to Airservices Australia for assessment.",
+        )
+
+        slope = by_name["Zone A - 50 Degree Slope"]
+        self.assertEqual((slope["InnerRadius_m"], slope["OuterRadius_m"]), (5, 50))
+        self.assertEqual(slope["HeightRule"], "Radial Slope")
+        self.assertEqual(slope["SlopeDegrees"], 50)
+        self.assertAlmostEqual(slope["SlopeStartHeightAGL_m"], 5.958768, places=6)
+        self.assertEqual(slope_contour_levels(slope)[0]["radius_m"], 5.0)
+
+        zone_b = by_name["Zone B"]
+        self.assertEqual((zone_b["InnerRadius_m"], zone_b["OuterRadius_m"]), (5, 50))
+        self.assertEqual(zone_b["HeightRule"], "Does Not Cross Zone Boundary")
+        self.assertEqual(zone_b["ActionRequired"], "No requirements.")
+        self.assertEqual(
+            get_cns_spec("Middle and Outer Marker"),
+            specs,
+        )
+
+    def test_gbas_surfaces_explicitly_have_no_height_rule(self):
+        for facility_type in (
+            "Ground Based Augmentation System (GBAS) - RSMU",
+            "GBAS - VDB",
+        ):
+            with self.subTest(facility_type=facility_type):
+                specs = get_cns_spec(facility_type)
+                self.assertIsNotNone(specs)
+                self.assertTrue(all(spec["HeightRule"] == "N/A" for spec in specs))
+
     def test_legacy_high_frequency_type_remains_a_transmit_site_alias(self):
         self.assertEqual(
             get_cns_spec("High Frequency (HF)"),
