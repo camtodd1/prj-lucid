@@ -33,6 +33,7 @@ CNS_FACILITY_TYPES = [
     "Distance Measuring Equipment (DME)",
     "VHF Omni-Directional Range (VOR)",
     "Conventional VHF Omni-Directional Range (CVOR)",
+    "Elevated Counterpoise Conventional VHF Omni-Directional Range (CVOR)",
     "Doppler VHF Omni-Directional Range (DVOR) - Elevated",
     "Doppler VHF Omni-Directional Range (DVOR) - Ground Mounted",
     "Middle and Outer Marker",
