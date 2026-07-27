@@ -73,6 +73,15 @@ class LayerMixin:
                 level=Qgis.Warning,
             )
 
+    def _collapse_layer_tree_groups(self, group: Optional[QgsLayerTreeGroup]) -> None:
+        """Collapse every group in a generated layer-tree branch."""
+        if group is None:
+            return
+        for child in group.children():
+            if isinstance(child, QgsLayerTreeGroup):
+                self._collapse_layer_tree_groups(child)
+        group.setExpanded(False)
+
     def _remove_group_recursively(self, group_node: QgsLayerTreeGroup, project: QgsProject):
         """Helper to remove layers within a group and its subgroups."""
         if group_node is None:

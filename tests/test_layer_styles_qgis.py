@@ -142,15 +142,15 @@ class LayerStyleTests(unittest.TestCase):
             "LCZ D": ("rwy:string&field=zone:string&field=max_intensity:string", "LCZ"),
             "LCZ Area": ("rwy:string&field=radius_m:double", "Lighting Control Area"),
             "CNS Circle Zone": (
-                "sourcefacid:string&field=surfname:string&field=reqheight:double",
+                "sourcefacid:string&field=factype:string&field=surfname:string&field=reqheight:double",
                 "surfname",
             ),
             "CNS Donut Zone": (
-                "sourcefacid:string&field=surfname:string&field=reqheight:double",
+                "sourcefacid:string&field=factype:string&field=surfname:string&field=reqheight:double",
                 "surfname",
             ),
             "Default CNS": (
-                "sourcefacid:string&field=surfname:string&field=reqheight:double",
+                "sourcefacid:string&field=factype:string&field=surfname:string&field=reqheight:double",
                 "surfname",
             ),
         }
@@ -167,6 +167,10 @@ class LayerStyleTests(unittest.TestCase):
                 self.assertTrue(layer.labelsEnabled())
                 settings = layer.labeling().settings()
                 self.assertIn(label_fragment, settings.fieldName)
+                if style_key in {"CNS Circle Zone", "CNS Donut Zone", "Default CNS"}:
+                    self.assertLess(settings.fieldName.index("factype"), settings.fieldName.index("surfname"))
+                    self.assertNotIn("sourcefacid", settings.fieldName)
+                    self.assertNotIn("reqheight", settings.fieldName)
                 self.assertTrue(settings.isExpression)
                 self.assertTrue(settings.scaleVisibility)
                 self.assertEqual(settings.maximumScale, 1)

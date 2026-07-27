@@ -1879,6 +1879,7 @@ class SafeguardingBuilder(
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
             self._repair_output_layer_tree(main_group)
             self._remove_empty_generated_groups(main_group)
+            self._collapse_layer_tree_groups(main_group)
 
             self._final_feedback(
                 main_group,
