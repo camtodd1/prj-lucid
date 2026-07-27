@@ -48,6 +48,9 @@ CNS_FACILITY_TYPES = [
     "Radar Site Monitor - Type B",
 ]
 
+CNS_CONTOUR_DEFAULT_PRIMARY_INTERVAL = 10.0
+CNS_CONTOUR_DEFAULT_INTERMEDIATE_INTERVAL = 5.0
+
 
 class CnsTableMixin:
     """Mixin for CNS manual-entry table behaviour."""
@@ -110,6 +113,7 @@ class CnsTableMixin:
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
+        self._setup_cns_contour_controls()
 
         selection_model = cns_table.selectionModel()
         if selection_model is not None:
@@ -134,6 +138,79 @@ class CnsTableMixin:
             button_layout.insertStretch(0, 1)
         self.CNS_FACILITY_TYPES = CNS_FACILITY_TYPES
         self._update_cns_view_state()
+
+    def _setup_cns_contour_controls(self):
+        """Add shared primary and intermediate contour controls for CNS slope layers."""
+        controls = getattr(self, "widgetCnsContourIntervals", None)
+        if controls is None:
+            group_layout = getattr(self, "verticalLayout_6", None)
+            if not isinstance(group_layout, QtWidgets.QVBoxLayout):
+                return
+            controls = QtWidgets.QWidget(self)
+            controls.setObjectName("widgetCnsContourIntervals")
+            layout = QtWidgets.QHBoxLayout(controls)
+            layout.setContentsMargins(0, 2, 0, 2)
+            layout.setSpacing(8)
+            title = QtWidgets.QLabel("CNS contour intervals", controls)
+            primary_label = QtWidgets.QLabel("Primary", controls)
+            intermediate_label = QtWidgets.QLabel("Intermediate", controls)
+            primary = QtWidgets.QDoubleSpinBox(controls)
+            primary.setObjectName("doubleSpinBoxCnsContourPrimary")
+            intermediate = QtWidgets.QDoubleSpinBox(controls)
+            intermediate.setObjectName("doubleSpinBoxCnsContourIntermediate")
+            for spinbox, default in (
+                (primary, CNS_CONTOUR_DEFAULT_PRIMARY_INTERVAL),
+                (intermediate, CNS_CONTOUR_DEFAULT_INTERMEDIATE_INTERVAL),
+            ):
+                spinbox.setRange(0.1, 1000.0)
+                spinbox.setDecimals(1)
+                spinbox.setSingleStep(1.0)
+                spinbox.setSuffix(" m")
+                spinbox.setValue(default)
+                spinbox.setMinimumWidth(92)
+            primary.setToolTip("Major CNS contour interval applied to every sloped CNS surface.")
+            intermediate.setToolTip("Regular CNS contour interval applied to every sloped CNS surface.")
+            layout.addWidget(title)
+            layout.addStretch(1)
+            layout.addWidget(primary_label)
+            layout.addWidget(primary)
+            layout.addWidget(intermediate_label)
+            layout.addWidget(intermediate)
+            group_layout.insertWidget(1, controls)
+            self.widgetCnsContourIntervals = controls
+            self.doubleSpinBoxCnsContourPrimary = primary
+            self.doubleSpinBoxCnsContourIntermediate = intermediate
+        primary = getattr(self, "doubleSpinBoxCnsContourPrimary", None)
+        intermediate = getattr(self, "doubleSpinBoxCnsContourIntermediate", None)
+        for spinbox in (primary, intermediate):
+            if spinbox is not None:
+                spinbox.valueChanged.connect(self._on_cns_contour_interval_changed)
+
+    def _on_cns_contour_interval_changed(self):
+        if hasattr(self, "update_dialog_status"):
+            self.update_dialog_status()
+
+    def get_cns_contour_interval_options(self) -> Dict[str, float]:
+        primary = getattr(self, "doubleSpinBoxCnsContourPrimary", None)
+        intermediate = getattr(self, "doubleSpinBoxCnsContourIntermediate", None)
+        return {
+            "primary": primary.value() if primary is not None else CNS_CONTOUR_DEFAULT_PRIMARY_INTERVAL,
+            "intermediate": intermediate.value() if intermediate is not None else CNS_CONTOUR_DEFAULT_INTERMEDIATE_INTERVAL,
+        }
+
+    def set_cns_contour_interval_options(self, options) -> None:
+        options = options if isinstance(options, dict) else {}
+        for name, default in (
+            ("primary", CNS_CONTOUR_DEFAULT_PRIMARY_INTERVAL),
+            ("intermediate", CNS_CONTOUR_DEFAULT_INTERMEDIATE_INTERVAL),
+        ):
+            try:
+                value = float(options.get(name, default))
+            except (TypeError, ValueError):
+                value = default
+            spinbox = getattr(self, f"doubleSpinBoxCnsContour{name.title()}", None)
+            if spinbox is not None:
+                spinbox.setValue(value if value > 0 else default)
 
     def _style_cns_panel(self):
         description = getattr(self, "label_CNS_description", self.findChild(QtWidgets.QLabel, "label_CNS_description"))

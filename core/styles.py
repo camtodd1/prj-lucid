@@ -72,6 +72,7 @@ DEFAULT_STYLE_MAP = {
     "CNS Circle Zone": "nasf_cns_circle.qml",
     "CNS Donut Zone": "nasf_cns_donut.qml",
     "Default CNS": "nasf_cns_default.qml",
+    "CNS Contour": "nasf_cns_contours.qml",
     "PSA Runway": "nasf_public_safety_area.qml",
     "Default Polygon": "default_zone_polygon.qml",
     "Default Line": "default_ols_line.qml",

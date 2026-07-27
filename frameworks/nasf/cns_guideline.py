@@ -435,7 +435,12 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
         """Create plan-view contour rings for a radial CNS slope surface."""
-        contours = slope_contour_levels(surface_spec)
+        primary_interval, intermediate_interval = self._cns_contour_intervals()
+        contours = slope_contour_levels(
+            surface_spec,
+            primary_interval_m=primary_interval,
+            intermediate_interval_m=intermediate_interval,
+        )
         if not contours:
             return False
 
@@ -448,6 +453,9 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 QgsField("heightbase", QVariant.String),
                 QgsField("radius_m", QVariant.Double),
                 QgsField("slope_deg", QVariant.Double),
+                QgsField("contclass", QVariant.String),
+                QgsField("contint_m", QVariant.Double),
+                QgsField("primint_m", QVariant.Double),
                 QgsField("actionreq", QVariant.String),
                 QgsField("source_ref", QVariant.String),
             ]
@@ -478,6 +486,9 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     surface_spec.get("HeightBasis"),
                     contour["radius_m"],
                     surface_spec.get("SlopeDegrees"),
+                    contour["contour_class"],
+                    contour["intermediate_interval_m"],
+                    contour["primary_interval_m"],
                     surface_spec.get("ActionRequired"),
                     surface_spec.get("SourceRef"),
                 ]
@@ -493,10 +504,26 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             contour_fields,
             features,
             layer_group,
-            "Default Line",
+            "CNS Contour",
         )
         self._set_cns_field_alias(contour_layer, "actionreq", "Action required")
         return contour_layer is not None
+
+    def _cns_contour_intervals(self) -> tuple[float, float]:
+        """Return positive shared CNS primary and intermediate contour intervals."""
+        options = getattr(self, "cns_contour_intervals", {}) or {}
+        try:
+            primary = float(options.get("primary", 10.0))
+        except (AttributeError, TypeError, ValueError):
+            primary = 10.0
+        try:
+            intermediate = float(options.get("intermediate", 5.0))
+        except (AttributeError, TypeError, ValueError):
+            intermediate = 5.0
+        return (
+            primary if primary > 0 else 10.0,
+            intermediate if intermediate > 0 else 5.0,
+        )
 
     @staticmethod
     def _set_cns_field_alias(layer: Any, field_name: str, field_alias: str) -> None:

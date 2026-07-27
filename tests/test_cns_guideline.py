@@ -14,6 +14,25 @@ class CnsGuidelineTests(unittest.TestCase):
             "All applications must be referred to Airservices Australia for assessment.",
         )
 
+    def test_cns_slope_contours_start_at_the_lowest_level_and_classify_primary_lines(self):
+        levels = slope_contour_levels(
+            {
+                "HeightRule": "Radial Slope",
+                "SlopeDegrees": 45,
+                "SlopeStartHeightAGL_m": 2,
+                "SlopeStartDistance_m": 10,
+                "OuterRadius_m": 30,
+                "ContourInterval_m": 5,
+            },
+            primary_interval_m=10,
+            intermediate_interval_m=5,
+        )
+        self.assertEqual([level["height_agl_m"] for level in levels], [2.0, 7.0, 12.0, 17.0, 22.0])
+        self.assertEqual(
+            [level["contour_class"] for level in levels],
+            ["primary", "intermediate", "primary", "intermediate", "primary"],
+        )
+
     def test_satellite_ground_station_has_explicit_overlapping_height_bands(self):
         specs = get_cns_spec("Satellite Ground Station (SGS)")
         self.assertIsNotNone(specs)

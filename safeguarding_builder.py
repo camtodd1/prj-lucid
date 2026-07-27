@@ -208,6 +208,7 @@ class SafeguardingBuilder(
         self.output_format_driver: Optional[str] = None
         self.output_format_extension: Optional[str] = None
         self.contour_intervals: Dict[str, float] = {}
+        self.cns_contour_intervals: Dict[str, float] = {}
         self.protected_airspace_policy: str = "ruleset_aligned"
         self._run_log: Optional[RunLog] = None
         self._generation_outcomes: List[GenerationOutcome] = []
@@ -1284,6 +1285,7 @@ class SafeguardingBuilder(
         self.output_format_driver = None
         self.output_format_extension = None
         self.contour_intervals = {}
+        self.cns_contour_intervals = {}
         self.protected_airspace_policy = "ruleset_aligned"
         self.baseline_ols_ruleset = self.ruleset
         self.comparison_ols_ruleset = None
@@ -1375,6 +1377,7 @@ class SafeguardingBuilder(
         self.output_format_driver = input_data.get("output_format_driver")
         self.output_format_extension = input_data.get("output_format_extension")
         self.contour_intervals = input_data.get("contour_intervals", {})
+        self.cns_contour_intervals = input_data.get("cns_contour_intervals", {})
         self.ruleset = get_ruleset_profile(input_data.get("design_standard") or input_data.get("ruleset"))
         protected_airspace_policy = input_data.get("protected_airspace_policy", "ruleset_aligned")
         self.protected_airspace_policy = protected_airspace_policy

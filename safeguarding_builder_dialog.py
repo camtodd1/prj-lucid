@@ -3222,6 +3222,11 @@ class SafeguardingBuilderDialog(
         if cns_data is None:
             return None
         final_data["cns_facilities"] = cns_data
+        final_data["cns_contour_intervals"] = (
+            self.get_cns_contour_interval_options()
+            if hasattr(self, "get_cns_contour_interval_options")
+            else {}
+        )
 
         # --- Output Options ---
         if self.radioMemoryOutput.isChecked():

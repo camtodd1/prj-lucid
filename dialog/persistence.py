@@ -360,6 +360,9 @@ class PersistenceMixin:
             "runway_configuration": runway_configuration,
             "runways": runways,
             "cns_facilities": self._get_cns_save_rows(),
+            "cns_contour_intervals": self.get_cns_contour_interval_options()
+            if hasattr(self, "get_cns_contour_interval_options")
+            else {},
         }
         if hasattr(self, "_get_agl_save_options"):
             data_to_save["agl_options"] = self._get_agl_save_options()
@@ -518,6 +521,8 @@ class PersistenceMixin:
         if hasattr(self, "_load_agl_options"):
             self._load_agl_options(loaded_data.get("agl_options", {}))
         self._load_cns_rows(loaded_data.get("cns_facilities", []))
+        if hasattr(self, "set_cns_contour_interval_options"):
+            self.set_cns_contour_interval_options(loaded_data.get("cns_contour_intervals", {}))
         self._load_output_options(loaded_data.get("output_options", {}))
 
     def _load_runway_rows(self, loaded_runways_list) -> None:
