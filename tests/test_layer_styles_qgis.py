@@ -8,6 +8,7 @@ from pathlib import Path
 
 from qgis.PyQt.QtCore import QVariant
 from qgis.core import (
+    Qgis,
     QgsCoordinateReferenceSystem,
     QgsFeature,
     QgsField,
@@ -185,6 +186,22 @@ class LayerStyleTests(unittest.TestCase):
 
         # Families are intentionally coordinated, but not collapsed to one generic red style.
         self.assertGreaterEqual(len(outline_colors), 10)
+
+    def test_cns_source_facility_style_uses_a_visible_screen_sized_marker(self):
+        style_path = Path(__file__).resolve().parents[1] / "styles" / "cns_source_facility.qml"
+        layer = QgsVectorLayer(
+            "Point?field=facility_id:string&field=facility_type:string",
+            "CNS Source Facilities",
+            "memory",
+        )
+
+        message, loaded = layer.loadNamedStyle(str(style_path))
+
+        self.assertTrue(loaded, message)
+        symbol_layer = layer.renderer().symbol().symbolLayer(0)
+        self.assertEqual(symbol_layer.sizeUnit(), Qgis.RenderUnit.Millimeters)
+        self.assertGreaterEqual(symbol_layer.size(), 3.0)
+        self.assertEqual(symbol_layer.color().alpha(), 255)
 
     def test_modernisation_change_contour_style_renders_and_labels_zero_contour(self):
         layer = QgsVectorLayer(

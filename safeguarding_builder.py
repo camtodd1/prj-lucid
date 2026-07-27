@@ -3836,7 +3836,7 @@ class SafeguardingBuilder(
             fields,
             features,
             layer_group,
-            "Default Point",
+            "CNS Source Facility",
         )
 
     def _create_centered_oriented_square(
