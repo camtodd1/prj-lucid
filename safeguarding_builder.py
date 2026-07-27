@@ -1517,6 +1517,9 @@ class SafeguardingBuilder(
             reference_group = output_groups.get("reference_data")
             if reference_group is None:
                 reference_group = main_group
+            infrastructure_group = output_groups.get("aerodrome_infrastructure")
+            if infrastructure_group is None:
+                infrastructure_group = main_group
             external_safeguarding_group = output_groups.get("external_safeguarding")
             if external_safeguarding_group is None:
                 external_safeguarding_group = main_group
@@ -1559,11 +1562,17 @@ class SafeguardingBuilder(
 
             met_layers_created_ok = False
             if met_point is not None:
-                met_group = reference_group.addGroup(self.tr(output_structure.METEOROLOGICAL_STATION))
+                met_group = self._ensure_layer_group(
+                    infrastructure_group,
+                    output_structure.METEOROLOGICAL_STATION,
+                )
                 if met_group is not None:
-                    self._stage_layer_tree_node(met_group)
                     met_layers_created_ok, _ = self.process_met_station_surfaces(
-                        met_point, icao_code, target_crs, met_group
+                        met_point,
+                        icao_code,
+                        target_crs,
+                        reference_group,
+                        met_group,
                     )
                 else:
                     QgsMessageLog.logMessage(

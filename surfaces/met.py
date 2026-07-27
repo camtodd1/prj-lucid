@@ -30,9 +30,10 @@ class MetSurfacesMixin:
         met_point_proj_crs: QgsPointXY,
         icao_code: str,
         target_crs: QgsCoordinateReferenceSystem,
-        layer_group: QgsLayerTreeGroup,
+        reference_layer_group: QgsLayerTreeGroup,
+        infrastructure_layer_group: QgsLayerTreeGroup,
     ) -> Tuple[bool, List[QgsVectorLayer]]:
-        """Generates MET station layers (point, enclosure, buffers)."""
+        """Generate the MET source point separately from derived infrastructure."""
         any_layer_ok = False
         enclosure_geom: Optional[QgsGeometry] = None
         met_geom_target_crs = QgsGeometry.fromPointXY(met_point_proj_crs)
@@ -64,7 +65,7 @@ class MetSurfacesMixin:
                 self.tr("MET Station Location"),
                 fields,
                 [feat],
-                layer_group,
+                reference_layer_group,
                 "MET Station Location",
             ):
                 any_layer_ok = True
@@ -103,7 +104,7 @@ class MetSurfacesMixin:
                 name,
                 fields,
                 [feat],
-                layer_group,
+                infrastructure_layer_group,
                 "MET Instrument Enclosure",
             ):
                 any_layer_ok = True
@@ -141,7 +142,7 @@ class MetSurfacesMixin:
                 name,
                 fields,
                 [feat],
-                layer_group,
+                infrastructure_layer_group,
                 "MET Buffer Zone",
             ):
                 any_layer_ok = True
@@ -183,7 +184,7 @@ class MetSurfacesMixin:
                     name,
                     fields,
                     [feat],
-                    layer_group,
+                    infrastructure_layer_group,
                     "MET Obstacle Buffer Zone",
                 ):
                     any_layer_ok = True
