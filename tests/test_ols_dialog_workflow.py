@@ -941,7 +941,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             25.0,
         )
 
-    def test_phase_progress_and_safe_cancel_state(self):
+    def test_phase_progress_state_has_no_cancel_control(self):
         self.dialog.begin_processing(10)
         self.dialog.set_processing_status("Solving controlling envelopes...", step=8, total_steps=10)
 
@@ -949,25 +949,20 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(self.dialog._processing_progress_bar.minimum(), 0)
         self.assertEqual(self.dialog._processing_progress_bar.maximum(), 10)
         self.assertEqual(self.dialog._processing_progress_bar.value(), 8)
-        self.assertFalse(self.dialog._processing_cancel_button.isHidden())
-
-        self.dialog.request_processing_cancel()
-
-        self.assertTrue(self.dialog.is_processing_cancel_requested())
-        self.assertFalse(self.dialog._processing_cancel_button.isEnabled())
-        self.assertIn(
-            "finishing the current phase",
-            self.dialog.label_footer_status.toolTip(),
+        self.assertIsNone(
+            self.dialog.findChild(
+                QtWidgets.QPushButton,
+                "pushButton_cancel_processing",
+            )
         )
 
-        self.dialog.clear_processing_status("Generation cancelled — completed layers were kept.")
+        self.dialog.clear_processing_status("Generation complete.")
 
         self.assertFalse(self.dialog._processing_status_active)
-        self.assertFalse(self.dialog.is_processing_cancel_requested())
         self.assertTrue(self.dialog._processing_progress_bar.isHidden())
         self.assertEqual(
             self.dialog.label_footer_status.toolTip(),
-            "Generation cancelled — completed layers were kept.",
+            "Generation complete.",
         )
 
     def test_dynamic_status_text_is_bounded_without_resizing_the_dialog(self):
@@ -1024,17 +1019,16 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.assertEqual(self.dialog.size(), expected_size)
 
-    def test_builder_stops_at_checkpoint_after_cancel_request(self):
+    def test_builder_checkpoint_updates_progress_without_cancel_branch(self):
         builder = object.__new__(SafeguardingBuilder)
-        builder.dlg = self.dialog
-        self.dialog.begin_processing(10)
-        self.dialog.request_processing_cancel()
+        builder._runtime_run_recorder = None
+        builder._run_log = None
 
-        with patch.object(builder, "_finish_processing_cancelled") as finish_cancelled:
+        with patch.object(builder, "_set_processing_status") as set_status:
             should_continue = builder._processing_checkpoint("Next phase", 4, 10)
 
-        self.assertFalse(should_continue)
-        finish_cancelled.assert_called_once_with()
+        self.assertTrue(should_continue)
+        set_status.assert_called_once_with("Next phase", step=4, total_steps=10)
 
 
 if __name__ == "__main__":

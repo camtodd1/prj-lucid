@@ -120,8 +120,6 @@ class SafeguardingBuilderDialog(
         self.scroll_area_layout: Optional[QtWidgets.QVBoxLayout] = None
         self._processing_status_active = False
         self._processing_progress_bar: Optional[QtWidgets.QProgressBar] = None
-        self._processing_cancel_button: Optional[QtWidgets.QPushButton] = None
-        self._processing_cancel_requested = False
         self._processing_elapsed_timer = QtCore.QElapsedTimer()
         self._footer_status_full_text = ""
         self._airport_lookup_cache: Dict[str, Dict[str, str]] = {}
@@ -237,7 +235,7 @@ class SafeguardingBuilderDialog(
         QtCore.QTimer.singleShot(0, self.update_dialog_status)
 
     def _setup_processing_status_widgets(self) -> None:
-        """Add phase progress and safe-cancellation controls to the dialog footer."""
+        """Add phase progress to the dialog footer."""
         footer_layout = getattr(self, "horizontalLayout_dialogFooter", None)
         if footer_layout is None:
             return
@@ -251,16 +249,6 @@ class SafeguardingBuilderDialog(
         progress_bar.setVisible(False)
         footer_layout.insertWidget(1, progress_bar)
         self._processing_progress_bar = progress_bar
-
-        cancel_button = QtWidgets.QPushButton(self.tr("Cancel after current phase"), self)
-        cancel_button.setObjectName("pushButton_cancel_processing")
-        cancel_button.setToolTip(
-            self.tr("Finish the active geometry phase, then stop before the next phase. Completed layers are kept.")
-        )
-        cancel_button.setVisible(False)
-        cancel_button.clicked.connect(self.request_processing_cancel)
-        footer_layout.insertWidget(2, cancel_button)
-        self._processing_cancel_button = cancel_button
 
         footer_status = getattr(self, "label_footer_status", None)
         if footer_status is not None:
@@ -306,34 +294,13 @@ class SafeguardingBuilderDialog(
         QtCore.QTimer.singleShot(0, self._refresh_footer_status_elision)
 
     def begin_processing(self, total_steps: int = 1) -> None:
-        """Reset cancellation and start a determinate generation run."""
+        """Start a determinate generation run."""
         self._processing_status_active = True
-        self._processing_cancel_requested = False
         self._processing_elapsed_timer.start()
         if self._processing_progress_bar is not None:
             self._processing_progress_bar.setRange(0, max(1, int(total_steps)))
             self._processing_progress_bar.setValue(0)
             self._processing_progress_bar.setVisible(True)
-        if self._processing_cancel_button is not None:
-            self._processing_cancel_button.setEnabled(True)
-            self._processing_cancel_button.setVisible(True)
-
-    def request_processing_cancel(self) -> None:
-        """Request cancellation at the next safe phase boundary."""
-        if not self._processing_status_active:
-            return
-        self._processing_cancel_requested = True
-        if self._processing_cancel_button is not None:
-            self._processing_cancel_button.setEnabled(False)
-            self._processing_cancel_button.setText(self.tr("Cancellation requested"))
-        if hasattr(self, "label_footer_status"):
-            self._set_footer_status(
-                self.tr("Cancellation requested — finishing the current phase safely...")
-            )
-
-    def is_processing_cancel_requested(self) -> bool:
-        return bool(self._processing_cancel_requested)
-
     def set_processing_status(
         self,
         message: str,
@@ -366,15 +333,10 @@ class SafeguardingBuilderDialog(
             generate_button.setText("Generating...")
 
     def clear_processing_status(self, final_message: Optional[str] = None) -> None:
-        """Restore normal footer status after generation finishes or aborts."""
+        """Restore normal footer status after generation finishes."""
         self._processing_status_active = False
-        self._processing_cancel_requested = False
         if self._processing_progress_bar is not None:
             self._processing_progress_bar.setVisible(False)
-        if self._processing_cancel_button is not None:
-            self._processing_cancel_button.setVisible(False)
-            self._processing_cancel_button.setEnabled(True)
-            self._processing_cancel_button.setText(self.tr("Cancel after current phase"))
         generate_button = getattr(
             self,
             "pushButton_Generate",

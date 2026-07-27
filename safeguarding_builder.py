@@ -1819,9 +1819,6 @@ class SafeguardingBuilder(
                         "solved_families": sorted(solved_ols_engines),
                     },
                 )
-                if self._processing_cancel_requested():
-                    self._finish_processing_cancelled()
-                    return
                 any_guideline_processed_ok = any_guideline_processed_ok or controlling_ols_ok
                 if getattr(self, "comparison_ols_ruleset", None) is not None:
                     if not self._processing_checkpoint(
@@ -1869,9 +1866,6 @@ class SafeguardingBuilder(
                             ),
                         },
                     )
-                    if self._processing_cancel_requested():
-                        self._finish_processing_cancelled()
-                        return
                     any_guideline_processed_ok = any_guideline_processed_ok or comparison_ok
             any_guideline_processed_ok = any_guideline_processed_ok or agl_processed_ok
 
@@ -1914,13 +1908,6 @@ class SafeguardingBuilder(
             self.dlg.begin_processing(total_steps)
         QCoreApplication.processEvents()
 
-    def _processing_cancel_requested(self) -> bool:
-        return bool(
-            self.dlg is not None
-            and hasattr(self.dlg, "is_processing_cancel_requested")
-            and self.dlg.is_processing_cancel_requested()
-        )
-
     def _processing_checkpoint(
         self,
         message: str,
@@ -1928,11 +1915,8 @@ class SafeguardingBuilder(
         total_steps: int,
         phase_key: Optional[str] = None,
     ) -> bool:
-        """Enter a phase unless cancellation was requested during the previous phase."""
+        """Enter a generation phase and update its progress state."""
         QCoreApplication.processEvents()
-        if self._processing_cancel_requested():
-            self._finish_processing_cancelled()
-            return False
         recorder = getattr(self, "_runtime_run_recorder", None)
         if recorder is not None and phase_key:
             recorder.start_phase(phase_key)
@@ -1946,31 +1930,6 @@ class SafeguardingBuilder(
             )
         self._set_processing_status(message, step=step, total_steps=total_steps)
         return True
-
-    def _finish_processing_cancelled(self) -> None:
-        """Keep completed layers and make a partial run safe to inspect or restart."""
-        self._processing_run_status = "cancelled"
-        main_group = getattr(self, "_processing_main_group", None)
-        if main_group is not None:
-            try:
-                self._repair_output_layer_tree(main_group)
-                self._remove_empty_generated_groups(main_group)
-            except Exception as exc:
-                self._log_warning(f"Cancellation cleanup warning: {exc}")
-        if self._run_log is not None:
-            self._run_log.update_context(
-                reason="cancelled at a safe phase boundary; completed layers were kept"
-            )
-        if self.iface is not None:
-            self.iface.messageBar().pushMessage(
-                self.tr("Cancelled"),
-                self.tr("Generation stopped after the current phase. Completed layers were kept."),
-                level=Qgis.Info,
-                duration=6,
-            )
-        self._clear_processing_status(
-            self.tr("Generation cancelled — completed layers were kept.")
-        )
 
     def _set_processing_status(
         self,
@@ -2786,8 +2745,6 @@ class SafeguardingBuilder(
                         f"({runway_index}/{runway_total})..."
                     )
                 )
-                if self._processing_cancel_requested():
-                    return geometry_created
                 if comparison_is_annex14:
                     created = self.process_annex14_geometry(
                         runway_data,
@@ -2847,9 +2804,6 @@ class SafeguardingBuilder(
                     comparison_controlling_group,
                     solved_engines=solved_comparison_engines,
                 )
-            if self._processing_cancel_requested():
-                return controlling_created
-
             comparison_groups = {
                 "OFS": output_groups.get("comparison_result_ofs"),
                 "OES": output_groups.get("comparison_result_oes"),
@@ -2928,8 +2882,6 @@ class SafeguardingBuilder(
                         f"Modernisation: creating future Annex 14 candidates ({runway_index}/{runway_total})..."
                     )
                 )
-                if self._processing_cancel_requested():
-                    return future_geometry_created
                 future_geometry_created = self.process_annex14_geometry(
                     runway_data,
                     future_ofs_group,
@@ -2950,8 +2902,6 @@ class SafeguardingBuilder(
                 debug_group,
                 solved_engines=solved_future_engines,
             )
-            if self._processing_cancel_requested():
-                return future_controlling_created
             comparison_created = self._create_ols_modernisation_comparison_layers(
                 icao_code,
                 self.baseline_ols_ruleset.id,
