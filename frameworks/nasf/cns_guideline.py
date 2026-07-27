@@ -12,8 +12,10 @@ from qgis.core import (  # type: ignore
     QgsFields,
     QgsGeometry,
     QgsLayerTreeGroup,
+    QgsPointXY,
 )
 
+from .cns import slope_contour_levels
 from .processor_base import NasfGuidelineProcessorBase
 
 try:
@@ -52,6 +54,14 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 QgsField("innerrad_m", QVariant.Double),
                 QgsField("outerrad_m", QVariant.Double),
                 QgsField("heightrule", QVariant.String),
+                QgsField("heightbase", QVariant.String),
+                QgsField("minagl_m", QVariant.Double),
+                QgsField("maxagl_m", QVariant.Double),
+                QgsField("heightcmp", QVariant.String),
+                QgsField("slope_deg", QVariant.Double),
+                QgsField("actionreq", QVariant.String),
+                QgsField("condition", QVariant.String),
+                QgsField("source_ref", QVariant.String),
             ]
         )
 
@@ -84,9 +94,8 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                             "GROUND BASED AUGMENTATION SYSTEM": "GBAS",
                         }
                         fac_acronym = predefined_acronyms.get(facility_type.upper(), facility_type.split(" ")[0])
-                    layer_display_name = (
-                        f"{fac_acronym} {surface_name}" if fac_acronym else f"{facility_type} {surface_name}"
-                    )
+                    facility_label = surface_spec.get("FacilityLabel") or fac_acronym or facility_type
+                    layer_display_name = f"{facility_label} {surface_name}"
                     fac_identifier = facility_id if facility_id != "N/A" else facility_type.replace(" ", "_")[:10]
                     internal_name_base = f"G_CNS_{icao_code}_{fac_identifier}_{surface_name.replace(' ', '_')}"
                     internal_name_base = "".join(c if c.isalnum() else "_" for c in internal_name_base)
@@ -119,6 +128,14 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                             surface_spec.get("InnerRadius_m"),
                             surface_spec.get("OuterRadius_m"),
                             height_rule,
+                            surface_spec.get("HeightBasis"),
+                            surface_spec.get("MinHeightAGL_m"),
+                            surface_spec.get("MaxHeightAGL_m"),
+                            surface_spec.get("HeightComparator"),
+                            surface_spec.get("SlopeDegrees"),
+                            surface_spec.get("Referral"),
+                            surface_spec.get("Condition"),
+                            surface_spec.get("SourceRef"),
                         ]
                     )
                     if shape_type == "CIRCLE":
@@ -138,6 +155,16 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     )
                     if layer_created:
                         overall_success = True
+                    if self._create_cns_slope_contours(
+                        facility_geom,
+                        facility_id,
+                        facility_type,
+                        surface_spec,
+                        internal_name_base,
+                        layer_display_name,
+                        layer_group,
+                    ):
+                        overall_success = True
                 except Exception as e_spec:
                     QgsMessageLog.logMessage(
                         f"Error processing CNS surface '{surface_name}' for '{facility_type}': {e_spec}",
@@ -152,6 +179,77 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 level=Qgis.Info,
             )
         return overall_success
+
+    def _create_cns_slope_contours(
+        self,
+        facility_geom: QgsGeometry,
+        facility_id: str,
+        facility_type: str,
+        surface_spec: dict,
+        internal_name_base: str,
+        layer_display_name: str,
+        layer_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Create plan-view contour rings for a radial CNS slope surface."""
+        contours = slope_contour_levels(surface_spec)
+        if not contours:
+            return False
+
+        contour_fields = QgsFields(
+            [
+                QgsField("sourcefacid", QVariant.String),
+                QgsField("factype", QVariant.String),
+                QgsField("surfname", QVariant.String),
+                QgsField("contagl_m", QVariant.Double),
+                QgsField("radius_m", QVariant.Double),
+                QgsField("slope_deg", QVariant.Double),
+                QgsField("actionreq", QVariant.String),
+                QgsField("source_ref", QVariant.String),
+            ]
+        )
+        features: List[QgsFeature] = []
+        for contour in contours:
+            ring = facility_geom.buffer(contour["radius_m"], 36)
+            if not ring or not ring.isGeosValid():
+                ring = ring.makeValid() if ring else None
+            if not ring or not ring.isGeosValid():
+                continue
+            polygon_rings = ring.asPolygon()
+            if not polygon_rings:
+                continue
+            boundary = QgsGeometry.fromPolylineXY(
+                [QgsPointXY(point.x(), point.y()) for point in polygon_rings[0]]
+            )
+            if not boundary or boundary.isEmpty():
+                continue
+            feature = QgsFeature(contour_fields)
+            feature.setGeometry(boundary)
+            feature.setAttributes(
+                [
+                    facility_id,
+                    facility_type,
+                    surface_spec.get("SurfaceName"),
+                    contour["height_agl_m"],
+                    contour["radius_m"],
+                    surface_spec.get("SlopeDegrees"),
+                    surface_spec.get("Referral"),
+                    surface_spec.get("SourceRef"),
+                ]
+            )
+            features.append(feature)
+
+        if not features:
+            return False
+        contour_layer = self._create_and_add_layer(
+            "LineString",
+            f"{internal_name_base}_Contours",
+            f"{layer_display_name} Contours",
+            contour_fields,
+            features,
+            layer_group,
+            "Default Line",
+        )
+        return contour_layer is not None
 
     def _generate_circular_or_donut(
         self, facility_point_geom: QgsGeometry, surface_spec: dict, description: str
@@ -242,6 +340,16 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
         try:
             if rule == "TBD" or rule is None:
                 return facility_elevation
+            elif rule in {
+                "All Heights",
+                "Maximum Height",
+                "Minimum Height",
+                "Radial Slope",
+                "Does Not Cross Zone Boundary",
+            }:
+                # These Guideline G limits are expressed as AGL conditions.
+                # A single AMSL value would be misleading without terrain data.
+                return None
             elif rule == "FacilityElevation + AGL":
                 return facility_elevation + float(value) if value is not None else facility_elevation
             elif rule == "Fixed_AMSL":
