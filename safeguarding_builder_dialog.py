@@ -918,8 +918,6 @@ class SafeguardingBuilderDialog(
         self._workflow_context_widgets: Dict[str, Dict[str, QtWidgets.QWidget]] = {}
         for spec in self._workflow_tab_specs():
             tab_name = str(spec["tab"])
-            if tab_name == "tab_ols":
-                continue
             layout = self._workflow_tab_layout(tab_name)
             if layout is None or getattr(self, f"_workflow_context_ready_{tab_name}", False):
                 continue
@@ -2681,7 +2679,13 @@ class SafeguardingBuilderDialog(
             if cns_dependencies["state"] == "optional"
             else "Review"
         )
-        ols_context_text = "Ready" if ols_dependencies["state"] == "ready" else "Review"
+        ols_context_text = (
+            "Ready"
+            if ols_dependencies["state"] == "ready"
+            else "Needed"
+            if ols_dependencies["state"] == "blocked"
+            else "Review"
+        )
         output_context_text = (
             "Memory"
             if output_ready

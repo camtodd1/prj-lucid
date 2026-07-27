@@ -274,17 +274,6 @@ class OutputOptionsMixin:
         grid.addWidget(family_frame, 3, 0, 1, 2)
         family_frame.hide()
 
-        status = QtWidgets.QLabel()
-        status.setObjectName("label_olsInlineStatus")
-        status.setWordWrap(True)
-        status.setMinimumWidth(0)
-        status.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Ignored,
-            QtWidgets.QSizePolicy.Policy.Preferred,
-        )
-        status.setMinimumHeight(30)
-        grid.addWidget(status, 4, 0, 1, 2)
-
         self.baseline_ols_ruleset_combo = baseline_combo
         self.comparison_ols_ruleset_combo = comparison_combo
         self.label_baselineOlsRuleset = baseline_label
@@ -295,7 +284,6 @@ class OutputOptionsMixin:
         self.label_olsOfsDetail = ofs_detail
         self.label_olsOesTitle = oes_title
         self.label_olsOesDetail = oes_detail
-        self.label_olsInlineStatus = status
         family_help.toggled.connect(self._toggle_ols_family_help)
         baseline_combo.currentIndexChanged.connect(self._on_ols_ruleset_selection_changed)
         comparison_combo.currentIndexChanged.connect(self._on_ols_ruleset_selection_changed)
@@ -559,22 +547,22 @@ class OutputOptionsMixin:
             "summary": self.tr("Complete airport and runway inputs to evaluate OLS readiness."),
         }
         state = str(status_data.get("state") or "neutral")
-        colors = {
-            "ready": ("#e8f5ec", "#2f7d45", "#235f34"),
-            "warning": ("#fff7e0", "#b87a00", "#744d00"),
-            "blocked": ("#fff0f0", "#c64545", "#7b2929"),
-            "neutral": ("#f2f4f6", "#aab2bb", "#4f5964"),
-        }
-        background, border, foreground = colors.get(state, colors["neutral"])
-        if hasattr(self, "label_olsInlineStatus"):
-            summary = str(status_data.get("summary") or "")
-            self.label_olsInlineStatus.setText(summary)
-            self.label_olsInlineStatus.setToolTip(summary)
-            self.label_olsInlineStatus.setVisible(state in {"warning", "blocked"})
-            self.label_olsInlineStatus.setStyleSheet(
-                f"QLabel {{ background: {background}; border: 1px solid {border}; border-radius: 4px; "
-                f"color: {foreground}; padding: 6px 8px; font-weight: 600; }}"
+        summary = str(status_data.get("summary") or "")
+        context_widgets = getattr(self, "_workflow_context_widgets", {}).get(
+            "tab_ols",
+            {},
+        )
+        context_status = context_widgets.get("status")
+        if isinstance(context_status, QtWidgets.QLabel):
+            status_text = (
+                self.tr("Ready")
+                if state == "ready"
+                else self.tr("Needed")
+                if state == "blocked"
+                else self.tr("Review")
             )
+            self._apply_status_chip(context_status, status_text, state)
+            context_status.setToolTip(summary)
         workflow_group = getattr(self, "groupBox_olsWorkflow", None)
         if workflow_group is not None:
             workflow_group.updateGeometry()

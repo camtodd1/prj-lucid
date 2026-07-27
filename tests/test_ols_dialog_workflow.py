@@ -54,8 +54,20 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertIsNone(
             self.dialog.findChild(QtWidgets.QLabel, "label_olsModeDescription")
         )
+        context = self.dialog.findChild(
+            QtWidgets.QFrame,
+            "frame_workflow_context_tab_ols",
+        )
+        self.assertIsNotNone(context)
+        self.assertEqual(
+            self.dialog.findChild(
+                QtWidgets.QLabel,
+                "label_workflow_summary_tab_ols",
+            ).text(),
+            "Choose which protected-airspace layers to create.",
+        )
         self.assertIsNone(
-            self.dialog.findChild(QtWidgets.QFrame, "frame_workflow_context_tab_ols")
+            self.dialog.findChild(QtWidgets.QLabel, "label_olsInlineStatus")
         )
         self.assertEqual(baseline.currentData(), "mos139_2019")
         self.assertEqual(comparison.itemData(0), "")
@@ -782,20 +794,25 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertFalse(self.dialog.toolButtonContourOverrides.isHidden())
         self.assertTrue(self.dialog._contour_interval_labels["annex14_ofs"].isHidden())
-        self.assertEqual(self.dialog.label_olsInlineStatus.text(), "OLS ready.")
-        self.assertTrue(self.dialog.label_olsInlineStatus.isHidden())
+        status = self.dialog.findChild(
+            QtWidgets.QLabel,
+            "label_workflow_context_status_tab_ols",
+        )
+        self.assertEqual(status.text(), "Ready")
+        self.assertEqual(status.toolTip(), "OLS ready.")
 
-    def test_ols_warning_is_shown_once_in_the_inline_status_area(self):
+    def test_ols_warning_is_shown_in_the_muted_context_tile(self):
         self.dialog._update_ols_workflow_ui(
             dependency_status={"state": "warning", "summary": "Controlling OLS is experimental."},
             runway_count=1,
         )
 
-        self.assertFalse(self.dialog.label_olsInlineStatus.isHidden())
-        self.assertEqual(
-            self.dialog.label_olsInlineStatus.text(),
-            "Controlling OLS is experimental.",
+        status = self.dialog.findChild(
+            QtWidgets.QLabel,
+            "label_workflow_context_status_tab_ols",
         )
+        self.assertEqual(status.text(), "Review")
+        self.assertEqual(status.toolTip(), "Controlling OLS is experimental.")
 
     def test_contour_disclosures_report_state_and_reset_is_contextual(self):
         self.assertEqual(self.dialog.groupBox_contourIntervals.title(), "Contour intervals")
@@ -988,20 +1005,13 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertNotEqual(self.dialog.label_footer_status.text(), message)
         self.assertIn("…", self.dialog.label_footer_status.text())
 
-    def test_readiness_and_ols_warning_labels_wrap_with_shrinkable_widths(self):
+    def test_readiness_label_wraps_with_a_shrinkable_width(self):
         readiness = self.dialog.label_generation_readiness_detail
-        ols_warning = self.dialog.label_olsInlineStatus
 
         self.assertTrue(readiness.wordWrap())
         self.assertEqual(readiness.minimumWidth(), 0)
         self.assertEqual(
             readiness.sizePolicy().horizontalPolicy(),
-            QtWidgets.QSizePolicy.Policy.Ignored,
-        )
-        self.assertTrue(ols_warning.wordWrap())
-        self.assertEqual(ols_warning.minimumWidth(), 0)
-        self.assertEqual(
-            ols_warning.sizePolicy().horizontalPolicy(),
             QtWidgets.QSizePolicy.Policy.Ignored,
         )
 
