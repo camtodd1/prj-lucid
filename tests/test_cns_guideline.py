@@ -41,7 +41,7 @@ class CnsGuidelineTests(unittest.TestCase):
         )
 
     def test_high_frequency_transmit_slope_and_area_of_interest_overlap(self):
-        specs = get_cns_spec("High Frequency (HF)")
+        specs = get_cns_spec("High Frequency (HF) Transmit Site")
         self.assertIsNotNone(specs)
         by_name = {spec["SurfaceName"]: spec for spec in specs}
 
@@ -64,6 +64,28 @@ class CnsGuidelineTests(unittest.TestCase):
         self.assertEqual([contour["height_agl_m"] for contour in contours], [10.0, 15.0, 20.0, 25.0, 30.0])
         self.assertEqual(contours[0]["radius_m"], 100.0)
         self.assertAlmostEqual(contours[-1]["radius_m"], 558.075311, places=6)
+
+    def test_high_frequency_receiver_has_source_defined_vertical_conditions(self):
+        specs = get_cns_spec("High Frequency (HF) Receiver Site")
+        self.assertIsNotNone(specs)
+        by_name = {spec["SurfaceName"]: spec for spec in specs}
+
+        slope = by_name["Zone A - 2.5 Degree Slope"]
+        self.assertEqual((slope["InnerRadius_m"], slope["OuterRadius_m"]), (100, 6000))
+        self.assertEqual(slope["SlopeDegrees"], 2.5)
+        self.assertEqual(len(slope_contour_levels(slope)), 52)
+        self.assertEqual(by_name["Area of Interest - Above 267 m"]["MinHeightAboveAntenna_m"], 267)
+        self.assertEqual(by_name["Area of Interest - Above 267 m"]["HeightComparator"], ">")
+        self.assertEqual(
+            by_name["Zone B"]["ActionRequired"],
+            "No requirements. Airservices Australia should be advised of proposals for large obstructions.",
+        )
+
+    def test_legacy_high_frequency_type_remains_a_transmit_site_alias(self):
+        self.assertEqual(
+            get_cns_spec("High Frequency (HF)"),
+            get_cns_spec("High Frequency (HF) Transmit Site"),
+        )
 
 
 if __name__ == "__main__":

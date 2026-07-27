@@ -58,6 +58,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 QgsField("heightbase", QVariant.String),
                 QgsField("minagl_m", QVariant.Double),
                 QgsField("maxagl_m", QVariant.Double),
+                QgsField("minant_m", QVariant.Double),
                 QgsField("heightcmp", QVariant.String),
                 QgsField("slope_deg", QVariant.Double),
                 QgsField("actionreq", QVariant.String),
@@ -139,6 +140,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                             surface_spec.get("HeightBasis"),
                             surface_spec.get("MinHeightAGL_m"),
                             surface_spec.get("MaxHeightAGL_m"),
+                            surface_spec.get("MinHeightAboveAntenna_m"),
                             surface_spec.get("HeightComparator"),
                             surface_spec.get("SlopeDegrees"),
                             surface_spec.get("ActionRequired"),
@@ -243,6 +245,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                         RADIO_LINK_POLICY["Width_m"],
                         RADIO_LINK_POLICY["HeightRule"],
                         RADIO_LINK_POLICY["HeightBasis"],
+                        None,
                         None,
                         None,
                         None,
@@ -462,7 +465,9 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 "Maximum Height",
                 "Minimum Height",
                 "Radial Slope",
+                "Below Radial Slope",
                 "Does Not Cross Zone Boundary",
+                "No Additional Height Limit",
             }:
                 # These Guideline G limits are expressed as AGL conditions.
                 # A single AMSL value would be misleading without terrain data.

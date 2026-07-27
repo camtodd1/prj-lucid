@@ -25,7 +25,8 @@ except ImportError:
 
 
 CNS_FACILITY_TYPES = [
-    "High Frequency (HF)",
+    "High Frequency (HF) Transmit Site",
+    "High Frequency (HF) Receiver Site",
     "Very High Frequency (VHF)",
     "Satellite Ground Station (SGS)",
     "Non-Directional Beacon (NDB)",

@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional
 
 CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
     # Facility Type Key (MUST match values from dialog table ComboBox)
-    "High Frequency (HF)": [
+    "High Frequency (HF) Transmit Site": [
         {
             "SurfaceName": "Zone A - Inner",
             "shape": "Circle",
@@ -67,30 +67,136 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
             "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 13",
         },
     ],
-    "Very High Frequency (VHF)": [
+    "High Frequency (HF) Receiver Site": [
         {
-            "SurfaceName": "Zone A",
+            "SurfaceName": "Zone A - Inner",
             "shape": "Circle",
             "OuterRadius_m": 100,
             "InnerRadius_m": 0,
-            "HeightRule": "TBD",
-            "HeightValue": None,
+            "HeightRule": "All Heights",
+            "HeightBasis": "AGL",
+            "ActionRequired": "All applications must be referred to Airservices Australia for assessment.",
+            "Condition": "Within 100 m of the High Frequency receive antenna, regardless of height.",
+            "FacilityLabel": "HF Receiver",
+            "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 14",
+            "Guidance": "Substantial structures are generally limited within 100 m of the antenna; Area of Interest proposals are assessed case by case.",
         },
         {
-            "SurfaceName": "Zone A/B",
+            "SurfaceName": "Zone A - 2.5 Degree Slope",
+            "shape": "Donut",
+            "OuterRadius_m": 6000,
+            "InnerRadius_m": 100,
+            "HeightRule": "Radial Slope",
+            "HeightBasis": "AGL",
+            "SlopeDegrees": 2.5,
+            "SlopeStartHeightAGL_m": 10,
+            "SlopeStartDistance_m": 100,
+            "ContourInterval_m": 5,
+            "ActionRequired": "All applications must be referred to Airservices Australia for assessment.",
+            "Condition": "Crosses the 2.5 degree zone boundary, starting at 10 m AGL.",
+            "FacilityLabel": "HF Receiver",
+            "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 14",
+            "Guidance": "Substantial structures are generally limited within 100 m of the antenna; Area of Interest proposals are assessed case by case.",
+        },
+        {
+            "SurfaceName": "Area of Interest - Below Zone A",
+            "shape": "Donut",
+            "OuterRadius_m": 6000,
+            "InnerRadius_m": 100,
+            "HeightRule": "Below Radial Slope",
+            "HeightBasis": "AGL",
+            "ActionRequired": "All applications must be referred to Airservices Australia for assessment.",
+            "Condition": "Between 100 m and 6,000 m from the receive antenna and below the Zone A height.",
+            "FacilityLabel": "HF Receiver",
+            "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 14",
+            "Guidance": "Area of Interest proposals are assessed case by case for adverse impacts to the High Frequency receiver site.",
+        },
+        {
+            "SurfaceName": "Area of Interest - Above 267 m",
+            "shape": "Donut",
+            "OuterRadius_m": 10000,
+            "InnerRadius_m": 6000,
+            "HeightRule": "Minimum Height",
+            "HeightBasis": "Above Antenna",
+            "MinHeightAboveAntenna_m": 267,
+            "HeightComparator": ">",
+            "ActionRequired": "All applications must be referred to Airservices Australia for assessment.",
+            "Condition": "Between 6,000 m and 10,000 m from the receive antenna and more than 267 m above the High Frequency antenna.",
+            "FacilityLabel": "HF Receiver",
+            "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 14",
+            "Guidance": "Area of Interest proposals are assessed case by case for adverse impacts to the High Frequency receiver site.",
+        },
+        {
+            "SurfaceName": "Zone B",
+            "shape": "Donut",
+            "OuterRadius_m": 10000,
+            "InnerRadius_m": 6000,
+            "HeightRule": "Does Not Cross Zone Boundary",
+            "HeightBasis": "Above Antenna",
+            "ActionRequired": "No requirements. Airservices Australia should be advised of proposals for large obstructions.",
+            "Condition": "Between 6,000 m and 10,000 m from the receiver antenna and does not cross the Zone A boundary.",
+            "FacilityLabel": "HF Receiver",
+            "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 14",
+            "Guidance": "Area of Interest proposals are assessed case by case for adverse impacts to the High Frequency receiver site.",
+        },
+    ],
+    "Very High Frequency (VHF)": [
+        {
+            "SurfaceName": "Zone A - Inner",
+            "shape": "Circle",
+            "OuterRadius_m": 100,
+            "InnerRadius_m": 0,
+            "HeightRule": "All Heights",
+            "HeightBasis": "AGL",
+            "ActionRequired": "All applications must be referred to Airservices Australia for assessment.",
+            "Condition": "Within 100 m of the Very High Frequency antenna, regardless of height.",
+            "FacilityLabel": "VHF",
+            "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 15",
+            "Guidance": "Substantial structures are generally prohibited within Zone A.",
+        },
+        {
+            "SurfaceName": "Zone A - 2 Percent Slope",
+            "shape": "Donut",
+            "OuterRadius_m": 2000,
+            "InnerRadius_m": 100,
+            "HeightRule": "Radial Slope",
+            "HeightBasis": "AGL",
+            "SlopePercent": 2,
+            "SlopeDegrees": math.degrees(math.atan(0.02)),
+            "SlopeStartHeightAGL_m": 10,
+            "SlopeStartDistance_m": 100,
+            "ContourInterval_m": 5,
+            "ActionRequired": "All applications must be referred to Airservices Australia for assessment.",
+            "Condition": "Crosses the 2% zone boundary, starting at 10 m AGL.",
+            "FacilityLabel": "VHF",
+            "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 15",
+            "Guidance": "Substantial structures are generally prohibited within Zone A.",
+        },
+        {
+            "SurfaceName": "Zone B",
             "shape": "Donut",
             "OuterRadius_m": 600,
             "InnerRadius_m": 100,
-            "HeightRule": "TBD",
-            "HeightValue": None,
+            "HeightRule": "Does Not Cross Zone Boundary",
+            "HeightBasis": "AGL",
+            "ActionRequired": "No requirements. Airservices Australia should be advised of proposals for large obstructions.",
+            "Condition": "Between 100 m and 600 m from the VHF antenna and does not cross the Zone A boundary.",
+            "FacilityLabel": "VHF",
+            "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 15",
+            "Guidance": "VHF propagation is governed by antenna line of sight; advise Airservices Australia of large obstructions.",
         },
         {
             "SurfaceName": "Area of Interest",
             "shape": "Donut",
             "OuterRadius_m": 2000,
-            "InnerRadius_m": 100,
-            "HeightRule": "TBD",
-            "HeightValue": None,
+            "InnerRadius_m": 600,
+            "HeightRule": "No Additional Height Limit",
+            "HeightBasis": "AGL",
+            "ActionRequired": "No requirements. Airservices Australia should be advised of proposals for large obstructions.",
+            "Condition": "Between 600 m and 2,000 m from the VHF antenna.",
+            "FacilityLabel": "VHF",
+            "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 15",
+            "Guidance": "VHF propagation is governed by antenna line of sight; advise Airservices Australia of large obstructions.",
         },
     ],
     "Satellite Ground Station (SGS)": [
@@ -443,6 +549,10 @@ RADIO_LINK_POLICY: Dict[str, Any] = {
     "Guidance": "No temporary or permanent obstructions should infringe Zone A.",
 }
 
+LEGACY_CNS_FACILITY_TYPE_ALIASES = {
+    "HIGH FREQUENCY (HF)": "High Frequency (HF) Transmit Site",
+}
+
 
 def get_cns_spec(facility_type: str) -> Optional[List[Dict[str, Any]]]:
     """
@@ -453,6 +563,9 @@ def get_cns_spec(facility_type: str) -> Optional[List[Dict[str, Any]]]:
     if not isinstance(facility_type, str):  # Basic type check
         return None
     search_type = facility_type.strip().upper()
+    alias = LEGACY_CNS_FACILITY_TYPE_ALIASES.get(search_type)
+    if alias:
+        return CNS_BRA_SPECIFICATIONS[alias]
     for key, value in CNS_BRA_SPECIFICATIONS.items():
         if key.strip().upper() == search_type:
             return value  # Return the list of spec dictionaries

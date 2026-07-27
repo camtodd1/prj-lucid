@@ -84,7 +84,7 @@ class CnsGuidelineQgisTests(unittest.TestCase):
 
         self.assertTrue(
             harness.process_cns_building_restricted_areas(
-                [self._facility("High Frequency (HF)")],
+                [self._facility("High Frequency (HF) Transmit Site")],
                 "YTEST",
                 None,
                 None,
@@ -117,6 +117,39 @@ class CnsGuidelineQgisTests(unittest.TestCase):
             [feature.attribute("contagl_m") for feature in contours[0]["features"]],
             [10.0, 15.0, 20.0, 25.0, 30.0],
         )
+
+    def test_high_frequency_receiver_generates_overlapping_areas_and_contours(self):
+        harness = _CnsHarness()
+
+        self.assertTrue(
+            harness.process_cns_building_restricted_areas(
+                [self._facility("High Frequency (HF) Receiver Site")],
+                "YTEST",
+                None,
+                None,
+            )
+        )
+
+        polygons = [layer for layer in harness.created_layers if layer["geometry_type"] == "Polygon"]
+        contours = [layer for layer in harness.created_layers if layer["geometry_type"] == "LineString"]
+        self.assertEqual(len(polygons), 5)
+        self.assertEqual(len(contours), 1)
+        attributes = {
+            layer["features"][0].attribute("surfname"): layer["features"][0]
+            for layer in polygons
+        }
+        self.assertEqual(attributes["Area of Interest - Above 267 m"].attribute("minant_m"), 267.0)
+        self.assertEqual(attributes["Area of Interest - Above 267 m"].attribute("heightcmp"), ">")
+        self.assertEqual(
+            attributes["Area of Interest - Below Zone A"].attribute("heightrule"),
+            "Below Radial Slope",
+        )
+        self.assertTrue(
+            attributes["Zone A - 2.5 Degree Slope"].geometry().intersects(
+                attributes["Area of Interest - Below Zone A"].geometry()
+            )
+        )
+        self.assertEqual(len(contours[0]["features"]), 52)
 
     def test_radio_link_generates_a_30_m_all_height_corridor_from_two_endpoints(self):
         harness = _CnsHarness()

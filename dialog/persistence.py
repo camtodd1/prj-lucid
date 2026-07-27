@@ -572,8 +572,11 @@ class PersistenceMixin:
                 cns_table.insertRow(row)
                 combo = QComboBox()
                 combo.addItems([""] + self.CNS_FACILITY_TYPES)
+                facility_type = item_data.get("type", "")
+                if facility_type == "High Frequency (HF)":
+                    facility_type = "High Frequency (HF) Transmit Site"
                 idx = combo.findText(
-                    item_data.get("type", ""),
+                    facility_type,
                     QtCore.Qt.MatchFlag.MatchFixedString,
                 )
                 combo.setCurrentIndex(idx if idx >= 0 else 0)
