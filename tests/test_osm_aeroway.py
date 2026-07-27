@@ -145,12 +145,31 @@ class OsmAerowayTests(unittest.TestCase):
                 self.assertEqual(settings.minimumScale, 3_000)
                 self.assertEqual(settings.maximumScale, 1)
 
-    def test_dialog_exposes_arp_download_button(self):
+    def test_dialog_uses_plain_airport_setup_labels(self):
         dialog = SafeguardingBuilderDialog()
         try:
             self.assertEqual(
                 dialog.pushButton_DownloadOsmAeroway.text(),
-                "Download OSM aeroway features within 5 km",
+                "Import nearby airport map features",
+            )
+            self.assertEqual(dialog.groupBox_ARP.title(), "Airport location")
+            self.assertEqual(
+                dialog.groupBox_MET.title(),
+                "Weather station (optional)",
+            )
+            context = dialog.findChild(
+                QtWidgets.QLabel,
+                "label_workflow_summary_tab_airport",
+            )
+            self.assertEqual(
+                context.text(),
+                "Add the airport location and optional weather station.",
+            )
+            self.assertTrue(
+                all(
+                    dialog.tabWidget_workflow.tabIcon(index).isNull()
+                    for index in range(dialog.tabWidget_workflow.count())
+                )
             )
         finally:
             dialog.close()

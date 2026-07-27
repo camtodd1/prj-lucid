@@ -381,7 +381,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QPushButton, "pushButton_Generate"),
         )
         if generate_button:
-            generate_button.setText("Generate Airport Layers")
+            generate_button.setText("Generate layers")
         self.update_dialog_status()
         if final_message and hasattr(self, "label_footer_status"):
             self._set_footer_status(final_message)
@@ -572,10 +572,10 @@ class SafeguardingBuilderDialog(
             if group:
                 group.setFlat(True)
                 if name == "groupBox_ARP":
-                    group.setTitle("Aerodrome Reference Point (ARP)")
+                    group.setTitle("Airport location")
                     group.setStyleSheet(airport_card_style)
                 else:
-                    group.setTitle("Meteorological Instrument Station")
+                    group.setTitle("Weather station (optional)")
                     group.setStyleSheet(airport_card_style)
                 group.setSizePolicy(
                     QtWidgets.QSizePolicy.Policy.Expanding,
@@ -599,7 +599,20 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_met_description"),
         )
         if met_description:
-            met_description.setText("Optional coordinates for MET safeguarding.")
+            met_description.setText(
+                "Add a location only when weather-station safeguarding is needed."
+            )
+
+        osm_button = getattr(
+            self,
+            "pushButton_DownloadOsmAeroway",
+            self.findChild(QtWidgets.QPushButton, "pushButton_DownloadOsmAeroway"),
+        )
+        if osm_button:
+            osm_button.setText("Import nearby airport map features")
+            osm_button.setToolTip(
+                "Import airport features from OpenStreetMap within 5 km of the airport location."
+            )
 
     def _style_global_context_groupbox(self, groupbox: Optional[QtWidgets.QGroupBox]) -> None:
         """Apply identical title and border geometry to the top setup cards."""
@@ -837,24 +850,7 @@ class SafeguardingBuilderDialog(
         main_layout.insertWidget(insert_index, readiness_frame)
 
     def _setup_workflow_tab_state(self) -> None:
-        """Prepare tab-level readiness icons and tooltips."""
-        self._workflow_tab_icons: Dict[str, QtGui.QIcon] = {}
-        for state, color in {
-            "ready": "#247a45",
-            "warning": "#9a6200",
-            "blocked": "#9a6200",
-            "optional": "#8a95a3",
-            "neutral": "#8a95a3",
-        }.items():
-            self._workflow_tab_icons[state] = self._make_tab_state_icon(color)
-
-        self._workflow_tab_text_colors = {
-            "ready": QtGui.QColor("#1f6b32"),
-            "warning": QtGui.QColor("#8a5200"),
-            "blocked": QtGui.QColor("#8a5200"),
-            "optional": QtGui.QColor("#66717d"),
-            "neutral": QtGui.QColor("#66717d"),
-        }
+        """Prepare plain workflow tabs; readiness is shown in the summary strip."""
         self._workflow_tab_labels = [
             ("tab_airport", "Airport"),
             ("tab_runways", "Runways"),
@@ -877,71 +873,27 @@ class SafeguardingBuilderDialog(
         return [
             {
                 "tab": "tab_airport",
-                "title": "Airport setup",
-                "summary": "Identity, ARP, MET, and project CRS",
-                "feeds": ["Reference data", "RED", "Airport-wide safeguards"],
-                "functions": [
-                    "get_all_input_data()",
-                    "create_arp_layer()",
-                    "process_met_station_surfaces()",
-                    "_calculate_reference_elevation_datum()",
-                ],
+                "summary": "Add the airport location and optional weather station.",
             },
             {
                 "tab": "tab_runways",
-                "title": "Runway definitions",
-                "summary": "Geometry, classification, elevations, and declared distances",
-                "feeds": ["Centrelines", "Physical surfaces", "OLS"],
-                "functions": [
-                    "_validate_runway_data()",
-                    "create_runway_centreline_layer()",
-                    "_process_physical_and_protection_layers()",
-                    "_process_runways_part2()",
-                ],
+                "summary": "Define each runway and its operating distances.",
             },
             {
                 "tab": "tab_cns",
-                "title": "CNS facilities",
-                "summary": "Optional technical facility coordinates",
-                "feeds": ["CNS references", "NASF CNS guidelines"],
-                "functions": [
-                    "_get_cns_manual_data()",
-                    "create_cns_source_facility_layer()",
-                    "_process_airport_safeguarding()",
-                ],
+                "summary": "Add navigation and communication facilities when needed.",
             },
             {
                 "tab": "tab_ols",
-                "title": "Protected airspace",
-                "summary": "Workflow mode, readiness, contours, and controlling output",
-                "feeds": ["Baseline OLS", "Comparison OLS", "Contour settings"],
-                "functions": [
-                    "get_contour_interval_options()",
-                    "_process_airport_wide_ols_if_possible()",
-                    "_create_controlling_ols_layers()",
-                    "_create_annex14_controlling_surface_layers()",
-                ],
+                "summary": "Choose which protected-airspace layers to create.",
             },
             {
                 "tab": "tab_lighting",
-                "title": "Airfield lighting",
-                "summary": "Optional AGL elements and approach-light rows",
-                "feeds": ["AGL points", "Aerodrome infrastructure"],
-                "functions": [
-                    "_get_agl_options()",
-                    "process_airfield_ground_lighting()",
-                ],
+                "summary": "Add airfield and approach lighting when needed.",
             },
             {
                 "tab": "tab_output",
-                "title": "Output destination",
-                "summary": "Memory layers or persistent file outputs",
-                "feeds": ["Layer tree", "Files", "Final report"],
-                "functions": [
-                    "_output_dependency_status()",
-                    "_create_and_add_layer()",
-                    "_final_feedback()",
-                ],
+                "summary": "Choose where generated layers will be saved.",
             },
         ]
 
@@ -962,7 +914,7 @@ class SafeguardingBuilderDialog(
         return page_layout if isinstance(page_layout, QtWidgets.QVBoxLayout) else None
 
     def _setup_workflow_context_strips(self) -> None:
-        """Add compact tab-local context showing how each tab contributes to generation."""
+        """Add a short tab instruction and its current state."""
         self._workflow_context_widgets: Dict[str, Dict[str, QtWidgets.QWidget]] = {}
         for spec in self._workflow_tab_specs():
             tab_name = str(spec["tab"])
@@ -982,46 +934,18 @@ class SafeguardingBuilderDialog(
             )
 
             row = QtWidgets.QHBoxLayout(frame)
-            row.setContentsMargins(10, 8, 10, 8)
-            row.setSpacing(10)
+            row.setContentsMargins(10, 5, 10, 5)
+            row.setSpacing(8)
             row.setAlignment(QtCore.Qt.AlignmentFlag.AlignVCenter)
 
-            title_stack = QtWidgets.QVBoxLayout()
-            title_stack.setContentsMargins(0, 0, 0, 0)
-            title_stack.setSpacing(0)
-            title = QtWidgets.QLabel(str(spec["title"]), frame)
-            title.setObjectName(f"label_workflow_title_{tab_name}")
-            title.setStyleSheet("QLabel { color: #232323; font-size: 12px; font-weight: 700; }")
             summary = QtWidgets.QLabel(str(spec["summary"]), frame)
             summary.setObjectName(f"label_workflow_summary_{tab_name}")
             summary.setStyleSheet("QLabel { color: #56616d; font-size: 11px; }")
-            summary.setWordWrap(False)
-            title_stack.addWidget(title)
-            title_stack.addWidget(summary)
-            row.addLayout(title_stack, 1)
-
-            feeds_layout = QtWidgets.QHBoxLayout()
-            feeds_layout.setContentsMargins(0, 0, 0, 0)
-            feeds_layout.setSpacing(5)
-            for feed in spec.get("feeds", []):
-                chip = QtWidgets.QLabel(str(feed), frame)
-                chip.setSizePolicy(
-                    QtWidgets.QSizePolicy.Policy.Maximum,
-                    QtWidgets.QSizePolicy.Policy.Fixed,
-                )
-                chip.setMinimumHeight(22)
-                chip.setStyleSheet(
-                    "QLabel { background: #ffffff; color: #45505b; border: 1px solid #d5dde6; "
-                    "border-radius: 9px; padding: 2px 8px; font-size: 10px; font-weight: 600; }"
-                )
-                feeds_layout.addWidget(chip)
-            row.addLayout(feeds_layout, 0)
+            summary.setWordWrap(True)
+            row.addWidget(summary, 1)
 
             status = QtWidgets.QLabel("", frame)
             status.setObjectName(f"label_workflow_context_status_{tab_name}")
-            functions = ", ".join(str(name) for name in spec.get("functions", []))
-            frame.setToolTip(f"Connected functions: {functions}")
-            status.setToolTip(f"Connected functions: {functions}")
             row.addWidget(status, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
 
             layout.insertWidget(0, frame)
@@ -1035,14 +959,13 @@ class SafeguardingBuilderDialog(
         self._sync_workflow_context()
 
     def _style_workflow_context_frame(self, frame: QtWidgets.QFrame, active: bool) -> None:
-        border = "#88aede" if active else "#d5dde6"
-        background = "#f7fafc" if active else "#ffffff"
+        background = "#f5f7f9" if active else "#fafafa"
         frame.setStyleSheet(
             f"""
             QFrame#{frame.objectName()} {{
                 background: {background};
-                border: 1px solid {border};
-                border-radius: 4px;
+                border: none;
+                border-radius: 3px;
             }}
             """
         )
@@ -1067,21 +990,8 @@ class SafeguardingBuilderDialog(
                     "neutral" if state == "optional" else state,
                 )
 
-    def _make_tab_state_icon(self, color: str) -> QtGui.QIcon:
-        """Create a small colored status dot for a workflow tab."""
-        pixmap = QtGui.QPixmap(14, 14)
-        pixmap.fill(QtCore.Qt.GlobalColor.transparent)
-        painter = QtGui.QPainter(pixmap)
-        painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing, True)
-        painter.setPen(QtGui.QPen(QtGui.QColor("#ffffff"), 2))
-        painter.setBrush(QtGui.QColor(color))
-        painter.drawEllipse(3, 3, 8, 8)
-        painter.end()
-        return QtGui.QIcon(pixmap)
-
     def _set_workflow_tab_state(self, tab_name: str, state: str, tooltip: str) -> None:
-        """Apply a dynamic state icon, text color, and tooltip to a tab."""
-        visual_state = "warning" if state == "blocked" else state
+        """Keep state details available without adding status dots to every tab."""
         tab_widget = getattr(self, "tabWidget_workflow", None)
         tab_page = getattr(self, tab_name, None)
         if tab_widget is None or tab_page is None:
@@ -1089,11 +999,8 @@ class SafeguardingBuilderDialog(
         index = tab_widget.indexOf(tab_page)
         if index < 0:
             return
-        icon = getattr(self, "_workflow_tab_icons", {}).get(visual_state)
-        if icon is not None:
-            tab_widget.setTabIcon(index, icon)
-        color = getattr(self, "_workflow_tab_text_colors", {}).get(visual_state, QtGui.QColor("#333333"))
-        tab_widget.tabBar().setTabTextColor(index, color)
+        tab_widget.setTabIcon(index, QtGui.QIcon())
+        tab_widget.tabBar().setTabTextColor(index, QtGui.QColor("#333333"))
         tab_widget.setTabToolTip(index, tooltip)
 
     def _set_readiness_strip_state(
@@ -1111,9 +1018,10 @@ class SafeguardingBuilderDialog(
             self._apply_status_chip(badge, badge_text, badge_state, prominent=False)
         if title_label is not None:
             title_label.setText(title)
+            title_label.setToolTip(detail)
         if detail_label is not None:
-            detail_label.setText(detail)
-            detail_label.setToolTip(detail)
+            detail_label.clear()
+            detail_label.hide()
 
     def _line_value(self, widget_name: str) -> str:
         widget = getattr(self, widget_name, self.findChild(QtWidgets.QLineEdit, widget_name))
@@ -2593,14 +2501,14 @@ class SafeguardingBuilderDialog(
         arp_values = airport_dependencies["arp_values"]
         self._set_small_status_chip(
             "label_arp_status",
-            "ARP located" if all(arp_values[:2]) else "ARP incomplete" if any(arp_values) else "ARP not set",
+            "Location set" if all(arp_values[:2]) else "Location incomplete" if any(arp_values) else "Not set",
             "ready" if all(arp_values[:2]) else "warning" if any(arp_values) else "neutral",
         )
 
         met_values = airport_dependencies["met_values"]
         self._set_small_status_chip(
             "label_met_status",
-            "MET located" if all(met_values[:2]) else "MET incomplete" if any(met_values) else "MET not used",
+            "Location set" if all(met_values[:2]) else "Location incomplete" if any(met_values) else "Not added",
             "ready" if all(met_values[:2]) else "warning" if any(met_values) else "neutral",
         )
 
@@ -2667,7 +2575,7 @@ class SafeguardingBuilderDialog(
 
         blockers = []
         if not airport_dependencies["identity_present"]:
-            blockers.append("airport identifier")
+            blockers.append("airport code")
         elif not identity_generation_ready:
             blockers.append("resolved ICAO")
         if not output_ready:
@@ -2688,12 +2596,11 @@ class SafeguardingBuilderDialog(
             review_items.append(ols_review)
 
         if blockers:
-            count = len(blockers)
             self._set_readiness_strip_state(
-                "Needs input",
+                "Action needed",
                 "warning",
-                f"{count} item{'s' if count != 1 else ''} before generation",
-                "Missing: " + ", ".join(blockers) + ".",
+                "Add " + ", ".join(blockers) + " before generating.",
+                "Required: " + ", ".join(blockers) + ".",
             )
         elif review_items:
             self._set_readiness_strip_state(

@@ -330,7 +330,7 @@
        <item>
        <widget class="QGroupBox" name="groupBox_ARP">
          <property name="title">
-          <string>Aerodrome Reference Point (ARP)</string>
+          <string>Airport location</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_arp">
          <item row="0" column="0" colspan="6">
@@ -338,7 +338,7 @@
            <item>
             <widget class="QLabel" name="label_arp_description">
              <property name="text">
-              <string>Primary coordinates for airport-wide safeguarding surfaces.</string>
+              <string>Reference point used to place airport-wide layers.</string>
              </property>
             </widget>
            </item>
@@ -397,7 +397,7 @@
           <item row="2" column="0" colspan="6">
            <widget class="QPushButton" name="pushButton_DownloadOsmAeroway">
             <property name="text">
-             <string>Download OSM aeroway features within 5 km</string>
+             <string>Import nearby airport map features</string>
             </property>
            </widget>
           </item>
@@ -407,7 +407,7 @@
        <item>
         <widget class="QGroupBox" name="groupBox_MET">
          <property name="title">
-          <string>Meteorological Instrument Station (optional)</string>
+          <string>Weather station (optional)</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_met">
          <item row="0" column="0" colspan="6">
@@ -415,7 +415,7 @@
            <item>
             <widget class="QLabel" name="label_met_description">
              <property name="text">
-              <string>Leave blank when MET safeguarding is not required.</string>
+              <string>Add a location only when weather-station safeguarding is needed.</string>
              </property>
             </widget>
            </item>
@@ -787,7 +787,7 @@
         </size>
        </property>
        <property name="text">
-        <string>Generate Airport Layers</string>
+        <string>Generate layers</string>
        </property>
       </widget>
      </item>
