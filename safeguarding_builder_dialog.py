@@ -529,16 +529,17 @@ class SafeguardingBuilderDialog(
             font-weight: 600;
         }
         """
-        for name in ["groupBox_ARP", "groupBox_MET"]:
+        airport_group_titles = {
+            "groupBox_ARP": "Airport location",
+            "groupBox_AirportMap": "Airport map",
+            "groupBox_MET": "Weather station (optional)",
+        }
+        for name, title in airport_group_titles.items():
             group = getattr(self, name, self.findChild(QtWidgets.QGroupBox, name))
             if group:
                 group.setFlat(True)
-                if name == "groupBox_ARP":
-                    group.setTitle("Airport location")
-                    group.setStyleSheet(airport_card_style)
-                else:
-                    group.setTitle("Weather station (optional)")
-                    group.setStyleSheet(airport_card_style)
+                group.setTitle(title)
+                group.setStyleSheet(airport_card_style)
                 group.setSizePolicy(
                     QtWidgets.QSizePolicy.Policy.Expanding,
                     QtWidgets.QSizePolicy.Policy.Fixed,
@@ -551,7 +552,11 @@ class SafeguardingBuilderDialog(
                     "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; "
                     "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
                 )
-        for name in ["label_arp_description", "label_met_description"]:
+        for name in [
+            "label_arp_description",
+            "label_airport_map_description",
+            "label_met_description",
+        ]:
             label = getattr(self, name, self.findChild(QtWidgets.QLabel, name))
             if label:
                 label.setStyleSheet("color: #666666; font-size: 11px;")
@@ -571,7 +576,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QPushButton, "pushButton_DownloadOsmAeroway"),
         )
         if osm_button:
-            osm_button.setText("Import nearby airport map features")
+            osm_button.setText("Import airport map features")
             osm_button.setToolTip(
                 "Import airport features from OpenStreetMap within 5 km of the airport location."
             )

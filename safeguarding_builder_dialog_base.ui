@@ -394,10 +394,29 @@
           <item row="1" column="5">
            <widget class="QLineEdit" name="lineEdit_arp_elevation"/>
           </item>
-          <item row="2" column="0" colspan="6">
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="groupBox_AirportMap">
+         <property name="title">
+          <string>Airport map</string>
+         </property>
+         <layout class="QVBoxLayout" name="verticalLayout_airportMap">
+          <item>
+           <widget class="QLabel" name="label_airport_map_description">
+            <property name="text">
+             <string>Import runways, taxiways, aprons, and other airport features from OpenStreetMap.</string>
+            </property>
+            <property name="wordWrap">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item>
            <widget class="QPushButton" name="pushButton_DownloadOsmAeroway">
             <property name="text">
-             <string>Import nearby airport map features</string>
+             <string>Import airport map features</string>
             </property>
            </widget>
           </item>

@@ -150,12 +150,29 @@ class OsmAerowayTests(unittest.TestCase):
         try:
             self.assertEqual(
                 dialog.pushButton_DownloadOsmAeroway.text(),
-                "Import nearby airport map features",
+                "Import airport map features",
             )
             self.assertEqual(dialog.groupBox_ARP.title(), "Airport location")
             self.assertEqual(
+                dialog.groupBox_AirportMap.title(),
+                "Airport map",
+            )
+            self.assertEqual(
                 dialog.groupBox_MET.title(),
                 "Weather station (optional)",
+            )
+            self.assertIs(
+                dialog.pushButton_DownloadOsmAeroway.parentWidget(),
+                dialog.groupBox_AirportMap,
+            )
+            airport_layout = dialog.verticalLayout_airportTab
+            self.assertLess(
+                airport_layout.indexOf(dialog.groupBox_ARP),
+                airport_layout.indexOf(dialog.groupBox_AirportMap),
+            )
+            self.assertLess(
+                airport_layout.indexOf(dialog.groupBox_AirportMap),
+                airport_layout.indexOf(dialog.groupBox_MET),
             )
             context = dialog.findChild(
                 QtWidgets.QLabel,
