@@ -2,7 +2,7 @@
 
 import unittest
 
-from qgis.core import QgsGeometry, QgsPointXY
+from qgis.core import QgsGeometry, QgsLayerTreeGroup, QgsPointXY
 
 from frameworks.nasf.cns_guideline import NasfCnsGuidelineMixin
 from frameworks.nasf.profile import NASF_PROFILE
@@ -15,7 +15,16 @@ class _CnsHarness(NasfCnsGuidelineMixin):
     def get_active_framework(self):
         return NASF_PROFILE
 
-    def _create_and_add_layer(self, geometry_type, internal_name, display_name, fields, features, *_args):
+    def _create_and_add_layer(
+        self,
+        geometry_type,
+        internal_name,
+        display_name,
+        fields,
+        features,
+        layer_group,
+        *_args,
+    ):
         self.created_layers.append(
             {
                 "geometry_type": geometry_type,
@@ -23,6 +32,7 @@ class _CnsHarness(NasfCnsGuidelineMixin):
                 "display_name": display_name,
                 "fields": fields,
                 "features": features,
+                "layer_group": layer_group,
             }
         )
         return object()
@@ -77,6 +87,29 @@ class CnsGuidelineQgisTests(unittest.TestCase):
         )
         self.assertTrue(
             attributes["Zone B"].geometry().equals(attributes["Area of Interest"].geometry())
+        )
+
+    def test_facility_surfaces_are_grouped_by_cns_element(self):
+        harness = _CnsHarness()
+        cns_group = QgsLayerTreeGroup("CNS / Technical Safeguarding")
+
+        self.assertTrue(
+            harness.process_cns_building_restricted_areas(
+                [self._facility("Satellite Ground Station (SGS)")],
+                "YTEST",
+                None,
+                cns_group,
+            )
+        )
+
+        element_groups = cns_group.children()
+        self.assertEqual(len(element_groups), 1)
+        self.assertEqual(
+            element_groups[0].name(),
+            "CNS-01 - Satellite Ground Station (SGS)",
+        )
+        self.assertTrue(
+            all(layer["layer_group"] is element_groups[0] for layer in harness.created_layers)
         )
 
     def test_high_frequency_transmit_generates_overlapping_surfaces_and_contours(self):
@@ -153,6 +186,7 @@ class CnsGuidelineQgisTests(unittest.TestCase):
 
     def test_radio_link_generates_a_30_m_all_height_corridor_from_two_endpoints(self):
         harness = _CnsHarness()
+        cns_group = QgsLayerTreeGroup("CNS / Technical Safeguarding")
 
         self.assertTrue(
             harness.process_cns_building_restricted_areas(
@@ -162,12 +196,14 @@ class CnsGuidelineQgisTests(unittest.TestCase):
                 ],
                 "YTEST",
                 None,
-                None,
+                cns_group,
             )
         )
 
         self.assertEqual(len(harness.created_layers), 1)
         layer = harness.created_layers[0]
+        self.assertEqual(layer["layer_group"].name(), "RL-01 - Radio Link")
+        self.assertIs(layer["layer_group"].parent(), cns_group)
         feature = layer["features"][0]
         self.assertEqual(layer["geometry_type"], "Polygon")
         self.assertEqual(feature.attribute("link_id"), "RL-01")

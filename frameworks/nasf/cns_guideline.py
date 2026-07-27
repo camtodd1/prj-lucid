@@ -100,6 +100,11 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             bra_specs_list = self._active_safeguarding_framework().cns_spec(facility_type)
             if not bra_specs_list:
                 continue
+            facility_group = self._cns_element_group(
+                layer_group,
+                facility_type,
+                facility_id,
+            )
 
             for surface_spec in bra_specs_list:
                 try:
@@ -178,7 +183,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                         layer_display_name,
                         fields,
                         [feature],
-                        layer_group,
+                        facility_group,
                         style_key,
                     )
                     if layer_created:
@@ -191,7 +196,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                         surface_spec,
                         internal_name_base,
                         layer_display_name,
-                        layer_group,
+                        facility_group,
                     ):
                         overall_success = True
                 except Exception as e_spec:
@@ -208,6 +213,23 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 level=Qgis.Info,
             )
         return overall_success
+
+    @staticmethod
+    def _cns_element_group(
+        parent_group: Optional[QgsLayerTreeGroup],
+        element_type: Any,
+        identifier: Any,
+    ) -> Optional[QgsLayerTreeGroup]:
+        """Return a child group that keeps one CNS element's layers together."""
+        if parent_group is None:
+            return None
+        element_type = str(element_type or "CNS Element").strip()
+        identifier = str(identifier or "").strip()
+        group_name = f"{identifier} - {element_type}" if identifier and identifier != "N/A" else element_type
+        for child in parent_group.children():
+            if isinstance(child, QgsLayerTreeGroup) and child.name() == group_name:
+                return child
+        return parent_group.addGroup(group_name)
 
     def _process_radio_link_areas(
         self,
@@ -274,13 +296,14 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     ]
                 )
                 safe_link_id = "".join(char if char.isalnum() else "_" for char in link_id)
+                element_group = self._cns_element_group(layer_group, "Radio Link", link_id)
                 layer = self._create_and_add_layer(
                     "Polygon",
                     f"G_CNS_{icao_code}_Radio_Link_{safe_link_id}_Zone_A",
                     f"Radio Link {link_id} Zone A",
                     fields,
                     [feature],
-                    layer_group,
+                    element_group,
                     "Default CNS",
                 )
                 if layer:
@@ -368,6 +391,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     ("Zone A", zone_a, "CORRIDOR", policy["LineOfSightWidth_m"], policy["ZoneACondition"]),
                     ("Zone B", zone_b, "CIRCLE", policy["ZoneBRadius_m"], policy["ZoneBCondition"]),
                 )
+                element_group = self._cns_element_group(layer_group, monitor_label, link_id)
                 for surface_name, geometry, shape, outer_radius, condition in zone_definitions:
                     feature = QgsFeature(fields)
                     feature.setGeometry(geometry)
@@ -401,7 +425,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                         f"{monitor_label} {link_id} {surface_name}",
                         fields,
                         [feature],
-                        layer_group,
+                        element_group,
                         "Default CNS",
                     )
                     if layer:
