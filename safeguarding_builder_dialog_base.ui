@@ -406,7 +406,7 @@
           <item>
            <widget class="QLabel" name="label_airport_map_description">
             <property name="text">
-             <string>Import runways, taxiways, aprons, and other airport features from OpenStreetMap.</string>
+             <string>Import taxiways, aprons, parking positions and other airport features from OpenStreetMap.</string>
             </property>
             <property name="wordWrap">
              <bool>true</bool>
