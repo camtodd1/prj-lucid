@@ -24,31 +24,29 @@ except ImportError:
     from core.run_log import QgsMessageLog  # type: ignore
 
 
-CNS_FACILITY_TYPES = sorted(
-    [
-        "High Frequency (HF)",
-        "Very High Frequency (VHF)",
-        "Satellite Ground Station (SGS)",
-        "Non-Directional Beacon (NDB)",
-        "Distance Measuring Equipment (DME)",
-        "VHF Omni-Directional Range (VOR)",
-        "Conventional VHF Omni-Directional Range (CVOR)",
-        "Doppler VHF Omni-Directional Range (DVOR) - Elevated",
-        "Doppler VHF Omni-Directional Range (DVOR) - Ground Mounted",
-        "Middle and Outer Marker",
-        "Automatic Dependent Surveillance Broadcast (ADS-B)",
-        "Wide Area Multilateration (WAM)",
-        "Primary Surveillance Radar (PSR)",
-        "Secondary Surveillance Radar (SSR)",
-        "Ground Based Augmentation System (GBAS) - RSMU",
-        "GBAS - VDB",
-        "Link Dishes",
-        "Radar Site Monitor - Type A",
-        "Radar Site Monitor - Type B",
-        "Glide Path (GP)",
-        "Localiser (LOC)",
-    ]
-)
+CNS_FACILITY_TYPES = [
+    "High Frequency (HF)",
+    "Very High Frequency (VHF)",
+    "Satellite Ground Station (SGS)",
+    "Non-Directional Beacon (NDB)",
+    "Distance Measuring Equipment (DME)",
+    "VHF Omni-Directional Range (VOR)",
+    "Conventional VHF Omni-Directional Range (CVOR)",
+    "Doppler VHF Omni-Directional Range (DVOR) - Elevated",
+    "Doppler VHF Omni-Directional Range (DVOR) - Ground Mounted",
+    "Middle and Outer Marker",
+    "Glide Path (GP)",
+    "Localiser (LOC)",
+    "Automatic Dependent Surveillance Broadcast (ADS-B)",
+    "Wide Area Multilateration (WAM)",
+    "Primary Surveillance Radar (PSR)",
+    "Secondary Surveillance Radar (SSR)",
+    "Ground Based Augmentation System (GBAS) - RSMU",
+    "GBAS - VDB",
+    "Link Dishes",
+    "Radar Site Monitor - Type A",
+    "Radar Site Monitor - Type B",
+]
 
 
 class CnsTableMixin:
