@@ -20,8 +20,6 @@ class CnsTableOrderTests(unittest.TestCase):
                 "Doppler VHF Omni-Directional Range (DVOR) - Elevated",
                 "Doppler VHF Omni-Directional Range (DVOR) - Ground Mounted",
                 "Middle and Outer Marker",
-                "Glide Path (GP)",
-                "Localiser (LOC)",
                 "Automatic Dependent Surveillance Broadcast (ADS-B)",
                 "Wide Area Multilateration (WAM)",
                 "Primary Surveillance Radar (PSR)",
