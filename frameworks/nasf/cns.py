@@ -737,24 +737,7 @@ CNS_BRA_SPECIFICATIONS: Dict[str, List[Dict[str, Any]]] = {
         },
     ],
     "Radar Site Monitor - Type A": [],  # Generated from a paired PSR/SSR endpoint via Link ID.
-    "Radar Site Monitor - Type B": [
-        {
-            "SurfaceName": "Zone A",
-            "shape": "Circle",
-            "OuterRadius_m": 70,
-            "InnerRadius_m": 0,
-            "HeightRule": "TBD",
-            "HeightValue": None,
-        },
-        {
-            "SurfaceName": "Zone A/B",
-            "shape": "Circle",
-            "OuterRadius_m": 500,
-            "InnerRadius_m": 0,
-            "HeightRule": "TBD",
-            "HeightValue": None,
-        },
-    ],
+    "Radar Site Monitor - Type B": [],  # Generated from a paired PSR/SSR endpoint via Link ID.
 }
 
 RADIO_LINK_POLICY: Dict[str, Any] = {
@@ -782,6 +765,23 @@ RADAR_SITE_MONITOR_TYPE_A_POLICY: Dict[str, Any] = {
     "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 28",
     "ZoneACondition": "Within 30 m of the line of sight between the paired radar and Type A site monitor (applicable where their separation is 5 NM or less).",
     "ZoneBCondition": "Within 500 m of the Type A site-monitor antenna, regardless of height. Modelled to ground level because antenna height is not collected; the source guide specifies development above a horizontal plane 4 m below the antenna base.",
+    "Guidance": "No temporary or permanent obstructions should infringe Zone A. Infringements in Zone B can cause interference and must be assessed case by case.",
+}
+
+RADAR_SITE_MONITOR_TYPE_B_POLICY: Dict[str, Any] = {
+    "MonitorType": "Radar Site Monitor - Type B",
+    "RadarTypes": {
+        "Primary Surveillance Radar (PSR)",
+        "Secondary Surveillance Radar (SSR)",
+    },
+    "LineOfSightWidth_m": 70,
+    "ZoneBRadius_m": 500,
+    "HeightRule": "All Heights",
+    "HeightBasis": "AGL",
+    "ActionRequired": "All applications must be referred to Airservices Australia for assessment.",
+    "SourceRef": "Airservices Building Restrictions Guide, Attachment 3, p. 30",
+    "ZoneACondition": "Within 70 m of the line of sight between the paired radar and Type B site monitor (applicable where their separation exceeds 5 NM).",
+    "ZoneBCondition": "Within 500 m of the Type B site-monitor antenna, regardless of height. Modelled to ground level because antenna height is not collected; the source guide specifies development above a horizontal plane 4 m below the antenna base.",
     "Guidance": "No temporary or permanent obstructions should infringe Zone A. Infringements in Zone B can cause interference and must be assessed case by case.",
 }
 

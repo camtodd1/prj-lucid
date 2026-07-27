@@ -18,6 +18,7 @@ from qgis.core import (  # type: ignore
 from .cns import (
     RADIO_LINK_POLICY,
     RADAR_SITE_MONITOR_TYPE_A_POLICY,
+    RADAR_SITE_MONITOR_TYPE_B_POLICY,
     slope_contour_levels,
 )
 from .processor_base import NasfGuidelineProcessorBase
@@ -74,10 +75,14 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
 
         if self._process_radio_link_areas(cns_facilities_data, icao_code, layer_group, fields):
             overall_success = True
-        if self._process_radar_site_monitor_type_a_areas(
-            cns_facilities_data, icao_code, layer_group, fields
+        for monitor_policy in (
+            RADAR_SITE_MONITOR_TYPE_A_POLICY,
+            RADAR_SITE_MONITOR_TYPE_B_POLICY,
         ):
-            overall_success = True
+            if self._process_radar_site_monitor_areas(
+                cns_facilities_data, icao_code, layer_group, fields, monitor_policy
+            ):
+                overall_success = True
 
         for facility_data in cns_facilities_data:
             facility_id = facility_data.get("id", "N/A")
@@ -85,6 +90,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             if str(facility_type).strip().casefold() in {
                 "radio link",
                 RADAR_SITE_MONITOR_TYPE_A_POLICY["MonitorType"].casefold(),
+                RADAR_SITE_MONITOR_TYPE_B_POLICY["MonitorType"].casefold(),
             }:
                 continue
             facility_geom = facility_data.get("geom")
@@ -289,15 +295,16 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 )
         return created
 
-    def _process_radar_site_monitor_type_a_areas(
+    def _process_radar_site_monitor_areas(
         self,
         facilities: List[dict],
         icao_code: str,
         layer_group: QgsLayerTreeGroup,
         fields: QgsFields,
+        policy: dict,
     ) -> bool:
-        """Generate paired line-of-sight and monitor areas for Type A site monitors."""
-        policy = RADAR_SITE_MONITOR_TYPE_A_POLICY
+        """Generate paired line-of-sight and monitor areas for a radar site-monitor type."""
+        monitor_label = policy["MonitorType"]
         monitor_type = policy["MonitorType"].casefold()
         radar_types = {facility_type.casefold() for facility_type in policy["RadarTypes"]}
         grouped: dict[str, List[dict]] = {}
@@ -322,7 +329,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             ]
             if len(monitors) != 1 or len(radars) != 1:
                 QgsMessageLog.logMessage(
-                    f"Radar Site Monitor Type A '{link_id}' skipped: exactly one Type A monitor and one PSR or SSR endpoint are required.",
+                    f"{monitor_label} '{link_id}' skipped: exactly one monitor and one PSR or SSR endpoint are required.",
                     PLUGIN_TAG,
                     level=Qgis.Warning,
                 )
@@ -350,10 +357,13 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     geometry is None or geometry.isEmpty() or not geometry.isGeosValid()
                     for geometry in (zone_a, zone_b)
                 ):
-                    raise ValueError("could not create valid Type A site-monitor geometry")
+                    raise ValueError("could not create valid site-monitor geometry")
 
                 monitor_id = monitor.get("id", "N/A")
                 safe_link_id = "".join(char if char.isalnum() else "_" for char in link_id)
+                safe_monitor_type = "".join(
+                    char if char.isalnum() else "_" for char in monitor_label
+                )
                 zone_definitions = (
                     ("Zone A", zone_a, "CORRIDOR", policy["LineOfSightWidth_m"], policy["ZoneACondition"]),
                     ("Zone B", zone_b, "CIRCLE", policy["ZoneBRadius_m"], policy["ZoneBCondition"]),
@@ -387,8 +397,8 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     )
                     layer = self._create_and_add_layer(
                         "Polygon",
-                        f"G_CNS_{icao_code}_Radar_Site_Monitor_Type_A_{safe_link_id}_{surface_name.replace(' ', '_')}",
-                        f"Radar Site Monitor Type A {link_id} {surface_name}",
+                        f"G_CNS_{icao_code}_{safe_monitor_type}_{safe_link_id}_{surface_name.replace(' ', '_')}",
+                        f"{monitor_label} {link_id} {surface_name}",
                         fields,
                         [feature],
                         layer_group,
@@ -400,7 +410,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                         created = True
             except Exception as error:
                 QgsMessageLog.logMessage(
-                    f"Radar Site Monitor Type A '{link_id}' skipped: {error}",
+                    f"{monitor_label} '{link_id}' skipped: {error}",
                     PLUGIN_TAG,
                     level=Qgis.Warning,
                 )
