@@ -114,13 +114,14 @@ class OlsLayerGroupingTests(unittest.TestCase):
         self.assertIsNotNone(groups["debug_development"])
         self.assertIsNotNone(self.direct_group(main_group, "99 Debug / Development"))
 
-    def test_generated_layer_groups_are_collapsed_recursively(self):
+    def test_generated_layer_groups_are_collapsed_and_unchecked_recursively(self):
         main_group = QgsLayerTreeGroup("TEST")
         section_group = main_group.addGroup("05 External Safeguarding")
         cns_group = section_group.addGroup("CNS / Technical Safeguarding")
         cns_group.addGroup("Radio Link")
         for group in (main_group, section_group, cns_group):
             group.setExpanded(True)
+            group.setItemVisibilityChecked(True)
 
         self.builder._collapse_layer_tree_groups(main_group)
 
@@ -131,6 +132,7 @@ class OlsLayerGroupingTests(unittest.TestCase):
             self.direct_group(cns_group, "Radio Link"),
         ]
         self.assertTrue(all(not group.isExpanded() for group in groups))
+        self.assertTrue(all(not group.itemVisibilityChecked() for group in groups))
 
 
 if __name__ == "__main__":
