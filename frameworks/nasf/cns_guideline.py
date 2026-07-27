@@ -103,29 +103,13 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             facility_group = self._cns_element_group(
                 layer_group,
                 facility_type,
-                facility_id,
             )
 
             for surface_spec in bra_specs_list:
                 try:
                     surface_name = surface_spec.get("SurfaceName", "Unkn")
                     shape_type = surface_spec.get("shape", "Unkn").upper()
-                    type_parts = facility_type.split("(")
-                    fac_acronym = ""
-                    if len(type_parts) > 1 and type_parts[1].strip().endswith(")"):
-                        fac_acronym = type_parts[1].strip()[:-1].strip()
-                    else:
-                        predefined_acronyms = {
-                            "NON-DIRECTIONAL BEACON": "NDB",
-                            "VHF OMNI-DIRECTIONAL RANGE": "VOR",
-                            "DISTANCE MEASURING EQUIPMENT": "DME",
-                            "PRIMARY SURVEILLANCE RADAR": "PSR",
-                            "SECONDARY SURVEILLANCE RADAR": "SSR",
-                            "GROUND BASED AUGMENTATION SYSTEM": "GBAS",
-                        }
-                        fac_acronym = predefined_acronyms.get(facility_type.upper(), facility_type.split(" ")[0])
-                    facility_label = surface_spec.get("FacilityLabel") or fac_acronym or facility_type
-                    layer_display_name = f"{facility_label} {surface_name}"
+                    layer_display_name = surface_name
                     fac_identifier = facility_id if facility_id != "N/A" else facility_type.replace(" ", "_")[:10]
                     internal_name_base = f"G_CNS_{icao_code}_{fac_identifier}_{surface_name.replace(' ', '_')}"
                     internal_name_base = "".join(c if c.isalnum() else "_" for c in internal_name_base)
@@ -218,14 +202,11 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
     def _cns_element_group(
         parent_group: Optional[QgsLayerTreeGroup],
         element_type: Any,
-        identifier: Any,
     ) -> Optional[QgsLayerTreeGroup]:
-        """Return a child group that keeps one CNS element's layers together."""
+        """Return the child group named from a CNS element's ``factype``."""
         if parent_group is None:
             return None
-        element_type = str(element_type or "CNS Element").strip()
-        identifier = str(identifier or "").strip()
-        group_name = f"{identifier} - {element_type}" if identifier and identifier != "N/A" else element_type
+        group_name = str(element_type or "CNS Element").strip()
         for child in parent_group.children():
             if isinstance(child, QgsLayerTreeGroup) and child.name() == group_name:
                 return child
@@ -296,11 +277,11 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     ]
                 )
                 safe_link_id = "".join(char if char.isalnum() else "_" for char in link_id)
-                element_group = self._cns_element_group(layer_group, "Radio Link", link_id)
+                element_group = self._cns_element_group(layer_group, "Radio Link")
                 layer = self._create_and_add_layer(
                     "Polygon",
                     f"G_CNS_{icao_code}_Radio_Link_{safe_link_id}_Zone_A",
-                    f"Radio Link {link_id} Zone A",
+                    RADIO_LINK_POLICY["SurfaceName"],
                     fields,
                     [feature],
                     element_group,
@@ -391,7 +372,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     ("Zone A", zone_a, "CORRIDOR", policy["LineOfSightWidth_m"], policy["ZoneACondition"]),
                     ("Zone B", zone_b, "CIRCLE", policy["ZoneBRadius_m"], policy["ZoneBCondition"]),
                 )
-                element_group = self._cns_element_group(layer_group, monitor_label, link_id)
+                element_group = self._cns_element_group(layer_group, monitor_label)
                 for surface_name, geometry, shape, outer_radius, condition in zone_definitions:
                     feature = QgsFeature(fields)
                     feature.setGeometry(geometry)
@@ -422,7 +403,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     layer = self._create_and_add_layer(
                         "Polygon",
                         f"G_CNS_{icao_code}_{safe_monitor_type}_{safe_link_id}_{surface_name.replace(' ', '_')}",
-                        f"{monitor_label} {link_id} {surface_name}",
+                        surface_name,
                         fields,
                         [feature],
                         element_group,

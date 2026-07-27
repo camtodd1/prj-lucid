@@ -106,10 +106,14 @@ class CnsGuidelineQgisTests(unittest.TestCase):
         self.assertEqual(len(element_groups), 1)
         self.assertEqual(
             element_groups[0].name(),
-            "CNS-01 - Satellite Ground Station (SGS)",
+            "Satellite Ground Station (SGS)",
         )
         self.assertTrue(
             all(layer["layer_group"] is element_groups[0] for layer in harness.created_layers)
+        )
+        self.assertEqual(
+            {layer["display_name"] for layer in harness.created_layers},
+            {"Zone A", "Zone B", "Area of Interest"},
         )
 
     def test_high_frequency_transmit_generates_overlapping_surfaces_and_contours(self):
@@ -202,8 +206,9 @@ class CnsGuidelineQgisTests(unittest.TestCase):
 
         self.assertEqual(len(harness.created_layers), 1)
         layer = harness.created_layers[0]
-        self.assertEqual(layer["layer_group"].name(), "RL-01 - Radio Link")
+        self.assertEqual(layer["layer_group"].name(), "Radio Link")
         self.assertIs(layer["layer_group"].parent(), cns_group)
+        self.assertEqual(layer["display_name"], "Zone A")
         feature = layer["features"][0]
         self.assertEqual(layer["geometry_type"], "Polygon")
         self.assertEqual(feature.attribute("link_id"), "RL-01")
