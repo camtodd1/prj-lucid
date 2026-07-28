@@ -22,6 +22,8 @@ sys.path.insert(0, str(WORKSPACE.parent))
 from safeguarding_builder.core.osm_aeroway import (
     AEROWAY_RADIUS_M,
     OVERPASS_ENDPOINTS,
+    OVERPASS_QUERY_TIMEOUT_S,
+    OVERPASS_TRANSFER_TIMEOUT_MS,
     apply_aeroway_style,
     build_aeroway_query,
     fetch_aeroway_osm,
@@ -48,6 +50,9 @@ class OsmAerowayTests(unittest.TestCase):
         query = build_aeroway_query(-33.9461, 151.1772)
 
         self.assertEqual(AEROWAY_RADIUS_M, 5_000)
+        self.assertEqual(OVERPASS_QUERY_TIMEOUT_S, 15)
+        self.assertEqual(OVERPASS_TRANSFER_TIMEOUT_MS, 20_000)
+        self.assertTrue(query.startswith("[out:xml][timeout:15];"))
         self.assertIn('node["aeroway"](around:5000,-33.9461000,151.1772000)', query)
         self.assertIn('way["aeroway"](around:5000,-33.9461000,151.1772000)', query)
         self.assertIn(

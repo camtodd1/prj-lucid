@@ -30,6 +30,8 @@ OVERPASS_ENDPOINTS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
+OVERPASS_QUERY_TIMEOUT_S = 15
+OVERPASS_TRANSFER_TIMEOUT_MS = 20_000
 AEROWAY_RADIUS_M = 5_000
 OSM_SUBLAYERS = (
     ("points", "points"),
@@ -455,7 +457,7 @@ def build_aeroway_query(latitude: float, longitude: float) -> str:
 
     around = f"around:{AEROWAY_RADIUS_M},{latitude:.7f},{longitude:.7f}"
     return (
-        "[out:xml][timeout:45];\n"
+        f"[out:xml][timeout:{OVERPASS_QUERY_TIMEOUT_S}];\n"
         "(\n"
         f'  node["aeroway"]({around});\n'
         f'  way["aeroway"]({around});\n'
@@ -470,7 +472,7 @@ def _post_overpass(endpoint: str, payload: QByteArray) -> bytes:
     """Post one query to an Overpass endpoint and validate its OSM response."""
     request = QNetworkRequest(QUrl(endpoint))
     if hasattr(request, "setTransferTimeout"):
-        request.setTransferTimeout(50_000)
+        request.setTransferTimeout(OVERPASS_TRANSFER_TIMEOUT_MS)
     known_headers = getattr(QNetworkRequest, "KnownHeaders", QNetworkRequest)
     request.setHeader(
         known_headers.ContentTypeHeader,
