@@ -2,7 +2,7 @@
 
 **Status:** Roadmap
 
-**Last reviewed:** 27 July 2026
+**Last reviewed:** 28 July 2026
 
 This file is the single project documentation backlog. It lists incomplete
 work only; completed implementation history belongs in Git and regression
@@ -33,6 +33,8 @@ fixtures.
 
 ## Rulesets and Frameworks
 
+- [ ] Add a ruleset for Airspace Act changes, including the distinction between
+  Commonwealth-leased airports and non-Commonwealth airports.
 - [ ] Complete the remaining EASA CS-ADR-DSN Issue 7 scope: pavement/shoulder
   decision-tree coverage, parallel-runway separation, and controlling-envelope
   evidence. Chapter H/J airport-wide OLS and Category II/III OFZ are supported;
@@ -59,3 +61,10 @@ fixtures.
 - [ ] Add an aircraft-characteristics registry and design-aircraft nomination.
 - [ ] Implement NASF Guideline A aircraft-noise generation.
 - [ ] Implement NASF Guideline H helicopter-site generation.
+
+## Data and Workflow Integration
+
+- [ ] Integrate a digital elevation model (DEM).
+- [ ] Explore an agentic workflow outside QGIS that auto-populates airport
+  input files from verified sources such as the AIP. Consider delivering this
+  as an external client rather than as part of the plugin.

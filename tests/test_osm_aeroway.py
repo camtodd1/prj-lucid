@@ -8,6 +8,8 @@ from qgis.PyQt import QtCore, QtWidgets
 from qgis.core import (
     QgsApplication,
     QgsCoordinateReferenceSystem,
+    QgsFeature,
+    QgsGeometry,
     QgsProject,
     QgsVectorLayer,
 )
@@ -144,6 +146,42 @@ class OsmAerowayTests(unittest.TestCase):
                 self.assertTrue(settings.scaleVisibility)
                 self.assertEqual(settings.minimumScale, 3_000)
                 self.assertEqual(settings.maximumScale, 1)
+                if category == "taxiway":
+                    self.assertFalse(settings.lineSettings().mergeLines())
+
+    def test_taxiway_segments_render_as_one_network_without_merging_features(self):
+        layer = QgsVectorLayer(
+            "LineString?crs=EPSG:3857&field=ref:string",
+            "taxiway",
+            "memory",
+        )
+        features = []
+        for ref, wkt in (
+            ("A", "LINESTRING (0 0, 10 0)"),
+            ("B", "LINESTRING (10 0, 20 5)"),
+        ):
+            feature = QgsFeature(layer.fields())
+            feature["ref"] = ref
+            feature.setGeometry(QgsGeometry.fromWkt(wkt))
+            features.append(feature)
+        layer.dataProvider().addFeatures(features)
+        apply_aeroway_style(layer, "taxiway")
+
+        renderer = layer.renderer()
+        symbol = renderer.symbol()
+        self.assertTrue(renderer.usingSymbolLevels())
+        self.assertEqual(symbol.symbolLayer(0).renderingPass(), 0)
+        self.assertEqual(symbol.symbolLayer(1).renderingPass(), 1)
+        for symbol_layer in (symbol.symbolLayer(0), symbol.symbolLayer(1)):
+            self.assertEqual(
+                symbol_layer.penCapStyle(),
+                QtCore.Qt.PenCapStyle.RoundCap,
+            )
+            self.assertEqual(
+                symbol_layer.penJoinStyle(),
+                QtCore.Qt.PenJoinStyle.RoundJoin,
+            )
+        self.assertEqual(layer.featureCount(), 2)
 
     def test_dialog_uses_plain_airport_setup_labels(self):
         dialog = SafeguardingBuilderDialog()

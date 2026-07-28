@@ -59,6 +59,30 @@
       "project_crs": "EPSG:28356"
     },
     {
+      "file": "ygth_2rwy_intersecting.json",
+      "description": "Source-backed Griffith Airport intersecting runways",
+      "icao_code": "YGTH",
+      "runway_count": 2,
+      "runway_configuration": "intersecting",
+      "project_crs": "EPSG:28355",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "performance_baseline_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "ystw_4rwy_mixed.json",
+      "description": "Source-backed Tamworth Airport mixed four-runway layout",
+      "icao_code": "YSTW",
+      "runway_count": 4,
+      "runway_configuration": "mixed",
+      "project_crs": "EPSG:28356",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "performance_baseline_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
       "file": "ybcp_1rwy_single_curved.json",
       "description": "CAP168 single runway with a nominated curved approach track",
       "icao_code": "YBCP",

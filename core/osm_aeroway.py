@@ -145,6 +145,9 @@ AEROWAY_STYLES = {
         "center_color": "#F2C230",
         "center_width": "0.28",
         "center_style": "solid",
+        "capstyle": "round",
+        "joinstyle": "round",
+        "symbol_levels": True,
         "fill": "#858E97",
         "outline": "#626A71",
         "opacity": "0.90",
@@ -170,6 +173,9 @@ DEFAULT_AEROWAY_STYLE = {
     "size": "2.2",
     "width": "0.8",
     "line_style": "solid",
+    "capstyle": "square",
+    "joinstyle": "bevel",
+    "symbol_levels": False,
     "opacity": "0.72",
 }
 
@@ -233,6 +239,7 @@ AEROWAY_LABEL_STYLES = {
         "fields": ("ref", "name"),
         "size": 8.0,
         "color": "#303840",
+        "merge_lines": False,
     },
     "parking_position": {
         "fields": ("ref", "name"),
@@ -337,7 +344,9 @@ def _apply_aeroway_labels(layer: QgsVectorLayer, category: str) -> None:
         try:
             line_settings = settings.lineSettings()
             if hasattr(line_settings, "setMergeLines"):
-                line_settings.setMergeLines(True)
+                line_settings.setMergeLines(
+                    bool(label_style.get("merge_lines", True))
+                )
             if hasattr(settings, "labelPerPart"):
                 settings.labelPerPart = False
         except Exception:
@@ -384,6 +393,8 @@ def apply_aeroway_style(layer: QgsVectorLayer, category: str) -> None:
                 "color": style["line_color"],
                 "width": style["width"],
                 "line_style": style["line_style"],
+                "capstyle": style["capstyle"],
+                "joinstyle": style["joinstyle"],
             }
         )
         center_color = style.get("center_color")
@@ -393,9 +404,14 @@ def apply_aeroway_style(layer: QgsVectorLayer, category: str) -> None:
                     "color": center_color,
                     "width": style["center_width"],
                     "line_style": style["center_style"],
+                    "capstyle": style["capstyle"],
+                    "joinstyle": style["joinstyle"],
                 }
             )
             if center_line is not None:
+                if style["symbol_levels"]:
+                    symbol.symbolLayer(0).setRenderingPass(0)
+                    center_line.setRenderingPass(1)
                 symbol.appendSymbolLayer(center_line)
     elif geometry_type == QgsWkbTypes.PolygonGeometry:
         symbol = QgsFillSymbol.createSimple(
@@ -411,7 +427,10 @@ def apply_aeroway_style(layer: QgsVectorLayer, category: str) -> None:
         return
 
     if symbol is not None:
-        layer.setRenderer(QgsSingleSymbolRenderer(symbol))
+        renderer = QgsSingleSymbolRenderer(symbol)
+        if style["symbol_levels"]:
+            renderer.setUsingSymbolLevels(True)
+        layer.setRenderer(renderer)
     minimum_scale = AEROWAY_MINIMUM_SCALES.get(category)
     if minimum_scale is not None:
         layer.setScaleBasedVisibility(True)

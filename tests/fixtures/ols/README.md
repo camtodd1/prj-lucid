@@ -15,6 +15,10 @@ or test-intensity label. A three-runway mixed layout is therefore simply
 - `ymml_2rwy_intersecting.json`: intersecting YMML runways with prominent
   Approach/TOCS-to-Conical equality arcs in EPSG:32755.
 - `yssy_3rwy_mixed.json`: three mixed runways.
+- `ygth_2rwy_intersecting.json`: source-backed Griffith Airport layout in
+  EPSG:28355, including current ERSA declared distances.
+- `ystw_4rwy_mixed.json`: source-backed Tamworth Airport layout in EPSG:28356,
+  including its parallel and crosswind runways and displaced RWY 18 threshold.
 - `ybas_1rwy_single.json`: current Annex 14 non-instrument code 1
   runway and airport-wide OLS.
 - `ybai_2rwy_intersecting.json`: current Annex 14 intersecting mixed-code
