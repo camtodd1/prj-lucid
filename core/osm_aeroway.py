@@ -141,10 +141,11 @@ AEROWAY_STYLES = {
     },
     "taxiway": {
         "line_color": "#7C858E",
-        "width": "1.8",
+        "width": "15.0",
         "center_color": "#F2C230",
-        "center_width": "0.28",
+        "center_width": "0.45",
         "center_style": "solid",
+        "width_unit": "MapUnit",
         "capstyle": "round",
         "joinstyle": "round",
         "symbol_levels": True,
@@ -172,6 +173,7 @@ DEFAULT_AEROWAY_STYLE = {
     "shape": "circle",
     "size": "2.2",
     "width": "0.8",
+    "width_unit": "MM",
     "line_style": "solid",
     "capstyle": "square",
     "joinstyle": "bevel",
@@ -392,6 +394,7 @@ def apply_aeroway_style(layer: QgsVectorLayer, category: str) -> None:
             {
                 "color": style["line_color"],
                 "width": style["width"],
+                "line_width_unit": style["width_unit"],
                 "line_style": style["line_style"],
                 "capstyle": style["capstyle"],
                 "joinstyle": style["joinstyle"],
@@ -403,6 +406,7 @@ def apply_aeroway_style(layer: QgsVectorLayer, category: str) -> None:
                 {
                     "color": center_color,
                     "width": style["center_width"],
+                    "line_width_unit": style["width_unit"],
                     "line_style": style["center_style"],
                     "capstyle": style["capstyle"],
                     "joinstyle": style["joinstyle"],

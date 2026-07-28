@@ -12,6 +12,7 @@ from qgis.core import (
     QgsGeometry,
     QgsProject,
     QgsVectorLayer,
+    Qgis,
 )
 
 
@@ -172,7 +173,13 @@ class OsmAerowayTests(unittest.TestCase):
         self.assertTrue(renderer.usingSymbolLevels())
         self.assertEqual(symbol.symbolLayer(0).renderingPass(), 0)
         self.assertEqual(symbol.symbolLayer(1).renderingPass(), 1)
+        self.assertEqual(symbol.symbolLayer(0).width(), 15.0)
+        self.assertEqual(symbol.symbolLayer(1).width(), 0.45)
         for symbol_layer in (symbol.symbolLayer(0), symbol.symbolLayer(1)):
+            self.assertEqual(
+                symbol_layer.widthUnit(),
+                Qgis.RenderUnit.MapUnits,
+            )
             self.assertEqual(
                 symbol_layer.penCapStyle(),
                 QtCore.Qt.PenCapStyle.RoundCap,
@@ -441,7 +448,7 @@ class OsmAerowayTests(unittest.TestCase):
         )
         self.assertAlmostEqual(
             layers_by_name["Taxiways"].renderer().symbol().width(),
-            1.8,
+            15.0,
         )
         taxiway_symbol = layers_by_name["Taxiways"].renderer().symbol()
         self.assertEqual(taxiway_symbol.symbolLayerCount(), 2)
@@ -451,7 +458,7 @@ class OsmAerowayTests(unittest.TestCase):
         )
         self.assertAlmostEqual(
             taxiway_symbol.symbolLayer(1).width(),
-            0.28,
+            0.45,
         )
         navigation_renderer = layers_by_name["Navigation Aids"].renderer()
         self.assertEqual(navigation_renderer.type(), "categorizedSymbol")
