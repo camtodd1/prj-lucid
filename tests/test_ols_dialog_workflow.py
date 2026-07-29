@@ -497,6 +497,72 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertTrue(normalized["review_required"])
         self.assertTrue(any("specific/curved OES" in error for error in errors))
 
+    def test_modernised_annex14_requires_a_standard_oes_operation(self):
+        config = {
+            "confirmed": True,
+            "strip": {
+                "source": "manual",
+                "overall_width_m": 150,
+                "end_extension_m": 60,
+            },
+            "primary_end": {"operations": {}},
+            "reciprocal_end": {"operations": {}},
+        }
+
+        normalized, errors = self.dialog._validate_annex14_modernised_config(
+            1,
+            config,
+            {
+                "type1": "Non-Instrument",
+                "type2": "Non-Instrument",
+                "threshold_elev_1": "10",
+                "threshold_elev_2": "11",
+            },
+        )
+
+        self.assertTrue(normalized["review_required"])
+        self.assertTrue(any("At least one standard" in error for error in errors))
+
+    def test_modernised_horizontal_oes_requires_aerodrome_elevation(self):
+        config = {
+            "confirmed": True,
+            "strip": {
+                "source": "manual",
+                "overall_width_m": 140,
+                "end_extension_m": 60,
+            },
+            "primary_end": {
+                "operations": {
+                    "straight_in_non_precision_instrument": True,
+                },
+            },
+            "reciprocal_end": {"operations": {}},
+        }
+        runway = {
+            "type1": "Non-Precision Approach",
+            "type2": "Non-Instrument",
+            "threshold_elev_1": "10",
+            "threshold_elev_2": "11",
+        }
+
+        normalized, errors = self.dialog._validate_annex14_modernised_config(
+            1,
+            config,
+            runway,
+        )
+
+        self.assertTrue(normalized["review_required"])
+        self.assertTrue(any("Aerodrome elevation" in error for error in errors))
+
+        normalized, errors = self.dialog._validate_annex14_modernised_config(
+            1,
+            config,
+            runway,
+            aerodrome_elevation_m=12.0,
+        )
+        self.assertFalse(normalized["review_required"])
+        self.assertEqual(errors, [])
+
     def test_legacy_runway_elevations_are_normalized_at_load_boundary(self):
         legacy = {"thr_elev_1": "0", "thr_elev_2": "12.5"}
 

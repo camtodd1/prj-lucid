@@ -2414,6 +2414,24 @@ class Annex14GeometryMixin:
                 "runway-axis buffer: threshold-centred arcs joined tangentially",
             )
 
+        if not oes_features:
+            selected_operations = sorted(
+                {
+                    operation
+                    for end in end_configs
+                    for operation, enabled in (end.get("operations") or {}).items()
+                    if enabled
+                }
+            )
+            detail = ", ".join(selected_operations) if selected_operations else "none"
+            QgsMessageLog.logMessage(
+                f"Annex 14 OES skipped for {runway_name}: no standard OES geometry "
+                f"was created; selected operations={detail}; "
+                f"aerodrome_elevation_m={aerodrome_elev!r}.",
+                PLUGIN_TAG,
+                Qgis.Warning,
+            )
+
         ofs_contour_features = self._annex14_consolidate_transition_contours(ofs_contour_features)
         oes_contour_features = self._annex14_consolidate_transition_contours(oes_contour_features)
         self._annex14_register_controlling_contours(ofs_contour_features)
