@@ -74,6 +74,19 @@ def _runway_scenario(value: object, runway_count: Optional[int]) -> str:
     return scenario
 
 
+def _scenario_slice(runway_count: Optional[int], runway_configuration: str) -> str:
+    """Return the dashboard's high-level runway-layout category."""
+    if runway_count is None or not runway_configuration:
+        return "Not recorded"
+    if runway_count == 1:
+        return "Single Runway"
+    if runway_count == 2:
+        return "Dual Parallel" if runway_configuration == "parallel" else "Dual Intersecting"
+    if runway_configuration == "intersecting":
+        return "Mixed Intersecting"
+    return "Mixed Parallel"
+
+
 def _bool(value: object) -> Optional[bool]:
     text = str(value or "").strip().lower()
     if text in {"true", "1", "yes"}:
@@ -214,6 +227,10 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
                 "runwayCount": runway_count,
                 "runwayCountLabel": str(runway_count) if runway_count is not None else "Not recorded",
                 "scenario": runway_configuration.title() if runway_configuration else "Not recorded",
+                "scenarioSlice": _scenario_slice(
+                    runway_count,
+                    runway_configuration,
+                ),
                 "builtTo": _ruleset_name(design_id, _field(row, "design_ruleset_label")),
                 "primaryOls": primary,
                 "comparedWith": comparison,
@@ -313,7 +330,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     .button:hover { border-color: var(--blue); }
     .panel { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: var(--shadow); }
     .panel-pad { padding: 16px; }
-    .filters { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 10px; }
+    .filters { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 10px; }
     .advanced-filters { margin-top: 12px; }
     .advanced-filters summary { cursor: pointer; color: var(--ink); font-size: 12px; font-weight: 650; }
     .advanced-filters .filters { grid-template-columns: repeat(6, minmax(125px, 1fr)); margin-top: 10px; }
@@ -391,6 +408,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     <section class="panel panel-pad" aria-label="Dashboard filters">
       <div class="filters">
+        <div class="filter"><label for="filterScenarioSlice">Scenario</label><select id="filterScenarioSlice" data-field="scenarioSlice"></select></div>
         <div class="filter"><label for="filterTestCase">Test case</label><select id="filterTestCase" data-field="testCase"></select></div>
         <div class="filter"><label for="filterOlsSelection">OLS selection</label><select id="filterOlsSelection" data-field="olsSelection"></select></div>
         <div class="filter"><label for="filterRunBy">Run by</label><select id="filterRunBy" data-field="runBy"></select></div>
@@ -400,7 +418,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         <div class="filters">
           <div class="filter"><label for="filterAirport">Airport</label><select id="filterAirport" data-field="airport"></select></div>
           <div class="filter"><label for="filterRunways">Runways</label><select id="filterRunways" data-field="runwayCountLabel"></select></div>
-          <div class="filter"><label for="filterScenario">Scenario</label><select id="filterScenario" data-field="scenario"></select></div>
+          <div class="filter"><label for="filterScenario">Recorded layout</label><select id="filterScenario" data-field="scenario"></select></div>
           <div class="filter"><label for="filterBuiltTo">Built to</label><select id="filterBuiltTo" data-field="builtTo"></select></div>
           <div class="filter"><label for="filterPrimary">Primary OLS</label><select id="filterPrimary" data-field="primaryOls"></select></div>
           <div class="filter"><label for="filterComparison">Compared with</label><select id="filterComparison" data-field="comparedWith"></select></div>
@@ -464,8 +482,9 @@ HTML_TEMPLATE = r"""<!doctype html>
     const allRuns = JSON.parse(document.getElementById('runData').textContent);
     const filterElements = [...document.querySelectorAll('select[data-field]')];
     const groupOptions = [
-      ['testCase', 'Test case'], ['airport', 'Airport'], ['runwayCountLabel', 'Runways'],
-      ['scenario', 'Scenario'], ['builtTo', 'Built to'], ['primaryOls', 'Primary OLS'],
+      ['scenarioSlice', 'Scenario'], ['testCase', 'Test case'], ['airport', 'Airport'],
+      ['runwayCountLabel', 'Runways'], ['scenario', 'Recorded layout'],
+      ['builtTo', 'Built to'], ['primaryOls', 'Primary OLS'],
       ['comparedWith', 'Compared with'], ['runBy', 'Run by'], ['commit', 'Commit']
     ];
     const groupPrimary = document.getElementById('groupPrimary');

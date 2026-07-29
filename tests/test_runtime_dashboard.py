@@ -72,6 +72,7 @@ class RuntimeDashboardTests(unittest.TestCase):
         self.assertEqual(run["testCase"], "YTEST 2Rwy Parallel")
         self.assertEqual(run["runwayCount"], 2)
         self.assertEqual(run["scenario"], "Parallel")
+        self.assertEqual(run["scenarioSlice"], "Dual Parallel")
         self.assertEqual(run["runBy"], "Codex")
         self.assertTrue(run["exactSetupRecorded"])
         self.assertIn("MOS139", run["primaryOls"])
@@ -86,6 +87,7 @@ class RuntimeDashboardTests(unittest.TestCase):
         )
         for control in (
             "filterTestCase",
+            "filterScenarioSlice",
             "filterOlsSelection",
             "filterAirport",
             "filterRunways",
@@ -134,6 +136,35 @@ class RuntimeDashboardTests(unittest.TestCase):
         self.assertEqual(
             run["comparedWith"],
             "ICAO Annex 14 Vol I - Modernised OLS",
+        )
+
+    def test_top_level_scenario_slice_distinguishes_dual_and_mixed_layouts(self):
+        cases = (
+            ("2", "parallel", "Dual Parallel"),
+            ("2", "intersecting", "Dual Intersecting"),
+            ("3", "mixed", "Mixed Parallel"),
+            ("3", "intersecting", "Mixed Intersecting"),
+        )
+        rows = [
+            {
+                "timestamp_utc": f"2026-01-0{index}T00:00:00Z",
+                "status": "completed",
+                "airport": f"YTE{index}T",
+                "commit_ref": f"scenario{index}",
+                "elapsed_seconds": "30",
+                "runway_count": count,
+                "runway_configuration": layout,
+            }
+            for index, (count, layout, _) in enumerate(cases, start=1)
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "runs.tsv"
+            _write_ledger(ledger, rows)
+            runs = load_runs(ledger)
+
+        self.assertEqual(
+            [run["scenarioSlice"] for run in runs],
+            [expected for _, _, expected in cases],
         )
 
     def test_legacy_rows_are_not_mislabelled_as_known_scenarios(self):
