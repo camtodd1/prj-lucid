@@ -38,6 +38,25 @@ class OlsLayerGroupingTests(unittest.TestCase):
         self.assertIs(runway_group.parent(), ofz_group)
         self.assertIsNone(self.direct_group(runway_group, "Obstacle Free Zone"))
 
+    def test_primary_surface_layers_share_the_runway_group_without_wrappers(self):
+        primary_group = QgsLayerTreeGroup("Primary Surfaces")
+
+        approach_group = self.builder._ols_runway_surface_group(
+            primary_group,
+            "01L",
+            "Approach",
+        )
+        takeoff_group = self.builder._ols_runway_surface_group(
+            primary_group,
+            "01L",
+            "Take-off Climb",
+        )
+
+        self.assertIs(approach_group, takeoff_group)
+        self.assertEqual(approach_group.name(), "RWY 01L")
+        self.assertIsNone(self.direct_group(approach_group, "Approach"))
+        self.assertIsNone(self.direct_group(approach_group, "Take-off Climb"))
+
     def test_surface_layer_names_use_one_shared_schema(self):
         self.assertEqual(
             self.builder._surface_layer_display_name(

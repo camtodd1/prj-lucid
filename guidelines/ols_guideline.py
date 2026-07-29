@@ -3538,8 +3538,8 @@ class OlsGuidelineMixin:
         end_desig: str,
         surface_group_name: str,
     ) -> QgsLayerTreeGroup:
-        runway_group = self._ols_child_group(parent_group, f"RWY {end_desig}")
-        return self._ols_child_group(runway_group, surface_group_name)
+        """Return the runway branch shared by its surface and contour layers."""
+        return self._ols_runway_group(parent_group, end_desig)
 
     def _ols_runway_group(
         self,
