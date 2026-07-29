@@ -54,7 +54,8 @@ MODERNISED_ASSUMPTIONS = (
     "ARC letter F automatically applies the Code F case without qualifying "
     "digital go-around guidance.",
     "The modernised OFS strip is resolved automatically from the selected "
-    "aerodrome design ruleset.",
+    "aerodrome design ruleset and is held identical across both sides of an "
+    "OLS comparison.",
     "Blank approach-slope and obstacle-clearance-height adjustments use the "
     "unadjusted standard table dimensions.",
     "The ADG horizontal OES is included by default, independently of whether "

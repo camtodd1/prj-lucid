@@ -46,6 +46,13 @@ sign of gain and loss outputs. Conventional OLS rulesets share one comparison
 family. When modernised ICAO Annex 14 is on either side, the conventional OLS
 envelope is compared independently with the Annex 14 OFS and OES families.
 
+Both envelopes use one physical runway strip resolved from the selected
+aerodrome design ruleset. An OLS ruleset cannot substitute its own strip width
+or end extension during comparison construction. The generated surface
+provenance records the strip source, design-ruleset identifier, dimensions, and
+governing runway classification. This holds the aerodrome design input constant
+so reported gain or loss represents the protected-airspace rule change.
+
 The established **OLS modernisation comparison** is the pairing of an existing
 OLS baseline with the modernised ICAO Annex 14 OFS/OES model applicable from
 21 November 2030. For this pairing:
@@ -123,10 +130,6 @@ and finalized controller-pair polygons used by the comparison. Affine candidate
 pairs use exact isolines; curved pairs use a clipped triangulated approximation.
 When an affine isoline lands on a controller transition, a 0.01 m clipping retry
 rejoins fragments caused solely by small boundary-coordinate residuals.
-Curved comparison contours can still appear patchy or truncated where a
-conical baseline meets a controller transition or horizontal plane. This is a
-known limitation tracked under
-[Protected Airspace in the roadmap](roadmap.md#protected-airspace).
 The zero contour is omitted because it is already represented by the separate
 equal-height transition layer, and only primary contours are labelled to limit
 map clutter. Each contour has a unique `comparison_id`, its
@@ -198,48 +201,31 @@ The comparison requires:
 - different baseline and comparison rulesets, unless baseline-only is selected;
 - an available controlling-envelope capability for each selected ruleset;
 - an Aeroplane Design Group for every runway used by future Annex 14 generation;
-- complete runway operational and elevation inputs needed by both rulesets.
+- runway type, take-off availability, runway-end elevations, and applicable
+  declared-distance inputs.
+
+Modernised operation applicability is not entered separately. Approaches are
+assumed aligned and straight-in; standard approach OES is selected from the
+runway-end type, departure/take-off OES from take-off availability, the
+above-5,700 kg take-off case is used, and Code F uses the conservative
+no-qualifying-digital-guidance adjustment. Standard unadjusted slope/OCH table
+dimensions are used. Horizontal OES is included by default. Curved, offset, and
+other specific OES remain outside the supported automatic workflow.
 
 Saved inputs now persist `baseline_ols_ruleset` and
 `comparison_ols_ruleset`. The earlier `protected_airspace_policy` values are
 still loaded and mapped onto the equivalent selector pair.
 
-## Stability checkpoint — 11 July 2026
+## Maintained regression checkpoint
 
-The calculation and output workflow is considered mostly stable for continued
-product work. The current regression matrix contains:
+The maintained comparison matrix covers:
 
 - YBBN single-runway;
+- YMML intersecting-runway;
 - YSSY dual intersecting;
 - YSWS dual parallel; and
 - YSSY three-runway mixed inputs.
 
-The QGIS 4.0.2 end-to-end runner validates geometry, candidate and controlling
-coverage, comparison-domain coverage, mutually exclusive change classes,
-comparison IDs, and staged runtime. The 11 July run passed all four cases with
-no invalid or empty geometry and no duplicate comparison IDs. The accompanying
-unit suite passed 110 tests.
-
-Remaining work is primarily productisation rather than a calculation rewrite:
-OLS-tab clarity, phase-based progress/cancellation, release performance gates,
-regulatory-scope documentation, and the promoted-versus-diagnostic layer
-contract.
-
-## Comparison-refactor baseline — 22 July 2026
-
-The invariant-audit slice established a one-run QGIS 4.0 checkpoint before the
-comparison repair pipeline is consolidated. Counts are gain/loss/no-change/
-transition; boundary components measure the complete gain/loss adjacency and
-zero components measure the verified published zero contour.
-
-| Fixture/family | Runtime | Features | Common domain | Unclassified | Boundary/zero components | Recovery parts | Invariants |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
-| YBBN/OFS | 17.93 s fixture | 25/0/0/0 | 8,981,676.99 m2 | 0.0002 m2 | 0/0 | 4 | pass |
-| YBBN/OES | 17.93 s fixture | 33/59/2/12 | 471,236,515.02 m2 | 716.4341 m2 | 475/30 | 26 | fail: coverage and transition adjacency |
-| YMML/OFS | 25.60 s fixture | 73/15/0/8 | 18,172,243.18 m2 | 0.0022 m2 | 18/15 | 16 | fail: transition adjacency |
-| YMML/OES | 25.60 s fixture | 62/176/5/18 | 536,044,732.51 m2 | 0.0028 m2 | 1083/32 | 36 | fail: transition adjacency |
-
-All four partitions had zero material class overlap, zero height-sign
-violations, and zero invalid or empty comparison parts. The YBBN/OES coverage
-gap and transition lines that no longer coincide with final gain/loss adjacency
-are now explicit pre-refactor failures; they are not repaired by the audit.
+The automated gates validate geometry, candidate and controlling coverage,
+comparison-domain coverage, mutually exclusive change classes, deterministic
+comparison IDs, contours, transition adjacency, and recovery diagnostics.

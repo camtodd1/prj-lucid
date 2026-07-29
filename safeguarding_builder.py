@@ -298,20 +298,89 @@ class SafeguardingBuilder(
         """Return the ruleset profile used for protected airspace/OLS generation."""
         return getattr(self, "protected_airspace_ruleset", self.get_active_ruleset())
 
+    def _resolve_design_strip_parameters(
+        self,
+        runway_data: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        """Resolve the one physical strip shared by all compared OLS models."""
+
+        design_ruleset = self.get_active_ruleset()
+        try:
+            arc_number = int(runway_data.get("arc_num"))
+        except (TypeError, ValueError):
+            return {}
+        width_m = self._non_negative_float(runway_data.get("width"), 0.0)
+        classified_types = (
+            design_ruleset.classify_runway_type(runway_data.get("type1")),
+            design_ruleset.classify_runway_type(runway_data.get("type2")),
+        )
+        type_rank = {"NI": 0, "NPA": 1, "PA_I": 2, "PA_II_III": 3}
+        governing_type = max(
+            classified_types,
+            key=lambda value: type_rank.get(value, -1),
+        )
+        strip_parameters = design_ruleset.strip_parameters(
+            arc_number,
+            governing_type,
+            width_m or None,
+        ) or {}
+        resolved = dict(strip_parameters)
+        resolved.update(
+            {
+                "source": "design_ruleset",
+                "design_ruleset_id": design_ruleset.id,
+                "design_ruleset_label": design_ruleset.display_name,
+                "governing_runway_type": governing_type,
+            }
+        )
+        return resolved
+
+    def _apply_shared_design_strips(
+        self,
+        processed_runway_data_list: List[Dict[str, Any]],
+    ) -> None:
+        """Persist the design strip used by baseline and comparison geometry."""
+
+        for runway_data in processed_runway_data_list:
+            strip_parameters = self._resolve_design_strip_parameters(runway_data)
+            if (
+                strip_parameters.get("overall_width") is None
+                or strip_parameters.get("extension_length") is None
+            ):
+                continue
+            runway_data["calculated_strip_dims"] = dict(strip_parameters)
+            runway_data["_calculated_strip_ruleset_id"] = self.ruleset.id
+            runway_data["_shared_design_strip_dims"] = dict(strip_parameters)
+
+            modernised = runway_data.get("annex14_modernised")
+            if isinstance(modernised, dict):
+                strip = dict(modernised.get("strip") or {})
+                strip.update(
+                    {
+                        "source": "design_ruleset",
+                        "overall_width_m": strip_parameters["overall_width"],
+                        "end_extension_m": strip_parameters["extension_length"],
+                        "design_ruleset_id": self.ruleset.id,
+                        "design_ruleset_label": self.ruleset.display_name,
+                        "governing_runway_type": strip_parameters.get(
+                            "governing_runway_type"
+                        ),
+                    }
+                )
+                modernised["strip"] = strip
+
     def _build_ols_construction_context(
         self,
         ruleset,
         processed_runway_data_list: List[Dict[str, Any]],
         arp_point=None,
     ) -> OlsConstructionContext:
-        """Normalise runway inputs independently under one selected OLS ruleset."""
+        """Normalise OLS inputs while retaining the shared design-ruleset strip."""
 
         context_runways: List[OlsRunwayContext] = []
         for source_runway in processed_runway_data_list:
             runway_data = dict(source_runway)
             runway_data.pop("_effective_clearway_specs", None)
-            runway_data.pop("_calculated_strip_ruleset_id", None)
-            runway_data.pop("calculated_strip_dims", None)
             thr_point = runway_data.get("thr_point")
             rec_thr_point = runway_data.get("rec_thr_point")
             rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
@@ -334,24 +403,18 @@ class SafeguardingBuilder(
             width_m = self._non_negative_float(runway_data.get("width"), 0.0)
             classified_primary = ruleset.classify_runway_type(runway_data.get("type1"))
             classified_reciprocal = ruleset.classify_runway_type(runway_data.get("type2"))
-            type_rank = {"NI": 0, "NPA": 1, "PA_I": 2, "PA_II_III": 3}
-            strip_classification = classified_primary
-            if getattr(ruleset, "id", "") != "mos139_2019":
-                strip_classification = max(
-                    (classified_primary, classified_reciprocal),
-                    key=lambda value: type_rank.get(value, -1),
-                )
-            strip_parameters = ruleset.strip_parameters(
-                arc_number,
-                strip_classification,
-                width_m or None,
-            ) or {}
+            strip_parameters = dict(
+                runway_data.get("_shared_design_strip_dims")
+                or self._resolve_design_strip_parameters(runway_data)
+            )
             runway_data["calculated_strip_dims"] = strip_parameters
-            runway_data["_calculated_strip_ruleset_id"] = ruleset.id
+            runway_data["_calculated_strip_ruleset_id"] = self.ruleset.id
+            runway_data["_shared_design_strip_dims"] = dict(strip_parameters)
             clearway_specs = self._calculate_effective_clearway_specs(
                 runway_data,
                 physical_length,
                 ruleset=ruleset,
+                strip_parameters_override=strip_parameters,
             )
             declared_distances = self._calculate_declared_distances(runway_data, ruleset=ruleset)
             runway_data["declared_distances"] = declared_distances
@@ -458,6 +521,11 @@ class SafeguardingBuilder(
             arp_point=arp_point,
             arp_elevation_m=getattr(self, "arp_elevation_amsl", None),
             reference_elevation_datum_m=getattr(self, "reference_elevation_datum", None),
+            options={
+                "strip_input_policy": "shared_design_ruleset",
+                "design_ruleset_id": self.ruleset.id,
+                "design_ruleset_label": self.ruleset.display_name,
+            },
         )
 
     def _activate_ols_construction_context(self, ruleset, context: OlsConstructionContext) -> bool:
@@ -1683,6 +1751,7 @@ class SafeguardingBuilder(
             self.reference_elevation_datum = self._calculate_reference_elevation_datum(
                 self.arp_elevation_amsl, runway_input_list
             )
+            self._apply_shared_design_strips(processed_runway_data_list)
             self._ols_source_runways = processed_runway_data_list
             self._ols_arp_point = arp_point
             baseline_ols_context = self._build_ols_construction_context(
@@ -2349,6 +2418,7 @@ class SafeguardingBuilder(
         runway_data: Dict[str, Any],
         physical_length: Optional[float] = None,
         ruleset=None,
+        strip_parameters_override: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Dict[str, Any]]:
         """Return clearway specs under the explicitly selected ruleset."""
         cached_specs = runway_data.get("_effective_clearway_specs")
@@ -2377,11 +2447,13 @@ class SafeguardingBuilder(
             "PA_II_III",
         }
 
-        strip_dims = (
-            runway_data.get("calculated_strip_dims")
-            if runway_data.get("_calculated_strip_ruleset_id") in {None, ruleset_id}
-            else None
-        )
+        strip_dims = strip_parameters_override
+        if strip_dims is None:
+            strip_dims = (
+                runway_data.get("calculated_strip_dims")
+                if runway_data.get("_calculated_strip_ruleset_id") in {None, ruleset_id}
+                else None
+            )
         if not strip_dims:
             strip_dims = ruleset.strip_parameters(arc_num, type1_abbr, runway_width or None)
             runway_data["calculated_strip_dims"] = strip_dims

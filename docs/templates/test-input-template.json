@@ -6,6 +6,7 @@
             "Keep runway_configuration consistent with the runway count and geometry.",
             "Use coordinates in one projected CRS with metre units; record that CRS in manifest_case.project_crs.",
             "Use metres AMSL for elevations and metres for distances.",
+            "Modernised Annex 14 strip dimensions and standard straight-in operations are derived automatically; do not add operation-specific configuration.",
             "Set cns_facilities or agl_options.approach_lighting to an empty array when none are sourced.",
             "Retain official source URLs, publication dates, and any assumptions in source_references."
         ],
@@ -185,40 +186,7 @@
             "takeoff_track_wkt_2": "",
             "annex14_modernised": {
                 "schema_version": 1,
-                "confirmed": false,
-                "review_required": true,
-                "strip": {
-                    "source": "design_standard_prefill",
-                    "overall_width_m": "REPLACE_CONFIRMED_STRIP_WIDTH_M",
-                    "end_extension_m": "REPLACE_CONFIRMED_STRIP_END_EXTENSION_M"
-                },
-                "code_f_without_digital_go_around_avionics": false,
-                "primary_end": {
-                    "operations": {
-                        "circling_or_visual_circuit": false,
-                        "straight_in_non_precision_instrument": false,
-                        "precision_approach": false,
-                        "instrument_departure": false,
-                        "take_off": false
-                    },
-                    "maximum_certificated_takeoff_mass_kg": "",
-                    "governing_approach_surface_slope_percent": "",
-                    "obstacle_clearance_height_m": "",
-                    "specific_oes_required": false
-                },
-                "reciprocal_end": {
-                    "operations": {
-                        "circling_or_visual_circuit": false,
-                        "straight_in_non_precision_instrument": false,
-                        "precision_approach": false,
-                        "instrument_departure": false,
-                        "take_off": false
-                    },
-                    "maximum_certificated_takeoff_mass_kg": "",
-                    "governing_approach_surface_slope_percent": "",
-                    "obstacle_clearance_height_m": "",
-                    "specific_oes_required": false
-                }
+                "operation_basis": "automatic_conservative_straight_in"
             }
         }
     ],

@@ -516,9 +516,10 @@ class OlsConstructionQgisTests(unittest.TestCase):
         self.assertTrue(requested)
         self.assertIsNone(track)
 
-    def test_builder_rebuilds_conventional_contexts_without_cross_ruleset_state(self):
+    def test_builder_rebuilds_contexts_with_one_shared_design_strip(self):
         builder = object.__new__(SafeguardingBuilder)
         builder.translator = None
+        builder.ruleset = MOS139_PROFILE
         builder.reference_elevation_datum = 130.0
         builder.arp_elevation_amsl = 120.0
         source = {
@@ -575,14 +576,35 @@ class OlsConstructionQgisTests(unittest.TestCase):
             annex_current.runways[0].generation_data,
         )
         self.assertEqual(source["clearway1_len"], 200.0)
-        self.assertNotEqual(
-            cap.runways[0].strip_parameters.get("overall_width_ref"),
-            easa.runways[0].strip_parameters.get("overall_width_ref"),
+        shared_strips = [
+            context.runways[0].strip_parameters
+            for context in (cap, easa, annex_current, annex_modernised)
+        ]
+        self.assertTrue(
+            all(strip["overall_width"] == 280.0 for strip in shared_strips)
         )
-        self.assertIn(
-            "Annex 14 Vol I 3.4",
-            annex_current.runways[0].strip_parameters.get("ref", ""),
+        self.assertTrue(
+            all(
+                strip["design_ruleset_id"] == MOS139_PROFILE.id
+                for strip in shared_strips
+            )
         )
+        self.assertEqual(
+            {
+                strip.get("overall_width_ref")
+                for strip in shared_strips
+            },
+            {shared_strips[0].get("overall_width_ref")},
+        )
+        for context in (cap, easa, annex_current, annex_modernised):
+            self.assertEqual(
+                context.options,
+                {
+                    "strip_input_policy": "shared_design_ruleset",
+                    "design_ruleset_id": MOS139_PROFILE.id,
+                    "design_ruleset_label": MOS139_PROFILE.display_name,
+                },
+            )
         self.assertEqual(
             sorted(end.clearway_length_m for end in annex_current.runways[0].ends),
             [100.0, 200.0],
@@ -610,6 +632,58 @@ class OlsConstructionQgisTests(unittest.TestCase):
         )
         self.assertEqual(mos.runways[0].generation_data["clearway1_len"], "")
         self.assertGreater(mos.runways[0].ends[0].clearway_length_m, 0.0)
+
+    def test_modernised_comparison_does_not_substitute_annex14_ni_strip(self):
+        builder = object.__new__(SafeguardingBuilder)
+        builder.translator = None
+        builder.ruleset = MOS139_PROFILE
+        builder.reference_elevation_datum = 100.0
+        builder.arp_elevation_amsl = 100.0
+        source = {
+            "original_index": 1,
+            "short_name": "09/27",
+            "thr_point": QgsPointXY(0.0, 0.0),
+            "rec_thr_point": QgsPointXY(1500.0, 0.0),
+            "thr_displaced_1": 0.0,
+            "thr_displaced_2": 0.0,
+            "threshold_elev_1": 100.0,
+            "threshold_elev_2": 100.0,
+            "runway_end_elev_1": 100.0,
+            "runway_end_elev_2": 100.0,
+            "width": 30.0,
+            "arc_num": 3,
+            "arc_let": "C",
+            "type1": "Non-Instrument (NI)",
+            "type2": "Non-Instrument (NI)",
+            "clearway1_len": 0.0,
+            "clearway2_len": 0.0,
+            "stopway1_len": 0.0,
+            "stopway2_len": 0.0,
+            "annex14_modernised": {"strip": {}},
+        }
+
+        builder._apply_shared_design_strips([source])
+        baseline = builder._build_ols_construction_context(
+            MOS139_PROFILE,
+            [source],
+            arp_point=QgsPointXY(750.0, 200.0),
+        )
+        future = builder._build_ols_construction_context(
+            ANNEX14_MODERNISED_OFS_OES_PROFILE,
+            [source],
+            arp_point=QgsPointXY(750.0, 200.0),
+        )
+
+        self.assertEqual(baseline.runways[0].strip_parameters["overall_width"], 90.0)
+        self.assertEqual(future.runways[0].strip_parameters["overall_width"], 90.0)
+        self.assertEqual(
+            source["annex14_modernised"]["strip"]["overall_width_m"],
+            90.0,
+        )
+        self.assertEqual(
+            source["annex14_modernised"]["strip"]["design_ruleset_id"],
+            MOS139_PROFILE.id,
+        )
 
 
 if __name__ == "__main__":

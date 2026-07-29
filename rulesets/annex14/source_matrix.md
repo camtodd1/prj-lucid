@@ -9,15 +9,15 @@ This matrix separates the current conventional OLS applicable until
 | Area | Module | Status | Notes |
 | --- | --- | --- | --- |
 | Runway type mapping | `classification.py` | supported | Existing app type labels map to NI/NPA/PA codes. |
-| Reference code / design group | `classification.py` | supported | Table 1-1 and Table 1-2 captured; current OLS keeps ARC, modernised OFS/OES uses explicit ADG or critical aircraft data. |
+| Reference code / design group | `classification.py` | supported | Table 1-1 and Table 1-2 captured; current OLS keeps ARC and modernised OFS/OES uses the runway ADG. |
 | Current OLS physical dependencies | `physical_data.py` | source-loaded | Chapter 3 strip length/width/graded width, clearway and stopway rules required by OLS construction are loaded. Other physical families remain out of scope. |
 | Taxiway and separations | `taxiway.py` | pending | Include taxiway and parallel runway separation standards. |
 | Current OLS | `current_ols.py`, `ols_construction.py` | production-supported | Current Table 4-1 approach, transitional, IHS, conical and OFZ families plus Table 4-2 take-off climb are source-loaded and constructed through the conventional OLS engine. |
-| Modernised OFS | `ols_surfaces.py`, `surfaces/annex14_geometry.py` | supported | Future Chapter 4 OFS tables, optional slope/OCH and Code F adjustments, explicit strip basis, geometry, controlling envelopes, and contours are source checked and covered by strict airport fixtures. |
-| Modernised OES | `oes.py`, `surfaces/annex14_geometry.py` | supported standard families | Horizontal, straight-in instrument, precision approach, instrument departure, and take-off climb are operation driven. Resolved TODA/clearway origins and the 5,700 kg boundary are recorded in provenance. Specific/curved OES remains unsupported. |
+| Modernised OFS | `ols_surfaces.py`, `surfaces/annex14_geometry.py` | supported | Future Chapter 4 OFS tables, conservative Code F adjustment, shared design-ruleset strip, geometry, controlling envelopes, and contours are source checked. The automatic workflow uses unadjusted table slope/OCH dimensions. |
+| Modernised OES | `oes.py`, `surfaces/annex14_geometry.py` | supported standard families | Horizontal, straight-in instrument, precision approach, instrument departure, and take-off climb applicability is derived automatically from runway type and take-off availability. Resolved TODA/clearway origins and the assumed above-5,700 kg case are recorded in provenance. Specific/curved OES remains unsupported. |
 | Source-backed analytical validation | `tests/ols_source_oracle.py`, `tests/test_ols_source_validation.py` | supported-scope complete | Production-independent MOS/OFS/OES/comparison calculations, source hashes, clauses/pages, expected values, and tolerances are stored in `tests/fixtures/ols/source_validation_v1.json`. |
 | Obstacle limitation requirements | `obstacle_requirements.py` | captured | Section 4.4 captured as penetration/exception/aeronautical-study policy; no geometry parameters. |
-| Surface establishment requirements | `obstacle_requirements.py` | captured | Section 4.5 captured as OFS by runway use and OES by operation; no geometry parameters. |
+| Surface establishment requirements | `obstacle_requirements.py` | captured | Section 4.5 captured as OFS by runway use and OES by operation. The product maps those requirements automatically from the available runway inputs; no procedure-specific geometry parameters are requested. |
 | Markings | `markings.py` | pending | Runway marking dimensions, offsets, and applicability. |
 | Lighting | `lighting.py` | pending | Runway, threshold, end, centreline, approach, and displaced threshold lighting. |
 

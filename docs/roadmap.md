@@ -16,8 +16,8 @@ fixtures.
 ## Protected Airspace
 
 - [ ] Add imported or user-defined specific OES geometry for curved and other
-  operations. Until then, selecting `specific_oes_required` blocks modernised
-  generation explicitly.
+  operations. The automatic modernised workflow remains limited to aligned
+  straight-in standard OES and does not expose procedure-specific controls.
 - [ ] Evaluate vertex-count reduction for smoothed MOS139 axis/conical
   intersections only if observed runtimes make it worthwhile; do not
   change the accepted compatibility lock solely for benchmark improvement.

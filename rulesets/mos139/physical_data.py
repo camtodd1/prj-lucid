@@ -8,14 +8,14 @@ SHOULDER_MOS_REF = "MOS 6.11"
 STRIP_WIDTH_PARAMS = {
     1: {
         "graded": 60.0,
-        "overall_ni_npa": 140.0,
+        "overall_npa": 140.0,
         "overall_pa": 140.0,
         "ref_graded": "MOS T6.17(1) Code 1",
         "ref_overall": "MOS T6.17(4) Code 1/2",
     },
     2: {
         "graded": 80.0,
-        "overall_ni_npa": 140.0,
+        "overall_npa": 140.0,
         "overall_pa": 140.0,
         "ref_graded": "MOS T6.17(1) Code 2",
         "ref_overall": "MOS T6.17(4) Code 1/2",
@@ -28,8 +28,7 @@ STRIP_WIDTH_PARAMS = {
         "ref_overall": "MOS T6.17(4) Code 3/4",
     },
     4: {
-        "graded_lt_45": 90.0,
-        "graded_ge_45": 150.0,
+        "graded": 150.0,
         "overall": 280.0,
         "ref_graded": "MOS T6.17(1) Code 3/4",
         "ref_overall": "MOS T6.17(4) Code 3/4",
@@ -92,10 +91,15 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
             results["mos_graded_width_ref"] += " (>=45m)"
             results["graded_width_ref"] = results["mos_graded_width_ref"]
 
-    is_ni_or_npa = type_abbr in ["NI", "NPA"]
-    if arc_num in [1, 2] and is_ni_or_npa:
-        results["overall_width"] = width_rules.get("overall_ni_npa")
-        results["mos_overall_width_ref"] += " (Code 1/2 NI/NPA)"
+    if type_abbr == "NI":
+        results["overall_width"] = results["graded_width"]
+        results["mos_overall_width_ref"] = (
+            results["mos_graded_width_ref"] + " (NI graded strip boundary)"
+        )
+        results["overall_width_ref"] = results["mos_overall_width_ref"]
+    elif arc_num in [1, 2] and type_abbr == "NPA":
+        results["overall_width"] = width_rules.get("overall_npa")
+        results["mos_overall_width_ref"] += " (Code 1/2 NPA)"
         results["overall_width_ref"] = results["mos_overall_width_ref"]
     elif arc_num in [1, 2] and type_abbr.startswith("PA"):
         results["overall_width"] = width_rules.get("overall_pa")

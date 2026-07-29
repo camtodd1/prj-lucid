@@ -2858,7 +2858,7 @@ class SafeguardingBuilderDialog(
     ) -> None:
         if (
             group_widget.annex14_strip_source_combo.currentData()
-            != "design_standard_prefill"
+            not in {"design_standard_prefill", "design_ruleset"}
             or (
                 group_widget.annex14_strip_width_le.text().strip()
                 and group_widget.annex14_strip_extension_le.text().strip()
@@ -3575,7 +3575,11 @@ class SafeguardingBuilderDialog(
         strip_source = str(
             strip.get("source") or "design_standard_prefill"
         ).strip()
-        if strip_source not in {"design_standard_prefill", "manual"}:
+        if strip_source not in {
+            "design_standard_prefill",
+            "design_ruleset",
+            "manual",
+        }:
             errors.append(
                 f"Rwy {index}: Invalid modernised Annex 14 strip source '{strip_source}'."
             )
@@ -3607,6 +3611,9 @@ class SafeguardingBuilderDialog(
                     "source": "design_standard_prefill",
                     "overall_width_m": automatic_strip["overall_width"],
                     "end_extension_m": automatic_strip["extension_length"],
+                    "design_ruleset_id": profile.id,
+                    "design_ruleset_label": profile.display_name,
+                    "governing_runway_type": governing_type,
                 }
                 strip_source = "design_standard_prefill"
         except (AttributeError, TypeError, ValueError):
@@ -3647,6 +3654,15 @@ class SafeguardingBuilderDialog(
                 "source": strip_source,
                 "overall_width_m": strip_width,
                 "end_extension_m": strip_extension,
+                "design_ruleset_id": str(
+                    strip.get("design_ruleset_id") or ""
+                ),
+                "design_ruleset_label": str(
+                    strip.get("design_ruleset_label") or ""
+                ),
+                "governing_runway_type": str(
+                    strip.get("governing_runway_type") or ""
+                ),
             },
             "code_f_without_digital_go_around_avionics":
                 str(runway_inputs.get("arc_let") or "").strip().upper() == "F",

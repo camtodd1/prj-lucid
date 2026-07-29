@@ -597,6 +597,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             normalized["strip"]["source"],
             "design_standard_prefill",
         )
+        self.assertEqual(
+            normalized["strip"]["design_ruleset_id"],
+            self.dialog.ruleset_combo.currentData(),
+        )
         self.assertIsNotNone(normalized["strip"]["overall_width_m"])
         self.assertTrue(
             normalized["code_f_without_digital_go_around_avionics"]

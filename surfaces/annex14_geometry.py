@@ -49,6 +49,8 @@ class Annex14GeometryMixin:
                 QgsField("notes", QVariant.String, self.tr("Notes"), 254),
                 QgsField("operation", QVariant.String, self.tr("Operation"), 60),
                 QgsField("strip_src", QVariant.String, self.tr("Strip Source"), 40),
+                QgsField("strip_rule", QVariant.String, self.tr("Strip Design Ruleset"), 80),
+                QgsField("strip_type", QVariant.String, self.tr("Strip Runway Type"), 20),
                 QgsField("strip_w_m", QVariant.Double, self.tr("Strip Width"), 12, 2),
                 QgsField("strip_ext_m", QVariant.Double, self.tr("Strip Extension"), 12, 2),
                 QgsField("mass_class", QVariant.String, self.tr("Mass Class"), 20),
@@ -640,6 +642,8 @@ class Annex14GeometryMixin:
                 notes,
                 provenance.get("operation", ""),
                 provenance.get("strip_source", ""),
+                provenance.get("strip_design_ruleset", ""),
+                provenance.get("strip_governing_runway_type", ""),
                 provenance.get("strip_width_m"),
                 provenance.get("strip_extension_m"),
                 provenance.get("mass_class", ""),
@@ -1272,6 +1276,13 @@ class Annex14GeometryMixin:
                 "overall_width": width,
                 "extension_length": extension,
                 "source": str(strip.get("source") or "design_standard_prefill"),
+                "design_ruleset_id": str(strip.get("design_ruleset_id") or ""),
+                "design_ruleset_label": str(
+                    strip.get("design_ruleset_label") or ""
+                ),
+                "governing_runway_type": str(
+                    strip.get("governing_runway_type") or ""
+                ),
             }
 
         strip_dims = runway_data.get("calculated_strip_dims")
@@ -1279,7 +1290,20 @@ class Annex14GeometryMixin:
             width = self._annex14_float_or_none(strip_dims.get("overall_width"))
             extension = self._annex14_float_or_none(strip_dims.get("extension_length"))
             if width is not None and width > 0 and extension is not None and extension >= 0:
-                return {"overall_width": width, "extension_length": extension}
+                return {
+                    "overall_width": width,
+                    "extension_length": extension,
+                    "source": str(strip_dims.get("source") or ""),
+                    "design_ruleset_id": str(
+                        strip_dims.get("design_ruleset_id") or ""
+                    ),
+                    "design_ruleset_label": str(
+                        strip_dims.get("design_ruleset_label") or ""
+                    ),
+                    "governing_runway_type": str(
+                        strip_dims.get("governing_runway_type") or ""
+                    ),
+                }
 
         width = self._annex14_float_or_none(
             runway_data.get("strip_overall_width")
@@ -1654,6 +1678,12 @@ class Annex14GeometryMixin:
             self._annex14_current_provenance = {
                 "operation": "runway_protected_airspace",
                 "strip_source": (strip_dims or {}).get("source", ""),
+                "strip_design_ruleset": (strip_dims or {}).get(
+                    "design_ruleset_id", ""
+                ),
+                "strip_governing_runway_type": (strip_dims or {}).get(
+                    "governing_runway_type", ""
+                ),
                 "strip_width_m": (strip_dims or {}).get("overall_width"),
                 "strip_extension_m": (strip_dims or {}).get("extension_length"),
                 "mass_class": (
@@ -2313,6 +2343,12 @@ class Annex14GeometryMixin:
         self._annex14_current_provenance = {
             "operation": "straight_in_non_precision_instrument",
             "strip_source": (strip_dims or {}).get("source", ""),
+            "strip_design_ruleset": (strip_dims or {}).get(
+                "design_ruleset_id", ""
+            ),
+            "strip_governing_runway_type": (strip_dims or {}).get(
+                "governing_runway_type", ""
+            ),
             "strip_width_m": (strip_dims or {}).get("overall_width"),
             "strip_extension_m": (strip_dims or {}).get("extension_length"),
             "configuration_version": int(modernised_config.get("schema_version") or 1),
