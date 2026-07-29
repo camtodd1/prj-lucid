@@ -453,7 +453,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     </section>
 
     <section class="panel">
-      <div class="section-head"><div><h2>Last 5 matching runs</h2><p class="section-note">Newest first. The change badge compares with the previous run using the same recorded setup.</p></div></div>
+      <div class="section-head"><div><h2>Last 5 matching runs</h2><p class="section-note">Newest first. Each completed run is compared with the previous run for the same test case, standards, and runner. The badge identifies whether the exact recorded inputs also match.</p></div></div>
       <div class="ticker" id="lastFive"></div>
     </section>
 
@@ -698,7 +698,10 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
 
     function priorComparable(run, runs) {
-      const earlier = completed(runs).filter(candidate => candidate.timestamp < run.timestamp && candidate.exactSetup === run.exactSetup);
+      const earlier = completed(runs).filter(candidate =>
+        candidate.timestamp < run.timestamp &&
+        candidate.trendSetup === run.trendSetup
+      );
       return earlier.at(-1) || null;
     }
 
@@ -712,9 +715,19 @@ HTML_TEMPLATE = r"""<!doctype html>
       host.innerHTML = latest.map(run => {
         const prior = priorComparable(run, runs);
         const change = prior && Number.isFinite(run.elapsed) ? percentChange(run.elapsed, prior.elapsed) : null;
-        const approximate = !run.exactSetupRecorded && Number.isFinite(change) ? '~' : '';
+        const exactInputs = prior && run.exactSetupRecorded && prior.exactSetupRecorded && run.exactSetup === prior.exactSetup;
+        const setupComparison = !prior
+          ? ''
+          : exactInputs
+            ? 'Exact setup'
+            : run.exactSetupRecorded && prior.exactSetupRecorded
+              ? 'Setup varied'
+              : 'Setup details unavailable';
+        const approximate = prior && !exactInputs && Number.isFinite(change) ? '~' : '';
         const deltaClass = Number.isFinite(change) ? (change < -.02 ? 'positive' : change > .02 ? 'negative' : '') : '';
-        const delta = Number.isFinite(change) ? `${approximate}${directionText(change)} vs prior` : 'No comparable prior run';
+        const delta = Number.isFinite(change)
+          ? `${approximate}${directionText(change)} vs prior · ${setupComparison}`
+          : 'No prior matching trend';
         const runway = run.runwayCount ? `${run.runwayCount} · ${run.scenario}` : run.scenario;
         return `<article class="run-card">
           <div class="run-card-top"><span>${escapeHtml(dateLabel(run.timestamp))}</span><span>${escapeHtml(run.status)}</span></div>

@@ -48,9 +48,11 @@ Intersecting means three or more runways where any number may intersect.
 
 The **Run by** slicer filters the KPIs, last-five cards, chart, and pivot table.
 Each last-five card repeats its owner as plain bold muted text beside the run
-time. When the slicer is active, the card's change indicator compares with the
-previous matching run from the same filtered owner; it does not silently compare
-a User run with a Codex run.
+time. Its change indicator compares with the previous completed run for the
+same test case, design standard, baseline OLS, comparison OLS, and owner. The
+badge says **Exact setup** when both input fingerprints match, **Setup varied**
+when both are recorded but differ, or **Setup details unavailable** for legacy
+rows. User and Codex runs are never silently compared.
 
 Comparison quality remains fingerprint-based. **Exact · User + Codex** means
 that both owners have recorded the identical input fingerprint, even when the
