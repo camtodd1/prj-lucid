@@ -38,6 +38,13 @@ RULESET_NAMES = {
     "easa_cs_adr_dsn_issue_7": "EASA CS-ADR-DSN Issue 7",
 }
 RUNWAY_SCENARIOS = {"single", "parallel", "intersecting", "mixed"}
+SCENARIO_SLICES = (
+    "Single",
+    "Dual Parallel",
+    "Dual Intersecting",
+    "Multiple Parallel",
+    "Multiple Intersecting",
+)
 
 
 def _field(row: Mapping[str, object], name: str) -> str:
@@ -75,16 +82,20 @@ def _runway_scenario(value: object, runway_count: Optional[int]) -> str:
 
 
 def _scenario_slice(runway_count: Optional[int], runway_configuration: str) -> str:
-    """Return the dashboard's high-level runway-layout category."""
+    """Return the dashboard's high-level runway-layout category.
+
+    Three-or-more runways are Multiple Parallel only when none intersect.
+    If any of three-or-more runways intersect, they are Multiple Intersecting.
+    """
     if runway_count is None or not runway_configuration:
         return "Not recorded"
     if runway_count == 1:
-        return "Single Runway"
+        return "Single"
     if runway_count == 2:
         return "Dual Parallel" if runway_configuration == "parallel" else "Dual Intersecting"
-    if runway_configuration == "intersecting":
-        return "Mixed Intersecting"
-    return "Mixed Parallel"
+    if runway_configuration == "parallel":
+        return "Multiple Parallel"
+    return "Multiple Intersecting"
 
 
 def _bool(value: object) -> Optional[bool]:
@@ -481,6 +492,7 @@ HTML_TEMPLATE = r"""<!doctype html>
   (() => {
     const allRuns = JSON.parse(document.getElementById('runData').textContent);
     const filterElements = [...document.querySelectorAll('select[data-field]')];
+    const scenarioSlices = __SCENARIO_SLICES__;
     const groupOptions = [
       ['scenarioSlice', 'Scenario'], ['testCase', 'Test case'], ['airport', 'Airport'],
       ['runwayCountLabel', 'Runways'], ['scenario', 'Recorded layout'],
@@ -526,7 +538,11 @@ HTML_TEMPLATE = r"""<!doctype html>
     }
 
     function uniqueValues(field) {
-      return [...new Set(allRuns.map(run => String(run[field] ?? 'Not recorded')))].sort((a, b) => {
+      const recorded = new Set(allRuns.map(run => String(run[field] ?? 'Not recorded')));
+      if (field === 'scenarioSlice') {
+        return [...scenarioSlices, ...[...recorded].filter(value => !scenarioSlices.includes(value))];
+      }
+      return [...recorded].sort((a, b) => {
         if (a === 'Not recorded') return 1;
         if (b === 'Not recorded') return -1;
         return a.localeCompare(b, undefined, {numeric: true});
@@ -777,6 +793,7 @@ def build_html(
     generated = generated_at or datetime.now(timezone.utc)
     return (
         HTML_TEMPLATE.replace("__RUN_DATA__", _json_for_html(list(runs)))
+        .replace("__SCENARIO_SLICES__", _json_for_html(SCENARIO_SLICES))
         .replace("__GENERATED_AT__", _iso(generated))
     )
 

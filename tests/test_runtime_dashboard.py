@@ -106,6 +106,7 @@ class RuntimeDashboardTests(unittest.TestCase):
         self.assertNotIn("run-owner codex", html)
         self.assertIn("${escapeHtml(run.runBy)}", html)
         self.assertIn("priorComparable(run, runs)", html)
+        self.assertIn('"Multiple Intersecting"', html)
         payload = re.search(
             r'<script id="runData" type="application/json">(.*?)</script>',
             html,
@@ -142,8 +143,9 @@ class RuntimeDashboardTests(unittest.TestCase):
         cases = (
             ("2", "parallel", "Dual Parallel"),
             ("2", "intersecting", "Dual Intersecting"),
-            ("3", "mixed", "Mixed Parallel"),
-            ("3", "intersecting", "Mixed Intersecting"),
+            ("3", "parallel", "Multiple Parallel"),
+            ("3", "mixed", "Multiple Intersecting"),
+            ("3", "intersecting", "Multiple Intersecting"),
         )
         rows = [
             {
