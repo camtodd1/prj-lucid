@@ -69,13 +69,16 @@ class RuntimeDashboardTests(unittest.TestCase):
             runs = load_runs(ledger)
 
         run = runs[0]
-        self.assertEqual(run["testCase"], "YTEST parallel runways")
+        self.assertEqual(run["testCase"], "YTEST 2Rwy Parallel")
         self.assertEqual(run["runwayCount"], 2)
         self.assertEqual(run["scenario"], "Parallel")
         self.assertEqual(run["runBy"], "Codex")
         self.assertTrue(run["exactSetupRecorded"])
         self.assertIn("MOS139", run["primaryOls"])
-        self.assertIn("Annex 14 Modernised", run["comparedWith"])
+        self.assertEqual(
+            run["comparedWith"],
+            "ICAO Annex 14 Vol I - Modernised OLS",
+        )
 
         html = build_html(
             runs,
@@ -83,6 +86,7 @@ class RuntimeDashboardTests(unittest.TestCase):
         )
         for control in (
             "filterTestCase",
+            "filterOlsSelection",
             "filterAirport",
             "filterRunways",
             "filterScenario",
@@ -107,6 +111,30 @@ class RuntimeDashboardTests(unittest.TestCase):
         )
         self.assertIsNotNone(payload)
         self.assertEqual(json.loads(payload.group(1))[0]["fingerprint"], "setup123")
+
+    def test_historical_case_names_and_ruleset_labels_use_dashboard_standard(self):
+        row = {
+            "timestamp_utc": "2026-01-01T00:00:00Z",
+            "status": "completed",
+            "airport": "YBBN",
+            "comparison_ols_ruleset": "icao_annex14_vol1_modernised_ofs_oes",
+            "comparison_ols_ruleset_label": "Future Annex 14",
+            "commit_ref": "standard1",
+            "elapsed_seconds": "30",
+            "test_case_name": "Brisbane parallel runway performance check",
+            "runway_count": "2",
+            "runway_configuration": "parallel",
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            ledger = Path(directory) / "runs.tsv"
+            _write_ledger(ledger, [row])
+            run = load_runs(ledger)[0]
+
+        self.assertEqual(run["testCase"], "YBBN 2Rwy Parallel")
+        self.assertEqual(
+            run["comparedWith"],
+            "ICAO Annex 14 Vol I - Modernised OLS",
+        )
 
     def test_legacy_rows_are_not_mislabelled_as_known_scenarios(self):
         row = {

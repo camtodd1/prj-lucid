@@ -5,7 +5,7 @@ This is a small local dashboard for answering practical development questions:
 - Which airports and test cases are slowest?
 - Do single, parallel, intersecting, or mixed-runway tests behave differently?
 - Which primary/comparison OLS selections cost the most time?
-- For the same filtered setup, are the last five runs faster or slower than the previous five?
+- Which standard test-case/OLS/runner trends are getting faster or slower?
 
 From the repository folder, run:
 
@@ -30,6 +30,12 @@ Runtime rows are normalized to two owner labels:
 
 - **User** for interactive QGIS runs; and
 - **Codex** for headless, Codex, or CI runs.
+
+The three primary slicers cover test case, OLS selection, and runner. Airport,
+runway, scenario, and individual ruleset slicers remain under **Advanced
+filters**. The dashboard separates trend lines by standard test case, OLS
+selection, and runner automatically, so the overall view can show useful trends
+without first selecting every dimension.
 
 The **Run by** slicer filters the KPIs, last-five cards, chart, and pivot table.
 Each last-five card repeats its owner as plain bold muted text beside the run

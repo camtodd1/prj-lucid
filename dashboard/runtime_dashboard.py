@@ -32,10 +32,8 @@ REQUIRED_LEDGER_COLUMNS = {
 
 RULESET_NAMES = {
     "mos139_2019": "MOS139 (C.07 2026)",
-    "icao_annex14_vol1_modernised_ofs_oes": (
-        "Annex 14 Modernised OFS/OES — Future 21 Nov 2030"
-    ),
-    "icao_annex14_vol1_current_ols": "Annex 14 Current OLS",
+    "icao_annex14_vol1_modernised_ofs_oes": "ICAO Annex 14 Vol I - Modernised OLS",
+    "icao_annex14_vol1_current_ols": "ICAO Annex 14 Vol I - Current OLS",
     "uk_caa_cap168_edition_13": "UK CAP 168 Edition 13",
     "easa_cs_adr_dsn_issue_7": "EASA CS-ADR-DSN Issue 7",
 }
@@ -103,7 +101,7 @@ def _iso(value: datetime) -> str:
 
 
 def _ruleset_name(identifier: str, label: str) -> str:
-    return label or RULESET_NAMES.get(identifier, identifier.replace("_", " ").title()) or "Not recorded"
+    return RULESET_NAMES.get(identifier) or label or identifier.replace("_", " ").title() or "Not recorded"
 
 
 def _run_source(agent: str) -> str:
@@ -139,6 +137,22 @@ def _plain_case_name(row: Mapping[str, object], airport: str) -> str:
     return "Not recorded"
 
 
+def _standard_case_name(
+    row: Mapping[str, object],
+    airport: str,
+    runway_count: Optional[int],
+    runway_configuration: str,
+) -> str:
+    """Use the dashboard's airport/count/scenario naming standard when possible."""
+    if (
+        airport != "Not recorded"
+        and runway_count is not None
+        and runway_configuration
+    ):
+        return f"{airport} {runway_count}Rwy {runway_configuration.title()}"
+    return _plain_case_name(row, airport)
+
+
 def load_runs(ledger_path: Path) -> list[dict[str, object]]:
     """Read the append-only TSV and retain missing legacy scenario fields as unknown."""
     with Path(ledger_path).open("r", encoding="utf-8", newline="") as stream:
@@ -172,7 +186,12 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
             if len(airport_text) == 4 and airport_text.isalpha()
             else airport_text or "Not recorded"
         )
-        test_case = _plain_case_name(row, airport)
+        test_case = _standard_case_name(
+            row,
+            airport,
+            runway_count,
+            runway_configuration,
+        )
         legacy_setup = "|".join(
             [
                 test_case,
@@ -207,8 +226,21 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
                 "commitFull": _field(row, "commit_ref") or "unknown",
                 "dirty": _bool(row.get("working_tree_dirty")),
                 "fingerprint": fingerprint or "Not recorded",
-                "exactSetup": f"exact:{fingerprint}" if fingerprint else f"legacy:{legacy_setup}",
+                "exactSetup": (
+                    f"exact:{fingerprint}|{design_id}|{primary_id}|{comparison_id}"
+                    if fingerprint
+                    else f"legacy:{legacy_setup}"
+                ),
                 "exactSetupRecorded": bool(fingerprint),
+                "trendSetup": "|".join(
+                    [
+                        test_case,
+                        design_id,
+                        primary_id,
+                        comparison_id,
+                        _run_source(_field(row, "agent")),
+                    ]
+                ),
                 "layers": _integer(row.get("layers_created")),
                 "features": _integer(row.get("features_created")),
             }
@@ -281,7 +313,10 @@ HTML_TEMPLATE = r"""<!doctype html>
     .button:hover { border-color: var(--blue); }
     .panel { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: var(--shadow); }
     .panel-pad { padding: 16px; }
-    .filters { display: grid; grid-template-columns: repeat(8, minmax(125px, 1fr)); gap: 10px; }
+    .filters { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 10px; }
+    .advanced-filters { margin-top: 12px; }
+    .advanced-filters summary { cursor: pointer; color: var(--ink); font-size: 12px; font-weight: 650; }
+    .advanced-filters .filters { grid-template-columns: repeat(6, minmax(125px, 1fr)); margin-top: 10px; }
     .filter label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 650; }
     select { width: 100%; min-height: 38px; padding: 7px 28px 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
     select:focus, button:focus { outline: 3px solid rgba(23, 105, 170, .18); outline-offset: 1px; }
@@ -327,12 +362,12 @@ HTML_TEMPLATE = r"""<!doctype html>
     details summary { cursor: pointer; color: var(--ink); font-weight: 650; }
     details p { max-width: 900px; }
     code { padding: 1px 4px; border-radius: 4px; background: #e9edf1; }
-    @media (max-width: 1150px) { .filters { grid-template-columns: repeat(4, 1fr); } .ticker { grid-template-columns: repeat(5, 220px); } }
+    @media (max-width: 1150px) { .advanced-filters .filters { grid-template-columns: repeat(3, 1fr); } .ticker { grid-template-columns: repeat(5, 220px); } }
     @media (max-width: 760px) {
       .page { padding: 14px; }
       .topbar { display: block; }
       .actions { margin-top: 12px; }
-      .filters { grid-template-columns: repeat(2, 1fr); }
+      .filters, .advanced-filters .filters { grid-template-columns: repeat(2, 1fr); }
       .kpis { grid-template-columns: repeat(2, 1fr); }
       .section-head { align-items: flex-start; flex-direction: column; }
       .pivot-controls { width: 100%; }
@@ -346,7 +381,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     <div class="topbar">
       <div>
         <h1>AeroSense runtime explorer</h1>
-        <p class="subtitle">Filter the test conditions, then see whether matching runs are getting faster or slower.</p>
+        <p class="subtitle">See runtime trends by standard test case and OLS selection; narrow the view only when needed.</p>
       </div>
       <div class="actions">
         <button class="button" id="clearFilters" type="button">Clear filters</button>
@@ -357,14 +392,20 @@ HTML_TEMPLATE = r"""<!doctype html>
     <section class="panel panel-pad" aria-label="Dashboard filters">
       <div class="filters">
         <div class="filter"><label for="filterTestCase">Test case</label><select id="filterTestCase" data-field="testCase"></select></div>
-        <div class="filter"><label for="filterAirport">Airport</label><select id="filterAirport" data-field="airport"></select></div>
-        <div class="filter"><label for="filterRunways">Runways</label><select id="filterRunways" data-field="runwayCountLabel"></select></div>
-        <div class="filter"><label for="filterScenario">Scenario</label><select id="filterScenario" data-field="scenario"></select></div>
-        <div class="filter"><label for="filterBuiltTo">Built to</label><select id="filterBuiltTo" data-field="builtTo"></select></div>
-        <div class="filter"><label for="filterPrimary">Primary OLS</label><select id="filterPrimary" data-field="primaryOls"></select></div>
-        <div class="filter"><label for="filterComparison">Compared with</label><select id="filterComparison" data-field="comparedWith"></select></div>
+        <div class="filter"><label for="filterOlsSelection">OLS selection</label><select id="filterOlsSelection" data-field="olsSelection"></select></div>
         <div class="filter"><label for="filterRunBy">Run by</label><select id="filterRunBy" data-field="runBy"></select></div>
       </div>
+      <details class="advanced-filters">
+        <summary>Advanced filters</summary>
+        <div class="filters">
+          <div class="filter"><label for="filterAirport">Airport</label><select id="filterAirport" data-field="airport"></select></div>
+          <div class="filter"><label for="filterRunways">Runways</label><select id="filterRunways" data-field="runwayCountLabel"></select></div>
+          <div class="filter"><label for="filterScenario">Scenario</label><select id="filterScenario" data-field="scenario"></select></div>
+          <div class="filter"><label for="filterBuiltTo">Built to</label><select id="filterBuiltTo" data-field="builtTo"></select></div>
+          <div class="filter"><label for="filterPrimary">Primary OLS</label><select id="filterPrimary" data-field="primaryOls"></select></div>
+          <div class="filter"><label for="filterComparison">Compared with</label><select id="filterComparison" data-field="comparedWith"></select></div>
+        </div>
+      </details>
       <div class="filter-status"><span id="filterCount"></span><span id="generatedAt">Built __GENERATED_AT__</span></div>
       <div class="notice" id="comparisonNotice"></div>
     </section>
@@ -382,7 +423,7 @@ HTML_TEMPLATE = r"""<!doctype html>
     </section>
 
     <section class="panel">
-      <div class="section-head"><div><h2>Run time over time</h2><p class="section-note">Lower is faster. Each dot is one completed run after your filters are applied.</p></div></div>
+      <div class="section-head"><div><h2>Run time over time</h2><p class="section-note">Lower is faster. Lines automatically keep each test case, OLS selection, and runner separate.</p></div></div>
       <div class="chart-wrap" id="trendWrap"><svg id="trendChart" role="img" aria-label="Runtime trend"></svg></div>
     </section>
 
@@ -412,7 +453,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     <details>
       <summary>How to read this</summary>
-      <p>For a fair speed comparison, filter to one test case and one OLS selection. “Typical” means the median, so one unusually slow run does not dominate. “Last 5 vs previous 5” compares two five-run windows.</p>
+      <p>Trend lines automatically separate test case, OLS selection, and runner. “Typical” means the median, so one unusually slow run does not dominate. “Last 5 vs previous 5” compares two five-run windows within each trend.</p>
       <p>Older runtime rows did not record the test-case file, runway count, layout, or exact parameters. They remain visible for airport and OLS exploration, but are marked <strong>rough</strong>. New rows store an exact setup code and are marked <strong>exact</strong>.</p>
     </details>
   </main>
@@ -448,6 +489,22 @@ HTML_TEMPLATE = r"""<!doctype html>
     const dateLabel = iso => new Intl.DateTimeFormat(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}).format(new Date(iso));
     const shortDate = iso => new Intl.DateTimeFormat(undefined, {month:'short', day:'numeric'}).format(new Date(iso));
     const completed = runs => runs.filter(run => run.status === 'Completed' && Number.isFinite(run.elapsed));
+
+    function setupTrends(runs) {
+      const groups = new Map();
+      completed(runs).forEach(run => {
+        if (!groups.has(run.trendSetup)) groups.set(run.trendSetup, []);
+        groups.get(run.trendSetup).push(run);
+      });
+      return [...groups.values()].map(group => {
+        const recent = group.slice(-5);
+        const previous = group.slice(-10, -5);
+        const change = recent.length === 5 && previous.length === 5
+          ? percentChange(median(recent.map(run => run.elapsed)), median(previous.map(run => run.elapsed)))
+          : null;
+        return {runs: group, change};
+      }).filter(summary => Number.isFinite(summary.change));
+    }
 
     function uniqueValues(field) {
       return [...new Set(allRuns.map(run => String(run[field] ?? 'Not recorded')))].sort((a, b) => {
@@ -513,11 +570,18 @@ HTML_TEMPLATE = r"""<!doctype html>
       document.getElementById('kpiRunsNote').textContent = `${usable.length} completed`;
       document.getElementById('kpiMedian').textContent = seconds(typical);
       const changeElement = document.getElementById('kpiChange');
-      const mixedSetups = quality.label.startsWith('Mixed');
-      changeElement.textContent = mixedSetups ? 'Filter further' : `${quality.kind === 'rough' && Number.isFinite(change) ? '~' : ''}${directionText(change)}`;
-      changeElement.className = `kpi-value ${!mixedSetups && Number.isFinite(change) ? (change < -.02 ? 'positive' : change > .02 ? 'negative' : '') : ''}`;
-      document.getElementById('kpiChangeNote').textContent = mixedSetups
-        ? 'Select one test setup before comparing speed'
+      const multipleTrends = new Set(usable.map(run => run.trendSetup)).size > 1;
+      const trends = setupTrends(runs);
+      const faster = trends.filter(trend => trend.change < -.02).length;
+      const slower = trends.filter(trend => trend.change > .02).length;
+      changeElement.textContent = multipleTrends
+        ? trends.length ? `${faster} faster · ${slower} slower` : 'Not enough runs'
+        : `${quality.kind === 'rough' && Number.isFinite(change) ? '~' : ''}${directionText(change)}`;
+      changeElement.className = `kpi-value ${!multipleTrends && Number.isFinite(change) ? (change < -.02 ? 'positive' : change > .02 ? 'negative' : '') : ''}`;
+      document.getElementById('kpiChangeNote').textContent = multipleTrends
+        ? trends.length
+          ? `${trends.length} setup trend${trends.length === 1 ? '' : 's'} compared automatically`
+          : 'Each setup needs 10 completed runs'
         : Number.isFinite(change)
           ? `${seconds(recentMedian)} recently vs ${seconds(previousMedian)} before · ${quality.label}`
           : `Needs 10 completed matching runs · ${quality.label}`;
@@ -529,7 +593,7 @@ HTML_TEMPLATE = r"""<!doctype html>
           ? 'This is an exact shared setup: User and Codex ran identical input parameters.'
           : `This is an exact input setup, but only ${quality.label.includes('Codex') ? 'Codex' : 'User'} has run it so far.`
         : quality.label.startsWith('Mixed')
-          ? 'This view mixes input setups. Use the slicers to narrow it before treating faster/slower as a development result.'
+          ? 'This view mixes setups. Trend lines and the faster/slower summary compare each test case, OLS selection, and runner separately.'
           : 'This is a rough historical comparison: older rows did not record the exact input file and parameters.';
     }
 
@@ -585,7 +649,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       const x = run => left + ((new Date(run.timestamp).getTime() - minTime) / (maxTime - minTime || 1)) * innerWidth;
       const y = run => top + (1 - (run.elapsed - minY) / (maxY - minY || 1)) * innerHeight;
       const palette = ['#1769aa','#177245','#9b51a0','#c45d12','#5b6573','#b42318','#00838f','#6b5b95'];
-      const seriesKeys = [...new Set(usable.map(run => run.exactSetup))];
+      const seriesKeys = [...new Set(usable.map(run => run.trendSetup))];
       const color = key => palette[Math.max(0, seriesKeys.indexOf(key)) % palette.length];
       let parts = [`<rect x="0" y="0" width="${width}" height="${height}" fill="white"/>`];
       for (let tick = 0; tick <= 4; tick++) {
@@ -595,12 +659,12 @@ HTML_TEMPLATE = r"""<!doctype html>
         parts.push(`<text x="${left-9}" y="${tickY+4}" text-anchor="end" fill="#687582" font-size="11">${value.toFixed(value >= 100 ? 0 : 1)}s</text>`);
       }
       seriesKeys.forEach(key => {
-        const series = usable.filter(run => run.exactSetup === key);
+        const series = usable.filter(run => run.trendSetup === key);
         if (series.length > 1) {
           parts.push(`<polyline fill="none" stroke="${color(key)}" stroke-width="2" opacity=".75" points="${series.map(run => `${x(run)},${y(run)}`).join(' ')}"/>`);
         }
       });
-      usable.forEach(run => parts.push(`<circle cx="${x(run)}" cy="${y(run)}" r="4" fill="${color(run.exactSetup)}" stroke="white" stroke-width="1.5"><title>${escapeHtml(`${run.testCase} · ${run.airport} · ${seconds(run.elapsed)} · ${dateLabel(run.timestamp)}`)}</title></circle>`));
+      usable.forEach(run => parts.push(`<circle cx="${x(run)}" cy="${y(run)}" r="4" fill="${color(run.trendSetup)}" stroke="white" stroke-width="1.5"><title>${escapeHtml(`${run.testCase} · ${run.olsSelection} · ${run.runBy} · ${seconds(run.elapsed)} · ${dateLabel(run.timestamp)}`)}</title></circle>`));
       const labels = [usable[0], usable[Math.floor((usable.length - 1) / 2)], usable.at(-1)];
       labels.forEach((run, index) => parts.push(`<text x="${x(run)}" y="${height-16}" text-anchor="${index === 0 ? 'start' : index === 2 ? 'end' : 'middle'}" fill="#687582" font-size="11">${escapeHtml(shortDate(run.timestamp))}</text>`));
       chart.setAttribute('viewBox', `0 0 ${width} ${height}`);
