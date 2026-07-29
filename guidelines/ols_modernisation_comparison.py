@@ -109,7 +109,7 @@ class OlsEnvelopeComparisonEngine:
         self.baseline_engine = baseline_engine
         self.future_engine = future_engine
         self.tolerance_m = max(0.0, float(tolerance_m))
-        self._comparison_diagnostics: Dict[str, float] = {}
+        self._comparison_diagnostics: Dict[str, object] = {}
         self._comparison_invariant_report: Dict[str, object] = {}
         self._recovered_sliver_geometries: List[QgsGeometry] = []
         self._pair_domain_cache: Dict[Tuple[int, int], QgsGeometry] = {}
@@ -132,7 +132,9 @@ class OlsEnvelopeComparisonEngine:
             "bounded_approximations": {
                 "fallback_lower_region_calls": int(stats.get("fallback_lower_region_calls", 0.0)),
                 "sampled_whole_overlap_calls": int(stats.get("sampled_whole_overlap_calls", 0.0)),
-                "vertical_error_bound_m": None,
+                "vertical_error_bound_m": stats.get(
+                    "fallback_vertical_error_bound_m"
+                ),
             },
             "exceptional_recovery": {
                 "common_domain_gap_parts": int(stats.get("common_domain_gap_parts", 0.0)),
@@ -747,6 +749,41 @@ class OlsEnvelopeComparisonEngine:
             )
         except Exception:
             triangulated = None
+        conservative_vertical_error_bound = pair_engine._region_solve_stats.get(
+            "triangulation_vertical_error_bound_m",
+            0.0,
+        )
+        validated_vertical_error_bound = None
+        if triangulated is not None and not triangulated.isEmpty():
+            try:
+                transition = triangulated.boundary().difference(
+                    overlap.boundary().buffer(0.01, 2)
+                )
+                if transition is not None and not transition.isEmpty():
+                    validated_vertical_error_bound = (
+                        pair_engine._maximum_candidate_pair_curve_residual(
+                            transition,
+                            baseline_candidate,
+                            future_candidate,
+                        )
+                    )
+            except Exception:
+                validated_vertical_error_bound = None
+        vertical_error_bound = (
+            validated_vertical_error_bound
+            if validated_vertical_error_bound is not None
+            else conservative_vertical_error_bound
+        )
+        if vertical_error_bound:
+            self._comparison_diagnostics["fallback_vertical_error_bound_m"] = max(
+                float(
+                    self._comparison_diagnostics.get(
+                        "fallback_vertical_error_bound_m",
+                        0.0,
+                    )
+                ),
+                float(vertical_error_bound),
+            )
         return self._safe_intersection(triangulated, overlap) if triangulated is not None else None
 
     def baseline_only_parts(self) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
@@ -2380,22 +2417,19 @@ class OlsEnvelopeComparisonEngine:
                 starts = {
                     change: len(rebuilt[change]) for change in ("gain", "loss")
                 }
-                self._append_parts(
-                    rebuilt["gain"],
-                    baseline,
-                    future,
-                    gain_geometry,
-                    "gain",
-                    clean_spikes=False,
-                )
-                self._append_parts(
-                    rebuilt["loss"],
-                    baseline,
-                    future,
-                    loss_geometry,
-                    "loss",
-                    clean_spikes=False,
-                )
+                for change, partition in (
+                    ("gain", gain_geometry),
+                    ("loss", loss_geometry),
+                ):
+                    for part in self.baseline_engine._polygon_parts(partition):
+                        if (
+                            part is not None
+                            and not part.isEmpty()
+                            and part.area() > 1e-9
+                        ):
+                            rebuilt[change].append(
+                                (baseline, future, QgsGeometry(part))
+                            )
                 new_geometries = [
                     item[2]
                     for change in ("gain", "loss")

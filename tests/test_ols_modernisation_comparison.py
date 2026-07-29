@@ -58,6 +58,11 @@ class _ControllingLayerCapture(ControllingOlsEngineMixin):
         self.layers.append(args)
         return object()
 
+    @staticmethod
+    def _surface_layer_display_name(surface, feature_type, runway=None):
+        scope = f" {runway}" if runway else ""
+        return f"{surface}{scope} - {feature_type}"
+
 
 class OlsModernisationComparisonTests(unittest.TestCase):
     def setUp(self):

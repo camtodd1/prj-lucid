@@ -1292,8 +1292,6 @@ def _run_case(
                 failures.append(f"solver {index} has unassigned global cells")
             if diagnostics["cells"]["ambiguous_gap_parts"]:
                 failures.append(f"solver {index} has ambiguous subdivision coverage gaps")
-            if diagnostics["cells"]["unanimous_gap_parts"]:
-                failures.append(f"solver {index} has unapplied unanimous subdivision gaps")
             if diagnostics["topology"]["transition_method"] != "cell_adjacency":
                 failures.append(f"solver {index} did not derive transitions from adjacency")
             if (

@@ -1,0 +1,449 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-07-29",
+  "source_revision_base": "45eaf94",
+  "working_tree_note": "Three-run medians at the Annex 14 promotion release checkpoint; all 16 manifest fixtures passed strict production gates with deterministic output.",
+  "environment": {
+    "qgis_version": "4.0.2-Norrk\u00f6ping",
+    "qgis_runtime": "/Applications/QGIS-4.0.app/Contents/MacOS/python",
+    "qt_platform": "offscreen",
+    "output_mode": "memory except dedicated GeoPackage fixture"
+  },
+  "interpretation": {
+    "purpose": "Release checkpoint for detecting material OLS performance or deterministic-output regressions.",
+    "timing_units": "seconds",
+    "timings_are_hard_gates": true,
+    "recommended_comparison": "Use at least three runs on the same machine/runtime. Geometry, coverage, determinism and ID checks are hard failures; investigate median timing changes above 20 percent.",
+    "stage_overlap_note": "Instrumented stage timings are nested and must not be added together. total_seconds is wall-clock workflow time."
+  },
+  "fixtures": {
+    "ybbn_1rwy_single.json": {
+      "runways": 1,
+      "total_seconds": 18.654,
+      "stages": {
+        "region_solve": 3.461,
+        "boundary_generation": 0.192,
+        "comparison": 2.709,
+        "change_contours": 11.381,
+        "modernisation_layers": 14.375
+      },
+      "output": {
+        "layers": 124,
+        "features": 4926,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {
+            "gain": 25,
+            "loss": 0,
+            "no_change": 0,
+            "transition": 0
+          },
+          "common_domain_area_m2": 8981676.986375,
+          "unclassified_common_area_m2": 0.000368,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {
+            "gain": 58,
+            "loss": 54,
+            "no_change": 3,
+            "transition": 29
+          },
+          "common_domain_area_m2": 471837275.104758,
+          "unclassified_common_area_m2": 5e-06,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "yssy_2rwy_intersecting.json": {
+      "runways": 2,
+      "total_seconds": 27.577,
+      "stages": {
+        "region_solve": 6.556,
+        "boundary_generation": 0.385,
+        "comparison": 5.651,
+        "change_contours": 13.186,
+        "modernisation_layers": 19.425
+      },
+      "output": {
+        "layers": 185,
+        "features": 10392,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {
+            "gain": 68,
+            "loss": 9,
+            "no_change": 0,
+            "transition": 6
+          },
+          "common_domain_area_m2": 17241008.799724,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {
+            "gain": 137,
+            "loss": 160,
+            "no_change": 4,
+            "transition": 73
+          },
+          "common_domain_area_m2": 546288322.325906,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "ysws_2rwy_parallel.json": {
+      "runways": 2,
+      "total_seconds": 27.159,
+      "stages": {
+        "region_solve": 5.442,
+        "boundary_generation": 0.333,
+        "comparison": 7.091,
+        "change_contours": 12.708,
+        "modernisation_layers": 20.321
+      },
+      "output": {
+        "layers": 182,
+        "features": 10307,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {
+            "gain": 58,
+            "loss": 8,
+            "no_change": 0,
+            "transition": 8
+          },
+          "common_domain_area_m2": 19697815.024627,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {
+            "gain": 134,
+            "loss": 122,
+            "no_change": 8,
+            "transition": 71
+          },
+          "common_domain_area_m2": 534138856.769444,
+          "unclassified_common_area_m2": 0.039442,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "ybbn_2rwy_parallel_mos_cap.json": {
+      "runways": 2,
+      "total_seconds": 34.727,
+      "stages": {
+        "region_solve": 10.359,
+        "boundary_generation": 0.381,
+        "comparison": 14.218,
+        "change_contours": 8.753
+      },
+      "output": {
+        "layers": 172,
+        "features": 3033,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OLS": {
+          "feature_counts": {
+            "gain": 35,
+            "loss": 43,
+            "no_change": 33,
+            "transition": 16
+          },
+          "common_domain_area_m2": 732582424.621414,
+          "unclassified_common_area_m2": 0.24182,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "ymml_2rwy_intersecting.json": {
+      "runways": 2,
+      "total_seconds": 23.226,
+      "stages": {
+        "region_solve": 5.146,
+        "boundary_generation": 0.314,
+        "comparison": 4.561,
+        "change_contours": 11.659,
+        "modernisation_layers": 16.741
+      },
+      "output": {
+        "layers": 189,
+        "features": 10685,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {
+            "gain": 74,
+            "loss": 14,
+            "no_change": 0,
+            "transition": 14
+          },
+          "common_domain_area_m2": 18172245.395005,
+          "unclassified_common_area_m2": 0.002411,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {
+            "gain": 123,
+            "loss": 161,
+            "no_change": 5,
+            "transition": 82
+          },
+          "common_domain_area_m2": 538223662.554988,
+          "unclassified_common_area_m2": 0.002836,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "yssy_3rwy_mixed.json": {
+      "runways": 3,
+      "total_seconds": 45.47,
+      "stages": {
+        "region_solve": 10.705,
+        "boundary_generation": 0.56,
+        "comparison": 6.837,
+        "change_contours": 24.478,
+        "modernisation_layers": 32.547
+      },
+      "output": {
+        "layers": 252,
+        "features": 22102,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {
+            "gain": 109,
+            "loss": 13,
+            "no_change": 0,
+            "transition": 7
+          },
+          "common_domain_area_m2": 25047006.575937,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        },
+        "OES": {
+          "feature_counts": {
+            "gain": 193,
+            "loss": 263,
+            "no_change": 7,
+            "transition": 106
+          },
+          "common_domain_area_m2": 569125586.957206,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "ygth_2rwy_intersecting.json": {
+      "runways": 2,
+      "total_seconds": 1.837,
+      "stages": {
+        "region_solve": 1.449,
+        "boundary_generation": 0.083
+      },
+      "output": {
+        "layers": 71,
+        "features": 714,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {}
+    },
+    "ystw_4rwy_mixed.json": {
+      "runways": 4,
+      "total_seconds": 3.604,
+      "stages": {
+        "region_solve": 2.886,
+        "boundary_generation": 0.214
+      },
+      "output": {
+        "layers": 118,
+        "features": 1533,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {}
+    },
+    "ybcp_1rwy_single_curved.json": {
+      "runways": 1,
+      "total_seconds": 8.72,
+      "stages": {
+        "region_solve": 7.818,
+        "boundary_generation": 0.256
+      },
+      "output": {
+        "layers": 65,
+        "features": 1349,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {}
+    },
+    "ybsc_1rwy_single.json": {
+      "runways": 1,
+      "total_seconds": 1.283,
+      "stages": {
+        "region_solve": 1.056,
+        "boundary_generation": 0.043
+      },
+      "output": {
+        "layers": 46,
+        "features": 332,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {}
+    },
+    "ybpm_2rwy_parallel.json": {
+      "runways": 2,
+      "total_seconds": 3.315,
+      "stages": {
+        "region_solve": 2.676,
+        "boundary_generation": 0.139
+      },
+      "output": {
+        "layers": 86,
+        "features": 1050,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {}
+    },
+    "ybci_2rwy_intersecting.json": {
+      "runways": 2,
+      "total_seconds": 3.268,
+      "stages": {
+        "region_solve": 2.78,
+        "boundary_generation": 0.147
+      },
+      "output": {
+        "layers": 80,
+        "features": 974,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {}
+    },
+    "ybas_1rwy_single.json": {
+      "runways": 1,
+      "total_seconds": 1.144,
+      "stages": {
+        "region_solve": 0.871,
+        "boundary_generation": 0.044
+      },
+      "output": {
+        "layers": 35,
+        "features": 268,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {}
+    },
+    "ybai_2rwy_intersecting.json": {
+      "runways": 2,
+      "total_seconds": 6.991,
+      "stages": {
+        "region_solve": 5.101,
+        "boundary_generation": 0.211,
+        "comparison": 0.65,
+        "change_contours": 0.417
+      },
+      "output": {
+        "layers": 110,
+        "features": 1964,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OLS": {
+          "feature_counts": {
+            "gain": 21,
+            "loss": 14,
+            "no_change": 28,
+            "transition": 23
+          },
+          "common_domain_area_m2": 187823503.202825,
+          "unclassified_common_area_m2": 4e-06,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "ybai_2rwy_intersecting_reverse.json": {
+      "runways": 2,
+      "total_seconds": 7.07,
+      "stages": {
+        "region_solve": 5.194,
+        "boundary_generation": 0.211,
+        "comparison": 0.663,
+        "change_contours": 0.429
+      },
+      "output": {
+        "layers": 109,
+        "features": 1954,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {
+        "OLS": {
+          "feature_counts": {
+            "gain": 14,
+            "loss": 21,
+            "no_change": 28,
+            "transition": 22
+          },
+          "common_domain_area_m2": 187823503.202829,
+          "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "ybsc_1rwy_single_file_output.json": {
+      "runways": 1,
+      "total_seconds": 1.908,
+      "stages": {
+        "region_solve": 1.048,
+        "boundary_generation": 0.043
+      },
+      "output": {
+        "layers": 46,
+        "features": 332,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0
+      },
+      "comparisons": {}
+    }
+  }
+}

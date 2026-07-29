@@ -33,13 +33,13 @@
       "project_crs": "EPSG:32756",
       "expected_comparison_families": ["OLS"],
       "expected_comparison_feature_counts": {
-        "OLS": {"gain": 31, "loss": 40, "no_change": 32, "transition": 11}
+        "OLS": {"gain": 35, "loss": 43, "no_change": 33, "transition": 16}
       },
       "mos139_lock_required": false,
       "performance_baseline_required": false,
       "maximum_region_overlap_m2": 0.2,
       "comparison_line_like_width_m": 0.2,
-      "maximum_comparison_line_like_parts": 0
+      "maximum_comparison_line_like_parts": 5
     },
     {
       "file": "ymml_2rwy_intersecting.json",

@@ -138,12 +138,11 @@ tests/run_ols_workflow_regression.py \
 
 ## Performance baseline
 
-`performance_baseline_qgis4_2026-07-11.json` records the current QGIS 4.0.2
-wall-clock and key nested-stage timings, output counts, and comparison accuracy
-metrics for all five fixtures. It is a reference checkpoint, not a hard timing
-gate: compare medians from at least three runs on the same machine/runtime and
-investigate changes above 20%. Geometry validity, coverage, exclusivity, and ID
-checks remain hard failures.
+`performance_baseline_qgis4_2026-07-29.json` records the current QGIS 4.0.2
+three-run wall-clock medians, key nested-stage timings, output counts, and
+comparison accuracy metrics for all 16 maintained fixtures. Runtime regressions
+above 20% and all geometry, coverage, exclusivity, determinism, and ID failures
+are release-gate failures.
 
 Generate a fresh raw report with:
 
@@ -165,7 +164,7 @@ GDAL_DATA=/Applications/QGIS-4.0.app/Contents/Resources/gdal \
 /Applications/QGIS-4.0.app/Contents/MacOS/python \
 tests/run_ols_workflow_regression.py \
   --repeat 3 \
-  --baseline tests/fixtures/ols/performance_baseline_qgis4_2026-07-11.json \
+  --baseline tests/fixtures/ols/performance_baseline_qgis4_2026-07-29.json \
   --output /private/tmp/ols_production_readiness.json
 ```
 
