@@ -144,6 +144,9 @@ surfaces/specialised.py          Specialised surfaces such as RAOA and taxiway
                                  separation offsets.
 rulesets/                       Aerodrome-standard profiles and policy modules
                                  for MOS139, EASA, CAP 168, and ICAO Annex 14.
+                                 Modernised Annex 14 ADG/OFS/standard-OES
+                                 protected airspace is supported for its future
+                                 21 November 2030 applicability.
 frameworks/nasf/                Australian NASF safeguarding framework profile,
                                  policy parameters, and compatibility aliases.
 reports/                        Declared-distance and runway-summary reports.

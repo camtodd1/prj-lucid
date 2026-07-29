@@ -2,12 +2,15 @@
 
 **Status:** Current
 
-**Last reviewed:** 22 July 2026
+**Last reviewed:** 29 July 2026
 
 The OLS tab provides independent **Baseline OLS** and **Comparison OLS**
 selectors. Choosing **None — baseline only** generates only the baseline.
 Rulesets are selectable when their controlling-envelope capability is available;
 incomplete rulesets remain visible but disabled.
+
+The modernised Annex 14 protected-airspace comparison is supported and stable,
+while remaining a future model applicable from 21 November 2030.
 
 The OLS tab keeps the shared contour defaults visible and places detailed
 controls behind two disclosures. **Surface-specific overrides** repeats the

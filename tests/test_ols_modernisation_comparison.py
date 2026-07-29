@@ -162,15 +162,18 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             0.0,
         )
 
-    def test_finalizer_runs_each_mutating_partition_stage_once(self):
+    def test_finalizer_preserves_raw_arrangement_and_runs_final_stages_once(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 110.0)
         comparison = OlsEnvelopeComparisonEngine(
             PlanarControllingOlsEngine([baseline]),
             PlanarControllingOlsEngine([future]),
         )
-        stage_names = (
+        skipped_stage_names = (
+            "_finalise_comparison_parts",
             "_normalize_raw_classified_parts",
+        )
+        stage_names = (
             "_append_common_domain_gap_parts",
             "_append_final_common_domain_remainders",
             "_reattach_tracked_recovered_sliver_parts",
@@ -189,10 +192,18 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                 )
                 for name in stage_names
             }
+            skipped_stages = {
+                name: stack.enter_context(
+                    patch.object(comparison, name, wraps=getattr(comparison, name))
+                )
+                for name in skipped_stage_names
+            }
             comparison.finalize_comparison()
 
         for stage in stages.values():
             self.assertEqual(stage.call_count, 1)
+        for stage in skipped_stages.values():
+            self.assertEqual(stage.call_count, 0)
 
     def test_finalization_caches_pair_domains_unions_and_delta_ranges(self):
         baseline = self.constant("baseline", 100.0)

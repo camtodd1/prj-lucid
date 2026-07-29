@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Dynamic runway input widget used by the main dialog."""
 
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
 
@@ -414,6 +414,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._add_runway_operations_controls(advanced_body_layout)
         self._add_runway_characteristics_controls(advanced_body_layout)
         self._add_declared_distance_controls(advanced_body_layout)
+        self._add_modernised_annex14_controls(advanced_body_layout)
         advanced_layout.addWidget(advanced_body)
         groupBox_layout.addWidget(self.advanced_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
@@ -881,6 +882,264 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         parent_layout.addWidget(declared_group)
 
+    def _add_modernised_annex14_controls(
+        self,
+        parent_layout: QtWidgets.QVBoxLayout,
+    ) -> None:
+        container = QtWidgets.QWidget()
+        container.setObjectName(f"widget_annex14_modernised_{self.index}")
+        container_layout = QtWidgets.QVBoxLayout(container)
+        container_layout.setContentsMargins(0, 0, 0, 0)
+        container_layout.setSpacing(4)
+
+        disclosure = QtWidgets.QToolButton()
+        disclosure.setObjectName(f"toolButton_annex14_modernised_{self.index}")
+        disclosure.setText("Modernised Annex 14 OFS/OES")
+        disclosure.setCheckable(True)
+        disclosure.setChecked(False)
+        disclosure.setArrowType(QtCore.Qt.ArrowType.RightArrow)
+        disclosure.setToolButtonStyle(
+            QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon
+        )
+        disclosure.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        container_layout.addWidget(disclosure)
+
+        body = QtWidgets.QGroupBox()
+        body.setObjectName(f"groupBox_annex14_modernised_{self.index}")
+        self._style_section_groupbox(body)
+        grid = QtWidgets.QGridLayout(body)
+        self._configure_runway_form_grid(grid)
+
+        self.annex14_confirmed_cb = QtWidgets.QCheckBox(
+            "I have reviewed the operation and strip basis"
+        )
+        self.annex14_confirmed_cb.setObjectName(
+            f"checkBox_annex14_confirmed_{self.index}"
+        )
+        grid.addWidget(QtWidgets.QLabel("Configuration:"), 0, 0)
+        grid.addWidget(self.annex14_confirmed_cb, 0, 1, 1, 2)
+
+        self.annex14_strip_source_combo = NoWheelComboBox()
+        self.annex14_strip_source_combo.setObjectName(
+            f"comboBox_annex14_strip_source_{self.index}"
+        )
+        self.annex14_strip_source_combo.addItem(
+            "Prefilled from design standard",
+            "design_standard_prefill",
+        )
+        self.annex14_strip_source_combo.addItem("Manual override", "manual")
+        self.annex14_strip_source_combo.setToolTip(
+            "Records whether the OFS strip dimensions were accepted from the "
+            "selected design standard or entered manually."
+        )
+        grid.addWidget(QtWidgets.QLabel("Strip source:"), 1, 0)
+        grid.addWidget(self.annex14_strip_source_combo, 1, 1, 1, 2)
+
+        self.annex14_strip_width_le = self._annex14_number_edit(
+            "strip_width",
+            "Overall strip width used by transitional and inner surfaces.",
+        )
+        self.annex14_strip_extension_le = self._annex14_number_edit(
+            "strip_extension",
+            "Strip extension beyond each runway end.",
+        )
+        grid.addWidget(QtWidgets.QLabel("Strip width / end extension (m):"), 2, 0)
+        grid.addWidget(self.annex14_strip_width_le, 2, 1)
+        grid.addWidget(self.annex14_strip_extension_le, 2, 2)
+
+        self.annex14_code_f_no_digital_cb = QtWidgets.QCheckBox(
+            "Code F aircraft without qualifying digital go-around guidance"
+        )
+        self.annex14_code_f_no_digital_cb.setObjectName(
+            f"checkBox_annex14_code_f_no_digital_{self.index}"
+        )
+        grid.addWidget(QtWidgets.QLabel("Code F adjustment:"), 3, 0)
+        grid.addWidget(self.annex14_code_f_no_digital_cb, 3, 1, 1, 2)
+
+        grid.addWidget(self._column_header_label("Primary End"), 4, 1)
+        grid.addWidget(self._column_header_label("Reciprocal End"), 4, 2)
+        self._annex14_end_widgets: Dict[str, Dict[str, QtWidgets.QWidget]] = {}
+        row = 5
+        operation_labels = (
+            ("circling_or_visual_circuit", "Circling / visual circuit"),
+            (
+                "straight_in_non_precision_instrument",
+                "Straight-in non-precision instrument",
+            ),
+            ("precision_approach", "Precision approach"),
+            ("instrument_departure", "Instrument departure"),
+            ("take_off", "Take-off"),
+        )
+        for key, label in operation_labels:
+            grid.addWidget(QtWidgets.QLabel(label + ":"), row, 0)
+            for column, end_key in ((1, "primary_end"), (2, "reciprocal_end")):
+                end_widgets = self._annex14_end_widgets.setdefault(
+                    end_key,
+                    {"operations": {}},
+                )
+                checkbox = QtWidgets.QCheckBox()
+                checkbox.setObjectName(
+                    f"checkBox_annex14_{end_key}_{key}_{self.index}"
+                )
+                end_widgets["operations"][key] = checkbox
+                grid.addWidget(checkbox, row, column)
+            row += 1
+
+        numeric_rows = (
+            (
+                "maximum_certificated_takeoff_mass_kg",
+                "Maximum certificated take-off mass (kg)",
+                "Required when take-off OES is selected.",
+            ),
+            (
+                "governing_approach_surface_slope_percent",
+                "Governing OFS approach slope (%)",
+                "Blank uses the unadjusted table slope.",
+            ),
+            (
+                "obstacle_clearance_height_m",
+                "Obstacle clearance height (m)",
+                "Blank uses the unadjusted table length.",
+            ),
+        )
+        for key, label, tooltip in numeric_rows:
+            grid.addWidget(QtWidgets.QLabel(label + ":"), row, 0)
+            for column, end_key in ((1, "primary_end"), (2, "reciprocal_end")):
+                line_edit = self._annex14_number_edit(
+                    f"{end_key}_{key}",
+                    tooltip,
+                )
+                self._annex14_end_widgets[end_key][key] = line_edit
+                grid.addWidget(line_edit, row, column)
+            row += 1
+
+        grid.addWidget(QtWidgets.QLabel("Specific/curved OES required:"), row, 0)
+        for column, end_key in ((1, "primary_end"), (2, "reciprocal_end")):
+            checkbox = QtWidgets.QCheckBox()
+            checkbox.setObjectName(
+                f"checkBox_annex14_{end_key}_specific_oes_{self.index}"
+            )
+            checkbox.setToolTip(
+                "Specific OES geometry is not supported; selecting this blocks "
+                "modernised generation."
+            )
+            self._annex14_end_widgets[end_key]["specific_oes_required"] = checkbox
+            grid.addWidget(checkbox, row, column)
+        self._standardize_form_rows(grid, row + 1)
+
+        body.setVisible(False)
+        disclosure.toggled.connect(body.setVisible)
+        disclosure.toggled.connect(
+            lambda expanded: disclosure.setArrowType(
+                QtCore.Qt.ArrowType.DownArrow
+                if expanded
+                else QtCore.Qt.ArrowType.RightArrow
+            )
+        )
+        self.annex14_modernised_disclosure = disclosure
+        self.annex14_modernised_body = body
+        container_layout.addWidget(body)
+        parent_layout.addWidget(container)
+
+    def _annex14_number_edit(
+        self,
+        suffix: str,
+        tooltip: str,
+    ) -> QtWidgets.QLineEdit:
+        line_edit = QtWidgets.QLineEdit()
+        line_edit.setObjectName(f"lineEdit_annex14_{suffix}_{self.index}")
+        if suffix.endswith("maximum_certificated_takeoff_mass_kg"):
+            validator = QtGui.QDoubleValidator(0.0, 9999999.0, 1, line_edit)
+            validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
+            line_edit.setValidator(validator)
+        else:
+            line_edit.setValidator(self.distance_validator)
+        line_edit.setToolTip(tooltip)
+        self._set_control_width(line_edit)
+        return line_edit
+
+    def _annex14_modernised_input_data(self) -> Dict[str, Any]:
+        config: Dict[str, Any] = {
+            "schema_version": 1,
+            "confirmed": self.annex14_confirmed_cb.isChecked(),
+            "strip": {
+                "source": self.annex14_strip_source_combo.currentData(),
+                "overall_width_m": self.annex14_strip_width_le.text().strip(),
+                "end_extension_m": self.annex14_strip_extension_le.text().strip(),
+            },
+            "code_f_without_digital_go_around_avionics":
+                self.annex14_code_f_no_digital_cb.isChecked(),
+        }
+        for end_key, widgets in self._annex14_end_widgets.items():
+            operations = {
+                key: checkbox.isChecked()
+                for key, checkbox in widgets["operations"].items()
+            }
+            config[end_key] = {
+                "operations": operations,
+                "maximum_certificated_takeoff_mass_kg":
+                    widgets["maximum_certificated_takeoff_mass_kg"].text().strip(),
+                "governing_approach_surface_slope_percent":
+                    widgets["governing_approach_surface_slope_percent"].text().strip(),
+                "obstacle_clearance_height_m":
+                    widgets["obstacle_clearance_height_m"].text().strip(),
+                "specific_oes_required":
+                    widgets["specific_oes_required"].isChecked(),
+            }
+        return config
+
+    def _set_annex14_modernised_input_data(self, raw_config: Any) -> None:
+        config = raw_config if isinstance(raw_config, dict) else {}
+        strip = config.get("strip") if isinstance(config.get("strip"), dict) else {}
+        self.annex14_confirmed_cb.setChecked(
+            self._bool_from_saved_value(config.get("confirmed", False))
+        )
+        self._set_combo_data(
+            self.annex14_strip_source_combo,
+            strip.get("source", "design_standard_prefill"),
+        )
+        self.annex14_strip_width_le.setText(str(strip.get("overall_width_m", "") or ""))
+        self.annex14_strip_extension_le.setText(
+            str(strip.get("end_extension_m", "") or "")
+        )
+        self.annex14_code_f_no_digital_cb.setChecked(
+            self._bool_from_saved_value(
+                config.get(
+                    "code_f_without_digital_go_around_avionics",
+                    False,
+                )
+            )
+        )
+        for end_key, widgets in self._annex14_end_widgets.items():
+            end_config = (
+                config.get(end_key)
+                if isinstance(config.get(end_key), dict)
+                else {}
+            )
+            operations = (
+                end_config.get("operations")
+                if isinstance(end_config.get("operations"), dict)
+                else {}
+            )
+            for key, checkbox in widgets["operations"].items():
+                checkbox.setChecked(
+                    self._bool_from_saved_value(operations.get(key, False))
+                )
+            for key in (
+                "maximum_certificated_takeoff_mass_kg",
+                "governing_approach_surface_slope_percent",
+                "obstacle_clearance_height_m",
+            ):
+                widgets[key].setText(str(end_config.get(key, "") or ""))
+            widgets["specific_oes_required"].setChecked(
+                self._bool_from_saved_value(
+                    end_config.get("specific_oes_required", False)
+                )
+            )
+
     def _declared_override_line_edit(self, suffix: str, tooltip: str) -> QtWidgets.QLineEdit:
         line_edit = QtWidgets.QLineEdit()
         line_edit.setObjectName(f"lineEdit_{suffix}_{self.index}")
@@ -933,6 +1192,16 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.lahso_applied_1_cb,
             self.lahso_applied_2_cb,
             self.cap168_wide_runway_cb,
+            self.annex14_confirmed_cb,
+            self.annex14_code_f_no_digital_cb,
+            *[
+                checkbox
+                for widgets in self._annex14_end_widgets.values()
+                for checkbox in (
+                    *widgets["operations"].values(),
+                    widgets["specific_oes_required"],
+                )
+            ],
         ]:
             checkbox.stateChanged.connect(self.inputChanged.emit)
         for combo in [
@@ -947,8 +1216,23 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.approach_track_2_combo,
             self.takeoff_track_1_combo,
             self.takeoff_track_2_combo,
+            self.annex14_strip_source_combo,
         ]:
             combo.currentIndexChanged.connect(self.inputChanged.emit)
+        for line_edit in [
+            self.annex14_strip_width_le,
+            self.annex14_strip_extension_le,
+            *[
+                widgets[key]
+                for widgets in self._annex14_end_widgets.values()
+                for key in (
+                    "maximum_certificated_takeoff_mass_kg",
+                    "governing_approach_surface_slope_percent",
+                    "obstacle_clearance_height_m",
+                )
+            ],
+        ]:
+            line_edit.textChanged.connect(self.inputChanged.emit)
         self.surface_category_combo.currentIndexChanged.connect(self._handle_surface_category_changed)
         self.remove_button.clicked.connect(self._emit_remove_request)
         self.expand_button.toggled.connect(self._update_expand_button_icon)
@@ -965,7 +1249,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _emit_remove_request(self):
         self.removeRequested.emit(self.index)
 
-    def get_input_data(self) -> Dict[str, str]:
+    def get_input_data(self) -> Dict[str, Any]:
         return {
             "designator_str": self.desig_le.text(),
             "suffix": self.suffix_combo.currentText(),
@@ -1017,9 +1301,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "takeoff_track_type_2": self.takeoff_track_2_combo.currentData(),
             "takeoff_track_wkt_1": self.takeoff_track_wkt_1_le.text().strip(),
             "takeoff_track_wkt_2": self.takeoff_track_wkt_2_le.text().strip(),
+            "annex14_modernised": self._annex14_modernised_input_data(),
         }
 
-    def set_input_data(self, data: Dict[str, str]):
+    def set_input_data(self, data: Dict[str, Any]):
         widgets_to_block = self._input_widgets()
         for widget in widgets_to_block:
             widget.blockSignals(True)
@@ -1083,6 +1368,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self._set_combo_data(self.takeoff_track_2_combo, data.get("takeoff_track_type_2", "aligned"))
             self.takeoff_track_wkt_1_le.setText(data.get("takeoff_track_wkt_1", ""))
             self.takeoff_track_wkt_2_le.setText(data.get("takeoff_track_wkt_2", ""))
+            self._set_annex14_modernised_input_data(
+                data.get("annex14_modernised")
+            )
         finally:
             for widget in widgets_to_block:
                 widget.blockSignals(False)
@@ -1161,6 +1449,22 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.takeoff_track_2_combo,
             self.takeoff_track_wkt_1_le,
             self.takeoff_track_wkt_2_le,
+            self.annex14_confirmed_cb,
+            self.annex14_strip_source_combo,
+            self.annex14_strip_width_le,
+            self.annex14_strip_extension_le,
+            self.annex14_code_f_no_digital_cb,
+            *[
+                widget
+                for widgets in self._annex14_end_widgets.values()
+                for widget in (
+                    *widgets["operations"].values(),
+                    widgets["maximum_certificated_takeoff_mass_kg"],
+                    widgets["governing_approach_surface_slope_percent"],
+                    widgets["obstacle_clearance_height_m"],
+                    widgets["specific_oes_required"],
+                )
+            ],
         ]
 
     def _handle_surface_category_changed(self):

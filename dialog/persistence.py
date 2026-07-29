@@ -738,6 +738,27 @@ class PersistenceMixin:
         runway_data.setdefault("takeoff_track_type_2", "aligned")
         runway_data.setdefault("takeoff_track_wkt_1", "")
         runway_data.setdefault("takeoff_track_wkt_2", "")
+        modernised = runway_data.get("annex14_modernised")
+        if not isinstance(modernised, dict):
+            modernised = {
+                "schema_version": 1,
+                "confirmed": False,
+                "review_required": True,
+                "strip": {
+                    "source": "design_standard_prefill",
+                    "overall_width_m": "",
+                    "end_extension_m": "",
+                },
+                "code_f_without_digital_go_around_avionics": False,
+                "primary_end": {"operations": {}},
+                "reciprocal_end": {"operations": {}},
+            }
+        else:
+            modernised = dict(modernised)
+            modernised.setdefault("schema_version", 1)
+            modernised.setdefault("confirmed", False)
+            modernised["review_required"] = not bool(modernised.get("confirmed"))
+        runway_data["annex14_modernised"] = modernised
         return runway_data
 
     def _line_edit(self, name: str):

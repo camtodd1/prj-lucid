@@ -32,7 +32,9 @@ REQUIRED_LEDGER_COLUMNS = {
 
 RULESET_NAMES = {
     "mos139_2019": "MOS139 (C.07 2026)",
-    "icao_annex14_vol1_modernised_ofs_oes": "Annex 14 Modernised OLS",
+    "icao_annex14_vol1_modernised_ofs_oes": (
+        "Annex 14 Modernised OFS/OES — Future 21 Nov 2030"
+    ),
     "icao_annex14_vol1_current_ols": "Annex 14 Current OLS",
     "uk_caa_cap168_edition_13": "UK CAP 168 Edition 13",
     "easa_cs_adr_dsn_issue_7": "EASA CS-ADR-DSN Issue 7",

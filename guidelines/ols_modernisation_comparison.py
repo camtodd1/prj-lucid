@@ -185,17 +185,15 @@ class OlsEnvelopeComparisonEngine:
         self._delta_range_cache = {}
         baseline_regions = self.baseline_engine._controlling_region_geometries()
         future_regions = self.future_engine._controlling_region_geometries()
-        strict_conventional = self._strict_conventional_partition_enabled()
         result = self._raw_comparison_parts(
             baseline_regions,
             future_regions,
-            clean_spikes=not strict_conventional,
+            clean_spikes=False,
         )
         self._finalize_comparison_partition(
             result,
             baseline_regions,
             future_regions,
-            strict_conventional=strict_conventional,
         )
         self._comparison_invariant_report = self._audit_comparison_invariants(
             result,
@@ -235,18 +233,12 @@ class OlsEnvelopeComparisonEngine:
         result: Dict[str, List[ComparisonPart]],
         baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
         future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
-        strict_conventional: bool,
     ) -> None:
         """Finalize one partition; no caller may mutate geometry after this pass."""
-        if not strict_conventional:
-            self._finalise_comparison_parts(result)
-
-        # Recover pair-attributed coverage once after controller-aware cleanup,
-        # then normalize the complete raw/recovered partition once. The final
-        # remainder pass only restores any area trimmed by normalization.
+        # Every controller-pair domain is completed during the initial shared
+        # arrangement.  Finalization must preserve that coverage rather than
+        # cleaning individual parts and repairing the resulting holes later.
         self._append_common_domain_gap_parts(result, baseline_regions, future_regions)
-        if not strict_conventional:
-            self._normalize_raw_classified_parts(result)
         self._append_final_common_domain_remainders(result, baseline_regions, future_regions)
         self._reattach_tracked_recovered_sliver_parts(result)
         common_domain = self._common_domain(baseline_regions, future_regions)
@@ -285,6 +277,10 @@ class OlsEnvelopeComparisonEngine:
                 )
                 if not self._has_area(overlap):
                     continue
+                starts = {
+                    change: len(result[change])
+                    for change in ("gain", "loss", "no_change")
+                }
                 self._append_classified_overlap(
                     result,
                     baseline_candidate,
@@ -292,6 +288,27 @@ class OlsEnvelopeComparisonEngine:
                     overlap,
                     clean_spikes=clean_spikes,
                 )
+                assigned = self._union_geometries([
+                    geometry
+                    for change in ("gain", "loss", "no_change")
+                    for _baseline, _future, geometry in result[change][starts[change]:]
+                    if self._has_area(geometry)
+                ])
+                pair_remainder = (
+                    self._safe_difference(overlap, assigned)
+                    if assigned is not None and not assigned.isEmpty()
+                    else QgsGeometry(overlap)
+                )
+                for part in self.baseline_engine._polygon_parts(pair_remainder):
+                    if not self._has_area(part):
+                        continue
+                    self._append_classified_overlap(
+                        result,
+                        baseline_candidate,
+                        future_candidate,
+                        part,
+                        clean_spikes=False,
+                    )
         return result
 
     def _pair_domain(

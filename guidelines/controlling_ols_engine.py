@@ -267,6 +267,15 @@ class PlanarControllingOlsEngine:
             "icao_annex14_vol1_current_ols",
         }
 
+    def _modernised_annex14_completion_enabled(self) -> bool:
+        return any(
+            str((candidate.metadata or {}).get("annex14_family") or "")
+            .strip()
+            .upper()
+            in {"OFS", "OES"}
+            for candidate in self.candidates
+        )
+
     def _minimum_cell_area_m2(self) -> float:
         """Retain sub-square-metre cells for curved and Annex 14 arrangements."""
         if any(
@@ -1825,7 +1834,11 @@ class PlanarControllingOlsEngine:
         if not cell_parts:
             return []
 
-        cell_parts.extend(self._global_subdivision_completion_parts(cell_parts))
+        for _pass in range(1):
+            completion_parts = self._global_subdivision_completion_parts(cell_parts)
+            if not completion_parts:
+                break
+            cell_parts.extend(completion_parts)
         cell_parts = self._reassign_numeric_sliver_parts(cell_parts)
         self._region_solve_stats["global_pre_merge_union_area_m2"] = self._geometry_union_area(
             geometry for _candidate, geometry in cell_parts
@@ -2088,7 +2101,10 @@ class PlanarControllingOlsEngine:
             if (
                 controller is None
                 and numeric_completion
-                and self._conventional_refinement_enabled()
+                and (
+                    self._conventional_refinement_enabled()
+                    or self._modernised_annex14_completion_enabled()
+                )
             ):
                 try:
                     point = gap.pointOnSurface().asPoint()
@@ -2101,8 +2117,22 @@ class PlanarControllingOlsEngine:
                     controller = None
             if controller is None:
                 refined_parts = []
-                if self._conventional_refinement_enabled():
+                if (
+                    self._conventional_refinement_enabled()
+                    or self._modernised_annex14_completion_enabled()
+                ):
                     refined_parts = self._complete_gap_with_lower_envelope(gap)
+                if not refined_parts and not self._conventional_refinement_enabled():
+                    try:
+                        point = gap.pointOnSurface().asPoint()
+                        result = self.controlling_candidate_at_xy(
+                            QgsPointXY(point.x(), point.y())
+                        )
+                        sampled = result[0] if result is not None else None
+                    except Exception:
+                        sampled = None
+                    if sampled is not None:
+                        refined_parts = [(sampled, gap)]
                 if refined_parts:
                     completed.extend(refined_parts)
                     self._region_solve_stats["global_refined_gap_part_count"] = (
@@ -2130,7 +2160,10 @@ class PlanarControllingOlsEngine:
                 owned = None
             if not self._has_polygon_area(owned) or not self._areas_match(owned, gap, tolerance_m2=1e-3):
                 refined_parts = []
-                if self._conventional_refinement_enabled():
+                if (
+                    self._conventional_refinement_enabled()
+                    or self._modernised_annex14_completion_enabled()
+                ):
                     refined_parts = self._complete_gap_with_lower_envelope(gap)
                 if refined_parts:
                     completed.extend(refined_parts)
@@ -2154,7 +2187,11 @@ class PlanarControllingOlsEngine:
                 )
                 continue
             completed.append((controller, owned))
-            gap_kind = "numeric" if numeric_completion else "unanimous"
+            gap_kind = (
+                "unanimous"
+                if not self._modernised_annex14_completion_enabled()
+                else "refined"
+            )
             self._region_solve_stats[f"global_{gap_kind}_gap_part_count"] = (
                 self._region_solve_stats.get(f"global_{gap_kind}_gap_part_count", 0.0)
                 + 1.0
@@ -2169,10 +2206,10 @@ class PlanarControllingOlsEngine:
         self,
         gap: QgsGeometry,
     ) -> List[Tuple[ControllingOlsCandidate, QgsGeometry]]:
-        """Accept a gap refinement only when its solved union covers the whole gap."""
+        """Split a polygonize omission through the canonical lower-envelope solver."""
         refined_parts = self._gap_lower_envelope_parts(gap)
-        if not refined_parts:
-            return []
+        if not refined_parts or not self._conventional_refinement_enabled():
+            return refined_parts
         try:
             solved = QgsGeometry.unaryUnion(
                 [geometry for _candidate, geometry in refined_parts]
@@ -2686,9 +2723,12 @@ class PlanarControllingOlsEngine:
             source_boundary = self._combined_boundary_geometry(geometries)
             cleaned_merged = self._clean_merged_region_geometry(merged, candidate, source_boundary)
             if (
-                self._conventional_refinement_enabled()
-                and self._has_polygon_area(cleaned_merged)
+                self._has_polygon_area(cleaned_merged)
                 and merged.isGeosValid()
+                and (
+                    self._conventional_refinement_enabled()
+                    or self._modernised_annex14_completion_enabled()
+                )
             ):
                 try:
                     coverage_change = merged.symDifference(cleaned_merged).area()
@@ -7992,7 +8032,13 @@ class ControllingOlsEngineMixin:
                 surface_stats["area_m2"] = float(surface_stats["area_m2"]) + repair.area()
 
         if repaired_count:
-            if repaired_area <= CONTROLLING_NUMERIC_COVERAGE_TOLERANCE_M2:
+            numeric_completion_tolerance = CONTROLLING_NUMERIC_COVERAGE_TOLERANCE_M2
+            if engine._modernised_annex14_completion_enabled():
+                numeric_completion_tolerance = max(
+                    numeric_completion_tolerance,
+                    coverage.area() * 1e-7,
+                )
+            if repaired_area <= numeric_completion_tolerance:
                 engine._region_solve_stats["numeric_partition_completion_part_count"] = (
                     engine._region_solve_stats.get(
                         "numeric_partition_completion_part_count", 0.0

@@ -2849,7 +2849,54 @@ class SafeguardingBuilderDialog(
 
         # --- Update the group's display labels ---
         group_widget.update_display_labels(calculation_results)
+        self._prefill_annex14_strip_controls(group_widget)
         self.update_dialog_status()
+
+    def _prefill_annex14_strip_controls(
+        self,
+        group_widget: RunwayWidgetGroup,
+    ) -> None:
+        if (
+            group_widget.annex14_strip_source_combo.currentData()
+            != "design_standard_prefill"
+            or (
+                group_widget.annex14_strip_width_le.text().strip()
+                and group_widget.annex14_strip_extension_le.text().strip()
+            )
+        ):
+            return
+        try:
+            inputs = group_widget.get_input_data()
+            profile = get_ruleset_profile(
+                self.ruleset_combo.currentData() or DEFAULT_RULESET_ID
+            )
+            runway_types = [
+                profile.classify_runway_type(inputs.get("type1")),
+                profile.classify_runway_type(inputs.get("type2")),
+            ]
+            type_rank = {"NI": 0, "NPA": 1, "PA_I": 2, "PA_II_III": 3}
+            runway_type = max(
+                runway_types,
+                key=lambda value: type_rank.get(value, -1),
+            )
+            params = profile.strip_parameters(
+                int(inputs.get("arc_num") or 0),
+                runway_type,
+                float(inputs.get("width") or 0.0) or None,
+            ) or {}
+            width = params.get("overall_width")
+            extension = params.get("extension_length")
+            if width is not None and not group_widget.annex14_strip_width_le.text():
+                group_widget.annex14_strip_width_le.setText(f"{float(width):g}")
+            if (
+                extension is not None
+                and not group_widget.annex14_strip_extension_le.text()
+            ):
+                group_widget.annex14_strip_extension_le.setText(
+                    f"{float(extension):g}"
+                )
+        except (TypeError, ValueError, AttributeError):
+            return
 
     def add_runway_group(self):
         """Creates and adds a new RunwayWidgetGroup instance."""
@@ -3166,7 +3213,7 @@ class SafeguardingBuilderDialog(
             final_data["contour_intervals"] = {}
         return final_data
 
-    def _validate_runway_data(self, index: int, inputs: Dict[str, str], errors: List[str]) -> Optional[Dict[str, Any]]:
+    def _validate_runway_data(self, index: int, inputs: Dict[str, Any], errors: List[str]) -> Optional[Dict[str, Any]]:
         """Validates raw inputs for a single runway."""
         validated = {"original_index": index}
         current_errors = 0
@@ -3431,6 +3478,20 @@ class SafeguardingBuilderDialog(
             errors.append(f"Rwy {index}: ADG is required for Annex 14 OFS/OES generation.")
             current_errors += 1
         validated["adg"] = adg
+        if "icao_annex14_vol1_modernised_ofs_oes" in {
+            baseline_ols_ruleset,
+            comparison_ols_ruleset,
+        }:
+            modernised, modernised_errors = self._validate_annex14_modernised_config(
+                index,
+                inputs.get("annex14_modernised"),
+                inputs,
+            )
+            validated["annex14_modernised"] = modernised
+            errors.extend(modernised_errors)
+            current_errors += len(modernised_errors)
+        else:
+            validated["annex14_modernised"] = inputs.get("annex14_modernised")
         surface_category = str(inputs.get("surface_category", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_CATEGORY
         surface_material = str(inputs.get("surface_material", "") or "").strip() or DEFAULT_RUNWAY_SURFACE_MATERIAL
         if surface_category and surface_category not in RUNWAY_SURFACE_MATERIALS:
@@ -3482,6 +3543,176 @@ class SafeguardingBuilderDialog(
                 validated[wkt_key] = track_wkt
 
         return validated if current_errors == 0 else None
+
+    def _validate_annex14_modernised_config(
+        self,
+        index: int,
+        raw_config: Any,
+        runway_inputs: Dict[str, Any],
+    ) -> Tuple[Dict[str, Any], List[str]]:
+        errors: List[str] = []
+        config = dict(raw_config) if isinstance(raw_config, dict) else {}
+        def selected(value: Any) -> bool:
+            if isinstance(value, bool):
+                return value
+            if value is None:
+                return False
+            return str(value).strip().lower() not in {"", "0", "false", "no", "off"}
+
+        confirmed = selected(config.get("confirmed", False))
+        if not confirmed:
+            errors.append(
+                f"Rwy {index}: Modernised Annex 14 configuration requires review and confirmation."
+            )
+
+        strip_raw = config.get("strip")
+        strip = dict(strip_raw) if isinstance(strip_raw, dict) else {}
+        strip_source = str(
+            strip.get("source") or "design_standard_prefill"
+        ).strip()
+        if strip_source not in {"design_standard_prefill", "manual"}:
+            errors.append(
+                f"Rwy {index}: Invalid modernised Annex 14 strip source '{strip_source}'."
+            )
+            strip_source = "design_standard_prefill"
+
+        def positive_optional(value: Any, label: str, required: bool = False):
+            text = str(value or "").strip()
+            if not text:
+                if required:
+                    errors.append(f"Rwy {index}: {label} is required.")
+                return None
+            try:
+                number = float(text)
+            except (TypeError, ValueError):
+                number = 0.0
+            if number <= 0.0:
+                errors.append(f"Rwy {index}: {label} must be greater than zero.")
+                return None
+            return number
+
+        strip_width = positive_optional(
+            strip.get("overall_width_m"),
+            "modernised OFS strip width",
+            required=True,
+        )
+        strip_extension = positive_optional(
+            strip.get("end_extension_m"),
+            "modernised OFS strip end extension",
+            required=True,
+        )
+
+        normalized: Dict[str, Any] = {
+            "schema_version": 1,
+            "confirmed": confirmed,
+            "review_required": False,
+            "strip": {
+                "source": strip_source,
+                "overall_width_m": strip_width,
+                "end_extension_m": strip_extension,
+            },
+            "code_f_without_digital_go_around_avionics":
+                selected(
+                    config.get(
+                        "code_f_without_digital_go_around_avionics",
+                        False,
+                    )
+                ),
+        }
+        operation_keys = (
+            "circling_or_visual_circuit",
+            "straight_in_non_precision_instrument",
+            "precision_approach",
+            "instrument_departure",
+            "take_off",
+        )
+        for end_key, runway_type_key, elevation_keys, takeoff_available_key in (
+            (
+                "primary_end",
+                "type1",
+                ("threshold_elev_1", "runway_end_elev_1"),
+                "takeoff_available_1",
+            ),
+            (
+                "reciprocal_end",
+                "type2",
+                ("threshold_elev_2", "runway_end_elev_2"),
+                "takeoff_available_2",
+            ),
+        ):
+            end_raw = config.get(end_key)
+            end_config = dict(end_raw) if isinstance(end_raw, dict) else {}
+            operations_raw = end_config.get("operations")
+            operations_raw = (
+                operations_raw if isinstance(operations_raw, dict) else {}
+            )
+            operations = {
+                key: selected(operations_raw.get(key, False))
+                for key in operation_keys
+            }
+            runway_type = str(runway_inputs.get(runway_type_key) or "")
+            is_non_precision = "Non-Precision" in runway_type
+            is_precision = "Precision Approach" in runway_type
+            is_instrument = is_non_precision or is_precision
+            end_label = "primary end" if end_key == "primary_end" else "reciprocal end"
+            if not any(
+                str(runway_inputs.get(key) or "").strip()
+                for key in elevation_keys
+            ):
+                errors.append(
+                    f"Rwy {index}: {end_label} elevation is required for "
+                    "modernised OFS/OES."
+                )
+            if operations["straight_in_non_precision_instrument"] and not is_non_precision:
+                errors.append(
+                    f"Rwy {index}: {end_label} straight-in non-precision OES "
+                    "requires a non-precision runway end."
+                )
+            if operations["precision_approach"] and not is_precision:
+                errors.append(
+                    f"Rwy {index}: {end_label} precision OES requires a precision runway end."
+                )
+            if operations["instrument_departure"] and not is_instrument:
+                errors.append(
+                    f"Rwy {index}: {end_label} instrument-departure OES requires an instrument runway end."
+                )
+            if operations["take_off"] and not selected(
+                runway_inputs.get(takeoff_available_key, True)
+            ):
+                errors.append(
+                    f"Rwy {index}: {end_label} take-off OES is selected but "
+                    "take-off is unavailable for that direction."
+                )
+            specific_oes_required = selected(
+                end_config.get("specific_oes_required", False)
+            )
+            if specific_oes_required:
+                errors.append(
+                    f"Rwy {index}: {end_label} requires a specific/curved OES, "
+                    "which is not supported."
+                )
+            mass = positive_optional(
+                end_config.get("maximum_certificated_takeoff_mass_kg"),
+                f"{end_label} maximum certificated take-off mass",
+                required=operations["take_off"],
+            )
+            slope = positive_optional(
+                end_config.get("governing_approach_surface_slope_percent"),
+                f"{end_label} governing approach slope",
+            )
+            och = positive_optional(
+                end_config.get("obstacle_clearance_height_m"),
+                f"{end_label} obstacle clearance height",
+            )
+            normalized[end_key] = {
+                "operations": operations,
+                "maximum_certificated_takeoff_mass_kg": mass,
+                "governing_approach_surface_slope_percent": slope,
+                "obstacle_clearance_height_m": och,
+                "specific_oes_required": specific_oes_required,
+            }
+        normalized["review_required"] = bool(errors)
+        return normalized, errors
 
     def _bool_from_input(self, value: Any) -> bool:
         if isinstance(value, bool):

@@ -24,9 +24,9 @@ CURRENT_ALIASES = (
 )
 
 MODERNISED_RULESET_ID = "icao_annex14_vol1_modernised_ofs_oes"
-MODERNISED_DISPLAY_NAME = "Annex 14 Modernised OLS"
+MODERNISED_DISPLAY_NAME = "Annex 14 Modernised OFS/OES — Future 21 Nov 2030"
 MODERNISED_EDITION = "Annex 14 Volume I modernised OFS/OES"
-MODERNISED_STATUS = "draft"
+MODERNISED_STATUS = "stable"
 MODERNISED_DESCRIPTION = (
     "Future ICAO Annex 14 Volume I protected-airspace model using OFS/OES and ADG, "
     "not enforceable until 21 November 2030."
@@ -45,14 +45,14 @@ MODERNISED_ALIASES = (
 RULESET_ID = MODERNISED_RULESET_ID
 DISPLAY_NAME = MODERNISED_DISPLAY_NAME
 EDITION = "Annex 14 Volume I"
-STATUS = "scaffold"
+STATUS = "stable"
 DESCRIPTION = MODERNISED_DESCRIPTION
 ALIASES = MODERNISED_ALIASES
 
 CAPABILITY_STATUS_BY_KEY = {
     "classification.runway_type_mapping": "supported",
-    "classification.reference_code": "partial",
-    "classification.design_group": "partial",
+    "classification.reference_code": "supported",
+    "classification.design_group": "supported",
     "physical.pavement": "unsupported",
     "physical.shoulder": "unsupported",
     "physical.strip": "unsupported",
@@ -60,20 +60,21 @@ CAPABILITY_STATUS_BY_KEY = {
     "physical.clearway": "unsupported",
     "physical.stopway": "unsupported",
     "physical.taxiway_separation": "unsupported",
-    "physical.parallel_runway_separation": "scaffold",
-    "ols.airport_wide": "scaffold",
+    "physical.parallel_runway_separation": "unsupported",
+    "ols.airport_wide": "supported",
     "ols.obstacle_free_surfaces": "supported",
-    "ols.runway_approach": "partial",
-    "ols.takeoff_climb": "scaffold",
-    "ols.ofz": "scaffold",
-    "ols.controlling_lower_envelope": "partial",
-    "oes.airport_wide": "partial",
-    "oes.design_group_driven": "partial",
+    "ols.runway_approach": "supported",
+    "ols.takeoff_climb": "unsupported",
+    "ols.ofz": "supported",
+    "ols.controlling_lower_envelope": "supported",
+    "oes.airport_wide": "supported",
+    "oes.design_group_driven": "supported",
     "oes.horizontal": "supported",
     "oes.straight_in_instrument_approach": "supported",
     "oes.precision_approach": "supported",
     "oes.instrument_departure": "supported",
     "oes.take_off_climb": "supported",
+    "oes.specific": "unsupported",
     "obstacle_limitation.requirements": "supported",
     "obstacle_limitation.surface_establishment": "supported",
     "markings.runway": "unsupported",

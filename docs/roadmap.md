@@ -2,7 +2,7 @@
 
 **Status:** Roadmap
 
-**Last reviewed:** 28 July 2026
+**Last reviewed:** 29 July 2026
 
 This file is the single project documentation backlog. It lists incomplete
 work only; completed implementation history belongs in Git and regression
@@ -15,18 +15,9 @@ fixtures.
 
 ## Protected Airspace
 
-- [ ] Complete the modernised ICAO Annex 14 OFS/OES boundary:
-  document complex transitional coverage, reconcile capability declarations,
-  and keep the profile `partial` where source or topology evidence is still
-  incomplete.
-- [ ] Reduce exceptional geometry recovery and unresolved curved-surface
-  comparisons in the modernised OFS/OES and comparison paths.
-- [ ] Resolve patchy or truncated comparison change contours where a curved
-  baseline surface, particularly a conical surface, meets a controller
-  transition or horizontal plane. Keep the repair bounded and avoid repeating
-  full-domain buffering for individual triangulated segments.
-  Deferred after the July 2026 comparison-finalization refactor; the existing
-  bounded clipping repair and documented limitation remain unchanged.
+- [ ] Add imported or user-defined specific OES geometry for curved and other
+  operations. Until then, selecting `specific_oes_required` blocks modernised
+  generation explicitly.
 - [ ] Evaluate vertex-count reduction for smoothed MOS139 axis/conical
   intersections only if observed runtimes make it worthwhile; do not
   change the accepted compatibility lock solely for benchmark improvement.

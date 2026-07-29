@@ -77,7 +77,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(
             comparison.itemText(modernised_index),
-            "Annex 14 Modernised OLS",
+            "Annex 14 Modernised OFS/OES — Future 21 Nov 2030",
         )
         self.assertIsNone(
             self.dialog.findChild(
@@ -418,6 +418,84 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.assertEqual(normalized["adg"], "V")
         self.assertNotIn("design_group", normalized)
+
+    def test_legacy_runway_requires_modernised_annex14_review(self):
+        normalized = self.dialog._with_runway_defaults({"adg": "III"})
+
+        self.assertFalse(normalized["annex14_modernised"]["confirmed"])
+        self.assertTrue(normalized["annex14_modernised"]["review_required"])
+        self.assertEqual(
+            normalized["annex14_modernised"]["primary_end"]["operations"],
+            {},
+        )
+
+    def test_modernised_annex14_validation_preserves_explicit_operations(self):
+        config = {
+            "confirmed": True,
+            "strip": {
+                "source": "manual",
+                "overall_width_m": "300",
+                "end_extension_m": "60",
+            },
+            "primary_end": {
+                "operations": {"precision_approach": True, "take_off": True},
+                "maximum_certificated_takeoff_mass_kg": "5700",
+            },
+            "reciprocal_end": {"operations": {}},
+        }
+
+        normalized, errors = self.dialog._validate_annex14_modernised_config(
+            1,
+            config,
+            {
+                "type1": "Precision Approach Cat I",
+                "type2": "Non-Instrument",
+                "threshold_elev_1": "10",
+                "threshold_elev_2": "11",
+            },
+        )
+
+        self.assertEqual(errors, [])
+        self.assertTrue(
+            normalized["primary_end"]["operations"]["precision_approach"]
+        )
+        self.assertFalse(
+            normalized["primary_end"]["operations"]["instrument_departure"]
+        )
+        self.assertEqual(
+            normalized["primary_end"]["maximum_certificated_takeoff_mass_kg"],
+            5700.0,
+        )
+        self.assertEqual(normalized["strip"]["source"], "manual")
+
+    def test_modernised_annex14_blocks_specific_oes(self):
+        config = {
+            "confirmed": True,
+            "strip": {
+                "source": "design_standard_prefill",
+                "overall_width_m": 300,
+                "end_extension_m": 60,
+            },
+            "primary_end": {
+                "operations": {},
+                "specific_oes_required": True,
+            },
+            "reciprocal_end": {"operations": {}},
+        }
+
+        normalized, errors = self.dialog._validate_annex14_modernised_config(
+            1,
+            config,
+            {
+                "type1": "Non-Instrument",
+                "type2": "Non-Instrument",
+                "threshold_elev_1": "10",
+                "threshold_elev_2": "11",
+            },
+        )
+
+        self.assertTrue(normalized["review_required"])
+        self.assertTrue(any("specific/curved OES" in error for error in errors))
 
     def test_legacy_runway_elevations_are_normalized_at_load_boundary(self):
         legacy = {"thr_elev_1": "0", "thr_elev_2": "12.5"}

@@ -3,7 +3,7 @@
 from copy import deepcopy
 from typing import Iterable, Optional
 
-OES_STATUS = "partial"
+OES_STATUS = "supported"
 
 HORIZONTAL_SURFACE_REF = "Annex 14 Vol I 4.3.2"
 HORIZONTAL_SURFACE_TABLE_REF = "Annex 14 Vol I Table 4-10"

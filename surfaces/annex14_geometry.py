@@ -47,6 +47,17 @@ class Annex14GeometryMixin:
                 QgsField("diverg_pct", QVariant.Double, self.tr("Divergence %"), 8, 3),
                 QgsField("ref", QVariant.String, self.tr("Reference"), 120),
                 QgsField("notes", QVariant.String, self.tr("Notes"), 254),
+                QgsField("operation", QVariant.String, self.tr("Operation"), 60),
+                QgsField("strip_src", QVariant.String, self.tr("Strip Source"), 40),
+                QgsField("strip_w_m", QVariant.Double, self.tr("Strip Width"), 12, 2),
+                QgsField("strip_ext_m", QVariant.Double, self.tr("Strip Extension"), 12, 2),
+                QgsField("mass_class", QVariant.String, self.tr("Mass Class"), 20),
+                QgsField("slope_basis", QVariant.String, self.tr("Slope Basis"), 40),
+                QgsField("och_m", QVariant.Double, self.tr("OCH"), 12, 2),
+                QgsField("toda_m", QVariant.Double, self.tr("Resolved TODA"), 12, 2),
+                QgsField("clearway_m", QVariant.Double, self.tr("Resolved Clearway"), 12, 2),
+                QgsField("config_ver", QVariant.Int, self.tr("Configuration Version")),
+                QgsField("applicable", QVariant.String, self.tr("Applicable From"), 20),
             ]
         )
 
@@ -87,6 +98,19 @@ class Annex14GeometryMixin:
         if reciprocal is None and primary is not None:
             reciprocal = primary
         return primary, reciprocal
+
+    def _annex14_physical_end_elevations(self, runway_data: dict) -> tuple:
+        primary = self._annex14_float_or_none(runway_data.get("runway_end_elev_1"))
+        reciprocal = self._annex14_float_or_none(
+            runway_data.get("runway_end_elev_2")
+        )
+        threshold_primary, threshold_reciprocal = (
+            self._annex14_runway_end_elevations(runway_data)
+        )
+        return (
+            primary if primary is not None else threshold_primary,
+            reciprocal if reciprocal is not None else threshold_reciprocal,
+        )
 
     def _annex14_polygon_z_from_corners(
         self,
@@ -479,6 +503,59 @@ class Annex14GeometryMixin:
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
         primary_desig, reciprocal_desig = runway_name.split("/") if "/" in runway_name else ("THR1", "THR2")
         primary_elev, reciprocal_elev = self._annex14_runway_end_elevations(runway_data)
+        physical_primary_elev, physical_reciprocal_elev = (
+            self._annex14_physical_end_elevations(runway_data)
+        )
+        config = runway_data.get("annex14_modernised")
+        config = config if isinstance(config, dict) else {}
+        declared = {
+            str(record.get("direction") or ""): record
+            for record in runway_data.get("declared_distances", [])
+            if isinstance(record, dict)
+        }
+        primary_distances = declared.get("primary", {})
+        reciprocal_distances = declared.get("reciprocal", {})
+        primary_toda = self._annex14_float_or_none(primary_distances.get("toda_m"))
+        reciprocal_toda = self._annex14_float_or_none(reciprocal_distances.get("toda_m"))
+        primary_displacement = self._annex14_float_or_none(
+            runway_data.get("thr_displaced_1")
+        ) or 0.0
+        reciprocal_displacement = self._annex14_float_or_none(
+            runway_data.get("thr_displaced_2")
+        ) or 0.0
+        physical_primary = (
+            runway_data.get("thr_point").project(
+                primary_displacement,
+                rwy_params["azimuth_r_p"],
+            )
+            if runway_data.get("thr_point") is not None
+            else None
+        )
+        physical_reciprocal = (
+            runway_data.get("rec_thr_point").project(
+                reciprocal_displacement,
+                rwy_params["azimuth_p_r"],
+            )
+            if runway_data.get("rec_thr_point") is not None
+            else None
+        )
+        primary_departure_start = (
+            physical_primary.project(primary_toda, rwy_params["azimuth_p_r"])
+            if physical_primary is not None and primary_toda is not None
+            else None
+        )
+        reciprocal_departure_start = (
+            physical_reciprocal.project(
+                reciprocal_toda,
+                rwy_params["azimuth_r_p"],
+            )
+            if physical_reciprocal is not None and reciprocal_toda is not None
+            else None
+        )
+        primary_config = config.get("primary_end")
+        primary_config = primary_config if isinstance(primary_config, dict) else {}
+        reciprocal_config = config.get("reciprocal_end")
+        reciprocal_config = reciprocal_config if isinstance(reciprocal_config, dict) else {}
         return [
             {
                 "end_desig": primary_desig,
@@ -491,10 +568,14 @@ class Annex14GeometryMixin:
                 else None,
                 "approach_azimuth": rwy_params["azimuth_r_p"],
                 "takeoff_azimuth": rwy_params["azimuth_p_r"],
-                "takeoff_start": runway_data.get("rec_thr_point"),
-                "takeoff_start_elev": reciprocal_elev,
+                "takeoff_start": primary_departure_start,
+                "takeoff_start_elev": physical_reciprocal_elev,
                 "runway_type": runway_data.get("type1", ""),
-                "takeoff_mass_kg": runway_data.get("takeoff_mass_1_kg") or runway_data.get("max_takeoff_mass_kg"),
+                "operations": dict(primary_config.get("operations") or {}),
+                "takeoff_mass_kg": primary_config.get("maximum_certificated_takeoff_mass_kg"),
+                "approach_slope_percent": primary_config.get("governing_approach_surface_slope_percent"),
+                "obstacle_clearance_height_m": primary_config.get("obstacle_clearance_height_m"),
+                "declared_distances": primary_distances,
             },
             {
                 "end_desig": reciprocal_desig,
@@ -507,10 +588,14 @@ class Annex14GeometryMixin:
                 else None,
                 "approach_azimuth": rwy_params["azimuth_p_r"],
                 "takeoff_azimuth": rwy_params["azimuth_r_p"],
-                "takeoff_start": runway_data.get("thr_point"),
-                "takeoff_start_elev": primary_elev,
+                "takeoff_start": reciprocal_departure_start,
+                "takeoff_start_elev": physical_primary_elev,
                 "runway_type": runway_data.get("type2", ""),
-                "takeoff_mass_kg": runway_data.get("takeoff_mass_2_kg") or runway_data.get("max_takeoff_mass_kg"),
+                "operations": dict(reciprocal_config.get("operations") or {}),
+                "takeoff_mass_kg": reciprocal_config.get("maximum_certificated_takeoff_mass_kg"),
+                "approach_slope_percent": reciprocal_config.get("governing_approach_surface_slope_percent"),
+                "obstacle_clearance_height_m": reciprocal_config.get("obstacle_clearance_height_m"),
+                "declared_distances": reciprocal_distances,
             },
         ]
 
@@ -537,6 +622,7 @@ class Annex14GeometryMixin:
             return
         feature = QgsFeature(fields)
         feature.setGeometry(geom)
+        provenance = getattr(self, "_annex14_current_provenance", {}) or {}
         feature.setAttributes(
             [
                 runway_name,
@@ -552,6 +638,17 @@ class Annex14GeometryMixin:
                 divergence * 100.0 if divergence is not None else None,
                 ref,
                 notes,
+                provenance.get("operation", ""),
+                provenance.get("strip_source", ""),
+                provenance.get("strip_width_m"),
+                provenance.get("strip_extension_m"),
+                provenance.get("mass_class", ""),
+                provenance.get("slope_basis", ""),
+                provenance.get("obstacle_clearance_height_m"),
+                provenance.get("toda_m"),
+                provenance.get("clearway_m"),
+                provenance.get("configuration_version", 1),
+                "2030-11-21",
             ]
         )
         features.append(feature)
@@ -1164,6 +1261,19 @@ class Annex14GeometryMixin:
         return sections
 
     def _annex14_strip_dimensions(self, runway_data: dict) -> Optional[dict]:
+        config = runway_data.get("annex14_modernised")
+        config = config if isinstance(config, dict) else {}
+        strip = config.get("strip")
+        strip = strip if isinstance(strip, dict) else {}
+        width = self._annex14_float_or_none(strip.get("overall_width_m"))
+        extension = self._annex14_float_or_none(strip.get("end_extension_m"))
+        if width is not None and width > 0 and extension is not None and extension >= 0:
+            return {
+                "overall_width": width,
+                "extension_length": extension,
+                "source": str(strip.get("source") or "design_standard_prefill"),
+            }
+
         strip_dims = runway_data.get("calculated_strip_dims")
         if isinstance(strip_dims, dict):
             width = self._annex14_float_or_none(strip_dims.get("overall_width"))
@@ -1455,6 +1565,17 @@ class Annex14GeometryMixin:
         rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
         if rwy_params is None:
             return False
+        modernised_config = runway_data.get("annex14_modernised")
+        if (
+            not isinstance(modernised_config, dict)
+            or not bool(modernised_config.get("confirmed"))
+        ):
+            QgsMessageLog.logMessage(
+                f"Annex 14 geometry skipped for {runway_name}: modernised configuration requires review.",
+                PLUGIN_TAG,
+                Qgis.Warning,
+            )
+            return False
         design_group = self._annex14_design_group_for_runway(runway_data)
         if not design_group:
             QgsMessageLog.logMessage(
@@ -1484,10 +1605,25 @@ class Annex14GeometryMixin:
         oes_instrument_departure_contour_interval = self._annex14_contour_interval(
             "instrument_departure", "OES"
         )
-        code_f_no_digital = bool(runway_data.get("code_letter_f_without_digital_avionics", False))
+        code_f_no_digital = bool(
+            modernised_config.get(
+                "code_f_without_digital_go_around_avionics",
+                False,
+            )
+        )
+        strip_dims = self._annex14_strip_dimensions(runway_data)
+        end_configs = self._annex14_runway_end_configs(runway_data, rwy_params)
+        straight_in_selected = any(
+            bool(end.get("operations", {}).get("straight_in_non_precision_instrument"))
+            for end in end_configs
+        )
+        circling_selected = any(
+            bool(end.get("operations", {}).get("circling_or_visual_circuit"))
+            for end in end_configs
+        )
         strip_adjacent_transitional_created = False
 
-        for end_config in self._annex14_runway_end_configs(runway_data, rwy_params):
+        for end_config in end_configs:
             threshold = end_config["threshold"]
             if threshold is None:
                 continue
@@ -1501,11 +1637,50 @@ class Annex14GeometryMixin:
             highest_threshold_z = end_config.get("highest_threshold_elev")
             takeoff_start_z = end_config.get("takeoff_start_elev")
             runway_length_m = float(rwy_params.get("length") or 0.0)
+            operations = end_config.get("operations", {})
+            declared_distances = end_config.get("declared_distances", {})
+            approach_slope_percent = self._annex14_float_or_none(
+                end_config.get("approach_slope_percent")
+            )
+            obstacle_clearance_height_m = self._annex14_float_or_none(
+                end_config.get("obstacle_clearance_height_m")
+            )
+            mass = self._annex14_float_or_none(end_config.get("takeoff_mass_kg"))
+            self._annex14_current_provenance = {
+                "operation": "runway_protected_airspace",
+                "strip_source": (strip_dims or {}).get("source", ""),
+                "strip_width_m": (strip_dims or {}).get("overall_width"),
+                "strip_extension_m": (strip_dims or {}).get("extension_length"),
+                "mass_class": (
+                    "at_or_below_5700_kg"
+                    if mass is not None and mass <= 5700.0
+                    else "above_5700_kg" if mass is not None else ""
+                ),
+                "slope_basis": (
+                    "user_governing_slope"
+                    if approach_slope_percent is not None
+                    else "unadjusted_table"
+                ),
+                "obstacle_clearance_height_m": obstacle_clearance_height_m,
+                "toda_m": self._annex14_float_or_none(declared_distances.get("toda_m")),
+                "clearway_m": self._annex14_float_or_none(
+                    declared_distances.get("clearway_m")
+                ),
+                "configuration_version": int(
+                    modernised_config.get("schema_version") or 1
+                ),
+            }
 
             ofs = ruleset.obstacle_free_surfaces(
                 design_group=design_group,
                 runway_type=runway_type,
                 runway_width_m=runway_data.get("runway_width"),
+                approach_surface_slope=(
+                    approach_slope_percent / 100.0
+                    if approach_slope_percent is not None
+                    else None
+                ),
+                obstacle_clearance_height_m=obstacle_clearance_height_m,
                 code_letter_f_without_digital_avionics=code_f_no_digital,
             )
             approach = next((s for s in ofs["groups"]["general"] if s.get("surface") == "approach"), None)
@@ -1577,7 +1752,6 @@ class Annex14GeometryMixin:
                 upper_height = float(transitional.get("upper_edge_height_above_highest_threshold_m") or 60.0)
                 horizontal_extent = upper_height / trans_slope if trans_slope > 0 else 0.0
                 upper_edge_z = (highest_threshold_z + upper_height) if highest_threshold_z is not None else None
-                strip_dims = self._annex14_strip_dimensions(runway_data)
                 if strip_dims is not None and not strip_adjacent_transitional_created:
                     opposite_threshold = end_config.get("opposite_threshold")
                     strip_end = (
@@ -1889,9 +2063,13 @@ class Annex14GeometryMixin:
                         contour_interval=ofs_inner_transitional_contour_interval,
                     )
 
+            self._annex14_current_provenance["operation"] = "precision_approach"
             precision = ruleset.precision_approach_surface_parameters()
             approach_component = precision["components"]["approach"]
-            precision_applicable = self._annex14_is_precision_runway_type(runway_type_abbr)
+            precision_applicable = (
+                bool(operations.get("precision_approach"))
+                and self._annex14_is_precision_runway_type(runway_type_abbr)
+            )
             pa_start = (
                 threshold.project(float(approach_component["distance_from_threshold_m"]), approach_az)
                 if precision_applicable
@@ -2064,9 +2242,14 @@ class Annex14GeometryMixin:
                     contour_interval=oes_precision_approach_contour_interval,
                 )
 
+            self._annex14_current_provenance["operation"] = "instrument_departure"
             departure = ruleset.instrument_departure_surface_parameters()
             dep_start = end_config["takeoff_start"]
-            if dep_start is not None and self._annex14_is_instrument_runway_type(runway_type_abbr):
+            if (
+                dep_start is not None
+                and bool(operations.get("instrument_departure"))
+                and self._annex14_is_instrument_runway_type(runway_type_abbr)
+            ):
                 departure_start_z = self._annex14_surface_z(
                     takeoff_start_z or opposite_threshold_z,
                     float(departure.get("inner_edge_elevation_offset_m") or 5.0),
@@ -2092,12 +2275,12 @@ class Annex14GeometryMixin:
                     contour_interval=oes_instrument_departure_contour_interval,
                 )
 
-            mass = end_config.get("takeoff_mass_kg")
+            self._annex14_current_provenance["operation"] = "take_off"
             takeoff = ruleset.take_off_climb_surface_parameters(
                 design_group,
                 max_certificated_takeoff_mass_kg=float(mass) if mass is not None else None,
             )
-            if takeoff and dep_start is not None:
+            if takeoff and dep_start is not None and bool(operations.get("take_off")):
                 self._annex14_append_approach_like_sections(
                     oes_features,
                     fields,
@@ -2118,9 +2301,20 @@ class Annex14GeometryMixin:
                     contour_interval=oes_take_off_climb_contour_interval,
                 )
 
+        self._annex14_current_provenance = {
+            "operation": "straight_in_non_precision_instrument",
+            "strip_source": (strip_dims or {}).get("source", ""),
+            "strip_width_m": (strip_dims or {}).get("overall_width"),
+            "strip_extension_m": (strip_dims or {}).get("extension_length"),
+            "configuration_version": int(modernised_config.get("schema_version") or 1),
+        }
         straight_in = ruleset.straight_in_instrument_approach_surface_parameters()
         aerodrome_elev = self._annex14_float_or_none(getattr(self, "arp_elevation_amsl", None))
-        lower_horizontal = ruleset.horizontal_surface_parameters("I")
+        lower_horizontal = (
+            ruleset.horizontal_surface_parameters("I")
+            if straight_in_selected
+            else None
+        )
         if lower_horizontal:
             runway_axis = QgsGeometry.fromPolylineXY([thr_point, rec_thr_point])
             geom = runway_axis.buffer(float(lower_horizontal["radius_m"]), 72)
@@ -2149,7 +2343,11 @@ class Annex14GeometryMixin:
             )
         upper = straight_in["upper_section"]
         upper_extension = float(upper["longer_side_length_from_threshold_or_thresholds_m"])
-        rect_start = thr_point.project(upper_extension, rwy_params["azimuth_r_p"])
+        rect_start = (
+            thr_point.project(upper_extension, rwy_params["azimuth_r_p"])
+            if straight_in_selected
+            else None
+        )
         if rect_start is not None:
             total_len = upper_extension * 2.0 + float(rwy_params["length"])
             upper_z = (
@@ -2183,7 +2381,12 @@ class Annex14GeometryMixin:
                 straight_in.get("ref", ""),
             )
 
-        horizontal = ruleset.horizontal_surface_parameters(design_group)
+        self._annex14_current_provenance["operation"] = "circling_or_visual_circuit"
+        horizontal = (
+            ruleset.horizontal_surface_parameters(design_group)
+            if circling_selected
+            else None
+        )
         if horizontal:
             runway_axis = QgsGeometry.fromPolylineXY([thr_point, rec_thr_point])
             geom = runway_axis.buffer(float(horizontal["radius_m"]), 72)

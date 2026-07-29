@@ -53,6 +53,18 @@
             "arc_num": "4",
             "arc_let": "F",
             "adg": "V",
+            "annex14_modernised": {
+                "schema_version": 1, "confirmed": true,
+                "strip": {"source": "design_standard_prefill", "overall_width_m": 300.0, "end_extension_m": 60.0},
+                "primary_end": {
+                    "operations": {"circling_or_visual_circuit": true, "precision_approach": true, "instrument_departure": true, "take_off": true},
+                    "maximum_certificated_takeoff_mass_kg": 100000.0
+                },
+                "reciprocal_end": {
+                    "operations": {"circling_or_visual_circuit": true, "precision_approach": true, "instrument_departure": true, "take_off": true},
+                    "maximum_certificated_takeoff_mass_kg": 100000.0
+                }
+            },
             "surface_category": "Sealed",
             "surface_material": "Asphalt",
             "type1": "Precision Approach CAT II/III",
@@ -96,6 +108,18 @@
             "arc_num": "4",
             "arc_let": "E",
             "adg": "V",
+            "annex14_modernised": {
+                "schema_version": 1, "confirmed": true,
+                "strip": {"source": "design_standard_prefill", "overall_width_m": 300.0, "end_extension_m": 60.0},
+                "primary_end": {
+                    "operations": {"circling_or_visual_circuit": true, "precision_approach": true, "instrument_departure": true, "take_off": true},
+                    "maximum_certificated_takeoff_mass_kg": 100000.0
+                },
+                "reciprocal_end": {
+                    "operations": {"circling_or_visual_circuit": true, "precision_approach": true, "instrument_departure": true, "take_off": true},
+                    "maximum_certificated_takeoff_mass_kg": 100000.0
+                }
+            },
             "surface_category": "Sealed",
             "surface_material": "Asphalt",
             "type1": "Precision Approach CAT I",

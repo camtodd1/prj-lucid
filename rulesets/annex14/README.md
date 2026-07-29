@@ -7,7 +7,7 @@ This package contains two separate protected-airspace profiles:
 | Profile | Status | Applicability |
 | --- | --- | --- |
 | `icao_annex14_vol1_current_ols` | Stable | Conventional OLS through 20 November 2030 |
-| `icao_annex14_vol1_modernised_ofs_oes` | Draft | Future OFS/OES model from 21 November 2030 |
+| `icao_annex14_vol1_modernised_ofs_oes` | Stable | Future OFS/OES model from 21 November 2030 |
 
 ## Current OLS Profile
 
@@ -23,11 +23,15 @@ coverage outside those dependencies.
 
 ## Modernised OFS/OES Profile
 
-The modernised profile contains Aeroplane Design Group classification, obstacle
-free surface parameters, obstacle evaluation surface parameters, establishment
-policy, plan-view construction, and comparison support. It remains a draft,
-partially supported future model and is not enforceable before its applicability
-date.
+The modernised protected-airspace profile supports Aeroplane Design Group
+classification, runway OFS, controlling lower envelopes, the five standard OES
+families, contours, and cross-ruleset comparisons. Each runway end requires an
+explicit reviewed operation, strip, mass, adjustment, and declared-distance
+basis. It is a future model applicable from 21 November 2030 and is not
+currently enforceable.
+
+Physical design, declared-distance design, markings, lighting, and
+specific/curved OES geometry remain unsupported.
 
 The baseline/comparison behavior is described in
 [`docs/ols_modernisation_comparison.md`](../../docs/ols_modernisation_comparison.md).
