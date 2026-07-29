@@ -448,8 +448,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             1,
             config,
             {
-                "type1": "Precision Approach Cat I",
-                "type2": "Non-Instrument",
+                "type1": "Precision Approach CAT I",
+                "type2": "Non-Instrument (NI)",
                 "threshold_elev_1": "10",
                 "threshold_elev_2": "11",
             },
@@ -465,13 +465,12 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertFalse(
             normalized["primary_end"]["operations"]["circling_or_visual_circuit"]
         )
-        self.assertEqual(
-            normalized["primary_end"]["maximum_certificated_takeoff_mass_kg"],
-            5700.0,
+        self.assertIsNone(
+            normalized["primary_end"]["maximum_certificated_takeoff_mass_kg"]
         )
         self.assertEqual(normalized["strip"]["source"], "manual")
 
-    def test_modernised_annex14_blocks_specific_oes(self):
+    def test_modernised_annex14_ignores_specific_oes_under_straight_in_assumption(self):
         config = {
             "confirmed": True,
             "strip": {
@@ -490,15 +489,16 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             1,
             config,
             {
-                "type1": "Non-Instrument",
-                "type2": "Non-Instrument",
+                "type1": "Non-Instrument (NI)",
+                "type2": "Non-Instrument (NI)",
                 "threshold_elev_1": "10",
                 "threshold_elev_2": "11",
             },
         )
 
-        self.assertTrue(normalized["review_required"])
-        self.assertTrue(any("specific/curved OES" in error for error in errors))
+        self.assertFalse(normalized["review_required"])
+        self.assertEqual(errors, [])
+        self.assertFalse(normalized["primary_end"]["specific_oes_required"])
 
     def test_modernised_annex14_allows_no_applicable_oes_operation(self):
         config = {
@@ -516,8 +516,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             1,
             config,
             {
-                "type1": "Non-Instrument",
-                "type2": "Non-Instrument",
+                "type1": "Non-Instrument (NI)",
+                "type2": "Non-Instrument (NI)",
                 "threshold_elev_1": "10",
                 "threshold_elev_2": "11",
                 "takeoff_available_1": False,
@@ -547,8 +547,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "reciprocal_end": {"operations": {}},
         }
         runway = {
-            "type1": "Non-Precision Approach",
-            "type2": "Non-Instrument",
+            "type1": "Non-Precision Approach (NPA)",
+            "type2": "Non-Instrument (NI)",
             "threshold_elev_1": "10",
             "threshold_elev_2": "11",
             "takeoff_available_1": False,
@@ -570,6 +570,36 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertFalse(
             normalized["primary_end"]["operations"]["precision_approach"]
+        )
+
+    def test_modernised_annex14_automatically_uses_design_strip_and_code_f_case(self):
+        normalized, errors = self.dialog._validate_annex14_modernised_config(
+            1,
+            {},
+            {
+                "arc_num": "4",
+                "arc_let": "F",
+                "width": "45",
+                "type1": "Precision Approach CAT I",
+                "type2": "Precision Approach CAT I",
+                "threshold_elev_1": "10",
+                "threshold_elev_2": "11",
+            },
+        )
+
+        self.assertEqual(errors, [])
+        self.assertTrue(normalized["confirmed"])
+        self.assertEqual(
+            normalized["operation_basis"],
+            "automatic_conservative_straight_in",
+        )
+        self.assertEqual(
+            normalized["strip"]["source"],
+            "design_standard_prefill",
+        )
+        self.assertIsNotNone(normalized["strip"]["overall_width_m"])
+        self.assertTrue(
+            normalized["code_f_without_digital_go_around_avionics"]
         )
 
     def test_legacy_runway_elevations_are_normalized_at_load_boundary(self):

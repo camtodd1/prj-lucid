@@ -25,10 +25,13 @@ coverage outside those dependencies.
 
 The modernised protected-airspace profile supports Aeroplane Design Group
 classification, runway OFS, controlling lower envelopes, the five standard OES
-families, contours, and cross-ruleset comparisons. Each runway end requires an
-explicit reviewed operation, strip, mass, adjustment, and declared-distance
-basis. It is a future model applicable from 21 November 2030 and is not
-currently enforceable.
+families, contours, and cross-ruleset comparisons. The automatic workflow uses
+the design-ruleset strip, derives operations from runway type and take-off
+availability, assumes straight-in approaches, applies the conservative heavy
+take-off and Code F cases, and retains unadjusted standard slope/OCH table
+dimensions. These assumptions and the corresponding exclusions are declared
+authoritatively in `metadata.py`. It is a future model applicable from
+21 November 2030 and is not currently enforceable.
 
 Physical design, declared-distance design, markings, lighting, and
 specific/curved OES geometry remain unsupported.

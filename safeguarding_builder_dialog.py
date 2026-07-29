@@ -3568,11 +3568,7 @@ class SafeguardingBuilderDialog(
                 return False
             return str(value).strip().lower() not in {"", "0", "false", "no", "off"}
 
-        confirmed = selected(config.get("confirmed", False))
-        if not confirmed:
-            errors.append(
-                f"Rwy {index}: Modernised Annex 14 configuration requires review and confirmation."
-            )
+        confirmed = True
 
         strip_raw = config.get("strip")
         strip = dict(strip_raw) if isinstance(strip_raw, dict) else {}
@@ -3584,6 +3580,37 @@ class SafeguardingBuilderDialog(
                 f"Rwy {index}: Invalid modernised Annex 14 strip source '{strip_source}'."
             )
             strip_source = "design_standard_prefill"
+
+        try:
+            profile = get_ruleset_profile(
+                self.ruleset_combo.currentData() or DEFAULT_RULESET_ID
+            )
+            classified_types = [
+                profile.classify_runway_type(runway_inputs.get("type1")),
+                profile.classify_runway_type(runway_inputs.get("type2")),
+            ]
+            type_rank = {"NI": 0, "NPA": 1, "PA_I": 2, "PA_II_III": 3}
+            governing_type = max(
+                classified_types,
+                key=lambda value: type_rank.get(value, -1),
+            )
+            automatic_strip = profile.strip_parameters(
+                int(runway_inputs.get("arc_num") or 0),
+                governing_type,
+                float(runway_inputs.get("width") or 0.0) or None,
+            ) or {}
+            if (
+                automatic_strip.get("overall_width") is not None
+                and automatic_strip.get("extension_length") is not None
+            ):
+                strip = {
+                    "source": "design_standard_prefill",
+                    "overall_width_m": automatic_strip["overall_width"],
+                    "end_extension_m": automatic_strip["extension_length"],
+                }
+                strip_source = "design_standard_prefill"
+        except (AttributeError, TypeError, ValueError):
+            pass
 
         def positive_optional(value: Any, label: str, required: bool = False):
             text = str(value or "").strip()
@@ -3615,19 +3642,14 @@ class SafeguardingBuilderDialog(
             "schema_version": 1,
             "confirmed": confirmed,
             "review_required": False,
-            "operation_basis": "runway_type_straight_in_assumption",
+            "operation_basis": "automatic_conservative_straight_in",
             "strip": {
                 "source": strip_source,
                 "overall_width_m": strip_width,
                 "end_extension_m": strip_extension,
             },
             "code_f_without_digital_go_around_avionics":
-                selected(
-                    config.get(
-                        "code_f_without_digital_go_around_avionics",
-                        False,
-                    )
-                ),
+                str(runway_inputs.get("arc_let") or "").strip().upper() == "F",
         }
         for end_key, runway_type_key, elevation_keys, takeoff_available_key in (
             (
@@ -3671,32 +3693,12 @@ class SafeguardingBuilderDialog(
                     f"Rwy {index}: {end_label} elevation is required for "
                     "modernised OFS/OES."
                 )
-            specific_oes_required = selected(
-                end_config.get("specific_oes_required", False)
-            )
-            if specific_oes_required:
-                errors.append(
-                    f"Rwy {index}: {end_label} requires a specific/curved OES, "
-                    "which is not supported."
-                )
-            mass = positive_optional(
-                end_config.get("maximum_certificated_takeoff_mass_kg"),
-                f"{end_label} maximum certificated take-off mass",
-            )
-            slope = positive_optional(
-                end_config.get("governing_approach_surface_slope_percent"),
-                f"{end_label} governing approach slope",
-            )
-            och = positive_optional(
-                end_config.get("obstacle_clearance_height_m"),
-                f"{end_label} obstacle clearance height",
-            )
             normalized[end_key] = {
                 "operations": operations,
-                "maximum_certificated_takeoff_mass_kg": mass,
-                "governing_approach_surface_slope_percent": slope,
-                "obstacle_clearance_height_m": och,
-                "specific_oes_required": specific_oes_required,
+                "maximum_certificated_takeoff_mass_kg": None,
+                "governing_approach_surface_slope_percent": None,
+                "obstacle_clearance_height_m": None,
+                "specific_oes_required": False,
             }
         normalized["review_required"] = bool(errors)
         return normalized, errors

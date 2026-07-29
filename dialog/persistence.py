@@ -744,7 +744,7 @@ class PersistenceMixin:
                 "schema_version": 1,
                 "confirmed": False,
                 "review_required": True,
-                "operation_basis": "runway_type_straight_in_assumption",
+                "operation_basis": "automatic_conservative_straight_in",
                 "strip": {
                     "source": "design_standard_prefill",
                     "overall_width_m": "",
@@ -760,7 +760,7 @@ class PersistenceMixin:
             modernised.setdefault("confirmed", False)
             modernised.setdefault(
                 "operation_basis",
-                "runway_type_straight_in_assumption",
+                "automatic_conservative_straight_in",
             )
             modernised["review_required"] = not bool(modernised.get("confirmed"))
         runway_data["annex14_modernised"] = modernised

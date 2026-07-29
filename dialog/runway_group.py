@@ -1052,6 +1052,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.annex14_modernised_disclosure = disclosure
         self.annex14_modernised_body = body
         container_layout.addWidget(body)
+        container.hide()
         parent_layout.addWidget(container)
 
     def _annex14_number_edit(
@@ -1074,15 +1075,15 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _annex14_modernised_input_data(self) -> Dict[str, Any]:
         config: Dict[str, Any] = {
             "schema_version": 1,
-            "confirmed": self.annex14_confirmed_cb.isChecked(),
-            "operation_basis": "runway_type_straight_in_assumption",
+            "confirmed": True,
+            "operation_basis": "automatic_conservative_straight_in",
             "strip": {
-                "source": self.annex14_strip_source_combo.currentData(),
+                "source": "design_standard_prefill",
                 "overall_width_m": self.annex14_strip_width_le.text().strip(),
                 "end_extension_m": self.annex14_strip_extension_le.text().strip(),
             },
             "code_f_without_digital_go_around_avionics":
-                self.annex14_code_f_no_digital_cb.isChecked(),
+                str(self.arc_let_combo.currentData() or "").upper() == "F",
         }
         end_inputs = {
             "primary_end": (
@@ -1111,14 +1112,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             }
             config[end_key] = {
                 "operations": operations,
-                "maximum_certificated_takeoff_mass_kg":
-                    widgets["maximum_certificated_takeoff_mass_kg"].text().strip(),
-                "governing_approach_surface_slope_percent":
-                    widgets["governing_approach_surface_slope_percent"].text().strip(),
-                "obstacle_clearance_height_m":
-                    widgets["obstacle_clearance_height_m"].text().strip(),
-                "specific_oes_required":
-                    widgets["specific_oes_required"].isChecked(),
+                "maximum_certificated_takeoff_mass_kg": None,
+                "governing_approach_surface_slope_percent": None,
+                "obstacle_clearance_height_m": None,
+                "specific_oes_required": False,
             }
         return config
 

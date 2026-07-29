@@ -34,6 +34,8 @@ class RulesetProfile:
     protected_airspace_model: str = "ols_current"
     selectable_as_design_standard: bool = True
     design_standard_display_name: str = ""
+    assumptions: tuple[str, ...] = field(default_factory=tuple)
+    limitations: tuple[str, ...] = field(default_factory=tuple)
 
     @property
     def design_standard_label(self) -> str:

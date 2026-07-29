@@ -348,6 +348,8 @@ ANNEX14_MODERNISED_OFS_OES_PROFILE = Annex14RulesetProfile(
     capabilities=capability_map(metadata.MODERNISED_CAPABILITY_STATUS_BY_KEY),
     protected_airspace_model="annex14_modernised_ofs_oes",
     selectable_as_design_standard=False,
+    assumptions=metadata.MODERNISED_ASSUMPTIONS,
+    limitations=metadata.MODERNISED_LIMITATIONS,
 )
 
 ANNEX14_PROFILE = ANNEX14_MODERNISED_OFS_OES_PROFILE
