@@ -925,10 +925,6 @@ class LayerMixin:
         if layer is None or not layer.isValid():
             return
         try:
-            surface_values = {
-                str(feature.attribute("surface") or "")
-                for feature in layer.getFeatures()
-            } if layer.fields().indexFromName("surface") >= 0 else set()
             contour_classes = {
                 str(feature.attribute("contour_class") or "")
                 for feature in layer.getFeatures()
@@ -941,27 +937,13 @@ class LayerMixin:
                     'abs(("contour_elev_am" / 50.0) - round("contour_elev_am" / 50.0)) <= 0.001'
                 )
             root = QgsRuleBasedRenderer.Rule(None)
-            primary_filter = f'("surface" IS NULL OR "surface" <> \'Transition\') AND ({index_expression})'
+            primary_filter = index_expression
             if palette == "ofs":
                 primary_color = "174,68,45,245"
                 intermediate_color = "190,103,36,185"
             else:
                 primary_color = "18,75,82,240"
                 intermediate_color = "38,111,117,175"
-
-            if "Transition" in surface_values:
-                transition_symbol = QgsLineSymbol.createSimple(
-                    {
-                        "line_color": "196,59,77,245",
-                        "line_width": "0.44",
-                        "line_width_unit": "MM",
-                        "line_style": "dash",
-                    }
-                )
-                transition_rule = QgsRuleBasedRenderer.Rule(transition_symbol)
-                transition_rule.setFilterExpression('"surface" = \'Transition\'')
-                transition_rule.setLabel("Transition / intersection")
-                root.appendChild(transition_rule)
 
             index_symbol = QgsLineSymbol.createSimple(
                 {
@@ -986,9 +968,7 @@ class LayerMixin:
                 }
             )
             normal_rule = QgsRuleBasedRenderer.Rule(normal_symbol)
-            normal_rule.setFilterExpression(
-                f'("surface" IS NULL OR "surface" <> \'Transition\') AND NOT ({index_expression})'
-            )
+            normal_rule.setFilterExpression(f"NOT ({index_expression})")
             normal_rule.setLabel("Intermediate contour")
             if not contour_classes or "intermediate" in contour_classes:
                 root.appendChild(normal_rule)

@@ -327,14 +327,13 @@ def run(input_path, audit_path, preview_path):
         if layer.name().startswith("Controlling OFS"):
             rule_colors = [rule.symbol().color().name() for rule in layer.renderer().rootRule().children()]
             assert rule_colors == ["#ae442d", "#be6724"], rule_colors
-        classes = {str(feature.attribute("contour_class") or "") for feature in layer.getFeatures()}
+        features = list(layer.getFeatures())
+        classes = {str(feature.attribute("contour_class") or "") for feature in features}
         assert {"primary", "intermediate"} <= classes, (layer.name(), classes)
-        regular_features = [
-            feature for feature in layer.getFeatures()
-            if str(feature.attribute("surface") or "") != "Transition"
-        ]
-        assert all(float(feature.attribute("contour_interval_m")) > 0 for feature in regular_features)
-        assert all(float(feature.attribute("primary_interval_m")) > 0 for feature in regular_features)
+        assert "transition" not in classes, (layer.name(), classes)
+        assert all(str(feature.attribute("surface") or "") != "Transition" for feature in features)
+        assert all(float(feature.attribute("contour_interval_m")) > 0 for feature in features)
+        assert all(float(feature.attribute("primary_interval_m")) > 0 for feature in features)
     assert {"Annex 14 OFS Controlling", "Annex 14 OES Controlling"} <= set(_child_names(debug))
 
     strip_adjacent_by_runway = {}
