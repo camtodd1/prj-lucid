@@ -1,4 +1,4 @@
-"""Classification helpers for the ICAO Annex 14 Volume I scaffold."""
+"""Classification helpers for ICAO Annex 14 Volume I profiles."""
 
 from typing import Optional
 

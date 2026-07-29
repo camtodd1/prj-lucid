@@ -16,7 +16,7 @@ from .services import (
 
 
 class Annex14RulesetProfile(RulesetProfile):
-    """Public ruleset API for the ICAO Annex 14 Volume I scaffold."""
+    """Public ruleset API for supported ICAO Annex 14 Volume I profiles."""
 
     classification = ClassificationService()
     ols = OlsService()

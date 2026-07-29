@@ -39,6 +39,20 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class LayerMixin:
+    def _surface_layer_display_name(
+        self,
+        surface: str,
+        feature_type: str,
+        runway: Optional[str] = None,
+    ) -> str:
+        """Return the shared user-facing OLS layer label."""
+        translate = getattr(self, "tr", lambda value: value)
+        parts = [translate(str(surface).strip())]
+        runway_label = str(runway or "").strip()
+        if runway_label:
+            parts.append(runway_label)
+        return f"{' '.join(parts)} - {translate(str(feature_type).strip())}"
+
     def _setup_main_group(
         self, root_node: QgsLayerTreeNode, group_name: str, project: QgsProject
     ) -> Optional[QgsLayerTreeGroup]:
@@ -419,10 +433,6 @@ class LayerMixin:
                             return
                     if str(style_key) == "AGL Light":
                         self._apply_agl_rotation_field(layer)
-                    if str(style_key) == "OLS Controlling Planar Region":
-                        self._apply_controlling_region_style(layer)
-                    if str(style_key) == "OLS Controlling Contour":
-                        self._apply_controlling_contour_style(layer)
                     if str(style_key) in {
                         "Annex 14 OFS Surface",
                         "Annex 14 OES Surface",
@@ -432,6 +442,22 @@ class LayerMixin:
                         "Annex 14 Controlling OES",
                         "Annex 14 Candidate OFS",
                         "Annex 14 Candidate OES",
+                        "OLS Approach",
+                        "OLS Inner Approach",
+                        "OLS Inner Transitional",
+                        "OLS Baulked Landing",
+                        "OLS TOCS",
+                        "OLS IHS",
+                        "OLS Transitional",
+                        "OLS Conical",
+                        "OLS OHS",
+                        "OLS Controlling Planar Region",
+                        "OLS Approach Contour",
+                        "OLS OFZ Contour",
+                        "OLS TOCS Contour",
+                        "OLS Transitional Contour",
+                        "OLS Conical Contour",
+                        "OLS Controlling Contour",
                     }:
                         self._prune_annex14_renderer_rules(layer)
                     if str(style_key) in {"Annex 14 Controlling OFS", "Annex 14 Controlling OES"}:
@@ -447,6 +473,22 @@ class LayerMixin:
                                 layer,
                                 '"contour_elev_am" IS NOT NULL',
                             )
+                    if str(style_key) == "OLS Controlling Contour":
+                        self._apply_controlling_contour_style(
+                            layer,
+                            palette="ofs",
+                        )
+                    if str(style_key) in {
+                        "OLS Approach Contour",
+                        "OLS OFZ Contour",
+                        "OLS TOCS Contour",
+                        "OLS Transitional Contour",
+                        "OLS Conical Contour",
+                    }:
+                        self._apply_controlling_contour_labels(
+                            layer,
+                            '"contour_elev_am" IS NOT NULL',
+                        )
                     if str(style_key) == "Parallel Runway Standards Line":
                         self._apply_parallel_runway_standards_style(layer)
                     if str(style_key) in {

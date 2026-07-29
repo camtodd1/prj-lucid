@@ -38,6 +38,24 @@ class OlsLayerGroupingTests(unittest.TestCase):
         self.assertIs(runway_group.parent(), ofz_group)
         self.assertIsNone(self.direct_group(runway_group, "Obstacle Free Zone"))
 
+    def test_surface_layer_names_use_one_shared_schema(self):
+        self.assertEqual(
+            self.builder._surface_layer_display_name(
+                "Inner Transitional",
+                "Surface",
+                "19R",
+            ),
+            "Inner Transitional 19R - Surface",
+        )
+        self.assertEqual(
+            self.builder._surface_layer_display_name(
+                "Take-off Climb",
+                "Contours",
+                "01L",
+            ),
+            "Take-off Climb 01L - Contours",
+        )
+
     def test_legacy_nested_ofz_is_promoted_beside_primary_surfaces(self):
         primary_group = QgsLayerTreeGroup("Primary Surfaces")
         secondary_group = QgsLayerTreeGroup("Secondary Surfaces")

@@ -7420,7 +7420,9 @@ class ControllingOlsEngineMixin:
                 output_group,
                 engine,
                 internal_name=f"Annex14_Controlling_{family}_{icao_code}",
-                display_name=f"Controlling {family} — Surface",
+                display_name=self._surface_layer_display_name(
+                    f"Controlling {family}", "Surface", icao_code
+                ),
                 style_key=f"Annex 14 Controlling {family}",
                 partition_overlaps=True,
             )
@@ -7436,7 +7438,9 @@ class ControllingOlsEngineMixin:
                 engine,
                 family_contours,
                 internal_name=f"Annex14_Controlling_{family}_Contours_{icao_code}",
-                display_name=f"Controlling {family} — Contours",
+                display_name=self._surface_layer_display_name(
+                    f"Controlling {family}", "Contours", icao_code
+                ),
                 style_key=f"Annex 14 {family} Contour",
                 strict_clip=True,
             )
@@ -7661,7 +7665,10 @@ class ControllingOlsEngineMixin:
         layer = self._create_and_add_layer(
             "MultiPolygon",
             internal_name or f"OLS_Controlling_Planar_Regions_{icao_code}",
-            display_name or f"{self.tr('OLS')} Controlling Regions {icao_code}",
+            display_name
+            or self._surface_layer_display_name(
+                "Controlling OLS", "Surface", icao_code
+            ),
             fields,
             features,
             output_group,
@@ -8393,7 +8400,10 @@ class ControllingOlsEngineMixin:
         layer = self._create_and_add_layer(
             "MultiLineString",
             internal_name or f"OLS_Controlling_Contours_{icao_code}",
-            display_name or f"{self.tr('OLS')} Controlling Contours {icao_code}",
+            display_name
+            or self._surface_layer_display_name(
+                "Controlling OLS", "Contours", icao_code
+            ),
             fields,
             features,
             output_group,

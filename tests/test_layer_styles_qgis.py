@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtWidgets import QApplication
 from qgis.core import (
     Qgis,
     QgsCoordinateReferenceSystem,
@@ -40,8 +41,75 @@ class _FileLayerHarness(LayerMixin):
 
 
 class LayerStyleTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
     def tearDown(self):
         QgsProject.instance().clear()
+
+    def test_conventional_ols_uses_the_modernised_surface_palette(self):
+        polygon_keys = {
+            "OLS Approach",
+            "OLS Inner Approach",
+            "OLS Inner Transitional",
+            "OLS Baulked Landing",
+            "OLS TOCS",
+            "OLS IHS",
+            "OLS Transitional",
+            "OLS Conical",
+            "OLS OHS",
+            "OLS Controlling Planar Region",
+        }
+        contour_keys = {
+            "OLS Approach Contour",
+            "OLS OFZ Contour",
+            "OLS TOCS Contour",
+            "OLS Transitional Contour",
+            "OLS Conical Contour",
+            "OLS Controlling Contour",
+        }
+        self.assertEqual(
+            {DEFAULT_STYLE_MAP[key] for key in polygon_keys},
+            {"harmonised_ols_surfaces.qml"},
+        )
+        self.assertEqual(
+            {DEFAULT_STYLE_MAP[key] for key in contour_keys},
+            {"harmonised_ols_contours.qml"},
+        )
+
+        styles_dir = Path(__file__).resolve().parents[1] / "styles"
+        expected_rules = {
+            "Approach",
+            "Inner Approach",
+            "Transitional",
+            "Inner Transitional",
+            "Balked Landing",
+            "Take-off Climb",
+            "Inner Horizontal",
+            "Conical",
+            "Outer Horizontal",
+        }
+        for geometry, filename in (
+            ("Polygon", "harmonised_ols_surfaces.qml"),
+            ("LineString", "harmonised_ols_contours.qml"),
+        ):
+            with self.subTest(filename=filename):
+                layer = QgsVectorLayer(
+                    f"{geometry}?field=surface:string",
+                    filename,
+                    "memory",
+                )
+                message, loaded = layer.loadNamedStyle(str(styles_dir / filename))
+                self.assertTrue(loaded, message)
+                self.assertEqual(layer.renderer().type(), "RuleRenderer")
+                self.assertEqual(
+                    {
+                        rule.label()
+                        for rule in layer.renderer().rootRule().children()
+                    },
+                    expected_rules,
+                )
 
     @staticmethod
     def _surface_layer(surface_values):

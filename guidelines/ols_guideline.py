@@ -777,7 +777,9 @@ class OlsGuidelineMixin:
                 layer = self._create_and_add_layer(
                     "Polygon",
                     f"OLS_IHS_{icao_code}",
-                    f"{self.tr('OLS')} IHS {icao_code}",
+                    self._surface_layer_display_name(
+                        "Inner Horizontal", "Surface", icao_code
+                    ),
                     fields,
                     [feature],
                     ols_layer_group,
@@ -879,7 +881,9 @@ class OlsGuidelineMixin:
                                 layer = self._create_and_add_layer(
                                     "Polygon",
                                     f"OLS_Conical_{icao_code}",
-                                    f"{self.tr('OLS')} Conical {icao_code}",
+                                    self._surface_layer_display_name(
+                                        "Conical", "Surface", icao_code
+                                    ),
                                     fields,
                                     [feature],
                                     ols_layer_group,
@@ -1113,7 +1117,9 @@ class OlsGuidelineMixin:
                 contour_layer = self._create_and_add_layer(
                     "LineString",
                     f"OLS_Conical_Contours_{icao_code}",
-                    f"{self.tr('OLS')} Conical Contours {icao_code}",
+                    self._surface_layer_display_name(
+                        "Conical", "Contours", icao_code
+                    ),
                     fields,
                     contour_features,
                     ols_layer_group,
@@ -1268,7 +1274,9 @@ class OlsGuidelineMixin:
                             layer = self._create_and_add_layer(
                                 "Polygon",
                                 f"OLS_OHS_{icao_code}",
-                                f"{self.tr('OLS')} OHS {icao_code}",
+                                self._surface_layer_display_name(
+                                    "Outer Horizontal", "Surface", icao_code
+                                ),
                                 fields,
                                 [feature],
                                 ols_layer_group,
@@ -1373,7 +1381,9 @@ class OlsGuidelineMixin:
                             poly_layer = self._create_and_add_layer(
                                 "Polygon",
                                 f"OLS_Transitional_{safe_runway_name}_{safe_end_desig}",
-                                f"{self.tr('OLS')} Transitional Surface RWY {end_desig}",
+                                self._surface_layer_display_name(
+                                    "Transitional", "Surface", end_desig
+                                ),
                                 transitional_fields,
                                 end_transitional_features,
                                 transitional_group,
@@ -1387,7 +1397,9 @@ class OlsGuidelineMixin:
                             contour_layer = self._create_and_add_layer(
                                 "LineString",
                                 f"OLS_Transitional_Contours_{safe_runway_name}_{safe_end_desig}",
-                                f"{self.tr('OLS')} Transitional Contours RWY {end_desig}",
+                                self._surface_layer_display_name(
+                                    "Transitional", "Contours", end_desig
+                                ),
                                 contour_fields,
                                 end_transitional_contour_features,
                                 transitional_group,
@@ -5449,7 +5461,9 @@ class OlsGuidelineMixin:
                 if self._create_and_add_layer(
                     "Polygon",
                     f"OLS_Approach_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} Approach Surface RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Approach", "Surface", current_desig
+                    ),
                     fields,
                     end_approach_features,
                     approach_group,
@@ -5463,7 +5477,9 @@ class OlsGuidelineMixin:
                 if self._create_and_add_layer(
                     "LineString",
                     f"OLS_ApproachContours_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} Approach Contours RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Approach", "Contours", current_desig
+                    ),
                     fields,
                     end_approach_contour_features,
                     approach_group,
@@ -5477,7 +5493,9 @@ class OlsGuidelineMixin:
                 if self._create_and_add_layer(
                     "Polygon",
                     f"OLS_TOCS_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} TOCS RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Take-off Climb", "Surface", current_desig
+                    ),
                     fields,
                     end_tocs_features,
                     takeoff_group,
@@ -5491,7 +5509,9 @@ class OlsGuidelineMixin:
                 if self._create_and_add_layer(
                     "LineString",
                     f"OLS_TOCS_Contours_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} TOCS Contours RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Take-off Climb", "Contours", current_desig
+                    ),
                     fields,
                     end_tocs_contour_features,
                     takeoff_group,
@@ -5507,7 +5527,9 @@ class OlsGuidelineMixin:
                 if self._create_and_add_layer(
                     "Polygon",
                     f"OLS_InnerTransitional_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} Inner Transitional RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Inner Transitional", "Surface", current_desig
+                    ),
                     fields,
                     end_inner_trans_features,
                     ofz_direction_group,
@@ -5522,7 +5544,9 @@ class OlsGuidelineMixin:
                 if self._create_and_add_layer(
                     "LineString",
                     f"OLS_InnerTransitional_Contours_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} Inner Transitional Contours RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Inner Transitional", "Contours", current_desig
+                    ),
                     self._get_ofz_contour_fields(),
                     end_inner_trans_contours,
                     ofz_direction_group,
@@ -5538,7 +5562,9 @@ class OlsGuidelineMixin:
                 if self._create_and_add_layer(
                     "Polygon",
                     f"OLS_InnerApproach_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} Inner Approach RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Inner Approach", "Surface", current_desig
+                    ),
                     fields,
                     end_inner_approach_features,
                     ofz_direction_group,
@@ -5553,7 +5579,9 @@ class OlsGuidelineMixin:
                 if self._create_and_add_layer(
                     "LineString",
                     f"OLS_InnerApproach_Contours_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} Inner Approach Contours RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Inner Approach", "Contours", current_desig
+                    ),
                     self._get_ofz_contour_fields(),
                     end_inner_approach_contours,
                     ofz_direction_group,
@@ -5569,7 +5597,9 @@ class OlsGuidelineMixin:
                 bls_layer = self._create_and_add_layer(
                     "Polygon",
                     f"OLS_BaulkedLanding_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} Baulked Landing RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Balked Landing", "Surface", current_desig
+                    ),
                     fields,
                     end_bls_features,
                     ofz_direction_group,
@@ -5591,7 +5621,9 @@ class OlsGuidelineMixin:
                 if self._create_and_add_layer(
                     "LineString",
                     f"OLS_BaulkedLanding_Contours_{safe_runway_name}_{safe_end_desig}",
-                    f"{self.tr('OLS')} Baulked Landing Contours RWY {current_desig}",
+                    self._surface_layer_display_name(
+                        "Balked Landing", "Contours", current_desig
+                    ),
                     self._get_ofz_contour_fields(),
                     end_bls_contours,
                     ofz_direction_group,

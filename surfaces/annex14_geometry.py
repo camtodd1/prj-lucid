@@ -2504,7 +2504,9 @@ class Annex14GeometryMixin:
                         layer = self._create_and_add_layer(
                             self._annex14_polygon_layer_type(surface_features),
                             f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
-                            f"{surface_label} — {self.tr('Surface')}",
+                            self._surface_layer_display_name(
+                                surface_label, "Surface", runway_label
+                            ),
                             fields,
                             surface_features,
                             surface_group,
@@ -2528,7 +2530,9 @@ class Annex14GeometryMixin:
                         layer = self._create_and_add_layer(
                             self._annex14_contour_layer_type(surface_features),
                             f"Annex14_OFS_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}_Contours",
-                            f"{surface_label} — {self.tr('Contours')}",
+                            self._surface_layer_display_name(
+                                surface_label, "Contours", runway_label
+                            ),
                             contour_fields,
                             surface_features,
                             contour_group,
@@ -2551,7 +2555,9 @@ class Annex14GeometryMixin:
                         layer = self._create_and_add_layer(
                             self._annex14_polygon_layer_type(surface_features),
                             f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}",
-                            f"{surface_label} — {self.tr('Surface')}",
+                            self._surface_layer_display_name(
+                                surface_label, "Surface", runway_label
+                            ),
                             fields,
                             surface_features,
                             surface_group,
@@ -2575,7 +2581,9 @@ class Annex14GeometryMixin:
                         layer = self._create_and_add_layer(
                             self._annex14_contour_layer_type(surface_features),
                             f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_end_desig}_{safe_surface}_Contours",
-                            f"{surface_label} — {self.tr('Contours')}",
+                            self._surface_layer_display_name(
+                                surface_label, "Contours", runway_label
+                            ),
                             contour_fields,
                             surface_features,
                             contour_group,
@@ -2598,7 +2606,9 @@ class Annex14GeometryMixin:
                     layer = self._create_and_add_layer(
                         self._annex14_polygon_layer_type(surface_features),
                         f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_surface}",
-                        f"{surface_label} — {self.tr('Surface')}",
+                        self._surface_layer_display_name(
+                            surface_label, "Surface", runway_name
+                        ),
                         fields,
                         surface_features,
                         surface_group,
@@ -2622,7 +2632,9 @@ class Annex14GeometryMixin:
                     layer = self._create_and_add_layer(
                         self._annex14_contour_layer_type(surface_features),
                         f"Annex14_OES_{runway_name.replace('/', '_')}_{safe_surface}_Contours",
-                        f"{surface_label} — {self.tr('Contours')}",
+                        self._surface_layer_display_name(
+                            surface_label, "Contours", runway_name
+                        ),
                         contour_fields,
                         surface_features,
                         contour_group,

@@ -3366,7 +3366,10 @@ class SafeguardingBuilder(
                 ]
             ):
                 if obstacle_free_zone_group is not None:
-                    runway_match = re.search(r"\bRWY\s+(\S+)$", layer_name)
+                    runway_match = re.search(
+                        r"^.+?\s+(\S+)\s+-\s+(?:Surface|Contours)$",
+                        layer_name,
+                    ) or re.search(r"\bRWY\s+(\S+)$", layer_name)
                     if runway_match:
                         return self._ensure_layer_group(
                             obstacle_free_zone_group,

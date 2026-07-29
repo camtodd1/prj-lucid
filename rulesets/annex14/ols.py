@@ -1,4 +1,4 @@
-"""Obstacle limitation surface facade for the ICAO Annex 14 scaffold."""
+"""Obstacle limitation surface facade for ICAO Annex 14 profiles."""
 
 from typing import Optional
 

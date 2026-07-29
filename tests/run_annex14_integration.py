@@ -218,15 +218,70 @@ def run(input_path, audit_path, preview_path):
     debug = _group_at(main, ["99 Debug / Development"])
     if main is None or ols is None or debug is None:
         raise AssertionError("Generated root, OLS, or debug group is missing")
-    assert _child_names(ols) == ["OFS", "OES"], _child_names(ols)
-    ofs = _group_at(ols, ["OFS"])
-    oes = _group_at(ols, ["OES"])
+    comparison_group = next(
+        (
+            child
+            for child in ols.children()
+            if isinstance(child, QgsLayerTreeGroup)
+            and child.name().startswith("Comparison OLS — Annex 14 Modernised")
+        ),
+        None,
+    )
+    if comparison_group is None:
+        comparison_group = ols
+    assert {"OFS", "OES"} <= set(_child_names(comparison_group)), _child_names(
+        comparison_group
+    )
+    ofs = _group_at(comparison_group, ["OFS"])
+    oes = _group_at(comparison_group, ["OES"])
     for family_group in (ofs, oes):
         for child in family_group.children():
             if isinstance(child, QgsLayerTreeGroup) and child.name().startswith("RWY "):
                 assert all(isinstance(grandchild, QgsLayerTreeLayer) for grandchild in child.children())
 
     records = _layer_records(main)
+    conventional_surface_style_keys = {
+        "OLS Approach",
+        "OLS Inner Approach",
+        "OLS Inner Transitional",
+        "OLS Baulked Landing",
+        "OLS TOCS",
+        "OLS IHS",
+        "OLS Transitional",
+        "OLS Conical",
+        "OLS OHS",
+        "OLS Controlling Planar Region",
+    }
+    conventional_contour_style_keys = {
+        "OLS Approach Contour",
+        "OLS OFZ Contour",
+        "OLS TOCS Contour",
+        "OLS Transitional Contour",
+        "OLS Conical Contour",
+        "OLS Controlling Contour",
+    }
+    conventional_layers = [
+        record
+        for record in records
+        if record["style_key"]
+        in conventional_surface_style_keys | conventional_contour_style_keys
+        and "04 Obstacle Limitation Surfaces" in record["path"]
+        and any(
+            part.startswith(("Baseline OLS", "Comparison OLS"))
+            for part in record["path"]
+        )
+    ]
+    assert conventional_layers
+    for record in conventional_layers:
+        expected_suffix = (
+            " - Surface"
+            if record["style_key"] in conventional_surface_style_keys
+            else " - Contours"
+        )
+        assert record["name"].endswith(expected_suffix), record
+        assert record["renderer"] in {"singleSymbol", "RuleRenderer"}, record
+        assert record["renderer"] == "singleSymbol" or record["rules"], record
+
     annex = [record for record in records if record["style_key"].startswith("Annex 14")]
     expected_styles = {
         "Annex 14 OFS Surface", "Annex 14 OES Surface",
@@ -283,7 +338,14 @@ def run(input_path, audit_path, preview_path):
     strip_adjacent_by_runway = {}
     for node in root.findLayers():
         layer = node.layer()
-        if layer is None or layer.name() != "Transitional — Surface":
+        if (
+            layer is None
+            or not layer.name().startswith("Transitional ")
+            or not layer.name().endswith(" - Surface")
+            or str(
+                layer.customProperty("safeguarding_style_key") or ""
+            ) != "Annex 14 OFS Surface"
+        ):
             continue
         for feature in layer.getFeatures():
             if not str(feature.attribute("component") or "").startswith("strip_adjacent_"):
@@ -292,10 +354,18 @@ def run(input_path, audit_path, preview_path):
             strip_adjacent_by_runway.setdefault(runway, []).append(feature)
     assert strip_adjacent_by_runway, "No strip-adjacent transitional surfaces were generated"
     for runway, features in strip_adjacent_by_runway.items():
-        assert len(features) == 2, (runway, [feature.attributes() for feature in features])
+        assert len(features) == 4, (runway, [feature.attributes() for feature in features])
         assert {str(feature.attribute("component")) for feature in features} == {
             "strip_adjacent_left", "strip_adjacent_right",
         }
+        assert sum(
+            str(feature.attribute("component")) == "strip_adjacent_left"
+            for feature in features
+        ) == 2
+        assert sum(
+            str(feature.attribute("component")) == "strip_adjacent_right"
+            for feature in features
+        ) == 2
         assert all(not str(feature.attribute("end_desig") or "") for feature in features)
 
     coverage = {}
@@ -306,10 +376,16 @@ def run(input_path, audit_path, preview_path):
             for child in list(family_group.children()) + list(debug_family.children())
             if isinstance(child, QgsLayerTreeLayer)
         }
-        if f"Controlling {family} — Surface" not in layers:
+        controlling_surface_name = (
+            f"Controlling {family} {payload['icao_code']} - Surface"
+        )
+        controlling_contour_name = (
+            f"Controlling {family} {payload['icao_code']} - Contours"
+        )
+        if controlling_surface_name not in layers:
             print(json.dumps({"family": family, "available": sorted(layers), "records": annex, "logs": logs}, indent=2))
-        controlling = layers[f"Controlling {family} — Surface"]
-        controlling_contours = layers[f"Controlling {family} — Contours"]
+        controlling = layers[controlling_surface_name]
+        controlling_contours = layers[controlling_contour_name]
         candidates = layers[f"{family} — Planar Candidates"]
         transitions = layers[f"{family} — Planar Transitions"]
         controlling_union = _union(controlling)
