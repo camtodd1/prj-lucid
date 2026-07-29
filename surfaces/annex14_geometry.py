@@ -1626,10 +1626,6 @@ class Annex14GeometryMixin:
             bool(end.get("operations", {}).get("straight_in_non_precision_instrument"))
             for end in end_configs
         )
-        circling_selected = any(
-            bool(end.get("operations", {}).get("circling_or_visual_circuit"))
-            for end in end_configs
-        )
         strip_adjacent_transitional_created = False
 
         for end_config in end_configs:
@@ -2394,12 +2390,8 @@ class Annex14GeometryMixin:
                 straight_in.get("ref", ""),
             )
 
-        self._annex14_current_provenance["operation"] = "circling_or_visual_circuit"
-        horizontal = (
-            ruleset.horizontal_surface_parameters(design_group)
-            if circling_selected
-            else None
-        )
+        self._annex14_current_provenance["operation"] = "default_horizontal_oes"
+        horizontal = ruleset.horizontal_surface_parameters(design_group)
         if horizontal:
             runway_axis = QgsGeometry.fromPolylineXY([thr_point, rec_thr_point])
             geom = runway_axis.buffer(float(horizontal["radius_m"]), 72)

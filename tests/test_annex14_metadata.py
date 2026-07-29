@@ -19,6 +19,7 @@ class Annex14MetadataTests(unittest.TestCase):
         self.assertIn("ARC letter F", assumptions)
         self.assertIn("design ruleset", assumptions)
         self.assertIn("unadjusted standard table", assumptions)
+        self.assertIn("horizontal OES is included by default", assumptions)
         self.assertIn("Circling", limitations)
         self.assertIn("specific OES", limitations)
         self.assertIn("21 November 2030", limitations)
