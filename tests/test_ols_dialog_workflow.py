@@ -77,7 +77,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(
             comparison.itemText(modernised_index),
-            "Annex 14 Modernised OFS/OES — Future 21 Nov 2030",
+            "ICAO Annex 14 Vol I - Modernised OLS",
         )
         self.assertIsNone(
             self.dialog.findChild(

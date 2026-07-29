@@ -114,7 +114,7 @@ class OlsLayerGroupingTests(unittest.TestCase):
         )
         comparison = self.direct_group(
             protected_airspace,
-            "Comparison OLS — Annex 14 Modernised OFS/OES — Future 21 Nov 2030",
+            "Comparison OLS — ICAO Annex 14 Vol I - Modernised OLS",
         )
         self.assertIsNotNone(baseline)
         self.assertIsNotNone(comparison)

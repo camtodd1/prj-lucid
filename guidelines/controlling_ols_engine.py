@@ -27,9 +27,11 @@ from qgis.core import (  # type: ignore
 try:
     from ..core import output_structure
     from ..core.run_log import QgsMessageLog
+    from ..rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
 except ImportError:
     from core import output_structure
     from core.run_log import QgsMessageLog  # type: ignore
+    from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 CONTROLLING_PROVENANCE_FIELD_NAMES = (
@@ -7363,7 +7365,7 @@ class ControllingOlsEngineMixin:
         debug_group: Optional[QgsLayerTreeGroup],
         solved_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
     ) -> bool:
-        """Create independent future Annex 14 OFS and OES lower envelopes."""
+        """Create independent modernised Annex 14 OFS and OES lower envelopes."""
         candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
         contours = list(getattr(self, "_controlling_ols_contours", []) or [])
         created = False
@@ -7376,7 +7378,8 @@ class ControllingOlsEngineMixin:
             ]
             if not family_candidates:
                 QgsMessageLog.logMessage(
-                    f"[skip] Controlling {family}: no future Annex 14 planar candidates were registered.",
+                    f"[skip] Controlling {family}: no {MODERNISED_DISPLAY_NAME} "
+                    "planar candidates were registered.",
                     PLUGIN_TAG,
                     Qgis.Info,
                 )
@@ -7387,7 +7390,7 @@ class ControllingOlsEngineMixin:
             family_debug_group = (
                 self._ensure_layer_group(
                     debug_group,
-                    f"Annex 14 {family} Controlling",
+                    f"{MODERNISED_DISPLAY_NAME} — {family} Controlling",
                 )
                 if debug_group is not None
                 else None

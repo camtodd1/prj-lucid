@@ -14,8 +14,10 @@ try:
         get_ruleset_profile,
         iter_ruleset_profiles,
     )
+    from ..rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
 except ImportError:
     from rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile, iter_ruleset_profiles  # type: ignore
+    from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
 
 from .dialog_constants import (
     ANNEX14_FAMILY_CONTOUR_KEYS,
@@ -223,7 +225,7 @@ class OutputOptionsMixin:
 
         family_help = QtWidgets.QToolButton()
         family_help.setObjectName("toolButtonOlsFamilyHelp")
-        family_help.setText(self.tr("About OFS/OES"))
+        family_help.setText(self.tr(MODERNISED_DISPLAY_NAME))
         family_help.setCheckable(True)
         family_help.setChecked(False)
         family_help.setArrowType(QtCore.Qt.ArrowType.RightArrow)

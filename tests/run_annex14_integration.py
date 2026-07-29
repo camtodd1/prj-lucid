@@ -223,7 +223,9 @@ def run(input_path, audit_path, preview_path):
             child
             for child in ols.children()
             if isinstance(child, QgsLayerTreeGroup)
-            and child.name().startswith("Comparison OLS — Annex 14 Modernised")
+            and child.name().startswith(
+                "Comparison OLS — ICAO Annex 14 Vol I - Modernised OLS"
+            )
         ),
         None,
     )

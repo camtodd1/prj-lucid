@@ -65,7 +65,8 @@ Outputs are grouped as follows:
 
 - **OFS — Protected Airspace Change**
   - **Baseline OLS Wireframe**: outline-only baseline controlling envelope.
-  - **Future Annex 14 Wireframe**: dashed outline-only future Annex 14 controlling envelope.
+  - **ICAO Annex 14 Vol I - Modernised OLS — Wireframe**: dashed outline-only
+    modernised controlling envelope.
   - **Height Gain** (green): future OFS is higher than the baseline OLS.
   - **Height Loss** (red): future OFS is lower than the baseline OLS.
   - **No Height Change** (neutral): future OFS and baseline OLS are effectively equal.
@@ -77,7 +78,8 @@ Outputs are grouped as follows:
   - **No Comparison OLS Overlay** (grey): baseline controlling OLS area with no
     overlapping future Annex 14 comparison surface.
 - **OES — Assessment Trigger Change**
-  - **Baseline OLS Wireframe** and **Future Annex 14 Wireframe**.
+  - **Baseline OLS Wireframe** and
+    **ICAO Annex 14 Vol I - Modernised OLS — Wireframe**.
   - **Trigger Height Raised** (green): the future aeronautical-study trigger is
     higher than the baseline OLS.
   - **Trigger Height Lowered** (red): the future aeronautical-study trigger is

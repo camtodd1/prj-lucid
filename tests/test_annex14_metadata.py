@@ -6,6 +6,12 @@ from rulesets.annex14.profile import ANNEX14_MODERNISED_OFS_OES_PROFILE
 
 
 class Annex14MetadataTests(unittest.TestCase):
+    def test_modernised_profile_uses_canonical_display_name(self):
+        self.assertEqual(
+            ANNEX14_MODERNISED_OFS_OES_PROFILE.display_name,
+            "ICAO Annex 14 Vol I - Modernised OLS",
+        )
+
     def test_modernised_profile_records_automatic_workflow_policy(self):
         assumptions = " ".join(
             ANNEX14_MODERNISED_OFS_OES_PROFILE.assumptions

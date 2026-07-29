@@ -64,6 +64,7 @@ try:
         get_ruleset_profile,
         iter_design_standard_profiles,
     )
+    from .rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
 except ImportError:
     from dialog.dialog_constants import (  # type: ignore
         CALC_PLACEHOLDER,
@@ -92,6 +93,7 @@ except ImportError:
         get_ruleset_profile,
         iter_design_standard_profiles,
     )
+    from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
 
 # Load the UI class from the .ui file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), "safeguarding_builder_dialog_base.ui"))
@@ -1353,7 +1355,10 @@ class SafeguardingBuilderDialog(
                 if adg_issues:
                     return {
                         "state": "blocked",
-                        "summary": "Future Annex 14 OFS/OES needs an Aeroplane Design Group for every runway.",
+                        "summary": (
+                            f"{MODERNISED_DISPLAY_NAME} needs an Aeroplane "
+                            "Design Group for every runway."
+                        ),
                     }
             return {"state": "blocked", "summary": "OLS needs complete runway geometry and classification inputs."}
 
@@ -1458,7 +1463,7 @@ class SafeguardingBuilderDialog(
         self.protected_airspace_policy_combo.setObjectName("comboBox_protected_airspace_policy")
         self.protected_airspace_policy_combo.addItem("Ruleset aligned", userData="ruleset_aligned")
         self.protected_airspace_policy_combo.addItem(
-            "Future Annex 14 OFS/OES",
+            MODERNISED_DISPLAY_NAME,
             userData="future_annex14_ofs_oes",
         )
         self.protected_airspace_policy_combo.addItem(
@@ -1471,7 +1476,7 @@ class SafeguardingBuilderDialog(
         )
         self.protected_airspace_policy_combo.setToolTip(
             "Protected airspace/OLS policy. Use Ruleset aligned for the selected design standard, "
-            "overlay the future Annex 14 OFS/OES model, or compare both against the selected baseline."
+            f"overlay {MODERNISED_DISPLAY_NAME}, or compare both against the selected baseline."
         )
         self.protected_airspace_policy_combo.setMinimumWidth(190)
         self.protected_airspace_policy_combo.setMinimumHeight(28)
@@ -3484,7 +3489,9 @@ class SafeguardingBuilderDialog(
             baseline_ols_ruleset,
             comparison_ols_ruleset,
         } and not adg:
-            errors.append(f"Rwy {index}: ADG is required for Annex 14 OFS/OES generation.")
+            errors.append(
+                f"Rwy {index}: ADG is required for {MODERNISED_DISPLAY_NAME} generation."
+            )
             current_errors += 1
         validated["adg"] = adg
         if "icao_annex14_vol1_modernised_ofs_oes" in {
@@ -3581,7 +3588,8 @@ class SafeguardingBuilderDialog(
             "manual",
         }:
             errors.append(
-                f"Rwy {index}: Invalid modernised Annex 14 strip source '{strip_source}'."
+                f"Rwy {index}: Invalid {MODERNISED_DISPLAY_NAME} strip source "
+                f"'{strip_source}'."
             )
             strip_source = "design_standard_prefill"
 
@@ -3707,7 +3715,7 @@ class SafeguardingBuilderDialog(
             ):
                 errors.append(
                     f"Rwy {index}: {end_label} elevation is required for "
-                    "modernised OFS/OES."
+                    f"{MODERNISED_DISPLAY_NAME}."
                 )
             normalized[end_key] = {
                 "operations": operations,

@@ -95,6 +95,7 @@ from .rulesets.context import (
     RulesetContext,
 )
 from .rulesets.registry import get_ruleset_profile
+from .rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
 
 
 try:
@@ -1851,7 +1852,9 @@ class SafeguardingBuilder(
                 controlling_output_start = len(self.successfully_generated_layers)
                 if self._is_future_annex14_protected_airspace():
                     self._set_processing_status(
-                        self.tr("Solving controlling Annex 14 OFS/OES surfaces..."),
+                        self.tr(
+                            f"Solving controlling {MODERNISED_DISPLAY_NAME} surfaces..."
+                        ),
                         step=8,
                         total_steps=self._processing_total_steps,
                     )
@@ -2099,7 +2102,10 @@ class SafeguardingBuilder(
             getattr(self.get_active_protected_airspace_ruleset(), "protected_airspace_model", "")
             == "annex14_modernised_ofs_oes"
         ):
-            self._log_skip("Airport-wide current OLS: protected airspace policy is future Annex 14 OFS/OES.")
+            self._log_skip(
+                "Airport-wide current OLS: protected airspace policy is "
+                f"{MODERNISED_DISPLAY_NAME}."
+            )
             return False
         active_context = getattr(self, "ols_construction_context", None)
         active_policy = self.get_active_protected_airspace_ruleset().ols_construction_policy()
@@ -2961,7 +2967,8 @@ class SafeguardingBuilder(
             for runway_index, runway_data in enumerate(processed_runway_data_list, start=1):
                 self._set_processing_status(
                     self.tr(
-                        f"Modernisation: creating future Annex 14 candidates ({runway_index}/{runway_total})..."
+                        f"{MODERNISED_DISPLAY_NAME}: creating candidates "
+                        f"({runway_index}/{runway_total})..."
                     )
                 )
                 future_geometry_created = self.process_annex14_geometry(
@@ -2972,7 +2979,7 @@ class SafeguardingBuilder(
             future_candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
             if not future_geometry_created or not future_candidates:
                 self._log_warning(
-                    "[skip] OLS modernisation comparison: future Annex 14 produced no candidates. "
+                    f"[skip] {MODERNISED_DISPLAY_NAME} produced no candidates. "
                     "Check ADG and runway operational inputs."
                 )
                 return False

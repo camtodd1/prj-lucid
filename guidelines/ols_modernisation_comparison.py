@@ -27,8 +27,10 @@ from .controlling_ols_engine import (
 
 try:
     from ..core.run_log import QgsMessageLog
+    from ..rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
 except ImportError:
     from core.run_log import QgsMessageLog  # type: ignore
+    from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 COMPARISON_TOLERANCE_M = 0.01
@@ -4086,7 +4088,8 @@ class OlsModernisationComparisonMixin:
             ) or created
             created = self._create_modernisation_wireframe_layer(
                 icao_code, baseline_ruleset_id, family, "future",
-                "Future Annex 14 Wireframe", future_engine._controlling_region_geometries(),
+                f"{MODERNISED_DISPLAY_NAME} — Wireframe",
+                future_engine._controlling_region_geometries(),
                 family_group, comparison_ruleset_id=comparison_ruleset_id,
             ) or created
             gain_name = "Height Gain" if family == "OFS" else "Trigger Height Raised"

@@ -5,6 +5,11 @@ from typing import Any, Dict, Optional
 
 from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
 
+try:
+    from ..rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
+except ImportError:
+    from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
+
 from .dialog_constants import (
     CALC_PLACEHOLDER,
     NA_PLACEHOLDER,
@@ -556,7 +561,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             ("V", "V"),
         ]:
             self.adg_combo.addItem(label, userData=value)
-        self.adg_combo.setToolTip("Select Annex 14 Aeroplane Design Group for OFS/OES generation.")
+        self.adg_combo.setToolTip(
+            f"Select Aeroplane Design Group for {MODERNISED_DISPLAY_NAME} generation."
+        )
         self.adg_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self._set_control_width(self.adg_combo, input_width)
         layout.addWidget(label_adg, row, label_col)
@@ -894,7 +901,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         disclosure = QtWidgets.QToolButton()
         disclosure.setObjectName(f"toolButton_annex14_modernised_{self.index}")
-        disclosure.setText("Modernised Annex 14 OFS/OES")
+        disclosure.setText(MODERNISED_DISPLAY_NAME)
         disclosure.setCheckable(True)
         disclosure.setChecked(False)
         disclosure.setArrowType(QtCore.Qt.ArrowType.RightArrow)
