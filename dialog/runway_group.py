@@ -914,7 +914,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._configure_runway_form_grid(grid)
 
         self.annex14_confirmed_cb = QtWidgets.QCheckBox(
-            "I have reviewed the operation and strip basis"
+            "I have reviewed the strip and straight-in operation basis"
         )
         self.annex14_confirmed_cb.setObjectName(
             f"checkBox_annex14_confirmed_{self.index}"
@@ -973,26 +973,33 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             ("instrument_departure", "Instrument departure"),
             ("take_off", "Take-off"),
         )
-        for key, label in operation_labels:
-            grid.addWidget(QtWidgets.QLabel(label + ":"), row, 0)
-            for column, end_key in ((1, "primary_end"), (2, "reciprocal_end")):
+        operation_note = QtWidgets.QLabel(
+            "Standard operations are derived from each runway-end type. "
+            "Approaches are assumed straight-in; circling and curved/specific "
+            "OES are not generated."
+        )
+        operation_note.setWordWrap(True)
+        grid.addWidget(QtWidgets.QLabel("Operation basis:"), row, 0)
+        grid.addWidget(operation_note, row, 1, 1, 2)
+        row += 1
+        for key, _label in operation_labels:
+            for end_key in ("primary_end", "reciprocal_end"):
                 end_widgets = self._annex14_end_widgets.setdefault(
                     end_key,
                     {"operations": {}},
                 )
-                checkbox = QtWidgets.QCheckBox()
+                checkbox = QtWidgets.QCheckBox(body)
                 checkbox.setObjectName(
                     f"checkBox_annex14_{end_key}_{key}_{self.index}"
                 )
+                checkbox.hide()
                 end_widgets["operations"][key] = checkbox
-                grid.addWidget(checkbox, row, column)
-            row += 1
 
         numeric_rows = (
             (
                 "maximum_certificated_takeoff_mass_kg",
-                "Maximum certificated take-off mass (kg)",
-                "Required when take-off OES is selected.",
+                "Maximum certificated take-off mass (kg, optional)",
+                "Blank uses the conservative above-5,700 kg take-off dimensions.",
             ),
             (
                 "governing_approach_surface_slope_percent",
@@ -1028,6 +1035,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             )
             self._annex14_end_widgets[end_key]["specific_oes_required"] = checkbox
             grid.addWidget(checkbox, row, column)
+        grid.itemAtPosition(row, 0).widget().hide()
+        for column in (1, 2):
+            grid.itemAtPosition(row, column).widget().hide()
         self._standardize_form_rows(grid, row + 1)
 
         body.setVisible(False)
@@ -1065,6 +1075,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         config: Dict[str, Any] = {
             "schema_version": 1,
             "confirmed": self.annex14_confirmed_cb.isChecked(),
+            "operation_basis": "runway_type_straight_in_assumption",
             "strip": {
                 "source": self.annex14_strip_source_combo.currentData(),
                 "overall_width_m": self.annex14_strip_width_le.text().strip(),
@@ -1073,10 +1084,30 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "code_f_without_digital_go_around_avionics":
                 self.annex14_code_f_no_digital_cb.isChecked(),
         }
+        end_inputs = {
+            "primary_end": (
+                self.type1_combo.currentText(),
+                self.takeoff_available_1_cb.isChecked(),
+            ),
+            "reciprocal_end": (
+                self.type2_combo.currentText(),
+                self.takeoff_available_2_cb.isChecked(),
+            ),
+        }
         for end_key, widgets in self._annex14_end_widgets.items():
+            runway_type, takeoff_available = end_inputs[end_key]
+            is_non_precision = "Non-Precision" in runway_type
+            is_precision = (
+                "Precision Approach" in runway_type
+                and not is_non_precision
+            )
+            is_instrument = is_non_precision or is_precision
             operations = {
-                key: checkbox.isChecked()
-                for key, checkbox in widgets["operations"].items()
+                "circling_or_visual_circuit": False,
+                "straight_in_non_precision_instrument": is_non_precision,
+                "precision_approach": is_precision,
+                "instrument_departure": is_instrument and takeoff_available,
+                "take_off": takeoff_available,
             }
             config[end_key] = {
                 "operations": operations,

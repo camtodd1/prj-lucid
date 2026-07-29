@@ -1654,7 +1654,11 @@ class Annex14GeometryMixin:
                 "mass_class": (
                     "at_or_below_5700_kg"
                     if mass is not None and mass <= 5700.0
-                    else "above_5700_kg" if mass is not None else ""
+                    else "above_5700_kg"
+                    if mass is not None
+                    else "above_5700_kg_assumed"
+                    if operations.get("take_off")
+                    else ""
                 ),
                 "slope_basis": (
                     "user_governing_slope"

@@ -3113,7 +3113,6 @@ class SafeguardingBuilderDialog(
                     index,
                     runway_inputs,
                     error_messages,
-                    aerodrome_elevation_m=arp_elev,
                 )
                 if validated_runway:
                     # Ensure keys exist (validator should add them, but be safe)
@@ -3223,7 +3222,6 @@ class SafeguardingBuilderDialog(
         index: int,
         inputs: Dict[str, Any],
         errors: List[str],
-        aerodrome_elevation_m: Optional[float] = None,
     ) -> Optional[Dict[str, Any]]:
         """Validates raw inputs for a single runway."""
         validated = {"original_index": index}
@@ -3497,7 +3495,6 @@ class SafeguardingBuilderDialog(
                 index,
                 inputs.get("annex14_modernised"),
                 inputs,
-                aerodrome_elevation_m=aerodrome_elevation_m,
             )
             validated["annex14_modernised"] = modernised
             errors.extend(modernised_errors)
@@ -3561,7 +3558,6 @@ class SafeguardingBuilderDialog(
         index: int,
         raw_config: Any,
         runway_inputs: Dict[str, Any],
-        aerodrome_elevation_m: Optional[float] = None,
     ) -> Tuple[Dict[str, Any], List[str]]:
         errors: List[str] = []
         config = dict(raw_config) if isinstance(raw_config, dict) else {}
@@ -3619,6 +3615,7 @@ class SafeguardingBuilderDialog(
             "schema_version": 1,
             "confirmed": confirmed,
             "review_required": False,
+            "operation_basis": "runway_type_straight_in_assumption",
             "strip": {
                 "source": strip_source,
                 "overall_width_m": strip_width,
@@ -3632,15 +3629,6 @@ class SafeguardingBuilderDialog(
                     )
                 ),
         }
-        operation_keys = (
-            "circling_or_visual_circuit",
-            "straight_in_non_precision_instrument",
-            "precision_approach",
-            "instrument_departure",
-            "take_off",
-        )
-        any_operation_selected = False
-        requires_aerodrome_elevation = False
         for end_key, runway_type_key, elevation_keys, takeoff_available_key in (
             (
                 "primary_end",
@@ -3657,23 +3645,23 @@ class SafeguardingBuilderDialog(
         ):
             end_raw = config.get(end_key)
             end_config = dict(end_raw) if isinstance(end_raw, dict) else {}
-            operations_raw = end_config.get("operations")
-            operations_raw = (
-                operations_raw if isinstance(operations_raw, dict) else {}
-            )
-            operations = {
-                key: selected(operations_raw.get(key, False))
-                for key in operation_keys
-            }
-            any_operation_selected = any_operation_selected or any(operations.values())
-            requires_aerodrome_elevation = requires_aerodrome_elevation or bool(
-                operations["circling_or_visual_circuit"]
-                or operations["straight_in_non_precision_instrument"]
-            )
             runway_type = str(runway_inputs.get(runway_type_key) or "")
             is_non_precision = "Non-Precision" in runway_type
-            is_precision = "Precision Approach" in runway_type
+            is_precision = (
+                "Precision Approach" in runway_type
+                and not is_non_precision
+            )
             is_instrument = is_non_precision or is_precision
+            takeoff_available = selected(
+                runway_inputs.get(takeoff_available_key, True)
+            )
+            operations = {
+                "circling_or_visual_circuit": False,
+                "straight_in_non_precision_instrument": is_non_precision,
+                "precision_approach": is_precision,
+                "instrument_departure": is_instrument and takeoff_available,
+                "take_off": takeoff_available,
+            }
             end_label = "primary end" if end_key == "primary_end" else "reciprocal end"
             if not any(
                 str(runway_inputs.get(key) or "").strip()
@@ -3682,26 +3670,6 @@ class SafeguardingBuilderDialog(
                 errors.append(
                     f"Rwy {index}: {end_label} elevation is required for "
                     "modernised OFS/OES."
-                )
-            if operations["straight_in_non_precision_instrument"] and not is_non_precision:
-                errors.append(
-                    f"Rwy {index}: {end_label} straight-in non-precision OES "
-                    "requires a non-precision runway end."
-                )
-            if operations["precision_approach"] and not is_precision:
-                errors.append(
-                    f"Rwy {index}: {end_label} precision OES requires a precision runway end."
-                )
-            if operations["instrument_departure"] and not is_instrument:
-                errors.append(
-                    f"Rwy {index}: {end_label} instrument-departure OES requires an instrument runway end."
-                )
-            if operations["take_off"] and not selected(
-                runway_inputs.get(takeoff_available_key, True)
-            ):
-                errors.append(
-                    f"Rwy {index}: {end_label} take-off OES is selected but "
-                    "take-off is unavailable for that direction."
                 )
             specific_oes_required = selected(
                 end_config.get("specific_oes_required", False)
@@ -3714,7 +3682,6 @@ class SafeguardingBuilderDialog(
             mass = positive_optional(
                 end_config.get("maximum_certificated_takeoff_mass_kg"),
                 f"{end_label} maximum certificated take-off mass",
-                required=operations["take_off"],
             )
             slope = positive_optional(
                 end_config.get("governing_approach_surface_slope_percent"),
@@ -3731,16 +3698,6 @@ class SafeguardingBuilderDialog(
                 "obstacle_clearance_height_m": och,
                 "specific_oes_required": specific_oes_required,
             }
-        if not any_operation_selected:
-            errors.append(
-                f"Rwy {index}: At least one standard modernised Annex 14 OES "
-                "operation must be selected."
-            )
-        if requires_aerodrome_elevation and aerodrome_elevation_m is None:
-            errors.append(
-                f"Rwy {index}: Aerodrome elevation is required for circling, "
-                "visual-circuit, or straight-in non-precision OES."
-            )
         normalized["review_required"] = bool(errors)
         return normalized, errors
 

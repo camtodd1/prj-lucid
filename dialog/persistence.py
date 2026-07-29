@@ -744,6 +744,7 @@ class PersistenceMixin:
                 "schema_version": 1,
                 "confirmed": False,
                 "review_required": True,
+                "operation_basis": "runway_type_straight_in_assumption",
                 "strip": {
                     "source": "design_standard_prefill",
                     "overall_width_m": "",
@@ -757,6 +758,10 @@ class PersistenceMixin:
             modernised = dict(modernised)
             modernised.setdefault("schema_version", 1)
             modernised.setdefault("confirmed", False)
+            modernised.setdefault(
+                "operation_basis",
+                "runway_type_straight_in_assumption",
+            )
             modernised["review_required"] = not bool(modernised.get("confirmed"))
         runway_data["annex14_modernised"] = modernised
         return runway_data

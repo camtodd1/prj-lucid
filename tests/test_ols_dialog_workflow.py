@@ -429,7 +429,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             {},
         )
 
-    def test_modernised_annex14_validation_preserves_explicit_operations(self):
+    def test_modernised_annex14_validation_derives_straight_in_operations(self):
         config = {
             "confirmed": True,
             "strip": {
@@ -459,8 +459,11 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertTrue(
             normalized["primary_end"]["operations"]["precision_approach"]
         )
-        self.assertFalse(
+        self.assertTrue(
             normalized["primary_end"]["operations"]["instrument_departure"]
+        )
+        self.assertFalse(
+            normalized["primary_end"]["operations"]["circling_or_visual_circuit"]
         )
         self.assertEqual(
             normalized["primary_end"]["maximum_certificated_takeoff_mass_kg"],
@@ -497,7 +500,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertTrue(normalized["review_required"])
         self.assertTrue(any("specific/curved OES" in error for error in errors))
 
-    def test_modernised_annex14_requires_a_standard_oes_operation(self):
+    def test_modernised_annex14_allows_no_applicable_oes_operation(self):
         config = {
             "confirmed": True,
             "strip": {
@@ -517,13 +520,18 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 "type2": "Non-Instrument",
                 "threshold_elev_1": "10",
                 "threshold_elev_2": "11",
+                "takeoff_available_1": False,
+                "takeoff_available_2": False,
             },
         )
 
-        self.assertTrue(normalized["review_required"])
-        self.assertTrue(any("At least one standard" in error for error in errors))
+        self.assertFalse(normalized["review_required"])
+        self.assertEqual(errors, [])
+        self.assertFalse(
+            any(normalized["primary_end"]["operations"].values())
+        )
 
-    def test_modernised_horizontal_oes_requires_aerodrome_elevation(self):
+    def test_modernised_straight_in_basis_does_not_gate_on_aerodrome_elevation(self):
         config = {
             "confirmed": True,
             "strip": {
@@ -543,6 +551,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "type2": "Non-Instrument",
             "threshold_elev_1": "10",
             "threshold_elev_2": "11",
+            "takeoff_available_1": False,
+            "takeoff_available_2": False,
         }
 
         normalized, errors = self.dialog._validate_annex14_modernised_config(
@@ -551,17 +561,16 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             runway,
         )
 
-        self.assertTrue(normalized["review_required"])
-        self.assertTrue(any("Aerodrome elevation" in error for error in errors))
-
-        normalized, errors = self.dialog._validate_annex14_modernised_config(
-            1,
-            config,
-            runway,
-            aerodrome_elevation_m=12.0,
-        )
         self.assertFalse(normalized["review_required"])
         self.assertEqual(errors, [])
+        self.assertTrue(
+            normalized["primary_end"]["operations"][
+                "straight_in_non_precision_instrument"
+            ]
+        )
+        self.assertFalse(
+            normalized["primary_end"]["operations"]["precision_approach"]
+        )
 
     def test_legacy_runway_elevations_are_normalized_at_load_boundary(self):
         legacy = {"thr_elev_1": "0", "thr_elev_2": "12.5"}
