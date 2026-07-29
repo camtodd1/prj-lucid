@@ -341,10 +341,8 @@ HTML_TEMPLATE = r"""<!doctype html>
     .button:hover { border-color: var(--blue); }
     .panel { margin-bottom: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); box-shadow: var(--shadow); }
     .panel-pad { padding: 16px; }
-    .filters { display: grid; grid-template-columns: repeat(4, minmax(160px, 1fr)); gap: 10px; }
-    .advanced-filters { margin-top: 12px; }
-    .advanced-filters summary { cursor: pointer; color: var(--ink); font-size: 12px; font-weight: 650; }
-    .advanced-filters .filters { grid-template-columns: repeat(6, minmax(125px, 1fr)); margin-top: 10px; }
+    .filters { display: grid; grid-template-columns: repeat(3, minmax(180px, 1fr)); gap: 10px; }
+    .filters + .filters { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
     .filter label { display: block; margin-bottom: 5px; color: var(--muted); font-size: 12px; font-weight: 650; }
     select { width: 100%; min-height: 38px; padding: 7px 28px 7px 9px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); }
     select:focus, button:focus { outline: 3px solid rgba(23, 105, 170, .18); outline-offset: 1px; }
@@ -390,12 +388,12 @@ HTML_TEMPLATE = r"""<!doctype html>
     details summary { cursor: pointer; color: var(--ink); font-weight: 650; }
     details p { max-width: 900px; }
     code { padding: 1px 4px; border-radius: 4px; background: #e9edf1; }
-    @media (max-width: 1150px) { .advanced-filters .filters { grid-template-columns: repeat(3, 1fr); } .ticker { grid-template-columns: repeat(5, 220px); } }
+    @media (max-width: 1150px) { .ticker { grid-template-columns: repeat(5, 220px); } }
     @media (max-width: 760px) {
       .page { padding: 14px; }
       .topbar { display: block; }
       .actions { margin-top: 12px; }
-      .filters, .advanced-filters .filters { grid-template-columns: repeat(2, 1fr); }
+      .filters { grid-template-columns: repeat(2, 1fr); }
       .kpis { grid-template-columns: repeat(2, 1fr); }
       .section-head { align-items: flex-start; flex-direction: column; }
       .pivot-controls { width: 100%; }
@@ -418,23 +416,16 @@ HTML_TEMPLATE = r"""<!doctype html>
     </div>
 
     <section class="panel panel-pad" aria-label="Dashboard filters">
-      <div class="filters">
+      <div class="filters" aria-label="Primary filters">
         <div class="filter"><label for="filterScenarioSlice">Scenario</label><select id="filterScenarioSlice" data-field="scenarioSlice"></select></div>
-        <div class="filter"><label for="filterTestCase">Test case</label><select id="filterTestCase" data-field="testCase"></select></div>
-        <div class="filter"><label for="filterOlsSelection">OLS selection</label><select id="filterOlsSelection" data-field="olsSelection"></select></div>
+        <div class="filter"><label for="filterAirport">Airport</label><select id="filterAirport" data-field="airport"></select></div>
         <div class="filter"><label for="filterRunBy">Run by</label><select id="filterRunBy" data-field="runBy"></select></div>
       </div>
-      <details class="advanced-filters">
-        <summary>Advanced filters</summary>
-        <div class="filters">
-          <div class="filter"><label for="filterAirport">Airport</label><select id="filterAirport" data-field="airport"></select></div>
-          <div class="filter"><label for="filterRunways">Runways</label><select id="filterRunways" data-field="runwayCountLabel"></select></div>
-          <div class="filter"><label for="filterScenario">Recorded layout</label><select id="filterScenario" data-field="scenario"></select></div>
-          <div class="filter"><label for="filterBuiltTo">Built to</label><select id="filterBuiltTo" data-field="builtTo"></select></div>
-          <div class="filter"><label for="filterPrimary">Primary OLS</label><select id="filterPrimary" data-field="primaryOls"></select></div>
-          <div class="filter"><label for="filterComparison">Compared with</label><select id="filterComparison" data-field="comparedWith"></select></div>
-        </div>
-      </details>
+      <div class="filters" aria-label="Standards filters">
+        <div class="filter"><label for="filterBuiltTo">Design Standard</label><select id="filterBuiltTo" data-field="builtTo"></select></div>
+        <div class="filter"><label for="filterPrimary">Baseline OLS</label><select id="filterPrimary" data-field="primaryOls"></select></div>
+        <div class="filter"><label for="filterComparison">Comparison OLS</label><select id="filterComparison" data-field="comparedWith"></select></div>
+      </div>
       <div class="filter-status"><span id="filterCount"></span><span id="generatedAt">Built __GENERATED_AT__</span></div>
       <div class="notice" id="comparisonNotice"></div>
     </section>
@@ -537,10 +528,13 @@ HTML_TEMPLATE = r"""<!doctype html>
       }).filter(summary => Number.isFinite(summary.change));
     }
 
-    function uniqueValues(field) {
-      const recorded = new Set(allRuns.map(run => String(run[field] ?? 'Not recorded')));
+    function uniqueValues(field, runs) {
+      const recorded = new Set(runs.map(run => String(run[field] ?? 'Not recorded')));
       if (field === 'scenarioSlice') {
-        return [...scenarioSlices, ...[...recorded].filter(value => !scenarioSlices.includes(value))];
+        return [
+          ...scenarioSlices.filter(value => recorded.has(value)),
+          ...[...recorded].filter(value => !scenarioSlices.includes(value)).sort()
+        ];
       }
       return [...recorded].sort((a, b) => {
         if (a === 'Not recorded') return 1;
@@ -549,12 +543,35 @@ HTML_TEMPLATE = r"""<!doctype html>
       });
     }
 
-    function populateFilters() {
+    function runsMatchingOtherFilters(excludedSelect) {
+      return allRuns.filter(run => filterElements.every(select =>
+        select === excludedSelect
+        || !select.value
+        || String(run[select.dataset.field]) === select.value
+      ));
+    }
+
+    function refreshFilterOptions() {
+      let clearedSelection = false;
       filterElements.forEach(select => {
-        const values = uniqueValues(select.dataset.field);
+        const current = select.value;
+        const values = uniqueValues(
+          select.dataset.field,
+          runsMatchingOtherFilters(select)
+        );
+        if (current && !values.includes(current)) clearedSelection = true;
         select.innerHTML = '<option value="">All</option>' + values.map(value => `<option value="${escapeHtml(value)}">${escapeHtml(value)}</option>`).join('');
-        select.addEventListener('change', render);
+        select.value = values.includes(current) ? current : '';
       });
+      if (clearedSelection) refreshFilterOptions();
+    }
+
+    function populateFilters() {
+      refreshFilterOptions();
+      filterElements.forEach(select => select.addEventListener('change', () => {
+        refreshFilterOptions();
+        render();
+      }));
       groupPrimary.innerHTML = groupOptions.map(([field, label]) => `<option value="${field}">${label}</option>`).join('');
       groupPrimary.value = 'airport';
       refreshSecondaryOptions();
@@ -767,7 +784,11 @@ HTML_TEMPLATE = r"""<!doctype html>
       renderPivot(runs);
     }
 
-    document.getElementById('clearFilters').addEventListener('click', () => { filterElements.forEach(select => select.value = ''); render(); });
+    document.getElementById('clearFilters').addEventListener('click', () => {
+      filterElements.forEach(select => select.value = '');
+      refreshFilterOptions();
+      render();
+    });
     document.getElementById('refreshPage').addEventListener('click', () => location.reload());
     document.querySelectorAll('[data-sort]').forEach(button => button.addEventListener('click', () => {
       const key = button.dataset.sort;

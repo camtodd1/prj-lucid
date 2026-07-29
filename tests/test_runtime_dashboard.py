@@ -86,12 +86,8 @@ class RuntimeDashboardTests(unittest.TestCase):
             generated_at=datetime(2026, 1, 2, tzinfo=timezone.utc),
         )
         for control in (
-            "filterTestCase",
             "filterScenarioSlice",
-            "filterOlsSelection",
             "filterAirport",
-            "filterRunways",
-            "filterScenario",
             "filterBuiltTo",
             "filterPrimary",
             "filterComparison",
@@ -107,6 +103,10 @@ class RuntimeDashboardTests(unittest.TestCase):
         self.assertIn("${escapeHtml(run.runBy)}", html)
         self.assertIn("priorComparable(run, runs)", html)
         self.assertIn('"Multiple Intersecting"', html)
+        self.assertIn("runsMatchingOtherFilters", html)
+        self.assertIn("refreshFilterOptions", html)
+        self.assertNotIn('id="filterTestCase"', html)
+        self.assertNotIn('id="filterOlsSelection"', html)
         payload = re.search(
             r'<script id="runData" type="application/json">(.*?)</script>',
             html,

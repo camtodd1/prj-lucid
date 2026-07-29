@@ -31,16 +31,15 @@ Runtime rows are normalized to two owner labels:
 - **User** for interactive QGIS runs; and
 - **Codex** for headless, Codex, or CI runs.
 
-The four primary slicers cover scenario, test case, OLS selection, and runner.
+The top-level slicers cover **Scenario**, **Airport**, and **Run by**. The
+second level covers **Design Standard**, **Baseline OLS**, and **Comparison
+OLS**. Each slicer responds to the others: options with no matching runs are
+removed as selections are made.
+
 The scenario slicer groups layouts as **Single**, **Dual Parallel**, **Dual
 Intersecting**, **Multiple Parallel**, or **Multiple Intersecting**. Multiple
 Parallel means three or more runways with no intersections; Multiple
 Intersecting means three or more runways where any number may intersect.
-Airport, runway count, recorded layout, and individual ruleset slicers remain
-under **Advanced filters**. The dashboard separates trend lines by standard
-test case, OLS selection, and runner automatically, so the overall view can
-show useful trends without first selecting every dimension. All five scenario
-choices remain visible even when the current ledger has no runs in a category.
 
 The **Run by** slicer filters the KPIs, last-five cards, chart, and pivot table.
 Each last-five card repeats its owner as plain bold muted text beside the run
