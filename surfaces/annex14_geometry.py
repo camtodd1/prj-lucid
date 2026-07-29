@@ -1321,11 +1321,20 @@ class Annex14GeometryMixin:
         return None
 
     def _annex14_features_for_end(self, features: List[QgsFeature], end_desig: str) -> List[QgsFeature]:
-        return [
-            feature
-            for feature in features
-            if str(self._annex14_feature_attribute(feature, "end_desig") or "") == end_desig
-        ]
+        selected = []
+        for feature in features:
+            feature_end = str(
+                self._annex14_feature_attribute(feature, "end_desig") or ""
+            )
+            surface = str(
+                self._annex14_feature_attribute(feature, "surface") or ""
+            ).strip().lower()
+            if feature_end == end_desig or (
+                not feature_end
+                and surface in {"transitional", "inner_transitional"}
+            ):
+                selected.append(feature)
+        return selected
 
     def _annex14_runway_wide_features(self, features: List[QgsFeature]) -> List[QgsFeature]:
         return [
@@ -1542,7 +1551,7 @@ class Annex14GeometryMixin:
 
     def _annex14_runway_label_for_surface(self, surface: str, end_desig: str, runway_name: str) -> str:
         surface_key = str(surface or "").strip().lower()
-        if surface_key in {"transitional", "inner_transitional", "horizontal"}:
+        if surface_key == "horizontal":
             return runway_name
         return end_desig
 
@@ -2444,11 +2453,7 @@ class Annex14GeometryMixin:
         created = False
         try:
             runway_end_configs = self._annex14_runway_end_configs(runway_data, rwy_params)
-            all_ofs_by_surface = self._annex14_features_by_surface(ofs_features)
-            all_oes_by_surface = self._annex14_features_by_surface(oes_features)
-            all_ofs_contours_by_surface = self._annex14_features_by_surface(ofs_contour_features)
-            all_oes_contours_by_surface = self._annex14_features_by_surface(oes_contour_features)
-            for end_index, end_config in enumerate(runway_end_configs):
+            for end_config in runway_end_configs:
                 end_desig = end_config["end_desig"]
                 safe_end_desig = str(end_desig).replace("/", "_")
                 end_ofs_features = self._annex14_features_for_end(ofs_features, end_desig)
@@ -2461,10 +2466,6 @@ class Annex14GeometryMixin:
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
                         runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
-                        if runway_label == runway_name:
-                            if end_index > 0:
-                                continue
-                            surface_features = all_ofs_by_surface.get(surface, surface_features)
                         surface_group = self._annex14_runway_surface_layer_group(
                             layer_group,
                             oes_group,
@@ -2488,10 +2489,6 @@ class Annex14GeometryMixin:
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
                         runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
-                        if runway_label == runway_name:
-                            if end_index > 0:
-                                continue
-                            surface_features = all_ofs_contours_by_surface.get(surface, surface_features)
                         surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
                         contour_group = self._annex14_runway_surface_layer_group(
                             layer_group,
@@ -2516,10 +2513,6 @@ class Annex14GeometryMixin:
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
                         runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
-                        if runway_label == runway_name:
-                            if end_index > 0:
-                                continue
-                            surface_features = all_oes_by_surface.get(surface, surface_features)
                         surface_group = self._annex14_runway_surface_layer_group(
                             layer_group,
                             oes_group,
@@ -2543,10 +2536,6 @@ class Annex14GeometryMixin:
                         safe_surface = self._sanitize_filename(surface)
                         surface_label = self._annex14_surface_label(surface)
                         runway_label = self._annex14_runway_label_for_surface(surface, end_desig, runway_name)
-                        if runway_label == runway_name:
-                            if end_index > 0:
-                                continue
-                            surface_features = all_oes_contours_by_surface.get(surface, surface_features)
                         surface_features = self._annex14_prepare_contour_features_for_layer(surface_features)
                         contour_group = self._annex14_runway_surface_layer_group(
                             layer_group,

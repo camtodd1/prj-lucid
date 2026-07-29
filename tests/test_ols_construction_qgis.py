@@ -118,6 +118,49 @@ def cap_context(track_wkt: str) -> OlsConstructionContext:
 
 
 class OlsConstructionQgisTests(unittest.TestCase):
+    def test_annex14_transition_features_are_repeated_under_each_runway_end(self):
+        builder = object.__new__(SafeguardingBuilder)
+        fields = QgsFields()
+        fields.append(QgsField("surface", QVariant.String))
+        fields.append(QgsField("end_desig", QVariant.String))
+
+        def feature(surface, end_desig):
+            item = QgsFeature(fields)
+            item.setAttributes([surface, end_desig])
+            return item
+
+        shared_transitional = feature("transitional", "")
+        shared_inner_transitional = feature("inner_transitional", "")
+        end_16_transitional = feature("transitional", "16")
+        end_34_transitional = feature("transitional", "34")
+        runway_wide_horizontal = feature("horizontal", "")
+        features = [
+            shared_transitional,
+            shared_inner_transitional,
+            end_16_transitional,
+            end_34_transitional,
+            runway_wide_horizontal,
+        ]
+
+        end_16 = builder._annex14_features_for_end(features, "16")
+        end_34 = builder._annex14_features_for_end(features, "34")
+
+        self.assertIn(shared_transitional, end_16)
+        self.assertIn(shared_transitional, end_34)
+        self.assertIn(shared_inner_transitional, end_16)
+        self.assertIn(shared_inner_transitional, end_34)
+        self.assertIn(end_16_transitional, end_16)
+        self.assertNotIn(end_34_transitional, end_16)
+        self.assertNotIn(runway_wide_horizontal, end_16)
+        self.assertEqual(
+            builder._annex14_runway_label_for_surface(
+                "transitional",
+                "16",
+                "16/34",
+            ),
+            "16",
+        )
+
     @staticmethod
     def _easa_generation_fixture():
         primary = OlsRunwayEndContext(
