@@ -19,6 +19,11 @@ Stop the server with `Ctrl+C`.
 The page is self-contained and uses no external service or JavaScript library.
 Running the command without `--serve` simply rebuilds `dashboard/index.html`.
 
+Chart lines use the same colour and line-style markers as the pivot table.
+The pivot defaults to **Chart series**, where each row maps directly to one
+test-case, OLS-selection, and runner line. Regrouped pivot rows show every chart
+series marker included in that aggregate.
+
 For a User-versus-Codex comparison, load an unchanged JSON from
 `tests/fixtures/ols/` in QGIS and have Codex run that same fixture headlessly.
 The dashboard shows **Exact · User + Codex** only when the recorded input

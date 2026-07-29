@@ -105,6 +105,9 @@ class RuntimeDashboardTests(unittest.TestCase):
         self.assertIn('"Multiple Intersecting"', html)
         self.assertIn("runsMatchingOtherFilters", html)
         self.assertIn("refreshFilterOptions", html)
+        self.assertIn("buildSeriesStyles", html)
+        self.assertIn('class="series-marker', html)
+        self.assertIn("groupPrimary.value = 'trendSeries'", html)
         self.assertNotIn('id="filterTestCase"', html)
         self.assertNotIn('id="filterOlsSelection"', html)
         payload = re.search(

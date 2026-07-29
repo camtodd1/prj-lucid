@@ -198,6 +198,9 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
             if comparison_id
             else "No comparison"
         )
+        built_to = _ruleset_name(design_id, _field(row, "design_ruleset_label"))
+        ols_selection = primary + (f" vs {comparison}" if comparison_id else " only")
+        run_source = _run_source(_field(row, "agent"))
         runway_count = _integer(row.get("runway_count"))
         runway_configuration = _runway_scenario(
             row.get("runway_configuration"),
@@ -242,13 +245,13 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
                     runway_count,
                     runway_configuration,
                 ),
-                "builtTo": _ruleset_name(design_id, _field(row, "design_ruleset_label")),
+                "builtTo": built_to,
                 "primaryOls": primary,
                 "comparedWith": comparison,
-                "olsSelection": primary + (f" vs {comparison}" if comparison_id else " only"),
+                "olsSelection": ols_selection,
                 "elapsed": _float(row.get("elapsed_seconds")),
                 "status": (_field(row, "status") or "unknown").title(),
-                "runBy": _run_source(_field(row, "agent")),
+                "runBy": run_source,
                 "agent": _field(row, "agent") or "Not recorded",
                 "commit": (_field(row, "commit_ref") or "unknown")[:7],
                 "commitFull": _field(row, "commit_ref") or "unknown",
@@ -266,7 +269,15 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
                         design_id,
                         primary_id,
                         comparison_id,
-                        _run_source(_field(row, "agent")),
+                        run_source,
+                    ]
+                ),
+                "trendSeries": " · ".join(
+                    [
+                        test_case,
+                        *([f"Built to {built_to}"] if built_to != primary else []),
+                        ols_selection,
+                        run_source,
                     ]
                 ),
                 "layers": _integer(row.get("layers_created")),
@@ -383,6 +394,10 @@ HTML_TEMPLATE = r"""<!doctype html>
     .quality { display: inline-flex; padding: 3px 7px; border-radius: 999px; font-size: 11px; font-weight: 650; }
     .quality.exact { background: var(--green-soft); color: var(--green); }
     .quality.rough { background: var(--amber-soft); color: var(--amber); }
+    .series-markers { display: inline-flex; align-items: center; gap: 5px; margin-right: 8px; vertical-align: middle; }
+    .series-marker { display: inline-block; width: 22px; border-top: 3px solid var(--series-color); }
+    .series-marker.dashed { border-top-style: dashed; }
+    .series-marker.dotted { border-top-style: dotted; }
     .empty-row { padding: 28px 10px; color: var(--muted); text-align: center; }
     details { margin-bottom: 20px; padding: 0 3px; color: var(--muted); }
     details summary { cursor: pointer; color: var(--ink); font-weight: 650; }
@@ -443,13 +458,13 @@ HTML_TEMPLATE = r"""<!doctype html>
     </section>
 
     <section class="panel">
-      <div class="section-head"><div><h2>Run time over time</h2><p class="section-note">Lower is faster. Lines automatically keep each test case, OLS selection, and runner separate.</p></div></div>
+      <div class="section-head"><div><h2>Run time over time</h2><p class="section-note">Lower is faster. Colour and line style match the Chart series markers in the pivot table.</p></div></div>
       <div class="chart-wrap" id="trendWrap"><svg id="trendChart" role="img" aria-label="Runtime trend"></svg></div>
     </section>
 
     <section class="panel">
       <div class="section-head">
-        <div><h2>Pivot summary</h2><p class="section-note">Choose how to group the filtered runs; click a column heading to sort.</p></div>
+        <div><h2>Pivot summary</h2><p class="section-note">Chart series is the default grouping; its markers match the lines above.</p></div>
         <div class="pivot-controls">
           <div class="filter"><label for="groupPrimary">Group rows by</label><select id="groupPrimary"></select></div>
           <div class="filter"><label for="groupSecondary">Then by</label><select id="groupSecondary"></select></div>
@@ -473,7 +488,7 @@ HTML_TEMPLATE = r"""<!doctype html>
 
     <details>
       <summary>How to read this</summary>
-      <p>Trend lines automatically separate test case, OLS selection, and runner. “Typical” means the median, so one unusually slow run does not dominate. “Last 5 vs previous 5” compares two five-run windows within each trend.</p>
+      <p>Trend lines automatically separate test case, OLS selection, and runner. Their colour and line style are repeated beside the matching pivot row. “Typical” means the median, so one unusually slow run does not dominate. “Last 5 vs previous 5” compares two five-run windows within each trend.</p>
       <p>Older runtime rows did not record the test-case file, runway count, layout, or exact parameters. They remain visible for airport and OLS exploration, but are marked <strong>rough</strong>. New rows store an exact setup code and are marked <strong>exact</strong>.</p>
     </details>
   </main>
@@ -485,7 +500,8 @@ HTML_TEMPLATE = r"""<!doctype html>
     const filterElements = [...document.querySelectorAll('select[data-field]')];
     const scenarioSlices = __SCENARIO_SLICES__;
     const groupOptions = [
-      ['scenarioSlice', 'Scenario'], ['testCase', 'Test case'], ['airport', 'Airport'],
+      ['trendSeries', 'Chart series'], ['scenarioSlice', 'Scenario'],
+      ['testCase', 'Test case'], ['airport', 'Airport'],
       ['runwayCountLabel', 'Runways'], ['scenario', 'Recorded layout'],
       ['builtTo', 'Built to'], ['primaryOls', 'Primary OLS'],
       ['comparedWith', 'Compared with'], ['runBy', 'Run by'], ['commit', 'Commit']
@@ -511,6 +527,38 @@ HTML_TEMPLATE = r"""<!doctype html>
     const dateLabel = iso => new Intl.DateTimeFormat(undefined, {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}).format(new Date(iso));
     const shortDate = iso => new Intl.DateTimeFormat(undefined, {month:'short', day:'numeric'}).format(new Date(iso));
     const completed = runs => runs.filter(run => run.status === 'Completed' && Number.isFinite(run.elapsed));
+    const seriesStyles = buildSeriesStyles(allRuns);
+
+    function buildSeriesStyles(runs) {
+      const palette = ['#1769aa', '#657a25', '#c45d12', '#9b51a0', '#00838f'];
+      const lineStyles = [
+        {dash: '', markerClass: 'solid'},
+        {dash: '7 4', markerClass: 'dashed'},
+        {dash: '2 3', markerClass: 'dotted'}
+      ];
+      const labels = new Map();
+      completed(runs).forEach(run => labels.set(run.trendSetup, run.trendSeries));
+      const keys = [...labels.keys()].sort((left, right) =>
+        labels.get(left).localeCompare(labels.get(right), undefined, {numeric: true})
+      );
+      return new Map(keys.map((key, index) => {
+        const lineStyle = lineStyles[Math.floor(index / palette.length) % lineStyles.length];
+        return [key, {
+          color: palette[index % palette.length],
+          dash: lineStyle.dash,
+          markerClass: lineStyle.markerClass,
+          label: labels.get(key)
+        }];
+      }));
+    }
+
+    function seriesMarkers(keys) {
+      return `<span class="series-markers">${keys.map(key => {
+        const style = seriesStyles.get(key);
+        if (!style) return '';
+        return `<span class="series-marker ${style.markerClass}" style="--series-color:${style.color}" title="${escapeHtml(style.label)}" aria-label="${escapeHtml(style.label)}"></span>`;
+      }).join('')}</span>`;
+    }
 
     function setupTrends(runs) {
       const groups = new Map();
@@ -573,9 +621,9 @@ HTML_TEMPLATE = r"""<!doctype html>
         render();
       }));
       groupPrimary.innerHTML = groupOptions.map(([field, label]) => `<option value="${field}">${label}</option>`).join('');
-      groupPrimary.value = 'airport';
+      groupPrimary.value = 'trendSeries';
       refreshSecondaryOptions();
-      groupSecondary.value = 'primaryOls';
+      groupSecondary.value = '';
       groupPrimary.addEventListener('change', () => { refreshSecondaryOptions(); renderPivot(filteredRuns()); });
       groupSecondary.addEventListener('change', () => renderPivot(filteredRuns()));
     }
@@ -700,9 +748,7 @@ HTML_TEMPLATE = r"""<!doctype html>
       const minY = Math.max(0, rawMin - padding), maxY = rawMax + padding;
       const x = run => left + ((new Date(run.timestamp).getTime() - minTime) / (maxTime - minTime || 1)) * innerWidth;
       const y = run => top + (1 - (run.elapsed - minY) / (maxY - minY || 1)) * innerHeight;
-      const palette = ['#1769aa','#177245','#9b51a0','#c45d12','#5b6573','#b42318','#00838f','#6b5b95'];
       const seriesKeys = [...new Set(usable.map(run => run.trendSetup))];
-      const color = key => palette[Math.max(0, seriesKeys.indexOf(key)) % palette.length];
       let parts = [`<rect x="0" y="0" width="${width}" height="${height}" fill="white"/>`];
       for (let tick = 0; tick <= 4; tick++) {
         const value = minY + (maxY - minY) * tick / 4;
@@ -712,11 +758,17 @@ HTML_TEMPLATE = r"""<!doctype html>
       }
       seriesKeys.forEach(key => {
         const series = usable.filter(run => run.trendSetup === key);
+        const style = seriesStyles.get(key);
         if (series.length > 1) {
-          parts.push(`<polyline fill="none" stroke="${color(key)}" stroke-width="2" opacity=".75" points="${series.map(run => `${x(run)},${y(run)}`).join(' ')}"/>`);
+          const dash = style.dash ? ` stroke-dasharray="${style.dash}"` : '';
+          parts.push(`<polyline fill="none" stroke="${style.color}" stroke-width="2"${dash} opacity=".78" points="${series.map(run => `${x(run)},${y(run)}`).join(' ')}"/>`);
         }
       });
-      usable.forEach(run => parts.push(`<circle cx="${x(run)}" cy="${y(run)}" r="4" fill="${color(run.trendSetup)}" stroke="white" stroke-width="1.5"><title>${escapeHtml(`${run.testCase} · ${run.olsSelection} · ${run.runBy} · ${seconds(run.elapsed)} · ${dateLabel(run.timestamp)}`)}</title></circle>`));
+      usable.forEach(run => {
+        const style = seriesStyles.get(run.trendSetup);
+        const fill = style.markerClass === 'solid' ? style.color : 'white';
+        parts.push(`<circle cx="${x(run)}" cy="${y(run)}" r="4" fill="${fill}" stroke="${style.color}" stroke-width="2"><title>${escapeHtml(`${run.trendSeries} · ${seconds(run.elapsed)} · ${dateLabel(run.timestamp)}`)}</title></circle>`);
+      });
       const labels = [usable[0], usable[Math.floor((usable.length - 1) / 2)], usable.at(-1)];
       labels.forEach((run, index) => parts.push(`<text x="${x(run)}" y="${height-16}" text-anchor="${index === 0 ? 'start' : index === 2 ? 'end' : 'middle'}" fill="#687582" font-size="11">${escapeHtml(shortDate(run.timestamp))}</text>`));
       chart.setAttribute('viewBox', `0 0 ${width} ${height}`);
@@ -747,7 +799,8 @@ HTML_TEMPLATE = r"""<!doctype html>
           group: group.values.join(' · '), runs: group.runs.length,
           median: median(values), latest: usable.at(-1)?.elapsed ?? null,
           recent, change: mixedSetups ? null : percentChange(recent, previous), quality: quality.label,
-          qualityKind: quality.kind
+          qualityKind: quality.kind,
+          seriesKeys: [...new Set(usable.map(run => run.trendSetup))]
         };
       });
     }
@@ -767,7 +820,7 @@ HTML_TEMPLATE = r"""<!doctype html>
         return;
       }
       body.innerHTML = rows.map(row => `<tr>
-        <td>${escapeHtml(row.group)}</td><td class="number">${row.runs}</td>
+        <td>${seriesMarkers(row.seriesKeys)}${escapeHtml(row.group)}</td><td class="number">${row.runs}</td>
         <td class="number">${escapeHtml(seconds(row.median))}</td><td class="number">${escapeHtml(seconds(row.latest))}</td>
         <td class="number">${escapeHtml(seconds(row.recent))}</td>
         <td class="number ${Number.isFinite(row.change) ? (row.change < -.02 ? 'positive' : row.change > .02 ? 'negative' : '') : ''}">${escapeHtml(Number.isFinite(row.change) ? directionText(row.change) : '—')}</td>
