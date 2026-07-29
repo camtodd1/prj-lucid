@@ -9,14 +9,14 @@ STRIP_WIDTH_PARAMS = {
     1: {
         "graded": 60.0,
         "overall_ni_npa": 140.0,
-        "overall_pa": 280.0,
+        "overall_pa": 140.0,
         "ref_graded": "MOS T6.17(1) Code 1",
         "ref_overall": "MOS T6.17(4) Code 1/2",
     },
     2: {
         "graded": 80.0,
         "overall_ni_npa": 140.0,
-        "overall_pa": 280.0,
+        "overall_pa": 140.0,
         "ref_graded": "MOS T6.17(1) Code 2",
         "ref_overall": "MOS T6.17(4) Code 1/2",
     },
@@ -37,7 +37,7 @@ STRIP_WIDTH_PARAMS = {
 }
 
 STRIP_EXTENSION_PARAMS = {
-    "NI_1_2": {"length": 30.0, "ref": "MOS 6.16(a) NI Code 1/2"},
+    "NI_1": {"length": 30.0, "ref": "MOS 6.16(a) NI Code 1"},
     "OTHER": {"length": 60.0, "ref": "MOS 6.16(b)"},
 }
 
@@ -106,8 +106,8 @@ def get_strip_params(arc_num: int, type_abbr: str, runway_width: Optional[float]
         results["mos_overall_width_ref"] += " (Code 3/4)"
         results["overall_width_ref"] = results["mos_overall_width_ref"]
 
-    is_ni_code_1_or_2 = type_abbr == "NI" and arc_num in [1, 2]
-    ext_key = "NI_1_2" if is_ni_code_1_or_2 else "OTHER"
+    is_ni_code_1 = type_abbr == "NI" and arc_num == 1
+    ext_key = "NI_1" if is_ni_code_1 else "OTHER"
     ext_params = STRIP_EXTENSION_PARAMS.get(ext_key)
     if ext_params:
         results["extension_length"] = ext_params.get("length")
