@@ -2,7 +2,7 @@
 
 FRAMEWORK_ID = "uk_caa_safeguarding"
 DISPLAY_NAME = "UK CAA / DfT Safeguarding"
-EDITION = "CAP 738 v3; CAP 764 v7; DfT PSZ policy 2021"
+EDITION = "CAP 738 v3; CAP 764 v7; DfT PSZ policy 2021; CAA crane guidance"
 STATUS = "beta"
 DESCRIPTION = (
     "UK consultation-map and public-safety-zone mechanisms. Generated geometry is "
@@ -18,7 +18,7 @@ CAPABILITY_STATUS_BY_KEY = {
     "framework.ols_planning": "supported",
     "framework.cns.bra": "unsupported",
     "framework.public_safety": "supported",
-    "framework.temporary_obstacle.notification": "partial",
+    "framework.temporary_obstacle.notification": "supported",
     "framework.met.station": "unsupported",
 }
 

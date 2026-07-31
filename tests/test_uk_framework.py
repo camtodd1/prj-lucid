@@ -76,6 +76,11 @@ class UkFrameworkProfileTests(unittest.TestCase):
         self.assertEqual(national["profile_id"], "uk_caa_cranes")
         self.assertEqual(national["source_id"], "UK-7")
         self.assertEqual(national["assessment_result"], "consult")
+        long_term = self.profile.screen_crane_notification(50000, 150, True, 0, 91)
+        self.assertTrue(long_term["dgc_notification"])
+        self.assertEqual(long_term["lighting_status"], "mandatory_medium_intensity")
+        self.assertEqual(long_term["lighting_intensity_cd"], 2000.0)
+        self.assertTrue(long_term["intermediate_lights_required"])
         with self.assertRaises(ValueError):
             self.profile.screen_crane_notification(-1, 20)
 

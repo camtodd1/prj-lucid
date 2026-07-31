@@ -28,11 +28,15 @@ class UkFrameworkProfile(FrameworkProfile):
         distance_to_aerodrome_m: float,
         height_agl_m: float,
         shielded_by_surroundings: bool = False,
+        surrounding_height_agl_m: float = 0.0,
+        in_situ_days: int = 0,
     ) -> dict:
         return guidelines.screen_crane_notification(
             distance_to_aerodrome_m,
             height_agl_m,
             shielded_by_surroundings,
+            surrounding_height_agl_m,
+            in_situ_days,
         )
 
     def safeguarding_group_name(self) -> str:
@@ -52,6 +56,9 @@ class UkFrameworkProfile(FrameworkProfile):
         definitions = layer_tree.guideline_group_definitions(include_cns)
         if options is not None and not self.public_safety_area_parameters(options)["enabled"]:
             definitions.pop("I", None)
+        crane = options.get("crane", {}) if isinstance(options, Mapping) else {}
+        if not isinstance(crane, Mapping) or not bool(crane.get("enabled", False)):
+            definitions.pop("K", None)
         return definitions
 
     def guideline_group_name(self, guideline_key: str) -> str:

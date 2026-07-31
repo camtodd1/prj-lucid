@@ -2,6 +2,7 @@
 
 import unittest
 import sys
+import math
 from pathlib import Path
 from types import MethodType
 
@@ -25,6 +26,16 @@ class UkFrameworkGeometryTests(unittest.TestCase):
         self.builder.safeguarding_options = {
             "psz_applicable": True,
             "pscz_length_m": 1000.0,
+            "crane": {
+                "enabled": True,
+                "name": "Test crane",
+                "easting": 3000.0,
+                "northing": 4000.0,
+                "height_agl_m": 50.0,
+                "surrounding_height_agl_m": 20.0,
+                "in_situ_days": 120,
+                "shielded_by_surroundings": False,
+            },
         }
         self.builder.translator = None
         self.captured = []
@@ -112,6 +123,23 @@ class UkFrameworkGeometryTests(unittest.TestCase):
                 for record in self.captured
             )
         )
+
+    def test_crane_screening_generates_candidate_and_arp_proxy_area(self):
+        group = QgsLayerTreeGroup("Crane Notification Screening")
+        crs = QgsCoordinateReferenceSystem("EPSG:3857")
+        self.assertTrue(
+            self.builder.process_uk_crane_screening(
+                QgsPointXY(0.0, 0.0), "EGXX", crs, group
+            )
+        )
+        by_style = {record[4]: record for record in self.captured}
+        candidate = by_style["Default Point"][3][0]
+        self.assertAlmostEqual(candidate.attribute("distance_m"), 5000.0)
+        self.assertTrue(candidate.attribute("notify"))
+        self.assertEqual(candidate.attribute("lighting"), "recommended_medium_intensity")
+        self.assertEqual(candidate.attribute("distance_basis"), "ARP proxy")
+        area = by_style["Default Polygon"][3][0]
+        self.assertAlmostEqual(area.geometry().area(), math.pi * 6000.0**2, delta=100000.0)
 
     def test_framework_dispatch_preserves_nasf_wildlife_and_wind_outputs(self):
         self.builder.framework = get_framework_profile("nasf_aus")

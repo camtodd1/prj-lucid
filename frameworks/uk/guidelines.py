@@ -116,6 +116,12 @@ def crane_notification_parameters() -> dict:
         "local_distance_m": 6000.0,
         "local_height_agl_m": 10.0,
         "national_height_agl_m": 100.0,
+        "mandatory_lighting_height_agl_m": 150.0,
+        "recommended_medium_lighting_height_agl_m": 45.0,
+        "medium_intensity_cd": 2000.0,
+        "low_intensity_cd": 32.0,
+        "intermediate_light_max_spacing_m": 52.0,
+        "dgc_duration_days": 90,
         "source_ref": "UK CAA Crane notification",
         "source_version": "web guidance reviewed 31 July 2026",
         "authority_level": "CAA notification guidance",
@@ -132,17 +138,25 @@ def screen_crane_notification(
     distance_to_aerodrome_m: float,
     height_agl_m: float,
     shielded_by_surroundings: bool = False,
+    surrounding_height_agl_m: float = 0.0,
+    in_situ_days: int = 0,
 ) -> dict:
     """Screen a crane candidate against the published UK notification triggers."""
     params = crane_notification_parameters()
     distance_m = float(distance_to_aerodrome_m)
     height_m = float(height_agl_m)
-    if distance_m < 0 or height_m < 0:
+    surrounding_height_m = float(surrounding_height_agl_m)
+    duration_days = int(in_situ_days)
+    if min(distance_m, height_m, surrounding_height_m, duration_days) < 0:
         raise ValueError("Crane distance and height must be non-negative.")
     national_trigger = height_m >= params["national_height_agl_m"]
+    local_height_trigger = height_m > max(
+        params["local_height_agl_m"],
+        surrounding_height_m,
+    )
     local_trigger = (
         distance_m <= params["local_distance_m"]
-        and height_m > params["local_height_agl_m"]
+        and local_height_trigger
         and not bool(shielded_by_surroundings)
     )
     reason_codes = []
@@ -150,10 +164,27 @@ def screen_crane_notification(
         reason_codes.append("within_6km_over_10m_unshielded")
     if national_trigger:
         reason_codes.append("at_or_above_100m_agl")
+    dgc_notification = national_trigger and duration_days > params["dgc_duration_days"]
+    if dgc_notification:
+        reason_codes.append("over_90_days_notify_dgc")
+    if height_m >= params["mandatory_lighting_height_agl_m"]:
+        lighting_status = "mandatory_medium_intensity"
+        lighting_intensity_cd = params["medium_intensity_cd"]
+    elif height_m >= params["recommended_medium_lighting_height_agl_m"]:
+        lighting_status = "recommended_medium_intensity"
+        lighting_intensity_cd = params["medium_intensity_cd"]
+    else:
+        lighting_status = "recommended_low_intensity"
+        lighting_intensity_cd = params["low_intensity_cd"]
     return {
         "notification_required": bool(local_trigger or national_trigger),
         "local_trigger": local_trigger,
         "national_trigger": national_trigger,
+        "dgc_notification": dgc_notification,
+        "lighting_status": lighting_status,
+        "lighting_intensity_cd": lighting_intensity_cd,
+        "intermediate_lights_required": height_m > 45.0,
+        "intermediate_light_max_spacing_m": params["intermediate_light_max_spacing_m"],
         "reason_codes": tuple(reason_codes),
         "family_id": params["family_id"],
         "profile_id": params["profile_id"],

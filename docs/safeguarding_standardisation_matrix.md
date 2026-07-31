@@ -70,7 +70,7 @@ Source identifiers refer to the [Primary Source Register](#primary-source-regist
 | Hazardous, confusing or misleading lights | Guideline E: four runway-aligned intensity-control zones plus a 6 km area [AUS-1] | CAP 738 §§3.17–3.20 uses distraction/confusion, glare and full-cut-off assessment; CAP 736 covers directed light [UK-1, UK-9] | Art 9(c) requires consultation; common rules do not reproduce NASF candela bands [EASA-2] | Annex 14 Vol I §5.3.1 addresses non-aeronautical lights and laser emissions [ICAO-1, ICAO-7] | **P/F** — build a screening/assessment record, not a relabelled NASF zone generator. |
 | Wind turbines | Guideline D: 30 km assessment radius [AUS-1] | Officially safeguarded aerodromes promulgate wind-turbine maps normally based on a 30 km ARP radius; CAP 764 requires obstacle, IFP and CNS assessment [UK-1, UK-4] | Covered indirectly by Arts 8 and 9(f); no EASA-wide wind-turbine radius [EASA-2] | Annex 14 obstacle controls and Annex 10/CNS assessment apply; no global ICAO 30 km circle [ICAO-1, ICAO-4] | **D** for a fixed 30 km UK consultation overlay; **F/P** elsewhere. The aerodrome’s lodged map overrides generated geometry. |
 | Building-induced turbulence / windshear | Guideline B: runway-based trigger zone followed by specialist assessment [AUS-1] | CAP 738 requires consideration near the airport, with a specialist study where a development may generate hazardous turbulence [UK-1, UK-2] | Art 9(b) expressly requires consultation; detailed common criteria are not yet provided [EASA-2, EASA-4] | Doc 9817 addresses low-level windshear and turbulence but does not supply a universal building-development zone [ICAO-11] | **P/F** — store a jurisdiction-specific screening decision and study result; do not apply the NASF trigger rectangle outside Australia. |
-| Helicopter landing sites | Guideline H protects strategically important HLS [AUS-1] | CAP 738 Chs 8–9 and CAP 1264 cover heliport/HHLS safeguarding, approach/take-off surfaces and downwash [UK-1, UK-6] | CS-HPT-DSN Issue 1 covers surface-level VFR heliports located at aerodromes in scope; it is not a general off-airport HLS code [EASA-5] | Annex 14 Vol II and Heliport Manual Doc 9261 [ICAO-12, ICAO-13] | **D**, but as a separate heliport module with design-helicopter and site inputs. Jurisdiction and heliport type determine applicability. |
+| Helicopter landing sites | Guideline H protects strategically important HLS [AUS-1] | CAP 738 Chs 8–9 and CAP 1264 cover heliport/HHLS safeguarding, approach/take-off surfaces and downwash [UK-1, UK-6] | CS-HPT-DSN Issue 1 covers surface-level VFR heliports located at aerodromes in scope; it is not a general off-airport HLS code [EASA-5] | Annex 14 Vol II and Heliport Manual Doc 9261 [ICAO-12, ICAO-13] | **Out of scope** for this airport safeguarding plugin. |
 | Solar glint and glare | No dedicated guideline; overlaps Guideline E/G | CAP 738 Appendix C and CAA safeguarding guidance require case-specific glare, radar, OLS, IFP and wildlife review [UK-1, UK-2] | Art 9(d); GM1 ADR-DSN.M.615 describes a dazzle safety assessment and uses 20,000 cd/m² as a maximum acceptable luminance assumption for solar panels [EASA-2, EASA-3] | Annex 14 light-safety principles and Doc 9184 land-use guidance; no universal solar exclusion polygon identified [ICAO-1, ICAO-9] | **P** — implement line-of-sight/sun-reflection analysis and receptor records, not a fixed buffer. Treat the EASA luminance value as source-scoped guidance, not a global threshold. |
 | Emissions, plumes, dust and smoke | No dedicated guideline; related to operational-airspace protection | CAP 738 includes dust/smoke from construction and thermal uplift or vapour plumes in safeguarding assessment [UK-1, UK-2] | The current common rules are high-level; RMT.0751 explicitly includes gaseous emissions in its future scope [EASA-4] | Doc 9184 environmental control and Doc 9817 windshear/turbulence guidance are relevant, but no generic exclusion geometry was found [ICAO-9, ICAO-11] | **P/F** — create a consultation checklist and specialist-study attachment, not automatic pass/fail geometry. |
 | Temporary obstacles and cranes | Guideline F protected-airspace assessment | CAA notification is required for a crane over 10 m AGL within 6 km of an aerodrome unless shielded by higher surroundings, and for a crane at or above 100 m AGL regardless of location [UK-7] | Art 8 consultation plus applicable OLS/other-surface assessment [EASA-2] | Annex 14 obstacle assessment, marking, lighting and publication [ICAO-1] | **D** for a UK notification screening layer; all actual acceptability checks still run against OLS, IFP and CNS controls. |
@@ -170,8 +170,8 @@ planning framework:
   must not be labelled as a global ICAO standard.
 - Doc 9184 Part 2 and Doc 9911 support compatible land use and aircraft-noise
   contours; they do not prescribe one universal land-use contour.
-- Annex 14 Vol II and Doc 9261 provide the appropriate global basis for a
-  separate heliport safeguarding module.
+- Annex 14 Vol II and Doc 9261 provide the appropriate global heliport basis,
+  but heliports are outside this plugin's airport safeguarding scope.
 - Annex 14 laser-protected flight zones are an additional mechanism with useful
   geometry, subject to controlled extraction of the current numeric criteria.
 
@@ -186,7 +186,7 @@ planning framework:
 | 1 | UK crane notification | `temporary_obstacle_notification` / `uk_caa_cranes` | 6 km/10 m and nationwide 100 m screening with reason codes | Notification does not imply approval. |
 | 2 | IFP protection | `ifp_protection` / source-specific profile | Import authoritative 2D/3D procedure surfaces and intersect candidates | Procedure design and approval remain external specialist functions. |
 | 2 | UK/ICAO CNS protection | `cns_bra` / authority-specific profile | Facility inventory, approved template library and candidate intersection | Dimensions vary by facility, installation and responsible authority. |
-| 2 | Heliport safeguarding | Separate `heliport` module | FATO/TLOF, safety area, approach/take-off and obstacle surfaces | Must capture heliport type, operating environment and design helicopter. |
+| — | Heliport safeguarding | Not implemented | — | Explicitly out of scope for this airport safeguarding plugin. |
 | 2 | ICAO/UK laser protection | `directed_light_protection` | Laser-zone geometry and source-scoped irradiance attributes | Numeric criteria require current controlled-source verification. |
 | 3 | Solar glint and glare | `solar_glare_assessment` | Sun-path/reflection engine with pilot/ATC receptors and time intervals | No credible fixed exclusion buffer. |
 | 3 | Aircraft noise | `noise_land_use` | Import, validate, style and compare externally produced contours | Full Doc 9911 computation needs substantial operational and aircraft data. |
@@ -203,13 +203,13 @@ mechanisms as follows:
 - opt-in DfT PSRZ and PSCZ triangles at both landing thresholds, requiring an
   explicit 1,000 m or 1,500 m PSCZ selection rather than inferring the unresolved
   exactly-45,000-movement case; and
-- a reusable crane-notification evaluator with independent 6 km/over-10 m
-  unshielded and nationwide at-or-above-100 m AGL reason codes.
+- an opt-in crane candidate screen with independent 6 km/over-10 m unshielded
+  and nationwide at-or-above-100 m AGL reason codes, duration/DGC screening,
+  and CAA lighting outcomes. The generated 6 km area uses the ARP only as a
+  labelled proxy until approved aerodrome-boundary/reference geometry is supplied.
 
-The crane evaluator is not exposed as a generated candidate layer because the
-current dialog has no development/crane point, aerodrome-boundary geometry or
-shielding input. CAP 168 OLS remains owned by the existing protected-airspace
-ruleset and is not duplicated by this supplementary profile.
+CAP 168 OLS remains owned by the existing protected-airspace ruleset and is not
+duplicated by this supplementary profile.
 
 ## Data and Provenance Contract
 
@@ -282,7 +282,7 @@ a substitute for a controlled copy when extracting numeric criteria.
 ## Open Verification Items
 
 - [ ] Obtain controlled copies of the current ICAO numeric source material
-      before implementing laser zones, CNS BRAs or heliport surfaces.
+      before implementing laser zones or CNS BRAs.
 - [ ] Confirm the DfT PSCZ rule for exactly 45,000 commercial movements and the
       treatment of exactly 18,000 movements before hardcoding applicability.
 - [ ] Validate UK PSZ generated orientation and taper against at least one
@@ -293,5 +293,5 @@ a substitute for a controlled copy when extracting numeric criteria.
       Articles 8–10 alone do not supply enough geometry for a useful profile.
 - [ ] Review RMT.0751 outputs when published and create a new source version;
       do not mutate the current EASA baseline in place.
-- [ ] Decide whether heliports remain a separate module, as recommended here,
+- [x] Keep heliports out of scope for this airport safeguarding plugin,
       or are exposed through the current runway-oriented workflow.
