@@ -198,7 +198,6 @@ class SafeguardingBuilderDialog(
         self._setup_arp_validators(self.coord_validator, self.numeric_validator)
         self._style_airport_tab()
         self._setup_ruleset_selector_ui()
-        self._setup_uk_crane_tab()
         self._connect_global_controls()
         self._setup_dialog_status_connections()
         self._setup_project_crs_status_monitor()
@@ -842,7 +841,6 @@ class SafeguardingBuilderDialog(
             ("tab_ols", "OLS"),
             ("tab_lighting", "Lighting"),
             ("tab_output", "Output"),
-            ("tab_uk_crane", "UK Crane"),
         ]
         tab_widget = getattr(self, "tabWidget_workflow", None)
         if tab_widget is not None:
@@ -879,10 +877,6 @@ class SafeguardingBuilderDialog(
             {
                 "tab": "tab_output",
                 "summary": "Choose where generated layers will be saved.",
-            },
-            {
-                "tab": "tab_uk_crane",
-                "summary": "Screen a crane candidate against UK CAA notification and lighting triggers.",
             },
         ]
 
@@ -1564,116 +1558,10 @@ class SafeguardingBuilderDialog(
         )
         self.uk_pscz_length.setEnabled(False)
 
-    def _setup_uk_crane_tab(self) -> None:
-        """Add UK crane candidate inputs without crowding the policy header."""
-        tabs = getattr(self, "tabWidget_workflow", None)
-        if tabs is None or getattr(self, "tab_uk_crane", None) is not None:
-            return
-        page = QtWidgets.QWidget(tabs)
-        page.setObjectName("tab_uk_crane")
-        outer = QtWidgets.QVBoxLayout(page)
-        outer.setContentsMargins(10, 10, 10, 10)
-        group = QtWidgets.QGroupBox("UK CAA crane notification screening", page)
-        form = QtWidgets.QGridLayout(group)
-        form.setColumnStretch(1, 1)
-        form.setColumnStretch(3, 1)
-
-        self.uk_crane_enabled = QtWidgets.QCheckBox("Generate crane notification screening")
-        self.uk_crane_enabled.setObjectName("checkBox_uk_crane_enabled")
-        form.addWidget(self.uk_crane_enabled, 0, 0, 1, 4)
-        self.uk_crane_name = QtWidgets.QLineEdit()
-        self.uk_crane_name.setObjectName("lineEdit_uk_crane_name")
-        self.uk_crane_name.setPlaceholderText("Crane candidate")
-        form.addWidget(QtWidgets.QLabel("Name"), 1, 0)
-        form.addWidget(self.uk_crane_name, 1, 1, 1, 3)
-
-        def coordinate_box(name: str) -> QtWidgets.QDoubleSpinBox:
-            box = QtWidgets.QDoubleSpinBox()
-            box.setObjectName(name)
-            box.setRange(-100000000.0, 100000000.0)
-            box.setDecimals(3)
-            box.setGroupSeparatorShown(True)
-            return box
-
-        def positive_box(name: str, maximum: float, decimals: int = 1) -> QtWidgets.QDoubleSpinBox:
-            box = QtWidgets.QDoubleSpinBox()
-            box.setObjectName(name)
-            box.setRange(0.0, maximum)
-            box.setDecimals(decimals)
-            return box
-
-        self.uk_crane_easting = coordinate_box("doubleSpinBox_uk_crane_easting")
-        self.uk_crane_northing = coordinate_box("doubleSpinBox_uk_crane_northing")
-        self.uk_crane_height = positive_box("doubleSpinBox_uk_crane_height_agl_m", 1000.0)
-        self.uk_crane_surrounding_height = positive_box(
-            "doubleSpinBox_uk_crane_surrounding_height_agl_m", 1000.0
-        )
-        self.uk_crane_duration = QtWidgets.QSpinBox()
-        self.uk_crane_duration.setObjectName("spinBox_uk_crane_in_situ_days")
-        self.uk_crane_duration.setRange(0, 3650)
-        self.uk_crane_shielded = QtWidgets.QCheckBox("Shielded by higher surrounding structures or trees")
-        self.uk_crane_shielded.setObjectName("checkBox_uk_crane_shielded")
-
-        rows = (
-            ("Easting", self.uk_crane_easting, "Northing", self.uk_crane_northing),
-            ("Height AGL (m)", self.uk_crane_height, "Surroundings AGL (m)", self.uk_crane_surrounding_height),
-            ("In situ (days)", self.uk_crane_duration, None, None),
-        )
-        for row, (left_label, left_widget, right_label, right_widget) in enumerate(rows, 2):
-            form.addWidget(QtWidgets.QLabel(left_label), row, 0)
-            form.addWidget(left_widget, row, 1)
-            if right_label:
-                form.addWidget(QtWidgets.QLabel(right_label), row, 2)
-                form.addWidget(right_widget, row, 3)
-        form.addWidget(self.uk_crane_shielded, 5, 0, 1, 4)
-        note = QtWidgets.QLabel(
-            "The 6 km proximity calculation uses the ARP as a screening proxy. "
-            "Confirm the relevant aerodrome boundary/reference geometry before notification."
-        )
-        note.setWordWrap(True)
-        form.addWidget(note, 6, 0, 1, 4)
-        outer.addWidget(group)
-        outer.addStretch(1)
-        self.tab_uk_crane = page
-        self._uk_crane_tab_index = tabs.addTab(page, "UK Crane")
-        for widget in (
-            self.uk_crane_name,
-            self.uk_crane_easting,
-            self.uk_crane_northing,
-            self.uk_crane_height,
-            self.uk_crane_surrounding_height,
-            self.uk_crane_duration,
-            self.uk_crane_shielded,
-        ):
-            widget.setEnabled(False)
-        self.uk_crane_enabled.toggled.connect(self._on_uk_crane_toggled)
-        tabs.setTabVisible(
-            self._uk_crane_tab_index,
-            self.framework_combo.currentData() == "uk_caa_safeguarding",
-        )
-
-    def _on_uk_crane_toggled(self, enabled: bool) -> None:
-        for widget in (
-            self.uk_crane_name,
-            self.uk_crane_easting,
-            self.uk_crane_northing,
-            self.uk_crane_height,
-            self.uk_crane_surrounding_height,
-            self.uk_crane_duration,
-            self.uk_crane_shielded,
-        ):
-            widget.setEnabled(enabled)
-        self.update_dialog_status()
-
     def _on_framework_changed(self, *_args) -> None:
         """Show only the configuration owned by the selected framework."""
         is_uk = self.framework_combo.currentData() == "uk_caa_safeguarding"
         self.uk_framework_options.setVisible(is_uk)
-        tabs = getattr(self, "tabWidget_workflow", None)
-        if tabs is not None and hasattr(self, "_uk_crane_tab_index"):
-            crane_index = tabs.indexOf(self.tab_uk_crane)
-            if crane_index >= 0:
-                tabs.setTabVisible(crane_index, is_uk)
         self._on_uk_psz_toggled()
         self._sync_global_context_box_geometry()
         QtCore.QTimer.singleShot(0, self._sync_global_context_box_geometry)
@@ -1691,16 +1579,6 @@ class SafeguardingBuilderDialog(
         return {
             "psz_applicable": bool(self.uk_psz_applicable.isChecked()),
             "pscz_length_m": self.uk_pscz_length.currentData(),
-            "crane": {
-                "enabled": bool(self.uk_crane_enabled.isChecked()),
-                "name": self.uk_crane_name.text().strip(),
-                "easting": self.uk_crane_easting.value(),
-                "northing": self.uk_crane_northing.value(),
-                "height_agl_m": self.uk_crane_height.value(),
-                "surrounding_height_agl_m": self.uk_crane_surrounding_height.value(),
-                "in_situ_days": self.uk_crane_duration.value(),
-                "shielded_by_surroundings": bool(self.uk_crane_shielded.isChecked()),
-            },
         }
 
     def _apply_safeguarding_options(self, options) -> None:
@@ -1710,16 +1588,6 @@ class SafeguardingBuilderDialog(
         pscz_length = values.get("pscz_length_m")
         index = self.uk_pscz_length.findData(float(pscz_length)) if pscz_length is not None else 0
         self.uk_pscz_length.setCurrentIndex(index if index >= 0 else 0)
-        crane = values.get("crane", {}) if isinstance(values.get("crane", {}), dict) else {}
-        self.uk_crane_enabled.setChecked(bool(crane.get("enabled", False)))
-        self.uk_crane_name.setText(str(crane.get("name", "")))
-        self.uk_crane_easting.setValue(float(crane.get("easting", 0.0)))
-        self.uk_crane_northing.setValue(float(crane.get("northing", 0.0)))
-        self.uk_crane_height.setValue(float(crane.get("height_agl_m", 0.0)))
-        self.uk_crane_surrounding_height.setValue(float(crane.get("surrounding_height_agl_m", 0.0)))
-        self.uk_crane_duration.setValue(int(crane.get("in_situ_days", 0)))
-        self.uk_crane_shielded.setChecked(bool(crane.get("shielded_by_surroundings", False)))
-        self._on_uk_crane_toggled(self.uk_crane_enabled.isChecked())
         self._on_uk_psz_toggled()
 
     def _reset_safeguarding_options(self) -> None:
@@ -3285,15 +3153,6 @@ class SafeguardingBuilderDialog(
             error_messages.append(
                 "Select the UK PSCZ traffic band, or disable indicative DfT PSZ generation."
             )
-        crane_options = safeguarding_options.get("crane", {})
-        if (
-            safeguarding_framework == "uk_caa_safeguarding"
-            and isinstance(crane_options, dict)
-            and crane_options.get("enabled")
-            and float(crane_options.get("height_agl_m", 0.0)) <= 0.0
-        ):
-            validation_ok = False
-            error_messages.append("Enter a crane height above ground level greater than zero.")
         baseline_ols_ruleset = design_standard
         comparison_ols_ruleset = ""
         if hasattr(self, "_current_ols_ruleset_ids"):

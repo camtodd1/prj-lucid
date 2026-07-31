@@ -62,28 +62,6 @@ class UkFrameworkProfileTests(unittest.TestCase):
         self.assertEqual([zone["length_m"] for zone in long["zones"]], [500.0, 1500.0])
         self.assertTrue(short["enabled"])
 
-    def test_crane_screen_preserves_independent_local_and_national_triggers(self):
-        local = self.profile.screen_crane_notification(6000, 10.1)
-        shielded = self.profile.screen_crane_notification(1000, 20, True)
-        national = self.profile.screen_crane_notification(50000, 100, True)
-        below = self.profile.screen_crane_notification(6000, 10)
-        self.assertTrue(local["notification_required"])
-        self.assertEqual(local["reason_codes"], ("within_6km_over_10m_unshielded",))
-        self.assertFalse(shielded["notification_required"])
-        self.assertTrue(national["national_trigger"])
-        self.assertFalse(national["local_trigger"])
-        self.assertFalse(below["notification_required"])
-        self.assertEqual(national["profile_id"], "uk_caa_cranes")
-        self.assertEqual(national["source_id"], "UK-7")
-        self.assertEqual(national["assessment_result"], "consult")
-        long_term = self.profile.screen_crane_notification(50000, 150, True, 0, 91)
-        self.assertTrue(long_term["dgc_notification"])
-        self.assertEqual(long_term["lighting_status"], "mandatory_medium_intensity")
-        self.assertEqual(long_term["lighting_intensity_cd"], 2000.0)
-        self.assertTrue(long_term["intermediate_lights_required"])
-        with self.assertRaises(ValueError):
-            self.profile.screen_crane_notification(-1, 20)
-
     def test_safeguarding_options_affect_run_fingerprint(self):
         base = {
             "icao_code": "EGLL",

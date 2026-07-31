@@ -341,39 +341,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             {
                 "psz_applicable": True,
                 "pscz_length_m": 1500.0,
-                "crane": {
-                    "enabled": False,
-                    "name": "",
-                    "easting": 0.0,
-                    "northing": 0.0,
-                    "height_agl_m": 0.0,
-                    "surrounding_height_agl_m": 0.0,
-                    "in_situ_days": 0,
-                    "shielded_by_surroundings": False,
-                },
             },
         )
-
-    def test_uk_crane_inputs_are_visible_only_for_uk_and_persisted(self):
-        tabs = self.dialog.tabWidget_workflow
-        crane_index = tabs.indexOf(self.dialog.tab_uk_crane)
-        self.assertFalse(tabs.isTabVisible(crane_index))
-        self.dialog.framework_combo.setCurrentIndex(
-            self.dialog.framework_combo.findData("uk_caa_safeguarding")
-        )
-        self.dialog.show()
-        self.app.processEvents()
-        self.assertTrue(tabs.isTabVisible(crane_index))
-        self.dialog.uk_crane_enabled.setChecked(True)
-        self.dialog.uk_crane_name.setText("Tower crane 1")
-        self.dialog.uk_crane_easting.setValue(530000.0)
-        self.dialog.uk_crane_northing.setValue(180000.0)
-        self.dialog.uk_crane_height.setValue(55.0)
-        self.dialog.uk_crane_duration.setValue(120)
-        crane = self.dialog._build_save_payload("EGLL")["safeguarding_options"]["crane"]
-        self.assertEqual(crane["name"], "Tower crane 1")
-        self.assertEqual(crane["height_agl_m"], 55.0)
-        self.assertEqual(crane["in_situ_days"], 120)
 
     def test_save_payload_records_scenario_and_uses_standard_filename(self):
         payload = self.dialog._build_save_payload("YBBN")

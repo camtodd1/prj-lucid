@@ -107,104 +107,10 @@ def public_safety_area_parameters(options: Optional[Mapping[str, object]] = None
     }
 
 
-def crane_notification_parameters() -> dict:
-    """Return the UK CAA crane-notification screening thresholds."""
-    return {
-        "family_id": "temporary_obstacle_notification",
-        "profile_id": "uk_caa_cranes",
-        "source_id": "UK-7",
-        "local_distance_m": 6000.0,
-        "local_height_agl_m": 10.0,
-        "national_height_agl_m": 100.0,
-        "mandatory_lighting_height_agl_m": 150.0,
-        "recommended_medium_lighting_height_agl_m": 45.0,
-        "medium_intensity_cd": 2000.0,
-        "low_intensity_cd": 32.0,
-        "intermediate_light_max_spacing_m": 52.0,
-        "dgc_duration_days": 90,
-        "source_ref": "UK CAA Crane notification",
-        "source_version": "web guidance reviewed 31 July 2026",
-        "authority_level": "CAA notification guidance",
-        "applicability": "crane candidate with approved aerodrome distance basis",
-        "geometry_status": "screening_only",
-        "caveat": (
-            "Distance is to the relevant aerodrome boundary or approved reference geometry. "
-            "Notification does not imply obstacle approval."
-        ),
-    }
-
-
-def screen_crane_notification(
-    distance_to_aerodrome_m: float,
-    height_agl_m: float,
-    shielded_by_surroundings: bool = False,
-    surrounding_height_agl_m: float = 0.0,
-    in_situ_days: int = 0,
-) -> dict:
-    """Screen a crane candidate against the published UK notification triggers."""
-    params = crane_notification_parameters()
-    distance_m = float(distance_to_aerodrome_m)
-    height_m = float(height_agl_m)
-    surrounding_height_m = float(surrounding_height_agl_m)
-    duration_days = int(in_situ_days)
-    if min(distance_m, height_m, surrounding_height_m, duration_days) < 0:
-        raise ValueError("Crane distance and height must be non-negative.")
-    national_trigger = height_m >= params["national_height_agl_m"]
-    local_height_trigger = height_m > max(
-        params["local_height_agl_m"],
-        surrounding_height_m,
-    )
-    local_trigger = (
-        distance_m <= params["local_distance_m"]
-        and local_height_trigger
-        and not bool(shielded_by_surroundings)
-    )
-    reason_codes = []
-    if local_trigger:
-        reason_codes.append("within_6km_over_10m_unshielded")
-    if national_trigger:
-        reason_codes.append("at_or_above_100m_agl")
-    dgc_notification = national_trigger and duration_days > params["dgc_duration_days"]
-    if dgc_notification:
-        reason_codes.append("over_90_days_notify_dgc")
-    if height_m >= params["mandatory_lighting_height_agl_m"]:
-        lighting_status = "mandatory_medium_intensity"
-        lighting_intensity_cd = params["medium_intensity_cd"]
-    elif height_m >= params["recommended_medium_lighting_height_agl_m"]:
-        lighting_status = "recommended_medium_intensity"
-        lighting_intensity_cd = params["medium_intensity_cd"]
-    else:
-        lighting_status = "recommended_low_intensity"
-        lighting_intensity_cd = params["low_intensity_cd"]
-    return {
-        "notification_required": bool(local_trigger or national_trigger),
-        "local_trigger": local_trigger,
-        "national_trigger": national_trigger,
-        "dgc_notification": dgc_notification,
-        "lighting_status": lighting_status,
-        "lighting_intensity_cd": lighting_intensity_cd,
-        "intermediate_lights_required": height_m > 45.0,
-        "intermediate_light_max_spacing_m": params["intermediate_light_max_spacing_m"],
-        "reason_codes": tuple(reason_codes),
-        "family_id": params["family_id"],
-        "profile_id": params["profile_id"],
-        "source_id": params["source_id"],
-        "source_ref": params["source_ref"],
-        "source_version": params["source_version"],
-        "authority_level": params["authority_level"],
-        "applicability": params["applicability"],
-        "geometry_status": params["geometry_status"],
-        "assessment_result": "consult" if local_trigger or national_trigger else "not_assessed",
-        "caveat": params["caveat"],
-    }
-
-
 __all__ = [
     "DEFAULT_WILDLIFE_RADIUS_KM",
     "DEFAULT_WIND_TURBINE_RADIUS_KM",
     "wildlife_parameters",
     "wind_turbine_parameters",
     "public_safety_area_parameters",
-    "crane_notification_parameters",
-    "screen_crane_notification",
 ]
