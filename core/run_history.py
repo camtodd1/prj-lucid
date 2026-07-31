@@ -16,6 +16,7 @@ import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, Mapping, Optional
+from zoneinfo import ZoneInfo
 
 try:
     import fcntl
@@ -640,8 +641,9 @@ class RuntimeRunRecorder:
 
 
 def _new_run_id(started_at_utc: datetime) -> str:
-    """Return a sortable UTC timestamp plus collision-resistant short token."""
-    timestamp = started_at_utc.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    """Return a sortable Amsterdam-local timestamp plus a short token."""
+    local_time = started_at_utc.astimezone(ZoneInfo("Europe/Amsterdam"))
+    timestamp = local_time.strftime("%Y%m%dT%H%M%S%Z")
     return f"{timestamp}-{uuid.uuid4().hex[:8]}"
 
 

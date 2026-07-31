@@ -86,7 +86,11 @@ from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
 from .guidelines.ols_modernisation_comparison import OlsModernisationComparisonMixin
 from .reports.declared_distances import annotate_declared_distance_warnings, apply_declared_distance_overrides
-from .reports.ols_table import build_ols_table_values, write_ols_table_markdown
+from .reports.ols_table import (
+    build_modernised_ols_table_values,
+    build_ols_table_values,
+    write_ols_table_markdown,
+)
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 from .frameworks.registry import get_framework_profile
 from .rulesets.context import (
@@ -2317,7 +2321,13 @@ class SafeguardingBuilder(
             / f"{safe_icao}_OLS_Table_of_Values_{safe_run_id}.md"
         )
         try:
-            report = build_ols_table_values(
+            baseline_builder = (
+                build_modernised_ols_table_values
+                if getattr(ruleset, "protected_airspace_model", "")
+                == "annex14_modernised_ofs_oes"
+                else build_ols_table_values
+            )
+            report = baseline_builder(
                 icao_code,
                 ruleset,
                 context,
@@ -2326,6 +2336,60 @@ class SafeguardingBuilder(
                 test_case_id=getattr(recorder, "test_case_id", None),
                 input_fingerprint=getattr(recorder, "input_fingerprint", None),
             )
+            comparison_ruleset = getattr(self, "comparison_ols_ruleset", None)
+            comparison_context = contexts.get(
+                getattr(comparison_ruleset, "id", None)
+            )
+            if comparison_ruleset is not None and comparison_context is None:
+                source_runways = getattr(self, "_ols_source_runways", None)
+                if source_runways:
+                    comparison_context = self._build_ols_construction_context(
+                        comparison_ruleset,
+                        source_runways,
+                        arp_point=getattr(self, "_ols_arp_point", None),
+                    )
+                    self._ols_construction_contexts[
+                        comparison_ruleset.id
+                    ] = comparison_context
+            if comparison_ruleset is not None and comparison_context is not None:
+                comparison_builder = (
+                    build_modernised_ols_table_values
+                    if getattr(
+                        comparison_ruleset,
+                        "protected_airspace_model",
+                        "",
+                    )
+                    == "annex14_modernised_ofs_oes"
+                    else build_ols_table_values
+                )
+                report["comparisons"] = [
+                    comparison_builder(
+                        icao_code,
+                        comparison_ruleset,
+                        comparison_context,
+                        generated_at=getattr(
+                            recorder,
+                            "started_at_utc",
+                            None,
+                        ),
+                        run_id=run_id,
+                        test_case_id=getattr(
+                            recorder,
+                            "test_case_id",
+                            None,
+                        ),
+                        input_fingerprint=getattr(
+                            recorder,
+                            "input_fingerprint",
+                            None,
+                        ),
+                    )
+                ]
+            elif comparison_ruleset is not None:
+                report["warnings"].append(
+                    "Comparison OLS values were unavailable because its "
+                    "construction context could not be resolved."
+                )
             written_path = write_ols_table_markdown(report, report_path)
             self._last_ols_table_report_path = written_path
             if recorder is not None:
@@ -2340,6 +2404,11 @@ class SafeguardingBuilder(
                     "OLS table report",
                     path=written_path,
                     ruleset=ruleset.id,
+                    comparison_ruleset=getattr(
+                        comparison_ruleset,
+                        "id",
+                        None,
+                    ),
                     mode=self.output_mode,
                 )
             return written_path

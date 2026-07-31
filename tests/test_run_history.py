@@ -7,6 +7,7 @@ import io
 import json
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -18,6 +19,7 @@ from core.run_history import (
     migrate_history_file,
     runtime_input_fingerprint,
     validate_runway_configuration,
+    _new_run_id,
 )
 
 
@@ -31,6 +33,17 @@ def _rows(history_path: Path):
 
 
 class RunHistoryTests(unittest.TestCase):
+    def test_generated_run_id_uses_amsterdam_local_timezone(self):
+        summer = _new_run_id(
+            datetime(2026, 7, 31, 8, 35, 17, tzinfo=timezone.utc)
+        )
+        winter = _new_run_id(
+            datetime(2026, 1, 31, 8, 35, 17, tzinfo=timezone.utc)
+        )
+
+        self.assertRegex(summer, r"^20260731T103517CEST-[0-9a-f]{8}$")
+        self.assertRegex(winter, r"^20260131T093517CET-[0-9a-f]{8}$")
+
     def test_agent_detection_distinguishes_gui_headless_and_override(self):
         self.assertEqual(detect_run_agent({}), "qgis user")
         self.assertEqual(detect_run_agent({"QT_QPA_PLATFORM": "offscreen"}), "codex headless")

@@ -6,6 +6,7 @@ from __future__ import annotations
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional
+from zoneinfo import ZoneInfo
 
 
 TYPE_LABELS = {
@@ -14,6 +15,8 @@ TYPE_LABELS = {
     "PA_I": "PREC CAT I",
     "PA_II_III": "PREC CAT II/III",
 }
+
+REPORT_TIMEZONE = ZoneInfo("Europe/Amsterdam")
 
 
 def build_ols_table_values(
@@ -179,6 +182,7 @@ def build_ols_table_values(
                 )
 
     return {
+        "format": "conventional",
         "icao_code": str(icao_code or "UNKNOWN").strip().upper(),
         "ruleset_id": ruleset.id,
         "ruleset_name": ruleset.display_name,
@@ -217,30 +221,300 @@ def build_ols_table_values(
     }
 
 
+def build_modernised_ols_table_values(
+    icao_code: str,
+    ruleset,
+    construction_context,
+    generated_at: Optional[datetime] = None,
+    run_id: Optional[str] = None,
+    test_case_id: Optional[str] = None,
+    input_fingerprint: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Resolve the OFS/OES values used by modernised Annex 14 construction."""
+    context = construction_context
+    references = set()
+    warnings: List[str] = []
+    operations_rows: List[Dict[str, Any]] = []
+    ofs_rows: List[Dict[str, Any]] = []
+    oes_rows: List[Dict[str, Any]] = []
+
+    for runway in getattr(context, "runways", ()):
+        data = dict(runway.generation_data or {})
+        config = data.get("annex14_modernised")
+        config = config if isinstance(config, Mapping) else {}
+        design_group = data.get("adg") or data.get("design_group")
+        code_f_no_digital = bool(
+            config.get("code_f_without_digital_go_around_avionics", False)
+        )
+        if not config.get("confirmed"):
+            warnings.append(
+                f"{runway.runway_id}: modernised Annex 14 configuration was not confirmed."
+            )
+        if not design_group:
+            warnings.append(
+                f"{runway.runway_id}: aircraft design group was unavailable."
+            )
+            continue
+
+        horizontal = ruleset.horizontal_surface_parameters(design_group)
+        if horizontal:
+            oes_rows.append(
+                _modern_oes_row(
+                    runway,
+                    None,
+                    design_group,
+                    "All runway operations",
+                    "Horizontal",
+                    "Airport-wide",
+                    horizontal,
+                    start_rule=horizontal.get("outer_limits_rule"),
+                    height=horizontal.get(
+                        "height_above_aerodrome_elevation_m"
+                    ),
+                    length=horizontal.get("radius_m"),
+                )
+            )
+            _collect_refs(references, horizontal)
+
+        straight_in_selected = False
+        for end in runway.ends:
+            end_config = config.get(f"{end.direction}_end")
+            end_config = end_config if isinstance(end_config, Mapping) else {}
+            operations = dict(end_config.get("operations") or {})
+            selected = [
+                name.replace("_", " ")
+                for name, enabled in operations.items()
+                if enabled
+            ]
+            mass = _number(
+                end_config.get("maximum_certificated_takeoff_mass_kg")
+            )
+            slope_percent = _number(
+                end_config.get("governing_approach_surface_slope_percent")
+            )
+            obstacle_clearance_height = _number(
+                end_config.get("obstacle_clearance_height_m")
+            )
+            operations_rows.append(
+                {
+                    "runway": runway.runway_id,
+                    "end": end.designator,
+                    "design_group": design_group,
+                    "runway_type": TYPE_LABELS.get(
+                        end.classified_type,
+                        end.classified_type or end.approach_type,
+                    ),
+                    "operations": ", ".join(selected) if selected else "None",
+                    "takeoff_mass": mass,
+                    "approach_slope": (
+                        slope_percent / 100.0
+                        if slope_percent is not None
+                        else None
+                    ),
+                    "obstacle_clearance_height": obstacle_clearance_height,
+                }
+            )
+
+            ofs = ruleset.obstacle_free_surfaces(
+                design_group=design_group,
+                runway_type=end.approach_type,
+                runway_width_m=data.get("runway_width"),
+                approach_surface_slope=(
+                    slope_percent / 100.0
+                    if slope_percent is not None
+                    else None
+                ),
+                obstacle_clearance_height_m=obstacle_clearance_height,
+                code_letter_f_without_digital_avionics=code_f_no_digital,
+            )
+            for group_name, surfaces in (ofs or {}).get("groups", {}).items():
+                for surface in surfaces or ():
+                    ofs_rows.append(
+                        _modern_ofs_row(
+                            runway,
+                            end,
+                            design_group,
+                            group_name,
+                            surface,
+                        )
+                    )
+                    _collect_refs(references, surface)
+
+            straight_in_selected = straight_in_selected or bool(
+                operations.get("straight_in_non_precision_instrument")
+            )
+            if (
+                operations.get("precision_approach")
+                and end.classified_type in {"PA_I", "PA_II_III"}
+            ):
+                precision = ruleset.precision_approach_surface_parameters()
+                _append_precision_oes_rows(
+                    oes_rows,
+                    runway,
+                    end,
+                    design_group,
+                    precision,
+                )
+                _collect_refs(references, precision)
+            if (
+                operations.get("instrument_departure")
+                and end.classified_type != "NI"
+            ):
+                departure = ruleset.instrument_departure_surface_parameters()
+                _append_section_oes_rows(
+                    oes_rows,
+                    runway,
+                    end,
+                    design_group,
+                    "Instrument departure",
+                    "instrument departure",
+                    departure,
+                    start_rule=departure.get("inner_edge_location"),
+                    inner_edge=departure.get("inner_edge_length_m"),
+                    slope=departure.get("slope"),
+                    height=departure.get("inner_edge_elevation_offset_m"),
+                )
+                _collect_refs(references, departure)
+            if operations.get("take_off"):
+                takeoff = ruleset.take_off_climb_surface_parameters(
+                    design_group,
+                    max_certificated_takeoff_mass_kg=mass,
+                )
+                if takeoff:
+                    oes_rows.append(
+                        _modern_oes_row(
+                            runway,
+                            end,
+                            design_group,
+                            "Take-off",
+                            "Take-off climb",
+                            takeoff.get("mass_category"),
+                            takeoff,
+                            start_rule=takeoff.get("start_rule"),
+                            inner_edge=takeoff.get("inner_edge_length_m"),
+                            length=takeoff.get("length_m"),
+                            divergence=takeoff.get("divergence"),
+                            slope=takeoff.get("slope"),
+                            final_width=takeoff.get("final_width_m"),
+                        )
+                    )
+                    _collect_refs(references, takeoff)
+
+        if straight_in_selected:
+            straight_in = (
+                ruleset.straight_in_instrument_approach_surface_parameters()
+            )
+            lower = straight_in.get("lower_section", {})
+            upper = straight_in.get("upper_section", {})
+            oes_rows.extend(
+                [
+                    _modern_oes_row(
+                        runway,
+                        None,
+                        design_group,
+                        "Straight-in non-precision instrument",
+                        "Straight-in instrument approach",
+                        "Lower",
+                        straight_in,
+                        start_rule=lower.get("length_rule"),
+                        height=lower.get(
+                            "height_above_aerodrome_elevation_m"
+                        ),
+                    ),
+                    _modern_oes_row(
+                        runway,
+                        None,
+                        design_group,
+                        "Straight-in non-precision instrument",
+                        "Straight-in instrument approach",
+                        "Upper",
+                        straight_in,
+                        length=upper.get("shorter_side_length_m"),
+                        final_width=upper.get(
+                            "longer_side_length_from_threshold_or_thresholds_m"
+                        ),
+                        height=upper.get(
+                            "height_above_aerodrome_elevation_m"
+                        ),
+                    ),
+                ]
+            )
+            _collect_refs(references, straight_in)
+
+    return {
+        "format": "modernised_ofs_oes",
+        "icao_code": str(icao_code or "UNKNOWN").strip().upper(),
+        "ruleset_id": ruleset.id,
+        "ruleset_name": ruleset.display_name,
+        "ruleset_edition": ruleset.edition,
+        "generated_at": generated_at or datetime.now(REPORT_TIMEZONE),
+        "run_id": str(run_id or "").strip() or None,
+        "test_case_id": str(test_case_id or "").strip() or None,
+        "input_fingerprint": str(input_fingerprint or "").strip() or None,
+        "runways": [
+            {
+                "name": runway.runway_id,
+                "physical_length": runway.physical_length_m,
+                "width": runway.width_m,
+                "strip_width": (runway.strip_parameters or {}).get(
+                    "overall_width"
+                ),
+            }
+            for runway in getattr(context, "runways", ())
+        ],
+        "operations": operations_rows,
+        "ofs": ofs_rows,
+        "oes": oes_rows,
+        "references": sorted(references),
+        "warnings": _unique(warnings),
+    }
+
+
 def render_ols_table_markdown(report: Mapping[str, Any]) -> str:
     """Render the resolved OLS values as a VS Code-friendly Markdown report."""
-    airport = report.get("airport", {})
-    horizontal = report.get("horizontal", {})
     generated_at = report.get("generated_at")
-    generated_text = (
-        generated_at.strftime("%Y-%m-%d %H:%M:%S")
-        if isinstance(generated_at, datetime)
-        else _markdown_cell(generated_at)
-    )
+    generated_text = _format_report_timestamp(generated_at)
     lines = [
         "# Obstacle Restriction and Limitation Surfaces Table of Values",
         "",
         f"## {_markdown_cell(report.get('icao_code'))} Safeguarding OLS",
         "",
-        f"- Baseline ruleset: {_markdown_cell(report.get('ruleset_name'))} "
-        f"({_markdown_cell(report.get('ruleset_edition'))})",
-        f"- Ruleset ID: `{_markdown_cell(report.get('ruleset_id'))}`",
         f"- Generated: {generated_text}",
         f"- Run ID: `{_markdown_cell(report.get('run_id'))}`",
         f"- Test case ID: `{_markdown_cell(report.get('test_case_id'))}`",
         f"- Input fingerprint: `{_markdown_cell(report.get('input_fingerprint'))}`",
         "- Units: distances and lengths in metres; elevations in metres AMSL",
         "",
+    ]
+    lines.extend(_render_ruleset_section(report, "Baseline OLS"))
+    for comparison in report.get("comparisons", ()):
+        lines.extend([""])
+        lines.extend(_render_ruleset_section(comparison, "Comparison OLS"))
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _render_ruleset_section(
+    report: Mapping[str, Any],
+    role: str,
+) -> List[str]:
+    lines = [
+        f"## {role} — {_markdown_cell(report.get('ruleset_name'))}",
+        "",
+        f"- Edition: {_markdown_cell(report.get('ruleset_edition'))}",
+        f"- Ruleset ID: `{_markdown_cell(report.get('ruleset_id'))}`",
+        "",
+    ]
+    if report.get("format") == "modernised_ofs_oes":
+        lines.extend(_render_modernised_section(report))
+    else:
+        lines.extend(_render_conventional_section(report))
+    return lines
+
+
+def _render_conventional_section(report: Mapping[str, Any]) -> List[str]:
+    airport = report.get("airport", {})
+    horizontal = report.get("horizontal", {})
+    lines = [
         "### Runways",
         "",
         _markdown_table(
@@ -367,8 +641,8 @@ def render_ols_table_markdown(report: Mapping[str, Any]) -> str:
         "",
         "### Notes",
         "",
-        "- Values are resolved from the selected baseline OLS ruleset and the "
-        "processed runway inputs used for this run.",
+        "- Values are resolved from this conventional OLS ruleset and the "
+        "processed runway inputs used for the run.",
     ]
     lines.extend(f"- {_markdown_cell(value)}" for value in report.get("warnings", ()))
     lines.extend(["", "### Source references", ""])
@@ -377,7 +651,293 @@ def render_ols_table_markdown(report: Mapping[str, Any]) -> str:
         [f"- {_markdown_cell(reference)}" for reference in references]
         or ["- N/A"]
     )
-    return "\n".join(lines).rstrip() + "\n"
+    return lines
+
+
+def _render_modernised_section(report: Mapping[str, Any]) -> List[str]:
+    lines = [
+        "### Runways",
+        "",
+        _markdown_table(
+            ["Runway", "Physical length", "Width", "Runway strip width"],
+            [
+                [
+                    row.get("name"),
+                    _format_number(row.get("physical_length")),
+                    _format_number(row.get("width")),
+                    _format_number(row.get("strip_width")),
+                ]
+                for row in report.get("runways", ())
+            ],
+        ),
+        "",
+        "### Operational inputs and applicability",
+        "",
+        _markdown_table(
+            [
+                "Runway",
+                "End",
+                "ADG",
+                "Runway type",
+                "Selected operations",
+                "Max take-off mass (kg)",
+                "Governing approach slope",
+                "Obstacle clearance height",
+            ],
+            [
+                [
+                    row.get("runway"),
+                    row.get("end"),
+                    row.get("design_group"),
+                    row.get("runway_type"),
+                    row.get("operations"),
+                    _format_number(row.get("takeoff_mass")),
+                    _format_percent(row.get("approach_slope")),
+                    _format_number(row.get("obstacle_clearance_height")),
+                ]
+                for row in report.get("operations", ())
+            ],
+        ),
+        "",
+        "### Obstacle Free Surfaces (OFS)",
+        "",
+        _markdown_table(
+            [
+                "Runway",
+                "End",
+                "ADG",
+                "Group",
+                "Surface",
+                "Start / rule",
+                "Inner edge",
+                "Length / rule",
+                "Divergence",
+                "Slope",
+                "Upper height",
+            ],
+            [
+                [
+                    row.get("runway"),
+                    row.get("end"),
+                    row.get("design_group"),
+                    row.get("group"),
+                    row.get("surface"),
+                    _format_value_or_rule(row.get("start"), row.get("start_rule")),
+                    _format_number(row.get("inner_edge")),
+                    _format_value_or_rule(row.get("length"), row.get("length_rule")),
+                    _format_percent(row.get("divergence")),
+                    _format_percent(row.get("slope")),
+                    _format_number(row.get("height")),
+                ]
+                for row in report.get("ofs", ())
+            ],
+        ),
+        "",
+        "### Obstacle Evaluation Surfaces (OES)",
+        "",
+        _markdown_table(
+            [
+                "Runway",
+                "End",
+                "ADG",
+                "Operation",
+                "Surface",
+                "Component",
+                "Start / rule",
+                "Inner edge",
+                "Length / radius",
+                "Divergence",
+                "Slope",
+                "Final width / extent",
+                "Height / elevation offset",
+            ],
+            [
+                [
+                    row.get("runway"),
+                    row.get("end"),
+                    row.get("design_group"),
+                    row.get("operation"),
+                    row.get("surface"),
+                    row.get("component"),
+                    _markdown_cell(row.get("start_rule")),
+                    _format_number(row.get("inner_edge")),
+                    _format_number(row.get("length")),
+                    _format_percent(row.get("divergence")),
+                    _format_percent(row.get("slope")),
+                    _format_number(row.get("final_width")),
+                    _format_number(row.get("height")),
+                ]
+                for row in report.get("oes", ())
+            ],
+        ),
+        "",
+        "### Notes",
+        "",
+        "- OFS and OES use separate tables because the modernised Annex 14 "
+        "model is operation- and aircraft-design-group-dependent.",
+    ]
+    lines.extend(f"- {_markdown_cell(value)}" for value in report.get("warnings", ()))
+    lines.extend(["", "### Source references", ""])
+    references = report.get("references", ())
+    lines.extend(
+        [f"- {_markdown_cell(reference)}" for reference in references]
+        or ["- N/A"]
+    )
+    return lines
+
+
+def _modern_ofs_row(
+    runway,
+    end,
+    design_group: str,
+    group_name: str,
+    params: Mapping[str, Any],
+) -> Dict[str, Any]:
+    return {
+        "runway": runway.runway_id,
+        "end": end.designator,
+        "design_group": design_group,
+        "group": str(group_name).replace("_", " ").title(),
+        "surface": str(params.get("surface") or "N/A").replace("_", " ").title(),
+        "start": params.get(
+            "distance_from_threshold_m",
+            params.get("distance_from_runway_end_m"),
+        ),
+        "start_rule": params.get(
+            "distance_rule",
+            params.get("inner_edge_location"),
+        ),
+        "inner_edge": params.get("inner_edge_length_m"),
+        "length": params.get("length_m"),
+        "length_rule": params.get("length_rule"),
+        "divergence": params.get("divergence"),
+        "slope": params.get("slope", params.get("inclined_section_slope")),
+        "height": params.get(
+            "upper_edge_height_above_highest_threshold_m",
+            params.get("vertical_section_height_m"),
+        ),
+    }
+
+
+def _modern_oes_row(
+    runway,
+    end,
+    design_group: str,
+    operation: str,
+    surface: str,
+    component: Any,
+    params: Mapping[str, Any],
+    *,
+    start_rule: Any = None,
+    inner_edge: Any = None,
+    length: Any = None,
+    divergence: Any = None,
+    slope: Any = None,
+    final_width: Any = None,
+    height: Any = None,
+) -> Dict[str, Any]:
+    return {
+        "runway": runway.runway_id,
+        "end": end.designator if end is not None else "All",
+        "design_group": design_group,
+        "operation": operation,
+        "surface": surface,
+        "component": str(component or "N/A").replace("_", " ").title(),
+        "start_rule": start_rule,
+        "inner_edge": inner_edge,
+        "length": length,
+        "divergence": divergence,
+        "slope": slope,
+        "final_width": final_width,
+        "height": height,
+        "ref": params.get("ref"),
+    }
+
+
+def _append_precision_oes_rows(
+    rows: List[Dict[str, Any]],
+    runway,
+    end,
+    design_group: str,
+    params: Mapping[str, Any],
+) -> None:
+    components = params.get("components", {})
+    for component_name, operation_name in (
+        ("approach", "Precision approach"),
+        ("missed_approach", "Precision missed approach"),
+    ):
+        component = components.get(component_name, {})
+        start_rule = (
+            f"{_format_number(component.get('distance_from_threshold_m'))} m from threshold"
+            if component.get("distance_from_threshold_m") is not None
+            else f"{_format_number(component.get('distance_after_threshold_m'))} m after threshold"
+        )
+        for section in component.get("sections", ()):
+            rows.append(
+                _modern_oes_row(
+                    runway,
+                    end,
+                    design_group,
+                    operation_name,
+                    "Precision approach",
+                    f"{component_name} {section.get('section')}",
+                    params,
+                    start_rule=start_rule,
+                    inner_edge=component.get("inner_edge_length_m"),
+                    length=section.get("length_m"),
+                    divergence=section.get("divergence"),
+                    slope=section.get("slope"),
+                )
+            )
+    transitional = components.get("transitional", {})
+    rows.append(
+        _modern_oes_row(
+            runway,
+            end,
+            design_group,
+            "Precision approach",
+            "Precision approach",
+            "Transitional",
+            params,
+            start_rule=transitional.get("lower_edge_rule"),
+            slope=transitional.get("slope"),
+            height=transitional.get("upper_edge_height_above_threshold_m"),
+        )
+    )
+
+
+def _append_section_oes_rows(
+    rows: List[Dict[str, Any]],
+    runway,
+    end,
+    design_group: str,
+    operation: str,
+    surface: str,
+    params: Mapping[str, Any],
+    *,
+    start_rule: Any = None,
+    inner_edge: Any = None,
+    slope: Any = None,
+    height: Any = None,
+) -> None:
+    for section in params.get("sections", ()):
+        rows.append(
+            _modern_oes_row(
+                runway,
+                end,
+                design_group,
+                operation,
+                surface,
+                section.get("section"),
+                params,
+                start_rule=start_rule,
+                inner_edge=inner_edge,
+                length=section.get("length_m"),
+                divergence=section.get("divergence"),
+                slope=section.get("slope", slope),
+                height=height,
+            )
+        )
 
 
 def write_ols_table_markdown(
@@ -479,6 +1039,26 @@ def _format_percent(value: Any) -> str:
     return f"{number * 100:.2f}".rstrip("0").rstrip(".") + "%"
 
 
+def _format_value_or_rule(value: Any, rule: Any) -> str:
+    number = _number(value)
+    if number is not None:
+        return _format_number(number)
+    return _markdown_cell(
+        str(rule).replace("_", " ") if rule not in (None, "") else None
+    )
+
+
+def _format_report_timestamp(value: Any) -> str:
+    if not isinstance(value, datetime):
+        return _markdown_cell(value)
+    timestamp = value
+    if timestamp.tzinfo is None:
+        timestamp = timestamp.replace(tzinfo=REPORT_TIMEZONE)
+    else:
+        timestamp = timestamp.astimezone(REPORT_TIMEZONE)
+    return timestamp.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
 def _number(value: Any) -> Optional[float]:
     try:
         if value is None or value == "":
@@ -499,6 +1079,18 @@ def _collect_ref(references: set, params: Any) -> None:
         references.add(str(params["ref"]))
 
 
+def _collect_refs(references: set, value: Any) -> None:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if str(key).endswith("ref") and item:
+                references.add(str(item))
+            else:
+                _collect_refs(references, item)
+    elif isinstance(value, (list, tuple)):
+        for item in value:
+            _collect_refs(references, item)
+
+
 def _markdown_cell(value: Any) -> str:
     text = str(value if value not in (None, "") else "N/A")
     return text.replace("|", "\\|").replace("\r", " ").replace("\n", " ")
@@ -509,6 +1101,7 @@ def _unique(values: Iterable[str]) -> List[str]:
 
 
 __all__ = [
+    "build_modernised_ols_table_values",
     "build_ols_table_values",
     "render_ols_table_markdown",
     "write_ols_table_markdown",
