@@ -821,8 +821,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "modernisation_oes_change"
         ]
 
-        self.assertEqual((ofs_primary.value(), ofs_intermediate.value()), (5.0, 1.0))
-        self.assertEqual((oes_primary.value(), oes_intermediate.value()), (5.0, 1.0))
+        self.assertEqual((ofs_primary.value(), ofs_intermediate.value()), (10.0, 1.0))
+        self.assertEqual((oes_primary.value(), oes_intermediate.value()), (10.0, 1.0))
         for spinbox in (ofs_primary, ofs_intermediate, oes_primary, oes_intermediate):
             self.assertFalse(spinbox.isHidden())
             self.assertTrue(spinbox.isEnabled())
@@ -960,7 +960,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             self.dialog._contour_primary_interval_spinboxes[
                 "modernisation_ofs_change"
             ].value(),
-            5.0,
+            10.0,
         )
         self.assertEqual(
             self.dialog._contour_interval_spinboxes[

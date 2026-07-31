@@ -188,7 +188,7 @@ Comparison mode exposes a conventional OLS signed-change interval, or
 independent OFS and OES intervals when modernised Annex 14 is involved. The
 intermediate interval controls generated isoline spacing and the primary
 interval controls contour classification and labelling. Both default to 1.0 m
-intermediate and 5.0 m primary values, are persisted with the input file, and
+intermediate and 10.0 m primary values, are persisted with the input file, and
 are written to each change-contour feature.
 
 Primary/intermediate interval compatibility validation is intentionally not
