@@ -49,6 +49,7 @@ class RunHistoryTests(unittest.TestCase):
                 qgis_version="4.0-test",
                 history_path=history_path,
                 agent="codex headless",
+                run_id="20260731T100512Z-a4f29c1e",
             )
             recorder.set_context(
                 airport="ybbn",
@@ -69,12 +70,20 @@ class RunHistoryTests(unittest.TestCase):
             recorder.start_phase("controlling_envelope")
             recorder.add_timing("controlling_ols.regions", 1.25)
             recorder.set_output_counts(185, 9973)
+            recorder.set_ols_table_report(
+                "/tmp/YBBN_OLS_Table_of_Values_20260731T100512Z-a4f29c1e.md"
+            )
             with patch.dict("os.environ", {"SAFEGUARDING_BUILDER_COMMIT": "abc123def456"}):
                 record = recorder.finish("completed")
 
             stored = _rows(history_path)[0]
-            self.assertEqual(record["schema_version"], 4)
-            self.assertEqual(stored["schema_version"], "4")
+            self.assertEqual(record["schema_version"], 5)
+            self.assertEqual(stored["schema_version"], "5")
+            self.assertEqual(stored["run_id"], "20260731T100512Z-a4f29c1e")
+            self.assertEqual(
+                stored["ols_table_report_path"],
+                "/tmp/YBBN_OLS_Table_of_Values_20260731T100512Z-a4f29c1e.md",
+            )
             self.assertEqual(stored["agent"], "codex headless")
             self.assertEqual(stored["airport"], "YBBN")
             self.assertEqual(stored["commit_ref"], "abc123def456")
@@ -105,6 +114,7 @@ class RunHistoryTests(unittest.TestCase):
                     RuntimeRunRecorder(root, history_path=history_path).finish(status)
             records = _rows(history_path)
             self.assertEqual([record["status"] for record in records], ["aborted", "cancelled"])
+            self.assertEqual(len({record["run_id"] for record in records}), 2)
 
     def test_legacy_json_lines_are_migrated_without_losing_module_data(self):
         with tempfile.TemporaryDirectory() as directory:

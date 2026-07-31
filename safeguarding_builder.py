@@ -86,6 +86,7 @@ from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
 from .guidelines.ols_modernisation_comparison import OlsModernisationComparisonMixin
 from .reports.declared_distances import annotate_declared_distance_warnings, apply_declared_distance_overrides
+from .reports.ols_table import build_ols_table_values, write_ols_table_markdown
 from .reports.runway_summary import build_runway_summaries, render_markdown_report
 from .frameworks.registry import get_framework_profile
 from .rulesets.context import (
@@ -1957,6 +1958,7 @@ class SafeguardingBuilder(
                 phase_key="finalisation",
             ):
                 return
+            self._write_ols_table_report(icao_code)
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
             self._repair_output_layer_tree(main_group)
             self._remove_empty_generated_groups(main_group)
@@ -2286,6 +2288,65 @@ class SafeguardingBuilder(
             return report_path
         except Exception as e:
             self._log_warning(f"Runway summary report failed: {e}\n{traceback.format_exc()}")
+            return None
+
+    def _write_ols_table_report(self, icao_code: str) -> Optional[str]:
+        """Write the resolved OLS table of values for every completed run."""
+        ruleset = getattr(self, "baseline_ols_ruleset", None)
+        contexts = getattr(self, "_ols_construction_contexts", {}) or {}
+        context = contexts.get(getattr(ruleset, "id", None))
+        if ruleset is None or context is None or not context.runways:
+            self._log_warning(
+                "[skip] OLS table report: baseline construction context is unavailable."
+            )
+            return None
+
+        if self.output_mode == "file" and self.output_path:
+            report_directory = Path(self.output_path)
+        else:
+            report_directory = (
+                Path(QgsProcessingUtils.tempFolder())
+                / "safeguarding_builder_reports"
+            )
+        safe_icao = self._sanitize_filename(icao_code or "UNKNOWN")
+        recorder = getattr(self, "_runtime_run_recorder", None)
+        run_id = str(getattr(recorder, "run_id", None) or "untracked")
+        safe_run_id = self._sanitize_filename(run_id)
+        report_path = (
+            report_directory
+            / f"{safe_icao}_OLS_Table_of_Values_{safe_run_id}.md"
+        )
+        try:
+            report = build_ols_table_values(
+                icao_code,
+                ruleset,
+                context,
+                generated_at=getattr(recorder, "started_at_utc", None),
+                run_id=run_id,
+                test_case_id=getattr(recorder, "test_case_id", None),
+                input_fingerprint=getattr(recorder, "input_fingerprint", None),
+            )
+            written_path = write_ols_table_markdown(report, report_path)
+            self._last_ols_table_report_path = written_path
+            if recorder is not None:
+                recorder.set_ols_table_report(written_path)
+            self._log(f"OLS table of values written to '{written_path}'.")
+            self._diagnostic(
+                f"OLS table of values written to '{written_path}'.",
+                topic="report",
+            )
+            if self._run_log is not None:
+                self._run_log.output(
+                    "OLS table report",
+                    path=written_path,
+                    ruleset=ruleset.id,
+                    mode=self.output_mode,
+                )
+            return written_path
+        except Exception as e:
+            self._log_warning(
+                f"OLS table report failed: {e}\n{traceback.format_exc()}"
+            )
             return None
 
     def _calculate_declared_distances(

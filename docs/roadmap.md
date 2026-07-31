@@ -2,7 +2,7 @@
 
 **Status:** Roadmap
 
-**Last reviewed:** 29 July 2026
+**Last reviewed:** 31 July 2026
 
 This file is the single project documentation backlog. It lists incomplete
 work only; completed implementation history belongs in Git and regression
@@ -59,3 +59,9 @@ fixtures.
 - [ ] Explore an agentic workflow outside QGIS that auto-populates airport
   input files from verified sources such as the AIP. Consider delivering this
   as an external client rather than as part of the plugin.
+
+## Reporting and Layouts
+
+- [ ] Extend the per-run OLS table report into a production chart layout with
+  a georeferenced map inset of the generated OLS surfaces, legend, scale and
+  grid information, north point, notes, and title block.

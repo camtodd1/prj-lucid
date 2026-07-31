@@ -12,6 +12,7 @@ import os
 import re
 import subprocess
 import time
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Iterable, Mapping, Optional
@@ -22,7 +23,7 @@ except ImportError:  # pragma: no cover - QGIS production targets are Unix-like.
     fcntl = None
 
 
-RUN_HISTORY_SCHEMA_VERSION = 4
+RUN_HISTORY_SCHEMA_VERSION = 5
 RUN_HISTORY_FILENAME = "runtime_test_runs.txt"
 AGENT_ENV_VAR = "SAFEGUARDING_BUILDER_RUN_AGENT"
 COMMIT_ENV_VAR = "SAFEGUARDING_BUILDER_COMMIT"
@@ -83,6 +84,8 @@ RUN_HISTORY_COLUMNS = (
     "runway_count",
     "runway_configuration",
     "input_fingerprint",
+    "run_id",
+    "ols_table_report_path",
 )
 
 
@@ -298,6 +301,8 @@ def _table_row(record: Mapping[str, object]) -> Dict[str, object]:
         "runway_count": record.get("runway_count", "") or "",
         "runway_configuration": record.get("runway_configuration", "") or "",
         "input_fingerprint": record.get("input_fingerprint", "") or "",
+        "run_id": record.get("run_id", "") or "",
+        "ols_table_report_path": record.get("ols_table_report_path", "") or "",
     }
     for column, module_name in KEY_MODULE_COLUMNS:
         timing = timings.get(module_name)
@@ -477,6 +482,7 @@ class RuntimeRunRecorder:
         qgis_version: str = "unknown",
         history_path: Optional[Path] = None,
         agent: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> None:
         self.plugin_dir = Path(plugin_dir)
         self.history_path = (
@@ -484,6 +490,8 @@ class RuntimeRunRecorder:
         )
         self.agent = agent or detect_run_agent()
         self.qgis_version = str(qgis_version or "unknown")
+        self.started_at_utc = datetime.now(timezone.utc)
+        self.run_id = str(run_id or _new_run_id(self.started_at_utc)).strip()
         self.started_at = time.perf_counter()
         self._phase_name: Optional[str] = None
         self._phase_started_at = self.started_at
@@ -504,6 +512,7 @@ class RuntimeRunRecorder:
         self.layers_created = 0
         self.features_created = 0
         self._output_counts_set = False
+        self.ols_table_report_path: Optional[str] = None
 
     def set_context(
         self,
@@ -572,6 +581,10 @@ class RuntimeRunRecorder:
         self.features_created = max(0, int(features_created))
         self._output_counts_set = True
 
+    def set_ols_table_report(self, report_path: object) -> None:
+        """Associate the per-run OLS table artifact with this history record."""
+        self.ols_table_report_path = str(report_path or "").strip() or None
+
     def start_phase(self, name: str) -> None:
         key = str(name).strip()
         if not key or key == self._phase_name:
@@ -615,6 +628,8 @@ class RuntimeRunRecorder:
             "runway_count": self.runway_count,
             "runway_configuration": self.runway_configuration,
             "input_fingerprint": self.input_fingerprint,
+            "run_id": self.run_id,
+            "ols_table_report_path": self.ols_table_report_path,
             "layers_created": self.layers_created,
             "features_created": self.features_created,
             "modules": modules,
@@ -622,6 +637,12 @@ class RuntimeRunRecorder:
         self.history_path.parent.mkdir(parents=True, exist_ok=True)
         _append_record(self.history_path, record)
         return record
+
+
+def _new_run_id(started_at_utc: datetime) -> str:
+    """Return a sortable UTC timestamp plus collision-resistant short token."""
+    timestamp = started_at_utc.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"{timestamp}-{uuid.uuid4().hex[:8]}"
 
 
 __all__ = [
