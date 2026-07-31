@@ -68,7 +68,7 @@ Source identifiers refer to the [Primary Source Register](#primary-source-regist
 | CNS facility protection | Guideline G Building Restricted Areas (BRAs) by facility type [AUS-1] | Official technical-site maps and asset-specific assessment under CAP 738; CAP 764 adds wind-turbine assessment [UK-1, UK-4] | Art 9(f) requires consultation for radiation or objects affecting CNS; no common BRA dimensions are specified [EASA-2] | Annex 10 facility performance/siting requirements; EUR Doc 015 provides regional BRA guidance, not global SARPs [ICAO-4, ICAO-5] | **P/F** — use facility inventory plus authority-approved templates. Never substitute NASF Guideline G dimensions. |
 | Wildlife attraction | Guideline C: 0–3 km, 3–8 km and 8–13 km management zones [AUS-1] | A 13 km wildlife consultation circle appears on official safeguarding maps; CAP 772 explicitly says 13 km is not itself a universal requirement [UK-2, UK-3] | Arts 9(e) and 10 plus ADR.OPS.B.020 require assessment and management, with no common radius [EASA-2] | Annex 14, PANS-Aerodromes and Doc 9137 Part 3 require a site-specific wildlife hazard management programme [ICAO-1, ICAO-6] | **D** for a UK consultation overlay; **F** for EASA/ICAO. The UK circle must not inherit NASF A/B/C risk semantics. |
 | Hazardous, confusing or misleading lights | Guideline E: four runway-aligned intensity-control zones plus a 6 km area [AUS-1] | CAP 738 §§3.17–3.20 uses distraction/confusion, glare and full-cut-off assessment; CAP 736 covers directed light [UK-1, UK-9] | Art 9(c) requires consultation; common rules do not reproduce NASF candela bands [EASA-2] | Annex 14 Vol I §5.3.1 addresses non-aeronautical lights and laser emissions [ICAO-1, ICAO-7] | **P/F** — build a screening/assessment record, not a relabelled NASF zone generator. |
-| Wind turbines | Guideline D: 30 km assessment radius [AUS-1] | Officially safeguarded aerodromes promulgate wind-turbine maps normally based on a 30 km ARP radius; CAP 764 requires obstacle, IFP and CNS assessment [UK-1, UK-4] | Covered indirectly by Arts 8 and 9(f); no EASA-wide wind-turbine radius [EASA-2] | Annex 14 obstacle controls and Annex 10/CNS assessment apply; no global ICAO 30 km circle [ICAO-1, ICAO-4] | **D** for a configurable UK consultation overlay; **F/P** elsewhere. The aerodrome’s lodged map overrides the default. |
+| Wind turbines | Guideline D: 30 km assessment radius [AUS-1] | Officially safeguarded aerodromes promulgate wind-turbine maps normally based on a 30 km ARP radius; CAP 764 requires obstacle, IFP and CNS assessment [UK-1, UK-4] | Covered indirectly by Arts 8 and 9(f); no EASA-wide wind-turbine radius [EASA-2] | Annex 14 obstacle controls and Annex 10/CNS assessment apply; no global ICAO 30 km circle [ICAO-1, ICAO-4] | **D** for a fixed 30 km UK consultation overlay; **F/P** elsewhere. The aerodrome’s lodged map overrides generated geometry. |
 | Building-induced turbulence / windshear | Guideline B: runway-based trigger zone followed by specialist assessment [AUS-1] | CAP 738 requires consideration near the airport, with a specialist study where a development may generate hazardous turbulence [UK-1, UK-2] | Art 9(b) expressly requires consultation; detailed common criteria are not yet provided [EASA-2, EASA-4] | Doc 9817 addresses low-level windshear and turbulence but does not supply a universal building-development zone [ICAO-11] | **P/F** — store a jurisdiction-specific screening decision and study result; do not apply the NASF trigger rectangle outside Australia. |
 | Helicopter landing sites | Guideline H protects strategically important HLS [AUS-1] | CAP 738 Chs 8–9 and CAP 1264 cover heliport/HHLS safeguarding, approach/take-off surfaces and downwash [UK-1, UK-6] | CS-HPT-DSN Issue 1 covers surface-level VFR heliports located at aerodromes in scope; it is not a general off-airport HLS code [EASA-5] | Annex 14 Vol II and Heliport Manual Doc 9261 [ICAO-12, ICAO-13] | **D**, but as a separate heliport module with design-helicopter and site inputs. Jurisdiction and heliport type determine applicability. |
 | Solar glint and glare | No dedicated guideline; overlaps Guideline E/G | CAP 738 Appendix C and CAA safeguarding guidance require case-specific glare, radar, OLS, IFP and wildlife review [UK-1, UK-2] | Art 9(d); GM1 ADR-DSN.M.615 describes a dazzle safety assessment and uses 20,000 cd/m² as a maximum acceptable luminance assumption for solar panels [EASA-2, EASA-3] | Annex 14 light-safety principles and Doc 9184 land-use guidance; no universal solar exclusion polygon identified [ICAO-1, ICAO-9] | **P** — implement line-of-sight/sun-reflection analysis and receptor records, not a fixed buffer. Treat the EASA luminance value as source-scoped guidance, not a global threshold. |
@@ -114,9 +114,9 @@ require the official zone to be redefined.
 - Generate a single 13 km UK wildlife consultation circle from the ARP. Retain
   fields stating that it is a consultation envelope and not a universal
   regulatory risk boundary. Do not generate NASF’s three wildlife bands.
-- Generate a configurable UK wind-turbine consultation circle with a 30 km
-  default for an officially safeguarded aerodrome. The lodged renewable-energy
-  map or operator-supplied radius/geometry must take precedence.
+- Generate a fixed 30 km UK wind-turbine consultation circle for an officially
+  safeguarded aerodrome. A lodged renewable-energy map or operator-supplied
+  geometry must take precedence when authoritative import support is added.
 - Neither circle decides acceptability. Candidate developments still require
   land-use/wildlife review or OLS, IFP, CNS and operational assessment.
 
@@ -180,8 +180,8 @@ planning framework:
 | Priority | Mechanism | Proposed family/profile | First deliverable | Principal caveat |
 | ---: | --- | --- | --- | --- |
 | 0 | UK, EASA and ICAO protected airspace | Existing `cap168`, `easa` and `annex14` rulesets | Preserve current ruleset ownership and provenance | Do not duplicate OLS inside a supplementary framework. |
-| 1 | UK wildlife consultation | `wildlife_consultation` / `uk_caa_safeguarding` | One configurable 13 km ARP circle with consultation metadata | Not a universal legal boundary and not NASF three-band zoning. |
-| 1 | UK wind-turbine consultation | `wind_energy_consultation` / `uk_caa_safeguarding` | Configurable 30 km ARP circle plus OLS/IFP/CNS intersection hooks | Lodged aerodrome map overrides the default. |
+| 1 | UK wildlife consultation | `wildlife_consultation` / `uk_caa_safeguarding` | One fixed 13 km ARP circle with consultation metadata | Not a universal legal boundary and not NASF three-band zoning. |
+| 1 | UK wind-turbine consultation | `wind_energy_consultation` / `uk_caa_safeguarding` | Fixed 30 km ARP circle plus OLS/IFP/CNS intersection hooks | Lodged aerodrome map overrides generated geometry. |
 | 1 | UK public safety zones | `public_safety_ground_risk` / `uk_dft_psz_2021` | PSRZ and PSCZ indicative triangles per runway end | Confirm applicability and the exactly-45,000 movement case; official map controls. |
 | 1 | UK crane notification | `temporary_obstacle_notification` / `uk_caa_cranes` | 6 km/10 m and nationwide 100 m screening with reason codes | Notification does not imply approval. |
 | 2 | IFP protection | `ifp_protection` / source-specific profile | Import authoritative 2D/3D procedure surfaces and intersect candidates | Procedure design and approval remain external specialist functions. |
@@ -198,9 +198,8 @@ planning framework:
 The selectable `uk_caa_safeguarding` profile implements the priority 1 UK
 mechanisms as follows:
 
-- configurable, indicative ARP-centred wildlife and wind-turbine consultation
-  circles, with the 13 km and 30 km defaults and explicit source/applicability
-  metadata;
+- fixed, indicative ARP-centred wildlife and wind-turbine consultation circles
+  at 13 km and 30 km respectively, with explicit source/applicability metadata;
 - opt-in DfT PSRZ and PSCZ triangles at both landing thresholds, requiring an
   explicit 1,000 m or 1,500 m PSCZ selection rather than inferring the unresolved
   exactly-45,000-movement case; and

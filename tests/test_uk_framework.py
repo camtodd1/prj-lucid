@@ -36,13 +36,13 @@ class UkFrameworkProfileTests(unittest.TestCase):
             ),
         )
 
-    def test_consultation_radii_are_configurable_and_source_scoped(self):
+    def test_consultation_radii_are_fixed_and_source_scoped(self):
         wildlife = self.profile.wildlife_parameters({"wildlife_radius_km": 14.5})
         turbines = self.profile.wind_turbine_parameters({"wind_turbine_radius_km": 32})
         self.assertEqual(wildlife["model"], "uk_consultation_circle")
-        self.assertEqual(wildlife["radius_m"], 14500.0)
+        self.assertEqual(wildlife["radius_m"], 13000.0)
         self.assertEqual(wildlife["family_id"], "wildlife_consultation")
-        self.assertEqual(turbines["radius_m"], 32000.0)
+        self.assertEqual(turbines["radius_m"], 30000.0)
         self.assertEqual(turbines["family_id"], "wind_energy_consultation")
         self.assertEqual(wildlife["geometry_status"], "indicative_default")
 
@@ -83,10 +83,13 @@ class UkFrameworkProfileTests(unittest.TestCase):
         base = {
             "icao_code": "EGLL",
             "safeguarding_framework": "uk_caa_safeguarding",
-            "safeguarding_options": {"wildlife_radius_km": 13.0},
+            "safeguarding_options": {"psz_applicable": False, "pscz_length_m": None},
         }
         changed = dict(base)
-        changed["safeguarding_options"] = {"wildlife_radius_km": 14.0}
+        changed["safeguarding_options"] = {
+            "psz_applicable": True,
+            "pscz_length_m": 1000.0,
+        }
         self.assertNotEqual(
             runtime_input_fingerprint(base),
             runtime_input_fingerprint(changed),

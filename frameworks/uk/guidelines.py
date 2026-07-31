@@ -8,22 +8,12 @@ DEFAULT_WIND_TURBINE_RADIUS_KM = 30.0
 BUFFER_SEGMENTS = 144
 
 
-def _positive_option(
-    options: Optional[Mapping[str, object]], key: str, default: float
-) -> float:
-    try:
-        value = float((options or {}).get(key, default))
-    except (TypeError, ValueError):
-        return default
-    return value if value > 0 else default
-
-
 def wildlife_parameters(options: Optional[Mapping[str, object]] = None) -> dict:
-    """Return the UK wildlife consultation-map default."""
-    radius_km = _positive_option(options, "wildlife_radius_km", DEFAULT_WILDLIFE_RADIUS_KM)
+    """Return the fixed UK wildlife consultation radius."""
+    del options
     return {
         "model": "uk_consultation_circle",
-        "radius_m": radius_km * 1000.0,
+        "radius_m": DEFAULT_WILDLIFE_RADIUS_KM * 1000.0,
         "buffer_segments": BUFFER_SEGMENTS,
         "family_id": "wildlife_consultation",
         "profile_id": "uk_caa_safeguarding",
@@ -42,11 +32,11 @@ def wildlife_parameters(options: Optional[Mapping[str, object]] = None) -> dict:
 
 
 def wind_turbine_parameters(options: Optional[Mapping[str, object]] = None) -> dict:
-    """Return the UK wind-turbine consultation-map default."""
-    radius_km = _positive_option(options, "wind_turbine_radius_km", DEFAULT_WIND_TURBINE_RADIUS_KM)
+    """Return the fixed UK wind-turbine consultation radius."""
+    del options
     return {
         "model": "uk_consultation_circle",
-        "radius_m": radius_km * 1000.0,
+        "radius_m": DEFAULT_WIND_TURBINE_RADIUS_KM * 1000.0,
         "buffer_segments": BUFFER_SEGMENTS,
         "family_id": "wind_energy_consultation",
         "profile_id": "uk_caa_safeguarding",

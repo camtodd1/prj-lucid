@@ -313,8 +313,21 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 self.dialog.uk_pscz_length.geometry()
             )
         )
-        self.dialog.uk_wildlife_radius.setValue(14.5)
-        self.dialog.uk_wind_turbine_radius.setValue(32.0)
+        self.assertIsNone(
+            self.dialog.findChild(
+                QtWidgets.QDoubleSpinBox,
+                "doubleSpinBox_uk_wildlife_radius_km",
+            )
+        )
+        self.assertIsNone(
+            self.dialog.findChild(
+                QtWidgets.QDoubleSpinBox,
+                "doubleSpinBox_uk_wind_turbine_radius_km",
+            )
+        )
+        self.assertIsNone(
+            self.dialog.findChild(QtWidgets.QLabel, "label_uk_framework_notice")
+        )
         self.dialog.uk_psz_applicable.setChecked(True)
         self.dialog.uk_pscz_length.setCurrentIndex(
             self.dialog.uk_pscz_length.findData(1500.0)
@@ -326,8 +339,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(
             payload["safeguarding_options"],
             {
-                "wildlife_radius_km": 14.5,
-                "wind_turbine_radius_km": 32.0,
                 "psz_applicable": True,
                 "pscz_length_m": 1500.0,
             },

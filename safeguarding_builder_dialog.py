@@ -1524,41 +1524,15 @@ class SafeguardingBuilderDialog(
         self.uk_framework_options.setObjectName("frame_uk_safeguarding_options")
         uk_layout = QtWidgets.QGridLayout(self.uk_framework_options)
         uk_layout.setContentsMargins(0, 8, 0, 0)
-        uk_layout.setHorizontalSpacing(6)
+        uk_layout.setHorizontalSpacing(10)
         uk_layout.setVerticalSpacing(4)
 
-        self.uk_wildlife_radius = QtWidgets.QDoubleSpinBox()
-        self.uk_wildlife_radius.setObjectName("doubleSpinBox_uk_wildlife_radius_km")
-        self.uk_wildlife_radius.setRange(1.0, 100.0)
-        self.uk_wildlife_radius.setDecimals(1)
-        self.uk_wildlife_radius.setValue(13.0)
-        self.uk_wildlife_radius.setSuffix(" km")
-        self.uk_wildlife_radius.setMinimumWidth(78)
-        self.uk_wildlife_radius.setToolTip(
-            "Default consultation-map radius. The officially lodged aerodrome map overrides it."
-        )
-        uk_layout.addWidget(QtWidgets.QLabel("Wildlife:"), 0, 0)
-        uk_layout.addWidget(self.uk_wildlife_radius, 0, 1)
-
-        self.uk_wind_turbine_radius = QtWidgets.QDoubleSpinBox()
-        self.uk_wind_turbine_radius.setObjectName("doubleSpinBox_uk_wind_turbine_radius_km")
-        self.uk_wind_turbine_radius.setRange(1.0, 100.0)
-        self.uk_wind_turbine_radius.setDecimals(1)
-        self.uk_wind_turbine_radius.setValue(30.0)
-        self.uk_wind_turbine_radius.setSuffix(" km")
-        self.uk_wind_turbine_radius.setMinimumWidth(78)
-        self.uk_wind_turbine_radius.setToolTip(
-            "Default CAP 738/CAP 764 consultation-map radius. Lodged map geometry controls."
-        )
-        uk_layout.addWidget(QtWidgets.QLabel("Wind turbine:"), 0, 2)
-        uk_layout.addWidget(self.uk_wind_turbine_radius, 0, 3)
-
-        self.uk_psz_applicable = QtWidgets.QCheckBox("Generate indicative DfT PSZs")
+        self.uk_psz_applicable = QtWidgets.QCheckBox("Generate indicative PSZs")
         self.uk_psz_applicable.setObjectName("checkBox_uk_psz_applicable")
         self.uk_psz_applicable.setToolTip(
             "Enable only after confirming that DfT PSZ policy applies. Official operator-produced maps control."
         )
-        uk_layout.addWidget(self.uk_psz_applicable, 1, 0, 1, 3)
+        uk_layout.addWidget(self.uk_psz_applicable, 0, 0)
 
         self.uk_pscz_length = QtWidgets.QComboBox()
         self.uk_pscz_length.setObjectName("comboBox_uk_pscz_length_m")
@@ -1569,14 +1543,7 @@ class SafeguardingBuilderDialog(
             "Exactly 45,000 commercial air transport movements requires an explicit operator value; "
             "the published policy does not state the equality case."
         )
-        uk_layout.addWidget(self.uk_pscz_length, 1, 3)
-
-        uk_notice = QtWidgets.QLabel(
-            "Outputs are indicative consultation/screening geometry and do not replace lodged safeguarding maps."
-        )
-        uk_notice.setWordWrap(True)
-        uk_notice.setObjectName("label_uk_framework_notice")
-        uk_layout.addWidget(uk_notice, 2, 0, 1, 4)
+        uk_layout.addWidget(self.uk_pscz_length, 0, 1)
         ruleset_layout.addWidget(self.uk_framework_options, 3, 0, 1, 2)
 
         self.groupBox_ruleset = ruleset_group
@@ -1584,8 +1551,6 @@ class SafeguardingBuilderDialog(
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.protected_airspace_policy_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.framework_combo.currentIndexChanged.connect(self._on_framework_changed)
-        self.uk_wildlife_radius.valueChanged.connect(self.update_dialog_status)
-        self.uk_wind_turbine_radius.valueChanged.connect(self.update_dialog_status)
         self.uk_psz_applicable.toggled.connect(self._on_uk_psz_toggled)
         self.uk_pscz_length.currentIndexChanged.connect(self.update_dialog_status)
         self.uk_framework_options.setVisible(
@@ -1612,8 +1577,6 @@ class SafeguardingBuilderDialog(
         if self.framework_combo.currentData() != "uk_caa_safeguarding":
             return {}
         return {
-            "wildlife_radius_km": float(self.uk_wildlife_radius.value()),
-            "wind_turbine_radius_km": float(self.uk_wind_turbine_radius.value()),
             "psz_applicable": bool(self.uk_psz_applicable.isChecked()),
             "pscz_length_m": self.uk_pscz_length.currentData(),
         }
@@ -1621,8 +1584,6 @@ class SafeguardingBuilderDialog(
     def _apply_safeguarding_options(self, options) -> None:
         """Restore saved UK options without inferring policy applicability."""
         values = options if isinstance(options, dict) else {}
-        self.uk_wildlife_radius.setValue(float(values.get("wildlife_radius_km", 13.0)))
-        self.uk_wind_turbine_radius.setValue(float(values.get("wind_turbine_radius_km", 30.0)))
         self.uk_psz_applicable.setChecked(bool(values.get("psz_applicable", False)))
         pscz_length = values.get("pscz_length_m")
         index = self.uk_pscz_length.findData(float(pscz_length)) if pscz_length is not None else 0

@@ -23,8 +23,6 @@ class UkFrameworkGeometryTests(unittest.TestCase):
         self.builder = object.__new__(SafeguardingBuilder)
         self.builder.framework = get_framework_profile("uk_caa_safeguarding")
         self.builder.safeguarding_options = {
-            "wildlife_radius_km": 13.0,
-            "wind_turbine_radius_km": 30.0,
             "psz_applicable": True,
             "pscz_length_m": 1000.0,
         }
