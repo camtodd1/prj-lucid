@@ -292,6 +292,33 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(payload["protected_airspace_policy"], "modernisation_comparison")
 
+    def test_uk_framework_options_are_selectable_and_persisted(self):
+        framework = self.dialog.framework_combo
+        uk_index = framework.findData("uk_caa_safeguarding")
+
+        self.assertTrue(framework.isEnabled())
+        self.assertGreaterEqual(uk_index, 0)
+        framework.setCurrentIndex(uk_index)
+        self.dialog.uk_wildlife_radius.setValue(14.5)
+        self.dialog.uk_wind_turbine_radius.setValue(32.0)
+        self.dialog.uk_psz_applicable.setChecked(True)
+        self.dialog.uk_pscz_length.setCurrentIndex(
+            self.dialog.uk_pscz_length.findData(1500.0)
+        )
+
+        payload = self.dialog._build_save_payload("EGLL")
+
+        self.assertEqual(payload["safeguarding_framework"], "uk_caa_safeguarding")
+        self.assertEqual(
+            payload["safeguarding_options"],
+            {
+                "wildlife_radius_km": 14.5,
+                "wind_turbine_radius_km": 32.0,
+                "psz_applicable": True,
+                "pscz_length_m": 1500.0,
+            },
+        )
+
     def test_save_payload_records_scenario_and_uses_standard_filename(self):
         payload = self.dialog._build_save_payload("YBBN")
 
@@ -333,6 +360,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "design_standard",
             "ruleset",
             "safeguarding_framework",
+            "safeguarding_options",
             "protected_airspace_policy",
             "baseline_ols_ruleset",
             "comparison_ols_ruleset",

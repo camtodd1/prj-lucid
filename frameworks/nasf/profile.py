@@ -11,16 +11,19 @@ class NasfFrameworkProfile(FrameworkProfile):
     def windshear_parameters(self) -> dict:
         return guidelines.windshear_parameters()
 
-    def wildlife_parameters(self) -> dict:
+    def wildlife_parameters(self, options=None) -> dict:
+        del options
         return guidelines.wildlife_parameters()
 
-    def wind_turbine_parameters(self) -> dict:
+    def wind_turbine_parameters(self, options=None) -> dict:
+        del options
         return guidelines.wind_turbine_parameters()
 
     def lighting_control_parameters(self) -> dict:
         return guidelines.lighting_control_parameters()
 
-    def public_safety_area_parameters(self) -> dict:
+    def public_safety_area_parameters(self, options=None) -> dict:
+        del options
         return guidelines.public_safety_area_parameters()
 
     def cns_spec(self, facility_type: str):
@@ -35,7 +38,8 @@ class NasfFrameworkProfile(FrameworkProfile):
     def generation_status_message(self) -> str:
         return layer_tree.GENERATION_STATUS_MESSAGE
 
-    def guideline_group_definitions(self, include_cns: bool = True) -> dict:
+    def guideline_group_definitions(self, include_cns: bool = True, options=None) -> dict:
+        del options
         return layer_tree.guideline_group_definitions(include_cns)
 
     def guideline_group_name(self, guideline_key: str) -> str:

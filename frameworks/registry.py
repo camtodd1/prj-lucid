@@ -4,11 +4,13 @@ from typing import Dict, Iterable, Mapping
 
 from .base import FrameworkProfile
 from .nasf import NASF_PROFILE
+from .uk import UK_PROFILE
 
 DEFAULT_FRAMEWORK_ID = NASF_PROFILE.id
 
 _PROFILES: Dict[str, FrameworkProfile] = {
     NASF_PROFILE.id: NASF_PROFILE,
+    UK_PROFILE.id: UK_PROFILE,
 }
 
 _ALIASES: Dict[str, str] = {}

@@ -231,6 +231,7 @@ def runtime_input_fingerprint(input_data: Mapping[str, object]) -> str:
         "icao_code",
         "design_standard",
         "safeguarding_framework",
+        "safeguarding_options",
         "protected_airspace_policy",
         "baseline_ols_ruleset",
         "comparison_ols_ruleset",

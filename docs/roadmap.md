@@ -32,8 +32,11 @@ fixtures.
   retain the explicit CAT I guidance and outer-horizontal guidance caveats.
 - [ ] Complete CAP 168 scope outside the supported OLS contract, beginning with
   RESA and approach-adjacent transitional behavior on curved tracks.
-- [ ] Resolve remaining ruleset/framework ownership boundaries before adding a
-  second supplementary safeguarding framework.
+- [x] Add the UK CAA/DfT supplementary safeguarding framework while retaining
+  CAP 168 OLS in the protected-airspace ruleset.
+- [ ] Add development/crane candidate inputs, aerodrome-boundary or approved
+  reference geometry, and shielding evidence so the UK crane notification
+  evaluator can produce candidate screening layers.
 
 ## Physical, Marking, and Lighting Outputs
 

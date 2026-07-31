@@ -167,6 +167,8 @@ class PersistenceMixin:
         if isinstance(framework_combo, QComboBox):
             idx = framework_combo.findData(DEFAULT_FRAMEWORK_ID)
             framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        if hasattr(self, "_reset_safeguarding_options"):
+            self._reset_safeguarding_options()
         protected_airspace_combo = self._protected_airspace_policy_combo_widget()
         if isinstance(protected_airspace_combo, QComboBox):
             idx = protected_airspace_combo.findData("ruleset_aligned")
@@ -354,6 +356,9 @@ class PersistenceMixin:
             "design_standard": design_standard,
             "ruleset": design_standard,
             "safeguarding_framework": framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID,
+            "safeguarding_options": self._get_safeguarding_options()
+            if hasattr(self, "_get_safeguarding_options")
+            else {},
             "protected_airspace_policy": protected_airspace_policy,
             "baseline_ols_ruleset": baseline_ols_ruleset,
             "comparison_ols_ruleset": comparison_ols_ruleset or None,
@@ -469,6 +474,10 @@ class PersistenceMixin:
             )
         if "cns_facilities" in loaded_data and not isinstance(loaded_data.get("cns_facilities"), list):
             raise ValueError("Invalid format: 'cns_facilities' key exists but is not a list.")
+        if "safeguarding_options" in loaded_data and not isinstance(
+            loaded_data.get("safeguarding_options"), dict
+        ):
+            raise ValueError("Invalid format: 'safeguarding_options' must be a dictionary.")
 
     def _apply_loaded_payload(self, loaded_data) -> None:
         self._set_line_text("lineEdit_airport_name", loaded_data.get("icao_code", ""))
@@ -491,6 +500,8 @@ class PersistenceMixin:
             framework_id = normalize_framework_id(loaded_data.get("safeguarding_framework", DEFAULT_FRAMEWORK_ID))
             idx = framework_combo.findData(framework_id)
             framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        if hasattr(self, "_apply_safeguarding_options"):
+            self._apply_safeguarding_options(loaded_data.get("safeguarding_options", {}))
         protected_airspace_combo = self._protected_airspace_policy_combo_widget()
         if isinstance(protected_airspace_combo, QComboBox):
             policy_id = loaded_data.get("protected_airspace_policy", "ruleset_aligned")

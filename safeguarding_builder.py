@@ -224,6 +224,7 @@ class SafeguardingBuilder(
         self.protected_airspace_ruleset = self.baseline_ols_ruleset
         self._contour_interval_ruleset_role = "baseline"
         self.framework = get_framework_profile()
+        self.safeguarding_options: Dict[str, Any] = {}
         self.ruleset_context = RulesetContext(
             design_standard=self.ruleset,
             safeguarding_framework=self.framework,
@@ -1474,6 +1475,12 @@ class SafeguardingBuilder(
         self.protected_airspace_ruleset = self.baseline_ols_ruleset
         self._processing_total_steps = 10 if self.comparison_ols_ruleset is not None else 9
         self.framework = get_framework_profile(input_data.get("safeguarding_framework"))
+        raw_safeguarding_options = input_data.get("safeguarding_options", {})
+        self.safeguarding_options = (
+            dict(raw_safeguarding_options)
+            if isinstance(raw_safeguarding_options, dict)
+            else {}
+        )
         self.ruleset_context = RulesetContext(
             design_standard=self.ruleset,
             safeguarding_framework=self.framework,
@@ -3569,7 +3576,10 @@ class SafeguardingBuilder(
         include_cns: bool = True,
     ) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Creates the top-level groups for each guideline."""
-        guideline_defs = self.get_active_framework().guideline_group_definitions(include_cns=include_cns)
+        guideline_defs = self.get_active_framework().guideline_group_definitions(
+            include_cns=include_cns,
+            options=getattr(self, "safeguarding_options", None),
+        )
         guideline_groups: Dict[str, Optional[QgsLayerTreeGroup]] = {}
         for key, name in guideline_defs.items():
             grp = self._ensure_layer_group(main_group, name)
@@ -3795,8 +3805,12 @@ class SafeguardingBuilder(
             self.tr(output_structure.CNS_TECHNICAL_FACILITIES),
             self.tr("Airfield Ground Lighting (AGL)"),
             self.tr(output_structure.AIRFIELD_GROUND_LIGHTING),
-            self.tr(self.get_active_framework().guideline_group_name("G")),
         }
+        framework_groups = self.get_active_framework().guideline_group_definitions(
+            include_cns=True
+        )
+        if "G" in framework_groups:
+            removable_names.add(self.tr(framework_groups["G"]))
         guideline_f_subgroups = self.get_active_framework().guideline_f_subgroup_names()
         removable_names.update(
             {

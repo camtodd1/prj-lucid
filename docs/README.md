@@ -58,7 +58,8 @@ Use these conventions for new and edited documentation:
 - Use `MOS139`, `CAP 168`, `CS-ADR-DSN`, `OLS`, `OFS/OES`, `OFZ`, `TOCS`,
   `IHS`, and `OHS` consistently. Expand an uncommon acronym on first use.
 - Use *ruleset* for an aerodrome design standard implementation and
-  *framework* for supplementary safeguarding policy such as NASF.
+  *framework* for supplementary safeguarding policy such as NASF or the UK
+  CAA/DfT profile.
 - Mark open work only in [`roadmap.md`](roadmap.md). Reference documents may
   identify a limitation, but should link to the corresponding roadmap item
   instead of maintaining a second checklist.

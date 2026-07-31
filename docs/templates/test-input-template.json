@@ -25,7 +25,8 @@
                 "easa_cs_adr_dsn_issue_7"
             ],
             "safeguarding_framework": [
-                "nasf_aus"
+                "nasf_aus",
+                "uk_caa_safeguarding"
             ],
             "protected_airspace_policy": [
                 "ruleset_aligned",
@@ -128,6 +129,7 @@
     "design_standard": "REPLACE_RULESET_ID",
     "ruleset": "REPLACE_SAME_RULESET_ID",
     "safeguarding_framework": "nasf_aus",
+    "safeguarding_options": {},
     "protected_airspace_policy": "ruleset_aligned",
     "baseline_ols_ruleset": "REPLACE_RULESET_ID",
     "comparison_ols_ruleset": null,

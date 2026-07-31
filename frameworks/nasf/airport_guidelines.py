@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""Airport-centred safeguarding generators backed by NASF policy parameters."""
+"""Airport-centred generators dispatched by the active safeguarding profile."""
 
 import math
 import traceback
@@ -40,7 +40,16 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
             return False
         overall_success = False
         framework = self._active_safeguarding_framework()
-        wildlife = framework.wildlife_parameters()
+        wildlife = framework.wildlife_parameters(
+            getattr(self, "safeguarding_options", None)
+        )
+        if wildlife.get("model") == "uk_consultation_circle":
+            return self._process_uk_wildlife_consultation(
+                arp_point,
+                icao_code,
+                wildlife,
+                layer_group,
+            )
         radius_a_m = wildlife["radius_a_m"]
         radius_b_m = wildlife["radius_b_m"]
         radius_c_m = wildlife["radius_c_m"]
@@ -191,6 +200,78 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
             QgsMessageLog.logMessage(f"Wildlife safeguarding failed: {e}", PLUGIN_TAG, level=Qgis.Critical)
             return False
 
+    def _process_uk_wildlife_consultation(
+        self,
+        arp_point: QgsPointXY,
+        icao_code: str,
+        wildlife: dict,
+        layer_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Generate one source-labelled UK wildlife consultation circle."""
+        try:
+            radius_m = float(wildlife["radius_m"])
+            geometry = QgsGeometry.fromPointXY(arp_point).buffer(
+                radius_m,
+                int(wildlife["buffer_segments"]),
+            )
+            geometry = geometry.makeValid() if geometry and not geometry.isGeosValid() else geometry
+            if geometry is None or geometry.isEmpty() or not geometry.isGeosValid():
+                return False
+            fields = QgsFields(
+                [
+                    QgsField("zone", QVariant.String),
+                    QgsField("desc", QVariant.String),
+                    QgsField("inner_rad_km", QVariant.Double),
+                    QgsField("outer_rad_km", QVariant.Double),
+                    QgsField("family_id", QVariant.String),
+                    QgsField("profile_id", QVariant.String),
+                    QgsField("source_id", QVariant.String),
+                    QgsField("source_version", QVariant.String),
+                    QgsField("authority_level", QVariant.String),
+                    QgsField("applicability", QVariant.String),
+                    QgsField("geometry_status", QVariant.String),
+                    QgsField("assessment_result", QVariant.String),
+                    QgsField("caveat", QVariant.String, "", 500),
+                ]
+            )
+            feature = QgsFeature(fields)
+            feature.setGeometry(geometry)
+            feature.setAttributes(
+                [
+                    "UK wildlife consultation",
+                    "Indicative wildlife consultation envelope",
+                    0.0,
+                    radius_m / 1000.0,
+                    wildlife["family_id"],
+                    wildlife["profile_id"],
+                    wildlife["source_id"],
+                    wildlife["source_version"],
+                    wildlife["authority_level"],
+                    wildlife["applicability"],
+                    wildlife["geometry_status"],
+                    wildlife["assessment_result"],
+                    wildlife["caveat"],
+                ]
+            )
+            radius_km = radius_m / 1000.0
+            layer = self._create_and_add_layer(
+                "Polygon",
+                f"UK_WildlifeConsultation_{icao_code}",
+                f"{icao_code} Wildlife Consultation ({radius_km:g}km)",
+                fields,
+                [feature],
+                layer_group,
+                "UK Wildlife Consultation",
+            )
+            return layer is not None
+        except Exception as error:
+            QgsMessageLog.logMessage(
+                f"UK wildlife consultation generation failed: {error}\n{traceback.format_exc()}",
+                PLUGIN_TAG,
+                level=Qgis.Critical,
+            )
+            return False
+
     def process_wind_turbine_safeguarding(
         self,
         arp_point: QgsPointXY,
@@ -219,7 +300,10 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
                 return False
 
             framework = self._active_safeguarding_framework()
-            wind_turbine = framework.wind_turbine_parameters()
+            wind_turbine = framework.wind_turbine_parameters(
+                getattr(self, "safeguarding_options", None)
+            )
+            is_uk = wind_turbine.get("model") == "uk_consultation_circle"
             turbine_radius_m = wind_turbine["radius_m"]
             turbine_zone_geom = arp_geom.buffer(turbine_radius_m, wind_turbine["buffer_segments"])
             if not turbine_zone_geom or turbine_zone_geom.isEmpty():
@@ -239,29 +323,60 @@ class NasfAirportGuidelinesMixin(NasfGuidelineProcessorBase):
                 )
                 return False
 
-            fields = QgsFields(
+            field_list = [
+                QgsField("icao_code", QVariant.String, self.tr("ICAO Code"), 10),
+                QgsField("description", QVariant.String, self.tr("Description"), 100),
+                QgsField("radius_km", QVariant.Double, self.tr("Radius (km)"), 8, 2),
+            ]
+            if not is_uk:
+                field_list.append(
+                    QgsField("ref_nasf", QVariant.String, self.tr("Guideline Ref."), 50)
+                )
+            field_list.extend(
                 [
-                    QgsField("icao_code", QVariant.String, self.tr("ICAO Code"), 10),
-                    QgsField("description", QVariant.String, self.tr("Description"), 100),
-                    QgsField("radius_km", QVariant.Double, self.tr("Radius (km)"), 8, 2),
-                    QgsField("ref_nasf", QVariant.String, self.tr("Guideline Ref."), 50),
+                    QgsField("family_id", QVariant.String),
+                    QgsField("profile_id", QVariant.String),
+                    QgsField("source_id", QVariant.String),
+                    QgsField("source_version", QVariant.String),
+                    QgsField("authority_level", QVariant.String),
+                    QgsField("applicability", QVariant.String),
+                    QgsField("geometry_status", QVariant.String),
+                    QgsField("assessment_result", QVariant.String),
+                    QgsField("caveat", QVariant.String, "", 500),
                 ]
             )
+            fields = QgsFields(field_list)
 
             feature = QgsFeature(fields)
             feature.setGeometry(valid_geom)
-            feature.setAttributes(
+            attributes = [
+                icao_code,
+                self.tr(
+                    f"Wind Turbine Consultation Zone ({turbine_radius_m / 1000.0:g}km Radius)"
+                    if is_uk
+                    else "Wind Turbine Assessment Zone (30km Radius)"
+                ),
+                turbine_radius_m / 1000.0,
+            ]
+            if not is_uk:
+                attributes.append(self.tr(wind_turbine.get("ref_nasf", "")))
+            attributes.extend(
                 [
-                    icao_code,
-                    self.tr("Wind Turbine Assessment Zone (30km Radius)"),
-                    turbine_radius_m / 1000.0,
-                    self.tr(wind_turbine["ref_nasf"]),
+                    wind_turbine.get("family_id", "wind_energy_assessment"),
+                    wind_turbine.get("profile_id", framework.id),
+                    wind_turbine.get("source_id", "AUS-1" if framework.id == "nasf_aus" else ""),
+                    wind_turbine.get("source_version", framework.edition),
+                    wind_turbine.get("authority_level", "framework guidance"),
+                    wind_turbine.get("applicability", "framework-defined"),
+                    wind_turbine.get("geometry_status", "source_defined"),
+                    wind_turbine.get("assessment_result", "not_assessed"),
+                    wind_turbine.get("caveat", ""),
                 ]
             )
-
-            layer_display_name = f"{icao_code} {self.tr('Wind Turbine Assessment Zone')}"
-            internal_name_base = f"Guideline_D_TurbineZone_{icao_code}"
-            style_key = "Wind Turbine Assessment Zone"
+            feature.setAttributes(attributes)
+            layer_display_name = f"{icao_code} {self.tr('Wind Turbine Consultation Zone' if is_uk else 'Wind Turbine Assessment Zone')}"
+            internal_name_base = f"{'UK_WindTurbineConsultation' if is_uk else 'Guideline_D_TurbineZone'}_{icao_code}"
+            style_key = "UK Wind Turbine Consultation" if is_uk else "Wind Turbine Assessment Zone"
 
             layer_created = self._create_and_add_layer(
                 "Polygon",

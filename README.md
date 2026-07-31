@@ -149,6 +149,8 @@ rulesets/                       Aerodrome-standard profiles and policy modules
                                  21 November 2030 applicability.
 frameworks/nasf/                Australian NASF safeguarding framework profile,
                                  policy parameters, and compatibility aliases.
+frameworks/uk/                  UK CAA/DfT wildlife, wind-turbine, public-safety,
+                                 and crane-notification safeguarding profile.
 reports/                        Declared-distance and runway-summary reports.
 tests/                          Unit, QGIS integration, and OLS fixture tests.
 docs/                            Maintained implementation references, project
@@ -246,6 +248,9 @@ Documentation conventions and the active backlog are in
 
 - The plugin expects the QGIS project CRS to be projected and metre-based.
 - Guideline A and Guideline H detailed generation are not fully implemented.
+- UK consultation circles and DfT Public Safety Zones are indicative defaults;
+  officially lodged aerodrome/operator maps control. Crane candidate layer
+  generation awaits candidate, boundary, and shielding inputs.
 - Some specialised CNS and OLS cases depend on the available policy tables in
   `frameworks/nasf/cns.py` and the active ruleset package.
 - AGL generation models plan-view light locations and display characteristics.

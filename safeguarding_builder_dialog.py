@@ -1450,11 +1450,11 @@ class SafeguardingBuilderDialog(
             self.framework_combo.addItem(profile.display_name, userData=profile.id)
         default_framework_index = self.framework_combo.findData(DEFAULT_FRAMEWORK_ID)
         self.framework_combo.setCurrentIndex(default_framework_index if default_framework_index >= 0 else 0)
-        self.framework_combo.setEnabled(False)
+        self.framework_combo.setEnabled(True)
         self.framework_combo.setToolTip(
-            "Planning and safeguarding framework. NASF is currently the only selectable framework."
+            "Planning and safeguarding framework for supplementary consultation and land-use layers. "
+            "Protected-airspace/OLS geometry remains controlled separately on the OLS tab."
         )
-        self.framework_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.NoFocus)
         self.framework_combo.setMinimumWidth(190)
         self.framework_combo.setMinimumHeight(28)
         self.framework_combo.setMaximumHeight(28)
@@ -1506,11 +1506,113 @@ class SafeguardingBuilderDialog(
         ruleset_layout.addWidget(protected_airspace_label, 2, 0)
         ruleset_layout.addWidget(self.protected_airspace_policy_combo, 2, 1)
 
+        self.uk_framework_options = QtWidgets.QFrame()
+        self.uk_framework_options.setObjectName("frame_uk_safeguarding_options")
+        uk_layout = QtWidgets.QGridLayout(self.uk_framework_options)
+        uk_layout.setContentsMargins(0, 8, 0, 0)
+        uk_layout.setHorizontalSpacing(10)
+        uk_layout.setVerticalSpacing(4)
+
+        self.uk_wildlife_radius = QtWidgets.QDoubleSpinBox()
+        self.uk_wildlife_radius.setObjectName("doubleSpinBox_uk_wildlife_radius_km")
+        self.uk_wildlife_radius.setRange(1.0, 100.0)
+        self.uk_wildlife_radius.setDecimals(1)
+        self.uk_wildlife_radius.setValue(13.0)
+        self.uk_wildlife_radius.setSuffix(" km")
+        self.uk_wildlife_radius.setToolTip(
+            "Default consultation-map radius. The officially lodged aerodrome map overrides it."
+        )
+        uk_layout.addWidget(QtWidgets.QLabel("Wildlife consultation:"), 0, 0)
+        uk_layout.addWidget(self.uk_wildlife_radius, 0, 1)
+
+        self.uk_wind_turbine_radius = QtWidgets.QDoubleSpinBox()
+        self.uk_wind_turbine_radius.setObjectName("doubleSpinBox_uk_wind_turbine_radius_km")
+        self.uk_wind_turbine_radius.setRange(1.0, 100.0)
+        self.uk_wind_turbine_radius.setDecimals(1)
+        self.uk_wind_turbine_radius.setValue(30.0)
+        self.uk_wind_turbine_radius.setSuffix(" km")
+        self.uk_wind_turbine_radius.setToolTip(
+            "Default CAP 738/CAP 764 consultation-map radius. Lodged map geometry controls."
+        )
+        uk_layout.addWidget(QtWidgets.QLabel("Wind-turbine consultation:"), 1, 0)
+        uk_layout.addWidget(self.uk_wind_turbine_radius, 1, 1)
+
+        self.uk_psz_applicable = QtWidgets.QCheckBox("Generate indicative DfT PSZs")
+        self.uk_psz_applicable.setObjectName("checkBox_uk_psz_applicable")
+        self.uk_psz_applicable.setToolTip(
+            "Enable only after confirming that DfT PSZ policy applies. Official operator-produced maps control."
+        )
+        uk_layout.addWidget(self.uk_psz_applicable, 2, 0, 1, 2)
+
+        self.uk_pscz_length = QtWidgets.QComboBox()
+        self.uk_pscz_length.setObjectName("comboBox_uk_pscz_length_m")
+        self.uk_pscz_length.addItem("Select traffic band...", userData=None)
+        self.uk_pscz_length.addItem("1,000 m (<45,000 CATMs)", userData=1000.0)
+        self.uk_pscz_length.addItem("1,500 m (>45,000 CATMs)", userData=1500.0)
+        self.uk_pscz_length.setToolTip(
+            "Exactly 45,000 commercial air transport movements requires an explicit operator value; "
+            "the published policy does not state the equality case."
+        )
+        uk_layout.addWidget(QtWidgets.QLabel("PSCZ extent:"), 3, 0)
+        uk_layout.addWidget(self.uk_pscz_length, 3, 1)
+
+        uk_notice = QtWidgets.QLabel(
+            "Outputs are indicative consultation/screening geometry and do not replace lodged safeguarding maps."
+        )
+        uk_notice.setWordWrap(True)
+        uk_notice.setObjectName("label_uk_framework_notice")
+        uk_layout.addWidget(uk_notice, 4, 0, 1, 2)
+        ruleset_layout.addWidget(self.uk_framework_options, 3, 0, 1, 2)
+
         self.groupBox_ruleset = ruleset_group
         self.label_protected_airspace_policy = protected_airspace_label
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.protected_airspace_policy_combo.currentIndexChanged.connect(self.update_dialog_status)
-        self.framework_combo.currentIndexChanged.connect(self.update_dialog_status)
+        self.framework_combo.currentIndexChanged.connect(self._on_framework_changed)
+        self.uk_wildlife_radius.valueChanged.connect(self.update_dialog_status)
+        self.uk_wind_turbine_radius.valueChanged.connect(self.update_dialog_status)
+        self.uk_psz_applicable.toggled.connect(self._on_uk_psz_toggled)
+        self.uk_pscz_length.currentIndexChanged.connect(self.update_dialog_status)
+        self.uk_framework_options.setVisible(
+            self.framework_combo.currentData() == "uk_caa_safeguarding"
+        )
+        self.uk_pscz_length.setEnabled(False)
+
+    def _on_framework_changed(self, *_args) -> None:
+        """Show only the configuration owned by the selected framework."""
+        is_uk = self.framework_combo.currentData() == "uk_caa_safeguarding"
+        self.uk_framework_options.setVisible(is_uk)
+        self._on_uk_psz_toggled()
+        self.update_dialog_status()
+
+    def _on_uk_psz_toggled(self, *_args) -> None:
+        self.uk_pscz_length.setEnabled(self.uk_psz_applicable.isChecked())
+        self.update_dialog_status()
+
+    def _get_safeguarding_options(self) -> Dict[str, Any]:
+        """Return source-scoped options for the selected framework."""
+        if self.framework_combo.currentData() != "uk_caa_safeguarding":
+            return {}
+        return {
+            "wildlife_radius_km": float(self.uk_wildlife_radius.value()),
+            "wind_turbine_radius_km": float(self.uk_wind_turbine_radius.value()),
+            "psz_applicable": bool(self.uk_psz_applicable.isChecked()),
+            "pscz_length_m": self.uk_pscz_length.currentData(),
+        }
+
+    def _apply_safeguarding_options(self, options) -> None:
+        """Restore saved UK options without inferring policy applicability."""
+        values = options if isinstance(options, dict) else {}
+        self.uk_wildlife_radius.setValue(float(values.get("wildlife_radius_km", 13.0)))
+        self.uk_wind_turbine_radius.setValue(float(values.get("wind_turbine_radius_km", 30.0)))
+        self.uk_psz_applicable.setChecked(bool(values.get("psz_applicable", False)))
+        pscz_length = values.get("pscz_length_m")
+        index = self.uk_pscz_length.findData(float(pscz_length)) if pscz_length is not None else 0
+        self.uk_pscz_length.setCurrentIndex(index if index >= 0 else 0)
+        self._on_uk_psz_toggled()
+
+    def _reset_safeguarding_options(self) -> None:
+        self._apply_safeguarding_options({})
 
     def _style_dialog_header(self) -> None:
         """Tighten the top utility header into a compact visual band."""
@@ -3062,6 +3164,16 @@ class SafeguardingBuilderDialog(
         framework_combo = self._framework_combo_widget()
         design_standard = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
         safeguarding_framework = framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID
+        safeguarding_options = self._get_safeguarding_options()
+        if (
+            safeguarding_framework == "uk_caa_safeguarding"
+            and safeguarding_options.get("psz_applicable")
+            and safeguarding_options.get("pscz_length_m") not in {1000.0, 1500.0}
+        ):
+            validation_ok = False
+            error_messages.append(
+                "Select the UK PSCZ traffic band, or disable indicative DfT PSZ generation."
+            )
         baseline_ols_ruleset = design_standard
         comparison_ols_ruleset = ""
         if hasattr(self, "_current_ols_ruleset_ids"):
@@ -3100,6 +3212,7 @@ class SafeguardingBuilderDialog(
                 "design_standard": design_standard,
                 "ruleset": design_standard,
                 "safeguarding_framework": safeguarding_framework,
+                "safeguarding_options": safeguarding_options,
                 "protected_airspace_policy": protected_airspace_policy,
                 "baseline_ols_ruleset": baseline_ols_ruleset,
                 "comparison_ols_ruleset": comparison_ols_ruleset or None,
