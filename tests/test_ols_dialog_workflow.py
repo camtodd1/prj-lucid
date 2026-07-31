@@ -299,6 +299,20 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertTrue(framework.isEnabled())
         self.assertGreaterEqual(uk_index, 0)
         framework.setCurrentIndex(uk_index)
+        self.dialog.show()
+        self.app.processEvents()
+        self.dialog._sync_global_context_box_geometry()
+        self.app.processEvents()
+        self.assertGreater(self.dialog.groupBox_ruleset.height(), 136)
+        self.assertGreaterEqual(
+            self.dialog.uk_framework_options.height(),
+            self.dialog.uk_framework_options.sizeHint().height(),
+        )
+        self.assertFalse(
+            self.dialog.uk_psz_applicable.geometry().intersects(
+                self.dialog.uk_pscz_length.geometry()
+            )
+        )
         self.dialog.uk_wildlife_radius.setValue(14.5)
         self.dialog.uk_wind_turbine_radius.setValue(32.0)
         self.dialog.uk_psz_applicable.setChecked(True)

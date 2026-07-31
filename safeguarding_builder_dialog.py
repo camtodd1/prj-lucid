@@ -719,7 +719,7 @@ class SafeguardingBuilderDialog(
         self._sync_global_context_box_geometry()
 
     def _sync_global_context_box_geometry(self) -> None:
-        """Keep the airport identity and policy boxes locked to matching geometry."""
+        """Keep the setup cards aligned without clipping framework-specific controls."""
         airport_identity_frame = getattr(
             self,
             "frame_airport_identity",
@@ -743,11 +743,25 @@ class SafeguardingBuilderDialog(
             airport_lookup.setMaximumHeight(18)
 
         global_frame = getattr(self, "frame_global_context", None)
-        header_widget_height = 136
+        widgets = [airport_identity_frame, ruleset_group]
         if global_frame is not None:
-            global_frame.setFixedHeight(header_widget_height)
-        airport_identity_frame.setFixedHeight(header_widget_height)
-        ruleset_group.setFixedHeight(header_widget_height)
+            widgets.append(global_frame)
+        for widget in widgets:
+            widget.setMinimumHeight(0)
+            widget.setMaximumHeight(16777215)
+        for widget in (airport_identity_frame, ruleset_group):
+            layout = widget.layout()
+            if layout is not None:
+                layout.invalidate()
+                layout.activate()
+
+        header_widget_height = max(
+            136,
+            airport_identity_frame.sizeHint().height(),
+            ruleset_group.sizeHint().height(),
+        )
+        for widget in widgets:
+            widget.setFixedHeight(header_widget_height)
 
     def _setup_readiness_strip(self) -> None:
         """Insert the cross-tab generation readiness summary below the setup cards."""
@@ -1510,7 +1524,7 @@ class SafeguardingBuilderDialog(
         self.uk_framework_options.setObjectName("frame_uk_safeguarding_options")
         uk_layout = QtWidgets.QGridLayout(self.uk_framework_options)
         uk_layout.setContentsMargins(0, 8, 0, 0)
-        uk_layout.setHorizontalSpacing(10)
+        uk_layout.setHorizontalSpacing(6)
         uk_layout.setVerticalSpacing(4)
 
         self.uk_wildlife_radius = QtWidgets.QDoubleSpinBox()
@@ -1519,10 +1533,11 @@ class SafeguardingBuilderDialog(
         self.uk_wildlife_radius.setDecimals(1)
         self.uk_wildlife_radius.setValue(13.0)
         self.uk_wildlife_radius.setSuffix(" km")
+        self.uk_wildlife_radius.setMinimumWidth(78)
         self.uk_wildlife_radius.setToolTip(
             "Default consultation-map radius. The officially lodged aerodrome map overrides it."
         )
-        uk_layout.addWidget(QtWidgets.QLabel("Wildlife consultation:"), 0, 0)
+        uk_layout.addWidget(QtWidgets.QLabel("Wildlife:"), 0, 0)
         uk_layout.addWidget(self.uk_wildlife_radius, 0, 1)
 
         self.uk_wind_turbine_radius = QtWidgets.QDoubleSpinBox()
@@ -1531,18 +1546,19 @@ class SafeguardingBuilderDialog(
         self.uk_wind_turbine_radius.setDecimals(1)
         self.uk_wind_turbine_radius.setValue(30.0)
         self.uk_wind_turbine_radius.setSuffix(" km")
+        self.uk_wind_turbine_radius.setMinimumWidth(78)
         self.uk_wind_turbine_radius.setToolTip(
             "Default CAP 738/CAP 764 consultation-map radius. Lodged map geometry controls."
         )
-        uk_layout.addWidget(QtWidgets.QLabel("Wind-turbine consultation:"), 1, 0)
-        uk_layout.addWidget(self.uk_wind_turbine_radius, 1, 1)
+        uk_layout.addWidget(QtWidgets.QLabel("Wind turbine:"), 0, 2)
+        uk_layout.addWidget(self.uk_wind_turbine_radius, 0, 3)
 
         self.uk_psz_applicable = QtWidgets.QCheckBox("Generate indicative DfT PSZs")
         self.uk_psz_applicable.setObjectName("checkBox_uk_psz_applicable")
         self.uk_psz_applicable.setToolTip(
             "Enable only after confirming that DfT PSZ policy applies. Official operator-produced maps control."
         )
-        uk_layout.addWidget(self.uk_psz_applicable, 2, 0, 1, 2)
+        uk_layout.addWidget(self.uk_psz_applicable, 1, 0, 1, 3)
 
         self.uk_pscz_length = QtWidgets.QComboBox()
         self.uk_pscz_length.setObjectName("comboBox_uk_pscz_length_m")
@@ -1553,15 +1569,14 @@ class SafeguardingBuilderDialog(
             "Exactly 45,000 commercial air transport movements requires an explicit operator value; "
             "the published policy does not state the equality case."
         )
-        uk_layout.addWidget(QtWidgets.QLabel("PSCZ extent:"), 3, 0)
-        uk_layout.addWidget(self.uk_pscz_length, 3, 1)
+        uk_layout.addWidget(self.uk_pscz_length, 1, 3)
 
         uk_notice = QtWidgets.QLabel(
             "Outputs are indicative consultation/screening geometry and do not replace lodged safeguarding maps."
         )
         uk_notice.setWordWrap(True)
         uk_notice.setObjectName("label_uk_framework_notice")
-        uk_layout.addWidget(uk_notice, 4, 0, 1, 2)
+        uk_layout.addWidget(uk_notice, 2, 0, 1, 4)
         ruleset_layout.addWidget(self.uk_framework_options, 3, 0, 1, 2)
 
         self.groupBox_ruleset = ruleset_group
@@ -1583,6 +1598,9 @@ class SafeguardingBuilderDialog(
         is_uk = self.framework_combo.currentData() == "uk_caa_safeguarding"
         self.uk_framework_options.setVisible(is_uk)
         self._on_uk_psz_toggled()
+        self._sync_global_context_box_geometry()
+        QtCore.QTimer.singleShot(0, self._sync_global_context_box_geometry)
+        QtCore.QTimer.singleShot(0, self._update_dialog_height)
         self.update_dialog_status()
 
     def _on_uk_psz_toggled(self, *_args) -> None:
