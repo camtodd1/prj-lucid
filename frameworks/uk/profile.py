@@ -20,6 +20,9 @@ class UkFrameworkProfile(FrameworkProfile):
     ) -> dict:
         return guidelines.public_safety_area_parameters(options)
 
+    def crane_notification_zone_parameters(self) -> dict:
+        return guidelines.crane_notification_zone_parameters()
+
     def safeguarding_group_name(self) -> str:
         return layer_tree.SAFEGUARDING_GROUP_NAME
 

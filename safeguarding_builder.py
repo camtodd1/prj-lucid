@@ -81,6 +81,7 @@ from .surfaces.airfield_ground_lighting import AirfieldGroundLightingMixin
 from .surfaces.specialised import SpecialisedSurfacesMixin
 from .surfaces.met import MetSurfacesMixin
 from .frameworks.nasf.processors import NasfGuidelinesMixin
+from .frameworks.uk.processors import UkSafeguardingMixin
 from .frameworks.nasf.lighting import LightingGuidelineMixin
 from .guidelines.ols_guideline import OlsGuidelineMixin
 from .guidelines.controlling_ols_engine import ControllingOlsEngineMixin
@@ -182,6 +183,7 @@ OSM_AEROWAY_GROUPS = (
 # Main Plugin Class - SafeguardingBuilder
 # ============================================================
 class SafeguardingBuilder(
+    UkSafeguardingMixin,
     NasfGuidelinesMixin,
     LightingGuidelineMixin,
     ControllingOlsEngineMixin,
@@ -2084,6 +2086,13 @@ class SafeguardingBuilder(
             )
         elif arp_point is None and guideline_groups.get("D") is not None:
             self._log_skip("Wind turbine safeguarding: ARP coordinates missing; turbine zone not generated.")
+
+        if arp_point is not None and guideline_groups.get("K") is not None:
+            self.process_uk_crane_notification_zone(
+                arp_point, icao_code, target_crs, guideline_groups["K"]
+            )
+        elif arp_point is None and guideline_groups.get("K") is not None:
+            self._log_skip("Crane notification zone: ARP coordinates missing; zone not generated.")
 
         if cns_input_list and guideline_groups.get("G") is not None:
             try:

@@ -113,6 +113,21 @@ class UkFrameworkGeometryTests(unittest.TestCase):
             )
         )
 
+    def test_crane_notification_zone_is_six_kilometres_from_arp(self):
+        group = QgsLayerTreeGroup("Crane Notification Zone")
+        crs = QgsCoordinateReferenceSystem("EPSG:3857")
+        self.assertTrue(
+            self.builder.process_uk_crane_notification_zone(
+                QgsPointXY(0.0, 0.0), "EGXX", crs, group
+            )
+        )
+        record = next(item for item in self.captured if item[1] == "UK_CraneNotificationZone_EGXX")
+        feature = record[3][0]
+        self.assertEqual(feature.attribute("radius_km"), 6.0)
+        bounds = feature.geometry().boundingBox()
+        self.assertAlmostEqual(bounds.xMinimum(), -6000.0, places=3)
+        self.assertAlmostEqual(bounds.xMaximum(), 6000.0, places=3)
+
     def test_framework_dispatch_preserves_nasf_wildlife_and_wind_outputs(self):
         self.builder.framework = get_framework_profile("nasf_aus")
         group = QgsLayerTreeGroup("NASF")

@@ -34,8 +34,8 @@ fixtures.
   RESA and approach-adjacent transitional behavior on curved tracks.
 - [x] Add the UK CAA/DfT supplementary safeguarding framework while retaining
   CAP 168 OLS in the protected-airspace ruleset.
-- [x] Keep candidate-dependent crane assessment outside the current layer-only
-  safeguarding scope.
+- [x] Add a fixed 6 km ARP-centred UK crane notification-zone layer without a
+  candidate assessment workflow.
 
 ## Physical, Marking, and Lighting Outputs
 

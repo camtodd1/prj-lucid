@@ -149,8 +149,8 @@ rulesets/                       Aerodrome-standard profiles and policy modules
                                  21 November 2030 applicability.
 frameworks/nasf/                Australian NASF safeguarding framework profile,
                                  policy parameters, and compatibility aliases.
-frameworks/uk/                  UK CAA/DfT wildlife, wind-turbine, and
-                                 public-safety safeguarding profile.
+frameworks/uk/                  UK CAA/DfT wildlife, wind-turbine, public-safety,
+                                 and crane-notification zone profile.
 reports/                        Declared-distance and runway-summary reports.
 tests/                          Unit, QGIS integration, and OLS fixture tests.
 docs/                            Maintained implementation references, project

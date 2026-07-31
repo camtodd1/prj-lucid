@@ -13,6 +13,7 @@ GUIDELINE_GROUPS = {
     "C": "Wildlife Consultation",
     "D": "Wind Turbine Safeguarding",
     "I": "Public Safety Zones",
+    "K": "Crane Notification Zone",
 }
 
 GUIDELINE_F_SUBGROUPS = {
@@ -32,6 +33,7 @@ EMPTY_GROUP_REASONS = {
     GUIDELINE_GROUPS["C"]: "ARP missing or wildlife consultation circle generation failed",
     GUIDELINE_GROUPS["D"]: "ARP missing or wind-turbine consultation circle generation failed",
     GUIDELINE_GROUPS["I"]: "PSZ applicability was not selected, or runway inputs are incomplete",
+    GUIDELINE_GROUPS["K"]: "ARP missing or crane notification zone generation failed",
 }
 
 

@@ -5,6 +5,7 @@ from typing import Mapping, Optional
 
 DEFAULT_WILDLIFE_RADIUS_KM = 13.0
 DEFAULT_WIND_TURBINE_RADIUS_KM = 30.0
+CRANE_NOTIFICATION_RADIUS_KM = 6.0
 BUFFER_SEGMENTS = 144
 
 
@@ -107,10 +108,30 @@ def public_safety_area_parameters(options: Optional[Mapping[str, object]] = None
     }
 
 
+def crane_notification_zone_parameters() -> dict:
+    """Return the fixed ARP-centred UK crane notification zone."""
+    return {
+        "model": "uk_notification_circle",
+        "radius_m": CRANE_NOTIFICATION_RADIUS_KM * 1000.0,
+        "buffer_segments": BUFFER_SEGMENTS,
+        "family_id": "temporary_obstacle_notification",
+        "profile_id": "uk_caa_safeguarding",
+        "source_id": "UK-7",
+        "source_ref": "UK CAA Crane notification",
+        "source_version": "web guidance reviewed 31 July 2026",
+        "authority_level": "CAA notification guidance",
+        "applicability": "indicative ARP-centred notification zone",
+        "geometry_status": "indicative_default",
+        "assessment_result": "notify",
+        "caveat": "The published rule refers to distance from an aerodrome; this layer uses the ARP as the requested centre.",
+    }
+
+
 __all__ = [
     "DEFAULT_WILDLIFE_RADIUS_KM",
     "DEFAULT_WIND_TURBINE_RADIUS_KM",
     "wildlife_parameters",
     "wind_turbine_parameters",
     "public_safety_area_parameters",
+    "crane_notification_zone_parameters",
 ]

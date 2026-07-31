@@ -73,7 +73,7 @@ Source identifiers refer to the [Primary Source Register](#primary-source-regist
 | Helicopter landing sites | Guideline H protects strategically important HLS [AUS-1] | CAP 738 Chs 8–9 and CAP 1264 cover heliport/HHLS safeguarding, approach/take-off surfaces and downwash [UK-1, UK-6] | CS-HPT-DSN Issue 1 covers surface-level VFR heliports located at aerodromes in scope; it is not a general off-airport HLS code [EASA-5] | Annex 14 Vol II and Heliport Manual Doc 9261 [ICAO-12, ICAO-13] | **Out of scope** for this airport safeguarding plugin. |
 | Solar glint and glare | No dedicated guideline; overlaps Guideline E/G | CAP 738 Appendix C and CAA safeguarding guidance require case-specific glare, radar, OLS, IFP and wildlife review [UK-1, UK-2] | Art 9(d); GM1 ADR-DSN.M.615 describes a dazzle safety assessment and uses 20,000 cd/m² as a maximum acceptable luminance assumption for solar panels [EASA-2, EASA-3] | Annex 14 light-safety principles and Doc 9184 land-use guidance; no universal solar exclusion polygon identified [ICAO-1, ICAO-9] | **P** — implement line-of-sight/sun-reflection analysis and receptor records, not a fixed buffer. Treat the EASA luminance value as source-scoped guidance, not a global threshold. |
 | Emissions, plumes, dust and smoke | No dedicated guideline; related to operational-airspace protection | CAP 738 includes dust/smoke from construction and thermal uplift or vapour plumes in safeguarding assessment [UK-1, UK-2] | The current common rules are high-level; RMT.0751 explicitly includes gaseous emissions in its future scope [EASA-4] | Doc 9184 environmental control and Doc 9817 windshear/turbulence guidance are relevant, but no generic exclusion geometry was found [ICAO-9, ICAO-11] | **P/F** — create a consultation checklist and specialist-study attachment, not automatic pass/fail geometry. |
-| Temporary obstacles and cranes | Guideline F protected-airspace assessment | CAA notification is required for a crane over 10 m AGL within 6 km of an aerodrome unless shielded by higher surroundings, and for a crane at or above 100 m AGL regardless of location [UK-7] | Art 8 consultation plus applicable OLS/other-surface assessment [EASA-2] | Annex 14 obstacle assessment, marking, lighting and publication [ICAO-1] | **R** only. This is a candidate-dependent notification test, not a fixed safeguarding zone suitable for the current layer-only scope. |
+| Temporary obstacles and cranes | Guideline F protected-airspace assessment | CAA notification is required for a crane over 10 m AGL within 6 km of an aerodrome unless shielded by higher surroundings, and for a crane at or above 100 m AGL regardless of location [UK-7] | Art 8 consultation plus applicable OLS/other-surface assessment [EASA-2] | Annex 14 obstacle assessment, marking, lighting and publication [ICAO-1] | **D** as an indicative 6 km ARP-centred notification-zone layer only; no candidate assessment is performed. |
 | Laser emitters and directed light | Closest match is Guideline E | CAP 736 notification and safety assessment [UK-9] | Arts 9(c)/(f); laser protection is also in the scope of RMT.0751 [EASA-2, EASA-4] | Annex 14 Vol I defines laser-protected flight zones; Doc 9815 supplies guidance [ICAO-7] | **D/P** — a strong future generator candidate, but extract current zone dimensions and irradiance criteria from a controlled source before coding. |
 | Drones / UAS and emerging air mobility | No current dedicated NASF guideline | CAP 722 governs UAS operations; aerodrome-specific flight-restriction and coordination requirements apply | RMT.0751 includes drones, but does not yet provide a common aerodrome-surroundings buffer [EASA-4] | ICAO RPAS provisions do not yet amount to a generic airport land-use safeguarding polygon | **F/N** — policy watch only; do not introduce a speculative radius. |
 
@@ -122,10 +122,9 @@ require the official zone to be redefined.
 
 #### Temporary Obstacles
 
-Retain the UK crane rule as documented research only. It depends on a candidate's
-height, shielding and distance from the relevant aerodrome boundary, so it is not
-a fixed restriction, assessment or notification-zone layer. No crane assessment
-function is included in the current layer-only scope.
+Generate a fixed 6 km notification-zone layer centred on the ARP. This is a
+layer-only representation: it does not assess candidate height, shielding,
+nationwide notification triggers, OLS, IFP or CNS interaction.
 
 The 6 km rule is a notification mechanism, not an obstacle-clearance surface.
 
@@ -180,7 +179,7 @@ planning framework:
 | 1 | UK wildlife consultation | `wildlife_consultation` / `uk_caa_safeguarding` | One fixed 13 km ARP circle with consultation metadata | Not a universal legal boundary and not NASF three-band zoning. |
 | 1 | UK wind-turbine consultation | `wind_energy_consultation` / `uk_caa_safeguarding` | Fixed 30 km ARP circle plus OLS/IFP/CNS intersection hooks | Lodged aerodrome map overrides generated geometry. |
 | 1 | UK public safety zones | `public_safety_ground_risk` / `uk_dft_psz_2021` | PSRZ and PSCZ indicative triangles per runway end | Confirm applicability and the exactly-45,000 movement case; official map controls. |
-| — | UK crane notification | Not implemented | — | Candidate-dependent assessment is outside the current layer-only scope. |
+| 1 | UK crane notification | `temporary_obstacle_notification` / `uk_caa_safeguarding` | Fixed 6 km ARP-centred notification-zone layer | Indicative geometry only; no candidate assessment. |
 | 2 | IFP protection | `ifp_protection` / source-specific profile | Import authoritative 2D/3D procedure surfaces and intersect candidates | Procedure design and approval remain external specialist functions. |
 | 2 | UK/ICAO CNS protection | `cns_bra` / authority-specific profile | Facility inventory, approved template library and candidate intersection | Dimensions vary by facility, installation and responsible authority. |
 | — | Heliport safeguarding | Not implemented | — | Explicitly out of scope for this airport safeguarding plugin. |
@@ -199,7 +198,9 @@ mechanisms as follows:
   at 13 km and 30 km respectively, with explicit source/applicability metadata;
 - opt-in DfT PSRZ and PSCZ triangles at both landing thresholds, requiring an
   explicit 1,000 m or 1,500 m PSCZ selection rather than inferring the unresolved
-  exactly-45,000-movement case.
+  exactly-45,000-movement case; and
+- a fixed 6 km ARP-centred crane notification-zone layer, without candidate
+  assessment controls or outcomes.
 
 CAP 168 OLS remains owned by the existing protected-airspace ruleset and is not
 duplicated by this supplementary profile.

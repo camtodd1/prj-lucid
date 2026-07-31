@@ -26,6 +26,7 @@ class UkFrameworkProfileTests(unittest.TestCase):
                 "C": "Wildlife Consultation",
                 "D": "Wind Turbine Safeguarding",
                 "I": "Public Safety Zones",
+                "K": "Crane Notification Zone",
             },
         )
         self.assertNotIn("I", self.profile.guideline_group_definitions(options={}))
@@ -61,6 +62,11 @@ class UkFrameworkProfileTests(unittest.TestCase):
         self.assertEqual([zone["length_m"] for zone in short["zones"]], [500.0, 1000.0])
         self.assertEqual([zone["length_m"] for zone in long["zones"]], [500.0, 1500.0])
         self.assertTrue(short["enabled"])
+
+    def test_crane_notification_zone_is_fixed_at_six_kilometres(self):
+        params = self.profile.crane_notification_zone_parameters()
+        self.assertEqual(params["radius_m"], 6000.0)
+        self.assertEqual(params["geometry_status"], "indicative_default")
 
     def test_safeguarding_options_affect_run_fingerprint(self):
         base = {
