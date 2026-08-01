@@ -459,10 +459,21 @@ class Cap168OlsConstructionPolicy(ConventionalOlsConstructionPolicy):
         from .cap168 import ols_surfaces
 
         del profile, context
-        params = ols_surfaces.get_ols_params(arc_number, runway_type, surface_type)
+        normalized = "".join(character for character in str(surface_type).upper() if character.isalnum())
+        if normalized in {
+            "IHS",
+            "INNERHORIZONTAL",
+            "INNERHORIZONTALSURFACE",
+            "CONICAL",
+            "CONICALSURFACE",
+            "OHS",
+            "OUTERHORIZONTAL",
+            "OUTERHORIZONTALSURFACE",
+        }:
+            return None
+        params = ols_surfaces.get_runway_surface_params(arc_number, runway_type, surface_type)
         if not params or runway is None:
             return params
-        normalized = "".join(character for character in str(surface_type).upper() if character.isalnum())
         if normalized in {"APPROACH", "APPROACHSURFACE"}:
             resolved_sections = [dict(section) for section in params]
             if runway.is_wide_runway and resolved_sections:

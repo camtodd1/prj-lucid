@@ -414,24 +414,12 @@ OUTER_HORIZONTAL_RULES: Dict[str, Any] = {
 }
 
 
-def get_ihs_base_height() -> float:
-    """Return the sourced 45 m height; callers must honour its threshold datum."""
-
-    return float(IHS_HEIGHT_RULE["height_m"])
-
-
 def _ofz_params(mapping: Dict[Tuple[int, str], Dict[str, Any]], key: Tuple[int, str]):
     return lookup_detached(mapping, key)
 
 
-def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: str):
-    """Return source-loaded parameters that fit the existing lookup contract.
-
-    Airport-wide IHS/conical/OHS plan parameters are intentionally not exposed
-    through this legacy lookup because the constructor needs runway-length and
-    threshold-datum inputs first.  Their complete source rules remain available
-    above for the forthcoming constructor adaptation.
-    """
+def get_runway_surface_params(arc_num: int, runway_type_str: Optional[str], surface_type: str):
+    """Return detached source parameters for a runway-specific CAP 168 surface."""
 
     if not is_valid_arc_number(arc_num):
         LOGGER.warning("Invalid ARC Number %r for CAP 168 OLS lookup.", arc_num)
@@ -452,18 +440,6 @@ def get_ols_params(arc_num: int, runway_type_str: Optional[str], surface_type: s
         return _ofz_params(INNER_TRANSITIONAL_PARAMS, key)
     if surface in {"BALKEDLANDING", "BALKEDLANDINGSURFACE", "BAULKEDLANDING", "BAULKEDLANDINGSURFACE"}:
         return _ofz_params(BAULKED_LANDING_PARAMS, key)
-    if surface in {
-        "IHS",
-        "INNERHORIZONTAL",
-        "INNERHORIZONTALSURFACE",
-        "CONICAL",
-        "CONICALSURFACE",
-        "OHS",
-        "OUTERHORIZONTAL",
-        "OUTERHORIZONTALSURFACE",
-    }:
-        LOGGER.warning("CAP 168 %s requires constructor context not present in the legacy OLS lookup.", surface)
-        return None
     LOGGER.warning("Unknown CAP 168 OLS surface type %r requested.", surface_type)
     return None
 
@@ -484,6 +460,5 @@ __all__ = [
     "TOCS_PARAMS",
     "TAKE_OFF_CLIMB_CONSTRUCTION_RULES",
     "TRANSITIONAL_PARAMS",
-    "get_ihs_base_height",
-    "get_ols_params",
+    "get_runway_surface_params",
 ]

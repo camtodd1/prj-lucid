@@ -156,29 +156,20 @@ class OlsSourceValidationTests(unittest.TestCase):
         self.assertEqual(correction["printed_radius"], 250.0)
         self.assertEqual(correction["radius"], 2500.0)
         self.assertEqual(correction["correction_status"], "user_confirmed")
-        with self.assertLogs("rulesets.cap168.ols_surfaces", level="WARNING"):
-            self.assertIsNone(ols_surfaces.get_ols_params(2, "NI", "IHS"))
 
-    def test_cap168_profile_exposes_source_lookups_as_detached_values(self):
+    def test_cap168_runway_surface_lookups_are_detached_values(self):
         from rulesets.cap168 import ols_surfaces
-        from rulesets.cap168.profile import CAP168_PROFILE
 
-        approach = ols_surfaces.get_ols_params(1, "PA_I", "Approach")
+        approach = ols_surfaces.get_runway_surface_params(1, "PA_I", "Approach")
         self.assertIsNotNone(approach)
         self.assertEqual([section["length"] for section in approach], [3000.0, 2500.0, 9500.0])
         approach[0]["length"] = -1.0
-        self.assertEqual(ols_surfaces.get_ols_params(1, "PA_I", "Approach")[0]["length"], 3000.0)
+        self.assertEqual(ols_surfaces.get_runway_surface_params(1, "PA_I", "Approach")[0]["length"], 3000.0)
 
-        take_off = ols_surfaces.get_ols_params(3, None, "TOCS")
+        take_off = ols_surfaces.get_runway_surface_params(3, None, "TOCS")
         self.assertEqual(take_off["final_width"], 1200.0)
         self.assertEqual(take_off["heading_change_gt_15_final_width"], 1800.0)
-        self.assertEqual(ols_surfaces.get_ihs_base_height(), 45.0)
-
-        profile_approach = CAP168_PROFILE.ols_parameters(1, "PA_I", "Approach")
-        self.assertEqual(profile_approach[0]["length"], 3000.0)
-        profile_approach[0]["length"] = -1.0
-        self.assertEqual(CAP168_PROFILE.ols_parameters(1, "PA_I", "Approach")[0]["length"], 3000.0)
-        self.assertEqual(CAP168_PROFILE.ihs_base_height(), 45.0)
+        self.assertEqual(ols_surfaces.IHS_HEIGHT_RULE["height_m"], 45.0)
 
     def test_independent_mos139_elevations_and_contour_locations(self):
         case = self.manifest["analytical_cases"]["mos139_npa_code3"]

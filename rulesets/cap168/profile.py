@@ -4,14 +4,13 @@ from typing import Optional
 
 from ..base import RulesetProfile, capability_map
 from . import metadata
-from .services import ClassificationService, LightingService, MarkingService, OlsService, PhysicalService
+from .services import ClassificationService, LightingService, MarkingService, PhysicalService
 
 
 class Cap168RulesetProfile(RulesetProfile):
     """Public ruleset API for the UK CAA CAP 168 Edition 13 implementation."""
 
     classification = ClassificationService()
-    ols = OlsService()
     physical = PhysicalService()
     markings = MarkingService()
     lighting = LightingService()
@@ -95,12 +94,6 @@ class Cap168RulesetProfile(RulesetProfile):
 
     def stopway_parameters(self, runway_width: Optional[float] = None, stopway_length: Optional[float] = None):
         return self.physical.stopway_parameters(runway_width, stopway_length)
-
-    def ihs_base_height(self):
-        return self.ols.ihs_base_height()
-
-    def ols_parameters(self, arc_num: int, runway_type: Optional[str], surface_type: str):
-        return self.ols.parameters(arc_num, runway_type, surface_type)
 
     def taxiway_separation_offset(self, arc_num: int, arc_let: Optional[str], runway_type: Optional[str]):
         return self.physical.taxiway_separation_offset(arc_num, arc_let, runway_type)

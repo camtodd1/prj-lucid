@@ -5,7 +5,6 @@ from typing import Optional
 from . import classification as classification_policy
 from . import lighting as lighting_policy
 from . import markings as marking_policy
-from . import ols
 from . import physical_data
 from . import taxiway
 
@@ -22,14 +21,6 @@ class ClassificationService:
 
     def code_letter(self, wingspan_m: Optional[float]):
         return classification_policy.code_letter(wingspan_m)
-
-
-class OlsService:
-    def ihs_base_height(self):
-        return ols.ihs_base_height()
-
-    def parameters(self, arc_num: int, runway_type: Optional[str], surface_type: str):
-        return ols.ols_parameters(arc_num, runway_type, surface_type)
 
 
 class PhysicalService:
@@ -196,7 +187,6 @@ class LightingService:
 
 __all__ = [
     "ClassificationService",
-    "OlsService",
     "PhysicalService",
     "MarkingService",
     "LightingService",
