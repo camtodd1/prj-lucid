@@ -5,6 +5,7 @@ import os.path
 import math
 import re
 import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 
 # import functools # Not used directly
@@ -118,6 +119,17 @@ from .safeguarding_builder_dialog import SafeguardingBuilderDialog
 
 # Plugin-specific constant for logging
 PLUGIN_TAG = "SafeguardingBuilder"
+
+
+def _report_filename_prefix(recorder: Any) -> str:
+    """Return a sortable run ID, or a UTC timestamp when no run is tracked."""
+    run_id = str(getattr(recorder, "run_id", "") or "").strip()
+    if run_id and run_id != "untracked":
+        return run_id
+    started_at_utc = getattr(recorder, "started_at_utc", None)
+    if isinstance(started_at_utc, datetime):
+        return started_at_utc.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 OSM_AEROWAY_LAYER_NAMES = {
     "aerodrome": "Aerodrome",
@@ -2298,7 +2310,12 @@ class SafeguardingBuilder(
             return None
 
         safe_icao = self._sanitize_filename(icao_code or "UNKNOWN")
-        report_path = os.path.join(self.output_path, f"{safe_icao}_Critical_Runway_Information_Summary.md")
+        recorder = getattr(self, "_runtime_run_recorder", None)
+        report_prefix = self._sanitize_filename(_report_filename_prefix(recorder))
+        report_path = os.path.join(
+            self.output_path,
+            f"{report_prefix}_{safe_icao}_Critical_Runway_Information_Summary.md",
+        )
         try:
             summaries = build_runway_summaries(processed_runway_data_list)
             markdown = render_markdown_report(icao_code, None, summaries)
@@ -2331,10 +2348,10 @@ class SafeguardingBuilder(
         safe_icao = self._sanitize_filename(icao_code or "UNKNOWN")
         recorder = getattr(self, "_runtime_run_recorder", None)
         run_id = str(getattr(recorder, "run_id", None) or "untracked")
-        safe_run_id = self._sanitize_filename(run_id)
+        report_prefix = self._sanitize_filename(_report_filename_prefix(recorder))
         report_path = (
             report_directory
-            / f"{safe_icao}_OLS_Table_of_Values_{safe_run_id}.md"
+            / f"{report_prefix}_{safe_icao}_OLS_Table_of_Values.md"
         )
         try:
             baseline_builder = (
