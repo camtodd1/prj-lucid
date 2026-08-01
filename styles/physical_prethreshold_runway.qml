@@ -162,11 +162,32 @@
             <Option value="0,0" name="offset" type="QString"/>
             <Option value="3x:0,0,0,0,0,0" name="offset_map_unit_scale" type="QString"/>
             <Option value="MM" name="offset_unit" type="QString"/>
-            <Option value="255,255,255,255,rgb:1,1,1,1" name="outline_color" type="QString"/>
-            <Option value="solid" name="outline_style" type="QString"/>
-            <Option value="0.5" name="outline_width" type="QString"/>
+            <Option value="255,255,255,0,rgb:1,1,1,0" name="outline_color" type="QString"/>
+            <Option value="no" name="outline_style" type="QString"/>
+            <Option value="0" name="outline_width" type="QString"/>
             <Option value="RenderMetersInMapUnits" name="outline_width_unit" type="QString"/>
             <Option value="solid" name="style" type="QString"/>
+          </Option>
+          <data_defined_properties>
+            <Option type="Map">
+              <Option value="" name="name" type="QString"/>
+              <Option name="properties"/>
+              <Option value="collection" name="type" type="QString"/>
+            </Option>
+          </data_defined_properties>
+        </layer>
+        <layer locked="0" enabled="1" pass="1" class="SimpleLine" id="{eac1f7b-06a1-4e6c-a6fb-a0d29c99f1b0}">
+          <Option type="Map">
+            <Option value="0" name="align_dash_pattern" type="QString"/>
+            <Option value="square" name="capstyle" type="QString"/>
+            <Option value="0" name="dash_pattern_offset" type="QString"/>
+            <Option value="1" name="draw_inside_polygon" type="QString"/>
+            <Option value="miter" name="joinstyle" type="QString"/>
+            <Option value="255,255,255,255,rgb:1,1,1,1" name="line_color" type="QString"/>
+            <Option value="solid" name="line_style" type="QString"/>
+            <Option value="0.5" name="line_width" type="QString"/>
+            <Option value="RenderMetersInMapUnits" name="line_width_unit" type="QString"/>
+            <Option value="0" name="offset" type="QString"/>
           </Option>
           <data_defined_properties>
             <Option type="Map">
