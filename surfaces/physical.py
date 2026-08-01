@@ -859,6 +859,16 @@ class PhysicalGeometryMixin:
         if len(runway_contexts) < 2:
             return 0
 
+        stripe_widths = {}
+        for stripe_feature in physical_features.get("DetailedSideStripeMarking", []):
+            stripe_runway = stripe_feature.attribute("rwy")
+            try:
+                stripe_width = float(stripe_feature.attribute("wid_m") or 0.0)
+            except (TypeError, ValueError):
+                stripe_width = 0.0
+            if stripe_runway and stripe_width > 0.0:
+                stripe_widths.setdefault(stripe_runway, stripe_width)
+
         clipped_count = 0
         updated_features = []
         for feature in physical_features.get("DetailedSideStripeMarking", []):
@@ -870,11 +880,6 @@ class PhysicalGeometryMixin:
             geom = feature.geometry()
             if geom is None or geom.isEmpty():
                 continue
-
-            try:
-                stripe_width = float(feature.attribute("wid_m") or 0.0)
-            except (TypeError, ValueError):
-                stripe_width = 0.0
 
             interrupted_by = []
             for other_name, other_context in runway_contexts.items():
@@ -888,8 +893,9 @@ class PhysicalGeometryMixin:
                     continue
 
                 clipping_geom = other_geom
-                if stripe_width > 0.0:
-                    inset_geom = other_geom.buffer(-stripe_width, 8)
+                other_stripe_width = stripe_widths.get(other_name, 0.0)
+                if other_stripe_width > 0.0:
+                    inset_geom = other_geom.buffer(-other_stripe_width, 8)
                     if inset_geom is not None and not inset_geom.isEmpty():
                         if not inset_geom.isGeosValid():
                             inset_geom = inset_geom.makeValid()
@@ -917,7 +923,7 @@ class PhysicalGeometryMixin:
             self._append_feature_note(
                 feature,
                 "Interrupted at intersecting runway pavement under MOS 8.21 "
-                "with one stripe-width extension "
+                "with the intersecting runway's side-stripe-width extension "
                 f"by {', '.join(interrupted_by)}.",
             )
             clipped_count += 1
