@@ -64,7 +64,7 @@ class UkSafeguardingMixin:
             fields,
             [feature],
             layer_group,
-            "Default Polygon",
+            "UK Crane Notification Zone",
         ) is not None
 
 

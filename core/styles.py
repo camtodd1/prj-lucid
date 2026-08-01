@@ -34,6 +34,7 @@ DEFAULT_STYLE_MAP = {
     "UK Wind Turbine Consultation": "nasf_wind_turbine.qml",
     "UK PSRZ": "nasf_public_safety_area.qml",
     "UK PSCZ": "nasf_public_safety_area.qml",
+    "UK Crane Notification Zone": "uk_crane_notification.qml",
     "LCZ A": "nasf_lighting_a.qml",
     "LCZ B": "nasf_lighting_b.qml",
     "LCZ C": "nasf_lighting_c.qml",
