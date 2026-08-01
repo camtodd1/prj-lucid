@@ -292,6 +292,23 @@ class OutputOptionsMixin:
         self._update_comparison_ols_ruleset_items()
         self._sync_legacy_ols_policy()
 
+    def _on_design_ruleset_selection_changed(self, *_args) -> None:
+        """Keep the default baseline OLS paired with the selected design standard."""
+        design_combo = getattr(self, "ruleset_combo", None)
+        baseline_combo = getattr(self, "baseline_ols_ruleset_combo", None)
+        if design_combo is None or baseline_combo is None:
+            return
+
+        design_id = str(design_combo.currentData() or DEFAULT_RULESET_ID)
+        baseline_index = baseline_combo.findData(design_id)
+        if baseline_index >= 0 and design_id in getattr(self, "_available_ols_ruleset_ids", set()):
+            blocked = baseline_combo.blockSignals(True)
+            baseline_combo.setCurrentIndex(baseline_index)
+            baseline_combo.blockSignals(blocked)
+        self._update_comparison_ols_ruleset_items()
+        self._sync_legacy_ols_policy()
+        self._update_ols_workflow_ui()
+
     def _toggle_ols_family_help(self, expanded: bool) -> None:
         """Show Annex 14 terminology only when the user asks for it."""
         button = getattr(self, "toolButtonOlsFamilyHelp", None)
@@ -426,6 +443,27 @@ class OutputOptionsMixin:
     def _update_ols_workflow_ui(self, *_args, dependency_status=None, runway_count=None):
         """Apply mode-specific guidance, controls, and inline readiness state."""
         baseline_id, comparison_id = self._current_ols_ruleset_ids()
+        design_combo = getattr(self, "ruleset_combo", None)
+        design_id = (
+            str(design_combo.currentData() or DEFAULT_RULESET_ID)
+            if design_combo is not None
+            else DEFAULT_RULESET_ID
+        )
+        baseline_label = getattr(self, "label_baselineOlsRuleset", None)
+        if baseline_label is not None:
+            matching = baseline_id == design_id
+            baseline_label.setText(
+                self.tr("Baseline (matching OLS)")
+                if matching
+                else self.tr("Baseline")
+            )
+            baseline_label.setToolTip(
+                self.tr(
+                    "Baseline OLS is paired with the selected design standard."
+                    if matching
+                    else "Baseline OLS is independently selected from the design standard."
+                )
+            )
         baseline_profile = get_ruleset_profile(baseline_id)
         comparison_profile = get_ruleset_profile(comparison_id) if comparison_id else None
         modernised_id = "icao_annex14_vol1_modernised_ofs_oes"

@@ -49,7 +49,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertTrue(self.dialog.label_protected_airspace_policy.isHidden())
         self.assertTrue(self.dialog.protected_airspace_policy_combo.isHidden())
         self.assertEqual(self.dialog.groupBox_olsWorkflow.title(), "OLS rulesets")
-        self.assertEqual(self.dialog.label_baselineOlsRuleset.text(), "Baseline")
+        self.assertEqual(
+            self.dialog.label_baselineOlsRuleset.text(),
+            "Baseline (matching OLS)",
+        )
         self.assertEqual(self.dialog.label_comparisonOlsRuleset.text(), "Comparison")
         self.assertIsNone(
             self.dialog.findChild(QtWidgets.QLabel, "label_olsModeDescription")
@@ -90,6 +93,22 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 QtWidgets.QGroupBox,
                 "groupBox_controllingOls",
             )
+        )
+
+    def test_baseline_follows_design_standard_and_shows_pairing_label(self):
+        design = self.dialog.ruleset_combo
+        cap168_index = design.findData("uk_caa_cap168_edition_13")
+        self.assertGreaterEqual(cap168_index, 0)
+
+        design.setCurrentIndex(cap168_index)
+
+        self.assertEqual(
+            self.dialog.baseline_ols_ruleset_combo.currentData(),
+            "uk_caa_cap168_edition_13",
+        )
+        self.assertEqual(
+            self.dialog.label_baselineOlsRuleset.text(),
+            "Baseline (matching OLS)",
         )
 
     def test_design_standard_excludes_modernised_ols_profile(self):

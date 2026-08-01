@@ -1549,6 +1549,9 @@ class SafeguardingBuilderDialog(
         self.groupBox_ruleset = ruleset_group
         self.label_protected_airspace_policy = protected_airspace_label
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
+        self.ruleset_combo.currentIndexChanged.connect(
+            self._on_design_ruleset_selection_changed
+        )
         self.protected_airspace_policy_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.framework_combo.currentIndexChanged.connect(self._on_framework_changed)
         self.uk_psz_applicable.toggled.connect(self._on_uk_psz_toggled)
