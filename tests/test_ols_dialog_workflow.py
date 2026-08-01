@@ -51,7 +51,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(self.dialog.groupBox_olsWorkflow.title(), "OLS rulesets")
         self.assertEqual(
             self.dialog.label_baselineOlsRuleset.text(),
-            "Baseline (matching OLS)",
+            "Baseline (design standard pairing)",
         )
         self.assertEqual(self.dialog.label_comparisonOlsRuleset.text(), "Comparison")
         self.assertIsNone(
@@ -108,7 +108,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertEqual(
             self.dialog.label_baselineOlsRuleset.text(),
-            "Baseline (matching OLS)",
+            "Baseline (design standard pairing)",
         )
 
     def test_design_standard_excludes_modernised_ols_profile(self):

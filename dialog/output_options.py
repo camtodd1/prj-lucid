@@ -453,7 +453,7 @@ class OutputOptionsMixin:
         if baseline_label is not None:
             matching = baseline_id == design_id
             baseline_label.setText(
-                self.tr("Baseline (matching OLS)")
+                self.tr("Baseline (design standard pairing)")
                 if matching
                 else self.tr("Baseline")
             )
