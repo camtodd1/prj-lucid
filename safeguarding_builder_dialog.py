@@ -107,10 +107,10 @@ class SafeguardingBuilderDialog(
     CnsTableMixin,
     AglOptionsMixin,
     PersistenceMixin,
-    QtWidgets.QDialog,
+    QtWidgets.QWidget,
     FORM_CLASS,
 ):
-    """Dialog class for user input."""
+    """Safeguarding Builder form, suitable for hosting in a QGIS dock."""
 
     def __init__(self, parent=None):
         """Constructor."""

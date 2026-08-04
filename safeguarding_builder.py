@@ -23,6 +23,7 @@ from qgis.PyQt.QtCore import (  # type: ignore
 from qgis.PyQt.QtGui import QIcon  # type: ignore
 from qgis.PyQt.QtWidgets import (  # type: ignore
     QAction,
+    QDockWidget,
     QMessageBox,
     QPushButton,
 )
@@ -224,6 +225,7 @@ class SafeguardingBuilder(
         self.actions: List[QAction] = []
         self.menu = self.tr("&Safeguarding Builder")
         self.dlg: Optional[SafeguardingBuilderDialog] = None
+        self.dock: Optional[QDockWidget] = None
         self.style_map: Dict[str, str] = {}
         self.reference_elevation_datum: Optional[float] = None
         self.arp_elevation_amsl: Optional[float] = None
@@ -638,23 +640,23 @@ class SafeguardingBuilder(
         for action in self.actions:
             self.iface.removePluginMenu(self.tr("&Safeguarding Builder"), action)
             self.iface.removeToolBarIcon(action)
-        if self.dlg:
+        if self.dock:
             try:
-                self.dlg.finished.disconnect(self.dialog_finished)
-            except TypeError:
-                pass
-            try:
-                self.dlg.deleteLater()
+                self.iface.removeDockWidget(self.dock)
             except Exception as e:
-                QgsMessageLog.logMessage(f"Error cleaning dialog: {e}", PLUGIN_TAG, level=Qgis.Warning)
-            self.dlg = None
+                QgsMessageLog.logMessage(
+                    f"Error removing dock: {e}", PLUGIN_TAG, level=Qgis.Warning
+                )
+            self.dock.deleteLater()
+        self.dock = None
+        self.dlg = None
         self.successfully_generated_layers = []
 
     def run(self):
-        """Shows the plugin dialog or brings it to front if already open."""
-        if self.dlg is not None and self.dlg.isVisible():
-            self.dlg.raise_()
-            self.dlg.activateWindow()
+        """Show the Safeguarding Builder dock or bring it to the front."""
+        if self.dock is not None:
+            self.dock.show()
+            self.dock.raise_()
             return
 
         self.successfully_generated_layers = []  # Reset layers list
@@ -662,20 +664,33 @@ class SafeguardingBuilder(
         if self.dlg is None:
             parent_window = self.iface.mainWindow()
             try:
-                self.dlg = SafeguardingBuilderDialog(parent=parent_window)
+                self.dock = QDockWidget(self.tr("Safeguarding Builder"), parent_window)
+                self.dock.setObjectName("SafeguardingBuilderDock")
+                self.dock.setAllowedAreas(
+                    Qt.DockWidgetArea.LeftDockWidgetArea
+                    | Qt.DockWidgetArea.RightDockWidgetArea
+                )
+                self.dlg = SafeguardingBuilderDialog(parent=self.dock)
+                self.dock.setWidget(self.dlg)
+                self.iface.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, self.dock)
             except Exception as e:
                 QgsMessageLog.logMessage(
-                    f"Error creating dialog: {e}\n{traceback.format_exc()}",
+                    f"Error creating dock: {e}\n{traceback.format_exc()}",
                     PLUGIN_TAG,
                     level=Qgis.Critical,
                 )
                 QMessageBox.critical(
                     parent_window,
-                    self.tr("Dialog Error"),
-                    self.tr("Could not create dialog:\n\n{error}\n\nCheck logs for the full traceback.").format(
-                        error=e
-                    ),
+                    self.tr("Dock Error"),
+                    self.tr(
+                        "Could not create the Safeguarding Builder dock:\n\n"
+                        "{error}\n\nCheck logs for the full traceback."
+                    ).format(error=e),
                 )
+                if self.dock is not None:
+                    self.dock.deleteLater()
+                self.dock = None
+                self.dlg = None
                 return
 
             # Connect Signals
@@ -695,7 +710,9 @@ class SafeguardingBuilder(
                     self.tr("UI Error"),
                     self.tr("Main 'Generate' button is missing from the dialog. Plugin cannot function."),
                 )
-                self.dlg.deleteLater()  # Clean up the partially created dialog
+                self.iface.removeDockWidget(self.dock)
+                self.dock.deleteLater()
+                self.dock = None
                 self.dlg = None
                 return
 
@@ -703,11 +720,8 @@ class SafeguardingBuilder(
             if osm_button:
                 osm_button.clicked.connect(self.download_osm_aeroway)
 
-            # The dialog's built-in close mechanisms (X button, Esc key)
-            # will emit the finished signal.
-            self.dlg.finished.connect(self.dialog_finished)
-
-        self.dlg.show()
+        self.dock.show()
+        self.dock.raise_()
 
     def download_osm_aeroway(self):
         """Download aeroway-tagged OSM elements within 5 km of the entered ARP."""
@@ -1073,11 +1087,6 @@ class SafeguardingBuilder(
         elif target_crs.isValid() and project.crs() != target_crs:
             project.setCrs(target_crs)
         return loaded
-
-    def dialog_finished(self, result: int):
-        """Slot connected to the dialog's finished signal for cleanup."""
-        del result
-        self.dlg = None
 
     # ============================================================
     # Core Processing Logic
@@ -2009,12 +2018,9 @@ class SafeguardingBuilder(
 
             if self.successfully_generated_layers:
                 if self.dlg:
-                    self._set_processing_status(
-                        self.tr("Generation complete. Closing dialog..."),
-                        step=self._processing_total_steps,
-                        total_steps=self._processing_total_steps,
+                    self._clear_processing_status(
+                        final_message=self.tr("Generation complete.")
                     )
-                    self.dlg.accept()
             else:
                 self._clear_processing_status()
 
