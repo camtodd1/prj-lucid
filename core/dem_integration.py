@@ -34,7 +34,9 @@ OPEN_TOPOGRAPHY_ALGORITHM_ID = (
 )
 CONTOUR_POLYGON_ALGORITHM_ID = "gdal:contour_polygon"
 GA_WCS_TRANSFER_TIMEOUT_MS = 120_000
-GA_WCS_TILE_SIZE = 4000
+# ArcGIS advertises 4096 px, but large float GeoTIFF coverages fail well below
+# that image limit. Keep each WCS response near 16 MB uncompressed.
+GA_WCS_TILE_SIZE = 2000
 # Temporarily disabled to permit oversized WCS requests during terrain testing.
 GA_MAX_DOWNLOAD_PIXELS: Optional[int] = None
 

@@ -164,7 +164,7 @@ class DemIntegrationTests(unittest.TestCase):
 
         urls = build_ga_wcs_urls(layer, "ga_lidar_5m")
 
-        self.assertEqual(len(urls), 4)
+        self.assertEqual(len(urls), 12)
 
     def test_processing_dialog_receives_the_selected_layer_as_extent(self):
         layer = QgsVectorLayer("Polygon?crs=EPSG:7856", "DEM extent", "memory")
