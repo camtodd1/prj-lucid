@@ -88,14 +88,21 @@ class DemToolsMixin:
         self.comboBox_dem_extent_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         self.comboBox_dem_extent_layer.setVisible(False)
         self.comboBox_dem_extent_layer.setFixedHeight(26)
+        self.widget_dem_extent_row = QtWidgets.QWidget(group)
+        self.widget_dem_extent_row.setObjectName("widget_dem_extent_row")
+        extent_row_layout = QtWidgets.QHBoxLayout(self.widget_dem_extent_row)
+        extent_row_layout.setContentsMargins(0, 0, 0, 0)
+        extent_row_layout.setSpacing(10)
+        extent_row_layout.addWidget(self.frame_dem_extent_auto, 1)
+        extent_row_layout.addWidget(self.comboBox_dem_extent_layer, 1)
+        extent_row_layout.addWidget(self.pushButton_dem_extent_override)
         group_layout.addWidget(extent_label, 2, 0)
-        group_layout.addWidget(self.frame_dem_extent_auto, 2, 1)
-        group_layout.addWidget(self.comboBox_dem_extent_layer, 2, 1)
         group_layout.addWidget(
-            self.pushButton_dem_extent_override,
+            self.widget_dem_extent_row,
             2,
+            1,
+            1,
             2,
-            QtCore.Qt.AlignmentFlag.AlignRight,
         )
 
         self.label_dem_tool_status = QtWidgets.QLabel()

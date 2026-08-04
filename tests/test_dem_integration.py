@@ -66,6 +66,7 @@ class DemIntegrationTests(unittest.TestCase):
             self.assertEqual(dialog.pushButton_DownloadDem.height(), 32)
             self.assertEqual(dialog.pushButton_CreateDemContours.height(), 32)
             self.assertEqual(dialog.pushButton_dem_extent_override.width(), 126)
+            self.assertEqual(dialog.widget_dem_extent_row.layout().spacing(), 10)
             self.assertEqual(dialog.pushButton_DownloadDem.width(), 198)
             self.assertEqual(dialog.pushButton_CreateDemContours.width(), 198)
             self.assertEqual(dialog.groupBox_dem_tools.layout().columnMinimumWidth(0), 200)
