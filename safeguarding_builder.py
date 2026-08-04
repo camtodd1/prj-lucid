@@ -131,6 +131,11 @@ def _report_filename_prefix(recorder: Any) -> str:
         return started_at_utc.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     return datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
+
+PERMANENT_REPORT_DIRECTORY = Path(
+    "/Users/camtodd_to70/GitHub/prj-lucid/output test data"
+)
+
 OSM_AEROWAY_LAYER_NAMES = {
     "aerodrome": "Aerodrome",
     "aerodrome_marking": "Aerodrome Markings",
@@ -1371,6 +1376,7 @@ class SafeguardingBuilder(
         self.arp_elevation_amsl = None
         self.output_mode = "memory"
         self.output_path = None
+        self._last_ols_table_report_path = None
         self.output_format_driver = None
         self.output_format_extension = None
         self.contour_intervals = {}
@@ -2341,10 +2347,7 @@ class SafeguardingBuilder(
         if self.output_mode == "file" and self.output_path:
             report_directory = Path(self.output_path)
         else:
-            report_directory = (
-                Path(QgsProcessingUtils.tempFolder())
-                / "safeguarding_builder_reports"
-            )
+            report_directory = PERMANENT_REPORT_DIRECTORY
         safe_icao = self._sanitize_filename(icao_code or "UNKNOWN")
         recorder = getattr(self, "_runtime_run_recorder", None)
         run_id = str(getattr(recorder, "run_id", None) or "untracked")
@@ -3917,6 +3920,10 @@ class SafeguardingBuilder(
                 output_summary = "memory layers created and left unchecked"
             else:
                 output_summary = self.output_mode or "output complete"
+
+            report_path = getattr(self, "_last_ols_table_report_path", None)
+            if report_path:
+                output_summary += f"; OLS table report saved to {report_path}"
 
             final_user_message = (
                 f"Processing complete for {icao_code}. "
