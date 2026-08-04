@@ -230,7 +230,7 @@ class OsmAerowayTests(unittest.TestCase):
                 dialog.pushButton_DownloadOsmAeroway.text(),
                 "Import airport map features",
             )
-            self.assertEqual(dialog.groupBox_ARP.title(), "Airport location")
+            self.assertEqual(dialog.groupBox_ARP.title(), "Aerodrome Reference Point")
             self.assertEqual(
                 dialog.groupBox_AirportMap.title(),
                 "Airport map",

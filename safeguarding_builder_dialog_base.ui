@@ -330,7 +330,7 @@
        <item>
        <widget class="QGroupBox" name="groupBox_ARP">
          <property name="title">
-          <string>Airport location</string>
+          <string>Aerodrome Reference Point</string>
          </property>
          <layout class="QGridLayout" name="gridLayout_arp">
          <item row="0" column="0" colspan="6">

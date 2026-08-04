@@ -537,7 +537,7 @@ class SafeguardingBuilderDialog(
         }
         """
         airport_group_titles = {
-            "groupBox_ARP": "Airport location",
+            "groupBox_ARP": "Aerodrome Reference Point",
             "groupBox_AirportMap": "Airport map",
             "groupBox_MET": "Weather station (optional)",
         }
@@ -877,17 +877,20 @@ class SafeguardingBuilderDialog(
             ("tab_cns", "CNS"),
             ("tab_ols", "OLS"),
             ("tab_lighting", "Lighting"),
-            ("tab_output", "Output"),
             ("tab_terrain", "Terrain"),
             ("tab_airport_map", "Airport Map"),
+            ("tab_output", "Output"),
         ]
         tab_widget = getattr(self, "tabWidget_workflow", None)
         if tab_widget is not None:
-            for tab_name, tab_text in self._workflow_tab_labels:
+            tab_bar = tab_widget.tabBar()
+            for target_index, (tab_name, tab_text) in enumerate(self._workflow_tab_labels):
                 tab_page = getattr(self, tab_name, None)
                 index = tab_widget.indexOf(tab_page) if tab_page is not None else -1
                 if index >= 0:
-                    tab_widget.setTabText(index, tab_text)
+                    if index != target_index:
+                        tab_bar.moveTab(index, target_index)
+                    tab_widget.setTabText(target_index, tab_text)
             tab_widget.currentChanged.connect(self._sync_workflow_context)
 
     def _workflow_tab_specs(self) -> List[Dict[str, Any]]:
@@ -914,16 +917,16 @@ class SafeguardingBuilderDialog(
                 "summary": "Add airfield and approach lighting when needed.",
             },
             {
-                "tab": "tab_output",
-                "summary": "Choose where generated layers will be saved.",
-            },
-            {
                 "tab": "tab_terrain",
                 "summary": "Download terrain for the OLS area, then create elevation polygons.",
             },
             {
                 "tab": "tab_airport_map",
                 "summary": "Import airport features from OpenStreetMap around the ARP.",
+            },
+            {
+                "tab": "tab_output",
+                "summary": "Choose where generated layers will be saved.",
             },
         ]
 
