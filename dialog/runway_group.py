@@ -77,9 +77,11 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
                 border-radius: 4px;
                 background: #ffffff;
             }
-            QLineEdit, QComboBox {
+            QLineEdit {
                 min-height: 28px;
                 max-height: 28px;
+            }
+            QLineEdit, QComboBox {
                 padding-left: 6px;
                 padding-right: 6px;
                 background: #ffffff;

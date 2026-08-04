@@ -300,6 +300,8 @@ class CnsTableMixin:
             if hasattr(self, "update_dialog_status"):
                 combo_type.currentIndexChanged.connect(self.update_dialog_status)
             cns_table.setCellWidget(row_position, 0, combo_type)
+            if hasattr(self, "_apply_workflow_control_heights"):
+                self._apply_workflow_control_heights(cns_table)
 
             item_x = QTableWidgetItem("")
             item_x.setToolTip("Enter Easting or X coordinate (in Project CRS).")

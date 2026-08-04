@@ -1862,6 +1862,31 @@ class SafeguardingBuilderDialog(
         if hasattr(self, "doubleSpinBoxContourDefault"):
             self.doubleSpinBoxContourDefault.setMaximumWidth(160)
 
+        self._apply_workflow_control_heights()
+
+    def _apply_workflow_control_heights(self, root=None) -> None:
+        """Keep routine workflow controls aligned while preserving commit actions."""
+        root = root or getattr(self, "tabWidget_workflow", None)
+        if root is None:
+            return
+        commit_actions = {
+            "pushButton_DownloadOsmAeroway",
+            "pushButton_DownloadDem",
+            "pushButton_CreateDemContours",
+        }
+        for widget_type in (
+            QtWidgets.QComboBox,
+            QtWidgets.QAbstractSpinBox,
+            QtWidgets.QPushButton,
+        ):
+            for widget in root.findChildren(widget_type):
+                height = 36 if widget.objectName() in commit_actions else 32
+                widget.setFixedHeight(height)
+
+        generate_button = getattr(self, "pushButton_Generate", None)
+        if generate_button is not None:
+            generate_button.setFixedHeight(38)
+
     def _apply_status_chip(
         self,
         label: QtWidgets.QLabel,
@@ -3021,6 +3046,7 @@ class SafeguardingBuilderDialog(
         self.scroll_area_layout.addWidget(new_group)
 
         self._runway_groups[runway_index] = new_group
+        self._apply_workflow_control_heights(new_group)
         self._update_dialog_height()
         self.update_runway_calculations(runway_index)  # Update placeholders
         self.update_dialog_status()

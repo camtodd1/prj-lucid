@@ -287,6 +287,8 @@ class AglOptionsMixin:
 
         table.setCellWidget(row, 0, runway_combo)
         table.setCellWidget(row, 1, end_combo)
+        if hasattr(self, "_apply_workflow_control_heights"):
+            self._apply_workflow_control_heights(table)
         table.setItem(row, 2, QTableWidgetItem(""))
         table.setItem(row, 3, QTableWidgetItem(""))
 
