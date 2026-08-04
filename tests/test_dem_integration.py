@@ -19,6 +19,7 @@ from safeguarding_builder.core.dem_integration import (  # noqa: E402
     apply_elevation_polygon_style,
     build_ga_wcs_url,
     create_elevation_polygons,
+    create_ols_square_extent_layer,
     download_ga_dem,
     elevation_polygon_output_path,
     open_topography_dialog,
@@ -55,7 +56,7 @@ class DemIntegrationTests(unittest.TestCase):
             self.assertIs(dialog.selected_dem_extent_layer(), layer)
             self.assertTrue(dialog.pushButton_DownloadDem.isEnabled())
             self.assertEqual(dialog.selected_dem_source(), "ga_best")
-            self.assertIn("30 m terrain fallback", dialog.label_dem_tool_status.text())
+            self.assertIn("falls back to 30 m", dialog.label_dem_tool_status.text())
 
             self.assertFalse(dialog.pushButton_CreateDemContours.isEnabled())
             dialog.set_downloaded_dem(layer)
@@ -86,6 +87,35 @@ class DemIntegrationTests(unittest.TestCase):
         self.assertEqual(query["format"], ["GeoTIFF"])
         self.assertEqual(query["crs"], ["EPSG:4283"])
         self.assertEqual(query["bbox"], ["138.500000000000,-34.970000000000,138.570000000000,-34.910000000000"])
+
+    def test_automatic_ols_extent_is_the_smallest_enclosing_square(self):
+        project = QgsProject.instance()
+        previous_crs = project.crs()
+        layer_crs = QgsVectorLayer("Polygon?crs=EPSG:7856", "crs", "memory").crs()
+        project.setCrs(layer_crs)
+        main_group = project.layerTreeRoot().addGroup("YPAD Safeguarding Builder")
+        ols_group = main_group.addGroup("04 Obstacle Limitation Surfaces")
+        for name, wkt in (
+            ("west", "POLYGON ((0 0, 100 0, 100 50, 0 50, 0 0))"),
+            ("east", "POLYGON ((200 50, 300 50, 300 100, 200 100, 200 50))"),
+        ):
+            layer = QgsVectorLayer("Polygon?crs=EPSG:7856", name, "memory")
+            feature = QgsFeature(layer.fields())
+            feature.setGeometry(QgsGeometry.fromWkt(wkt))
+            layer.dataProvider().addFeature(feature)
+            layer.updateExtents()
+            project.addMapLayer(layer, False)
+            ols_group.addLayer(layer)
+
+        extent_layer = create_ols_square_extent_layer("YPAD")
+        extent = extent_layer.extent()
+
+        self.assertAlmostEqual(extent.width(), 300.0)
+        self.assertAlmostEqual(extent.height(), 300.0)
+        self.assertAlmostEqual(extent.xMinimum(), 0.0)
+        self.assertAlmostEqual(extent.yMinimum(), -100.0)
+        project.layerTreeRoot().removeChildNode(main_group)
+        project.setCrs(previous_crs)
 
     def test_ga_dem_download_saves_geotiff_and_metadata(self):
         layer = QgsVectorLayer("Polygon?crs=EPSG:4326", "DEM extent", "memory")

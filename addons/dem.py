@@ -18,6 +18,7 @@ from qgis.core import (  # type: ignore
 from ..core.dem_integration import (
     apply_elevation_polygon_style,
     create_elevation_polygons,
+    create_ols_square_extent_layer,
     download_ga_dem,
     elevation_polygon_output_path,
     open_topography_dialog,
@@ -32,7 +33,15 @@ class DemIntegrationMixin:
         """Download terrain from the selected optional source."""
         if self.dlg is None:
             return
-        extent_layer = self.dlg.selected_dem_extent_layer()
+        try:
+            extent_layer = (
+                self.dlg.selected_dem_extent_layer()
+                or create_ols_square_extent_layer(self._terrain_airport_code())
+            )
+        except ValueError as exc:
+            self.dlg.set_dem_contour_status(str(exc), error=True)
+            QMessageBox.warning(self.dlg, self.tr("OLS extent unavailable"), str(exc))
+            return
         source_key = self.dlg.selected_dem_source()
         if source_key != "open_topography":
             self._download_ga_terrain(extent_layer, source_key)

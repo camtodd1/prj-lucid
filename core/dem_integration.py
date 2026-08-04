@@ -13,13 +13,19 @@ from qgis.core import (  # type: ignore
     QgsCategorizedSymbolRenderer,
     QgsCoordinateReferenceSystem,
     QgsCoordinateTransform,
+    QgsFeature,
     QgsFillSymbol,
+    QgsGeometry,
+    QgsLayerTreeGroup,
     QgsProject,
+    QgsRectangle,
     QgsRendererCategory,
     QgsRasterBandStats,
     QgsRasterLayer,
     QgsVectorLayer,
 )
+
+from . import output_structure
 
 
 OPEN_TOPOGRAPHY_ALGORITHM_ID = (
@@ -133,6 +139,92 @@ def ga_extent_bbox(extent_layer: Any, target_crs: str) -> Tuple[float, float, fl
         float(extent.xMaximum()),
         float(extent.yMaximum()),
     )
+
+
+def ols_square_extent(
+    airport_code: str = "",
+) -> Tuple[QgsRectangle, QgsCoordinateReferenceSystem, int]:
+    """Return the smallest axis-aligned square containing all generated OLS layers."""
+    root = QgsProject.instance().layerTreeRoot()
+    main_group = None
+    code = str(airport_code or "").strip().upper()
+    if code:
+        main_group = root.findGroup(f"{code} Safeguarding Builder")
+    if main_group is None:
+        candidates = [
+            child
+            for child in root.children()
+            if isinstance(child, QgsLayerTreeGroup)
+            and child.name().endswith(" Safeguarding Builder")
+        ]
+        if len(candidates) == 1:
+            main_group = candidates[0]
+    if main_group is None:
+        raise ValueError("Generate OLS layers before downloading terrain.")
+
+    ols_group = main_group.findGroup(output_structure.PROTECTED_AIRSPACE)
+    if ols_group is None:
+        raise ValueError("The generated OLS layer group could not be found.")
+    layers = [
+        node.layer()
+        for node in ols_group.findLayers()
+        if node.layer() is not None
+        and node.layer().isValid()
+        and not node.layer().extent().isEmpty()
+    ]
+    if not layers:
+        raise ValueError("The generated OLS group contains no layers with an extent.")
+
+    project_crs = QgsProject.instance().crs()
+    target_crs = project_crs if project_crs.isValid() and not project_crs.isGeographic() else None
+    if target_crs is None:
+        target_crs = next(
+            (layer.crs() for layer in layers if layer.crs().isValid() and not layer.crs().isGeographic()),
+            layers[0].crs(),
+        )
+    combined = None
+    for layer in layers:
+        extent = QgsRectangle(layer.extent())
+        if layer.crs() != target_crs:
+            transform = QgsCoordinateTransform(
+                layer.crs(), target_crs, QgsProject.instance()
+            )
+            extent = transform.transformBoundingBox(extent)
+        if combined is None:
+            combined = QgsRectangle(extent)
+        else:
+            combined.combineExtentWith(extent)
+    if combined is None or combined.isEmpty():
+        raise ValueError("The generated OLS layers have no usable combined extent.")
+
+    side = max(combined.width(), combined.height())
+    if side <= 0:
+        raise ValueError("The generated OLS extent has no area.")
+    centre = combined.center()
+    half_side = side / 2.0
+    square = QgsRectangle(
+        centre.x() - half_side,
+        centre.y() - half_side,
+        centre.x() + half_side,
+        centre.y() + half_side,
+    )
+    return square, target_crs, len(layers)
+
+
+def create_ols_square_extent_layer(airport_code: str = "") -> QgsVectorLayer:
+    """Create an in-memory polygon representing the automatic OLS terrain extent."""
+    square, crs, layer_count = ols_square_extent(airport_code)
+    layer = QgsVectorLayer(
+        f"Polygon?crs={crs.authid()}",
+        "Automatic OLS Terrain Extent",
+        "memory",
+    )
+    feature = QgsFeature(layer.fields())
+    feature.setGeometry(QgsGeometry.fromRect(square))
+    layer.dataProvider().addFeature(feature)
+    layer.updateExtents()
+    layer.setCustomProperty("safeguarding_builder/ols_extent_layer_count", layer_count)
+    return layer
 
 
 def build_ga_wcs_url(extent_layer: Any, source_key: str) -> str:
@@ -338,11 +430,13 @@ __all__ = [
     "build_ga_wcs_url",
     "contour_polygon_algorithm",
     "create_elevation_polygons",
+    "create_ols_square_extent_layer",
     "download_ga_dem",
     "elevation_polygon_output_path",
     "ga_dem_source",
     "ga_extent_bbox",
     "open_topography_algorithm",
     "open_topography_dialog",
+    "ols_square_extent",
     "raster_has_terrain_values",
 ]

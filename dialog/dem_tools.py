@@ -63,7 +63,7 @@ class DemToolsMixin:
 
         extent_row = QtWidgets.QHBoxLayout()
         extent_row.setSpacing(8)
-        extent_label = QtWidgets.QLabel("Extent layer")
+        extent_label = QtWidgets.QLabel("Extent override")
         extent_label.setObjectName("label_dem_extent_layer")
         extent_row.addWidget(extent_label)
 
@@ -260,26 +260,14 @@ class DemToolsMixin:
             )
             return
 
-        if self.selected_dem_extent_layer() is None:
-            status.setText("Select a vector layer to define the download extent.")
-            status.setStyleSheet("color: #56616d;")
-            button.setEnabled(False)
-            button.setToolTip("Select an extent layer first.")
-            self._set_dem_workflow_state(
-                "Select layer",
-                "optional",
-                "Select a vector layer to define the optional DEM download extent.",
-            )
-            return
-
         if is_open_topography:
             status.setText(
-                "Ready. The selected layer extent will be pre-filled in the downloader."
+                "Ready. Uses the automatic square OLS extent unless an override is selected."
             )
-            tooltip = "Open the OpenTopography downloader with this layer as its extent."
+            tooltip = "Open the downloader using the automatic or overridden extent."
         elif source_key == "ga_best":
             status.setText(
-                "Ready. GA 5 m LiDAR will be used where available, with 30 m terrain fallback."
+                "Ready. Uses the smallest square covering all OLS layers; GA 5 m falls back to 30 m."
             )
             tooltip = "Download the best available GA bare-earth DEM for this extent."
         else:
