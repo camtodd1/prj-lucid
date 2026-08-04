@@ -1,14 +1,23 @@
 """Optional DEM download and elevation-polygon processing helpers."""
 
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Dict, Optional, Tuple
+from urllib.parse import urlencode
 
+from qgis.PyQt.QtCore import QByteArray, QSaveFile, QUrl  # type: ignore
 from qgis.PyQt.QtGui import QColor  # type: ignore
+from qgis.PyQt.QtNetwork import QNetworkRequest  # type: ignore
 from qgis.core import (  # type: ignore
     QgsApplication,
+    QgsBlockingNetworkRequest,
     QgsCategorizedSymbolRenderer,
+    QgsCoordinateReferenceSystem,
+    QgsCoordinateTransform,
     QgsFillSymbol,
+    QgsProject,
     QgsRendererCategory,
+    QgsRasterBandStats,
+    QgsRasterLayer,
     QgsVectorLayer,
 )
 
@@ -17,6 +26,43 @@ OPEN_TOPOGRAPHY_ALGORITHM_ID = (
     "OTDEMDownloader:OpenTopography DEM Downloader"
 )
 CONTOUR_POLYGON_ALGORITHM_ID = "gdal:contour_polygon"
+GA_WCS_TRANSFER_TIMEOUT_MS = 120_000
+GA_MAX_DOWNLOAD_PIXELS = 25_000_000
+
+GA_DEM_SOURCES: Dict[str, Dict[str, Any]] = {
+    "ga_lidar_5m": {
+        "label": "GA LiDAR bare-earth DEM 5 m",
+        "short_label": "GA LiDAR 5 m",
+        "service_url": (
+            "https://services.ga.gov.au/gis/services/"
+            "DEM_LiDAR_5m_2025/MapServer/WCSServer"
+        ),
+        "coverage": "1",
+        "crs": "EPSG:4283",
+        "resx": 5.5063478185957097e-05,
+        "resy": 5.1601232527787033e-05,
+        "resolution_m": 5,
+        "vertical_datum": "Australian source survey datum; verify AHD metadata",
+        "vertical_epsg": "",
+        "dataset_url": "https://doi.org/10.26186/89644",
+    },
+    "ga_srtm_30m": {
+        "label": "GA SRTM bare-earth DEM 30 m",
+        "short_label": "GA SRTM 30 m",
+        "service_url": (
+            "https://services.ga.gov.au/gis/services/"
+            "DEM_SRTM_1Second_2024/MapServer/WCSServer"
+        ),
+        "coverage": "1",
+        "crs": "EPSG:4326",
+        "resx": 1.0 / 3600.0,
+        "resy": 1.0 / 3600.0,
+        "resolution_m": 30,
+        "vertical_datum": "EGM96 orthometric height",
+        "vertical_epsg": "EPSG:5773",
+        "dataset_url": "https://pid.geoscience.gov.au/dataset/ga/72759",
+    },
+}
 
 
 def open_topography_algorithm() -> Optional[Any]:
@@ -54,6 +100,125 @@ def open_topography_dialog(extent_layer: Any) -> Any:
         OPEN_TOPOGRAPHY_ALGORITHM_ID,
         {"Extent": extent_layer},
     )
+
+
+def ga_dem_source(source_key: str) -> Dict[str, Any]:
+    """Return a copy of one supported Geoscience Australia DEM definition."""
+    try:
+        return dict(GA_DEM_SOURCES[str(source_key)])
+    except KeyError as exc:
+        raise ValueError("Select a supported Geoscience Australia DEM source.") from exc
+
+
+def ga_extent_bbox(extent_layer: Any, target_crs: str) -> Tuple[float, float, float, float]:
+    """Transform a vector layer extent into the WCS request CRS."""
+    if extent_layer is None or not extent_layer.isValid():
+        raise ValueError("Select a valid project layer to define the DEM extent.")
+    extent = extent_layer.extent()
+    if extent.isEmpty():
+        raise ValueError("The selected extent layer has no usable extent.")
+    destination = QgsCoordinateReferenceSystem(target_crs)
+    if not destination.isValid():
+        raise RuntimeError(f"DEM service CRS is invalid: {target_crs}")
+    if extent_layer.crs() != destination:
+        transform = QgsCoordinateTransform(
+            extent_layer.crs(),
+            destination,
+            QgsProject.instance(),
+        )
+        extent = transform.transformBoundingBox(extent)
+    return (
+        float(extent.xMinimum()),
+        float(extent.yMinimum()),
+        float(extent.xMaximum()),
+        float(extent.yMaximum()),
+    )
+
+
+def build_ga_wcs_url(extent_layer: Any, source_key: str) -> str:
+    """Build a bounded WCS 1.0 GeoTIFF request for a GA terrain source."""
+    source = ga_dem_source(source_key)
+    xmin, ymin, xmax, ymax = ga_extent_bbox(extent_layer, source["crs"])
+    width = max(1, int((xmax - xmin) / float(source["resx"])) + 1)
+    height = max(1, int((ymax - ymin) / float(source["resy"])) + 1)
+    pixels = width * height
+    if pixels > GA_MAX_DOWNLOAD_PIXELS:
+        raise ValueError(
+            f"{source['short_label']} would contain about {pixels:,} cells. "
+            "Choose a smaller extent or the 30 m source."
+        )
+    parameters = (
+        ("service", "WCS"),
+        ("version", "1.0.0"),
+        ("request", "GetCoverage"),
+        ("coverage", source["coverage"]),
+        ("format", "GeoTIFF"),
+        ("crs", source["crs"]),
+        ("response_crs", source["crs"]),
+        ("bbox", f"{xmin:.12f},{ymin:.12f},{xmax:.12f},{ymax:.12f}"),
+        ("resx", f"{float(source['resx']):.15g}"),
+        ("resy", f"{float(source['resy']):.15g}"),
+    )
+    return f"{source['service_url']}?{urlencode(parameters)}"
+
+
+def _download_ga_wcs(url: str) -> bytes:
+    request = QNetworkRequest(QUrl(url))
+    if hasattr(request, "setTransferTimeout"):
+        request.setTransferTimeout(GA_WCS_TRANSFER_TIMEOUT_MS)
+    request.setRawHeader(
+        QByteArray(b"User-Agent"),
+        QByteArray(b"SafeguardingBuilder-QGIS/0.1"),
+    )
+    network = QgsBlockingNetworkRequest()
+    error = network.get(request, forceRefresh=True)
+    if error != QgsBlockingNetworkRequest.NoError:
+        raise RuntimeError(network.errorMessage() or "GA terrain request failed.")
+    content = bytes(network.reply().content())
+    if content[:4] not in (b"II*\x00", b"MM\x00*"):
+        detail = content[:300].decode("utf-8", errors="ignore").strip()
+        raise RuntimeError(
+            "Geoscience Australia did not return a GeoTIFF."
+            + (f" Response: {detail}" if detail else "")
+        )
+    return content
+
+
+def download_ga_dem(extent_layer: Any, source_key: str, output_path: str) -> Dict[str, Any]:
+    """Download a clipped GA elevation GeoTIFF and return its source metadata."""
+    source = ga_dem_source(source_key)
+    content = _download_ga_wcs(build_ga_wcs_url(extent_layer, source_key))
+    output = Path(str(output_path))
+    output.parent.mkdir(parents=True, exist_ok=True)
+    save_file = QSaveFile(str(output))
+    if not save_file.open(QSaveFile.OpenModeFlag.WriteOnly):
+        raise RuntimeError(f"Could not create DEM output: {output}")
+    if save_file.write(content) != len(content) or not save_file.commit():
+        raise RuntimeError(f"Could not save downloaded DEM: {output}")
+    source.update(
+        {
+            "dataset": source["label"],
+            "source_key": source_key,
+            "source_service": "Geoscience Australia WCS",
+            "output": str(output),
+        }
+    )
+    return source
+
+
+def raster_has_terrain_values(path: str) -> bool:
+    """Return whether a downloaded raster contains plausible terrain cells."""
+    layer = QgsRasterLayer(str(path), "GA DEM coverage check")
+    if not layer.isValid():
+        return False
+    provider = layer.dataProvider()
+    stats = provider.bandStatistics(
+        1,
+        QgsRasterBandStats.Stats.Min | QgsRasterBandStats.Stats.Max,
+        layer.extent(),
+        10000,
+    )
+    return float(stats.maximumValue) > -15000.0 and float(stats.minimumValue) < 10000.0
 
 
 def elevation_polygon_output_path(
@@ -166,11 +331,18 @@ def apply_elevation_polygon_style(layer: QgsVectorLayer) -> bool:
 
 __all__ = [
     "CONTOUR_POLYGON_ALGORITHM_ID",
+    "GA_DEM_SOURCES",
+    "GA_MAX_DOWNLOAD_PIXELS",
     "OPEN_TOPOGRAPHY_ALGORITHM_ID",
     "apply_elevation_polygon_style",
+    "build_ga_wcs_url",
     "contour_polygon_algorithm",
     "create_elevation_polygons",
+    "download_ga_dem",
     "elevation_polygon_output_path",
+    "ga_dem_source",
+    "ga_extent_bbox",
     "open_topography_algorithm",
     "open_topography_dialog",
+    "raster_has_terrain_values",
 ]

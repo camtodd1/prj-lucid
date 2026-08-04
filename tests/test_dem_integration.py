@@ -3,6 +3,7 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from qgis.PyQt import QtCore, QtWidgets
@@ -16,7 +17,9 @@ from safeguarding_builder.core.dem_integration import (  # noqa: E402
     CONTOUR_POLYGON_ALGORITHM_ID,
     OPEN_TOPOGRAPHY_ALGORITHM_ID,
     apply_elevation_polygon_style,
+    build_ga_wcs_url,
     create_elevation_polygons,
+    download_ga_dem,
     elevation_polygon_output_path,
     open_topography_dialog,
 )
@@ -33,7 +36,7 @@ class DemIntegrationTests(unittest.TestCase):
     def tearDown(self):
         QgsProject.instance().removeAllMapLayers()
 
-    def test_terrain_tab_enables_downloader_for_a_vector_extent(self):
+    def test_terrain_tab_enables_ga_downloader_for_a_vector_extent(self):
         layer = QgsVectorLayer("Polygon?crs=EPSG:7856", "DEM extent", "memory")
         QgsProject.instance().addMapLayer(layer)
 
@@ -51,7 +54,8 @@ class DemIntegrationTests(unittest.TestCase):
             )
             self.assertIs(dialog.selected_dem_extent_layer(), layer)
             self.assertTrue(dialog.pushButton_DownloadDem.isEnabled())
-            self.assertIn("pre-filled", dialog.label_dem_tool_status.text())
+            self.assertEqual(dialog.selected_dem_source(), "ga_best")
+            self.assertIn("30 m terrain fallback", dialog.label_dem_tool_status.text())
 
             self.assertFalse(dialog.pushButton_CreateDemContours.isEnabled())
             dialog.set_downloaded_dem(layer)
@@ -61,6 +65,50 @@ class DemIntegrationTests(unittest.TestCase):
 
             dialog.close()
             dialog.deleteLater()
+
+    def test_ga_wcs_request_uses_layer_extent_and_native_resolution(self):
+        layer = QgsVectorLayer("Polygon?crs=EPSG:4326", "DEM extent", "memory")
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(
+            QgsGeometry.fromWkt(
+                "POLYGON ((138.50 -34.97, 138.57 -34.97, "
+                "138.57 -34.91, 138.50 -34.91, 138.50 -34.97))"
+            )
+        )
+        layer.dataProvider().addFeature(feature)
+        layer.updateExtents()
+
+        url = build_ga_wcs_url(layer, "ga_lidar_5m")
+        query = parse_qs(urlparse(url).query)
+
+        self.assertIn("DEM_LiDAR_5m_2025", url)
+        self.assertEqual(query["coverage"], ["1"])
+        self.assertEqual(query["format"], ["GeoTIFF"])
+        self.assertEqual(query["crs"], ["EPSG:4283"])
+        self.assertEqual(query["bbox"], ["138.500000000000,-34.970000000000,138.570000000000,-34.910000000000"])
+
+    def test_ga_dem_download_saves_geotiff_and_metadata(self):
+        layer = QgsVectorLayer("Polygon?crs=EPSG:4326", "DEM extent", "memory")
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(
+            QgsGeometry.fromWkt(
+                "POLYGON ((138.50 -34.97, 138.51 -34.97, "
+                "138.51 -34.96, 138.50 -34.96, 138.50 -34.97))"
+            )
+        )
+        layer.dataProvider().addFeature(feature)
+        layer.updateExtents()
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "safeguarding_builder.core.dem_integration._download_ga_wcs",
+            return_value=b"II*\x00test-geotiff",
+        ):
+            output = Path(directory) / "terrain.tif"
+            metadata = download_ga_dem(layer, "ga_srtm_30m", str(output))
+
+            self.assertEqual(output.read_bytes(), b"II*\x00test-geotiff")
+            self.assertEqual(metadata["source_service"], "Geoscience Australia WCS")
+            self.assertEqual(metadata["vertical_epsg"], "EPSG:5773")
 
     def test_processing_dialog_receives_the_selected_layer_as_extent(self):
         layer = QgsVectorLayer("Polygon?crs=EPSG:7856", "DEM extent", "memory")
