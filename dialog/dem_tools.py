@@ -32,6 +32,7 @@ class DemToolsMixin:
         group_layout.setContentsMargins(10, 12, 10, 10)
         group_layout.setHorizontalSpacing(10)
         group_layout.setVerticalSpacing(10)
+        group_layout.setColumnMinimumWidth(0, 200)
         group_layout.setColumnStretch(1, 1)
 
         download_heading = QtWidgets.QLabel("1  Download terrain")
@@ -105,6 +106,7 @@ class DemToolsMixin:
         self.pushButton_DownloadDem = QtWidgets.QPushButton("Download terrain")
         self.pushButton_DownloadDem.setObjectName("pushButton_DownloadDem")
         self.pushButton_DownloadDem.setFixedHeight(32)
+        self.pushButton_DownloadDem.setFixedWidth(180)
         self.pushButton_DownloadDem.setStyleSheet(
             "QPushButton { background: #1769c2; color: white; border: 1px solid #125aa8; "
             "border-radius: 4px; padding: 7px 14px; font-weight: 600; }"
@@ -191,6 +193,7 @@ class DemToolsMixin:
             "pushButton_CreateDemContours"
         )
         self.pushButton_CreateDemContours.setFixedHeight(32)
+        self.pushButton_CreateDemContours.setFixedWidth(180)
         self.pushButton_CreateDemContours.setEnabled(False)
         group_layout.addWidget(
             self.pushButton_CreateDemContours,
