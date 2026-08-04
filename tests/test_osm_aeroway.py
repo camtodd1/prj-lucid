@@ -195,6 +195,34 @@ class OsmAerowayTests(unittest.TestCase):
             )
         self.assertEqual(layer.featureCount(), 2)
 
+    def test_taxilane_uses_taxiway_style_with_five_map_unit_width(self):
+        layer = QgsVectorLayer(
+            "LineString?crs=EPSG:3857",
+            "taxilane",
+            "memory",
+        )
+
+        apply_aeroway_style(layer, "taxilane")
+
+        renderer = layer.renderer()
+        symbol = renderer.symbol()
+        self.assertTrue(renderer.usingSymbolLevels())
+        self.assertEqual(symbol.symbolLayerCount(), 2)
+        self.assertEqual(symbol.symbolLayer(0).color().name(), "#7c858e")
+        self.assertEqual(symbol.symbolLayer(0).width(), 5.0)
+        self.assertEqual(symbol.symbolLayer(1).color().name(), "#f2c230")
+        self.assertEqual(symbol.symbolLayer(1).width(), 0.45)
+        for symbol_layer in (symbol.symbolLayer(0), symbol.symbolLayer(1)):
+            self.assertEqual(symbol_layer.widthUnit(), Qgis.RenderUnit.MapUnits)
+            self.assertEqual(
+                symbol_layer.penCapStyle(),
+                QtCore.Qt.PenCapStyle.RoundCap,
+            )
+            self.assertEqual(
+                symbol_layer.penJoinStyle(),
+                QtCore.Qt.PenJoinStyle.RoundJoin,
+            )
+
     def test_dialog_uses_plain_airport_setup_labels(self):
         dialog = SafeguardingBuilderDialog()
         try:
