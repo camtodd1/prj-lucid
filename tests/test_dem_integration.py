@@ -65,7 +65,7 @@ class DemIntegrationTests(unittest.TestCase):
             self.assertIs(dialog.selected_dem_extent_layer(), layer)
             self.assertEqual(
                 dialog.pushButton_dem_extent_override.text(),
-                "Use automatic extent",
+                "Automatic",
             )
             self.assertTrue(dialog.label_dem_tool_status.isHidden())
 
