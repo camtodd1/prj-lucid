@@ -885,7 +885,7 @@ class SafeguardingBuilderDialog(
             },
             {
                 "tab": "tab_terrain",
-                "summary": "Download optional terrain data using a project layer extent.",
+                "summary": "Download terrain for the OLS area, then create elevation polygons.",
             },
         ]
 
@@ -1744,7 +1744,6 @@ class SafeguardingBuilderDialog(
             "groupBox_contourIntervals",
             "groupBox_outputOptions",
             "groupBox_dem_tools",
-            "groupBox_dem_contours",
             "groupBox_agl_options",
             "groupBox_agl_generated",
             "groupBox_agl_elements",

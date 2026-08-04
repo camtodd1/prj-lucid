@@ -70,8 +70,12 @@ class DemIntegrationTests(unittest.TestCase):
             self.assertTrue(dialog.label_dem_tool_status.isHidden())
 
             self.assertFalse(dialog.pushButton_CreateDemContours.isEnabled())
+            self.assertFalse(dialog.doubleSpinBox_dem_contour_interval.isEnabled())
+            self.assertFalse(dialog.comboBox_dem_contour_output.isEnabled())
             dialog.set_downloaded_dem(layer)
             self.assertTrue(dialog.pushButton_CreateDemContours.isEnabled())
+            self.assertTrue(dialog.doubleSpinBox_dem_contour_interval.isEnabled())
+            self.assertTrue(dialog.comboBox_dem_contour_output.isEnabled())
             self.assertEqual(dialog.dem_contour_interval(), 5.0)
             self.assertEqual(dialog.dem_contour_output_mode(), "temporary")
 

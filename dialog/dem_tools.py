@@ -1,7 +1,7 @@
 """Dock widgets for optional DEM acquisition tools."""
 
 from qgis.PyQt import QtCore, QtWidgets  # type: ignore
-from qgis.core import QgsApplication, QgsMapLayerProxyModel  # type: ignore
+from qgis.core import QgsMapLayerProxyModel  # type: ignore
 from qgis.gui import QgsMapLayerComboBox  # type: ignore
 
 try:
@@ -26,58 +26,34 @@ class DemToolsMixin:
         layout.setSpacing(8)
         layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
 
-        group = QtWidgets.QGroupBox("Terrain data")
+        group = QtWidgets.QGroupBox("Terrain workflow")
         group.setObjectName("groupBox_dem_tools")
         group_layout = QtWidgets.QGridLayout(group)
         group_layout.setContentsMargins(10, 12, 10, 10)
         group_layout.setHorizontalSpacing(10)
         group_layout.setVerticalSpacing(10)
-        group_layout.setColumnStretch(2, 1)
+        group_layout.setColumnStretch(1, 1)
 
-        raster_icon = self._terrain_theme_icon(
-            "/mIconRaster.svg",
-            QtWidgets.QStyle.StandardPixmap.SP_DriveNetIcon,
-        )
-        extent_icon = self._terrain_theme_icon(
-            "/mActionZoomToLayer.svg",
-            QtWidgets.QStyle.StandardPixmap.SP_DesktopIcon,
-        )
-        edit_icon = self._terrain_theme_icon(
-            "/mActionToggleEditing.svg",
-            QtWidgets.QStyle.StandardPixmap.SP_FileDialogDetailedView,
-        )
+        download_heading = QtWidgets.QLabel("1  Download terrain")
+        download_heading.setStyleSheet("font-weight: 600;")
+        group_layout.addWidget(download_heading, 0, 0, 1, 3)
 
-        source_icon = QtWidgets.QLabel(group)
-        source_icon.setPixmap(raster_icon.pixmap(22, 22))
-        source_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         source_label = QtWidgets.QLabel("Terrain source")
-        source_label.setStyleSheet("font-weight: 600;")
         self.comboBox_dem_source = QtWidgets.QComboBox(group)
         self.comboBox_dem_source.setObjectName("comboBox_dem_source")
         self.comboBox_dem_source.setMinimumHeight(34)
         self.comboBox_dem_source.addItem(
-            raster_icon, "GA best available (5 m, then 30 m)", "ga_best"
+            "GA best available (5 m, then 30 m)", "ga_best"
         )
+        self.comboBox_dem_source.addItem("GA LiDAR bare-earth DEM 5 m", "ga_lidar_5m")
+        self.comboBox_dem_source.addItem("GA SRTM bare-earth DEM 30 m", "ga_srtm_30m")
         self.comboBox_dem_source.addItem(
-            raster_icon, "GA LiDAR bare-earth DEM 5 m", "ga_lidar_5m"
+            "OpenTopography DEM Downloader…", "open_topography"
         )
-        self.comboBox_dem_source.addItem(
-            raster_icon, "GA SRTM bare-earth DEM 30 m", "ga_srtm_30m"
-        )
-        self.comboBox_dem_source.addItem(
-            self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_DriveNetIcon),
-            "OpenTopography DEM Downloader…",
-            "open_topography",
-        )
-        group_layout.addWidget(source_icon, 0, 0)
-        group_layout.addWidget(source_label, 0, 1)
-        group_layout.addWidget(self.comboBox_dem_source, 0, 2, 1, 3)
+        group_layout.addWidget(source_label, 1, 0)
+        group_layout.addWidget(self.comboBox_dem_source, 1, 1, 1, 2)
 
-        extent_icon_label = QtWidgets.QLabel(group)
-        extent_icon_label.setPixmap(extent_icon.pixmap(22, 22))
-        extent_icon_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         extent_label = QtWidgets.QLabel("OLS coverage")
-        extent_label.setStyleSheet("font-weight: 600;")
 
         self.frame_dem_extent_auto = QtWidgets.QFrame(group)
         self.frame_dem_extent_auto.setObjectName("frame_dem_extent_auto")
@@ -87,12 +63,8 @@ class DemToolsMixin:
         )
         auto_layout = QtWidgets.QHBoxLayout(self.frame_dem_extent_auto)
         auto_layout.setContentsMargins(9, 5, 9, 5)
-        auto_layout.setSpacing(7)
-        auto_icon = QtWidgets.QLabel(self.frame_dem_extent_auto)
-        auto_icon.setPixmap(extent_icon.pixmap(18, 18))
         auto_text = QtWidgets.QLabel("Automatic — OLS square", self.frame_dem_extent_auto)
         auto_text.setStyleSheet("color: #343a40;")
-        auto_layout.addWidget(auto_icon)
         auto_layout.addWidget(auto_text)
         auto_layout.addStretch(1)
 
@@ -103,7 +75,6 @@ class DemToolsMixin:
             "pushButton_dem_extent_override"
         )
         self.pushButton_dem_extent_override.setCheckable(True)
-        self.pushButton_dem_extent_override.setIcon(edit_icon)
         self.pushButton_dem_extent_override.setMinimumHeight(34)
         self.pushButton_dem_extent_override.setToolTip(
             "Override the automatic square enclosing all generated OLS layers."
@@ -114,29 +85,25 @@ class DemToolsMixin:
         self.comboBox_dem_extent_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         self.comboBox_dem_extent_layer.setVisible(False)
         self.comboBox_dem_extent_layer.setMinimumHeight(34)
-        group_layout.addWidget(extent_icon_label, 1, 0)
-        group_layout.addWidget(extent_label, 1, 1)
-        group_layout.addWidget(self.frame_dem_extent_auto, 1, 2, 1, 2)
-        group_layout.addWidget(self.comboBox_dem_extent_layer, 1, 2, 1, 2)
-        group_layout.addWidget(self.pushButton_dem_extent_override, 1, 4)
+        group_layout.addWidget(extent_label, 2, 0)
+        group_layout.addWidget(self.frame_dem_extent_auto, 2, 1)
+        group_layout.addWidget(self.comboBox_dem_extent_layer, 2, 1)
+        group_layout.addWidget(self.pushButton_dem_extent_override, 2, 2)
 
         self.label_dem_tool_status = QtWidgets.QLabel()
         self.label_dem_tool_status.setObjectName("label_dem_tool_status")
         self.label_dem_tool_status.setWordWrap(True)
         self.label_dem_tool_status.setVisible(False)
-        group_layout.addWidget(self.label_dem_tool_status, 2, 2, 1, 3)
+        group_layout.addWidget(self.label_dem_tool_status, 3, 1, 1, 2)
 
         divider = QtWidgets.QFrame(group)
         divider.setFrameShape(QtWidgets.QFrame.Shape.HLine)
         divider.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
-        group_layout.addWidget(divider, 3, 0, 1, 5)
+        group_layout.addWidget(divider, 4, 0, 1, 3)
 
         self.pushButton_DownloadDem = QtWidgets.QPushButton("Download terrain")
         self.pushButton_DownloadDem.setObjectName("pushButton_DownloadDem")
         self.pushButton_DownloadDem.setMinimumHeight(36)
-        self.pushButton_DownloadDem.setIcon(
-            self.style().standardIcon(QtWidgets.QStyle.StandardPixmap.SP_ArrowDown)
-        )
         self.pushButton_DownloadDem.setStyleSheet(
             "QPushButton { background: #1769c2; color: white; border: 1px solid #125aa8; "
             "border-radius: 4px; padding: 7px 14px; font-weight: 600; }"
@@ -146,26 +113,27 @@ class DemToolsMixin:
         )
         group_layout.addWidget(
             self.pushButton_DownloadDem,
-            4,
-            4,
+            5,
+            2,
             QtCore.Qt.AlignmentFlag.AlignRight,
         )
 
-        layout.addWidget(group)
+        workflow_divider = QtWidgets.QFrame(group)
+        workflow_divider.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        workflow_divider.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        group_layout.addWidget(workflow_divider, 6, 0, 1, 3)
 
-        contour_group = QtWidgets.QGroupBox("Elevation polygons")
-        contour_group.setObjectName("groupBox_dem_contours")
-        contour_layout = QtWidgets.QGridLayout(contour_group)
-        contour_layout.setContentsMargins(10, 12, 10, 10)
-        contour_layout.setHorizontalSpacing(12)
-        contour_layout.setVerticalSpacing(8)
+        polygon_heading = QtWidgets.QLabel("2  Create elevation polygons")
+        polygon_heading.setStyleSheet("font-weight: 600;")
+        group_layout.addWidget(polygon_heading, 7, 0, 1, 3)
 
         self.label_downloaded_dem = QtWidgets.QLabel(
-            "Download a DEM to enable elevation polygons."
+            "Available after terrain has been downloaded."
         )
         self.label_downloaded_dem.setObjectName("label_downloaded_dem")
         self.label_downloaded_dem.setWordWrap(True)
-        contour_layout.addWidget(self.label_downloaded_dem, 0, 0, 1, 2)
+        self.label_downloaded_dem.setStyleSheet("color: #56616d;")
+        group_layout.addWidget(self.label_downloaded_dem, 8, 0, 1, 3)
 
         interval_label = QtWidgets.QLabel("Elevation interval")
         self.doubleSpinBox_dem_contour_interval = QtWidgets.QDoubleSpinBox()
@@ -176,8 +144,9 @@ class DemToolsMixin:
         self.doubleSpinBox_dem_contour_interval.setDecimals(1)
         self.doubleSpinBox_dem_contour_interval.setValue(5.0)
         self.doubleSpinBox_dem_contour_interval.setSuffix(" m")
-        contour_layout.addWidget(interval_label, 1, 0)
-        contour_layout.addWidget(self.doubleSpinBox_dem_contour_interval, 1, 1)
+        self.doubleSpinBox_dem_contour_interval.setEnabled(False)
+        group_layout.addWidget(interval_label, 9, 0)
+        group_layout.addWidget(self.doubleSpinBox_dem_contour_interval, 9, 1, 1, 2)
 
         output_label = QtWidgets.QLabel("Polygon output")
         self.comboBox_dem_contour_output = QtWidgets.QComboBox()
@@ -186,41 +155,33 @@ class DemToolsMixin:
         )
         self.comboBox_dem_contour_output.addItem("Temporary layer", "temporary")
         self.comboBox_dem_contour_output.addItem("Save GeoPackage", "file")
-        contour_layout.addWidget(output_label, 2, 0)
-        contour_layout.addWidget(self.comboBox_dem_contour_output, 2, 1)
+        self.comboBox_dem_contour_output.setEnabled(False)
+        group_layout.addWidget(output_label, 10, 0)
+        group_layout.addWidget(self.comboBox_dem_contour_output, 10, 1, 1, 2)
 
         self.label_dem_contour_status = QtWidgets.QLabel()
         self.label_dem_contour_status.setObjectName("label_dem_contour_status")
         self.label_dem_contour_status.setWordWrap(True)
-        contour_layout.addWidget(self.label_dem_contour_status, 3, 0, 1, 2)
+        group_layout.addWidget(self.label_dem_contour_status, 11, 0, 1, 3)
 
-        datum_frame = QtWidgets.QFrame(contour_group)
+        datum_frame = QtWidgets.QFrame(group)
         datum_frame.setObjectName("frame_dem_vertical_datum_note")
         datum_frame.setStyleSheet(
             "QFrame#frame_dem_vertical_datum_note { color: #7a4b00; "
             "background: #fff8e8; border: 1px solid #ecd49b; "
             "border-radius: 4px; }"
         )
-        datum_layout = QtWidgets.QHBoxLayout(datum_frame)
+        datum_layout = QtWidgets.QVBoxLayout(datum_frame)
         datum_layout.setContentsMargins(8, 6, 8, 6)
-        datum_layout.setSpacing(8)
-        datum_icon = QtWidgets.QLabel(datum_frame)
-        datum_icon.setPixmap(
-            self.style()
-            .standardIcon(QtWidgets.QStyle.StandardPixmap.SP_MessageBoxWarning)
-            .pixmap(18, 18)
-        )
-        datum_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
         datum_note = QtWidgets.QLabel(
             "Vertical datum must match the airport AMSL datum.", datum_frame
         )
         datum_note.setObjectName("label_dem_vertical_datum_note")
         datum_note.setWordWrap(True)
         datum_note.setStyleSheet("border: none; background: transparent;")
-        datum_layout.addWidget(datum_icon)
-        datum_layout.addWidget(datum_note, 1)
+        datum_layout.addWidget(datum_note)
         self.label_dem_vertical_datum_note = datum_note
-        contour_layout.addWidget(datum_frame, 4, 0, 1, 2)
+        group_layout.addWidget(datum_frame, 12, 0, 1, 3)
 
         self.pushButton_CreateDemContours = QtWidgets.QPushButton(
             "Create elevation polygons"
@@ -230,20 +191,17 @@ class DemToolsMixin:
         )
         self.pushButton_CreateDemContours.setMinimumHeight(32)
         self.pushButton_CreateDemContours.setEnabled(False)
-        contour_layout.addWidget(
+        group_layout.addWidget(
             self.pushButton_CreateDemContours,
-            5,
-            0,
-            1,
+            13,
             2,
             QtCore.Qt.AlignmentFlag.AlignRight,
         )
 
         self._downloaded_dem_source = None
-        self.groupBox_dem_contours = contour_group
-        layout.addWidget(contour_group)
-        layout.addStretch(1)
         self.groupBox_dem_tools = group
+        layout.addWidget(group)
+        layout.addStretch(1)
         tab_widget.addTab(self.tab_terrain, "Terrain")
 
         self.comboBox_dem_extent_layer.layerChanged.connect(
@@ -263,10 +221,6 @@ class DemToolsMixin:
             return None
         combo = getattr(self, "comboBox_dem_extent_layer", None)
         return combo.currentLayer() if combo is not None else None
-
-    def _terrain_theme_icon(self, theme_name, fallback):
-        icon = QgsApplication.getThemeIcon(theme_name)
-        return icon if not icon.isNull() else self.style().standardIcon(fallback)
 
     def _toggle_dem_extent_override(self, enabled: bool) -> None:
         combo = getattr(self, "comboBox_dem_extent_layer", None)
@@ -301,6 +255,8 @@ class DemToolsMixin:
             label.setToolTip(str(source))
         if button is not None:
             button.setEnabled(source is not None)
+        self.doubleSpinBox_dem_contour_interval.setEnabled(source is not None)
+        self.comboBox_dem_contour_output.setEnabled(source is not None)
         self.set_dem_contour_status(
             "Choose an interval, then create styled elevation polygons."
         )
@@ -348,14 +304,6 @@ class DemToolsMixin:
         button.setText(
             "Open DEM downloader…" if is_open_topography else "Download terrain"
         )
-        button.setIcon(
-            self.style().standardIcon(
-                QtWidgets.QStyle.StandardPixmap.SP_DialogOpenButton
-                if is_open_topography
-                else QtWidgets.QStyle.StandardPixmap.SP_ArrowDown
-            )
-        )
-
         if is_open_topography and open_topography_algorithm() is None:
             status.setText(
                 "OpenTopography DEM Downloader is not installed or enabled."
