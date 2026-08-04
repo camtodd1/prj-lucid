@@ -70,6 +70,77 @@ class DemToolsMixin:
         )
 
         layout.addWidget(group)
+
+        contour_group = QtWidgets.QGroupBox("Elevation polygons")
+        contour_group.setObjectName("groupBox_dem_contours")
+        contour_layout = QtWidgets.QGridLayout(contour_group)
+        contour_layout.setContentsMargins(10, 12, 10, 10)
+        contour_layout.setHorizontalSpacing(12)
+        contour_layout.setVerticalSpacing(8)
+
+        self.label_downloaded_dem = QtWidgets.QLabel(
+            "Download a DEM to enable elevation polygons."
+        )
+        self.label_downloaded_dem.setObjectName("label_downloaded_dem")
+        self.label_downloaded_dem.setWordWrap(True)
+        contour_layout.addWidget(self.label_downloaded_dem, 0, 0, 1, 2)
+
+        interval_label = QtWidgets.QLabel("Elevation interval")
+        self.doubleSpinBox_dem_contour_interval = QtWidgets.QDoubleSpinBox()
+        self.doubleSpinBox_dem_contour_interval.setObjectName(
+            "doubleSpinBox_dem_contour_interval"
+        )
+        self.doubleSpinBox_dem_contour_interval.setRange(0.1, 1000.0)
+        self.doubleSpinBox_dem_contour_interval.setDecimals(1)
+        self.doubleSpinBox_dem_contour_interval.setValue(5.0)
+        self.doubleSpinBox_dem_contour_interval.setSuffix(" m")
+        contour_layout.addWidget(interval_label, 1, 0)
+        contour_layout.addWidget(self.doubleSpinBox_dem_contour_interval, 1, 1)
+
+        output_label = QtWidgets.QLabel("Polygon output")
+        self.comboBox_dem_contour_output = QtWidgets.QComboBox()
+        self.comboBox_dem_contour_output.setObjectName(
+            "comboBox_dem_contour_output"
+        )
+        self.comboBox_dem_contour_output.addItem("Temporary layer", "temporary")
+        self.comboBox_dem_contour_output.addItem("Save GeoPackage", "file")
+        contour_layout.addWidget(output_label, 2, 0)
+        contour_layout.addWidget(self.comboBox_dem_contour_output, 2, 1)
+
+        self.label_dem_contour_status = QtWidgets.QLabel()
+        self.label_dem_contour_status.setObjectName("label_dem_contour_status")
+        self.label_dem_contour_status.setWordWrap(True)
+        contour_layout.addWidget(self.label_dem_contour_status, 3, 0, 1, 2)
+
+        datum_note = QtWidgets.QLabel(
+            "Before comparing terrain with OLS elevations, confirm that the "
+            "DEM vertical datum is compatible with the airport AMSL datum."
+        )
+        datum_note.setObjectName("label_dem_vertical_datum_note")
+        datum_note.setWordWrap(True)
+        datum_note.setStyleSheet("color: #8a4b08;")
+        contour_layout.addWidget(datum_note, 4, 0, 1, 2)
+
+        self.pushButton_CreateDemContours = QtWidgets.QPushButton(
+            "Create elevation polygons"
+        )
+        self.pushButton_CreateDemContours.setObjectName(
+            "pushButton_CreateDemContours"
+        )
+        self.pushButton_CreateDemContours.setMinimumHeight(32)
+        self.pushButton_CreateDemContours.setEnabled(False)
+        contour_layout.addWidget(
+            self.pushButton_CreateDemContours,
+            5,
+            0,
+            1,
+            2,
+            QtCore.Qt.AlignmentFlag.AlignRight,
+        )
+
+        self._downloaded_dem_source = None
+        self.groupBox_dem_contours = contour_group
+        layout.addWidget(contour_group)
         layout.addStretch(1)
         self.groupBox_dem_tools = group
         tab_widget.addTab(self.tab_terrain, "Terrain")
@@ -82,6 +153,47 @@ class DemToolsMixin:
     def selected_dem_extent_layer(self):
         combo = getattr(self, "comboBox_dem_extent_layer", None)
         return combo.currentLayer() if combo is not None else None
+
+    def set_downloaded_dem(self, source) -> None:
+        """Retain a completed DEM result and enable polygon processing."""
+        self._downloaded_dem_source = source
+        label = getattr(self, "label_downloaded_dem", None)
+        button = getattr(self, "pushButton_CreateDemContours", None)
+        if label is not None:
+            display_name = (
+                source.name()
+                if hasattr(source, "name") and callable(source.name)
+                else str(source)
+            )
+            label.setText(f"Downloaded DEM: {display_name}")
+            label.setToolTip(str(source))
+        if button is not None:
+            button.setEnabled(source is not None)
+        self.set_dem_contour_status(
+            "Choose an interval, then create styled elevation polygons."
+        )
+
+    def downloaded_dem_source(self):
+        return getattr(self, "_downloaded_dem_source", None)
+
+    def dem_contour_interval(self) -> float:
+        widget = getattr(self, "doubleSpinBox_dem_contour_interval", None)
+        return float(widget.value()) if widget is not None else 5.0
+
+    def dem_contour_output_mode(self) -> str:
+        combo = getattr(self, "comboBox_dem_contour_output", None)
+        return (
+            str(combo.currentData() or "temporary")
+            if combo is not None
+            else "temporary"
+        )
+
+    def set_dem_contour_status(self, message: str, *, error: bool = False) -> None:
+        label = getattr(self, "label_dem_contour_status", None)
+        if label is None:
+            return
+        label.setText(str(message or ""))
+        label.setStyleSheet("color: #8a1f11;" if error else "color: #56616d;")
 
     def refresh_dem_tool_state(self, *_args) -> None:
         status = getattr(self, "label_dem_tool_status", None)

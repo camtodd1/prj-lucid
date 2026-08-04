@@ -1744,6 +1744,7 @@ class SafeguardingBuilderDialog(
             "groupBox_contourIntervals",
             "groupBox_outputOptions",
             "groupBox_dem_tools",
+            "groupBox_dem_contours",
             "groupBox_agl_options",
             "groupBox_agl_generated",
             "groupBox_agl_elements",

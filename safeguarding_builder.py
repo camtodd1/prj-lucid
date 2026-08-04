@@ -76,7 +76,7 @@ from .core.osm_aeroway import (
     apply_aeroway_style,
     fetch_aeroway_osm,
 )
-from .core.dem_integration import open_topography_dialog
+from .addons.dem import DemIntegrationMixin
 from .dialog.osm_progress import OsmDownloadProgressDialog
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.annex14_geometry import Annex14GeometryMixin
@@ -202,6 +202,7 @@ OSM_AEROWAY_GROUPS = (
 # Main Plugin Class - SafeguardingBuilder
 # ============================================================
 class SafeguardingBuilder(
+    DemIntegrationMixin,
     UkSafeguardingMixin,
     NasfGuidelinesMixin,
     LightingGuidelineMixin,
@@ -727,36 +728,16 @@ class SafeguardingBuilder(
             if dem_button:
                 dem_button.clicked.connect(self.open_dem_downloader)
 
+            contour_button = self.dlg.findChild(
+                QPushButton,
+                "pushButton_CreateDemContours",
+            )
+            if contour_button:
+                contour_button.clicked.connect(self.create_dem_elevation_polygons)
+
         self.dlg.refresh_dem_tool_state()
         self.dock.show()
         self.dock.raise_()
-
-    def open_dem_downloader(self):
-        """Open the optional OpenTopography downloader for a layer extent."""
-        if self.dlg is None:
-            return
-        extent_layer = self.dlg.selected_dem_extent_layer()
-        try:
-            open_topography_dialog(extent_layer)
-        except (RuntimeError, ValueError) as exc:
-            QMessageBox.warning(
-                self.dlg,
-                self.tr("DEM downloader unavailable"),
-                self.tr(str(exc)),
-            )
-        except Exception as exc:
-            self._log_warning(
-                f"Could not open OpenTopography DEM Downloader: {exc}\n"
-                f"{traceback.format_exc()}"
-            )
-            QMessageBox.critical(
-                self.dlg,
-                self.tr("DEM downloader error"),
-                self.tr(
-                    "Could not open OpenTopography DEM Downloader. "
-                    "See the QGIS log for details."
-                ),
-            )
 
     def download_osm_aeroway(self):
         """Download aeroway-tagged OSM elements within 5 km of the entered ARP."""
