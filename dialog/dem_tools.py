@@ -63,14 +63,22 @@ class DemToolsMixin:
 
         extent_row = QtWidgets.QHBoxLayout()
         extent_row.setSpacing(8)
-        extent_label = QtWidgets.QLabel("Extent override")
-        extent_label.setObjectName("label_dem_extent_layer")
-        extent_row.addWidget(extent_label)
+        self.checkBox_dem_extent_override = QtWidgets.QCheckBox(
+            "Use custom extent"
+        )
+        self.checkBox_dem_extent_override.setObjectName(
+            "checkBox_dem_extent_override"
+        )
+        self.checkBox_dem_extent_override.setToolTip(
+            "Override the automatic square enclosing all generated OLS layers."
+        )
+        extent_row.addWidget(self.checkBox_dem_extent_override)
 
         self.comboBox_dem_extent_layer = QgsMapLayerComboBox(group)
         self.comboBox_dem_extent_layer.setObjectName("comboBox_dem_extent_layer")
         self.comboBox_dem_extent_layer.setAllowEmptyLayer(True)
         self.comboBox_dem_extent_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
+        self.comboBox_dem_extent_layer.setEnabled(False)
         extent_row.addWidget(self.comboBox_dem_extent_layer, 1)
         group_layout.addLayout(extent_row)
 
@@ -171,11 +179,23 @@ class DemToolsMixin:
         self.comboBox_dem_source.currentIndexChanged.connect(
             self.refresh_dem_tool_state
         )
+        self.checkBox_dem_extent_override.toggled.connect(
+            self._toggle_dem_extent_override
+        )
         self.refresh_dem_tool_state()
 
     def selected_dem_extent_layer(self):
+        override = getattr(self, "checkBox_dem_extent_override", None)
+        if override is None or not override.isChecked():
+            return None
         combo = getattr(self, "comboBox_dem_extent_layer", None)
         return combo.currentLayer() if combo is not None else None
+
+    def _toggle_dem_extent_override(self, enabled: bool) -> None:
+        combo = getattr(self, "comboBox_dem_extent_layer", None)
+        if combo is not None:
+            combo.setEnabled(bool(enabled))
+        self.refresh_dem_tool_state()
 
     def selected_dem_source(self) -> str:
         combo = getattr(self, "comboBox_dem_source", None)
@@ -260,14 +280,19 @@ class DemToolsMixin:
             )
             return
 
+        custom_extent = self.selected_dem_extent_layer() is not None
         if is_open_topography:
             status.setText(
-                "Ready. Uses the automatic square OLS extent unless an override is selected."
+                "Ready. Uses the selected custom extent."
+                if custom_extent
+                else "Ready. Uses the automatic square enclosing all OLS layers."
             )
             tooltip = "Open the downloader using the automatic or overridden extent."
         elif source_key == "ga_best":
             status.setText(
-                "Ready. Uses the smallest square covering all OLS layers; GA 5 m falls back to 30 m."
+                "Ready. Uses the selected custom extent; GA 5 m falls back to 30 m."
+                if custom_extent
+                else "Ready. Uses the smallest square covering all OLS layers; GA 5 m falls back to 30 m."
             )
             tooltip = "Download the best available GA bare-earth DEM for this extent."
         else:

@@ -53,10 +53,16 @@ class DemIntegrationTests(unittest.TestCase):
                 dialog.tabWidget_workflow.indexOf(dialog.tab_terrain),
                 0,
             )
-            self.assertIs(dialog.selected_dem_extent_layer(), layer)
+            self.assertIsNone(dialog.selected_dem_extent_layer())
+            self.assertFalse(dialog.comboBox_dem_extent_layer.isEnabled())
             self.assertTrue(dialog.pushButton_DownloadDem.isEnabled())
             self.assertEqual(dialog.selected_dem_source(), "ga_best")
             self.assertIn("falls back to 30 m", dialog.label_dem_tool_status.text())
+
+            dialog.checkBox_dem_extent_override.setChecked(True)
+            self.assertTrue(dialog.comboBox_dem_extent_layer.isEnabled())
+            self.assertIs(dialog.selected_dem_extent_layer(), layer)
+            self.assertIn("custom extent", dialog.label_dem_tool_status.text())
 
             self.assertFalse(dialog.pushButton_CreateDemContours.isEnabled())
             dialog.set_downloaded_dem(layer)
