@@ -1,10 +1,11 @@
 """Optional DEM download and elevation-polygon processing helpers."""
 
+from math import ceil
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlencode
 
-from qgis.PyQt.QtCore import QByteArray, QSaveFile, QUrl  # type: ignore
+from qgis.PyQt.QtCore import QByteArray, QSaveFile, QTemporaryDir, QUrl  # type: ignore
 from qgis.PyQt.QtGui import QColor  # type: ignore
 from qgis.PyQt.QtNetwork import QNetworkRequest  # type: ignore
 from qgis.core import (  # type: ignore
@@ -33,7 +34,9 @@ OPEN_TOPOGRAPHY_ALGORITHM_ID = (
 )
 CONTOUR_POLYGON_ALGORITHM_ID = "gdal:contour_polygon"
 GA_WCS_TRANSFER_TIMEOUT_MS = 120_000
-GA_MAX_DOWNLOAD_PIXELS = 25_000_000
+GA_WCS_TILE_SIZE = 4000
+# Temporarily disabled to permit oversized WCS requests during terrain testing.
+GA_MAX_DOWNLOAD_PIXELS: Optional[int] = None
 
 GA_DEM_SOURCES: Dict[str, Dict[str, Any]] = {
     "ga_lidar_5m": {
@@ -227,18 +230,8 @@ def create_ols_square_extent_layer(airport_code: str = "") -> QgsVectorLayer:
     return layer
 
 
-def build_ga_wcs_url(extent_layer: Any, source_key: str) -> str:
-    """Build a bounded WCS 1.0 GeoTIFF request for a GA terrain source."""
-    source = ga_dem_source(source_key)
-    xmin, ymin, xmax, ymax = ga_extent_bbox(extent_layer, source["crs"])
-    width = max(1, int((xmax - xmin) / float(source["resx"])) + 1)
-    height = max(1, int((ymax - ymin) / float(source["resy"])) + 1)
-    pixels = width * height
-    if pixels > GA_MAX_DOWNLOAD_PIXELS:
-        raise ValueError(
-            f"{source['short_label']} would contain about {pixels:,} cells. "
-            "Choose a smaller extent or the 30 m source."
-        )
+def _build_ga_wcs_url(source: Dict[str, Any], bbox: Tuple[float, float, float, float]) -> str:
+    xmin, ymin, xmax, ymax = bbox
     parameters = (
         ("service", "WCS"),
         ("version", "1.0.0"),
@@ -252,6 +245,47 @@ def build_ga_wcs_url(extent_layer: Any, source_key: str) -> str:
         ("resy", f"{float(source['resy']):.15g}"),
     )
     return f"{source['service_url']}?{urlencode(parameters)}"
+
+
+def build_ga_wcs_urls(extent_layer: Any, source_key: str) -> Tuple[str, ...]:
+    """Build service-safe tiled WCS requests covering one terrain extent."""
+    source = ga_dem_source(source_key)
+    xmin, ymin, xmax, ymax = ga_extent_bbox(extent_layer, source["crs"])
+    width = max(1, int((xmax - xmin) / float(source["resx"])) + 1)
+    height = max(1, int((ymax - ymin) / float(source["resy"])) + 1)
+    pixels = width * height
+    if GA_MAX_DOWNLOAD_PIXELS is not None and pixels > GA_MAX_DOWNLOAD_PIXELS:
+        raise ValueError(
+            f"{source['short_label']} would contain about {pixels:,} cells. "
+            "Choose a smaller extent or the 30 m source."
+        )
+    column_tiles = ceil(width / GA_WCS_TILE_SIZE)
+    row_tiles = ceil(height / GA_WCS_TILE_SIZE)
+    urls = []
+    for row in range(row_tiles):
+        tile_ymin = ymin + row * GA_WCS_TILE_SIZE * float(source["resy"])
+        tile_ymax = min(
+            ymax,
+            ymin + (row + 1) * GA_WCS_TILE_SIZE * float(source["resy"]),
+        )
+        for column in range(column_tiles):
+            tile_xmin = xmin + column * GA_WCS_TILE_SIZE * float(source["resx"])
+            tile_xmax = min(
+                xmax,
+                xmin + (column + 1) * GA_WCS_TILE_SIZE * float(source["resx"]),
+            )
+            urls.append(
+                _build_ga_wcs_url(
+                    source,
+                    (tile_xmin, tile_ymin, tile_xmax, tile_ymax),
+                )
+            )
+    return tuple(urls)
+
+
+def build_ga_wcs_url(extent_layer: Any, source_key: str) -> str:
+    """Build the first bounded WCS request; retained for API compatibility."""
+    return build_ga_wcs_urls(extent_layer, source_key)[0]
 
 
 def _download_ga_wcs(url: str) -> bytes:
@@ -279,14 +313,50 @@ def _download_ga_wcs(url: str) -> bytes:
 def download_ga_dem(extent_layer: Any, source_key: str, output_path: str) -> Dict[str, Any]:
     """Download a clipped GA elevation GeoTIFF and return its source metadata."""
     source = ga_dem_source(source_key)
-    content = _download_ga_wcs(build_ga_wcs_url(extent_layer, source_key))
     output = Path(str(output_path))
     output.parent.mkdir(parents=True, exist_ok=True)
-    save_file = QSaveFile(str(output))
-    if not save_file.open(QSaveFile.OpenModeFlag.WriteOnly):
-        raise RuntimeError(f"Could not create DEM output: {output}")
-    if save_file.write(content) != len(content) or not save_file.commit():
-        raise RuntimeError(f"Could not save downloaded DEM: {output}")
+    urls = build_ga_wcs_urls(extent_layer, source_key)
+    temporary = QTemporaryDir()
+    if not temporary.isValid():
+        raise RuntimeError("Could not create temporary storage for GA DEM tiles.")
+    tile_paths = []
+    for index, url in enumerate(urls, start=1):
+        tile_path = Path(temporary.path()) / f"tile_{index:03d}.tif"
+        content = _download_ga_wcs(url)
+        save_file = QSaveFile(str(tile_path))
+        if not save_file.open(QSaveFile.OpenModeFlag.WriteOnly):
+            raise RuntimeError(f"Could not create DEM tile: {tile_path}")
+        if save_file.write(content) != len(content) or not save_file.commit():
+            raise RuntimeError(f"Could not save downloaded DEM tile: {tile_path}")
+        tile_paths.append(str(tile_path))
+
+    if len(tile_paths) == 1:
+        source_file = QSaveFile(str(output))
+        if not source_file.open(QSaveFile.OpenModeFlag.WriteOnly):
+            raise RuntimeError(f"Could not create DEM output: {output}")
+        content = Path(tile_paths[0]).read_bytes()
+        if source_file.write(content) != len(content) or not source_file.commit():
+            raise RuntimeError(f"Could not save downloaded DEM: {output}")
+    else:
+        import processing  # type: ignore
+
+        result = processing.run(
+            "gdal:merge",
+            {
+                "INPUT": tile_paths,
+                "PCT": False,
+                "SEPARATE": False,
+                "NODATA_INPUT": None,
+                "NODATA_OUTPUT": None,
+                "OPTIONS": "COMPRESS=DEFLATE|TILED=YES",
+                "EXTRA": "",
+                "DATA_TYPE": 0,
+                "OUTPUT": str(output),
+            },
+        )
+        merged = result.get("OUTPUT") if isinstance(result, dict) else None
+        if not merged or not Path(str(merged)).is_file():
+            raise RuntimeError("QGIS could not merge the downloaded GA DEM tiles.")
     source.update(
         {
             "dataset": source["label"],
@@ -428,6 +498,7 @@ __all__ = [
     "OPEN_TOPOGRAPHY_ALGORITHM_ID",
     "apply_elevation_polygon_style",
     "build_ga_wcs_url",
+    "build_ga_wcs_urls",
     "contour_polygon_algorithm",
     "create_elevation_polygons",
     "create_ols_square_extent_layer",

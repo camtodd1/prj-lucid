@@ -18,6 +18,7 @@ from safeguarding_builder.core.dem_integration import (  # noqa: E402
     OPEN_TOPOGRAPHY_ALGORITHM_ID,
     apply_elevation_polygon_style,
     build_ga_wcs_url,
+    build_ga_wcs_urls,
     create_elevation_polygons,
     create_ols_square_extent_layer,
     download_ga_dem,
@@ -145,6 +146,25 @@ class DemIntegrationTests(unittest.TestCase):
             self.assertEqual(output.read_bytes(), b"II*\x00test-geotiff")
             self.assertEqual(metadata["source_service"], "Geoscience Australia WCS")
             self.assertEqual(metadata["vertical_epsg"], "EPSG:5773")
+
+    def test_large_ga_extent_is_split_within_service_tile_limits(self):
+        layer = QgsVectorLayer("Polygon?crs=EPSG:4326", "large extent", "memory")
+        feature = QgsFeature(layer.fields())
+        feature.setGeometry(
+            QgsGeometry.fromWkt(
+                "POLYGON ((152.945321310581 -27.533738722424, "
+                "153.290813120101 -27.533738722424, "
+                "153.290813120101 -27.225445896170, "
+                "152.945321310581 -27.225445896170, "
+                "152.945321310581 -27.533738722424))"
+            )
+        )
+        layer.dataProvider().addFeature(feature)
+        layer.updateExtents()
+
+        urls = build_ga_wcs_urls(layer, "ga_lidar_5m")
+
+        self.assertEqual(len(urls), 4)
 
     def test_processing_dialog_receives_the_selected_layer_as_extent(self):
         layer = QgsVectorLayer("Polygon?crs=EPSG:7856", "DEM extent", "memory")
