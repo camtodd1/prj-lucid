@@ -78,6 +78,7 @@ class DemToolsMixin:
         )
         self.pushButton_dem_extent_override.setCheckable(True)
         self.pushButton_dem_extent_override.setFixedHeight(26)
+        self.pushButton_dem_extent_override.setFixedWidth(126)
         self.pushButton_dem_extent_override.setToolTip(
             "Override the automatic square enclosing all generated OLS layers."
         )
@@ -90,7 +91,12 @@ class DemToolsMixin:
         group_layout.addWidget(extent_label, 2, 0)
         group_layout.addWidget(self.frame_dem_extent_auto, 2, 1)
         group_layout.addWidget(self.comboBox_dem_extent_layer, 2, 1)
-        group_layout.addWidget(self.pushButton_dem_extent_override, 2, 2)
+        group_layout.addWidget(
+            self.pushButton_dem_extent_override,
+            2,
+            2,
+            QtCore.Qt.AlignmentFlag.AlignRight,
+        )
 
         self.label_dem_tool_status = QtWidgets.QLabel()
         self.label_dem_tool_status.setObjectName("label_dem_tool_status")
@@ -106,7 +112,7 @@ class DemToolsMixin:
         self.pushButton_DownloadDem = QtWidgets.QPushButton("Download terrain")
         self.pushButton_DownloadDem.setObjectName("pushButton_DownloadDem")
         self.pushButton_DownloadDem.setFixedHeight(32)
-        self.pushButton_DownloadDem.setFixedWidth(180)
+        self.pushButton_DownloadDem.setFixedWidth(198)
         self.pushButton_DownloadDem.setStyleSheet(
             "QPushButton { background: #1769c2; color: white; border: 1px solid #125aa8; "
             "border-radius: 4px; padding: 7px 14px; font-weight: 600; }"
@@ -193,7 +199,7 @@ class DemToolsMixin:
             "pushButton_CreateDemContours"
         )
         self.pushButton_CreateDemContours.setFixedHeight(32)
-        self.pushButton_CreateDemContours.setFixedWidth(180)
+        self.pushButton_CreateDemContours.setFixedWidth(198)
         self.pushButton_CreateDemContours.setEnabled(False)
         group_layout.addWidget(
             self.pushButton_CreateDemContours,
