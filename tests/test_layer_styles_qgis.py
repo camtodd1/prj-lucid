@@ -340,6 +340,26 @@ class LayerStyleTests(unittest.TestCase):
             '"contour_class" = \'intermediate\'',
         )
 
+    def test_contour_labels_are_limited_to_primary_contours(self):
+        layer = QgsVectorLayer(
+            "LineString?field=contour_elev_am:double&field=contour_class:string",
+            "Approach 21 - Contours",
+            "memory",
+        )
+
+        LayerMixin()._apply_controlling_contour_labels(
+            layer,
+            '"contour_elev_am" IS NOT NULL',
+        )
+
+        self.assertTrue(layer.labelsEnabled())
+        label_rules = layer.labeling().rootRule().children()
+        self.assertEqual(len(label_rules), 1)
+        self.assertIn(
+            '"contour_class" = \'primary\'',
+            label_rules[0].filterExpression(),
+        )
+
     def test_modernisation_no_change_style_is_muted_blue_and_subdued(self):
         layer = QgsVectorLayer(
             "Polygon?field=label_txt:string",

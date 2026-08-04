@@ -1038,10 +1038,16 @@ class LayerMixin:
             )
 
     def _apply_controlling_contour_labels(self, layer: QgsVectorLayer, index_expression: str):
-        """Label only index controlling contours to keep dense areas readable."""
+        """Label only primary contours to keep dense areas readable."""
         if layer is None or not layer.isValid() or layer.fields().indexFromName("contour_elev_am") < 0:
             return
         try:
+            contour_class_field = self._persisted_field_name(layer, "contour_class")
+            if layer.fields().indexFromName(contour_class_field) >= 0:
+                index_expression = (
+                    f"({index_expression}) AND "
+                    f"(\"{contour_class_field}\" = 'primary')"
+                )
             settings = QgsPalLayerSettings()
             settings.fieldName = (
                 "CASE "
