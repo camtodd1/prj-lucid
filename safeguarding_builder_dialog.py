@@ -56,6 +56,7 @@ try:
     from .dialog.output_options import OutputOptionsMixin
     from .dialog.cns_table import CnsTableMixin
     from .dialog.agl_options import AglOptionsMixin
+    from .dialog.dem_tools import DemToolsMixin
     from .dialog.persistence import PersistenceMixin
     from .core.run_history import classify_runway_configuration
     from .frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles
@@ -85,6 +86,7 @@ except ImportError:
     from dialog.output_options import OutputOptionsMixin  # type: ignore
     from dialog.cns_table import CnsTableMixin  # type: ignore
     from dialog.agl_options import AglOptionsMixin  # type: ignore
+    from dialog.dem_tools import DemToolsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
     from core.run_history import classify_runway_configuration  # type: ignore
     from frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles  # type: ignore
@@ -106,6 +108,7 @@ class SafeguardingBuilderDialog(
     OutputOptionsMixin,
     CnsTableMixin,
     AglOptionsMixin,
+    DemToolsMixin,
     PersistenceMixin,
     QtWidgets.QWidget,
     FORM_CLASS,
@@ -215,6 +218,7 @@ class SafeguardingBuilderDialog(
 
         self._setup_cns_manual_entry()
         self._setup_agl_options_ui()
+        self._setup_dem_tools_ui()
 
         self._setup_output_options_ui_connections()
         self._setup_agl_options_ui_connections()
@@ -841,6 +845,7 @@ class SafeguardingBuilderDialog(
             ("tab_ols", "OLS"),
             ("tab_lighting", "Lighting"),
             ("tab_output", "Output"),
+            ("tab_terrain", "Terrain"),
         ]
         tab_widget = getattr(self, "tabWidget_workflow", None)
         if tab_widget is not None:
@@ -878,6 +883,10 @@ class SafeguardingBuilderDialog(
                 "tab": "tab_output",
                 "summary": "Choose where generated layers will be saved.",
             },
+            {
+                "tab": "tab_terrain",
+                "summary": "Download optional terrain data using a project layer extent.",
+            },
         ]
 
     def _workflow_tab_layout(self, tab_name: str) -> Optional[QtWidgets.QVBoxLayout]:
@@ -887,6 +896,7 @@ class SafeguardingBuilderDialog(
             "tab_cns": "verticalLayout_cnsTab",
             "tab_ols": "verticalLayout_olsTab",
             "tab_output": "verticalLayout_outputTab",
+            "tab_terrain": "verticalLayout_terrainTab",
         }
         layout_name = explicit_layout_names.get(tab_name)
         layout = getattr(self, layout_name, None) if layout_name else None
@@ -1720,6 +1730,7 @@ class SafeguardingBuilderDialog(
             "verticalLayout_cnsTab",
             "verticalLayout_olsTab",
             "verticalLayout_outputTab",
+            "verticalLayout_terrainTab",
         ]:
             layout = getattr(self, layout_name, None)
             if isinstance(layout, QtWidgets.QVBoxLayout):
@@ -1732,6 +1743,7 @@ class SafeguardingBuilderDialog(
             "groupBox_olsWorkflow",
             "groupBox_contourIntervals",
             "groupBox_outputOptions",
+            "groupBox_dem_tools",
             "groupBox_agl_options",
             "groupBox_agl_generated",
             "groupBox_agl_elements",

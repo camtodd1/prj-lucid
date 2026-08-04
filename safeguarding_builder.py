@@ -76,6 +76,7 @@ from .core.osm_aeroway import (
     apply_aeroway_style,
     fetch_aeroway_osm,
 )
+from .core.dem_integration import open_topography_dialog
 from .dialog.osm_progress import OsmDownloadProgressDialog
 from .surfaces.physical import PhysicalGeometryMixin
 from .surfaces.annex14_geometry import Annex14GeometryMixin
@@ -655,6 +656,8 @@ class SafeguardingBuilder(
     def run(self):
         """Show the Safeguarding Builder dock or bring it to the front."""
         if self.dock is not None:
+            if self.dlg is not None:
+                self.dlg.refresh_dem_tool_state()
             self.dock.show()
             self.dock.raise_()
             return
@@ -720,8 +723,40 @@ class SafeguardingBuilder(
             if osm_button:
                 osm_button.clicked.connect(self.download_osm_aeroway)
 
+            dem_button = self.dlg.findChild(QPushButton, "pushButton_DownloadDem")
+            if dem_button:
+                dem_button.clicked.connect(self.open_dem_downloader)
+
+        self.dlg.refresh_dem_tool_state()
         self.dock.show()
         self.dock.raise_()
+
+    def open_dem_downloader(self):
+        """Open the optional OpenTopography downloader for a layer extent."""
+        if self.dlg is None:
+            return
+        extent_layer = self.dlg.selected_dem_extent_layer()
+        try:
+            open_topography_dialog(extent_layer)
+        except (RuntimeError, ValueError) as exc:
+            QMessageBox.warning(
+                self.dlg,
+                self.tr("DEM downloader unavailable"),
+                self.tr(str(exc)),
+            )
+        except Exception as exc:
+            self._log_warning(
+                f"Could not open OpenTopography DEM Downloader: {exc}\n"
+                f"{traceback.format_exc()}"
+            )
+            QMessageBox.critical(
+                self.dlg,
+                self.tr("DEM downloader error"),
+                self.tr(
+                    "Could not open OpenTopography DEM Downloader. "
+                    "See the QGIS log for details."
+                ),
+            )
 
     def download_osm_aeroway(self):
         """Download aeroway-tagged OSM elements within 5 km of the entered ARP."""
