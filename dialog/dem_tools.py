@@ -41,7 +41,7 @@ class DemToolsMixin:
         source_label = QtWidgets.QLabel("Terrain source")
         self.comboBox_dem_source = QtWidgets.QComboBox(group)
         self.comboBox_dem_source.setObjectName("comboBox_dem_source")
-        self.comboBox_dem_source.setFixedHeight(32)
+        self.comboBox_dem_source.setFixedHeight(26)
         self.comboBox_dem_source.addItem(
             "GA best available (5 m, then 30 m)", "ga_best"
         )
@@ -61,7 +61,7 @@ class DemToolsMixin:
             "QFrame#frame_dem_extent_auto { background: #f7f8fa; "
             "border: 1px solid #c9cdd2; border-radius: 4px; }"
         )
-        self.frame_dem_extent_auto.setFixedHeight(32)
+        self.frame_dem_extent_auto.setFixedHeight(26)
         auto_layout = QtWidgets.QHBoxLayout(self.frame_dem_extent_auto)
         auto_layout.setContentsMargins(9, 5, 9, 5)
         auto_text = QtWidgets.QLabel("Automatic — OLS square", self.frame_dem_extent_auto)
@@ -76,7 +76,7 @@ class DemToolsMixin:
             "pushButton_dem_extent_override"
         )
         self.pushButton_dem_extent_override.setCheckable(True)
-        self.pushButton_dem_extent_override.setFixedHeight(32)
+        self.pushButton_dem_extent_override.setFixedHeight(26)
         self.pushButton_dem_extent_override.setToolTip(
             "Override the automatic square enclosing all generated OLS layers."
         )
@@ -85,7 +85,7 @@ class DemToolsMixin:
         self.comboBox_dem_extent_layer.setAllowEmptyLayer(True)
         self.comboBox_dem_extent_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
         self.comboBox_dem_extent_layer.setVisible(False)
-        self.comboBox_dem_extent_layer.setFixedHeight(32)
+        self.comboBox_dem_extent_layer.setFixedHeight(26)
         group_layout.addWidget(extent_label, 2, 0)
         group_layout.addWidget(self.frame_dem_extent_auto, 2, 1)
         group_layout.addWidget(self.comboBox_dem_extent_layer, 2, 1)
@@ -104,7 +104,7 @@ class DemToolsMixin:
 
         self.pushButton_DownloadDem = QtWidgets.QPushButton("Download terrain")
         self.pushButton_DownloadDem.setObjectName("pushButton_DownloadDem")
-        self.pushButton_DownloadDem.setFixedHeight(36)
+        self.pushButton_DownloadDem.setFixedHeight(32)
         self.pushButton_DownloadDem.setStyleSheet(
             "QPushButton { background: #1769c2; color: white; border: 1px solid #125aa8; "
             "border-radius: 4px; padding: 7px 14px; font-weight: 600; }"
@@ -190,7 +190,7 @@ class DemToolsMixin:
         self.pushButton_CreateDemContours.setObjectName(
             "pushButton_CreateDemContours"
         )
-        self.pushButton_CreateDemContours.setFixedHeight(36)
+        self.pushButton_CreateDemContours.setFixedHeight(32)
         self.pushButton_CreateDemContours.setEnabled(False)
         group_layout.addWidget(
             self.pushButton_CreateDemContours,

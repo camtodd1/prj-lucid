@@ -1880,12 +1880,12 @@ class SafeguardingBuilderDialog(
             QtWidgets.QPushButton,
         ):
             for widget in root.findChildren(widget_type):
-                height = 36 if widget.objectName() in commit_actions else 32
+                height = 32 if widget.objectName() in commit_actions else 26
                 widget.setFixedHeight(height)
 
         generate_button = getattr(self, "pushButton_Generate", None)
         if generate_button is not None:
-            generate_button.setFixedHeight(38)
+            generate_button.setFixedHeight(32)
 
     def _apply_status_chip(
         self,
