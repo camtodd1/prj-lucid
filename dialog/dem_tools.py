@@ -63,28 +63,31 @@ class DemToolsMixin:
 
         extent_row = QtWidgets.QHBoxLayout()
         extent_row.setSpacing(8)
-        self.checkBox_dem_extent_override = QtWidgets.QCheckBox(
-            "Use custom extent"
+        self.pushButton_dem_extent_override = QtWidgets.QPushButton(
+            "Custom extent…"
         )
-        self.checkBox_dem_extent_override.setObjectName(
-            "checkBox_dem_extent_override"
+        self.pushButton_dem_extent_override.setObjectName(
+            "pushButton_dem_extent_override"
         )
-        self.checkBox_dem_extent_override.setToolTip(
+        self.pushButton_dem_extent_override.setCheckable(True)
+        self.pushButton_dem_extent_override.setFlat(True)
+        self.pushButton_dem_extent_override.setToolTip(
             "Override the automatic square enclosing all generated OLS layers."
         )
-        extent_row.addWidget(self.checkBox_dem_extent_override)
+        extent_row.addWidget(self.pushButton_dem_extent_override)
 
         self.comboBox_dem_extent_layer = QgsMapLayerComboBox(group)
         self.comboBox_dem_extent_layer.setObjectName("comboBox_dem_extent_layer")
         self.comboBox_dem_extent_layer.setAllowEmptyLayer(True)
         self.comboBox_dem_extent_layer.setFilters(QgsMapLayerProxyModel.VectorLayer)
-        self.comboBox_dem_extent_layer.setEnabled(False)
+        self.comboBox_dem_extent_layer.setVisible(False)
         extent_row.addWidget(self.comboBox_dem_extent_layer, 1)
         group_layout.addLayout(extent_row)
 
         self.label_dem_tool_status = QtWidgets.QLabel()
         self.label_dem_tool_status.setObjectName("label_dem_tool_status")
         self.label_dem_tool_status.setWordWrap(True)
+        self.label_dem_tool_status.setVisible(False)
         group_layout.addWidget(self.label_dem_tool_status)
 
         self.pushButton_DownloadDem = QtWidgets.QPushButton("Download terrain")
@@ -179,13 +182,13 @@ class DemToolsMixin:
         self.comboBox_dem_source.currentIndexChanged.connect(
             self.refresh_dem_tool_state
         )
-        self.checkBox_dem_extent_override.toggled.connect(
+        self.pushButton_dem_extent_override.toggled.connect(
             self._toggle_dem_extent_override
         )
         self.refresh_dem_tool_state()
 
     def selected_dem_extent_layer(self):
-        override = getattr(self, "checkBox_dem_extent_override", None)
+        override = getattr(self, "pushButton_dem_extent_override", None)
         if override is None or not override.isChecked():
             return None
         combo = getattr(self, "comboBox_dem_extent_layer", None)
@@ -194,7 +197,10 @@ class DemToolsMixin:
     def _toggle_dem_extent_override(self, enabled: bool) -> None:
         combo = getattr(self, "comboBox_dem_extent_layer", None)
         if combo is not None:
-            combo.setEnabled(bool(enabled))
+            combo.setVisible(bool(enabled))
+        button = getattr(self, "pushButton_dem_extent_override", None)
+        if button is not None:
+            button.setText("Use automatic extent" if enabled else "Custom extent…")
         self.refresh_dem_tool_state()
 
     def selected_dem_source(self) -> str:
@@ -257,6 +263,8 @@ class DemToolsMixin:
         button = getattr(self, "pushButton_DownloadDem", None)
         if status is None or button is None:
             return
+        status.clear()
+        status.setVisible(False)
 
         source_key = self.selected_dem_source()
         is_open_topography = source_key == "open_topography"
@@ -268,6 +276,7 @@ class DemToolsMixin:
             status.setText(
                 "OpenTopography DEM Downloader is not installed or enabled."
             )
+            status.setVisible(True)
             status.setStyleSheet("color: #8a4b08;")
             button.setEnabled(False)
             button.setToolTip(
@@ -280,26 +289,27 @@ class DemToolsMixin:
             )
             return
 
-        custom_extent = self.selected_dem_extent_layer() is not None
-        if is_open_topography:
-            status.setText(
-                "Ready. Uses the selected custom extent."
-                if custom_extent
-                else "Ready. Uses the automatic square enclosing all OLS layers."
+        override_enabled = self.pushButton_dem_extent_override.isChecked()
+        if override_enabled and self.selected_dem_extent_layer() is None:
+            status.setText("Choose a custom extent layer.")
+            status.setStyleSheet("color: #56616d;")
+            status.setVisible(True)
+            button.setEnabled(False)
+            button.setToolTip("Choose a custom extent layer or use the automatic extent.")
+            self._set_dem_workflow_state(
+                "Select extent",
+                "optional",
+                "Choose a custom extent layer or return to the automatic OLS extent.",
             )
+            return
+
+        if is_open_topography:
             tooltip = "Open the downloader using the automatic or overridden extent."
         elif source_key == "ga_best":
-            status.setText(
-                "Ready. Uses the selected custom extent; GA 5 m falls back to 30 m."
-                if custom_extent
-                else "Ready. Uses the smallest square covering all OLS layers; GA 5 m falls back to 30 m."
-            )
             tooltip = "Download the best available GA bare-earth DEM for this extent."
         else:
             resolution = "5 m LiDAR" if source_key == "ga_lidar_5m" else "30 m SRTM"
-            status.setText(f"Ready to download GA {resolution} terrain for this extent.")
             tooltip = f"Download GA {resolution} bare-earth terrain."
-        status.setStyleSheet("color: #356b3d;")
         button.setEnabled(True)
         button.setToolTip(tooltip)
         self._set_dem_workflow_state(

@@ -55,15 +55,19 @@ class DemIntegrationTests(unittest.TestCase):
                 0,
             )
             self.assertIsNone(dialog.selected_dem_extent_layer())
-            self.assertFalse(dialog.comboBox_dem_extent_layer.isEnabled())
+            self.assertTrue(dialog.comboBox_dem_extent_layer.isHidden())
             self.assertTrue(dialog.pushButton_DownloadDem.isEnabled())
             self.assertEqual(dialog.selected_dem_source(), "ga_best")
-            self.assertIn("falls back to 30 m", dialog.label_dem_tool_status.text())
+            self.assertTrue(dialog.label_dem_tool_status.isHidden())
 
-            dialog.checkBox_dem_extent_override.setChecked(True)
-            self.assertTrue(dialog.comboBox_dem_extent_layer.isEnabled())
+            dialog.pushButton_dem_extent_override.setChecked(True)
+            self.assertFalse(dialog.comboBox_dem_extent_layer.isHidden())
             self.assertIs(dialog.selected_dem_extent_layer(), layer)
-            self.assertIn("custom extent", dialog.label_dem_tool_status.text())
+            self.assertEqual(
+                dialog.pushButton_dem_extent_override.text(),
+                "Use automatic extent",
+            )
+            self.assertTrue(dialog.label_dem_tool_status.isHidden())
 
             self.assertFalse(dialog.pushButton_CreateDemContours.isEnabled())
             dialog.set_downloaded_dem(layer)
