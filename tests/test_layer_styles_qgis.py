@@ -7,6 +7,7 @@ import unittest
 from pathlib import Path
 
 from qgis.PyQt.QtCore import QVariant
+from qgis.PyQt.QtGui import QColor
 from qgis.PyQt.QtWidgets import QApplication
 from qgis.core import (
     Qgis,
@@ -306,6 +307,38 @@ class LayerStyleTests(unittest.TestCase):
         label_rules = labeling.rootRule().children()
         self.assertEqual(len(label_rules), 1)
         self.assertEqual(label_rules[0].settings().fieldName, "label_txt")
+
+    def test_surface_contour_style_preserves_primary_and_mutes_intermediate(self):
+        layer = QgsVectorLayer(
+            "LineString?field=contour_class:string",
+            "Approach 21 - Contours",
+            "memory",
+        )
+        primary_color = QColor(174, 68, 45, 255)
+        layer.renderer().symbol().setColor(primary_color)
+        layer.renderer().symbol().setWidth(0.42)
+
+        LayerMixin()._apply_surface_contour_class_style(layer)
+
+        renderer = layer.renderer()
+        self.assertEqual(renderer.type(), "RuleRenderer")
+        rules = {rule.label(): rule for rule in renderer.rootRule().children()}
+        self.assertEqual(set(rules), {"Primary contour", "Intermediate contour"})
+        self.assertEqual(rules["Primary contour"].symbol().color(), primary_color)
+        intermediate_symbol = rules["Intermediate contour"].symbol()
+        self.assertLess(
+            intermediate_symbol.color().hslSaturation(),
+            primary_color.hslSaturation(),
+        )
+        self.assertLess(intermediate_symbol.color().alpha(), primary_color.alpha())
+        self.assertLess(
+            intermediate_symbol.width(),
+            rules["Primary contour"].symbol().width(),
+        )
+        self.assertEqual(
+            rules["Intermediate contour"].filterExpression(),
+            '"contour_class" = \'intermediate\'',
+        )
 
     def test_modernisation_no_change_style_is_muted_blue_and_subdued(self):
         layer = QgsVectorLayer(

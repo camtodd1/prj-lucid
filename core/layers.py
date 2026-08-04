@@ -469,6 +469,7 @@ class LayerMixin:
                                 palette="ofs" if str(style_key) == "Annex 14 OFS Contour" else "default",
                             )
                         else:
+                            self._apply_surface_contour_class_style(layer)
                             self._apply_controlling_contour_labels(
                                 layer,
                                 '"contour_elev_am" IS NOT NULL',
@@ -485,6 +486,7 @@ class LayerMixin:
                         "OLS Transitional Contour",
                         "OLS Conical Contour",
                     }:
+                        self._apply_surface_contour_class_style(layer)
                         self._apply_controlling_contour_labels(
                             layer,
                             '"contour_elev_am" IS NOT NULL',
@@ -978,6 +980,59 @@ class LayerMixin:
         except Exception as exc:
             QgsMessageLog.logMessage(
                 f"Warning: failed to apply controlling contour line style: {exc}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
+    def _apply_surface_contour_class_style(self, layer: QgsVectorLayer) -> None:
+        """Split a surface contour layer into primary and muted intermediate rules."""
+        if layer is None or not layer.isValid():
+            return
+        contour_class_field = self._persisted_field_name(layer, "contour_class")
+        if layer.fields().indexFromName(contour_class_field) < 0:
+            return
+
+        renderer = layer.renderer()
+        if renderer is None:
+            return
+        base_symbol = renderer.symbol()
+        if base_symbol is None and renderer.type() == "RuleRenderer":
+            base_rule = next(
+                (rule for rule in renderer.rootRule().children() if rule.symbol() is not None),
+                None,
+            )
+            base_symbol = base_rule.symbol() if base_rule is not None else None
+        if base_symbol is None or not isinstance(base_symbol, QgsLineSymbol):
+            return
+
+        try:
+            primary_symbol = base_symbol.clone()
+            intermediate_symbol = base_symbol.clone()
+            primary_color = primary_symbol.color()
+            muted_color = QColor.fromHsl(
+                max(0, primary_color.hslHue()),
+                max(0, round(primary_color.hslSaturation() * 0.42)),
+                min(255, round(primary_color.lightness() * 1.12)),
+                min(primary_color.alpha(), 180),
+            )
+            intermediate_symbol.setColor(muted_color)
+            intermediate_symbol.setWidth(max(0.16, primary_symbol.width() * 0.55))
+
+            root = QgsRuleBasedRenderer.Rule(None)
+            for contour_class, label, symbol in (
+                ("primary", "Primary contour", primary_symbol),
+                ("intermediate", "Intermediate contour", intermediate_symbol),
+            ):
+                rule = QgsRuleBasedRenderer.Rule(symbol)
+                rule.setFilterExpression(
+                    f'"{contour_class_field}" = \'{contour_class}\''
+                )
+                rule.setLabel(label)
+                root.appendChild(rule)
+            layer.setRenderer(QgsRuleBasedRenderer(root))
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"Warning: failed to apply contour class style: {exc}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
