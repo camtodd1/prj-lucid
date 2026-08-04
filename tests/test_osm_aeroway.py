@@ -244,13 +244,16 @@ class OsmAerowayTests(unittest.TestCase):
                 dialog.groupBox_AirportMap,
             )
             airport_layout = dialog.verticalLayout_airportTab
-            self.assertLess(
-                airport_layout.indexOf(dialog.groupBox_ARP),
-                airport_layout.indexOf(dialog.groupBox_AirportMap),
+            self.assertEqual(airport_layout.indexOf(dialog.groupBox_AirportMap), -1)
+            self.assertGreaterEqual(
+                dialog.verticalLayout_airportMapTab.indexOf(
+                    dialog.groupBox_AirportMap
+                ),
+                0,
             )
-            self.assertLess(
-                airport_layout.indexOf(dialog.groupBox_AirportMap),
-                airport_layout.indexOf(dialog.groupBox_MET),
+            self.assertGreaterEqual(
+                dialog.tabWidget_workflow.indexOf(dialog.tab_airport_map),
+                0,
             )
             context = dialog.findChild(
                 QtWidgets.QLabel,
@@ -259,6 +262,14 @@ class OsmAerowayTests(unittest.TestCase):
             self.assertEqual(
                 context.text(),
                 "Add the airport location and optional weather station.",
+            )
+            map_context = dialog.findChild(
+                QtWidgets.QLabel,
+                "label_workflow_summary_tab_airport_map",
+            )
+            self.assertEqual(
+                map_context.text(),
+                "Import airport features from OpenStreetMap around the ARP.",
             )
             self.assertTrue(
                 all(

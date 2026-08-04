@@ -219,6 +219,7 @@ class SafeguardingBuilderDialog(
         self._setup_cns_manual_entry()
         self._setup_agl_options_ui()
         self._setup_dem_tools_ui()
+        self._setup_airport_map_tab()
 
         self._setup_output_options_ui_connections()
         self._setup_agl_options_ui_connections()
@@ -587,6 +588,38 @@ class SafeguardingBuilderDialog(
                 "Import airport features from OpenStreetMap within 5 km of the airport location."
             )
 
+    def _setup_airport_map_tab(self) -> None:
+        """Move optional airport-map acquisition into its own workflow tab."""
+        tab_widget = getattr(self, "tabWidget_workflow", None)
+        airport_map_group = getattr(
+            self,
+            "groupBox_AirportMap",
+            self.findChild(QtWidgets.QGroupBox, "groupBox_AirportMap"),
+        )
+        if tab_widget is None or airport_map_group is None:
+            return
+
+        airport_layout = getattr(self, "verticalLayout_airportTab", None)
+        if airport_layout is not None:
+            airport_layout.removeWidget(airport_map_group)
+
+        self.tab_airport_map = QtWidgets.QWidget()
+        self.tab_airport_map.setObjectName("tab_airport_map")
+        self.verticalLayout_airportMapTab = QtWidgets.QVBoxLayout(
+            self.tab_airport_map
+        )
+        self.verticalLayout_airportMapTab.setObjectName(
+            "verticalLayout_airportMapTab"
+        )
+        self.verticalLayout_airportMapTab.setContentsMargins(8, 8, 8, 8)
+        self.verticalLayout_airportMapTab.setSpacing(8)
+        self.verticalLayout_airportMapTab.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignTop
+        )
+        self.verticalLayout_airportMapTab.addWidget(airport_map_group)
+        self.verticalLayout_airportMapTab.addStretch(1)
+        tab_widget.addTab(self.tab_airport_map, "Airport Map")
+
     def _style_global_context_groupbox(self, groupbox: Optional[QtWidgets.QGroupBox]) -> None:
         """Apply identical title and border geometry to the top setup cards."""
         if groupbox is None:
@@ -846,6 +879,7 @@ class SafeguardingBuilderDialog(
             ("tab_lighting", "Lighting"),
             ("tab_output", "Output"),
             ("tab_terrain", "Terrain"),
+            ("tab_airport_map", "Airport Map"),
         ]
         tab_widget = getattr(self, "tabWidget_workflow", None)
         if tab_widget is not None:
@@ -887,6 +921,10 @@ class SafeguardingBuilderDialog(
                 "tab": "tab_terrain",
                 "summary": "Download terrain for the OLS area, then create elevation polygons.",
             },
+            {
+                "tab": "tab_airport_map",
+                "summary": "Import airport features from OpenStreetMap around the ARP.",
+            },
         ]
 
     def _workflow_tab_layout(self, tab_name: str) -> Optional[QtWidgets.QVBoxLayout]:
@@ -897,6 +935,7 @@ class SafeguardingBuilderDialog(
             "tab_ols": "verticalLayout_olsTab",
             "tab_output": "verticalLayout_outputTab",
             "tab_terrain": "verticalLayout_terrainTab",
+            "tab_airport_map": "verticalLayout_airportMapTab",
         }
         layout_name = explicit_layout_names.get(tab_name)
         layout = getattr(self, layout_name, None) if layout_name else None
@@ -1731,6 +1770,7 @@ class SafeguardingBuilderDialog(
             "verticalLayout_olsTab",
             "verticalLayout_outputTab",
             "verticalLayout_terrainTab",
+            "verticalLayout_airportMapTab",
         ]:
             layout = getattr(self, layout_name, None)
             if isinstance(layout, QtWidgets.QVBoxLayout):
@@ -1744,6 +1784,7 @@ class SafeguardingBuilderDialog(
             "groupBox_contourIntervals",
             "groupBox_outputOptions",
             "groupBox_dem_tools",
+            "groupBox_AirportMap",
             "groupBox_agl_options",
             "groupBox_agl_generated",
             "groupBox_agl_elements",
@@ -2755,6 +2796,20 @@ class SafeguardingBuilderDialog(
             output_tab_tip = output_text
         self._set_workflow_tab_state("tab_output", output_tab_state, output_tab_tip)
 
+        airport_map_state = (
+            "ready" if airport_dependencies["arp_pair_ready"] else "blocked"
+        )
+        airport_map_tip = (
+            "ARP coordinates are ready for airport map import."
+            if airport_dependencies["arp_pair_ready"]
+            else "Enter ARP easting and northing before importing airport map features."
+        )
+        self._set_workflow_tab_state(
+            "tab_airport_map",
+            airport_map_state,
+            airport_map_tip,
+        )
+
         airport_context_text = (
             "Ready"
             if airport_tab_state == "ready"
@@ -2798,6 +2853,10 @@ class SafeguardingBuilderDialog(
                     agl_dependencies["state"],
                 ),
                 "tab_output": (output_context_text, output_tab_state),
+                "tab_airport_map": (
+                    "Ready" if airport_dependencies["arp_pair_ready"] else "Needs ARP",
+                    airport_map_state,
+                ),
             }
         )
         self._sync_workflow_context()
