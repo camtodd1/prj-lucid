@@ -6,7 +6,7 @@
       <rule key="inner-approach" label="Inner Approach" symbol="1" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') = 'inner_approach'"/>
       <rule key="transitional" label="Transitional" symbol="2" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') = 'transitional'"/>
       <rule key="inner-transitional" label="Inner Transitional" symbol="3" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') = 'inner_transitional'"/>
-      <rule key="balked" label="Balked Landing" symbol="4" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') IN ('balked_landing', 'baulked_landing')"/>
+      <rule key="balked" label="Baulked Landing" symbol="4" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') IN ('balked_landing', 'baulked_landing')"/>
       <rule key="takeoff" label="Take-off Climb" symbol="5" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') IN ('take_off_climb', 'tocs')"/>
       <rule key="inner-horizontal" label="Inner Horizontal" symbol="6" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') IN ('inner_horizontal', 'ihs', 'horizontal')"/>
       <rule key="conical" label="Conical" symbol="7" filter="replace(replace(lower(&quot;surface&quot;), ' ', '_'), '-', '_') LIKE 'conical%'"/>

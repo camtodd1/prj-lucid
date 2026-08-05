@@ -498,7 +498,7 @@
       "expected": {"slope": 0.333, "length_m": null}
     },
     {
-      "id": "annex14-ofs-adg-iii-balked-landing",
+      "id": "annex14-ofs-adg-iii-baulked-landing",
       "source_ref": "Annex 14 Vol I 4.2.5 and Table 4-9, printed page 4-21, supplied PDF page 24",
       "production": {
         "module": "rulesets.annex14.ols_surfaces",
@@ -851,7 +851,7 @@
     "Source-backed tie-priority and otherwise-equivalent fallback validation is not included in v1; neither supplied source assigns software controller IDs or a complete numerical tie-break order.",
     "Primary/intermediate contour interval compatibility validation remains intentionally unimplemented and accepted.",
     "CAP 168 Table 4.1 visibly prints 180 m for the conditional Code 3/4 final width while footnote 4 specifies 1800 m. The parameter follows the unambiguous footnote and records the interpretation.",
-    "CAP 168 4.73(1) points its Code 1/2 balked-landing origin to the Code 3/4 area in 4.70 rather than the immediately preceding Code 1/2 area in 4.72. The loaded start rule follows 4.72 and requires reviewer confirmation.",
+    "CAP 168 4.73(1) points its Code 1/2 baulked-landing origin to the Code 3/4 area in 4.70 rather than the immediately preceding Code 1/2 area in 4.72. The loaded start rule follows 4.72 and requires reviewer confirmation.",
     "CAP168 and EASA conventional construction are integrated but remain partial profiles pending the full airport topology/performance fixture matrix and independent technical review.",
     "Independent technical reviewer sign-off is not yet recorded."
   ]

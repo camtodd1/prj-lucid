@@ -448,7 +448,7 @@ BALKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "divergence": 0.10,
         "slope": 0.04,
         "code_letter_f_width": None,
-        "ref": f"{TABLE_J1_REF} (Balked Landing PA CAT I Code 1/2)",
+        "ref": f"{TABLE_J1_REF} (Baulked Landing PA CAT I Code 1/2)",
     },
     (2, "PA_I"): {
         "width": 90.0,
@@ -457,7 +457,7 @@ BALKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "divergence": 0.10,
         "slope": 0.04,
         "code_letter_f_width": None,
-        "ref": f"{TABLE_J1_REF} (Balked Landing PA CAT I Code 1/2)",
+        "ref": f"{TABLE_J1_REF} (Baulked Landing PA CAT I Code 1/2)",
     },
     (3, "PA_I"): {
         "width": 120.0,
@@ -466,7 +466,7 @@ BALKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "divergence": 0.10,
         "slope": 0.0333,
         "code_letter_f_width": 140.0,
-        "ref": f"{TABLE_J1_REF} (Balked Landing PA CAT I Code 3/4)",
+        "ref": f"{TABLE_J1_REF} (Baulked Landing PA CAT I Code 3/4)",
     },
     (4, "PA_I"): {
         "width": 120.0,
@@ -475,7 +475,7 @@ BALKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "divergence": 0.10,
         "slope": 0.0333,
         "code_letter_f_width": 140.0,
-        "ref": f"{TABLE_J1_REF} (Balked Landing PA CAT I Code 3/4)",
+        "ref": f"{TABLE_J1_REF} (Baulked Landing PA CAT I Code 3/4)",
     },
     (3, "PA_II_III"): {
         "width": 120.0,
@@ -484,7 +484,7 @@ BALKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "divergence": 0.10,
         "slope": 0.0333,
         "code_letter_f_width": 140.0,
-        "ref": f"{TABLE_J1_REF} (Balked Landing PA CAT II/III Code 3/4)",
+        "ref": f"{TABLE_J1_REF} (Baulked Landing PA CAT II/III Code 3/4)",
     },
     (4, "PA_II_III"): {
         "width": 120.0,
@@ -493,7 +493,7 @@ BALKED_LANDING_PARAMS: Dict[Tuple[int, str], Dict[str, Any]] = {
         "divergence": 0.10,
         "slope": 0.0333,
         "code_letter_f_width": 140.0,
-        "ref": f"{TABLE_J1_REF} (Balked Landing PA CAT II/III Code 3/4)",
+        "ref": f"{TABLE_J1_REF} (Baulked Landing PA CAT II/III Code 3/4)",
     },
 }
 
@@ -657,7 +657,7 @@ OLS_TRACEABILITY_ITEMS = {
         "source": TABLE_J1_REF,
         "status": "operational_verified",
         "implementation": "BALKED_LANDING_PARAMS",
-        "notes": "Table J-1 balked landing dimensions, including distance and code letter F footnotes.",
+        "notes": "Table J-1 baulked landing dimensions, including distance and code letter F footnotes.",
     },
     "inner_horizontal_surface": {
         "source": TABLE_J1_REF,
@@ -705,7 +705,7 @@ OLS_TRACEABILITY_ITEMS = {
         "source": "GM1 ADR-DSN.J.480(a)",
         "status": "interpretive",
         "implementation": "INNER_APPROACH_PARAMS / INNER_TRANSITIONAL_PARAMS / BALKED_LANDING_PARAMS for PA_I",
-        "notes": "CS J.480(a) establishes conical/IHS/approach/transitional for CAT I; GM1 identifies inner approach, inner transitional, and balked landing surfaces for precision approach CAT I.",
+        "notes": "CS J.480(a) establishes conical/IHS/approach/transitional for CAT I; GM1 identifies inner approach, inner transitional, and baulked landing surfaces for precision approach CAT I.",
     },
 }
 

@@ -23,7 +23,7 @@ an entire generated-output family supported.
 | Taxiway separations | CS ADR-DSN.D.260, Table D-1 | Supported |
 | Parallel runways | CS ADR-DSN.B.050, B.055 | Partial profile capability |
 | Airport-wide OLS | CS ADR-DSN.H.415, H.420, H.430; CS ADR-DSN.J.470-J.480, Table J-1 | Supported for source-referenced IHS, conical, and transitional output using the conservative composite runway footprint; the optional outer horizontal surface remains guidance-only under GM1 H.410 |
-| Obstacle-free zone (OFZ) | CS ADR-DSN.H.445, H.450-H.460; CS ADR-DSN.J.480, Table J-1 | Supported for the mandatory Category II/III inner approach, inner transitional, and balked landing family; Category I inner-surface output is retained as an explicit GM1 J.480(a) guidance-only caveat |
+| Obstacle-free zone (OFZ) | CS ADR-DSN.H.445, H.450-H.460; CS ADR-DSN.J.480, Table J-1 | Supported for the mandatory Category II/III inner approach, inner transitional, and baulked landing family; Category I inner-surface output is retained as an explicit GM1 J.480(a) guidance-only caveat |
 | Controlling lower envelope | Derived from source-backed Chapter H/J candidate surfaces | Partial generated contract; OFZ candidate inclusion and broader controlling-output evidence are still open |
 | Runway approach surfaces | CS ADR-DSN.J.470-J.480, Table J-1 | Supported for aligned generated sections, variable-length horizontal resolution against the inner horizontal surface, and source-referenced QGIS geometry; nominated-track and wider promotion scope remains subject to the shared OLS contract |
 | Take-off climb surface | CS ADR-DSN.J.485, Table J-2 | Supported for source-backed aligned, clearway-origin, and greater-than-15-degree heading-change cases with source-referenced QGIS geometry; reduced-slope guidance remains outside the advertised contract |
@@ -37,7 +37,7 @@ an entire generated-output family supported.
 ## Retained Interpretations
 
 - Category II/III OFZ applicability follows CS ADR-DSN.H.445. Category I inner
-  approach, inner transitional, and balked landing parameters are retained as
+  approach, inner transitional, and baulked landing parameters are retained as
   guidance-only output under GM1 ADR-DSN.J.480(a), not as mandatory OFZ output.
 - The outer horizontal surface is guidance, not a Table J-1 certification
   surface.

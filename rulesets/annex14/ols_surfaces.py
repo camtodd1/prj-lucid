@@ -566,7 +566,7 @@ def get_balked_landing_surface_params(
     design_group: Optional[str],
     code_letter_f_without_digital_avionics: bool = False,
 ):
-    """Return Annex 14 balked landing surface parameters from Table 4-9."""
+    """Return Annex 14 baulked landing surface parameters from Table 4-9."""
     normalized_design_group = _normalize_design_group(design_group)
     if normalized_design_group is None:
         return None

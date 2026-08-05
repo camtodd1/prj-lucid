@@ -25,10 +25,10 @@ interval differs from its default. With no comparison selected, the comparison
 column shows a baseline-only empty state.
 Annex 14 exposes separate OES intervals for Precision Approach, Take-off Climb,
 and Instrument Departure, plus separate OFS intervals for Approach,
-Transitional, Balked Landing, Inner Approach, and Inner Transitional surfaces.
+Transitional, Baulked Landing, Inner Approach, and Inner Transitional surfaces.
 The previous family-wide OFS/OES values remain load-compatible fallbacks.
 MOS139 contour controls mirror the generated layer groups: Obstacle Free Zone
-(Inner Approach, Inner Transitional, Balked Landing), Primary Surfaces
+(Inner Approach, Inner Transitional, Baulked Landing), Primary Surfaces
 (Approach, Take-off Climb, Transitional), and Secondary (Conical). Controlling
 envelope contours continue to inherit their source-surface intervals.
 In the generated layer tree, the selected baseline is grouped under

@@ -741,7 +741,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 (
                     ("inner_approach", "Inner approach"),
                     ("inner_transitional", "Inner transitional"),
-                    ("baulked_landing", "Balked landing"),
+                    ("baulked_landing", "Baulked landing"),
                 ),
             ),
             (
@@ -793,7 +793,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "annex14_oes_instrument_departure": "Instrument Departure",
             "annex14_ofs_approach": "Approach",
             "annex14_ofs_transitional": "Transitional",
-            "annex14_ofs_balked_landing": "Balked Landing",
+            "annex14_ofs_balked_landing": "Baulked Landing",
             "annex14_ofs_inner_approach": "Inner Approach",
             "annex14_ofs_inner_transitional": "Inner Transitional",
         }

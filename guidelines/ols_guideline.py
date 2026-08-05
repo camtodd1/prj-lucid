@@ -5598,7 +5598,7 @@ class OlsGuidelineMixin:
                     "Polygon",
                     f"OLS_BaulkedLanding_{safe_runway_name}_{safe_end_desig}",
                     self._surface_layer_display_name(
-                        "Balked Landing", "Surface", current_desig
+                        "Baulked Landing", "Surface", current_desig
                     ),
                     fields,
                     end_bls_features,
@@ -5622,7 +5622,7 @@ class OlsGuidelineMixin:
                     "LineString",
                     f"OLS_BaulkedLanding_Contours_{safe_runway_name}_{safe_end_desig}",
                     self._surface_layer_display_name(
-                        "Balked Landing", "Contours", current_desig
+                        "Baulked Landing", "Contours", current_desig
                     ),
                     self._get_ofz_contour_fields(),
                     end_bls_contours,

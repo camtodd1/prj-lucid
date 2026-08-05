@@ -85,7 +85,7 @@ class LayerStyleTests(unittest.TestCase):
             "Inner Approach",
             "Transitional",
             "Inner Transitional",
-            "Balked Landing",
+            "Baulked Landing",
             "Take-off Climb",
             "Inner Horizontal",
             "Conical",

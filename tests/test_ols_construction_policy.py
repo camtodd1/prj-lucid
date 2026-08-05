@@ -315,7 +315,7 @@ class OtherConventionalPolicyTests(unittest.TestCase):
             item.ends[0],
             3,
             "PA_I",
-            "BalkedLanding",
+            "BaulkedLanding",
         )
         self.assertEqual(balked["width"], 140.0)
         self.assertEqual(

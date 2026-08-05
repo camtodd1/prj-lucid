@@ -333,7 +333,7 @@ class OlsConstructionQgisTests(unittest.TestCase):
         self.assertEqual(generated["OHS"].attribute("ref_mos"), "GM1 ADR-DSN.H.410")
         self.assertEqual(generated["OHS"].attribute("applicability"), "guidance_only")
 
-        cat23_ofz = EASA_PROFILE.ols_parameters(3, "PA_II_III", "BalkedLanding")
+        cat23_ofz = EASA_PROFILE.ols_parameters(3, "PA_II_III", "BaulkedLanding")
         bls_result = builder._generate_baulked_landing_surface(
             runway_data,
             builder._get_runway_parameters(runway.primary_threshold_point, runway.reciprocal_threshold_point),

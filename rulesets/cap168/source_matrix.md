@@ -39,7 +39,7 @@ not text-extraction artefacts:
    user confirmed the corrected value is `2,500 m`; that value is now recorded
    in `IHS_PLAN_RULES`.
 5. Paragraph 4.73(1), describing Code 1/2 OFZ, points back to the area in 4.70
-   (Code 3/4) rather than 4.72. The loaded Code 1/2 balked-landing origin follows
+   (Code 3/4) rather than 4.72. The loaded Code 1/2 baulked-landing origin follows
    the immediately preceding Code 1/2 area in 4.72 and records the resulting
    `60_m_beyond_lda` rule.
 
