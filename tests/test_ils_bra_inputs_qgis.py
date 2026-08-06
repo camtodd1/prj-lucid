@@ -1,11 +1,11 @@
-"""QGIS dialog checks for ILS Building Restricted Area inputs."""
+"""QGIS dialog checks for provisional ILS BRA inputs."""
 
 import sys
 import unittest
 from pathlib import Path
 
 from qgis.PyQt import QtWidgets
-from qgis.core import QgsApplication, QgsWkbTypes
+from qgis.core import QgsApplication, QgsPointXY
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -34,54 +34,81 @@ class IlsBraInputsQgisTests(unittest.TestCase):
         runway = self.dialog._runway_groups[self.runway_index]
         runway.desig_le.setText("09")
         runway.suffix_combo.setCurrentText("L")
+        runway.thr_east_le.setText("455000")
+        runway.thr_north_le.setText("5772000")
+        runway.rec_east_le.setText("456000")
+        runway.rec_north_le.setText("5772000")
         self.dialog.refresh_ils_bra_runway_options()
+        self.validated_runway = {
+            "original_index": self.runway_index,
+            "thr_point": QgsPointXY(455000, 5772000),
+            "rec_thr_point": QgsPointXY(456000, 5772000),
+        }
 
     def tearDown(self):
         self.dialog.close()
         self.dialog.deleteLater()
 
-    def test_installation_row_captures_generation_inputs(self):
+    def test_derived_glide_path_position_captures_generation_inputs(self):
         self.dialog.add_ils_bra_row(
             {
-                "component": "localiser",
+                "component": "glide_path",
                 "runway_ref": f"{self.runway_index}:1",
-                "id": "LOC-09L",
-                "easting": "455000",
-                "northing": "5772000",
+                "id": "GP-09L",
+                "position_mode": "runway_offset",
+                "distance_inside_threshold": "300",
+                "signed_offset": "120",
                 "ground_elevation": "18.5",
-                "vehicle_critical_area_source": "Airservices drawing ABC-123",
-                "vehicle_critical_area_wkt": "POLYGON ((454900 5771900, 455100 5771900, 455100 5772100, 454900 5772100, 454900 5771900))",
+                "source_reference": "NASF worked-example provisional construction",
             }
         )
 
-        table = self.dialog.table_ils_bra
-        self.assertEqual(table.columnCount(), 8)
-        self.assertEqual(table.cellWidget(0, 0).currentData(), "localiser")
-        self.assertEqual(table.cellWidget(0, 1).currentText(), "RWY 09L approach end")
-
+        self.assertEqual(self.dialog.table_ils_bra.columnCount(), 10)
         errors = []
         installations = self.dialog.get_ils_bra_input_data(
-            [{"original_index": self.runway_index}],
+            [self.validated_runway],
             errors,
         )
+
         self.assertEqual(errors, [])
         self.assertEqual(len(installations), 1)
-        self.assertEqual(installations[0]["runway_end"], 1)
-        self.assertEqual(
-            installations[0]["vehicle_critical_area"].type(),
-            QgsWkbTypes.PolygonGeometry,
+        installation = installations[0]
+        self.assertAlmostEqual(installation["easting"], 455300.0)
+        self.assertAlmostEqual(installation["northing"], 5771880.0)
+        self.assertEqual(installation["antenna_offset"], 120.0)
+        self.assertTrue(installation["provisional"])
+
+    def test_direct_coordinates_derive_runway_offset(self):
+        self.dialog.add_ils_bra_row(
+            {
+                "component": "glide_path",
+                "runway_ref": f"{self.runway_index}:1",
+                "id": "GP-DIRECT",
+                "position_mode": "direct",
+                "easting": "455300",
+                "northing": "5771880",
+                "ground_elevation": "19",
+                "source_reference": "Surveyed antenna front face",
+            }
         )
+        errors = []
+        installation = self.dialog.get_ils_bra_input_data(
+            [self.validated_runway], errors
+        )[0]
+        self.assertEqual(errors, [])
+        self.assertAlmostEqual(installation["distance_inside_threshold"], 300.0)
+        self.assertAlmostEqual(installation["signed_offset"], 120.0)
 
     def test_rows_round_trip_through_persistence_shape(self):
         source = {
             "component": "glide_path",
             "runway_ref": f"{self.runway_index}:2",
             "id": "GP-27R",
-            "easting": "455200",
-            "northing": "5772200",
+            "position_mode": "runway_offset",
+            "distance_inside_threshold": "300",
+            "signed_offset": "-130",
             "ground_elevation": "19",
-            "vehicle_critical_area_source": "Derived from approved critical-area plan",
-            "vehicle_critical_area_wkt": "POLYGON ((0 0, 10 0, 10 10, 0 10, 0 0))",
+            "source_reference": "Worked-example provisional construction",
         }
         self.dialog.add_ils_bra_row(source)
         saved = self.dialog.get_ils_bra_save_rows()
@@ -89,8 +116,8 @@ class IlsBraInputsQgisTests(unittest.TestCase):
         self.dialog.load_ils_bra_rows(saved)
 
         self.assertEqual(payload["ils_bra_installations"][0]["id"], "GP-27R")
+        self.assertTrue(payload["ils_bra_installations"][0]["provisional"])
         self.assertEqual(self.dialog.table_ils_bra.rowCount(), 1)
-        self.assertEqual(self.dialog.get_ils_bra_save_rows()[0]["id"], "GP-27R")
         self.assertEqual(self.dialog.table_ils_bra.cellWidget(0, 1).currentText(), "RWY 27R approach end")
 
 

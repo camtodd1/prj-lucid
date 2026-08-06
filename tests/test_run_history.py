@@ -263,6 +263,25 @@ class RunHistoryTests(unittest.TestCase):
         self.assertEqual(runtime_input_fingerprint(first), runtime_input_fingerprint(reordered))
         self.assertNotEqual(runtime_input_fingerprint(first), runtime_input_fingerprint(changed))
 
+    def test_input_fingerprint_changes_with_provisional_ils_bra_inputs(self):
+        baseline = {"icao_code": "YTEST", "runways": []}
+        with_ils = {
+            **baseline,
+            "ils_bra_installations": [
+                {
+                    "id": "GP-09",
+                    "component": "glide_path",
+                    "easting": 455300.0,
+                    "northing": 5771880.0,
+                    "ground_elevation": 18.5,
+                }
+            ],
+        }
+        self.assertNotEqual(
+            runtime_input_fingerprint(baseline),
+            runtime_input_fingerprint(with_ils),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1,20 +1,26 @@
 """ILS Building Restricted Area installation inputs."""
 
+import math
 from typing import Any, Dict, List, Optional, Tuple
 
-from qgis.core import QgsGeometry, QgsPointXY, QgsWkbTypes  # type: ignore
-from qgis.PyQt import QtCore, QtWidgets  # type: ignore
+from qgis.core import QgsPointXY  # type: ignore
+from qgis.PyQt import QtWidgets  # type: ignore
 from qgis.PyQt.QtWidgets import QAbstractItemView, QComboBox, QTableWidgetItem  # type: ignore
 
 
 ILS_BRA_COMPONENTS: List[Tuple[str, str]] = [
     ("Glide path", "glide_path"),
-    ("Localiser", "localiser"),
+    ("Localiser (input only)", "localiser"),
+]
+
+ILS_BRA_POSITION_MODES: List[Tuple[str, str]] = [
+    ("Derived from threshold", "runway_offset"),
+    ("Direct front-face coordinates", "direct"),
 ]
 
 
 class IlsBraInputsMixin:
-    """Manage optional ILS BRA rows and validate generation prerequisites."""
+    """Manage provisional ILS BRA inputs and runway-relative positioning."""
 
     def _setup_ils_bra_inputs(self) -> None:
         table = getattr(self, "table_ils_bra", None)
@@ -23,17 +29,19 @@ class IlsBraInputsMixin:
         if not all([table, add_button, remove_button]):
             return
 
-        table.setColumnCount(8)
+        table.setColumnCount(10)
         table.setHorizontalHeaderLabels(
             [
                 "Component",
                 "Runway end",
                 "Facility ID",
-                "Easting",
-                "Northing",
+                "Position mode",
+                "Front-face Easting",
+                "Front-face Northing",
+                "Distance inside threshold (m)",
+                "Signed offset right (m)",
                 "Ground elev (AMSL)",
-                "VCA source / reference",
-                "Vehicle critical area polygon (WKT)",
+                "Source / reference",
             ]
         )
         table.setAlternatingRowColors(True)
@@ -46,10 +54,10 @@ class IlsBraInputsMixin:
         )
         header = table.horizontalHeader()
         if header:
-            for column in range(7):
+            for column in range(9):
                 header.setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.Interactive)
-            header.setSectionResizeMode(7, QtWidgets.QHeaderView.ResizeMode.Stretch)
-        for column, width in enumerate([105, 170, 110, 105, 105, 125, 170]):
+            header.setSectionResizeMode(9, QtWidgets.QHeaderView.ResizeMode.Stretch)
+        for column, width in enumerate([115, 170, 105, 175, 125, 125, 165, 145, 135]):
             table.setColumnWidth(column, width)
         table.setMinimumHeight(150)
         table.setMaximumHeight(260)
@@ -58,13 +66,14 @@ class IlsBraInputsMixin:
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
         table.setToolTip(
-            "Vehicle critical area WKT must be a polygon in the current project CRS. "
-            "Use an authority-approved polygon wherever one is available."
+            "Provisional glide-path BRA construction. Direct coordinates are the centre of "
+            "the antenna front face. Derived coordinates use distance inside the selected "
+            "threshold and signed offset (right positive when looking into the runway)."
         )
 
         add_button.clicked.connect(self.add_ils_bra_row)
         remove_button.clicked.connect(self.remove_ils_bra_rows)
-        add_button.setToolTip("Add a glide path or localiser installation.")
+        add_button.setToolTip("Add a provisional glide-path or localiser installation.")
         remove_button.setToolTip("Remove the selected ILS installation row(s).")
         remove_button.setEnabled(False)
         table.itemSelectionChanged.connect(self._update_ils_bra_view_state)
@@ -74,6 +83,10 @@ class IlsBraInputsMixin:
 
         description = getattr(self, "label_ils_bra_description", None)
         if description:
+            description.setText(
+                "Provisional glide-path BRA: locate the antenna front face directly or from "
+                "the associated threshold. Localiser generation is not yet implemented."
+            )
             description.setStyleSheet("color: #666666; font-size: 11px;")
         self._update_ils_bra_view_state()
 
@@ -107,7 +120,6 @@ class IlsBraInputsMixin:
 
     def _new_component_combo(self, selected: str = "") -> QComboBox:
         combo = QComboBox()
-        combo.addItem("", "")
         for label, value in ILS_BRA_COMPONENTS:
             combo.addItem(label, value)
         index = combo.findData(selected)
@@ -119,6 +131,15 @@ class IlsBraInputsMixin:
         combo = QComboBox()
         combo.addItem("", "")
         for label, value in self._ils_bra_runway_end_options():
+            combo.addItem(label, value)
+        index = combo.findData(selected)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.currentIndexChanged.connect(self._update_ils_bra_view_state)
+        return combo
+
+    def _new_position_mode_combo(self, selected: str = "") -> QComboBox:
+        combo = QComboBox()
+        for label, value in ILS_BRA_POSITION_MODES:
             combo.addItem(label, value)
         index = combo.findData(selected)
         combo.setCurrentIndex(index if index >= 0 else 0)
@@ -141,21 +162,26 @@ class IlsBraInputsMixin:
         data = row_data if isinstance(row_data, dict) else {}
         row = table.rowCount()
         table.insertRow(row)
-        table.setCellWidget(row, 0, self._new_component_combo(str(data.get("component", ""))))
+        table.setCellWidget(row, 0, self._new_component_combo(str(data.get("component", "glide_path"))))
         runway_ref = str(data.get("runway_ref", ""))
         if not runway_ref and data.get("runway_index") is not None and data.get("runway_end") is not None:
             runway_ref = f'{data.get("runway_index")}:{data.get("runway_end")}'
         table.setCellWidget(row, 1, self._new_runway_end_combo(runway_ref))
-        values = [
-            data.get("id", ""),
-            data.get("easting", ""),
-            data.get("northing", ""),
-            data.get("ground_elevation", ""),
-            data.get("vehicle_critical_area_source", ""),
-            data.get("vehicle_critical_area_wkt", ""),
-        ]
-        for column, value in enumerate(values, start=2):
-            table.setItem(row, column, QTableWidgetItem(str(value or "")))
+        position_mode = str(data.get("position_mode", ""))
+        if not position_mode:
+            position_mode = "direct" if data.get("easting") or data.get("northing") else "runway_offset"
+        table.setCellWidget(row, 3, self._new_position_mode_combo(position_mode))
+        values = {
+            2: data.get("id", ""),
+            4: data.get("easting", ""),
+            5: data.get("northing", ""),
+            6: data.get("distance_inside_threshold", "300"),
+            7: data.get("signed_offset", ""),
+            8: data.get("ground_elevation", ""),
+            9: data.get("source_reference", data.get("vehicle_critical_area_source", "")),
+        }
+        for column, value in values.items():
+            table.setItem(row, column, QTableWidgetItem(str(value if value is not None else "")))
         self._update_ils_bra_view_state()
 
     def remove_ils_bra_rows(self) -> None:
@@ -201,6 +227,7 @@ class IlsBraInputsMixin:
         for row in range(table.rowCount()):
             component = table.cellWidget(row, 0)
             runway = table.cellWidget(row, 1)
+            position_mode = table.cellWidget(row, 3)
             runway_ref = str(runway.currentData() or "") if isinstance(runway, QComboBox) else ""
             runway_index, runway_end = self._split_runway_ref(runway_ref)
             rows.append(
@@ -210,11 +237,18 @@ class IlsBraInputsMixin:
                     "runway_index": runway_index,
                     "runway_end": runway_end,
                     "id": self._ils_bra_item_text(table, row, 2),
-                    "easting": self._ils_bra_item_text(table, row, 3),
-                    "northing": self._ils_bra_item_text(table, row, 4),
-                    "ground_elevation": self._ils_bra_item_text(table, row, 5),
-                    "vehicle_critical_area_source": self._ils_bra_item_text(table, row, 6),
-                    "vehicle_critical_area_wkt": self._ils_bra_item_text(table, row, 7),
+                    "position_mode": (
+                        str(position_mode.currentData() or "")
+                        if isinstance(position_mode, QComboBox)
+                        else ""
+                    ),
+                    "easting": self._ils_bra_item_text(table, row, 4),
+                    "northing": self._ils_bra_item_text(table, row, 5),
+                    "distance_inside_threshold": self._ils_bra_item_text(table, row, 6),
+                    "signed_offset": self._ils_bra_item_text(table, row, 7),
+                    "ground_elevation": self._ils_bra_item_text(table, row, 8),
+                    "source_reference": self._ils_bra_item_text(table, row, 9),
+                    "provisional": True,
                 }
             )
         return rows
@@ -242,44 +276,50 @@ class IlsBraInputsMixin:
                     self.add_ils_bra_row(row_data)
         self._update_ils_bra_view_state()
 
+    @staticmethod
+    def _runway_frame(runway: Dict[str, Any], runway_end: int) -> Optional[Dict[str, Any]]:
+        threshold = runway.get("thr_point") if runway_end == 1 else runway.get("rec_thr_point")
+        opposite = runway.get("rec_thr_point") if runway_end == 1 else runway.get("thr_point")
+        if threshold is None or opposite is None:
+            return None
+        delta_e = opposite.x() - threshold.x()
+        delta_n = opposite.y() - threshold.y()
+        length = math.hypot(delta_e, delta_n)
+        if length <= 1e-9:
+            return None
+        unit_e = delta_e / length
+        unit_n = delta_n / length
+        return {
+            "threshold": QgsPointXY(threshold),
+            "interior_unit": (unit_e, unit_n),
+            "right_unit": (unit_n, -unit_e),
+        }
+
     def get_ils_bra_input_data(
         self,
         validated_runways: List[Dict[str, Any]],
         errors: List[str],
     ) -> List[Dict[str, Any]]:
-        save_rows = self.get_ils_bra_save_rows()
-        valid_runway_refs = {
-            f'{runway.get("original_index")}:{end}'
-            for runway in validated_runways
-            for end in (1, 2)
+        runway_by_index = {
+            runway.get("original_index"): runway for runway in validated_runways
         }
         installations: List[Dict[str, Any]] = []
         seen_ids = set()
-        for row_number, row in enumerate(save_rows, start=1):
-            values = [
-                str(row.get(key, "") or "").strip()
-                for key in (
-                    "component",
-                    "runway_ref",
-                    "id",
-                    "easting",
-                    "northing",
-                    "ground_elevation",
-                    "vehicle_critical_area_source",
-                    "vehicle_critical_area_wkt",
-                )
-            ]
-            if not any(values):
+        for row_number, row in enumerate(self.get_ils_bra_save_rows(), start=1):
+            if not any(str(value or "").strip() for value in row.values() if value is not True):
                 continue
             prefix = f"ILS BRA row {row_number}"
             component = str(row.get("component", ""))
-            runway_ref = str(row.get("runway_ref", ""))
+            runway_index, runway_end = self._split_runway_ref(str(row.get("runway_ref", "")))
+            runway = runway_by_index.get(runway_index)
+            frame = self._runway_frame(runway, runway_end) if runway and runway_end else None
             facility_id = str(row.get("id", "")).strip()
-            source = str(row.get("vehicle_critical_area_source", "")).strip()
-            wkt = str(row.get("vehicle_critical_area_wkt", "")).strip()
+            position_mode = str(row.get("position_mode", ""))
+            source_reference = str(row.get("source_reference", "")).strip()
+
             if component not in {value for _, value in ILS_BRA_COMPONENTS}:
                 errors.append(f"{prefix}: select glide path or localiser.")
-            if runway_ref not in valid_runway_refs:
+            if frame is None:
                 errors.append(f"{prefix}: select a valid runway approach end.")
             if not facility_id:
                 errors.append(f"{prefix}: facility ID is required.")
@@ -287,47 +327,84 @@ class IlsBraInputsMixin:
                 errors.append(f"{prefix}: facility ID '{facility_id}' is duplicated.")
             else:
                 seen_ids.add(facility_id.casefold())
+            if position_mode not in {value for _, value in ILS_BRA_POSITION_MODES}:
+                errors.append(f"{prefix}: select a valid position mode.")
+            if not source_reference:
+                errors.append(f"{prefix}: source/reference is required.")
+            try:
+                ground_elevation = float(str(row.get("ground_elevation", "")).strip())
+            except (TypeError, ValueError):
+                ground_elevation = None
+                errors.append(f"{prefix}: valid ground elevation is required.")
 
-            numbers: Dict[str, float] = {}
-            for key, label in [
-                ("easting", "easting"),
-                ("northing", "northing"),
-                ("ground_elevation", "ground elevation"),
-            ]:
+            point = None
+            distance_inside = None
+            signed_offset = None
+            if frame is not None and position_mode == "direct":
                 try:
-                    numbers[key] = float(str(row.get(key, "")).strip())
+                    easting = float(str(row.get("easting", "")).strip())
+                    northing = float(str(row.get("northing", "")).strip())
+                    point = QgsPointXY(easting, northing)
+                    delta_e = easting - frame["threshold"].x()
+                    delta_n = northing - frame["threshold"].y()
+                    distance_inside = (
+                        delta_e * frame["interior_unit"][0]
+                        + delta_n * frame["interior_unit"][1]
+                    )
+                    signed_offset = (
+                        delta_e * frame["right_unit"][0]
+                        + delta_n * frame["right_unit"][1]
+                    )
                 except (TypeError, ValueError):
-                    errors.append(f"{prefix}: valid {label} is required.")
-            if not source:
-                errors.append(f"{prefix}: vehicle-critical-area source/reference is required.")
+                    errors.append(f"{prefix}: valid front-face easting and northing are required.")
+            elif frame is not None and position_mode == "runway_offset":
+                try:
+                    distance_inside = float(str(row.get("distance_inside_threshold", "")).strip())
+                    signed_offset = float(str(row.get("signed_offset", "")).strip())
+                    if distance_inside < 0:
+                        raise ValueError("distance must not be negative")
+                    if abs(signed_offset) <= 1e-9:
+                        raise ValueError("offset must not be zero")
+                    point = QgsPointXY(
+                        frame["threshold"].x()
+                        + distance_inside * frame["interior_unit"][0]
+                        + signed_offset * frame["right_unit"][0],
+                        frame["threshold"].y()
+                        + distance_inside * frame["interior_unit"][1]
+                        + signed_offset * frame["right_unit"][1],
+                    )
+                except (TypeError, ValueError) as error:
+                    errors.append(
+                        f"{prefix}: valid non-negative threshold distance and non-zero signed offset are required ({error})."
+                    )
 
-            geometry = QgsGeometry.fromWkt(wkt) if wkt else QgsGeometry()
-            if (
-                not wkt
-                or geometry.isNull()
-                or geometry.isEmpty()
-                or geometry.type() != QgsWkbTypes.PolygonGeometry
-                or not geometry.isGeosValid()
-            ):
-                errors.append(f"{prefix}: vehicle critical area must be valid polygon WKT in the project CRS.")
+            if component == "glide_path" and signed_offset is not None:
+                if not 120.0 <= abs(signed_offset) <= 175.0:
+                    errors.append(
+                        f"{prefix}: provisional glide-path offset must be between 120 m and 175 m from runway centreline."
+                    )
 
             row_error_prefix = f"{prefix}:"
             if any(message.startswith(row_error_prefix) for message in errors):
                 continue
-            runway_index, runway_end = self._split_runway_ref(runway_ref)
             installations.append(
                 {
                     "id": facility_id,
                     "component": component,
                     "runway_index": runway_index,
                     "runway_end": runway_end,
-                    "easting": numbers["easting"],
-                    "northing": numbers["northing"],
-                    "point": QgsPointXY(numbers["easting"], numbers["northing"]),
-                    "ground_elevation": numbers["ground_elevation"],
-                    "vehicle_critical_area_source": source,
-                    "vehicle_critical_area_wkt": wkt,
-                    "vehicle_critical_area": geometry,
+                    "position_mode": position_mode,
+                    "easting": point.x(),
+                    "northing": point.y(),
+                    "point": point,
+                    "front_face_point": point,
+                    "distance_inside_threshold": distance_inside,
+                    "signed_offset": signed_offset,
+                    "antenna_offset": abs(signed_offset),
+                    "runway_interior_unit": frame["interior_unit"],
+                    "ground_elevation": ground_elevation,
+                    "source_reference": source_reference,
+                    "provisional": True,
                 }
             )
         return installations

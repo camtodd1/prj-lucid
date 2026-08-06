@@ -22,6 +22,7 @@ from .cns import (
     slope_contour_levels,
 )
 from .processor_base import NasfGuidelineProcessorBase
+from .ils_bra import construct_provisional_glide_path_bra
 
 try:
     from ...core.run_log import QgsMessageLog
@@ -32,6 +33,92 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
+    def process_ils_building_restricted_areas(
+        self,
+        installations: List[dict],
+        icao_code: str,
+        layer_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Generate provisional worked-example glide-path BRA PolygonZ layers."""
+        if not installations:
+            return False
+        fields = QgsFields(
+            [
+                QgsField("facility_id", QVariant.String),
+                QgsField("component", QVariant.String),
+                QgsField("surface", QVariant.String),
+                QgsField("surface_role", QVariant.String),
+                QgsField("provisional", QVariant.Bool),
+                QgsField("slope_deg", QVariant.Double),
+                QgsField("gp_elev_m", QVariant.Double),
+                QgsField("offset_m", QVariant.Double),
+                QgsField("fwd_len_m", QVariant.Double),
+                QgsField("base_len_m", QVariant.Double),
+                QgsField("divergence", QVariant.Double),
+                QgsField("source_ref", QVariant.String, len=254),
+            ]
+        )
+        generated = False
+        parent = self._cns_element_group(layer_group, "ILS Building Restricted Areas (Provisional)")
+        for installation in installations:
+            if installation.get("component") != "glide_path":
+                QgsMessageLog.logMessage(
+                    f"ILS BRA '{installation.get('id', '')}' skipped: provisional localiser generation is not implemented.",
+                    PLUGIN_TAG,
+                    level=Qgis.Info,
+                )
+                continue
+            try:
+                surfaces = construct_provisional_glide_path_bra(installation)
+                features: List[QgsFeature] = []
+                for surface in surfaces:
+                    feature = QgsFeature(fields)
+                    feature.setGeometry(surface["geometry"])
+                    feature.setAttributes(
+                        [
+                            installation.get("id", ""),
+                            installation.get("component", ""),
+                            surface["surface_name"],
+                            surface["surface_role"],
+                            True,
+                            surface["slope_degrees"],
+                            installation.get("ground_elevation"),
+                            surface["antenna_offset_m"],
+                            surface["forward_extent_m"],
+                            surface["horizontal_length_m"],
+                            surface["plan_divergence"],
+                            surface["source_reference"],
+                        ]
+                    )
+                    features.append(feature)
+                safe_id = "".join(
+                    char if char.isalnum() else "_"
+                    for char in str(installation.get("id", "Glide_Path"))
+                )
+                layer = self._create_and_add_layer(
+                    "PolygonZ",
+                    f"G_ILS_BRA_{icao_code}_{safe_id}",
+                    f"{installation.get('id', 'Glide Path')} - Provisional BRA Surfaces",
+                    fields,
+                    features,
+                    parent,
+                    "Default CNS",
+                )
+                if layer is not None:
+                    layer.setCustomProperty("safeguarding_provisional", True)
+                    layer.setCustomProperty(
+                        "safeguarding_provisional_note",
+                        "Worked-example glide-path BRA; verify against Airservices facility requirements.",
+                    )
+                    generated = True
+            except Exception as error:
+                QgsMessageLog.logMessage(
+                    f"ILS BRA '{installation.get('id', '')}' failed: {error}",
+                    PLUGIN_TAG,
+                    level=Qgis.Critical,
+                )
+        return generated
+
     def process_cns_building_restricted_areas(
         self,
         cns_facilities_data: List[dict],

@@ -238,6 +238,7 @@ def runtime_input_fingerprint(input_data: Mapping[str, object]) -> str:
         "runway_configuration",
         "runways",
         "cns_facilities",
+        "ils_bra_installations",
         "agl_options",
         "contour_intervals",
         "output_mode",

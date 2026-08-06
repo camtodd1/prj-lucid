@@ -1574,6 +1574,7 @@ class SafeguardingBuilder(
         arp_north = input_data.get("arp_northing")
         met_point = input_data.get("met_point")
         cns_input_list = input_data.get("cns_facilities", [])
+        ils_bra_input_list = input_data.get("ils_bra_installations", [])
         agl_options = input_data.get("agl_options", {"enabled": False})
         self.arp_elevation_amsl = input_data.get("arp_elevation")
 
@@ -1599,6 +1600,7 @@ class SafeguardingBuilder(
                 met="yes" if met_point is not None else "no",
                 agl="enabled" if agl_options.get("enabled") else "disabled",
                 cns=len(cns_input_list),
+                ils_bra=len(ils_bra_input_list),
                 ruleset=self.ruleset.id,
                 baseline=self.baseline_ols_ruleset.id,
                 comparison=getattr(self.comparison_ols_ruleset, "id", "none"),
@@ -1796,7 +1798,10 @@ class SafeguardingBuilder(
                 phase_key="supporting_safeguarding",
             ):
                 return
-            guideline_groups = self._create_guideline_groups(external_safeguarding_group, bool(cns_input_list))
+            guideline_groups = self._create_guideline_groups(
+                external_safeguarding_group,
+                bool(cns_input_list or ils_bra_input_list),
+            )
             guideline_groups["F"] = ols_surfaces_group
             self._reset_controlling_ols_engine()
 
@@ -1855,6 +1860,7 @@ class SafeguardingBuilder(
             ) = self._process_airport_safeguarding(
                 arp_point,
                 cns_input_list,
+                ils_bra_input_list,
                 icao_code,
                 target_crs,
                 guideline_groups,
@@ -2092,6 +2098,7 @@ class SafeguardingBuilder(
         self,
         arp_point: Optional[QgsPointXY],
         cns_input_list: List[dict],
+        ils_bra_input_list: List[dict],
         icao_code: str,
         target_crs: QgsCoordinateReferenceSystem,
         guideline_groups: Dict[str, Optional[QgsLayerTreeGroup]],
@@ -2148,6 +2155,23 @@ class SafeguardingBuilder(
                 )
         elif not cns_input_list:
             self._log_skip("CNS building restricted areas: no valid CNS facilities data provided.")
+
+        if ils_bra_input_list and guideline_groups.get("G") is not None:
+            try:
+                ils_processed = self.process_ils_building_restricted_areas(
+                    ils_bra_input_list,
+                    icao_code,
+                    guideline_groups["G"],
+                )
+                cns_processed = cns_processed or ils_processed
+            except Exception as error:
+                QgsMessageLog.logMessage(
+                    f"Critical error processing ILS building restricted areas: {error}\n{traceback.format_exc()}",
+                    plugin_tag,
+                    level=Qgis.Critical,
+                )
+        elif not ils_bra_input_list:
+            self._log_skip("ILS building restricted areas: no installations provided.")
 
         return wildlife_processed, wind_turbine_processed, cns_processed
 
