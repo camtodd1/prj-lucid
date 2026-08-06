@@ -898,7 +898,7 @@ class SafeguardingBuilderDialog(
         return [
             {
                 "tab": "tab_airport",
-                "summary": "Add the airport location and optional weather station.",
+                "summary": "Add the airport location and reference point.",
             },
             {
                 "tab": "tab_runways",
@@ -906,7 +906,7 @@ class SafeguardingBuilderDialog(
             },
             {
                 "tab": "tab_cns",
-                "summary": "Add navigation and communication facilities when needed.",
+                "summary": "Add CNS facilities, ILS safeguarding and the optional weather station.",
             },
             {
                 "tab": "tab_ols",
@@ -1783,6 +1783,8 @@ class SafeguardingBuilderDialog(
         panel_names = [
             "groupBox_ruleset",
             "groupBox_CNS",
+            "groupBox_ILS_BRA",
+            "groupBox_MET",
             "groupBox_olsWorkflow",
             "groupBox_contourIntervals",
             "groupBox_outputOptions",

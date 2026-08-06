@@ -239,6 +239,22 @@ class OsmAerowayTests(unittest.TestCase):
                 dialog.groupBox_MET.title(),
                 "Weather station (optional)",
             )
+            self.assertEqual(
+                dialog.groupBox_ILS_BRA.title(),
+                "ILS Building Restricted Areas",
+            )
+            self.assertGreaterEqual(
+                dialog.verticalLayout_cnsTab.indexOf(dialog.groupBox_ILS_BRA),
+                0,
+            )
+            self.assertGreaterEqual(
+                dialog.verticalLayout_cnsTab.indexOf(dialog.groupBox_MET),
+                0,
+            )
+            self.assertEqual(
+                dialog.verticalLayout_airportTab.indexOf(dialog.groupBox_MET),
+                -1,
+            )
             self.assertIs(
                 dialog.pushButton_DownloadOsmAeroway.parentWidget(),
                 dialog.groupBox_AirportMap,
@@ -261,7 +277,15 @@ class OsmAerowayTests(unittest.TestCase):
             )
             self.assertEqual(
                 context.text(),
-                "Add the airport location and optional weather station.",
+                "Add the airport location and reference point.",
+            )
+            cns_context = dialog.findChild(
+                QtWidgets.QLabel,
+                "label_workflow_summary_tab_cns",
+            )
+            self.assertEqual(
+                cns_context.text(),
+                "Add CNS facilities, ILS safeguarding and the optional weather station.",
             )
             map_context = dialog.findChild(
                 QtWidgets.QLabel,
