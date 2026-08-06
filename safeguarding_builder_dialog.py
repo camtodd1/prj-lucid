@@ -55,6 +55,7 @@ try:
     from .dialog.runway_group import RunwayWidgetGroup
     from .dialog.output_options import OutputOptionsMixin
     from .dialog.cns_table import CnsTableMixin
+    from .dialog.ils_bra import IlsBraInputsMixin
     from .dialog.agl_options import AglOptionsMixin
     from .dialog.dem_tools import DemToolsMixin
     from .dialog.persistence import PersistenceMixin
@@ -85,6 +86,7 @@ except ImportError:
     from dialog.runway_group import RunwayWidgetGroup  # type: ignore
     from dialog.output_options import OutputOptionsMixin  # type: ignore
     from dialog.cns_table import CnsTableMixin  # type: ignore
+    from dialog.ils_bra import IlsBraInputsMixin  # type: ignore
     from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.dem_tools import DemToolsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
@@ -107,6 +109,7 @@ FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), "safeguar
 class SafeguardingBuilderDialog(
     OutputOptionsMixin,
     CnsTableMixin,
+    IlsBraInputsMixin,
     AglOptionsMixin,
     DemToolsMixin,
     PersistenceMixin,
@@ -217,6 +220,7 @@ class SafeguardingBuilderDialog(
             load_button.clicked.connect(self.load_input_data)
 
         self._setup_cns_manual_entry()
+        self._setup_ils_bra_inputs()
         self._setup_agl_options_ui()
         self._setup_dem_tools_ui()
         self._setup_airport_map_tab()
@@ -1820,7 +1824,12 @@ class SafeguardingBuilderDialog(
                 group_layout.setContentsMargins(10, 12, 10, 10)
                 group_layout.setSpacing(8)
 
-        for name in ["pushButton_add_runway", "pushButton_add_CNS", "pushButton_add_agl_approach"]:
+        for name in [
+            "pushButton_add_runway",
+            "pushButton_add_CNS",
+            "pushButton_add_ILS_BRA",
+            "pushButton_add_agl_approach",
+        ]:
             button = getattr(self, name, self.findChild(QtWidgets.QPushButton, name))
             if button:
                 button.setStyleSheet(
@@ -1839,7 +1848,11 @@ class SafeguardingBuilderDialog(
                     """
                 )
 
-        for name in ["pushButton_remove_CNS", "pushButton_remove_agl_approach"]:
+        for name in [
+            "pushButton_remove_CNS",
+            "pushButton_remove_ILS_BRA",
+            "pushButton_remove_agl_approach",
+        ]:
             button = getattr(self, name, self.findChild(QtWidgets.QPushButton, name))
             if button:
                 button.setStyleSheet(
@@ -3104,6 +3117,7 @@ class SafeguardingBuilderDialog(
         new_group = RunwayWidgetGroup(runway_index, self.coord_validator, scroll_content_widget)
 
         new_group.inputChanged.connect(lambda idx=runway_index: self.update_runway_calculations(idx))
+        new_group.inputChanged.connect(self.refresh_ils_bra_runway_options)
         new_group.removeRequested.connect(self.remove_runway_group)
 
         # Add to the end of the layout
@@ -3113,6 +3127,7 @@ class SafeguardingBuilderDialog(
         self._apply_workflow_control_heights(new_group)
         self._update_dialog_height()
         self.update_runway_calculations(runway_index)  # Update placeholders
+        self.refresh_ils_bra_runway_options()
         self.update_dialog_status()
         self._focus_runway_group(new_group)
 
@@ -3164,6 +3179,7 @@ class SafeguardingBuilderDialog(
             group_to_remove.hide()
             self.scroll_area_layout.removeWidget(group_to_remove)
             group_to_remove.deleteLater()
+            self.refresh_ils_bra_runway_options()
             self._update_dialog_height()
         elif not group_to_remove:
             QgsMessageLog.logMessage(
@@ -3358,6 +3374,15 @@ class SafeguardingBuilderDialog(
             if hasattr(self, "get_cns_contour_interval_options")
             else {}
         )
+
+        # --- ILS Building Restricted Area Inputs ---
+        ils_bra_errors_before = len(error_messages)
+        final_data["ils_bra_installations"] = self.get_ils_bra_input_data(
+            runway_data_list,
+            error_messages,
+        )
+        if len(error_messages) > ils_bra_errors_before:
+            validation_ok = False
 
         # --- Output Options ---
         if self.radioMemoryOutput.isChecked():

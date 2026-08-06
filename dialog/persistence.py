@@ -144,6 +144,9 @@ class PersistenceMixin:
         cns_table = self._table("table_cns_facility")
         if cns_table:
             cns_table.setRowCount(0)
+        ils_bra_table = self._table("table_ils_bra")
+        if ils_bra_table:
+            ils_bra_table.setRowCount(0)
 
         for name in [
             "lineEdit_airport_name",
@@ -365,6 +368,9 @@ class PersistenceMixin:
             "runway_configuration": runway_configuration,
             "runways": runways,
             "cns_facilities": self._get_cns_save_rows(),
+            "ils_bra_installations": self.get_ils_bra_save_rows()
+            if hasattr(self, "get_ils_bra_save_rows")
+            else [],
             "cns_contour_intervals": self.get_cns_contour_interval_options()
             if hasattr(self, "get_cns_contour_interval_options")
             else {},
@@ -444,6 +450,9 @@ class PersistenceMixin:
         cns_table = self._table("table_cns_facility")
         if cns_table and cns_table.rowCount() > 0:
             return True
+        ils_bra_table = self._table("table_ils_bra")
+        if ils_bra_table and ils_bra_table.rowCount() > 0:
+            return True
         if hasattr(self, "_agl_options_changed") and self._agl_options_changed():
             return True
         return self._output_options_changed()
@@ -474,6 +483,10 @@ class PersistenceMixin:
             )
         if "cns_facilities" in loaded_data and not isinstance(loaded_data.get("cns_facilities"), list):
             raise ValueError("Invalid format: 'cns_facilities' key exists but is not a list.")
+        if "ils_bra_installations" in loaded_data and not isinstance(
+            loaded_data.get("ils_bra_installations"), list
+        ):
+            raise ValueError("Invalid format: 'ils_bra_installations' must be a list.")
         if "safeguarding_options" in loaded_data and not isinstance(
             loaded_data.get("safeguarding_options"), dict
         ):
@@ -532,6 +545,10 @@ class PersistenceMixin:
         if hasattr(self, "_load_agl_options"):
             self._load_agl_options(loaded_data.get("agl_options", {}))
         self._load_cns_rows(loaded_data.get("cns_facilities", []))
+        if hasattr(self, "refresh_ils_bra_runway_options"):
+            self.refresh_ils_bra_runway_options()
+        if hasattr(self, "load_ils_bra_rows"):
+            self.load_ils_bra_rows(loaded_data.get("ils_bra_installations", []))
         if hasattr(self, "set_cns_contour_interval_options"):
             self.set_cns_contour_interval_options(loaded_data.get("cns_contour_intervals", {}))
         self._load_output_options(loaded_data.get("output_options", {}))

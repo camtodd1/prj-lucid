@@ -7,7 +7,8 @@
             "Use coordinates in one projected CRS with metre units; record that CRS in manifest_case.project_crs.",
             "Use metres AMSL for elevations and metres for distances.",
             "Modernised Annex 14 strip dimensions and standard straight-in operations are derived automatically; do not add operation-specific configuration.",
-            "Set cns_facilities or agl_options.approach_lighting to an empty array when none are sourced.",
+            "Set cns_facilities, ils_bra_installations, or agl_options.approach_lighting to an empty array when none are sourced.",
+            "ILS vehicle critical area WKT must be a polygon in manifest_case.project_crs and traceable to an approved source or dimensioned facility drawing.",
             "Retain official source URLs, publication dates, and any assumptions in source_references."
         ],
         "filename_pattern": "<icao>_<count>rwy_<scenario>[_<variant>].json",
@@ -90,6 +91,10 @@
                 "offset",
                 "curved",
                 "curved_gt_15"
+            ],
+            "ils_bra_component": [
+                "glide_path",
+                "localiser"
             ],
             "output_format": [
                 "GeoPackage",
@@ -198,6 +203,20 @@
             "easting_x": "REPLACE_PROJECTED_EASTING_M",
             "northing_y": "REPLACE_PROJECTED_NORTHING_M",
             "elevation": "REPLACE_AMSL_M_OR_EMPTY"
+        }
+    ],
+    "ils_bra_installations": [
+        {
+            "component": "REPLACE_GLIDE_PATH_OR_LOCALISER",
+            "runway_ref": "1:1",
+            "runway_index": 1,
+            "runway_end": 1,
+            "id": "REPLACE_FACILITY_ID",
+            "easting": "REPLACE_ANTENNA_EASTING_M",
+            "northing": "REPLACE_ANTENNA_NORTHING_M",
+            "ground_elevation": "REPLACE_ANTENNA_GROUND_AMSL_M",
+            "vehicle_critical_area_source": "REPLACE_APPROVED_DRAWING_OR_AGREEMENT_REFERENCE",
+            "vehicle_critical_area_wkt": "REPLACE_POLYGON_WKT_IN_PROJECT_CRS"
         }
     ],
     "agl_options": {

@@ -587,14 +587,85 @@
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_ilsBra">
          <item>
-          <widget class="QLabel" name="label_ils_bra_description">
-           <property name="text">
-            <string>Glide path and localiser Building Restricted Area inputs will be added here.</string>
-           </property>
-           <property name="wordWrap">
+          <layout class="QHBoxLayout" name="horizontalLayout_ilsBraIntro">
+           <item>
+            <widget class="QLabel" name="label_ils_bra_description">
+             <property name="text">
+              <string>Add each glide path or localiser installation and its vehicle-critical-area polygon.</string>
+             </property>
+             <property name="wordWrap">
+              <bool>true</bool>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <spacer name="horizontalSpacer_ilsBraIntro">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QLabel" name="label_ils_bra_status">
+             <property name="text">
+              <string/>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </item>
+         <item>
+          <widget class="QTableWidget" name="table_ils_bra">
+           <property name="alternatingRowColors">
             <bool>true</bool>
            </property>
+           <property name="selectionBehavior">
+            <enum>QAbstractItemView::SelectRows</enum>
+           </property>
+           <property name="columnCount">
+            <number>8</number>
+           </property>
+           <attribute name="verticalHeaderVisible">
+            <bool>false</bool>
+           </attribute>
           </widget>
+         </item>
+         <item>
+          <layout class="QHBoxLayout" name="horizontalLayout_ilsBraButtons">
+           <item>
+            <spacer name="horizontalSpacer_ilsBraButtons">
+             <property name="orientation">
+              <enum>Qt::Horizontal</enum>
+             </property>
+             <property name="sizeHint" stdset="0">
+              <size>
+               <width>40</width>
+               <height>20</height>
+              </size>
+             </property>
+            </spacer>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_add_ILS_BRA">
+             <property name="text">
+              <string>Add ILS Installation</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QPushButton" name="pushButton_remove_ILS_BRA">
+             <property name="text">
+              <string>Remove Selected</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
          </item>
         </layout>
        </widget>
