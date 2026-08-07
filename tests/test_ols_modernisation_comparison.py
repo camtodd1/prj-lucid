@@ -1171,6 +1171,39 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                 self.assertAlmostEqual(clipped.boundingBox().xMaximum(), 100.0, places=9)
                 self.assertTrue(clipped.difference(region).isEmpty())
 
+    def test_controlling_contours_include_horizontal_plane_label_anchor(self):
+        region = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 200.0, 200.0))
+        candidate = ControllingOlsCandidate(
+            "ihs",
+            "IHS",
+            QgsGeometry(region),
+            constant_elevation_evaluator(123.456),
+            "constant",
+            metadata={"elevation_m": 123.456},
+        )
+        engine = PlanarControllingOlsEngine([candidate])
+        engine._controlling_region_geometries_cache = [
+            (candidate, QgsGeometry(region))
+        ]
+        capture = _ControllingLayerCapture()
+
+        created = capture._create_controlling_contour_layer(
+            "TEST",
+            None,
+            engine,
+            [],
+        )
+
+        self.assertTrue(created)
+        features = capture.layers[0][4]
+        self.assertEqual(len(features), 1)
+        anchor = features[0]
+        self.assertEqual(anchor["method"], "horizontal_plane_label")
+        self.assertEqual(anchor["contour_class"], "horizontal_plane")
+        self.assertAlmostEqual(anchor["contour_elev_am"], 123.456, places=6)
+        self.assertGreater(anchor.geometry().length(), 0.0)
+        self.assertTrue(anchor.geometry().within(region))
+
     def test_controlling_contours_recover_near_coincident_region_boundary(self):
         region = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
         candidate = ControllingOlsCandidate(

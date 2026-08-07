@@ -465,7 +465,7 @@ class LayerMixin:
                         "Annex 14 Controlling OES",
                         "OLS Controlling Planar Region",
                     }:
-                        self._apply_controlling_region_labels(layer)
+                        layer.setLabelsEnabled(False)
                     if str(style_key) in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}:
                         if str(layer.name()).startswith("Controlling "):
                             self._apply_controlling_contour_style(
@@ -855,72 +855,10 @@ class LayerMixin:
                 )
                 categories.append(QgsRendererCategory(surface, symbol, surface))
             layer.setRenderer(QgsCategorizedSymbolRenderer("surface", categories))
-            self._apply_controlling_region_labels(layer)
+            layer.setLabelsEnabled(False)
         except Exception as exc:
             QgsMessageLog.logMessage(
                 f"Warning: failed to apply controlling OLS region style: {exc}",
-                PLUGIN_TAG,
-                level=Qgis.Warning,
-            )
-
-    def _apply_controlling_region_labels(self, layer: QgsVectorLayer):
-        """Label flat controlling regions with their horizontal-plane elevation."""
-        if layer is None or not layer.isValid():
-            return
-        if layer.fields().indexFromName("elev_min") < 0 or layer.fields().indexFromName("elev_max") < 0:
-            return
-        has_surface = layer.fields().indexFromName("surface") >= 0
-        try:
-            settings = QgsPalLayerSettings()
-            settings.fieldName = (
-                "'HP ' || format_number("
-                '("elev_min" + "elev_max") / 2, 2'
-                ") || 'm'"
-            )
-            settings.isExpression = True
-            settings.placement = QgsPalLayerSettings.Horizontal
-            settings.centroidInside = True
-            settings.centroidWhole = False
-            settings.fitInPolygonOnly = True
-            try:
-                settings.setPolygonPlacementFlags(Qgis.LabelPolygonPlacementFlag.AllowPlacementInsideOfPolygon)
-            except Exception:
-                pass
-            settings.priority = 5
-            settings.obstacle = False
-
-            text_format = QgsTextFormat()
-            text_format.setFont(QFont("Helvetica", 10))
-            text_format.setSize(10)
-            text_format.setColor(QColor(50, 50, 50))
-
-            buffer = QgsTextBufferSettings()
-            buffer.setEnabled(True)
-            buffer.setSize(1)
-            buffer.setColor(QColor(250, 250, 250))
-            text_format.setBuffer(buffer)
-            settings.setFormat(text_format)
-
-            root = QgsRuleBasedLabeling.Rule(None)
-            rule = QgsRuleBasedLabeling.Rule(settings)
-            filter_expression = (
-                '"elev_min" IS NOT NULL AND "elev_max" IS NOT NULL '
-                'AND abs("elev_min" - "elev_max") <= 0.01 '
-                "AND $area >= 10000"
-            )
-            if has_surface:
-                filter_expression += (
-                    " AND replace(replace(lower(\"surface\"), ' ', '_'), '-', '_') "
-                    "IN ('approach', 'ihs', 'inner_horizontal', 'ohs', 'ohc', "
-                    "'outer_horizontal')"
-                )
-            rule.setFilterExpression(filter_expression)
-            root.appendChild(rule)
-            layer.setLabeling(QgsRuleBasedLabeling(root))
-            layer.setLabelsEnabled(True)
-        except Exception as exc:
-            QgsMessageLog.logMessage(
-                f"Warning: failed to apply controlling OLS region labels: {exc}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
@@ -930,12 +868,14 @@ class LayerMixin:
         if layer is None or not layer.isValid():
             return
         try:
+            contour_class_field = self._persisted_field_name(layer, "contour_class")
+            has_contour_class = layer.fields().indexFromName(contour_class_field) >= 0
             contour_classes = {
-                str(feature.attribute("contour_class") or "")
+                str(feature.attribute(contour_class_field) or "")
                 for feature in layer.getFeatures()
-            } if layer.fields().indexFromName("contour_class") >= 0 else set()
-            if layer.fields().indexFromName("contour_class") >= 0:
-                index_expression = '"contour_class" = \'primary\''
+            } if has_contour_class else set()
+            if has_contour_class:
+                index_expression = f'"{contour_class_field}" = \'primary\''
             else:
                 index_expression = (
                     '"contour_elev_am" IS NOT NULL AND '
@@ -973,7 +913,13 @@ class LayerMixin:
                 }
             )
             normal_rule = QgsRuleBasedRenderer.Rule(normal_symbol)
-            normal_rule.setFilterExpression(f"NOT ({index_expression})")
+            normal_filter = f"NOT ({index_expression})"
+            if has_contour_class:
+                normal_filter += (
+                    f' AND coalesce("{contour_class_field}", \'\') '
+                    "<> 'horizontal_plane'"
+                )
+            normal_rule.setFilterExpression(normal_filter)
             normal_rule.setLabel("Intermediate contour")
             if not contour_classes or "intermediate" in contour_classes:
                 root.appendChild(normal_rule)
@@ -1102,6 +1048,40 @@ class LayerMixin:
             rule = QgsRuleBasedLabeling.Rule(settings)
             rule.setFilterExpression(f"({index_expression})")
             root.appendChild(rule)
+
+            contour_classes = {
+                str(feature.attribute(contour_class_field) or "")
+                for feature in layer.getFeatures()
+            } if layer.fields().indexFromName(contour_class_field) >= 0 else set()
+            if "horizontal_plane" in contour_classes:
+                plane_settings = QgsPalLayerSettings()
+                plane_settings.fieldName = (
+                    "'HP' || '\n' || "
+                    "format_number(\"contour_elev_am\", 2) || 'm'"
+                )
+                plane_settings.isExpression = True
+                plane_settings.placement = QgsPalLayerSettings.Line
+                plane_settings.priority = 8
+                plane_settings.obstacle = False
+
+                plane_text_format = QgsTextFormat()
+                plane_text_format.setFont(QFont("Helvetica", 10))
+                plane_text_format.setSize(10)
+                plane_text_format.setColor(QColor(47, 52, 55))
+
+                plane_buffer = QgsTextBufferSettings()
+                plane_buffer.setEnabled(True)
+                plane_buffer.setSize(0.9)
+                plane_buffer.setColor(QColor(255, 255, 255))
+                plane_text_format.setBuffer(plane_buffer)
+                plane_settings.setFormat(plane_text_format)
+
+                plane_rule = QgsRuleBasedLabeling.Rule(plane_settings)
+                plane_rule.setFilterExpression(
+                    f'"{contour_class_field}" = \'horizontal_plane\' '
+                    'AND "contour_elev_am" IS NOT NULL'
+                )
+                root.appendChild(plane_rule)
             layer.setLabeling(QgsRuleBasedLabeling(root))
             layer.setLabelsEnabled(True)
         except Exception as exc:

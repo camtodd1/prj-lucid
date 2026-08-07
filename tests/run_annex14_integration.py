@@ -317,7 +317,7 @@ def run(input_path, audit_path, preview_path):
         if record["style_key"] in {"Annex 14 Controlling OFS", "Annex 14 Controlling OES"}
     ]
     assert all(
-        record["labels_enabled"] and record["labeling"] == "rule-based"
+        not record["labels_enabled"]
         for record in controlling_surface_records
     ), controlling_surface_records
     for node in root.findLayers():
@@ -332,8 +332,13 @@ def run(input_path, audit_path, preview_path):
         assert {"primary", "intermediate"} <= classes, (layer.name(), classes)
         assert "transition" not in classes, (layer.name(), classes)
         assert all(str(feature.attribute("surface") or "") != "Transition" for feature in features)
-        assert all(float(feature.attribute("contour_interval_m")) > 0 for feature in features)
-        assert all(float(feature.attribute("primary_interval_m")) > 0 for feature in features)
+        contour_features = [
+            feature
+            for feature in features
+            if str(feature.attribute("contour_class") or "") != "horizontal_plane"
+        ]
+        assert all(float(feature.attribute("contour_interval_m")) > 0 for feature in contour_features)
+        assert all(float(feature.attribute("primary_interval_m")) > 0 for feature in contour_features)
     assert {"Annex 14 OFS Controlling", "Annex 14 OES Controlling"} <= set(_child_names(debug))
 
     strip_adjacent_by_runway = {}

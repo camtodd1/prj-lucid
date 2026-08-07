@@ -423,7 +423,7 @@ class LayerStyleTests(unittest.TestCase):
             label_rules[0].filterExpression(),
         )
 
-    def test_controlling_ols_labels_horizontal_planes_with_elevation(self):
+    def test_controlling_ols_surface_does_not_own_horizontal_plane_labels(self):
         layer = QgsVectorLayer(
             "Polygon?field=surface:string&field=elev_min:double&field=elev_max:double",
             "Controlling OLS Surfaces",
@@ -444,17 +444,52 @@ class LayerStyleTests(unittest.TestCase):
 
         mixin._apply_style(layer, DEFAULT_STYLE_MAP)
 
-        self.assertTrue(layer.labelsEnabled())
-        label_rules = layer.labeling().rootRule().children()
-        self.assertEqual(len(label_rules), 1)
-        settings = label_rules[0].settings()
-        self.assertEqual(
-            settings.fieldName,
-            "'HP ' || format_number((\"elev_min\" + \"elev_max\") / 2, 2) || 'm'",
+        self.assertFalse(layer.labelsEnabled())
+
+    def test_controlling_contours_own_two_line_horizontal_plane_labels(self):
+        layer = QgsVectorLayer(
+            "MultiLineString?field=contour_elev_am:double&field=contour_class:string",
+            "Controlling OLS - Contours",
+            "memory",
         )
-        self.assertIn("'approach'", label_rules[0].filterExpression())
-        self.assertIn("'ihs'", label_rules[0].filterExpression())
-        self.assertIn("'ohs'", label_rules[0].filterExpression())
+        primary = QgsFeature(layer.fields())
+        primary.setAttributes([100.0, "primary"])
+        primary.setGeometry(
+            QgsGeometry.fromPolylineXY(
+                [QgsPointXY(0.0, 0.0), QgsPointXY(100.0, 0.0)]
+            )
+        )
+        horizontal_plane = QgsFeature(layer.fields())
+        horizontal_plane.setAttributes([123.456, "horizontal_plane"])
+        horizontal_plane.setGeometry(
+            QgsGeometry.fromPolylineXY(
+                [QgsPointXY(49.5, 50.0), QgsPointXY(50.5, 50.0)]
+            )
+        )
+        layer.dataProvider().addFeatures([primary, horizontal_plane])
+
+        LayerMixin()._apply_controlling_contour_style(layer)
+
+        label_rules = layer.labeling().rootRule().children()
+        self.assertEqual(len(label_rules), 2)
+        plane_rule = next(
+            rule
+            for rule in label_rules
+            if "horizontal_plane" in rule.filterExpression()
+        )
+        self.assertEqual(
+            plane_rule.settings().fieldName,
+            "'HP' || '\n' || format_number(\"contour_elev_am\", 2) || 'm'",
+        )
+        renderer = layer.renderer()
+        context = QgsRenderContext()
+        renderer.startRender(context, layer.fields())
+        try:
+            self.assertFalse(
+                renderer.symbolsForFeature(horizontal_plane, context)
+            )
+        finally:
+            renderer.stopRender(context)
 
     def test_modernisation_no_change_style_is_muted_blue_and_subdued(self):
         layer = QgsVectorLayer(

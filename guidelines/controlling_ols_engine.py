@@ -8218,6 +8218,68 @@ class ControllingOlsEngineMixin:
         )
         features: List[QgsFeature] = []
         contour_id = 1
+
+        horizontal_surface_types = {
+            "approach",
+            "ihs",
+            "inner_horizontal",
+            "ohs",
+            "ohc",
+            "outer_horizontal",
+        }
+        for candidate, region in region_parts:
+            surface_key = (
+                str(candidate.surface_type or "")
+                .strip()
+                .lower()
+                .replace("-", "_")
+                .replace(" ", "_")
+            )
+            if surface_key not in horizontal_surface_types or region.area() < 10000.0:
+                continue
+            elevation_min, elevation_max = engine._geometry_elevation_range(
+                region,
+                candidate,
+            )
+            if (
+                elevation_min is None
+                or elevation_max is None
+                or abs(elevation_min - elevation_max) > 0.01
+            ):
+                continue
+            anchor_geometry = region.pointOnSurface()
+            if anchor_geometry is None or anchor_geometry.isEmpty():
+                continue
+            anchor = anchor_geometry.asPoint()
+            anchor_half_length = max(
+                0.01,
+                min(1.0, region.boundingBox().width() * 0.0001),
+            )
+            feature = QgsFeature(fields)
+            feature.setGeometry(
+                QgsGeometry.fromPolylineXY(
+                    [
+                        QgsPointXY(anchor.x() - anchor_half_length, anchor.y()),
+                        QgsPointXY(anchor.x() + anchor_half_length, anchor.y()),
+                    ]
+                )
+            )
+            feature.setAttributes(
+                [
+                    contour_id,
+                    candidate.surface_id,
+                    candidate.surface_type,
+                    (elevation_min + elevation_max) / 2.0,
+                    "Controlling OLS horizontal plane",
+                    "horizontal_plane_label",
+                    "horizontal_plane",
+                    None,
+                    None,
+                ]
+            )
+            features.append(feature)
+            contour_id += 1
+
         for contour in contours:
             contour_candidate = candidates_by_surface_id.get(contour.surface_id)
             if contour_candidate is not None:
