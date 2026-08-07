@@ -1652,6 +1652,9 @@ class SafeguardingBuilder(
             external_safeguarding_group = output_groups.get("external_safeguarding")
             if external_safeguarding_group is None:
                 external_safeguarding_group = main_group
+            cns_safeguarding_group = output_groups.get("cns_technical_safeguarding")
+            if cns_safeguarding_group is None:
+                cns_safeguarding_group = main_group
             ols_surfaces_group = output_groups.get("ols_surfaces")
             if ols_surfaces_group is None:
                 ols_surfaces_group = main_group
@@ -1800,7 +1803,12 @@ class SafeguardingBuilder(
                 return
             guideline_groups = self._create_guideline_groups(
                 external_safeguarding_group,
-                bool(cns_input_list or ils_bra_input_list),
+                False,
+            )
+            guideline_groups["G"] = (
+                cns_safeguarding_group
+                if cns_input_list or ils_bra_input_list
+                else None
             )
             guideline_groups["F"] = ols_surfaces_group
             self._reset_controlling_ols_engine()
@@ -2844,6 +2852,9 @@ class SafeguardingBuilder(
             main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION
         )
         groups["protected_airspace"] = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
+        groups["cns_technical_safeguarding"] = self._ensure_layer_group(
+            main_group, output_structure.CNS_TECHNICAL_SAFEGUARDING
+        )
         groups["external_safeguarding"] = self._ensure_layer_group(
             main_group, self.get_active_framework().safeguarding_group_name()
         )
@@ -3290,6 +3301,9 @@ class SafeguardingBuilder(
         infrastructure_group = self._ensure_layer_group(main_group, output_structure.AERODROME_INFRASTRUCTURE)
         protection_group = self._ensure_layer_group(main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION)
         protected_airspace_group = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
+        cns_safeguarding_group = self._ensure_layer_group(
+            main_group, output_structure.CNS_TECHNICAL_SAFEGUARDING
+        )
         baseline_surface_group = self._ensure_layer_group(
             protected_airspace_group,
             self._baseline_ols_group_name(),
@@ -3330,6 +3344,7 @@ class SafeguardingBuilder(
             or infrastructure_group is None
             or protection_group is None
             or protected_airspace_group is None
+            or cns_safeguarding_group is None
             or baseline_surface_group is None
             or (
                 not self._is_future_annex14_protected_airspace()
@@ -3416,7 +3431,19 @@ class SafeguardingBuilder(
         ]:
             self._merge_or_move_direct_group(main_group, self.tr(group_name), protection_group)
 
-        for group_name in framework.guideline_group_names(include_cns=True):
+        legacy_cns_name = self.tr("CNS / Technical Safeguarding")
+        for legacy_parent in (main_group, external_group):
+            legacy_cns_group = self._find_direct_child_group(
+                legacy_parent, legacy_cns_name
+            )
+            if legacy_cns_group is None or legacy_cns_group == cns_safeguarding_group:
+                continue
+            for child in list(legacy_cns_group.children()):
+                self._move_layer_tree_node(child, cns_safeguarding_group)
+            if not legacy_cns_group.children():
+                legacy_parent.removeChildNode(legacy_cns_group)
+
+        for group_name in framework.guideline_group_names(include_cns=False):
             self._merge_or_move_direct_group(main_group, self.tr(group_name), external_group)
 
         self._repair_debug_development_layer_tree(main_group, debug_group)

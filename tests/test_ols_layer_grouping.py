@@ -138,6 +138,31 @@ class OlsLayerGroupingTests(unittest.TestCase):
         self.assertIsNone(groups["debug_development"])
         self.assertIsNone(self.direct_group(main_group, "99 Debug / Development"))
 
+    def test_top_level_sections_include_promoted_cns_group_in_numbered_order(self):
+        self.builder.framework = get_framework_profile()
+        self.builder.baseline_ols_ruleset = get_ruleset_profile("mos139_2019")
+        self.builder.protected_airspace_ruleset = self.builder.baseline_ols_ruleset
+        self.builder.comparison_ols_ruleset = None
+        main_group = QgsLayerTreeGroup("TEST")
+
+        groups = self.builder._create_output_layer_groups(main_group, agl_enabled=False)
+
+        self.assertEqual(
+            [child.name() for child in main_group.children()],
+            [
+                "01 Reference Data",
+                "02 Aerodrome Infrastructure",
+                "03 Runway Protection and Separation",
+                "04 Obstacle Limitation Surfaces",
+                "05 CNS / Technical Safeguarding",
+                "06 External Safeguarding",
+            ],
+        )
+        self.assertIs(
+            groups["cns_technical_safeguarding"],
+            self.direct_group(main_group, "05 CNS / Technical Safeguarding"),
+        )
+
     def test_debug_development_group_can_be_enabled_for_diagnostics(self):
         self.builder.framework = get_framework_profile()
         self.builder.baseline_ols_ruleset = get_ruleset_profile("mos139_2019")
@@ -153,10 +178,9 @@ class OlsLayerGroupingTests(unittest.TestCase):
 
     def test_generated_layer_groups_are_collapsed_and_unchecked_recursively(self):
         main_group = QgsLayerTreeGroup("TEST")
-        section_group = main_group.addGroup("05 External Safeguarding")
-        cns_group = section_group.addGroup("CNS / Technical Safeguarding")
+        cns_group = main_group.addGroup("05 CNS / Technical Safeguarding")
         cns_group.addGroup("Radio Link")
-        for group in (main_group, section_group, cns_group):
+        for group in (main_group, cns_group):
             group.setExpanded(True)
             group.setItemVisibilityChecked(True)
 
@@ -164,7 +188,6 @@ class OlsLayerGroupingTests(unittest.TestCase):
 
         groups = [
             main_group,
-            section_group,
             cns_group,
             self.direct_group(cns_group, "Radio Link"),
         ]
