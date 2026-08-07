@@ -306,8 +306,7 @@ class LayerStyleTests(unittest.TestCase):
             self.assertGreaterEqual(symbol_layer.strokeWidth(), 0.45)
             outline_colors.add(symbol_layer.strokeColor().name())
         self.assertEqual(len(outline_colors), 3)
-        self.assertTrue(surface.labelsEnabled())
-        self.assertIn("facility_id", surface.labeling().settings().fieldName)
+        self.assertFalse(surface.labelsEnabled())
 
         contours = QgsVectorLayer(
             "LineString?field=contclass:string&field=contagl_m:double&field=contelev_m:double",

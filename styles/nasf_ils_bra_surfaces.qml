@@ -1,5 +1,5 @@
 <!DOCTYPE qgis PUBLIC 'http://mrcc.com/qgis.dtd' 'SYSTEM'>
-<qgis version="4.0.2-Norrköping" styleCategories="AllStyleCategories" labelsEnabled="1">
+<qgis version="4.0.2-Norrköping" styleCategories="AllStyleCategories" labelsEnabled="0">
   <renderer-v2 type="RuleRenderer" symbollevels="0" enableorderby="0" forceraster="0">
     <rules key="ils-bra-surface-rules">
       <rule key="horizontal" label="Horizontal protection area" symbol="0" filter="&quot;surface_role&quot; LIKE '%horizontal%'"/>
@@ -18,13 +18,4 @@
       </symbol>
     </symbols>
   </renderer-v2>
-  <labeling type="simple">
-    <settings calloutType="simple">
-      <text-style fieldName="concat(&quot;facility_id&quot;, '\n', &quot;surface&quot;)" isExpression="1" fontFamily="Helvetica" fontSize="9" fontSizeUnit="Point" textColor="70,55,112,255" fontWeight="50">
-        <text-buffer bufferDraw="1" bufferSize="1" bufferSizeUnits="MM" bufferColor="255,255,255,225"/>
-      </text-style>
-      <placement placement="1" geometryGenerator="point_on_surface($geometry)" geometryGeneratorEnabled="1" geometryGeneratorType="PointGeometry" overlapHandling="PreventOverlap" priority="5"/>
-      <rendering drawLabels="1" scaleMin="1" scaleMax="100000" scaleVisibility="1" obstacle="0"/>
-    </settings>
-  </labeling>
 </qgis>
