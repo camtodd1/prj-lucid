@@ -19,12 +19,14 @@ from .cns import (
     RADIO_LINK_POLICY,
     RADAR_SITE_MONITOR_TYPE_A_POLICY,
     RADAR_SITE_MONITOR_TYPE_B_POLICY,
+    classified_contour_heights,
     slope_contour_levels,
 )
 from .processor_base import NasfGuidelineProcessorBase
 from .ils_bra import (
     construct_provisional_glide_path_bra,
     construct_provisional_localiser_bra,
+    ils_bra_contour_geometries,
 )
 
 try:
@@ -108,7 +110,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     fields,
                     features,
                     parent,
-                    "Default CNS",
+                    "ILS BRA Surface",
                 )
                 if layer is not None:
                     layer.setCustomProperty("safeguarding_provisional", True)
@@ -117,6 +119,14 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                         "Worked-example ILS BRA; verify against Airservices facility requirements.",
                     )
                     generated = True
+                if self._create_ils_bra_contours(
+                    installation,
+                    surfaces,
+                    icao_code,
+                    safe_id,
+                    parent,
+                ):
+                    generated = True
             except Exception as error:
                 QgsMessageLog.logMessage(
                     f"ILS BRA '{installation.get('id', '')}' failed: {error}",
@@ -124,6 +134,90 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     level=Qgis.Critical,
                 )
         return generated
+
+    def _create_ils_bra_contours(
+        self,
+        installation: dict,
+        surfaces: List[dict],
+        icao_code: str,
+        safe_id: str,
+        layer_group: QgsLayerTreeGroup,
+    ) -> bool:
+        """Create merged primary/intermediate contours for one ILS BRA envelope."""
+        ground_elevation = float(installation.get("ground_elevation"))
+        vertex_elevations = [
+            point.z()
+            for surface in surfaces
+            if float(surface.get("slope_degrees", 0.0) or 0.0) > 0
+            for point in surface["geometry"].vertices()
+        ]
+        if not vertex_elevations:
+            return False
+        maximum_agl = max(vertex_elevations) - ground_elevation
+        primary_interval, intermediate_interval = self._cns_contour_intervals()
+        levels = classified_contour_heights(
+            0.0,
+            maximum_agl,
+            primary_interval,
+            intermediate_interval,
+        )
+        if not levels:
+            return False
+
+        fields = QgsFields(
+            [
+                QgsField("facility_id", QVariant.String),
+                QgsField("component", QVariant.String),
+                QgsField("surfname", QVariant.String),
+                QgsField("contagl_m", QVariant.Double),
+                QgsField("contelev_m", QVariant.Double),
+                QgsField("contclass", QVariant.String),
+                QgsField("contint_m", QVariant.Double),
+                QgsField("primint_m", QVariant.Double),
+                QgsField("provisional", QVariant.Bool),
+                QgsField("source_ref", QVariant.String, len=254),
+            ]
+        )
+        features: List[QgsFeature] = []
+        for level in levels:
+            height_agl = float(level["height_agl_m"])
+            elevation_amsl = ground_elevation + height_agl
+            for geometry in ils_bra_contour_geometries(surfaces, elevation_amsl):
+                feature = QgsFeature(fields)
+                feature.setGeometry(geometry)
+                feature.setAttributes(
+                    [
+                        installation.get("id", ""),
+                        installation.get("component", ""),
+                        "ILS Building Restricted Area",
+                        height_agl,
+                        elevation_amsl,
+                        level["contour_class"],
+                        level["intermediate_interval_m"],
+                        level["primary_interval_m"],
+                        True,
+                        installation.get("source_reference", ""),
+                    ]
+                )
+                features.append(feature)
+        if not features:
+            return False
+        contour_layer = self._create_and_add_layer(
+            "LineString",
+            f"G_ILS_BRA_{icao_code}_{safe_id}_Contours",
+            f"{installation.get('id', 'ILS')} - Provisional BRA Contours",
+            fields,
+            features,
+            layer_group,
+            "ILS BRA Contour",
+        )
+        if contour_layer is not None:
+            contour_layer.setCustomProperty("safeguarding_provisional", True)
+            contour_layer.setCustomProperty("safeguarding_contour_primary_m", primary_interval)
+            contour_layer.setCustomProperty(
+                "safeguarding_contour_intermediate_m", intermediate_interval
+            )
+        return contour_layer is not None
 
     def process_cns_building_restricted_areas(
         self,

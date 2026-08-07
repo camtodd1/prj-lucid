@@ -37,6 +37,69 @@ def _polygon_z(points: Sequence[Tuple[float, float, float]]) -> QgsGeometry:
     return QgsGeometry(QgsPolygon(QgsLineString(ring_points)))
 
 
+def ils_bra_contour_geometries(
+    surfaces: Sequence[Dict[str, Any]],
+    elevation_amsl: float,
+) -> List[QgsGeometry]:
+    """Intersect all sloped PolygonZ pieces with one elevation and merge seams."""
+    target = float(elevation_amsl)
+    segments: List[QgsGeometry] = []
+    tolerance = 1e-7
+    for surface in surfaces:
+        if float(surface.get("slope_degrees", 0.0) or 0.0) <= 0:
+            continue
+        geometry = surface.get("geometry")
+        polygon = geometry.constGet() if isinstance(geometry, QgsGeometry) else None
+        ring = polygon.exteriorRing() if polygon is not None and hasattr(polygon, "exteriorRing") else None
+        points = ring.points() if ring is not None else []
+        intersections: List[QgsPointXY] = []
+        on_plane_edges: List[QgsGeometry] = []
+        for index in range(max(0, len(points) - 1)):
+            first = points[index]
+            second = points[index + 1]
+            first_delta = first.z() - target
+            second_delta = second.z() - target
+            if abs(first_delta) <= tolerance and abs(second_delta) <= tolerance:
+                on_plane_edges.append(
+                    QgsGeometry.fromPolylineXY(
+                        [QgsPointXY(first.x(), first.y()), QgsPointXY(second.x(), second.y())]
+                    )
+                )
+                continue
+            if first_delta * second_delta > tolerance:
+                continue
+            if abs(first_delta - second_delta) <= tolerance:
+                continue
+            fraction = (target - first.z()) / (second.z() - first.z())
+            if -tolerance <= fraction <= 1.0 + tolerance:
+                candidate = QgsPointXY(
+                    first.x() + fraction * (second.x() - first.x()),
+                    first.y() + fraction * (second.y() - first.y()),
+                )
+                if not any(candidate.distance(existing) <= 1e-6 for existing in intersections):
+                    intersections.append(candidate)
+        if on_plane_edges:
+            segments.extend(on_plane_edges)
+        elif len(intersections) >= 2:
+            segments.append(QgsGeometry.fromPolylineXY(intersections))
+
+    if not segments:
+        return []
+    merged = QgsGeometry.unaryUnion(segments)
+    if merged is None or merged.isNull() or merged.isEmpty():
+        return []
+    try:
+        merged = merged.mergeLines()
+    except Exception:
+        pass
+    polylines = merged.asMultiPolyline() if merged.isMultipart() else [merged.asPolyline()]
+    return [
+        QgsGeometry.fromPolylineXY(polyline)
+        for polyline in polylines
+        if len(polyline) >= 2
+    ]
+
+
 def construct_provisional_glide_path_bra(
     installation: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
@@ -410,6 +473,7 @@ def construct_provisional_localiser_bra(
 __all__ = [
     "construct_provisional_glide_path_bra",
     "construct_provisional_localiser_bra",
+    "ils_bra_contour_geometries",
     "GP_BRA_FORWARD_EXTENT_M",
     "GP_BRA_HORIZONTAL_LENGTH_M",
 ]

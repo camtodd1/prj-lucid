@@ -272,6 +272,69 @@ class LayerStyleTests(unittest.TestCase):
         self.assertGreaterEqual(symbol_layer.size(), 3.0)
         self.assertEqual(symbol_layer.color().alpha(), 255)
 
+    def test_ils_bra_styles_are_distinct_and_follow_cns_visual_hierarchy(self):
+        styles_dir = Path(__file__).resolve().parents[1] / "styles"
+        self.assertNotEqual(
+            DEFAULT_STYLE_MAP["ILS BRA Surface"],
+            DEFAULT_STYLE_MAP["Default CNS"],
+        )
+
+        surface = QgsVectorLayer(
+            "Polygon?field=facility_id:string&field=surface:string&field=surface_role:string",
+            "ILS BRA Surfaces",
+            "memory",
+        )
+        message, loaded = surface.loadNamedStyle(
+            str(styles_dir / DEFAULT_STYLE_MAP["ILS BRA Surface"])
+        )
+        self.assertTrue(loaded, message)
+        self.assertEqual(surface.renderer().type(), "RuleRenderer")
+        surface_rules = surface.renderer().rootRule().children()
+        self.assertEqual(
+            {rule.label() for rule in surface_rules},
+            {
+                "Horizontal protection area",
+                "0.5° longitudinal surface",
+                "2° lateral surface",
+            },
+        )
+        outline_colors = set()
+        for rule in surface_rules:
+            symbol_layer = rule.symbol().symbolLayer(0)
+            self.assertLess(symbol_layer.fillColor().alpha(), 80)
+            self.assertEqual(symbol_layer.strokeColor().alpha(), 255)
+            self.assertGreaterEqual(symbol_layer.strokeWidth(), 0.45)
+            outline_colors.add(symbol_layer.strokeColor().name())
+        self.assertEqual(len(outline_colors), 3)
+        self.assertTrue(surface.labelsEnabled())
+        self.assertIn("facility_id", surface.labeling().settings().fieldName)
+
+        contours = QgsVectorLayer(
+            "LineString?field=contclass:string&field=contagl_m:double",
+            "ILS BRA Contours",
+            "memory",
+        )
+        message, loaded = contours.loadNamedStyle(
+            str(styles_dir / DEFAULT_STYLE_MAP["ILS BRA Contour"])
+        )
+        self.assertTrue(loaded, message)
+        self.assertEqual(contours.renderer().type(), "RuleRenderer")
+        contour_rules = {
+            rule.label(): rule
+            for rule in contours.renderer().rootRule().children()
+        }
+        self.assertEqual(
+            set(contour_rules), {"Primary contour", "Intermediate contour"}
+        )
+        primary = contour_rules["Primary contour"].symbol()
+        intermediate = contour_rules["Intermediate contour"].symbol()
+        self.assertGreater(primary.width(), intermediate.width())
+        self.assertEqual(primary.color().alpha(), 255)
+        self.assertLess(intermediate.color().alpha(), primary.color().alpha())
+        self.assertNotEqual(primary.color().name(), intermediate.color().name())
+        self.assertTrue(contours.labelsEnabled())
+        self.assertIn("contagl_m", contours.labeling().settings().fieldName)
+
     def test_modernisation_change_contour_style_renders_and_labels_zero_contour(self):
         layer = QgsVectorLayer(
             "MultiLineString?field=change:string&field=contour_class:string&field=label_txt:string",

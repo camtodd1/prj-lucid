@@ -882,6 +882,45 @@ def get_cns_spec(facility_type: str) -> Optional[List[Dict[str, Any]]]:
     return None  # Not found
 
 
+def classified_contour_heights(
+    start_height_m: float,
+    maximum_height_m: float,
+    primary_interval_m: float,
+    intermediate_interval_m: float,
+) -> List[Dict[str, Any]]:
+    """Return primary/intermediate contour heights using the shared CNS policy."""
+    try:
+        start_height = float(start_height_m)
+        maximum_height = float(maximum_height_m)
+        primary_interval = float(primary_interval_m)
+        intermediate_interval = float(intermediate_interval_m)
+    except (TypeError, ValueError):
+        return []
+    if primary_interval <= 0 or intermediate_interval <= 0 or maximum_height < start_height:
+        return []
+
+    contour_classes: Dict[float, str] = {round(start_height, 6): "primary"}
+    for interval, contour_class in (
+        (intermediate_interval, "intermediate"),
+        (primary_interval, "primary"),
+    ):
+        height = start_height + interval
+        while height <= maximum_height + 1e-9:
+            rounded_height = round(height, 6)
+            if contour_class == "primary" or rounded_height not in contour_classes:
+                contour_classes[rounded_height] = contour_class
+            height += interval
+    return [
+        {
+            "height_agl_m": height,
+            "contour_class": contour_class,
+            "intermediate_interval_m": intermediate_interval,
+            "primary_interval_m": primary_interval,
+        }
+        for height, contour_class in sorted(contour_classes.items())
+    ]
+
+
 def slope_contour_levels(
     surface_spec: Dict[str, Any],
     primary_interval_m: Optional[float] = None,
@@ -913,28 +952,19 @@ def slope_contour_levels(
         return []
 
     maximum_height = start_height + (outer_radius - start_distance) * slope_tangent
-    contour_classes: Dict[float, str] = {round(start_height, 6): "primary"}
-    for interval, contour_class in (
-        (intermediate_interval, "intermediate"),
-        (primary_interval, "primary"),
-    ):
-        height = start_height + interval
-        while height <= maximum_height + 1e-9:
-            rounded_height = round(height, 6)
-            if contour_class == "primary" or rounded_height not in contour_classes:
-                contour_classes[rounded_height] = contour_class
-            height += interval
-
     contours: List[Dict[str, Any]] = []
-    for height, contour_class in sorted(contour_classes.items()):
+    for contour in classified_contour_heights(
+        start_height,
+        maximum_height,
+        primary_interval,
+        intermediate_interval,
+    ):
+        height = contour["height_agl_m"]
         radius = start_distance + (height - start_height) / slope_tangent
         contours.append(
             {
-                "height_agl_m": height,
+                **contour,
                 "radius_m": round(radius, 6),
-                "contour_class": contour_class,
-                "intermediate_interval_m": intermediate_interval,
-                "primary_interval_m": primary_interval,
             }
         )
     return contours

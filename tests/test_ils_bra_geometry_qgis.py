@@ -14,6 +14,7 @@ sys.path.insert(0, str(WORKSPACE.parent))
 from safeguarding_builder.frameworks.nasf.ils_bra import (
     construct_provisional_glide_path_bra,
     construct_provisional_localiser_bra,
+    ils_bra_contour_geometries,
 )
 from safeguarding_builder.frameworks.nasf.cns_guideline import NasfCnsGuidelineMixin
 
@@ -100,7 +101,14 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
             places=6,
         )
 
-    def test_processor_emits_one_provisional_polygonz_layer(self):
+    def test_contour_geometry_intersects_and_merges_sloped_surface_pieces(self):
+        contours = ils_bra_contour_geometries(self.surfaces, 23.5)
+
+        self.assertTrue(contours)
+        self.assertTrue(all(not geometry.isEmpty() for geometry in contours))
+        self.assertTrue(all(geometry.isGeosValid() for geometry in contours))
+
+    def test_processor_emits_provisional_surface_and_classified_contour_layers(self):
         harness = _IlsHarness()
         group = QgsLayerTreeGroup("Guideline G")
         installation = {
@@ -118,14 +126,34 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
                 [installation], "YTEST", group
             )
         )
-        self.assertEqual(len(harness.created), 1)
-        created = harness.created[0]
+        self.assertEqual(len(harness.created), 2)
+        created = next(
+            item for item in harness.created if item["style_key"] == "ILS BRA Surface"
+        )
+        contours = next(
+            item for item in harness.created if item["style_key"] == "ILS BRA Contour"
+        )
         self.assertEqual(created["geometry_type"], "PolygonZ")
         self.assertEqual(len(created["features"]), 5)
         self.assertTrue(
             all(feature.attribute("provisional") for feature in created["features"])
         )
         self.assertTrue(created["layer"].properties["safeguarding_provisional"])
+        self.assertEqual(contours["geometry_type"], "LineString")
+        levels = {
+            (feature.attribute("contagl_m"), feature.attribute("contclass"))
+            for feature in contours["features"]
+        }
+        self.assertIn((0.0, "primary"), levels)
+        self.assertIn((5.0, "intermediate"), levels)
+        self.assertIn((10.0, "primary"), levels)
+        self.assertTrue(contours["layer"].properties["safeguarding_provisional"])
+        self.assertEqual(
+            contours["layer"].properties["safeguarding_contour_primary_m"], 10.0
+        )
+        self.assertEqual(
+            contours["layer"].properties["safeguarding_contour_intermediate_m"], 5.0
+        )
 
     def test_localiser_constructs_runway_centred_cat_i_envelope(self):
         surfaces = construct_provisional_localiser_bra(
@@ -183,10 +211,22 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
                 [installation], "YTEST", QgsLayerTreeGroup("Guideline G")
             )
         )
-        created = harness.created[0]
+        created = next(
+            item for item in harness.created if item["style_key"] == "ILS BRA Surface"
+        )
+        contours = next(
+            item for item in harness.created if item["style_key"] == "ILS BRA Contour"
+        )
         self.assertEqual(len(created["features"]), 5)
         self.assertTrue(
             all(feature.attribute("loc_cat") == "cat_i" for feature in created["features"])
+        )
+        self.assertEqual(
+            {
+                feature.attribute("contclass")
+                for feature in contours["features"]
+            },
+            {"primary", "intermediate"},
         )
 
 
