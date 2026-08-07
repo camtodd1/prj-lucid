@@ -92,7 +92,12 @@ class IlsBraInputsMixin:
     @staticmethod
     def _runway_designations(data: Dict[str, Any]) -> Tuple[str, str]:
         try:
-            primary_number = int(str(data.get("designator_str", "")).strip())
+            primary_number = int(
+                str(
+                    data.get("designator_str")
+                    or data.get("designator_num", "")
+                ).strip()
+            )
             if not 1 <= primary_number <= 36:
                 raise ValueError
             primary_suffix = str(data.get("suffix", "") or "").strip().upper()
@@ -485,6 +490,7 @@ class IlsBraInputsMixin:
                     "component": component,
                     "runway_index": runway_index,
                     "runway_end": runway_end,
+                    "runway_designation": designation,
                     "position_mode": position_mode,
                     "easting": point.x(),
                     "northing": point.y(),

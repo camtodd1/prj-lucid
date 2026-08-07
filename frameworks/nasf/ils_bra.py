@@ -94,7 +94,11 @@ def ils_bra_contour_geometries(
         pass
     polylines = merged.asMultiPolyline() if merged.isMultipart() else [merged.asPolyline()]
     return [
-        QgsGeometry.fromPolylineXY(polyline)
+        QgsGeometry(
+            QgsLineString(
+                [QgsPoint(point.x(), point.y(), target) for point in polyline]
+            )
+        )
         for polyline in polylines
         if len(polyline) >= 2
     ]

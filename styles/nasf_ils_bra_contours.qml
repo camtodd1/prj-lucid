@@ -12,7 +12,7 @@
   </renderer-v2>
   <labeling type="simple">
     <settings calloutType="simple">
-      <text-style fieldName="CASE WHEN round(&quot;contagl_m&quot; * 2) / 2 = floor(round(&quot;contagl_m&quot; * 2) / 2) THEN format_number(round(&quot;contagl_m&quot; * 2) / 2, 0) ELSE format_number(round(&quot;contagl_m&quot; * 2) / 2, 1) END" isExpression="1" fontFamily="Helvetica" fontSize="10" fontSizeUnit="Point" textColor="70,48,116,255" fontWeight="50">
+      <text-style fieldName="CASE WHEN round(&quot;contelev_m&quot; * 2) / 2 = floor(round(&quot;contelev_m&quot; * 2) / 2) THEN format_number(round(&quot;contelev_m&quot; * 2) / 2, 0) ELSE format_number(round(&quot;contelev_m&quot; * 2) / 2, 1) END" isExpression="1" fontFamily="Helvetica" fontSize="10" fontSizeUnit="Point" textColor="70,48,116,255" fontWeight="50">
         <text-buffer bufferDraw="1" bufferSize="1" bufferSizeUnits="MM" bufferColor="255,255,255,220"/>
       </text-style>
       <placement placement="2" lineAnchorType="0" lineAnchorPercent="0.5" lineAnchorTextPoint="FollowPlacement" preserveRotation="1" maxCurvedCharAngleIn="25" maxCurvedCharAngleOut="-25" priority="5" overlapHandling="PreventOverlap"/>

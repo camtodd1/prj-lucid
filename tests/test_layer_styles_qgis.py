@@ -310,7 +310,7 @@ class LayerStyleTests(unittest.TestCase):
         self.assertIn("facility_id", surface.labeling().settings().fieldName)
 
         contours = QgsVectorLayer(
-            "LineString?field=contclass:string&field=contagl_m:double",
+            "LineString?field=contclass:string&field=contagl_m:double&field=contelev_m:double",
             "ILS BRA Contours",
             "memory",
         )
@@ -333,7 +333,8 @@ class LayerStyleTests(unittest.TestCase):
         self.assertLess(intermediate.color().alpha(), primary.color().alpha())
         self.assertNotEqual(primary.color().name(), intermediate.color().name())
         self.assertTrue(contours.labelsEnabled())
-        self.assertIn("contagl_m", contours.labeling().settings().fieldName)
+        self.assertIn("contelev_m", contours.labeling().settings().fieldName)
+        self.assertNotIn("contagl_m", contours.labeling().settings().fieldName)
 
     def test_modernisation_change_contour_style_renders_and_labels_zero_contour(self):
         layer = QgsVectorLayer(

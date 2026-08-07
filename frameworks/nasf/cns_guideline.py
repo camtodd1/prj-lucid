@@ -51,6 +51,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             [
                 QgsField("facility_id", QVariant.String),
                 QgsField("component", QVariant.String),
+                QgsField("runway", QVariant.String),
                 QgsField("surface", QVariant.String),
                 QgsField("surface_role", QVariant.String),
                 QgsField("provisional", QVariant.Bool),
@@ -84,6 +85,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                         [
                             installation.get("id", ""),
                             installation.get("component", ""),
+                            installation.get("runway_designation", ""),
                             surface["surface_name"],
                             surface["surface_role"],
                             True,
@@ -103,13 +105,30 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     char if char.isalnum() else "_"
                     for char in str(installation.get("id", "ILS"))
                 )
+                runway_designation = str(
+                    installation.get("runway_designation", "") or ""
+                ).strip()
+                if not runway_designation:
+                    identifier = str(installation.get("id", "") or "")
+                    if "-" in identifier:
+                        runway_designation = identifier.split("-", 1)[1]
+                runway_group = self._cns_element_group(
+                    parent,
+                    f"RWY {runway_designation}" if runway_designation else "Runway unassigned",
+                )
+                component_label = (
+                    "Glide Path" if component == "glide_path" else "Localiser"
+                )
+                layer_prefix = " ".join(
+                    value for value in (component_label, runway_designation) if value
+                )
                 layer = self._create_and_add_layer(
                     "PolygonZ",
                     f"G_ILS_BRA_{icao_code}_{safe_id}",
-                    f"{installation.get('id', 'ILS')} - Provisional BRA Surfaces",
+                    f"{layer_prefix} - Surface",
                     fields,
                     features,
-                    parent,
+                    runway_group,
                     "ILS BRA Surface",
                 )
                 if layer is not None:
@@ -124,7 +143,9 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     surfaces,
                     icao_code,
                     safe_id,
-                    parent,
+                    runway_group,
+                    runway_designation,
+                    component_label,
                 ):
                     generated = True
             except Exception as error:
@@ -142,6 +163,8 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
         icao_code: str,
         safe_id: str,
         layer_group: QgsLayerTreeGroup,
+        runway_designation: str,
+        component_label: str,
     ) -> bool:
         """Create merged primary/intermediate contours for one ILS BRA envelope."""
         ground_elevation = float(installation.get("ground_elevation"))
@@ -168,6 +191,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
             [
                 QgsField("facility_id", QVariant.String),
                 QgsField("component", QVariant.String),
+                QgsField("runway", QVariant.String),
                 QgsField("surfname", QVariant.String),
                 QgsField("contagl_m", QVariant.Double),
                 QgsField("contelev_m", QVariant.Double),
@@ -189,6 +213,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     [
                         installation.get("id", ""),
                         installation.get("component", ""),
+                        runway_designation,
                         "ILS Building Restricted Area",
                         height_agl,
                         elevation_amsl,
@@ -203,9 +228,9 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
         if not features:
             return False
         contour_layer = self._create_and_add_layer(
-            "LineString",
+            "LineStringZ",
             f"G_ILS_BRA_{icao_code}_{safe_id}_Contours",
-            f"{installation.get('id', 'ILS')} - Provisional BRA Contours",
+            f"{component_label} {runway_designation} - Contours".replace("  ", " "),
             fields,
             features,
             layer_group,

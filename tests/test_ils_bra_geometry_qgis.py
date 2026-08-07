@@ -107,6 +107,14 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
         self.assertTrue(contours)
         self.assertTrue(all(not geometry.isEmpty() for geometry in contours))
         self.assertTrue(all(geometry.isGeosValid() for geometry in contours))
+        self.assertTrue(all(QgsWkbTypes.hasZ(geometry.wkbType()) for geometry in contours))
+        self.assertTrue(
+            all(
+                abs(point.z() - 23.5) <= 1e-6
+                for geometry in contours
+                for point in geometry.vertices()
+            )
+        )
 
     def test_processor_emits_provisional_surface_and_classified_contour_layers(self):
         harness = _IlsHarness()
@@ -114,6 +122,7 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
         installation = {
             "id": "GP-09",
             "component": "glide_path",
+            "runway_designation": "09",
             "front_face_point": QgsPointXY(455300, 5771880),
             "runway_interior_unit": (1.0, 0.0),
             "signed_offset": 120.0,
@@ -134,12 +143,19 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
             item for item in harness.created if item["style_key"] == "ILS BRA Contour"
         )
         self.assertEqual(created["geometry_type"], "PolygonZ")
+        self.assertEqual(created["display_name"], "Glide Path 09 - Surface")
+        self.assertEqual(created["layer_group"].name(), "RWY 09")
         self.assertEqual(len(created["features"]), 5)
+        self.assertTrue(
+            all(feature.attribute("runway") == "09" for feature in created["features"])
+        )
         self.assertTrue(
             all(feature.attribute("provisional") for feature in created["features"])
         )
         self.assertTrue(created["layer"].properties["safeguarding_provisional"])
-        self.assertEqual(contours["geometry_type"], "LineString")
+        self.assertEqual(contours["geometry_type"], "LineStringZ")
+        self.assertEqual(contours["display_name"], "Glide Path 09 - Contours")
+        self.assertIs(contours["layer_group"], created["layer_group"])
         levels = {
             (feature.attribute("contagl_m"), feature.attribute("contclass"))
             for feature in contours["features"]
@@ -147,6 +163,13 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
         self.assertIn((0.0, "primary"), levels)
         self.assertIn((5.0, "intermediate"), levels)
         self.assertIn((10.0, "primary"), levels)
+        elevations = {
+            (feature.attribute("contagl_m"), feature.attribute("contelev_m"))
+            for feature in contours["features"]
+        }
+        self.assertIn((0.0, 18.5), elevations)
+        self.assertIn((5.0, 23.5), elevations)
+        self.assertIn((10.0, 28.5), elevations)
         self.assertTrue(contours["layer"].properties["safeguarding_provisional"])
         self.assertEqual(
             contours["layer"].properties["safeguarding_contour_primary_m"], 10.0
@@ -194,9 +217,11 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
 
     def test_processor_generates_localiser_layer(self):
         harness = _IlsHarness()
+        group = QgsLayerTreeGroup("Guideline G")
         installation = {
             "id": "LOC-09",
             "component": "localiser",
+            "runway_designation": "09",
             "point": QgsPointXY(456300, 5772000),
             "runway_interior_unit": (1.0, 0.0),
             "runway_length": 1000.0,
@@ -208,7 +233,7 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
         }
         self.assertTrue(
             harness.process_ils_building_restricted_areas(
-                [installation], "YTEST", QgsLayerTreeGroup("Guideline G")
+                [installation], "YTEST", group
             )
         )
         created = next(
@@ -218,6 +243,10 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
             item for item in harness.created if item["style_key"] == "ILS BRA Contour"
         )
         self.assertEqual(len(created["features"]), 5)
+        self.assertEqual(created["display_name"], "Localiser 09 - Surface")
+        self.assertEqual(contours["display_name"], "Localiser 09 - Contours")
+        self.assertEqual(created["layer_group"].name(), "RWY 09")
+        self.assertIs(contours["layer_group"], created["layer_group"])
         self.assertTrue(
             all(feature.attribute("loc_cat") == "cat_i" for feature in created["features"])
         )
@@ -227,6 +256,76 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
                 for feature in contours["features"]
             },
             {"primary", "intermediate"},
+        )
+
+    def test_processor_groups_components_under_their_runway(self):
+        harness = _IlsHarness()
+        root = QgsLayerTreeGroup("Guideline G")
+        installations = [
+            {
+                "id": "GP-09",
+                "component": "glide_path",
+                "runway_designation": "09",
+                "front_face_point": QgsPointXY(455300, 5771880),
+                "runway_interior_unit": (1.0, 0.0),
+                "signed_offset": 120.0,
+                "ground_elevation": 18.5,
+                "source_reference": "Provisional worked example",
+            },
+            {
+                "id": "LOC-09",
+                "component": "localiser",
+                "runway_designation": "09",
+                "point": QgsPointXY(456300, 5772000),
+                "runway_interior_unit": (1.0, 0.0),
+                "runway_length": 1000.0,
+                "distance_beyond_runway_end": 300.0,
+                "localiser_category": "cat_i",
+                "signed_offset": 0.0,
+                "ground_elevation": 17.5,
+                "source_reference": "Provisional worked example",
+            },
+            {
+                "id": "GP-27",
+                "component": "glide_path",
+                "runway_designation": "27",
+                "front_face_point": QgsPointXY(456700, 5772120),
+                "runway_interior_unit": (-1.0, 0.0),
+                "signed_offset": 120.0,
+                "ground_elevation": 19.0,
+                "source_reference": "Provisional worked example",
+            },
+        ]
+
+        self.assertTrue(
+            harness.process_ils_building_restricted_areas(
+                installations, "YTEST", root
+            )
+        )
+        ils_group = root.children()[0]
+        self.assertEqual(ils_group.name(), "ILS Building Restricted Areas (Provisional)")
+        runway_groups = {child.name(): child for child in ils_group.children()}
+        self.assertEqual(set(runway_groups), {"RWY 09", "RWY 27"})
+        self.assertTrue(all(
+            created["layer_group"] is runway_groups["RWY 09"]
+            for created in harness.created
+            if " 09 - " in created["display_name"]
+        ))
+        self.assertTrue(all(
+            created["layer_group"] is runway_groups["RWY 27"]
+            for created in harness.created
+            if " 27 - " in created["display_name"]
+        ))
+        self.assertEqual(
+            {created["display_name"] for created in harness.created},
+            {
+                "Glide Path 09 - Surface",
+                "Glide Path 09 - Contours",
+                "Localiser 09 - Surface",
+                "Localiser 09 - Contours",
+                "Glide Path 27 - Surface",
+                "Glide Path 27 - Contours",
+            },
         )
 
 

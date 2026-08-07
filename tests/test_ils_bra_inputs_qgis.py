@@ -42,7 +42,7 @@ class IlsBraInputsQgisTests(unittest.TestCase):
         self.dialog.refresh_ils_bra_runway_options()
         self.validated_runway = {
             "original_index": self.runway_index,
-            "designator_str": "09",
+            "designator_num": 9,
             "suffix": "L",
             "thr_point": QgsPointXY(455000, 5772000),
             "rec_thr_point": QgsPointXY(456000, 5772000),
@@ -93,6 +93,7 @@ class IlsBraInputsQgisTests(unittest.TestCase):
         self.assertEqual(len(installations), 1)
         installation = installations[0]
         self.assertEqual(installation["id"], "GP-09L")
+        self.assertEqual(installation["runway_designation"], "09L")
         self.assertAlmostEqual(installation["easting"], 455300.0)
         self.assertAlmostEqual(installation["northing"], 5771880.0)
         self.assertEqual(installation["antenna_offset"], 120.0)
