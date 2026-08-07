@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from qgis.core import QgsPointXY  # type: ignore
 from qgis.PyQt import QtWidgets  # type: ignore
+from qgis.PyQt.QtCore import Qt  # type: ignore
 from qgis.PyQt.QtWidgets import QAbstractItemView, QComboBox, QTableWidgetItem  # type: ignore
 
 
@@ -29,19 +30,17 @@ class IlsBraInputsMixin:
         if not all([table, add_button, remove_button]):
             return
 
-        table.setColumnCount(10)
+        table.setColumnCount(8)
         table.setHorizontalHeaderLabels(
             [
                 "Component",
                 "Runway end",
-                "Facility ID",
                 "Position mode",
                 "Antenna Easting",
                 "Antenna Northing",
-                "Runway-relative distance (m)",
-                "GP signed offset right (m)",
+                "Distance from threshold (m)",
+                "Distance from runway centreline (m)",
                 "Ground elev (AMSL)",
-                "Source / reference",
             ]
         )
         table.setAlternatingRowColors(True)
@@ -54,10 +53,9 @@ class IlsBraInputsMixin:
         )
         header = table.horizontalHeader()
         if header:
-            for column in range(9):
+            for column in range(8):
                 header.setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.Interactive)
-            header.setSectionResizeMode(9, QtWidgets.QHeaderView.ResizeMode.Stretch)
-        for column, width in enumerate([115, 170, 105, 175, 125, 125, 165, 145, 135]):
+        for column, width in enumerate([115, 170, 175, 125, 125, 170, 190, 135]):
             table.setColumnWidth(column, width)
         table.setMinimumHeight(150)
         table.setMaximumHeight(260)
@@ -66,9 +64,10 @@ class IlsBraInputsMixin:
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
         table.setToolTip(
-            "For glide path, runway-relative distance is inside the selected threshold and "
-            "offset is right-positive looking into the runway. For localiser, the distance "
-            "is beyond the opposite runway end; the antenna is derived on the extended centreline."
+            "For glide path, distance from threshold is measured into the runway and centreline "
+            "distance is right-positive looking into the runway. For localiser, distance from "
+            "threshold is measured beyond the opposite runway end and the antenna is constrained "
+            "to the extended centreline."
         )
 
         add_button.clicked.connect(self.add_ils_bra_row)
@@ -112,8 +111,8 @@ class IlsBraInputsMixin:
             primary, reciprocal = self._runway_designations(group.get_input_data())
             options.extend(
                 [
-                    (f"RWY {primary} approach end", f"{runway_index}:1"),
-                    (f"RWY {reciprocal} approach end", f"{runway_index}:2"),
+                    (f"RWY {primary} Approach", f"{runway_index}:1"),
+                    (f"RWY {reciprocal} Approach", f"{runway_index}:2"),
                 ]
             )
         return options
@@ -170,21 +169,19 @@ class IlsBraInputsMixin:
         position_mode = str(data.get("position_mode", ""))
         if not position_mode:
             position_mode = "direct" if data.get("easting") or data.get("northing") else "runway_offset"
-        table.setCellWidget(row, 3, self._new_position_mode_combo(position_mode))
+        table.setCellWidget(row, 2, self._new_position_mode_combo(position_mode))
         values = {
-            2: data.get("id", ""),
-            4: data.get("easting", ""),
-            5: data.get("northing", ""),
-            6: data.get(
+            3: data.get("easting", ""),
+            4: data.get("northing", ""),
+            5: data.get(
                 "runway_relative_distance",
                 data.get(
                     "distance_beyond_runway_end",
                     data.get("distance_inside_threshold", "300"),
                 ),
             ),
-            7: data.get("signed_offset", ""),
-            8: data.get("ground_elevation", ""),
-            9: data.get("source_reference", data.get("vehicle_critical_area_source", "")),
+            6: data.get("signed_offset", ""),
+            7: data.get("ground_elevation", ""),
         }
         for column, value in values.items():
             table.setItem(row, column, QTableWidgetItem(str(value if value is not None else "")))
@@ -208,6 +205,29 @@ class IlsBraInputsMixin:
         remove_button = getattr(self, "pushButton_remove_ILS_BRA", None)
         if remove_button:
             remove_button.setEnabled(bool(selected))
+        for row in range(row_count):
+            component = table.cellWidget(row, 0)
+            position_mode = table.cellWidget(row, 2)
+            component_value = (
+                str(component.currentData() or "")
+                if isinstance(component, QComboBox)
+                else ""
+            )
+            position_value = (
+                str(position_mode.currentData() or "")
+                if isinstance(position_mode, QComboBox)
+                else ""
+            )
+            direct = position_value == "direct"
+            self._set_ils_bra_item_enabled(table, row, 3, direct)
+            self._set_ils_bra_item_enabled(table, row, 4, direct)
+            self._set_ils_bra_item_enabled(table, row, 5, not direct)
+            self._set_ils_bra_item_enabled(
+                table,
+                row,
+                6,
+                not direct and component_value == "glide_path",
+            )
         status_helper = getattr(self, "_set_small_status_chip", None)
         if callable(status_helper):
             status_helper(
@@ -219,6 +239,17 @@ class IlsBraInputsMixin:
             status = getattr(self, "label_ils_bra_status", None)
             if status:
                 status.setText(f"ILS installations: {row_count}" if row_count else "ILS installations: none")
+
+    @staticmethod
+    def _set_ils_bra_item_enabled(table, row: int, column: int, enabled: bool) -> None:
+        item = table.item(row, column)
+        if item is None:
+            return
+        flags = item.flags()
+        if enabled:
+            item.setFlags(flags | Qt.ItemFlag.ItemIsEnabled)
+        else:
+            item.setFlags(flags & ~Qt.ItemFlag.ItemIsEnabled)
 
     @staticmethod
     def _ils_bra_item_text(table, row: int, column: int) -> str:
@@ -233,7 +264,7 @@ class IlsBraInputsMixin:
         for row in range(table.rowCount()):
             component = table.cellWidget(row, 0)
             runway = table.cellWidget(row, 1)
-            position_mode = table.cellWidget(row, 3)
+            position_mode = table.cellWidget(row, 2)
             runway_ref = str(runway.currentData() or "") if isinstance(runway, QComboBox) else ""
             runway_index, runway_end = self._split_runway_ref(runway_ref)
             rows.append(
@@ -242,18 +273,16 @@ class IlsBraInputsMixin:
                     "runway_ref": runway_ref,
                     "runway_index": runway_index,
                     "runway_end": runway_end,
-                    "id": self._ils_bra_item_text(table, row, 2),
                     "position_mode": (
                         str(position_mode.currentData() or "")
                         if isinstance(position_mode, QComboBox)
                         else ""
                     ),
-                    "easting": self._ils_bra_item_text(table, row, 4),
-                    "northing": self._ils_bra_item_text(table, row, 5),
-                    "runway_relative_distance": self._ils_bra_item_text(table, row, 6),
-                    "signed_offset": self._ils_bra_item_text(table, row, 7),
-                    "ground_elevation": self._ils_bra_item_text(table, row, 8),
-                    "source_reference": self._ils_bra_item_text(table, row, 9),
+                    "easting": self._ils_bra_item_text(table, row, 3),
+                    "northing": self._ils_bra_item_text(table, row, 4),
+                    "runway_relative_distance": self._ils_bra_item_text(table, row, 5),
+                    "signed_offset": self._ils_bra_item_text(table, row, 6),
+                    "ground_elevation": self._ils_bra_item_text(table, row, 7),
                     "provisional": True,
                 }
             )
@@ -331,24 +360,19 @@ class IlsBraInputsMixin:
             runway_index, runway_end = self._split_runway_ref(str(row.get("runway_ref", "")))
             runway = runway_by_index.get(runway_index)
             frame = self._runway_frame(runway, runway_end) if runway and runway_end else None
-            facility_id = str(row.get("id", "")).strip()
             position_mode = str(row.get("position_mode", ""))
-            source_reference = str(row.get("source_reference", "")).strip()
+            designations = self._runway_designations(runway) if runway else ("", "")
+            designation = designations[runway_end - 1] if runway_end in {1, 2} else ""
+            facility_prefix = "GP" if component == "glide_path" else "LOC"
+            facility_id_base = f"{facility_prefix}-{designation or row_number}"
+            source_reference = "Provisional ILS BRA worked-example construction"
 
             if component not in {value for _, value in ILS_BRA_COMPONENTS}:
                 errors.append(f"{prefix}: select glide path or localiser.")
             if frame is None:
                 errors.append(f"{prefix}: select a valid runway approach end.")
-            if not facility_id:
-                errors.append(f"{prefix}: facility ID is required.")
-            elif facility_id.casefold() in seen_ids:
-                errors.append(f"{prefix}: facility ID '{facility_id}' is duplicated.")
-            else:
-                seen_ids.add(facility_id.casefold())
             if position_mode not in {value for _, value in ILS_BRA_POSITION_MODES}:
                 errors.append(f"{prefix}: select a valid position mode.")
-            if not source_reference:
-                errors.append(f"{prefix}: source/reference is required.")
             try:
                 ground_elevation = float(str(row.get("ground_elevation", "")).strip())
             except (TypeError, ValueError):
@@ -449,6 +473,12 @@ class IlsBraInputsMixin:
             row_error_prefix = f"{prefix}:"
             if any(message.startswith(row_error_prefix) for message in errors):
                 continue
+            facility_id = facility_id_base
+            duplicate_number = 2
+            while facility_id.casefold() in seen_ids:
+                facility_id = f"{facility_id_base}-{duplicate_number}"
+                duplicate_number += 1
+            seen_ids.add(facility_id.casefold())
             installations.append(
                 {
                     "id": facility_id,

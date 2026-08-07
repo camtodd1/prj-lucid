@@ -5,6 +5,7 @@ import unittest
 from pathlib import Path
 
 from qgis.PyQt import QtWidgets
+from qgis.PyQt.QtCore import Qt
 from qgis.core import QgsApplication, QgsPointXY
 
 
@@ -41,6 +42,8 @@ class IlsBraInputsQgisTests(unittest.TestCase):
         self.dialog.refresh_ils_bra_runway_options()
         self.validated_runway = {
             "original_index": self.runway_index,
+            "designator_str": "09",
+            "suffix": "L",
             "thr_point": QgsPointXY(455000, 5772000),
             "rec_thr_point": QgsPointXY(456000, 5772000),
             "type1": "Precision Approach CAT I",
@@ -56,16 +59,30 @@ class IlsBraInputsQgisTests(unittest.TestCase):
             {
                 "component": "glide_path",
                 "runway_ref": f"{self.runway_index}:1",
-                "id": "GP-09L",
                 "position_mode": "runway_offset",
                 "distance_inside_threshold": "300",
                 "signed_offset": "120",
                 "ground_elevation": "18.5",
-                "source_reference": "NASF worked-example provisional construction",
             }
         )
 
-        self.assertEqual(self.dialog.table_ils_bra.columnCount(), 10)
+        self.assertEqual(self.dialog.table_ils_bra.columnCount(), 8)
+        self.assertEqual(
+            [
+                self.dialog.table_ils_bra.horizontalHeaderItem(column).text()
+                for column in range(8)
+            ],
+            [
+                "Component",
+                "Runway end",
+                "Position mode",
+                "Antenna Easting",
+                "Antenna Northing",
+                "Distance from threshold (m)",
+                "Distance from runway centreline (m)",
+                "Ground elev (AMSL)",
+            ],
+        )
         errors = []
         installations = self.dialog.get_ils_bra_input_data(
             [self.validated_runway],
@@ -75,10 +92,42 @@ class IlsBraInputsQgisTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(len(installations), 1)
         installation = installations[0]
+        self.assertEqual(installation["id"], "GP-09L")
         self.assertAlmostEqual(installation["easting"], 455300.0)
         self.assertAlmostEqual(installation["northing"], 5771880.0)
         self.assertEqual(installation["antenna_offset"], 120.0)
         self.assertTrue(installation["provisional"])
+
+    def test_position_mode_and_component_disable_inactive_inputs(self):
+        self.dialog.add_ils_bra_row(
+            {
+                "component": "glide_path",
+                "runway_ref": f"{self.runway_index}:1",
+                "position_mode": "runway_offset",
+            }
+        )
+        table = self.dialog.table_ils_bra
+
+        def enabled(column):
+            return bool(table.item(0, column).flags() & Qt.ItemFlag.ItemIsEnabled)
+
+        self.assertFalse(enabled(3))
+        self.assertFalse(enabled(4))
+        self.assertTrue(enabled(5))
+        self.assertTrue(enabled(6))
+
+        position_mode = table.cellWidget(0, 2)
+        position_mode.setCurrentIndex(position_mode.findData("direct"))
+        self.assertTrue(enabled(3))
+        self.assertTrue(enabled(4))
+        self.assertFalse(enabled(5))
+        self.assertFalse(enabled(6))
+
+        position_mode.setCurrentIndex(position_mode.findData("runway_offset"))
+        component = table.cellWidget(0, 0)
+        component.setCurrentIndex(component.findData("localiser"))
+        self.assertTrue(enabled(5))
+        self.assertFalse(enabled(6))
 
     def test_direct_coordinates_derive_runway_offset(self):
         self.dialog.add_ils_bra_row(
@@ -162,10 +211,11 @@ class IlsBraInputsQgisTests(unittest.TestCase):
         payload = self.dialog._build_save_payload("TEST")
         self.dialog.load_ils_bra_rows(saved)
 
-        self.assertEqual(payload["ils_bra_installations"][0]["id"], "GP-27R")
+        self.assertNotIn("id", payload["ils_bra_installations"][0])
+        self.assertNotIn("source_reference", payload["ils_bra_installations"][0])
         self.assertTrue(payload["ils_bra_installations"][0]["provisional"])
         self.assertEqual(self.dialog.table_ils_bra.rowCount(), 1)
-        self.assertEqual(self.dialog.table_ils_bra.cellWidget(0, 1).currentText(), "RWY 27R approach end")
+        self.assertEqual(self.dialog.table_ils_bra.cellWidget(0, 1).currentText(), "RWY 27R Approach")
 
 
 if __name__ == "__main__":
