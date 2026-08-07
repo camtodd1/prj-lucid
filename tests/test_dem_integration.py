@@ -413,6 +413,102 @@ class DemIntegrationTests(unittest.TestCase):
         self.assertIsNotNone(project.mapLayer(dem_layer.id()))
         self.assertIsNone(project.mapLayer(old_analysis_id))
 
+    def test_explicit_terrain_analysis_control_adds_all_output_layers(self):
+        project = QgsProject.instance()
+        project.layerTreeRoot().removeAllChildren()
+        project.setCrs(QgsCoordinateReferenceSystem("EPSG:7856"))
+        with tempfile.TemporaryDirectory() as directory:
+            dem_path = Path(directory) / "dem.tif"
+            dataset = gdal.GetDriverByName("GTiff").Create(
+                str(dem_path),
+                4,
+                4,
+                1,
+                gdal.GDT_Float32,
+            )
+            dataset.SetGeoTransform((0.0, 1.0, 0.0, 4.0, 0.0, -1.0))
+            spatial_reference = osr.SpatialReference()
+            spatial_reference.ImportFromEPSG(7856)
+            dataset.SetProjection(spatial_reference.ExportToWkt())
+            dataset.GetRasterBand(1).Fill(100.0)
+            dataset = None
+            dem_layer = QgsRasterLayer(str(dem_path), "DEM")
+            candidate = types.SimpleNamespace(
+                footprint=QgsGeometry.fromWkt(
+                    "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0))"
+                )
+            )
+
+            class TestEngine:
+                candidates = [candidate]
+
+                @staticmethod
+                def controlling_candidate_at_xy(point: QgsPointXY):
+                    return candidate, 94.0 + (point.x() * 10.0)
+
+            class TestDialog:
+                statuses = []
+
+                @staticmethod
+                def downloaded_dem_source():
+                    return dem_layer
+
+                @staticmethod
+                def findChild(*_args):
+                    return None
+
+                @classmethod
+                def set_dem_contour_status(cls, message, **_kwargs):
+                    cls.statuses.append(message)
+
+            class TestMessageBar:
+                @staticmethod
+                def pushMessage(*_args, **_kwargs):
+                    return None
+
+            class TestIface:
+                @staticmethod
+                def messageBar():
+                    return TestMessageBar()
+
+            class TestTerrainMixin(DemIntegrationMixin):
+                dlg = TestDialog()
+                iface = TestIface()
+                icao_code = "TEST"
+                _terrain_ols_engines = {"baseline": TestEngine()}
+
+                @staticmethod
+                def tr(message):
+                    return message
+
+                @staticmethod
+                def _log(_message):
+                    return None
+
+                @staticmethod
+                def _log_warning(_message):
+                    return None
+
+            with patch(
+                "safeguarding_builder.addons.dem.QgsProcessingUtils.tempFolder",
+                return_value=directory,
+            ), patch.object(QtWidgets.QMessageBox, "warning"), patch.object(
+                QtWidgets.QMessageBox,
+                "critical",
+            ):
+                TestTerrainMixin().create_terrain_analysis_layers()
+
+            group = project.layerTreeRoot().findGroup("TEST Terrain Analysis")
+            self.assertIsNotNone(group)
+            self.assertEqual(
+                {node.layer().name() for node in group.findLayers()},
+                {
+                    "TEST Terrain–OLS Clearance (m)",
+                    "TEST Obstacle Headroom",
+                    "TEST Terrain Penetration Boundary",
+                },
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

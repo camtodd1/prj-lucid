@@ -333,7 +333,7 @@ class DemIntegrationMixin:
         QCoreApplication.processEvents()
 
         try:
-            output_directory = str(
+            output_directory = self._terrain_output_directory() or str(
                 Path(QgsProcessingUtils.tempFolder())
                 / "safeguarding_builder_terrain_analysis"
             )
@@ -382,6 +382,7 @@ class DemIntegrationMixin:
             apply_headroom_style(headroom_layer)
             apply_penetration_boundary_style(boundary_layer)
             self._remove_existing_terrain_analysis_layers()
+            project = QgsProject.instance()
             for layer, analysis_type in (
                 (clearance_layer, "signed_clearance"),
                 (headroom_layer, "obstacle_headroom"),
@@ -403,19 +404,24 @@ class DemIntegrationMixin:
                     "safeguarding_builder/analysis_cell_height",
                     outputs["cell_height"],
                 )
-                self._place_terrain_layer(layer)
+                project.addMapLayer(layer, False)
 
-            project = QgsProject.instance()
             terrain_group = self._terrain_output_group()
             for layer in (clearance_layer, headroom_layer, boundary_layer):
-                node = project.layerTreeRoot().findLayer(layer.id())
-                if node is not None and node.parent() == terrain_group:
-                    terrain_group.removeChildNode(node)
                 terrain_group.insertLayer(0, layer)
 
-            clearance_node = QgsProject.instance().layerTreeRoot().findLayer(
-                clearance_layer.id()
-            )
+            missing_layers = [
+                layer.name()
+                for layer in (clearance_layer, headroom_layer, boundary_layer)
+                if terrain_group.findLayer(layer.id()) is None
+            ]
+            if missing_layers:
+                raise RuntimeError(
+                    "Terrain analysis completed but these output layers could not "
+                    f"be added to the project: {', '.join(missing_layers)}"
+                )
+
+            clearance_node = terrain_group.findLayer(clearance_layer.id())
             if clearance_node is not None:
                 clearance_node.setItemVisibilityChecked(False)
 
