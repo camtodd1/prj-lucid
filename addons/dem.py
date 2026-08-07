@@ -17,13 +17,18 @@ from qgis.core import (  # type: ignore
 
 from ..core.dem_integration import (
     apply_elevation_polygon_style,
+    apply_headroom_style,
+    apply_penetration_boundary_style,
+    apply_terrain_clearance_style,
     create_elevation_polygons,
     create_ols_square_extent_layer,
+    create_terrain_analysis_outputs,
     download_ga_dem,
     elevation_polygon_output_path,
     open_topography_dialog,
     raster_has_terrain_values,
 )
+from ..guidelines.controlling_ols_engine import PlanarControllingOlsEngine
 
 
 class DemIntegrationMixin:
@@ -266,6 +271,185 @@ class DemIntegrationMixin:
                     "Could not create elevation polygons. "
                     "See the QGIS log for details."
                 ),
+            )
+        finally:
+            if button is not None:
+                button.setText(original_text)
+                button.setEnabled(True)
+
+    def create_terrain_analysis_layers(self):
+        """Explicitly create terrain penetration and obstacle-headroom layers."""
+        if self.dlg is None:
+            return
+        dem_source = self.dlg.downloaded_dem_source()
+        if dem_source is None:
+            QMessageBox.warning(
+                self.dlg,
+                self.tr("DEM required"),
+                self.tr("Download a DEM before creating terrain analysis layers."),
+            )
+            return
+
+        engines = dict(getattr(self, "_terrain_ols_engines", {}) or {})
+        engine = engines.get("baseline") or engines.get("OFS")
+        if engine is None:
+            candidates = [
+                candidate
+                for candidate in list(
+                    getattr(self, "_controlling_ols_candidates", []) or []
+                )
+                if getattr(candidate, "model", None)
+                in {"constant", "axis", "plane", "conical"}
+            ]
+            exclusions = list(
+                getattr(self, "_controlling_ols_exclusion_geometries", []) or []
+            )
+            if candidates:
+                engine = PlanarControllingOlsEngine(
+                    candidates,
+                    exclusion_geometries=exclusions,
+                )
+        if engine is None:
+            QMessageBox.warning(
+                self.dlg,
+                self.tr("Controlling OLS required"),
+                self.tr(
+                    "Generate the OLS and its controlling envelope before creating "
+                    "terrain analysis layers."
+                ),
+            )
+            return
+
+        button = self.dlg.findChild(
+            QPushButton,
+            "pushButton_CreateTerrainAnalysis",
+        )
+        original_text = button.text() if button is not None else ""
+        if button is not None:
+            button.setEnabled(False)
+            button.setText(self.tr("Analysing…"))
+        self.dlg.set_dem_contour_status("Comparing DEM cells with the controlling OLS…")
+        QCoreApplication.processEvents()
+
+        try:
+            output_directory = str(
+                Path(QgsProcessingUtils.tempFolder())
+                / "safeguarding_builder_terrain_analysis"
+            )
+            last_percent = -1
+
+            def update_progress(completed: int, total: int) -> None:
+                nonlocal last_percent
+                percent = int((completed * 100) / max(1, total))
+                if percent == last_percent:
+                    return
+                last_percent = percent
+                self.dlg.set_dem_contour_status(
+                    f"Comparing DEM cells with the controlling OLS… {percent}%"
+                )
+                QCoreApplication.processEvents()
+
+            outputs = create_terrain_analysis_outputs(
+                dem_source,
+                engine,
+                output_directory,
+                self._terrain_airport_code(),
+                progress_callback=update_progress,
+            )
+            airport = self._terrain_airport_code()
+            prefix = f"{airport} " if airport else ""
+            clearance_layer = QgsRasterLayer(
+                outputs["clearance"],
+                f"{prefix}Terrain–OLS Clearance (m)",
+            )
+            headroom_layer = QgsRasterLayer(
+                outputs["headroom"],
+                f"{prefix}Obstacle Headroom",
+            )
+            boundary_layer = QgsVectorLayer(
+                f"{outputs['penetration_boundary']}|layername=zero_clearance",
+                f"{prefix}Terrain Penetration Boundary",
+                "ogr",
+            )
+            if not all(
+                layer.isValid()
+                for layer in (clearance_layer, headroom_layer, boundary_layer)
+            ):
+                raise RuntimeError("One or more terrain analysis outputs could not be loaded.")
+
+            apply_terrain_clearance_style(clearance_layer)
+            apply_headroom_style(headroom_layer)
+            apply_penetration_boundary_style(boundary_layer)
+            for layer, analysis_type in (
+                (clearance_layer, "signed_clearance"),
+                (headroom_layer, "obstacle_headroom"),
+                (boundary_layer, "zero_clearance_boundary"),
+            ):
+                layer.setCustomProperty(
+                    "safeguarding_builder/terrain_analysis_type",
+                    analysis_type,
+                )
+                layer.setCustomProperty(
+                    "safeguarding_builder/dem_source",
+                    self._terrain_source_path(dem_source),
+                )
+                layer.setCustomProperty(
+                    "safeguarding_builder/analysis_cell_width",
+                    outputs["cell_width"],
+                )
+                layer.setCustomProperty(
+                    "safeguarding_builder/analysis_cell_height",
+                    outputs["cell_height"],
+                )
+                self._place_terrain_layer(layer)
+
+            project = QgsProject.instance()
+            terrain_group = self._terrain_output_group()
+            for layer in (clearance_layer, headroom_layer, boundary_layer):
+                node = project.layerTreeRoot().findLayer(layer.id())
+                if node is not None and node.parent() == terrain_group:
+                    terrain_group.removeChildNode(node)
+                terrain_group.insertLayer(0, layer)
+
+            clearance_node = QgsProject.instance().layerTreeRoot().findLayer(
+                clearance_layer.id()
+            )
+            if clearance_node is not None:
+                clearance_node.setItemVisibilityChecked(False)
+
+            self.dlg.set_dem_contour_status(
+                "Created terrain clearance, penetration boundary and obstacle-headroom layers."
+            )
+            self._log(
+                "Terrain analysis ready: "
+                f"{outputs['valid_cells']} analysed cells, "
+                f"{outputs['penetration_cells']} penetration cells."
+            )
+            self.iface.messageBar().pushMessage(
+                self.tr("Terrain analysis"),
+                self.tr("Clearance and obstacle-headroom layers created."),
+                level=Qgis.Success,
+                duration=6,
+            )
+        except (RuntimeError, ValueError) as exc:
+            self.dlg.set_dem_contour_status(str(exc), error=True)
+            QMessageBox.warning(
+                self.dlg,
+                self.tr("Terrain analysis unavailable"),
+                str(exc),
+            )
+        except Exception as exc:
+            self.dlg.set_dem_contour_status(
+                "Terrain analysis failed. See the QGIS log.",
+                error=True,
+            )
+            self._log_warning(
+                f"Terrain analysis failed: {exc}\n{traceback.format_exc()}"
+            )
+            QMessageBox.critical(
+                self.dlg,
+                self.tr("Terrain analysis error"),
+                self.tr("Could not create terrain analysis layers. See the QGIS log."),
             )
         finally:
             if button is not None:

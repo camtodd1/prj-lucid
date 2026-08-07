@@ -231,6 +231,7 @@ class SafeguardingBuilder(
         self.style_map: Dict[str, str] = {}
         self.reference_elevation_datum: Optional[float] = None
         self.arp_elevation_amsl: Optional[float] = None
+        self._terrain_ols_engines: Dict[str, Any] = {}
 
         self.output_mode: str = "memory"
         self.output_path: Optional[str] = None
@@ -734,6 +735,13 @@ class SafeguardingBuilder(
             )
             if contour_button:
                 contour_button.clicked.connect(self.create_dem_elevation_polygons)
+
+            analysis_button = self.dlg.findChild(
+                QPushButton,
+                "pushButton_CreateTerrainAnalysis",
+            )
+            if analysis_button:
+                analysis_button.clicked.connect(self.create_terrain_analysis_layers)
 
         self.dlg.refresh_dem_tool_state()
         self.dock.show()
@@ -1403,6 +1411,7 @@ class SafeguardingBuilder(
         self.output_mode = "memory"
         self.output_path = None
         self._last_ols_table_report_path = None
+        self._terrain_ols_engines = {}
         self.output_format_driver = None
         self.output_format_extension = None
         self.contour_intervals = {}
@@ -1953,6 +1962,7 @@ class SafeguardingBuilder(
                 controlling_layers, controlling_features = self._generated_output_delta(
                     controlling_output_start
                 )
+                self._terrain_ols_engines = dict(solved_ols_engines)
                 self._record_generation_outcome(
                     "controlling protected-airspace envelope",
                     (

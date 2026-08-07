@@ -1932,6 +1932,7 @@ class SafeguardingBuilderDialog(
             "pushButton_DownloadOsmAeroway",
             "pushButton_DownloadDem",
             "pushButton_CreateDemContours",
+            "pushButton_CreateTerrainAnalysis",
         }
         for widget_type in (
             QtWidgets.QComboBox,

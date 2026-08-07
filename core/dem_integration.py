@@ -1,6 +1,6 @@
 """Optional DEM download and elevation-polygon processing helpers."""
 
-from math import ceil
+from math import ceil, isfinite, sqrt
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 from urllib.parse import urlencode
@@ -18,12 +18,18 @@ from qgis.core import (  # type: ignore
     QgsFillSymbol,
     QgsGeometry,
     QgsLayerTreeGroup,
+    QgsLineSymbol,
+    QgsPointXY,
     QgsProject,
     QgsRectangle,
     QgsRendererCategory,
     QgsRasterBandStats,
+    QgsColorRampShader,
     QgsRasterLayer,
+    QgsRasterShader,
     QgsVectorLayer,
+    QgsSingleBandPseudoColorRenderer,
+    QgsSingleSymbolRenderer,
 )
 
 from . import output_structure
@@ -49,6 +55,15 @@ ELEVATION_TERRAIN_COLORS = (
     "#D5D0C4",  # exposed rock
 )
 ELEVATION_CONTOUR_COLOR = "#4E5147"
+TERRAIN_ANALYSIS_NODATA = -9999.0
+TERRAIN_ANALYSIS_MAX_CELLS = 750_000
+HEADROOM_CLASSES = (
+    (1, "Terrain penetration (< 0 m)", "#B2182B"),
+    (2, "0–5 m", "#EF8A62"),
+    (3, "5–15 m", "#FDB863"),
+    (4, "15–30 m", "#A6D96A"),
+    (5, "> 30 m", "#1A9850"),
+)
 
 GA_DEM_SOURCES: Dict[str, Dict[str, Any]] = {
     "ga_lidar_5m": {
@@ -514,16 +529,345 @@ def apply_elevation_polygon_style(layer: QgsVectorLayer) -> bool:
     return True
 
 
+def _terrain_analysis_path(directory: Path, stem: str, suffix: str) -> Path:
+    candidate = directory / f"{stem}{suffix}"
+    sequence = 2
+    while candidate.exists():
+        candidate = directory / f"{stem}_{sequence}{suffix}"
+        sequence += 1
+    return candidate
+
+
+def _terrain_analysis_extent(dem_layer, ols_engine) -> QgsRectangle:
+    project_crs = QgsProject.instance().crs()
+    dem_crs = dem_layer.crs()
+    if not project_crs.isValid() or not dem_crs.isValid():
+        raise ValueError("Terrain and project layers require valid coordinate reference systems.")
+
+    candidate_extent = None
+    for candidate in list(getattr(ols_engine, "candidates", []) or []):
+        footprint = getattr(candidate, "footprint", None)
+        if footprint is None or footprint.isEmpty():
+            continue
+        extent = footprint.boundingBox()
+        if candidate_extent is None:
+            candidate_extent = QgsRectangle(extent)
+        else:
+            candidate_extent.combineExtentWith(extent)
+    if candidate_extent is None or candidate_extent.isEmpty():
+        raise ValueError("The controlling OLS envelope has no usable extent.")
+
+    if project_crs != dem_crs:
+        transform = QgsCoordinateTransform(project_crs, dem_crs, QgsProject.instance())
+        candidate_extent = transform.transformBoundingBox(candidate_extent)
+    analysis_extent = candidate_extent.intersect(dem_layer.extent())
+    if analysis_extent.isEmpty():
+        raise ValueError("The DEM does not overlap the controlling OLS envelope.")
+    return analysis_extent
+
+
+def _write_analysis_raster(path, values, extent, crs, data_type, nodata) -> None:
+    from osgeo import gdal  # type: ignore
+
+    height, width = values.shape
+    dataset = gdal.GetDriverByName("GTiff").Create(
+        str(path),
+        int(width),
+        int(height),
+        1,
+        data_type,
+        options=["COMPRESS=DEFLATE", "TILED=YES"],
+    )
+    if dataset is None:
+        raise RuntimeError(f"Could not create terrain analysis raster: {path}")
+    dataset.SetGeoTransform(
+        (
+            extent.xMinimum(),
+            extent.width() / width,
+            0.0,
+            extent.yMaximum(),
+            0.0,
+            -(extent.height() / height),
+        )
+    )
+    dataset.SetProjection(crs.toWkt())
+    band = dataset.GetRasterBand(1)
+    band.SetNoDataValue(nodata)
+    band.WriteArray(values)
+    band.FlushCache()
+    dataset.FlushCache()
+    dataset = None
+
+
+def _write_zero_clearance_contours(clearance_path: Path, contour_path: Path, crs) -> None:
+    from osgeo import gdal, ogr, osr  # type: ignore
+
+    source = gdal.Open(str(clearance_path), gdal.GA_ReadOnly)
+    if source is None:
+        raise RuntimeError("Could not reopen the terrain clearance raster.")
+    data_source = ogr.GetDriverByName("GPKG").CreateDataSource(str(contour_path))
+    if data_source is None:
+        raise RuntimeError("Could not create the terrain penetration boundary layer.")
+    spatial_reference = osr.SpatialReference()
+    spatial_reference.ImportFromWkt(crs.toWkt())
+    spatial_reference.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+    contour_layer = data_source.CreateLayer(
+        "zero_clearance",
+        spatial_reference,
+        ogr.wkbLineString,
+    )
+    contour_layer.CreateField(ogr.FieldDefn("id", ogr.OFTInteger))
+    contour_layer.CreateField(ogr.FieldDefn("clearance_m", ogr.OFTReal))
+    result = gdal.ContourGenerateEx(
+        source.GetRasterBand(1),
+        contour_layer,
+        options=[
+            "FIXED_LEVELS=0",
+            f"NODATA={TERRAIN_ANALYSIS_NODATA:g}",
+            "ID_FIELD=0",
+            "ELEV_FIELD=1",
+        ],
+    )
+    data_source = None
+    source = None
+    if result != 0:
+        raise RuntimeError("Could not derive the zero-clearance penetration boundary.")
+
+
+def create_terrain_analysis_outputs(
+    dem_layer: QgsRasterLayer,
+    ols_engine,
+    output_directory: str,
+    airport_code: str = "",
+    *,
+    max_cells: int = TERRAIN_ANALYSIS_MAX_CELLS,
+    progress_callback=None,
+) -> Dict[str, Any]:
+    """Compare DEM cells with the exact controlling OLS lower envelope."""
+    from osgeo import gdal, osr  # type: ignore
+    import numpy as np  # type: ignore
+
+    if dem_layer is None or not dem_layer.isValid():
+        raise ValueError("Select a valid DEM before running terrain analysis.")
+    if ols_engine is None or not getattr(ols_engine, "candidates", None):
+        raise ValueError("Generate a controlling OLS envelope before running terrain analysis.")
+    max_cells = max(1, int(max_cells))
+    analysis_extent = _terrain_analysis_extent(dem_layer, ols_engine)
+
+    native_x = abs(float(dem_layer.rasterUnitsPerPixelX()))
+    native_y = abs(float(dem_layer.rasterUnitsPerPixelY()))
+    if native_x <= 0.0 or native_y <= 0.0:
+        raise ValueError("The DEM pixel size is invalid.")
+    native_columns = max(1, ceil(analysis_extent.width() / native_x))
+    native_rows = max(1, ceil(analysis_extent.height() / native_y))
+    scale = max(1.0, sqrt((native_columns * native_rows) / max_cells))
+    width = max(1, ceil(analysis_extent.width() / (native_x * scale)))
+    height = max(1, ceil(analysis_extent.height() / (native_y * scale)))
+
+    provider = dem_layer.dataProvider()
+    block = provider.block(1, analysis_extent, width, height)
+    if block is None or not block.isValid():
+        raise RuntimeError("Could not read DEM values for the OLS analysis extent.")
+
+    clearance = np.full((height, width), TERRAIN_ANALYSIS_NODATA, dtype=np.float32)
+    headroom = np.zeros((height, width), dtype=np.uint8)
+    cell_width = analysis_extent.width() / width
+    cell_height = analysis_extent.height() / height
+
+    dem_crs = dem_layer.crs()
+    project_crs = QgsProject.instance().crs()
+    coordinate_transform = None
+    if dem_crs != project_crs:
+        source_reference = osr.SpatialReference()
+        source_reference.ImportFromWkt(dem_crs.toWkt())
+        source_reference.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+        target_reference = osr.SpatialReference()
+        target_reference.ImportFromWkt(project_crs.toWkt())
+        target_reference.SetAxisMappingStrategy(osr.OAMS_TRADITIONAL_GIS_ORDER)
+        coordinate_transform = osr.CoordinateTransformation(
+            source_reference,
+            target_reference,
+        )
+
+    x_coordinates = [
+        analysis_extent.xMinimum() + ((column + 0.5) * cell_width)
+        for column in range(width)
+    ]
+    for row in range(height):
+        y_coordinate = analysis_extent.yMaximum() - ((row + 0.5) * cell_height)
+        if coordinate_transform is None:
+            project_points = [(x_coordinate, y_coordinate) for x_coordinate in x_coordinates]
+        else:
+            project_points = coordinate_transform.TransformPoints(
+                [(x_coordinate, y_coordinate) for x_coordinate in x_coordinates]
+            )
+        for column, point in enumerate(project_points):
+            if block.isNoData(row, column):
+                continue
+            try:
+                ground_elevation = float(block.value(row, column))
+            except (TypeError, ValueError):
+                continue
+            if not isfinite(ground_elevation):
+                continue
+            result = ols_engine.controlling_candidate_at_xy(
+                QgsPointXY(float(point[0]), float(point[1]))
+            )
+            if result is None:
+                continue
+            _candidate, ols_elevation = result
+            if ols_elevation is None or not isfinite(float(ols_elevation)):
+                continue
+            value = float(ols_elevation) - ground_elevation
+            clearance[row, column] = value
+            if value < 0.0:
+                headroom[row, column] = 1
+            elif value < 5.0:
+                headroom[row, column] = 2
+            elif value < 15.0:
+                headroom[row, column] = 3
+            elif value < 30.0:
+                headroom[row, column] = 4
+            else:
+                headroom[row, column] = 5
+        if callable(progress_callback):
+            progress_callback(row + 1, height)
+
+    directory = Path(output_directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    safe_airport = "".join(
+        character.lower() if character.isalnum() else "_"
+        for character in str(airport_code or "airport")
+    ).strip("_") or "airport"
+    clearance_path = _terrain_analysis_path(
+        directory,
+        f"{safe_airport}_terrain_ols_clearance",
+        ".tif",
+    )
+    headroom_path = _terrain_analysis_path(
+        directory,
+        f"{safe_airport}_obstacle_headroom",
+        ".tif",
+    )
+    contour_path = _terrain_analysis_path(
+        directory,
+        f"{safe_airport}_terrain_penetration_boundary",
+        ".gpkg",
+    )
+    _write_analysis_raster(
+        clearance_path,
+        clearance,
+        analysis_extent,
+        dem_crs,
+        gdal.GDT_Float32,
+        TERRAIN_ANALYSIS_NODATA,
+    )
+    _write_analysis_raster(
+        headroom_path,
+        headroom,
+        analysis_extent,
+        dem_crs,
+        gdal.GDT_Byte,
+        0,
+    )
+    _write_zero_clearance_contours(clearance_path, contour_path, dem_crs)
+    valid_cells = int(np.count_nonzero(clearance != TERRAIN_ANALYSIS_NODATA))
+    penetration_cells = int(
+        np.count_nonzero(
+            (clearance < 0.0) & (clearance != TERRAIN_ANALYSIS_NODATA)
+        )
+    )
+    return {
+        "clearance": str(clearance_path),
+        "headroom": str(headroom_path),
+        "penetration_boundary": str(contour_path),
+        "width": width,
+        "height": height,
+        "cell_width": cell_width,
+        "cell_height": cell_height,
+        "valid_cells": valid_cells,
+        "penetration_cells": penetration_cells,
+    }
+
+
+def _apply_raster_color_items(layer, items, ramp_type) -> bool:
+    if layer is None or not layer.isValid():
+        return False
+    color_shader = QgsColorRampShader()
+    color_shader.setColorRampType(ramp_type)
+    color_shader.setColorRampItemList(
+        [
+            QgsColorRampShader.ColorRampItem(value, QColor(color), label)
+            for value, color, label in items
+        ]
+    )
+    raster_shader = QgsRasterShader()
+    raster_shader.setRasterShaderFunction(color_shader)
+    layer.setRenderer(
+        QgsSingleBandPseudoColorRenderer(layer.dataProvider(), 1, raster_shader)
+    )
+    layer.triggerRepaint()
+    return True
+
+
+def apply_terrain_clearance_style(layer: QgsRasterLayer) -> bool:
+    """Style signed clearance: penetration red, low clearance amber, then green."""
+    return _apply_raster_color_items(
+        layer,
+        [
+            (-30.0, "#67001F", "≤ −30 m"),
+            (-10.0, "#B2182B", "−10 m"),
+            (0.0, "#D6604D", "0 m — OLS boundary"),
+            (5.0, "#F4A582", "5 m"),
+            (15.0, "#FDD97E", "15 m"),
+            (30.0, "#A6D96A", "30 m"),
+            (100.0, "#1A9850", "≥ 100 m"),
+        ],
+        QgsColorRampShader.Type.Linear,
+    )
+
+
+def apply_headroom_style(layer: QgsRasterLayer) -> bool:
+    """Style the five discrete obstacle-headroom classes."""
+    return _apply_raster_color_items(
+        layer,
+        [(value, color, label) for value, label, color in HEADROOM_CLASSES],
+        QgsColorRampShader.Type.Exact,
+    )
+
+
+def apply_penetration_boundary_style(layer: QgsVectorLayer) -> bool:
+    """Style the zero-clearance terrain/OLS intersection line."""
+    if layer is None or not layer.isValid():
+        return False
+    symbol = QgsLineSymbol.createSimple(
+        {
+            "color": "#8B0000",
+            "width": "0.7",
+            "width_unit": "MM",
+        }
+    )
+    layer.setRenderer(QgsSingleSymbolRenderer(symbol))
+    layer.triggerRepaint()
+    return True
+
+
 __all__ = [
     "CONTOUR_POLYGON_ALGORITHM_ID",
     "GA_DEM_SOURCES",
     "GA_MAX_DOWNLOAD_PIXELS",
+    "HEADROOM_CLASSES",
     "OPEN_TOPOGRAPHY_ALGORITHM_ID",
+    "TERRAIN_ANALYSIS_MAX_CELLS",
     "apply_elevation_polygon_style",
+    "apply_headroom_style",
+    "apply_penetration_boundary_style",
+    "apply_terrain_clearance_style",
     "build_ga_wcs_url",
     "build_ga_wcs_urls",
     "contour_polygon_algorithm",
     "create_elevation_polygons",
+    "create_terrain_analysis_outputs",
     "create_ols_square_extent_layer",
     "download_ga_dem",
     "elevation_polygon_output_path",

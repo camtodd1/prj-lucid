@@ -215,6 +215,42 @@ class DemToolsMixin:
             QtCore.Qt.AlignmentFlag.AlignRight,
         )
 
+        analysis_divider = QtWidgets.QFrame(group)
+        analysis_divider.setFrameShape(QtWidgets.QFrame.Shape.HLine)
+        analysis_divider.setFrameShadow(QtWidgets.QFrame.Shadow.Sunken)
+        group_layout.addWidget(analysis_divider, 14, 0, 1, 3)
+
+        analysis_heading = QtWidgets.QLabel("3  Analyse terrain against OLS")
+        analysis_heading.setStyleSheet("font-weight: 600;")
+        group_layout.addWidget(analysis_heading, 15, 0, 1, 3)
+
+        analysis_description = QtWidgets.QLabel(
+            "Create signed clearance, terrain-penetration boundary and obstacle-headroom layers."
+        )
+        analysis_description.setObjectName("label_dem_analysis_description")
+        analysis_description.setWordWrap(True)
+        analysis_description.setStyleSheet("color: #56616d;")
+        group_layout.addWidget(analysis_description, 16, 0, 1, 3)
+
+        self.pushButton_CreateTerrainAnalysis = QtWidgets.QPushButton(
+            "Create clearance layers"
+        )
+        self.pushButton_CreateTerrainAnalysis.setObjectName(
+            "pushButton_CreateTerrainAnalysis"
+        )
+        self.pushButton_CreateTerrainAnalysis.setFixedHeight(32)
+        self.pushButton_CreateTerrainAnalysis.setFixedWidth(198)
+        self.pushButton_CreateTerrainAnalysis.setEnabled(False)
+        self.pushButton_CreateTerrainAnalysis.setToolTip(
+            "Explicitly compare the downloaded DEM with the controlling OLS envelope."
+        )
+        group_layout.addWidget(
+            self.pushButton_CreateTerrainAnalysis,
+            17,
+            2,
+            QtCore.Qt.AlignmentFlag.AlignRight,
+        )
+
         self._downloaded_dem_source = None
         self.groupBox_dem_tools = group
         layout.addWidget(group)
@@ -260,6 +296,7 @@ class DemToolsMixin:
         self._downloaded_dem_source = source
         label = getattr(self, "label_downloaded_dem", None)
         button = getattr(self, "pushButton_CreateDemContours", None)
+        analysis_button = getattr(self, "pushButton_CreateTerrainAnalysis", None)
         if label is not None:
             display_name = (
                 source.name()
@@ -272,6 +309,8 @@ class DemToolsMixin:
             label.setToolTip(str(source))
         if button is not None:
             button.setEnabled(source is not None)
+        if analysis_button is not None:
+            analysis_button.setEnabled(source is not None)
         self.doubleSpinBox_dem_contour_interval.setEnabled(source is not None)
         self.comboBox_dem_contour_output.setEnabled(source is not None)
         self.set_dem_contour_status(

@@ -6,8 +6,18 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
+from osgeo import gdal, osr
 from qgis.PyQt import QtCore, QtWidgets
-from qgis.core import QgsFeature, QgsField, QgsGeometry, QgsProject, QgsVectorLayer
+from qgis.core import (
+    QgsCoordinateReferenceSystem,
+    QgsFeature,
+    QgsField,
+    QgsGeometry,
+    QgsPointXY,
+    QgsProject,
+    QgsRasterLayer,
+    QgsVectorLayer,
+)
 
 
 WORKSPACE = Path(__file__).resolve().parents[1]
@@ -17,10 +27,14 @@ from safeguarding_builder.core.dem_integration import (  # noqa: E402
     CONTOUR_POLYGON_ALGORITHM_ID,
     OPEN_TOPOGRAPHY_ALGORITHM_ID,
     apply_elevation_polygon_style,
+    apply_headroom_style,
+    apply_penetration_boundary_style,
+    apply_terrain_clearance_style,
     build_ga_wcs_url,
     build_ga_wcs_urls,
     create_elevation_polygons,
     create_ols_square_extent_layer,
+    create_terrain_analysis_outputs,
     download_ga_dem,
     elevation_polygon_output_path,
     open_topography_dialog,
@@ -69,6 +83,8 @@ class DemIntegrationTests(unittest.TestCase):
             self.assertEqual(dialog.widget_dem_extent_row.layout().spacing(), 10)
             self.assertEqual(dialog.pushButton_DownloadDem.width(), 198)
             self.assertEqual(dialog.pushButton_CreateDemContours.width(), 198)
+            self.assertEqual(dialog.pushButton_CreateTerrainAnalysis.height(), 32)
+            self.assertEqual(dialog.pushButton_CreateTerrainAnalysis.width(), 198)
             self.assertEqual(dialog.groupBox_dem_tools.layout().columnMinimumWidth(0), 200)
             self.assertEqual(dialog.comboOutputFormat.minimumHeight(), 26)
             self.assertEqual(dialog.comboOutputFormat.maximumHeight(), 26)
@@ -89,10 +105,12 @@ class DemIntegrationTests(unittest.TestCase):
             self.assertTrue(dialog.label_dem_tool_status.isHidden())
 
             self.assertFalse(dialog.pushButton_CreateDemContours.isEnabled())
+            self.assertFalse(dialog.pushButton_CreateTerrainAnalysis.isEnabled())
             self.assertFalse(dialog.doubleSpinBox_dem_contour_interval.isEnabled())
             self.assertFalse(dialog.comboBox_dem_contour_output.isEnabled())
             dialog.set_downloaded_dem(layer)
             self.assertTrue(dialog.pushButton_CreateDemContours.isEnabled())
+            self.assertTrue(dialog.pushButton_CreateTerrainAnalysis.isEnabled())
             self.assertTrue(dialog.doubleSpinBox_dem_contour_interval.isEnabled())
             self.assertTrue(dialog.comboBox_dem_contour_output.isEnabled())
             self.assertEqual(dialog.dem_contour_interval(), 5.0)
@@ -287,6 +305,67 @@ class DemIntegrationTests(unittest.TestCase):
                 directory,
             )
             self.assertTrue(output.endswith("dem_elevation_bands_2.gpkg"))
+
+    def test_terrain_analysis_creates_clearance_headroom_and_zero_boundary(self):
+        QgsProject.instance().setCrs(QgsCoordinateReferenceSystem("EPSG:7856"))
+        with tempfile.TemporaryDirectory() as directory:
+            dem_path = Path(directory) / "dem.tif"
+            dataset = gdal.GetDriverByName("GTiff").Create(
+                str(dem_path),
+                4,
+                4,
+                1,
+                gdal.GDT_Float32,
+            )
+            dataset.SetGeoTransform((0.0, 1.0, 0.0, 4.0, 0.0, -1.0))
+            spatial_reference = osr.SpatialReference()
+            spatial_reference.ImportFromEPSG(7856)
+            dataset.SetProjection(spatial_reference.ExportToWkt())
+            dataset.GetRasterBand(1).Fill(100.0)
+            dataset = None
+
+            dem_layer = QgsRasterLayer(str(dem_path), "DEM")
+            candidate = types.SimpleNamespace(
+                footprint=QgsGeometry.fromWkt(
+                    "POLYGON ((0 0, 4 0, 4 4, 0 4, 0 0))"
+                )
+            )
+
+            class TestEngine:
+                candidates = [candidate]
+
+                @staticmethod
+                def controlling_candidate_at_xy(point: QgsPointXY):
+                    return candidate, 94.0 + (point.x() * 10.0)
+
+            outputs = create_terrain_analysis_outputs(
+                dem_layer,
+                TestEngine(),
+                directory,
+                "TEST",
+                max_cells=16,
+            )
+
+            clearance = gdal.Open(outputs["clearance"]).ReadAsArray()
+            headroom = gdal.Open(outputs["headroom"]).ReadAsArray()
+            self.assertEqual(clearance[0].tolist(), [-1.0, 9.0, 19.0, 29.0])
+            self.assertEqual(headroom[0].tolist(), [1, 3, 4, 4])
+            self.assertEqual(outputs["valid_cells"], 16)
+            self.assertEqual(outputs["penetration_cells"], 4)
+
+            clearance_layer = QgsRasterLayer(outputs["clearance"], "Clearance")
+            headroom_layer = QgsRasterLayer(outputs["headroom"], "Headroom")
+            self.assertTrue(apply_terrain_clearance_style(clearance_layer))
+            self.assertTrue(apply_headroom_style(headroom_layer))
+
+            boundary = QgsVectorLayer(
+                f"{outputs['penetration_boundary']}|layername=zero_clearance",
+                "Boundary",
+                "ogr",
+            )
+            self.assertTrue(boundary.isValid())
+            self.assertGreater(boundary.featureCount(), 0)
+            self.assertTrue(apply_penetration_boundary_style(boundary))
 
 
 if __name__ == "__main__":
