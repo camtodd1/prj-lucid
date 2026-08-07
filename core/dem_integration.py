@@ -40,6 +40,16 @@ GA_WCS_TILE_SIZE = 2000
 # Temporarily disabled to permit oversized WCS requests during terrain testing.
 GA_MAX_DOWNLOAD_PIXELS: Optional[int] = None
 
+ELEVATION_TERRAIN_COLORS = (
+    "#41644A",  # deep valley green
+    "#78966A",  # sage green
+    "#B7AD72",  # pale olive-sand
+    "#B58A55",  # warm ochre
+    "#7A5940",  # umber
+    "#D5D0C4",  # exposed rock
+)
+ELEVATION_CONTOUR_COLOR = "#4E5147"
+
 GA_DEM_SOURCES: Dict[str, Dict[str, Any]] = {
     "ga_lidar_5m": {
         "label": "GA LiDAR bare-earth DEM 5 m",
@@ -445,7 +455,7 @@ def create_elevation_polygons(
 
 
 def apply_elevation_polygon_style(layer: QgsVectorLayer) -> bool:
-    """Apply a deterministic blue-to-red style to elevation-band polygons."""
+    """Apply a deterministic natural-terrain style to elevation-band polygons."""
     if layer is None or not layer.isValid():
         return False
     field_names = {field.name() for field in layer.fields()}
@@ -468,9 +478,20 @@ def apply_elevation_polygon_style(layer: QgsVectorLayer) -> bool:
     denominator = max(1, len(ordered) - 1)
     for index, (lower, upper) in enumerate(ordered):
         ratio = index / denominator
-        hue = (210.0 * (1.0 - ratio)) / 360.0
-        fill = QColor.fromHsvF(hue, 0.58, 0.92, 0.58)
-        outline = QColor.fromHsvF(hue, 0.72, 0.58, 0.9)
+        palette_position = ratio * (len(ELEVATION_TERRAIN_COLORS) - 1)
+        lower_stop = min(int(palette_position), len(ELEVATION_TERRAIN_COLORS) - 1)
+        upper_stop = min(lower_stop + 1, len(ELEVATION_TERRAIN_COLORS) - 1)
+        blend = palette_position - lower_stop
+        start = QColor(ELEVATION_TERRAIN_COLORS[lower_stop])
+        end = QColor(ELEVATION_TERRAIN_COLORS[upper_stop])
+        fill = QColor(
+            round(start.red() + (end.red() - start.red()) * blend),
+            round(start.green() + (end.green() - start.green()) * blend),
+            round(start.blue() + (end.blue() - start.blue()) * blend),
+        )
+        fill.setAlphaF(0.58)
+        outline = QColor(ELEVATION_CONTOUR_COLOR)
+        outline.setAlphaF(0.9)
         symbol = QgsFillSymbol.createSimple(
             {
                 "color": fill.name(QColor.NameFormat.HexArgb),

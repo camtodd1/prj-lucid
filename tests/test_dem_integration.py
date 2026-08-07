@@ -245,14 +245,14 @@ class DemIntegrationTests(unittest.TestCase):
         )
         layer.updateFields()
         features = []
-        for lower, upper, x_offset in ((0.0, 5.0, 0), (5.0, 10.0, 20)):
+        for lower in range(0, 30, 5):
             feature = QgsFeature(layer.fields())
-            feature.setAttributes([lower, upper])
+            feature.setAttributes([float(lower), float(lower + 5)])
             feature.setGeometry(
                 QgsGeometry.fromWkt(
                     "POLYGON (({x} 0, {x2} 0, {x2} 10, {x} 10, {x} 0))".format(
-                        x=x_offset,
-                        x2=x_offset + 10,
+                        x=lower * 4,
+                        x2=lower * 4 + 10,
                     )
                 )
             )
@@ -261,7 +261,23 @@ class DemIntegrationTests(unittest.TestCase):
 
         self.assertTrue(apply_elevation_polygon_style(layer))
         self.assertEqual(layer.renderer().classAttribute(), "ELEV_MIN")
-        self.assertEqual(len(layer.renderer().categories()), 2)
+        categories = layer.renderer().categories()
+        self.assertEqual(
+            [category.symbol().color().name() for category in categories],
+            [
+                "#41644a",
+                "#78966a",
+                "#b7ad72",
+                "#b58a55",
+                "#7a5940",
+                "#d5d0c4",
+            ],
+        )
+        for category in categories:
+            self.assertEqual(
+                category.symbol().symbolLayer(0).strokeColor().name(),
+                "#4e5147",
+            )
 
         with tempfile.TemporaryDirectory() as directory:
             first = Path(directory) / "dem_elevation_bands.gpkg"
