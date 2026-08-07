@@ -460,7 +460,11 @@ class LayerMixin:
                         "OLS Controlling Contour",
                     }:
                         self._prune_annex14_renderer_rules(layer)
-                    if str(style_key) in {"Annex 14 Controlling OFS", "Annex 14 Controlling OES"}:
+                    if str(style_key) in {
+                        "Annex 14 Controlling OFS",
+                        "Annex 14 Controlling OES",
+                        "OLS Controlling Planar Region",
+                    }:
                         self._apply_controlling_region_labels(layer)
                     if str(style_key) in {"Annex 14 OFS Contour", "Annex 14 OES Contour"}:
                         if str(layer.name()).startswith("Controlling "):
@@ -868,19 +872,11 @@ class LayerMixin:
         has_surface = layer.fields().indexFromName("surface") >= 0
         try:
             settings = QgsPalLayerSettings()
-            if has_surface:
-                settings.fieldName = (
-                    "'HP' || '\n' || "
-                    'CASE WHEN "surface" = \'Approach\' '
-                    'THEN format_number("elev_max", 2) '
-                    'ELSE format_number("elev_max", 1) '
-                    "END"
-                )
-            else:
-                settings.fieldName = (
-                    "'HP' || '\n' || "
-                    'format_number("elev_max", 1)'
-                )
+            settings.fieldName = (
+                "'HP ' || format_number("
+                '("elev_min" + "elev_max") / 2, 2'
+                ") || 'm'"
+            )
             settings.isExpression = True
             settings.placement = QgsPalLayerSettings.Horizontal
             settings.centroidInside = True
@@ -907,11 +903,18 @@ class LayerMixin:
 
             root = QgsRuleBasedLabeling.Rule(None)
             rule = QgsRuleBasedLabeling.Rule(settings)
-            rule.setFilterExpression(
+            filter_expression = (
                 '"elev_min" IS NOT NULL AND "elev_max" IS NOT NULL '
                 'AND abs("elev_min" - "elev_max") <= 0.01 '
                 "AND $area >= 10000"
             )
+            if has_surface:
+                filter_expression += (
+                    " AND replace(replace(lower(\"surface\"), ' ', '_'), '-', '_') "
+                    "IN ('approach', 'ihs', 'inner_horizontal', 'ohs', 'ohc', "
+                    "'outer_horizontal')"
+                )
+            rule.setFilterExpression(filter_expression)
             root.appendChild(rule)
             layer.setLabeling(QgsRuleBasedLabeling(root))
             layer.setLabelsEnabled(True)

@@ -423,6 +423,39 @@ class LayerStyleTests(unittest.TestCase):
             label_rules[0].filterExpression(),
         )
 
+    def test_controlling_ols_labels_horizontal_planes_with_elevation(self):
+        layer = QgsVectorLayer(
+            "Polygon?field=surface:string&field=elev_min:double&field=elev_max:double",
+            "Controlling OLS Surfaces",
+            "memory",
+        )
+        feature = QgsFeature(layer.fields())
+        feature.setAttributes(["Approach", 123.456, 123.456])
+        feature.setGeometry(
+            QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 200.0, 200.0))
+        )
+        layer.dataProvider().addFeature(feature)
+        layer.setCustomProperty(
+            "safeguarding_style_key",
+            "OLS Controlling Planar Region",
+        )
+        mixin = LayerMixin()
+        mixin.plugin_dir = str(Path(__file__).resolve().parents[1])
+
+        mixin._apply_style(layer, DEFAULT_STYLE_MAP)
+
+        self.assertTrue(layer.labelsEnabled())
+        label_rules = layer.labeling().rootRule().children()
+        self.assertEqual(len(label_rules), 1)
+        settings = label_rules[0].settings()
+        self.assertEqual(
+            settings.fieldName,
+            "'HP ' || format_number((\"elev_min\" + \"elev_max\") / 2, 2) || 'm'",
+        )
+        self.assertIn("'approach'", label_rules[0].filterExpression())
+        self.assertIn("'ihs'", label_rules[0].filterExpression())
+        self.assertIn("'ohs'", label_rules[0].filterExpression())
+
     def test_modernisation_no_change_style_is_muted_blue_and_subdued(self):
         layer = QgsVectorLayer(
             "Polygon?field=label_txt:string",
