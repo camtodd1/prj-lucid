@@ -43,6 +43,8 @@ class IlsBraInputsQgisTests(unittest.TestCase):
             "original_index": self.runway_index,
             "thr_point": QgsPointXY(455000, 5772000),
             "rec_thr_point": QgsPointXY(456000, 5772000),
+            "type1": "Precision Approach CAT I",
+            "type2": "Precision Approach CAT II/III",
         }
 
     def tearDown(self):
@@ -98,6 +100,51 @@ class IlsBraInputsQgisTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertAlmostEqual(installation["distance_inside_threshold"], 300.0)
         self.assertAlmostEqual(installation["signed_offset"], 120.0)
+
+    def test_localiser_position_is_derived_beyond_opposite_runway_end(self):
+        self.dialog.add_ils_bra_row(
+            {
+                "component": "localiser",
+                "runway_ref": f"{self.runway_index}:1",
+                "id": "LOC-09L",
+                "position_mode": "runway_offset",
+                "runway_relative_distance": "300",
+                "ground_elevation": "17.5",
+                "source_reference": "NASF worked-example provisional construction",
+            }
+        )
+        errors = []
+        installation = self.dialog.get_ils_bra_input_data(
+            [self.validated_runway], errors
+        )[0]
+
+        self.assertEqual(errors, [])
+        self.assertAlmostEqual(installation["easting"], 456300.0)
+        self.assertAlmostEqual(installation["northing"], 5772000.0)
+        self.assertEqual(installation["distance_beyond_runway_end"], 300.0)
+        self.assertEqual(installation["signed_offset"], 0.0)
+        self.assertEqual(installation["localiser_category"], "cat_i")
+        self.assertEqual(installation["runway_length"], 1000.0)
+
+    def test_localiser_direct_coordinates_must_follow_extended_centreline(self):
+        self.dialog.add_ils_bra_row(
+            {
+                "component": "localiser",
+                "runway_ref": f"{self.runway_index}:1",
+                "id": "LOC-OFFSET",
+                "position_mode": "direct",
+                "easting": "456300",
+                "northing": "5772005",
+                "ground_elevation": "17.5",
+                "source_reference": "Surveyed localiser",
+            }
+        )
+        errors = []
+        installations = self.dialog.get_ils_bra_input_data(
+            [self.validated_runway], errors
+        )
+        self.assertEqual(installations, [])
+        self.assertTrue(any("extended runway centreline" in error for error in errors))
 
     def test_rows_round_trip_through_persistence_shape(self):
         source = {

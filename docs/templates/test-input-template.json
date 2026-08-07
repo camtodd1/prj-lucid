@@ -8,7 +8,7 @@
             "Use metres AMSL for elevations and metres for distances.",
             "Modernised Annex 14 strip dimensions and standard straight-in operations are derived automatically; do not add operation-specific configuration.",
             "Set cns_facilities, ils_bra_installations, or agl_options.approach_lighting to an empty array when none are sourced.",
-            "Provisional glide-path BRA inputs must identify the runway end, antenna front-face ground elevation, and either direct coordinates or threshold distance plus signed offset.",
+            "Provisional glide-path inputs use distance inside the served threshold plus signed offset; localiser inputs use antenna setback beyond the opposite runway end and are anchored to the extended centreline.",
             "Retain official source URLs, publication dates, and any assumptions in source_references."
         ],
         "filename_pattern": "<icao>_<count>rwy_<scenario>[_<variant>].json",
@@ -219,7 +219,7 @@
             "position_mode": "runway_offset",
             "easting": "REPLACE_FRONT_FACE_EASTING_M_OR_EMPTY",
             "northing": "REPLACE_FRONT_FACE_NORTHING_M_OR_EMPTY",
-            "distance_inside_threshold": "300",
+            "runway_relative_distance": "300",
             "signed_offset": "REPLACE_SIGNED_OFFSET_RIGHT_OF_RUNWAY_CENTRELINE_M",
             "ground_elevation": "REPLACE_FRONT_FACE_GROUND_AMSL_M",
             "source_reference": "REPLACE_SOURCE_OR_PROVISIONAL_WORKED_EXAMPLE_REFERENCE",

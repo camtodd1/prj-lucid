@@ -22,7 +22,10 @@ from .cns import (
     slope_contour_levels,
 )
 from .processor_base import NasfGuidelineProcessorBase
-from .ils_bra import construct_provisional_glide_path_bra
+from .ils_bra import (
+    construct_provisional_glide_path_bra,
+    construct_provisional_localiser_bra,
+)
 
 try:
     from ...core.run_log import QgsMessageLog
@@ -39,7 +42,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
         icao_code: str,
         layer_group: QgsLayerTreeGroup,
     ) -> bool:
-        """Generate provisional worked-example glide-path BRA PolygonZ layers."""
+        """Generate provisional worked-example ILS BRA PolygonZ layers."""
         if not installations:
             return False
         fields = QgsFields(
@@ -50,8 +53,10 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                 QgsField("surface_role", QVariant.String),
                 QgsField("provisional", QVariant.Bool),
                 QgsField("slope_deg", QVariant.Double),
-                QgsField("gp_elev_m", QVariant.Double),
+                QgsField("facility_z", QVariant.Double),
                 QgsField("offset_m", QVariant.Double),
+                QgsField("setback_m", QVariant.Double),
+                QgsField("loc_cat", QVariant.String),
                 QgsField("fwd_len_m", QVariant.Double),
                 QgsField("base_len_m", QVariant.Double),
                 QgsField("divergence", QVariant.Double),
@@ -61,15 +66,14 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
         generated = False
         parent = self._cns_element_group(layer_group, "ILS Building Restricted Areas (Provisional)")
         for installation in installations:
-            if installation.get("component") != "glide_path":
-                QgsMessageLog.logMessage(
-                    f"ILS BRA '{installation.get('id', '')}' skipped: provisional localiser generation is not implemented.",
-                    PLUGIN_TAG,
-                    level=Qgis.Info,
-                )
-                continue
             try:
-                surfaces = construct_provisional_glide_path_bra(installation)
+                component = installation.get("component")
+                if component == "glide_path":
+                    surfaces = construct_provisional_glide_path_bra(installation)
+                elif component == "localiser":
+                    surfaces = construct_provisional_localiser_bra(installation)
+                else:
+                    raise ValueError(f"unsupported ILS component '{component}'")
                 features: List[QgsFeature] = []
                 for surface in surfaces:
                     feature = QgsFeature(fields)
@@ -84,6 +88,8 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                             surface["slope_degrees"],
                             installation.get("ground_elevation"),
                             surface["antenna_offset_m"],
+                            surface.get("setback_m"),
+                            surface.get("category"),
                             surface["forward_extent_m"],
                             surface["horizontal_length_m"],
                             surface["plan_divergence"],
@@ -93,12 +99,12 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     features.append(feature)
                 safe_id = "".join(
                     char if char.isalnum() else "_"
-                    for char in str(installation.get("id", "Glide_Path"))
+                    for char in str(installation.get("id", "ILS"))
                 )
                 layer = self._create_and_add_layer(
                     "PolygonZ",
                     f"G_ILS_BRA_{icao_code}_{safe_id}",
-                    f"{installation.get('id', 'Glide Path')} - Provisional BRA Surfaces",
+                    f"{installation.get('id', 'ILS')} - Provisional BRA Surfaces",
                     fields,
                     features,
                     parent,
@@ -108,7 +114,7 @@ class NasfCnsGuidelineMixin(NasfGuidelineProcessorBase):
                     layer.setCustomProperty("safeguarding_provisional", True)
                     layer.setCustomProperty(
                         "safeguarding_provisional_note",
-                        "Worked-example glide-path BRA; verify against Airservices facility requirements.",
+                        "Worked-example ILS BRA; verify against Airservices facility requirements.",
                     )
                     generated = True
             except Exception as error:

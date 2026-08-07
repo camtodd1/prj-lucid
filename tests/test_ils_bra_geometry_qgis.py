@@ -13,6 +13,7 @@ sys.path.insert(0, str(WORKSPACE.parent))
 
 from safeguarding_builder.frameworks.nasf.ils_bra import (
     construct_provisional_glide_path_bra,
+    construct_provisional_localiser_bra,
 )
 from safeguarding_builder.frameworks.nasf.cns_guideline import NasfCnsGuidelineMixin
 
@@ -125,6 +126,68 @@ class IlsBraGeometryQgisTests(unittest.TestCase):
             all(feature.attribute("provisional") for feature in created["features"])
         )
         self.assertTrue(created["layer"].properties["safeguarding_provisional"])
+
+    def test_localiser_constructs_runway_centred_cat_i_envelope(self):
+        surfaces = construct_provisional_localiser_bra(
+            {
+                "point": QgsPointXY(456300, 5772000),
+                "runway_interior_unit": (1.0, 0.0),
+                "runway_length": 1000.0,
+                "distance_beyond_runway_end": 300.0,
+                "localiser_category": "cat_i",
+                "ground_elevation": 17.5,
+                "source_reference": "Provisional worked example",
+            }
+        )
+        by_role = {surface["surface_role"]: surface for surface in surfaces}
+        self.assertEqual(len(surfaces), 5)
+        base = by_role["provisional_localiser_horizontal_base"]["geometry"].boundingBox()
+        rear = by_role["provisional_localiser_rear_horizontal"]["geometry"].boundingBox()
+        self.assertAlmostEqual(base.width(), 300.0, places=6)
+        self.assertAlmostEqual(base.height(), 90.0, places=6)
+        self.assertAlmostEqual(rear.width(), 50.0, places=6)
+        self.assertAlmostEqual(rear.height(), 90.0, places=6)
+        self.assertEqual(surfaces[0]["forward_extent_m"], 1800.0)
+        self.assertEqual(surfaces[0]["category_half_width_m"], 500.0)
+        self.assertTrue(all(surface["geometry"].isGeosValid() for surface in surfaces))
+
+    def test_localiser_cat_ii_iii_uses_1000_m_half_width(self):
+        surfaces = construct_provisional_localiser_bra(
+            {
+                "point": QgsPointXY(456300, 5772000),
+                "runway_interior_unit": (1.0, 0.0),
+                "runway_length": 3000.0,
+                "distance_beyond_runway_end": 300.0,
+                "localiser_category": "cat_ii_iii",
+                "ground_elevation": 17.5,
+            }
+        )
+        self.assertTrue(all(surface["category_half_width_m"] == 1000.0 for surface in surfaces))
+
+    def test_processor_generates_localiser_layer(self):
+        harness = _IlsHarness()
+        installation = {
+            "id": "LOC-09",
+            "component": "localiser",
+            "point": QgsPointXY(456300, 5772000),
+            "runway_interior_unit": (1.0, 0.0),
+            "runway_length": 1000.0,
+            "distance_beyond_runway_end": 300.0,
+            "localiser_category": "cat_i",
+            "signed_offset": 0.0,
+            "ground_elevation": 17.5,
+            "source_reference": "Provisional worked example",
+        }
+        self.assertTrue(
+            harness.process_ils_building_restricted_areas(
+                [installation], "YTEST", QgsLayerTreeGroup("Guideline G")
+            )
+        )
+        created = harness.created[0]
+        self.assertEqual(len(created["features"]), 5)
+        self.assertTrue(
+            all(feature.attribute("loc_cat") == "cat_i" for feature in created["features"])
+        )
 
 
 if __name__ == "__main__":

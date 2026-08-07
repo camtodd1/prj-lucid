@@ -10,12 +10,12 @@ from qgis.PyQt.QtWidgets import QAbstractItemView, QComboBox, QTableWidgetItem  
 
 ILS_BRA_COMPONENTS: List[Tuple[str, str]] = [
     ("Glide path", "glide_path"),
-    ("Localiser (input only)", "localiser"),
+    ("Localiser", "localiser"),
 ]
 
 ILS_BRA_POSITION_MODES: List[Tuple[str, str]] = [
-    ("Derived from threshold", "runway_offset"),
-    ("Direct front-face coordinates", "direct"),
+    ("Derived from runway", "runway_offset"),
+    ("Direct antenna coordinates", "direct"),
 ]
 
 
@@ -36,10 +36,10 @@ class IlsBraInputsMixin:
                 "Runway end",
                 "Facility ID",
                 "Position mode",
-                "Front-face Easting",
-                "Front-face Northing",
-                "Distance inside threshold (m)",
-                "Signed offset right (m)",
+                "Antenna Easting",
+                "Antenna Northing",
+                "Runway-relative distance (m)",
+                "GP signed offset right (m)",
                 "Ground elev (AMSL)",
                 "Source / reference",
             ]
@@ -66,9 +66,9 @@ class IlsBraInputsMixin:
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
         table.setToolTip(
-            "Provisional glide-path BRA construction. Direct coordinates are the centre of "
-            "the antenna front face. Derived coordinates use distance inside the selected "
-            "threshold and signed offset (right positive when looking into the runway)."
+            "For glide path, runway-relative distance is inside the selected threshold and "
+            "offset is right-positive looking into the runway. For localiser, the distance "
+            "is beyond the opposite runway end; the antenna is derived on the extended centreline."
         )
 
         add_button.clicked.connect(self.add_ils_bra_row)
@@ -84,8 +84,8 @@ class IlsBraInputsMixin:
         description = getattr(self, "label_ils_bra_description", None)
         if description:
             description.setText(
-                "Provisional glide-path BRA: locate the antenna front face directly or from "
-                "the associated threshold. Localiser generation is not yet implemented."
+                "Provisional ILS BRA: derive glide-path position from threshold distance and "
+                "offset, or localiser position from its setback beyond the opposite runway end."
             )
             description.setStyleSheet("color: #666666; font-size: 11px;")
         self._update_ils_bra_view_state()
@@ -175,7 +175,13 @@ class IlsBraInputsMixin:
             2: data.get("id", ""),
             4: data.get("easting", ""),
             5: data.get("northing", ""),
-            6: data.get("distance_inside_threshold", "300"),
+            6: data.get(
+                "runway_relative_distance",
+                data.get(
+                    "distance_beyond_runway_end",
+                    data.get("distance_inside_threshold", "300"),
+                ),
+            ),
             7: data.get("signed_offset", ""),
             8: data.get("ground_elevation", ""),
             9: data.get("source_reference", data.get("vehicle_critical_area_source", "")),
@@ -244,7 +250,7 @@ class IlsBraInputsMixin:
                     ),
                     "easting": self._ils_bra_item_text(table, row, 4),
                     "northing": self._ils_bra_item_text(table, row, 5),
-                    "distance_inside_threshold": self._ils_bra_item_text(table, row, 6),
+                    "runway_relative_distance": self._ils_bra_item_text(table, row, 6),
                     "signed_offset": self._ils_bra_item_text(table, row, 7),
                     "ground_elevation": self._ils_bra_item_text(table, row, 8),
                     "source_reference": self._ils_bra_item_text(table, row, 9),
@@ -291,9 +297,21 @@ class IlsBraInputsMixin:
         unit_n = delta_n / length
         return {
             "threshold": QgsPointXY(threshold),
+            "opposite_threshold": QgsPointXY(opposite),
             "interior_unit": (unit_e, unit_n),
             "right_unit": (unit_n, -unit_e),
+            "runway_length": length,
+            "approach_type": runway.get("type1" if runway_end == 1 else "type2", ""),
         }
+
+    @staticmethod
+    def _localiser_category(approach_type: Any) -> Optional[str]:
+        normalised = str(approach_type or "").strip().upper().replace(" ", "")
+        if "CATII/III" in normalised:
+            return "cat_ii_iii"
+        if "CATI" in normalised:
+            return "cat_i"
+        return None
 
     def get_ils_bra_input_data(
         self,
@@ -339,49 +357,93 @@ class IlsBraInputsMixin:
 
             point = None
             distance_inside = None
+            distance_beyond_runway_end = None
             signed_offset = None
             if frame is not None and position_mode == "direct":
                 try:
                     easting = float(str(row.get("easting", "")).strip())
                     northing = float(str(row.get("northing", "")).strip())
                     point = QgsPointXY(easting, northing)
-                    delta_e = easting - frame["threshold"].x()
-                    delta_n = northing - frame["threshold"].y()
-                    distance_inside = (
-                        delta_e * frame["interior_unit"][0]
-                        + delta_n * frame["interior_unit"][1]
-                    )
-                    signed_offset = (
-                        delta_e * frame["right_unit"][0]
-                        + delta_n * frame["right_unit"][1]
-                    )
+                    if component == "localiser":
+                        delta_e = easting - frame["opposite_threshold"].x()
+                        delta_n = northing - frame["opposite_threshold"].y()
+                        distance_beyond_runway_end = (
+                            delta_e * frame["interior_unit"][0]
+                            + delta_n * frame["interior_unit"][1]
+                        )
+                        signed_offset = (
+                            delta_e * frame["right_unit"][0]
+                            + delta_n * frame["right_unit"][1]
+                        )
+                    else:
+                        delta_e = easting - frame["threshold"].x()
+                        delta_n = northing - frame["threshold"].y()
+                        distance_inside = (
+                            delta_e * frame["interior_unit"][0]
+                            + delta_n * frame["interior_unit"][1]
+                        )
+                        signed_offset = (
+                            delta_e * frame["right_unit"][0]
+                            + delta_n * frame["right_unit"][1]
+                        )
                 except (TypeError, ValueError):
-                    errors.append(f"{prefix}: valid front-face easting and northing are required.")
+                    errors.append(f"{prefix}: valid antenna easting and northing are required.")
             elif frame is not None and position_mode == "runway_offset":
                 try:
-                    distance_inside = float(str(row.get("distance_inside_threshold", "")).strip())
-                    signed_offset = float(str(row.get("signed_offset", "")).strip())
-                    if distance_inside < 0:
-                        raise ValueError("distance must not be negative")
-                    if abs(signed_offset) <= 1e-9:
-                        raise ValueError("offset must not be zero")
-                    point = QgsPointXY(
-                        frame["threshold"].x()
-                        + distance_inside * frame["interior_unit"][0]
-                        + signed_offset * frame["right_unit"][0],
-                        frame["threshold"].y()
-                        + distance_inside * frame["interior_unit"][1]
-                        + signed_offset * frame["right_unit"][1],
+                    runway_relative_distance = float(
+                        str(row.get("runway_relative_distance", "")).strip()
                     )
+                    if component == "localiser":
+                        distance_beyond_runway_end = runway_relative_distance
+                        signed_offset = 0.0
+                        point = QgsPointXY(
+                            frame["opposite_threshold"].x()
+                            + distance_beyond_runway_end * frame["interior_unit"][0],
+                            frame["opposite_threshold"].y()
+                            + distance_beyond_runway_end * frame["interior_unit"][1],
+                        )
+                    else:
+                        distance_inside = runway_relative_distance
+                        signed_offset = float(str(row.get("signed_offset", "")).strip())
+                        if distance_inside < 0:
+                            raise ValueError("distance must not be negative")
+                        if abs(signed_offset) <= 1e-9:
+                            raise ValueError("offset must not be zero")
+                        point = QgsPointXY(
+                            frame["threshold"].x()
+                            + distance_inside * frame["interior_unit"][0]
+                            + signed_offset * frame["right_unit"][0],
+                            frame["threshold"].y()
+                            + distance_inside * frame["interior_unit"][1]
+                            + signed_offset * frame["right_unit"][1],
+                        )
                 except (TypeError, ValueError) as error:
-                    errors.append(
-                        f"{prefix}: valid non-negative threshold distance and non-zero signed offset are required ({error})."
+                    requirement = (
+                        "valid localiser setback beyond the opposite runway end"
+                        if component == "localiser"
+                        else "valid non-negative threshold distance and non-zero signed offset"
                     )
+                    errors.append(f"{prefix}: {requirement} is required ({error}).")
 
             if component == "glide_path" and signed_offset is not None:
                 if not 120.0 <= abs(signed_offset) <= 175.0:
                     errors.append(
                         f"{prefix}: provisional glide-path offset must be between 120 m and 175 m from runway centreline."
+                    )
+            localiser_category = None
+            if component == "localiser" and frame is not None:
+                localiser_category = self._localiser_category(frame["approach_type"])
+                if localiser_category is None:
+                    errors.append(
+                        f"{prefix}: selected runway end must be Precision Approach CAT I or CAT II/III."
+                    )
+                if distance_beyond_runway_end is not None and not 200.0 <= distance_beyond_runway_end <= 400.0:
+                    errors.append(
+                        f"{prefix}: provisional localiser setback must be between 200 m and 400 m beyond the opposite runway end."
+                    )
+                if signed_offset is not None and abs(signed_offset) > 1.0:
+                    errors.append(
+                        f"{prefix}: localiser antenna must lie on the extended runway centreline (1 m tolerance)."
                     )
 
             row_error_prefix = f"{prefix}:"
@@ -399,9 +461,12 @@ class IlsBraInputsMixin:
                     "point": point,
                     "front_face_point": point,
                     "distance_inside_threshold": distance_inside,
+                    "distance_beyond_runway_end": distance_beyond_runway_end,
                     "signed_offset": signed_offset,
                     "antenna_offset": abs(signed_offset),
                     "runway_interior_unit": frame["interior_unit"],
+                    "runway_length": frame["runway_length"],
+                    "localiser_category": localiser_category,
                     "ground_elevation": ground_elevation,
                     "source_reference": source_reference,
                     "provisional": True,
