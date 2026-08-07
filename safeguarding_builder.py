@@ -659,6 +659,7 @@ class SafeguardingBuilder(
         """Show the Safeguarding Builder dock or bring it to the front."""
         if self.dock is not None:
             if self.dlg is not None:
+                self._repair_existing_terrain_output_groups()
                 self.dlg.refresh_dem_tool_state()
             self.dock.show()
             self.dock.raise_()
@@ -743,6 +744,7 @@ class SafeguardingBuilder(
             if analysis_button:
                 analysis_button.clicked.connect(self.create_terrain_analysis_layers)
 
+        self._repair_existing_terrain_output_groups()
         self.dlg.refresh_dem_tool_state()
         self.dock.show()
         self.dock.raise_()

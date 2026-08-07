@@ -13,6 +13,7 @@ from qgis.core import (
     QgsFeature,
     QgsField,
     QgsGeometry,
+    QgsLayerTreeGroup,
     QgsPointXY,
     QgsProject,
     QgsRasterLayer,
@@ -39,6 +40,7 @@ from safeguarding_builder.core.dem_integration import (  # noqa: E402
     elevation_polygon_output_path,
     open_topography_dialog,
 )
+from safeguarding_builder.addons.dem import DemIntegrationMixin  # noqa: E402
 from safeguarding_builder.safeguarding_builder_dialog import (  # noqa: E402
     SafeguardingBuilderDialog,
 )
@@ -366,6 +368,50 @@ class DemIntegrationTests(unittest.TestCase):
             self.assertTrue(boundary.isValid())
             self.assertGreater(boundary.featureCount(), 0)
             self.assertTrue(apply_penetration_boundary_style(boundary))
+
+    def test_terrain_output_group_consolidates_duplicates_and_replaces_analysis(self):
+        project = QgsProject.instance()
+        root = project.layerTreeRoot()
+        root.removeAllChildren()
+        dem_layer = QgsVectorLayer("Point?crs=EPSG:7856", "DEM", "memory")
+        old_analysis = QgsVectorLayer(
+            "Point?crs=EPSG:7856",
+            "Old clearance",
+            "memory",
+        )
+        old_analysis.setCustomProperty(
+            "safeguarding_builder/terrain_analysis_type",
+            "signed_clearance",
+        )
+        project.addMapLayer(dem_layer, False)
+        project.addMapLayer(old_analysis, False)
+        old_analysis_id = old_analysis.id()
+        root.addGroup("TEST Terrain Analysis").addLayer(dem_layer)
+        root.addGroup("TEST Terrain Analysis").addLayer(old_analysis)
+        root.addGroup("TEST Terrain Analysis").addLayer(old_analysis)
+
+        class TestTerrainMixin(DemIntegrationMixin):
+            @staticmethod
+            def _terrain_airport_code():
+                return "TEST"
+
+        mixin = TestTerrainMixin()
+        group = mixin._terrain_output_group()
+        matching_groups = [
+            child
+            for child in root.children()
+            if isinstance(child, QgsLayerTreeGroup)
+            and child.name() == "TEST Terrain Analysis"
+        ]
+        self.assertEqual(matching_groups, [group])
+        self.assertEqual(
+            {node.layerId() for node in group.findLayers()},
+            {dem_layer.id(), old_analysis_id},
+        )
+
+        mixin._remove_existing_terrain_analysis_layers()
+        self.assertIsNotNone(project.mapLayer(dem_layer.id()))
+        self.assertIsNone(project.mapLayer(old_analysis_id))
 
 
 if __name__ == "__main__":

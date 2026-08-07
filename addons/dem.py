@@ -9,6 +9,7 @@ from qgis.PyQt.QtWidgets import QMessageBox, QPushButton  # type: ignore
 from qgis.core import (  # type: ignore
     Qgis,
     QgsLayerTreeGroup,
+    QgsLayerTreeLayer,
     QgsProject,
     QgsProcessingUtils,
     QgsRasterLayer,
@@ -380,6 +381,7 @@ class DemIntegrationMixin:
             apply_terrain_clearance_style(clearance_layer)
             apply_headroom_style(headroom_layer)
             apply_penetration_boundary_style(boundary_layer)
+            self._remove_existing_terrain_analysis_layers()
             for layer, analysis_type in (
                 (clearance_layer, "signed_clearance"),
                 (headroom_layer, "obstacle_headroom"),
@@ -467,10 +469,84 @@ class DemIntegrationMixin:
         root = QgsProject.instance().layerTreeRoot()
         airport = self._terrain_airport_code()
         group_name = f"{airport} Terrain Analysis" if airport else "Terrain Analysis"
-        group = root.findGroup(group_name) or root.addGroup(group_name)
+        group = self._consolidate_terrain_group(root, group_name)
+        if group is None:
+            group = root.addGroup(group_name)
         group.setItemVisibilityChecked(True)
         group.setExpanded(True)
         return group
+
+    @staticmethod
+    def _consolidate_terrain_group(
+        root,
+        group_name: str,
+    ) -> Optional[QgsLayerTreeGroup]:
+        matching_groups = [
+            child
+            for child in root.children()
+            if isinstance(child, QgsLayerTreeGroup) and child.name() == group_name
+        ]
+        if not matching_groups:
+            return None
+        group = max(matching_groups, key=lambda candidate: len(candidate.children()))
+        existing_layer_ids = {
+            child.layerId()
+            for child in group.children()
+            if isinstance(child, QgsLayerTreeLayer)
+        }
+        for duplicate_group in matching_groups:
+            if duplicate_group == group:
+                continue
+            for child in list(duplicate_group.children()):
+                if not isinstance(child, QgsLayerTreeLayer):
+                    continue
+                layer = child.layer()
+                if layer is not None and layer.id() not in existing_layer_ids:
+                    group.addLayer(layer)
+                    existing_layer_ids.add(layer.id())
+            root.removeChildNode(duplicate_group)
+        seen_layer_ids = set()
+        for child in list(group.children()):
+            if not isinstance(child, QgsLayerTreeLayer):
+                continue
+            if child.layerId() in seen_layer_ids:
+                group.removeChildNode(child)
+            else:
+                seen_layer_ids.add(child.layerId())
+        return group
+
+    def _repair_existing_terrain_output_groups(self) -> None:
+        root = QgsProject.instance().layerTreeRoot()
+        group_names = {
+            child.name()
+            for child in root.children()
+            if isinstance(child, QgsLayerTreeGroup)
+            and (
+                child.name() == "Terrain Analysis"
+                or child.name().endswith(" Terrain Analysis")
+            )
+        }
+        for group_name in group_names:
+            self._consolidate_terrain_group(root, group_name)
+
+    @staticmethod
+    def _remove_existing_terrain_analysis_layers() -> None:
+        project = QgsProject.instance()
+        analysis_types = {
+            "signed_clearance",
+            "obstacle_headroom",
+            "zero_clearance_boundary",
+        }
+        layer_ids = [
+            layer.id()
+            for layer in project.mapLayers().values()
+            if layer.customProperty(
+                "safeguarding_builder/terrain_analysis_type"
+            )
+            in analysis_types
+        ]
+        if layer_ids:
+            project.removeMapLayers(layer_ids)
 
     @staticmethod
     def _terrain_source_path(source) -> str:
