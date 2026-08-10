@@ -1,7 +1,9 @@
+import json
 import sys
 import unittest
 from pathlib import Path
 
+from qgis.PyQt import QtWidgets
 from qgis.core import (
     QgsCoordinateReferenceSystem,
     QgsPointXY,
@@ -13,12 +15,24 @@ from qgis.core import (
 WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE.parent))
 
-from safeguarding_builder.core.family_modules import FAMILY_LIGHTING
+from safeguarding_builder.core.family_modules import (
+    FAMILY_AIRPORT,
+    FAMILY_CNS,
+    FAMILY_LIGHTING,
+    FAMILY_RUNWAYS,
+)
+from safeguarding_builder.core import output_structure
+from safeguarding_builder.frameworks.registry import get_framework_profile
 from safeguarding_builder.safeguarding_builder import SafeguardingBuilder
+from safeguarding_builder.safeguarding_builder_dialog import SafeguardingBuilderDialog
 from safeguarding_builder.rulesets.easa.profile import EASA_PROFILE
 
 
 class FamilyGenerationCommitTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
+
     def setUp(self):
         QgsProject.instance().clear()
         self.builder = object.__new__(SafeguardingBuilder)
@@ -101,6 +115,7 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         self.builder.tr = lambda value: value
         self.builder._run_log = None
         self.builder.output_mode = "memory"
+        self.builder.icao_code = "YBAS"
         self.builder.output_path = None
         self.builder.output_format_driver = None
         self.builder.output_format_extension = None
@@ -187,6 +202,177 @@ class FamilyGenerationCommitTests(unittest.TestCase):
             ),
             "second-signature",
         )
+
+    def test_runway_family_creates_physical_geometry_from_dialog_inputs(self):
+        fixture_path = WORKSPACE / "tests" / "fixtures" / "ols" / "ybas_1rwy_single.json"
+        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+        project = QgsProject.instance()
+        project.setCrs(QgsCoordinateReferenceSystem("EPSG:28353"))
+        dialog = SafeguardingBuilderDialog()
+        self.addCleanup(dialog.deleteLater)
+        dialog._airport_lookup_timer.stop()
+        dialog._apply_loaded_payload(payload)
+        dialog._airport_lookup_timer.stop()
+        input_data = dialog.get_all_input_data("runways")
+        self.assertIsNotNone(input_data)
+
+        self.builder.plugin_dir = str(WORKSPACE)
+        self.builder._run_log = None
+        self.builder.tr = lambda value: value
+        self.builder.successfully_generated_layers = []
+        self.builder._active_generation_module_id = FAMILY_RUNWAYS
+        self.builder._active_generation_signature = "signature"
+        self.builder._active_generation_run_id = "run-id"
+        self.builder.output_filename_prefix = ""
+        self.builder._configure_family_generation_context(input_data)
+        self.assertEqual(self.builder._active_generation_module_id, FAMILY_RUNWAYS)
+        stage = project.layerTreeRoot().addGroup("runway-stage")
+
+        self.assertTrue(
+            self.builder._run_runways_family(stage, input_data, project.crs())
+        )
+        physical = stage.findGroup(output_structure.PHYSICAL_GEOMETRY)
+        self.assertIsNotNone(physical)
+        self.assertIn("YBAS Runway Pavement", {node.name() for node in physical.findLayers()})
+        self.assertEqual(
+            {
+                str(node.layer().customProperty("safeguarding_builder/module_id") or "")
+                for node in physical.findLayers()
+            },
+            {FAMILY_RUNWAYS},
+        )
+
+        main = project.layerTreeRoot().addGroup("YBAS Safeguarding Builder")
+        committed = self.builder._commit_family_stage(
+            stage,
+            main,
+            FAMILY_RUNWAYS,
+            "signature",
+            "run-id",
+        )
+        self.assertGreater(committed, 0)
+        committed_physical = main.findGroup(output_structure.PHYSICAL_GEOMETRY)
+        self.assertIsNotNone(committed_physical)
+        self.assertIn(
+            "YBAS Runway Pavement",
+            {node.name() for node in committed_physical.findLayers()},
+        )
+
+    def test_airport_family_routes_all_met_layers_to_technical_safeguarding(self):
+        project = QgsProject.instance()
+        project.setCrs(QgsCoordinateReferenceSystem("EPSG:28353"))
+        self.builder.tr = lambda value: value
+        self.builder._run_log = None
+        self.builder.output_mode = "memory"
+        self.builder.icao_code = "YBAS"
+        self.builder.ruleset = EASA_PROFILE
+        self.builder.baseline_ols_ruleset = EASA_PROFILE
+        self.builder.comparison_ols_ruleset = None
+        self.builder.protected_airspace_ruleset = EASA_PROFILE
+        self.builder.protected_airspace_policy = "ruleset_aligned"
+        self.builder.framework = get_framework_profile()
+        self.builder.safeguarding_options = {}
+        self.builder.style_map = {}
+        self.builder.successfully_generated_layers = []
+        self.builder._active_generation_module_id = FAMILY_AIRPORT
+        self.builder._active_generation_signature = "signature"
+        self.builder._active_generation_run_id = "run-id"
+        stage = project.layerTreeRoot().addGroup("airport-stage")
+        arp = QgsPointXY(500000.0, 7000000.0)
+        met = QgsPointXY(500100.0, 7000100.0)
+
+        self.assertTrue(
+            self.builder._run_airport_family(
+                stage,
+                {
+                    "icao_code": "YBAS",
+                    "arp_point": arp,
+                    "arp_easting": arp.x(),
+                    "arp_northing": arp.y(),
+                    "arp_elevation": 95.0,
+                    "met_point": met,
+                },
+                project.crs(),
+            )
+        )
+
+        technical = stage.findGroup(output_structure.CNS_TECHNICAL_SAFEGUARDING)
+        station = technical.findGroup(output_structure.METEOROLOGICAL_STATION)
+        self.assertIsNotNone(station)
+        self.assertEqual(
+            {node.name() for node in station.findLayers()},
+            {
+                "MET Station Location",
+                "MET Instrument Enclosure",
+                "MET Buffer Zone",
+                "MET Obstacle Buffer Zone",
+            },
+        )
+        reference = stage.findGroup(output_structure.REFERENCE_DATA)
+        infrastructure = stage.findGroup(output_structure.AERODROME_INFRASTRUCTURE)
+        self.assertIsNone(reference.findGroup(output_structure.METEOROLOGICAL_STATION))
+        self.assertIsNone(infrastructure.findGroup(output_structure.METEOROLOGICAL_STATION))
+
+    def test_cns_family_routes_source_facilities_to_technical_safeguarding(self):
+        project = QgsProject.instance()
+        project.setCrs(QgsCoordinateReferenceSystem("EPSG:28353"))
+        self.builder.tr = lambda value: value
+        self.builder.icao_code = "YBAS"
+        self.builder.framework = get_framework_profile()
+        self.builder.baseline_ols_ruleset = EASA_PROFILE
+        self.builder.comparison_ols_ruleset = None
+        self.builder.protected_airspace_ruleset = EASA_PROFILE
+        self.builder.protected_airspace_policy = "ruleset_aligned"
+        self.builder.safeguarding_options = {}
+        self.builder.successfully_generated_layers = []
+        captured = {}
+        self.builder.create_cns_source_facility_layer = (
+            lambda _data, _icao, group: captured.setdefault("source_group", group)
+        )
+        self.builder.process_cns_building_restricted_areas = (
+            lambda *_args, **_kwargs: True
+        )
+        stage = project.layerTreeRoot().addGroup("cns-stage")
+
+        self.assertTrue(
+            self.builder._run_cns_family(
+                stage,
+                {"cns_facilities": [{"id": "VOR-1"}], "ils_bra_installations": []},
+                project.crs(),
+            )
+        )
+
+        source_group = captured["source_group"]
+        self.assertEqual(source_group.name(), output_structure.CNS_TECHNICAL_FACILITIES)
+        self.assertEqual(
+            source_group.parent().name(),
+            output_structure.CNS_TECHNICAL_SAFEGUARDING,
+        )
+
+    def test_cns_replacement_preserves_relocated_met_outputs(self):
+        main = QgsProject.instance().layerTreeRoot().addGroup(
+            "YBAS Safeguarding Builder"
+        )
+        technical = main.addGroup(output_structure.CNS_TECHNICAL_SAFEGUARDING)
+        met_group = technical.addGroup(output_structure.METEOROLOGICAL_STATION)
+        met_layer = self.layer("MET Station Location")
+        met_layer.setCustomProperty(
+            "safeguarding_style_key",
+            "MET Station Location",
+        )
+        met_group.addLayer(met_layer)
+        dme_group = technical.addGroup("Distance Measuring Equipment (DME)")
+        dme_layer = self.layer("DME BRA")
+        dme_layer_id = dme_layer.id()
+        dme_layer.setCustomProperty("safeguarding_style_key", "CNS Circle Zone")
+        dme_group.addLayer(dme_layer)
+
+        self.builder._remove_family_outputs(main, FAMILY_CNS)
+
+        self.assertIs(QgsProject.instance().mapLayer(met_layer.id()), met_layer)
+        self.assertIsNotNone(technical.findGroup(output_structure.METEOROLOGICAL_STATION))
+        self.assertIsNone(QgsProject.instance().mapLayer(dme_layer_id))
+        self.assertIsNone(technical.findGroup("Distance Measuring Equipment (DME)"))
 
 
 if __name__ == "__main__":

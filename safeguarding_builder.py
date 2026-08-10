@@ -900,6 +900,7 @@ class SafeguardingBuilder(
         legacy_paths = {
             FAMILY_AIRPORT: (
                 (output_structure.AERODROME_INFRASTRUCTURE, output_structure.METEOROLOGICAL_STATION),
+                (output_structure.CNS_TECHNICAL_SAFEGUARDING, output_structure.METEOROLOGICAL_STATION),
                 (output_structure.EXTERNAL_SAFEGUARDING, "Wildlife Hazard Management"),
                 (output_structure.EXTERNAL_SAFEGUARDING, "Wildlife Consultation"),
                 (output_structure.EXTERNAL_SAFEGUARDING, "Wind Turbines and Renewable Energy"),
@@ -918,7 +919,7 @@ class SafeguardingBuilder(
             ),
             FAMILY_CNS: (
                 (output_structure.REFERENCE_DATA, output_structure.CNS_TECHNICAL_FACILITIES),
-                (output_structure.CNS_TECHNICAL_SAFEGUARDING,),
+                (output_structure.CNS_TECHNICAL_SAFEGUARDING, output_structure.CNS_TECHNICAL_FACILITIES),
             ),
             FAMILY_OLS: ((output_structure.PROTECTED_AIRSPACE,),),
             FAMILY_LIGHTING: (
@@ -927,6 +928,41 @@ class SafeguardingBuilder(
         }
         for path in legacy_paths.get(family_id, ()):
             self._remove_group_path(main_group, path)
+
+        if family_id == FAMILY_CNS:
+            cns_group = self._find_direct_child_group(
+                main_group,
+                self.tr(output_structure.CNS_TECHNICAL_SAFEGUARDING),
+            )
+            if cns_group is not None:
+                cns_style_keys = {
+                    "CNS Circle Zone",
+                    "CNS Contour",
+                    "CNS Donut Zone",
+                    "CNS Source Facility",
+                    "Default CNS",
+                    "ILS BRA Contour",
+                    "ILS BRA Surface",
+                }
+                legacy_cns_ids = []
+                for layer_node in cns_group.findLayers():
+                    layer = layer_node.layer()
+                    if layer is not None and str(
+                        layer.customProperty("safeguarding_style_key") or ""
+                    ) in cns_style_keys:
+                        legacy_cns_ids.append(layer.id())
+                if legacy_cns_ids:
+                    project.removeMapLayers(legacy_cns_ids)
+
+                def prune_empty_groups(group: QgsLayerTreeGroup) -> None:
+                    for child in list(group.children()):
+                        if not isinstance(child, QgsLayerTreeGroup):
+                            continue
+                        prune_empty_groups(child)
+                        if not child.children():
+                            group.removeChildNode(child)
+
+                prune_empty_groups(cns_group)
 
         if family_id == FAMILY_AIRPORT:
             reference_group = self._find_direct_child_group(
@@ -1010,7 +1046,6 @@ class SafeguardingBuilder(
     ) -> bool:
         groups = self._create_output_layer_groups(stage_group, False)
         reference_group = groups["reference_data"]
-        infrastructure_group = groups["aerodrome_infrastructure"]
         external_group = groups["external_safeguarding"]
         created = False
         arp_point = input_data.get("arp_point")
@@ -1028,15 +1063,16 @@ class SafeguardingBuilder(
             ) or created
         met_point = input_data.get("met_point")
         if met_point is not None:
+            technical_group = groups["cns_technical_safeguarding"]
             met_group = self._ensure_layer_group(
-                infrastructure_group,
+                technical_group,
                 output_structure.METEOROLOGICAL_STATION,
             )
             met_ok, _ = self.process_met_station_surfaces(
                 met_point,
                 self.icao_code,
                 target_crs,
-                reference_group,
+                met_group,
                 met_group,
             )
             created = met_ok or created
@@ -1108,7 +1144,7 @@ class SafeguardingBuilder(
         created = False
         if cns_data:
             source_group = self._ensure_layer_group(
-                groups["reference_data"],
+                groups["cns_technical_safeguarding"],
                 output_structure.CNS_TECHNICAL_FACILITIES,
             )
             created = bool(
@@ -2332,7 +2368,7 @@ class SafeguardingBuilder(
             met_layers_created_ok = False
             if met_point is not None:
                 met_group = self._ensure_layer_group(
-                    infrastructure_group,
+                    cns_safeguarding_group,
                     output_structure.METEOROLOGICAL_STATION,
                 )
                 if met_group is not None:
@@ -2340,7 +2376,7 @@ class SafeguardingBuilder(
                         met_point,
                         icao_code,
                         target_crs,
-                        reference_group,
+                        met_group,
                         met_group,
                     )
                 else:
@@ -2353,7 +2389,9 @@ class SafeguardingBuilder(
                 self._log_skip("MET station surfaces: no MET coordinates provided.")
 
             if cns_input_list:
-                cns_source_group = reference_group.addGroup(self.tr(output_structure.CNS_TECHNICAL_FACILITIES))
+                cns_source_group = cns_safeguarding_group.addGroup(
+                    self.tr(output_structure.CNS_TECHNICAL_FACILITIES)
+                )
                 if cns_source_group is not None:
                     self._stage_layer_tree_node(cns_source_group)
                     self.create_cns_source_facility_layer(cns_input_list, icao_code, cns_source_group)
@@ -4025,9 +4063,23 @@ class SafeguardingBuilder(
         runway_centreline_group = self._ensure_layer_group(reference_group, output_structure.RUNWAY_CENTRE_LINES)
         self._merge_or_move_direct_group(main_group, self.tr("Runway Centrelines"), reference_group)
         self._merge_or_move_direct_group(main_group, self.tr(output_structure.RUNWAY_CENTRE_LINES), reference_group)
-        self._merge_or_move_direct_group(main_group, self.tr(output_structure.METEOROLOGICAL_STATION), reference_group)
-        self._merge_or_move_direct_group(main_group, self.tr("CNS Facilities / Source Facilities"), reference_group)
-        self._merge_or_move_direct_group(main_group, self.tr(output_structure.CNS_TECHNICAL_FACILITIES), reference_group)
+        for source_group in (main_group, reference_group, infrastructure_group):
+            self._merge_or_move_direct_group(
+                source_group,
+                self.tr(output_structure.METEOROLOGICAL_STATION),
+                cns_safeguarding_group,
+            )
+        for source_group in (main_group, reference_group):
+            self._merge_or_move_direct_group(
+                source_group,
+                self.tr("CNS Facilities / Source Facilities"),
+                cns_safeguarding_group,
+            )
+            self._merge_or_move_direct_group(
+                source_group,
+                self.tr(output_structure.CNS_TECHNICAL_FACILITIES),
+                cns_safeguarding_group,
+            )
 
         for child in list(main_group.children()):
             if not isinstance(child, QgsLayerTreeLayer):

@@ -318,7 +318,6 @@ class LayerMixin:
 
             if style_key:
                 layer.setCustomProperty("safeguarding_style_key", style_key)
-            self._apply_generation_metadata(layer, internal_name_base)
 
             if self.output_mode == "file":
                 if not all(
@@ -376,11 +375,16 @@ class LayerMixin:
                     loaded_layer = QgsVectorLayer(full_path, display_name, "ogr")
                     if loaded_layer is not None and loaded_layer.isValid():
                         loaded_layer.setCustomProperty("safeguarding_style_key", style_key)
+                        self._apply_style(loaded_layer, self.style_map)
+                        if style_key:
+                            loaded_layer.setCustomProperty(
+                                "safeguarding_style_key",
+                                style_key,
+                            )
                         self._apply_generation_metadata(
                             loaded_layer,
                             internal_name_base,
                         )
-                        self._apply_style(loaded_layer, self.style_map)
                         project.addMapLayer(loaded_layer, False)
                         loaded_node = layer_group.insertLayer(0, loaded_layer)
                         self._stage_layer_tree_node(loaded_node)
@@ -404,6 +408,9 @@ class LayerMixin:
             layer_node = layer_group.addLayer(layer)
             self._stage_layer_tree_node(layer_node)
             self._apply_style(layer, self.style_map)
+            if style_key:
+                layer.setCustomProperty("safeguarding_style_key", style_key)
+            self._apply_generation_metadata(layer, internal_name_base)
             self.successfully_generated_layers.append(layer)
 
             return layer

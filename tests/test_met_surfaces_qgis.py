@@ -43,17 +43,16 @@ class _MetHarness(MetSurfacesMixin):
 
 
 class MetSurfacesQgisTests(unittest.TestCase):
-    def test_source_point_and_derived_met_layers_use_separate_groups(self):
+    def test_all_met_layers_use_the_technical_station_group(self):
         harness = _MetHarness()
-        reference_group = QgsLayerTreeGroup("01 Reference Data")
-        infrastructure_group = QgsLayerTreeGroup("Meteorological Instrument Station")
+        station_group = QgsLayerTreeGroup("Meteorological Instrument Station")
 
         generated, _ = harness.process_met_station_surfaces(
             QgsPointXY(500000, 6000000),
             "YTEST",
             None,
-            reference_group,
-            infrastructure_group,
+            station_group,
+            station_group,
         )
 
         self.assertTrue(generated)
@@ -61,10 +60,7 @@ class MetSurfacesQgisTests(unittest.TestCase):
             display_name: layer_group
             for _geometry_type, display_name, layer_group in harness.created_layers
         }
-        self.assertIs(groups_by_layer["MET Station Location"], reference_group)
-        self.assertIs(groups_by_layer["MET Instrument Enclosure"], infrastructure_group)
-        self.assertIs(groups_by_layer["MET Buffer Zone"], infrastructure_group)
-        self.assertIs(groups_by_layer["MET Obstacle Buffer Zone"], infrastructure_group)
+        self.assertTrue(all(group is station_group for group in groups_by_layer.values()))
 
 
 if __name__ == "__main__":
