@@ -20,6 +20,8 @@ from .dialog_constants import (
 
 RUNWAY_FORM_LABEL_WIDTH = 230
 RUNWAY_FORM_FIELD_WIDTH = 240
+RUNWAY_FORM_LABEL_MIN_WIDTH = 190
+RUNWAY_FORM_FIELD_MIN_WIDTH = 180
 RUNWAY_FORM_COLUMN_GAP = 12
 RUNWAY_FORM_WIDE_FIELD_WIDTH = RUNWAY_FORM_FIELD_WIDTH * 2 + RUNWAY_FORM_COLUMN_GAP
 RUNWAY_FORM_ROW_HEIGHT = 28
@@ -218,13 +220,19 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.desig_le.setMaxLength(2)
         self.desig_le.setToolTip("Enter 2-digit primary designation (01-36).")
         self.desig_le.setValidator(QtGui.QIntValidator(1, 36, self))
-        self.desig_le.setFixedWidth(RUNWAY_FORM_FIELD_WIDTH - 86)
+        self.desig_le.setMinimumWidth(60)
+        self.desig_le.setMaximumWidth(RUNWAY_FORM_FIELD_WIDTH - 86)
+        self.desig_le.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
         self.suffix_combo = NoWheelComboBox()
         self.suffix_combo.setObjectName(f"comboBox_rwy_suffix_{self.index}")
         self.suffix_combo.addItems(["", "L", "C", "R"])
         self.suffix_combo.setToolTip("Runway suffix (Leave blank if none)")
         self.suffix_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self.suffix_combo.setFixedWidth(80)
+        self.suffix_combo.setMinimumWidth(60)
+        self.suffix_combo.setMaximumWidth(80)
         h_layout_desig_inputs.addWidget(self.desig_le)
         h_layout_desig_inputs.addWidget(self.suffix_combo)
 
@@ -442,7 +450,12 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         widget: QtWidgets.QWidget,
         width: int = RUNWAY_FORM_FIELD_WIDTH,
     ) -> None:
-        widget.setFixedWidth(width)
+        widget.setMinimumWidth(0)
+        widget.setMaximumWidth(width)
+        widget.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            widget.sizePolicy().verticalPolicy(),
+        )
 
     def _configure_runway_form_grid(self, layout: QtWidgets.QGridLayout) -> None:
         layout.setContentsMargins(0, 0, 0, 0)
@@ -452,9 +465,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         layout.setColumnStretch(1, 0)
         layout.setColumnStretch(2, 0)
         layout.setColumnStretch(3, 1)
-        layout.setColumnMinimumWidth(0, RUNWAY_FORM_LABEL_WIDTH)
-        layout.setColumnMinimumWidth(1, RUNWAY_FORM_FIELD_WIDTH)
-        layout.setColumnMinimumWidth(2, RUNWAY_FORM_FIELD_WIDTH)
+        layout.setColumnMinimumWidth(0, RUNWAY_FORM_LABEL_MIN_WIDTH)
+        layout.setColumnMinimumWidth(1, RUNWAY_FORM_FIELD_MIN_WIDTH)
+        layout.setColumnMinimumWidth(2, RUNWAY_FORM_FIELD_MIN_WIDTH)
         layout.setColumnMinimumWidth(3, 0)
 
     def _standardize_form_rows(self, layout: QtWidgets.QGridLayout, row_count: int) -> None:

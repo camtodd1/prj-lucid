@@ -1414,6 +1414,25 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 context = self.dialog._workflow_context_widgets[tab_name]["frame"]
                 self.assertFalse(scroll_area.isAncestorOf(context))
 
+    def test_expanded_runway_form_uses_vertical_only_scrolling(self):
+        self.dialog.resize(800, 650)
+        self.dialog.tabWidget_workflow.setCurrentWidget(self.dialog.tab_runways)
+        runway = self.dialog._runway_groups[1]
+        runway.expand_button.setChecked(True)
+        self.dialog.show()
+        self.app.processEvents()
+
+        scroll_area = self.dialog.scrollArea_runways
+        self.assertEqual(
+            scroll_area.horizontalScrollBarPolicy(),
+            QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff,
+        )
+        self.assertEqual(scroll_area.horizontalScrollBar().maximum(), 0)
+        self.assertLessEqual(
+            scroll_area.widget().minimumSizeHint().width(),
+            scroll_area.viewport().width(),
+        )
+
     def test_builder_checkpoint_updates_progress_without_cancel_branch(self):
         builder = object.__new__(SafeguardingBuilder)
         builder._runtime_run_recorder = None

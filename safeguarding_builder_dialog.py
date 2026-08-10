@@ -152,6 +152,13 @@ class SafeguardingBuilderDialog(
         scroll_area = self.findChild(QtWidgets.QScrollArea, "scrollArea_runways")
         if scroll_area:
             scroll_area.setWidgetResizable(True)
+            scroll_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+            scroll_area.setHorizontalScrollBarPolicy(
+                QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
+            scroll_area.setVerticalScrollBarPolicy(
+                QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            )
             scroll_content_widget = scroll_area.widget()
             if scroll_content_widget:
                 layout = scroll_content_widget.layout()
