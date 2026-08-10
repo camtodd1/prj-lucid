@@ -33,20 +33,22 @@ class EasaVisualAidsQgisTests(unittest.TestCase):
             "rec_thr_point": QgsPointXY(2000.0, 0.0),
             "width": 45.0,
             "arc_num": 3,
-            "type1": "Precision Approach CAT I",
-            "type2": "Precision Approach CAT I",
-            "thr_displaced_1": 0.0,
+            "type1": "Precision Approach CAT II/III",
+            "type2": "Precision Approach CAT II/III",
+            "thr_displaced_1": 100.0,
             "thr_displaced_2": 0.0,
-            "stopway1_len": 50.0,
-            "stopway2_len": 25.0,
+            "stopway1_len": 100.0,
+            "stopway2_len": 100.0,
         }
         options = {
-            ("__options__", "runway_end_lights"): True,
+            ("__options__", "runway_end_lights"): False,
             ("__options__", "threshold_wing_bars"): True,
-            ("__options__", "stopway_lights"): True,
+            ("__options__", "temp_displaced_threshold"): True,
+            ("__options__", "stopway_lights"): False,
             ("__options__", "centreline_lights"): True,
             ("__options__", "centreline_low_visibility"): True,
-            ("__options__", "cat_i_tdz_lights"): True,
+            ("__options__", "tdz_lights"): False,
+            ("__options__", "cat_i_tdz_lights"): False,
             (1, "primary"): {"length_m": 900.0, "spacing_m": 30.0},
             (1, "reciprocal"): {"length_m": 900.0, "spacing_m": 30.0},
         }
@@ -70,10 +72,17 @@ class EasaVisualAidsQgisTests(unittest.TestCase):
         features = captured["features"]
         self.assertGreater(len(features), 0)
         refs = {str(feature.attribute("ref_mos")) for feature in features}
+        light_types = {str(feature.attribute("light_type")) for feature in features}
         self.assertIn("CS ADR-DSN.M.705", refs)
-        self.assertTrue(any(ref.startswith("CS ADR-DSN.M.630") for ref in refs), refs)
+        self.assertTrue(any(ref.startswith("CS ADR-DSN.M.635") for ref in refs), refs)
         self.assertTrue(any(ref.startswith("CS ADR-DSN.M.675") for ref in refs), refs)
         self.assertTrue(all("Part 139 MOS" not in ref for ref in refs))
+        self.assertTrue(
+            {"Runway End", "Stopway Edge", "Stopway End", "TDZ Barrette"}
+            <= light_types,
+            light_types,
+        )
+        self.assertNotIn("Temporary Displaced Threshold", light_types)
 
 
 if __name__ == "__main__":

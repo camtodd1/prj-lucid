@@ -241,15 +241,11 @@
                 "spacing_m": "30"
             }
         ],
-        "runway_end_lights": true,
         "threshold_wing_bars": false,
         "rtil": false,
-        "temp_displaced_threshold": false,
-        "stopway_lights": true,
         "centreline_lights": true,
         "centreline_low_visibility": false,
         "cat_i_centreline_lights": false,
-        "tdz_lights": true,
         "cat_i_tdz_lights": false
     },
     "output_options": {

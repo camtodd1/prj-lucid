@@ -223,16 +223,11 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertIn("EASA CS-ADR-DSN Issue 7", self.dialog.label_agl_ruleset_caveat.text())
         self.assertFalse(self.dialog.checkBox_agl_rtil.isEnabled())
-        self.assertFalse(self.dialog.checkBox_agl_temp_displaced_threshold.isEnabled())
         self.assertFalse(self.dialog._get_agl_element_options()["rtil"])
-        self.assertFalse(
-            self.dialog._get_agl_element_options()["temp_displaced_threshold"]
-        )
 
         design_standard.setCurrentIndex(mos_index)
         self.assertEqual(self.dialog.groupBox_agl_elements.title(), "MOS optional elements")
         self.assertTrue(self.dialog.checkBox_agl_rtil.isEnabled())
-        self.assertTrue(self.dialog.checkBox_agl_temp_displaced_threshold.isEnabled())
         self.assertEqual(
             self.dialog.label_agl_edge_spacing.text(),
             "MOS edge spacing baseline (m)",
@@ -256,17 +251,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 self.dialog.lineEdit_agl_threshold_spacing,
                 self.dialog.lineEdit_agl_threshold_inset,
             ],
-            "groupBox_agl_layer_runway_end": [
-                self.dialog.checkBox_agl_runway_end_lights,
-            ],
             "groupBox_agl_layer_threshold_wing_bar": [
                 self.dialog.checkBox_agl_threshold_wing_bars,
             ],
             "groupBox_agl_layer_rtil": [self.dialog.checkBox_agl_rtil],
-            "groupBox_agl_layer_temp_displaced_threshold": [
-                self.dialog.checkBox_agl_temp_displaced_threshold,
-            ],
-            "groupBox_agl_layer_stopway": [self.dialog.checkBox_agl_stopway_lights],
             "groupBox_agl_layer_runway_centreline": [
                 self.dialog.checkBox_agl_centreline_lights,
                 self.dialog.checkBox_agl_centreline_low_visibility,
@@ -274,7 +262,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 self.dialog.lineEdit_agl_centreline_offset,
             ],
             "groupBox_agl_layer_tdz_barrette": [
-                self.dialog.checkBox_agl_tdz_lights,
                 self.dialog.checkBox_agl_cat_i_tdz_lights,
             ],
             "groupBox_agl_approach": [
@@ -292,6 +279,26 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.app.processEvents()
         self.assertFalse(
             self.dialog.scrollArea_agl_options.horizontalScrollBar().isVisible()
+        )
+
+    def test_policy_driven_agl_elements_have_no_manual_controls(self):
+        removed_option_keys = {
+            "runway_end_lights",
+            "temp_displaced_threshold",
+            "stopway_lights",
+            "tdz_lights",
+        }
+        for object_name in (
+            "checkBox_agl_runway_end_lights",
+            "checkBox_agl_temp_displaced_threshold",
+            "checkBox_agl_stopway_lights",
+            "checkBox_agl_tdz_lights",
+        ):
+            self.assertIsNone(
+                self.dialog.findChild(QtWidgets.QCheckBox, object_name)
+            )
+        self.assertTrue(
+            removed_option_keys.isdisjoint(self.dialog._get_agl_save_options())
         )
 
     def test_legacy_modernised_design_standard_loads_as_current_annex(self):

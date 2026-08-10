@@ -1928,11 +1928,8 @@ class SafeguardingBuilderDialog(
             "groupBox_agl_approach",
             "groupBox_agl_layer_runway_edge",
             "groupBox_agl_layer_threshold",
-            "groupBox_agl_layer_runway_end",
             "groupBox_agl_layer_threshold_wing_bar",
             "groupBox_agl_layer_rtil",
-            "groupBox_agl_layer_temp_displaced_threshold",
-            "groupBox_agl_layer_stopway",
             "groupBox_agl_layer_runway_centreline",
             "groupBox_agl_layer_tdz_barrette",
         ]

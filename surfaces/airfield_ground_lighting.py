@@ -54,15 +54,11 @@ class AirfieldGroundLightingMixin:
         default_approach_spacing_m = float(agl_options.get("approach_spacing_m") or 30.0)
         approach_rows = self._agl_rows_by_runway_end(agl_options.get("approach_lighting", []))
         for option_name in [
-            "runway_end_lights",
             "threshold_wing_bars",
             "rtil",
-            "temp_displaced_threshold",
-            "stopway_lights",
             "centreline_lights",
             "centreline_low_visibility",
             "cat_i_centreline_lights",
-            "tdz_lights",
             "cat_i_tdz_lights",
         ]:
             approach_rows[("__options__", option_name)] = bool(agl_options.get(option_name, False))
@@ -201,33 +197,32 @@ class AirfieldGroundLightingMixin:
                 threshold_inset_m,
             )
 
-        if self._agl_option_enabled(approach_rows, "runway_end_lights"):
-            if primary_type_supported:
-                self._append_runway_end_lights(
-                    features,
-                    fields,
-                    runway_name,
-                    primary_desig,
-                    primary_type,
-                    phys_primary,
-                    params["azimuth_perp_l"],
-                    params["azimuth_perp_r"],
-                    params["azimuth_p_r"],
-                    lit_half_width,
-                )
-            if reciprocal_type_supported:
-                self._append_runway_end_lights(
-                    features,
-                    fields,
-                    runway_name,
-                    reciprocal_desig,
-                    reciprocal_type,
-                    phys_reciprocal,
-                    params["azimuth_perp_l"],
-                    params["azimuth_perp_r"],
-                    params["azimuth_r_p"],
-                    lit_half_width,
-                )
+        if primary_type_supported:
+            self._append_runway_end_lights(
+                features,
+                fields,
+                runway_name,
+                primary_desig,
+                primary_type,
+                phys_primary,
+                params["azimuth_perp_l"],
+                params["azimuth_perp_r"],
+                params["azimuth_p_r"],
+                lit_half_width,
+            )
+        if reciprocal_type_supported:
+            self._append_runway_end_lights(
+                features,
+                fields,
+                runway_name,
+                reciprocal_desig,
+                reciprocal_type,
+                phys_reciprocal,
+                params["azimuth_perp_l"],
+                params["azimuth_perp_r"],
+                params["azimuth_r_p"],
+                lit_half_width,
+            )
 
         if approach_rows.get(("__options__", "threshold_wing_bars")):
             for end_desig, runway_type, point, observable_azimuth in [
@@ -265,25 +260,7 @@ class AirfieldGroundLightingMixin:
                         lit_half_width,
                     )
 
-        if approach_rows.get(("__options__", "temp_displaced_threshold")):
-            for end_desig, point, displacement_m, observable_azimuth in [
-                (primary_desig, thr_point, disp_primary, params["azimuth_r_p"]),
-                (reciprocal_desig, rec_thr_point, disp_reciprocal, params["azimuth_p_r"]),
-            ]:
-                if displacement_m > 0:
-                    self._append_temp_displaced_threshold_lights(
-                        features,
-                        fields,
-                        runway_name,
-                        end_desig,
-                        point,
-                        params["azimuth_perp_l"],
-                        params["azimuth_perp_r"],
-                        observable_azimuth,
-                        lit_half_width,
-                    )
-
-        if approach_rows.get(("__options__", "stopway_lights")) and supported_runway_types:
+        if supported_runway_types:
             self._append_stopway_lights(
                 features,
                 fields,
@@ -333,35 +310,34 @@ class AirfieldGroundLightingMixin:
                 centreline_offset_m,
             )
 
-        if approach_rows.get(("__options__", "tdz_lights")):
-            for end_role, end_desig, runway_type, origin, azimuth in [
-                ("primary", primary_desig, primary_type, thr_point, params["azimuth_p_r"]),
-                ("reciprocal", reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_r_p"]),
-            ]:
-                if not ruleset.runway_type_supports_agl(runway_type):
-                    continue
-                cat_ii_iii = "Precision Approach CAT II/III" in (runway_type or "")
-                cat_i_optional = "Precision Approach CAT I" in (runway_type or "") and approach_rows.get(
-                    ("__options__", "cat_i_tdz_lights")
-                )
-                if cat_ii_iii or cat_i_optional:
-                    self._append_tdz_lights(
-                        features,
-                        fields,
-                        runway_name,
+        for end_role, end_desig, runway_type, origin, azimuth in [
+            ("primary", primary_desig, primary_type, thr_point, params["azimuth_p_r"]),
+            ("reciprocal", reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_r_p"]),
+        ]:
+            if not ruleset.runway_type_supports_agl(runway_type):
+                continue
+            cat_ii_iii = "Precision Approach CAT II/III" in (runway_type or "")
+            cat_i_optional = "Precision Approach CAT I" in (runway_type or "") and approach_rows.get(
+                ("__options__", "cat_i_tdz_lights")
+            )
+            if cat_ii_iii or cat_i_optional:
+                self._append_tdz_lights(
+                    features,
+                    fields,
+                    runway_name,
+                    end_desig,
+                    origin,
+                    azimuth,
+                    params["azimuth_perp_l"],
+                    params["azimuth_perp_r"],
+                    self._tdz_lighting_extent(
+                        runway_data,
                         end_desig,
-                        origin,
-                        azimuth,
-                        params["azimuth_perp_l"],
-                        params["azimuth_perp_r"],
-                        self._tdz_lighting_extent(
-                            runway_data,
-                            end_desig,
-                            runway_type,
-                            physical_length,
-                            arc_num=runway_data.get("arc_num"),
-                        ),
-                    )
+                        runway_type,
+                        physical_length,
+                        arc_num=runway_data.get("arc_num"),
+                    ),
+                )
         if reciprocal_type_supported:
             self._append_threshold_lights(
                 features,
@@ -1111,42 +1087,6 @@ class AirfieldGroundLightingMixin:
                         beam_type=AGL_BEAM_UNIDIRECTIONAL,
                     )
                 )
-
-    def _append_temp_displaced_threshold_lights(
-        self,
-        features: List[QgsFeature],
-        fields: QgsFields,
-        runway_name: str,
-        end_desig: str,
-        threshold_point: QgsPointXY,
-        azimuth_left: float,
-        azimuth_right: float,
-        observable_azimuth: float,
-        half_width: float,
-    ) -> None:
-        lights_per_side = self.get_active_ruleset().temp_displaced_threshold_lights_per_side(half_width * 2.0)
-        for side_name, azimuth in [("Left", azimuth_left), ("Right", azimuth_right)]:
-            for index in range(lights_per_side):
-                lateral_m = half_width + index * self._agl_rule_value("TEMP_DISPLACED_THRESHOLD_SPACING_M")
-                point = threshold_point.project(lateral_m, azimuth)
-                if point is not None:
-                    features.append(
-                        self._agl_feature(
-                            fields,
-                            point,
-                            runway_name,
-                            end_desig,
-                            "Temporary Displaced Threshold",
-                            side_name,
-                            self._agl_rule_value("TEMP_DISPLACED_THRESHOLD_SPACING_M"),
-                            lateral_m,
-                            self._agl_rule_value("LIGHT_COLOUR_GREEN"),
-                            self._agl_rule_value("MOS_REF_TEMP_DISPLACED_THRESHOLD"),
-                            angle_deg=observable_azimuth,
-                            symbol_angle_deg=observable_azimuth,
-                            beam_type=AGL_BEAM_UNIDIRECTIONAL,
-                        )
-                    )
 
     def _append_stopway_lights(
         self,

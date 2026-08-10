@@ -157,18 +157,10 @@ class AglOptionsMixin:
         elements_layout.setVerticalSpacing(8)
         elements_layout.setColumnStretch(0, 1)
         elements_layout.setColumnStretch(1, 1)
-        self.checkBox_agl_runway_end_lights = QtWidgets.QCheckBox("Runway end lights")
-        self.checkBox_agl_runway_end_lights.setObjectName("checkBox_agl_runway_end_lights")
-        self.checkBox_agl_runway_end_lights.setChecked(True)
         self.checkBox_agl_threshold_wing_bars = QtWidgets.QCheckBox("Threshold wing bars for precision ends")
         self.checkBox_agl_threshold_wing_bars.setObjectName("checkBox_agl_threshold_wing_bars")
         self.checkBox_agl_rtil = QtWidgets.QCheckBox("RTIL for displaced thresholds")
         self.checkBox_agl_rtil.setObjectName("checkBox_agl_rtil")
-        self.checkBox_agl_temp_displaced_threshold = QtWidgets.QCheckBox("Temporary displaced threshold arrays")
-        self.checkBox_agl_temp_displaced_threshold.setObjectName("checkBox_agl_temp_displaced_threshold")
-        self.checkBox_agl_stopway_lights = QtWidgets.QCheckBox("Stopway lights where stopway length is entered")
-        self.checkBox_agl_stopway_lights.setObjectName("checkBox_agl_stopway_lights")
-        self.checkBox_agl_stopway_lights.setChecked(True)
         self.checkBox_agl_centreline_lights = QtWidgets.QCheckBox("Runway centreline lights for CAT II/III")
         self.checkBox_agl_centreline_lights.setObjectName("checkBox_agl_centreline_lights")
         self.checkBox_agl_centreline_lights.setChecked(True)
@@ -176,33 +168,15 @@ class AglOptionsMixin:
         self.checkBox_agl_centreline_low_visibility.setObjectName("checkBox_agl_centreline_low_visibility")
         self.checkBox_agl_cat_i_centreline_lights = QtWidgets.QCheckBox("Recommended centreline lights for CAT I >50 m")
         self.checkBox_agl_cat_i_centreline_lights.setObjectName("checkBox_agl_cat_i_centreline_lights")
-        self.checkBox_agl_tdz_lights = QtWidgets.QCheckBox("TDZ lights for CAT II/III")
-        self.checkBox_agl_tdz_lights.setObjectName("checkBox_agl_tdz_lights")
-        self.checkBox_agl_tdz_lights.setChecked(True)
         self.checkBox_agl_cat_i_tdz_lights = QtWidgets.QCheckBox("Optional TDZ lights for CAT I")
         self.checkBox_agl_cat_i_tdz_lights.setObjectName("checkBox_agl_cat_i_tdz_lights")
         layer_sections = [
-            (
-                "Runway End",
-                "groupBox_agl_layer_runway_end",
-                [self.checkBox_agl_runway_end_lights],
-            ),
             (
                 "Threshold Wing Bar",
                 "groupBox_agl_layer_threshold_wing_bar",
                 [self.checkBox_agl_threshold_wing_bars],
             ),
             ("RTIL", "groupBox_agl_layer_rtil", [self.checkBox_agl_rtil]),
-            (
-                "Temporary Displaced Threshold",
-                "groupBox_agl_layer_temp_displaced_threshold",
-                [self.checkBox_agl_temp_displaced_threshold],
-            ),
-            (
-                "Stopway Edge / Stopway End",
-                "groupBox_agl_layer_stopway",
-                [self.checkBox_agl_stopway_lights],
-            ),
             (
                 "Runway Centreline",
                 "groupBox_agl_layer_runway_centreline",
@@ -215,7 +189,7 @@ class AglOptionsMixin:
             (
                 "TDZ Barrette",
                 "groupBox_agl_layer_tdz_barrette",
-                [self.checkBox_agl_tdz_lights, self.checkBox_agl_cat_i_tdz_lights],
+                [self.checkBox_agl_cat_i_tdz_lights],
             ),
         ]
         for index, (title, object_name, widgets) in enumerate(layer_sections):
@@ -453,15 +427,11 @@ class AglOptionsMixin:
         self._set_line_text("lineEdit_agl_threshold_inset", self.AGL_DEFAULTS["threshold_inset_m"])
         self._set_line_text("lineEdit_agl_approach_spacing", self.AGL_DEFAULTS["approach_spacing_m"])
         self._set_line_text("lineEdit_agl_centreline_offset", "0")
-        self.checkBox_agl_runway_end_lights.setChecked(True)
         self.checkBox_agl_threshold_wing_bars.setChecked(False)
         self.checkBox_agl_rtil.setChecked(False)
-        self.checkBox_agl_temp_displaced_threshold.setChecked(False)
-        self.checkBox_agl_stopway_lights.setChecked(True)
         self.checkBox_agl_centreline_lights.setChecked(True)
         self.checkBox_agl_centreline_low_visibility.setChecked(False)
         self.checkBox_agl_cat_i_centreline_lights.setChecked(False)
-        self.checkBox_agl_tdz_lights.setChecked(True)
         self.checkBox_agl_cat_i_tdz_lights.setChecked(False)
         if hasattr(self, "table_agl_approach"):
             self.table_agl_approach.setRowCount(0)
@@ -476,15 +446,11 @@ class AglOptionsMixin:
         if table is not None and table.rowCount() > 0:
             return True
         defaults = {
-            "runway_end_lights": True,
             "threshold_wing_bars": False,
             "rtil": False,
-            "temp_displaced_threshold": False,
-            "stopway_lights": True,
             "centreline_lights": True,
             "centreline_low_visibility": False,
             "cat_i_centreline_lights": False,
-            "tdz_lights": True,
             "cat_i_tdz_lights": False,
         }
         for option_name, default in defaults.items():
@@ -586,47 +552,34 @@ class AglOptionsMixin:
 
     def _agl_checkbox_widgets(self) -> List[QtWidgets.QCheckBox]:
         return [
-            self.checkBox_agl_runway_end_lights,
             self.checkBox_agl_threshold_wing_bars,
             self.checkBox_agl_rtil,
-            self.checkBox_agl_temp_displaced_threshold,
-            self.checkBox_agl_stopway_lights,
             self.checkBox_agl_centreline_lights,
             self.checkBox_agl_centreline_low_visibility,
             self.checkBox_agl_cat_i_centreline_lights,
-            self.checkBox_agl_tdz_lights,
             self.checkBox_agl_cat_i_tdz_lights,
         ]
 
     def _get_agl_element_options(self) -> Dict[str, bool]:
         options = {
-            "runway_end_lights": self.checkBox_agl_runway_end_lights.isChecked(),
             "threshold_wing_bars": self.checkBox_agl_threshold_wing_bars.isChecked(),
             "rtil": self.checkBox_agl_rtil.isChecked(),
-            "temp_displaced_threshold": self.checkBox_agl_temp_displaced_threshold.isChecked(),
-            "stopway_lights": self.checkBox_agl_stopway_lights.isChecked(),
             "centreline_lights": self.checkBox_agl_centreline_lights.isChecked(),
             "centreline_low_visibility": self.checkBox_agl_centreline_low_visibility.isChecked(),
             "cat_i_centreline_lights": self.checkBox_agl_cat_i_centreline_lights.isChecked(),
-            "tdz_lights": self.checkBox_agl_tdz_lights.isChecked(),
             "cat_i_tdz_lights": self.checkBox_agl_cat_i_tdz_lights.isChecked(),
         }
         if self._agl_ruleset().id == self.EASA_RULESET_ID:
             options["rtil"] = False
-            options["temp_displaced_threshold"] = False
         return options
 
     def _set_agl_element_options(self, options) -> None:
         defaults = {
-            "runway_end_lights": True,
             "threshold_wing_bars": False,
             "rtil": False,
-            "temp_displaced_threshold": False,
-            "stopway_lights": True,
             "centreline_lights": True,
             "centreline_low_visibility": False,
             "cat_i_centreline_lights": False,
-            "tdz_lights": True,
             "cat_i_tdz_lights": False,
         }
         for option_name, default in defaults.items():
@@ -679,18 +632,11 @@ class AglOptionsMixin:
             )
             self.label_agl_edge_spacing.setText("EASA instrument runway edge spacing (m)")
             self.label_agl_threshold_spacing.setText("EASA precision threshold max spacing (m)")
-            self.checkBox_agl_runway_end_lights.setText("Runway end lights")
             self.checkBox_agl_threshold_wing_bars.setText(
                 "Threshold wing bars for precision ends (conditional)"
             )
             self.checkBox_agl_rtil.setText(
                 "RETIL / displaced-threshold identifier (compatibility only)"
-            )
-            self.checkBox_agl_temp_displaced_threshold.setText(
-                "Temporary displaced threshold arrays (compatibility only)"
-            )
-            self.checkBox_agl_stopway_lights.setText(
-                "Stopway lights (night or RVR <800 m; length required)"
             )
             self.checkBox_agl_centreline_lights.setText(
                 "Runway centreline lights (CAT II/III; CAT I conditional)"
@@ -701,21 +647,14 @@ class AglOptionsMixin:
             self.checkBox_agl_cat_i_centreline_lights.setText(
                 "Recommended centreline lights for CAT I / runway width >50 m"
             )
-            self.checkBox_agl_tdz_lights.setText(
-                "TDZ lights (CAT II/III; CAT I conditional)"
-            )
             self.checkBox_agl_cat_i_tdz_lights.setText("Optional TDZ lights for CAT I")
             self.label_agl_ruleset_caveat.setText(
                 "EASA CS-ADR-DSN Issue 7: approach, edge, threshold, end, centreline, "
-                "TDZ, and stopway controls are source-backed. CAT I, low-visibility, "
-                "and stopway selections remain conditional on the declared operation. "
-                "RETIL and temporary displaced-threshold arrays are compatibility-only "
-                "and are disabled for EASA."
+                "TDZ, and stopway generation is source-backed. CAT I and low-visibility "
+                "selections remain conditional on the declared operation. RETIL is "
+                "compatibility-only and is disabled for EASA."
             )
-            for widget in (
-                self.checkBox_agl_rtil,
-                self.checkBox_agl_temp_displaced_threshold,
-            ):
+            for widget in (self.checkBox_agl_rtil,):
                 widget.setChecked(False)
                 widget.setEnabled(False)
                 widget.setToolTip(
@@ -736,27 +675,20 @@ class AglOptionsMixin:
                 if is_mos139
                 else "Precision threshold max spacing (m)"
             )
-            self.checkBox_agl_runway_end_lights.setText("Runway end lights")
             self.checkBox_agl_threshold_wing_bars.setText("Threshold wing bars for precision ends")
             self.checkBox_agl_rtil.setText("RTIL for displaced thresholds")
-            self.checkBox_agl_temp_displaced_threshold.setText("Temporary displaced threshold arrays")
-            self.checkBox_agl_stopway_lights.setText("Stopway lights where stopway length is entered")
             self.checkBox_agl_centreline_lights.setText("Runway centreline lights for CAT II/III")
             self.checkBox_agl_centreline_low_visibility.setText("RVR below 350 m operations")
             self.checkBox_agl_cat_i_centreline_lights.setText(
                 "Recommended centreline lights for CAT I >50 m"
             )
-            self.checkBox_agl_tdz_lights.setText("TDZ lights for CAT II/III")
             self.checkBox_agl_cat_i_tdz_lights.setText("Optional TDZ lights for CAT I")
             self.label_agl_ruleset_caveat.setText(
                 f"{profile.display_name}: lighting options are ruleset-specific; "
                 "confirm applicability against the selected standard and declared "
                 "operating conditions before generation."
             )
-            for widget in (
-                self.checkBox_agl_rtil,
-                self.checkBox_agl_temp_displaced_threshold,
-            ):
+            for widget in (self.checkBox_agl_rtil,):
                 widget.setEnabled(True)
                 widget.setToolTip("")
 
@@ -775,12 +707,6 @@ class AglOptionsMixin:
                 self.checkBox_agl_rtil.setText(
                     "RTIL for displaced thresholds (operational review)"
                 )
-                self.checkBox_agl_temp_displaced_threshold.setText(
-                    "Temporary displaced threshold arrays (operational review)"
-                )
-                self.checkBox_agl_stopway_lights.setText(
-                    "Stopway lights where stopway length is entered (review applicability)"
-                )
                 self.checkBox_agl_centreline_lights.setText(
                     "Runway centreline lights (CAT II/III and low-RVR take-off)"
                 )
@@ -790,7 +716,6 @@ class AglOptionsMixin:
                 self.checkBox_agl_cat_i_centreline_lights.setText(
                     "Centreline review for CAT I / runway width >50 m"
                 )
-                self.checkBox_agl_tdz_lights.setText("TDZ lights for CAT II/III")
                 self.checkBox_agl_cat_i_tdz_lights.setText(
                     "Optional TDZ lights for CAT I (operational review)"
                 )
