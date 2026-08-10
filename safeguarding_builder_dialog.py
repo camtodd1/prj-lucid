@@ -1815,6 +1815,14 @@ class SafeguardingBuilderDialog(
 
         tab_widget = getattr(self, "tabWidget_workflow", self.findChild(QtWidgets.QTabWidget, "tabWidget_workflow"))
         if tab_widget:
+            # A QTabWidget normally contributes the largest page's minimum size.
+            # In a dock that can force the QGIS main window taller than the screen;
+            # let the tab viewport absorb the available height instead.
+            tab_widget.setSizePolicy(
+                QtWidgets.QSizePolicy.Policy.Expanding,
+                QtWidgets.QSizePolicy.Policy.Ignored,
+            )
+            tab_widget.setMinimumHeight(0)
             tab_widget.setIconSize(QtCore.QSize(12, 12))
             tab_widget.setStyleSheet(
                 """

@@ -1394,6 +1394,13 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.assertEqual(self.dialog.size(), expected_size)
 
+    def test_workflow_tabs_do_not_impose_largest_page_height_on_dock(self):
+        self.assertEqual(
+            self.dialog.tabWidget_workflow.sizePolicy().verticalPolicy(),
+            QtWidgets.QSizePolicy.Policy.Ignored,
+        )
+        self.assertLess(self.dialog.minimumSizeHint().height(), 700)
+
     def test_builder_checkpoint_updates_progress_without_cancel_branch(self):
         builder = object.__new__(SafeguardingBuilder)
         builder._runtime_run_recorder = None
