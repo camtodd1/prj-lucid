@@ -232,7 +232,6 @@
         "threshold_spacing_m": "3",
         "threshold_inset_m": "0",
         "approach_spacing_m": "30",
-        "centreline_offset_m": "0",
         "approach_lighting": [
             {
                 "runway_index": 1,
@@ -240,13 +239,7 @@
                 "length_m": "REPLACE_APPROACH_LIGHT_LENGTH_M",
                 "spacing_m": "30"
             }
-        ],
-        "threshold_wing_bars": false,
-        "rtil": false,
-        "centreline_lights": true,
-        "centreline_low_visibility": false,
-        "cat_i_centreline_lights": false,
-        "cat_i_tdz_lights": false
+        ]
     },
     "output_options": {
         "mode": "memory",

@@ -90,7 +90,6 @@ class AglOptionsMixin:
         self.lineEdit_agl_threshold_spacing = self._agl_line_edit("lineEdit_agl_threshold_spacing", "3")
         self.lineEdit_agl_threshold_inset = self._agl_line_edit("lineEdit_agl_threshold_inset", "0")
         self.lineEdit_agl_approach_spacing = self._agl_line_edit("lineEdit_agl_approach_spacing", "30")
-        self.lineEdit_agl_centreline_offset = self._agl_line_edit("lineEdit_agl_centreline_offset", "0")
         self.lineEdit_agl_edge_spacing.setReadOnly(True)
         self.lineEdit_agl_threshold_spacing.setReadOnly(True)
 
@@ -102,14 +101,10 @@ class AglOptionsMixin:
         self.label_agl_approach_spacing = QtWidgets.QLabel(
             "Default approach light spacing (m)"
         )
-        self.label_agl_centreline_offset = QtWidgets.QLabel(
-            "Centreline light lateral offset (m)"
-        )
         self.label_agl_edge_spacing.setObjectName("label_agl_edge_spacing")
         self.label_agl_threshold_spacing.setObjectName("label_agl_threshold_spacing")
         self.label_agl_threshold_inset.setObjectName("label_agl_threshold_inset")
         self.label_agl_approach_spacing.setObjectName("label_agl_approach_spacing")
-        self.label_agl_centreline_offset.setObjectName("label_agl_centreline_offset")
 
         def light_type_group(title: str, object_name: str):
             layer_group = QtWidgets.QGroupBox(title)
@@ -148,60 +143,6 @@ class AglOptionsMixin:
         spacing_layout.addWidget(threshold_group, 0, 1)
 
         group_layout.addWidget(spacing_group)
-
-        elements_group = QtWidgets.QGroupBox("MOS optional elements")
-        elements_group.setObjectName("groupBox_agl_elements")
-        self.groupBox_agl_elements = elements_group
-        elements_layout = QtWidgets.QGridLayout(elements_group)
-        elements_layout.setHorizontalSpacing(12)
-        elements_layout.setVerticalSpacing(8)
-        elements_layout.setColumnStretch(0, 1)
-        elements_layout.setColumnStretch(1, 1)
-        self.checkBox_agl_threshold_wing_bars = QtWidgets.QCheckBox("Threshold wing bars for precision ends")
-        self.checkBox_agl_threshold_wing_bars.setObjectName("checkBox_agl_threshold_wing_bars")
-        self.checkBox_agl_rtil = QtWidgets.QCheckBox("RTIL for displaced thresholds")
-        self.checkBox_agl_rtil.setObjectName("checkBox_agl_rtil")
-        self.checkBox_agl_centreline_lights = QtWidgets.QCheckBox("Runway centreline lights for CAT II/III")
-        self.checkBox_agl_centreline_lights.setObjectName("checkBox_agl_centreline_lights")
-        self.checkBox_agl_centreline_lights.setChecked(True)
-        self.checkBox_agl_centreline_low_visibility = QtWidgets.QCheckBox("RVR below 350 m operations")
-        self.checkBox_agl_centreline_low_visibility.setObjectName("checkBox_agl_centreline_low_visibility")
-        self.checkBox_agl_cat_i_centreline_lights = QtWidgets.QCheckBox("Recommended centreline lights for CAT I >50 m")
-        self.checkBox_agl_cat_i_centreline_lights.setObjectName("checkBox_agl_cat_i_centreline_lights")
-        self.checkBox_agl_cat_i_tdz_lights = QtWidgets.QCheckBox("Optional TDZ lights for CAT I")
-        self.checkBox_agl_cat_i_tdz_lights.setObjectName("checkBox_agl_cat_i_tdz_lights")
-        layer_sections = [
-            (
-                "Threshold Wing Bar",
-                "groupBox_agl_layer_threshold_wing_bar",
-                [self.checkBox_agl_threshold_wing_bars],
-            ),
-            ("RTIL", "groupBox_agl_layer_rtil", [self.checkBox_agl_rtil]),
-            (
-                "Runway Centreline",
-                "groupBox_agl_layer_runway_centreline",
-                [
-                    self.checkBox_agl_centreline_lights,
-                    self.checkBox_agl_centreline_low_visibility,
-                    self.checkBox_agl_cat_i_centreline_lights,
-                ],
-            ),
-            (
-                "TDZ Barrette",
-                "groupBox_agl_layer_tdz_barrette",
-                [self.checkBox_agl_cat_i_tdz_lights],
-            ),
-        ]
-        for index, (title, object_name, widgets) in enumerate(layer_sections):
-            layer_box, layer_layout = light_type_group(title, object_name)
-            for row, widget in enumerate(widgets):
-                layer_layout.addWidget(widget, row, 0, 1, 2)
-            if object_name == "groupBox_agl_layer_runway_centreline":
-                row = len(widgets)
-                layer_layout.addWidget(self.label_agl_centreline_offset, row, 0)
-                layer_layout.addWidget(self.lineEdit_agl_centreline_offset, row, 1)
-            elements_layout.addWidget(layer_box, index, 0, 1, 2)
-        group_layout.addWidget(elements_group)
 
         self.label_agl_ruleset_caveat = QtWidgets.QLabel()
         self.label_agl_ruleset_caveat.setObjectName("label_agl_ruleset_caveat")
@@ -271,13 +212,10 @@ class AglOptionsMixin:
             self.lineEdit_agl_threshold_spacing,
             self.lineEdit_agl_threshold_inset,
             self.lineEdit_agl_approach_spacing,
-            self.lineEdit_agl_centreline_offset,
         ]:
             widget.textChanged.connect(self._on_agl_option_changed)
         self.table_agl_approach.itemChanged.connect(self._on_agl_option_changed)
         self.table_agl_approach.itemSelectionChanged.connect(self._update_agl_view_state)
-        for widget in self._agl_checkbox_widgets():
-            widget.toggled.connect(self._on_agl_option_changed)
         self.pushButton_add_agl_approach.clicked.connect(self._add_agl_approach_row)
         self.pushButton_remove_agl_approach.clicked.connect(self._remove_selected_agl_approach_rows)
         ruleset_combo = self._ruleset_combo_widget()
@@ -359,17 +297,7 @@ class AglOptionsMixin:
         options["approach_spacing_m"] = self._agl_float(
             "lineEdit_agl_approach_spacing", "AGL default approach light spacing", errors, minimum=0.01
         )
-        options["centreline_offset_m"] = self._agl_float(
-            "lineEdit_agl_centreline_offset", "AGL centreline light offset", errors, minimum=0.0
-        )
-        centreline_max_offset_m = self._agl_ruleset().agl_value("RUNWAY_CENTRELINE_MAX_OFFSET_M")
-        if options["centreline_offset_m"] > centreline_max_offset_m:
-            self._agl_error(
-                errors,
-                f"AGL centreline light offset must not exceed {centreline_max_offset_m:g} m.",
-            )
         options["approach_lighting"] = self._get_agl_approach_rows(errors)
-        options.update(self._get_agl_element_options())
         return options
 
     def _get_agl_save_options(self) -> Dict[str, object]:
@@ -379,10 +307,8 @@ class AglOptionsMixin:
             "threshold_spacing_m": self._line_text("lineEdit_agl_threshold_spacing"),
             "threshold_inset_m": self._line_text("lineEdit_agl_threshold_inset"),
             "approach_spacing_m": self._line_text("lineEdit_agl_approach_spacing"),
-            "centreline_offset_m": self._line_text("lineEdit_agl_centreline_offset"),
             "approach_lighting": [],
         }
-        options.update(self._get_agl_element_options())
         rows = []
         table = getattr(self, "table_agl_approach", None)
         if table is not None:
@@ -408,8 +334,6 @@ class AglOptionsMixin:
         self._set_line_text("lineEdit_agl_threshold_spacing", str(agl_options.get("threshold_spacing_m", "3")))
         self._set_line_text("lineEdit_agl_threshold_inset", str(agl_options.get("threshold_inset_m", "0")))
         self._set_line_text("lineEdit_agl_approach_spacing", str(agl_options.get("approach_spacing_m", "30")))
-        self._set_line_text("lineEdit_agl_centreline_offset", str(agl_options.get("centreline_offset_m", "0")))
-        self._set_agl_element_options(agl_options)
         table = getattr(self, "table_agl_approach", None)
         if table is not None:
             table.setRowCount(0)
@@ -426,13 +350,6 @@ class AglOptionsMixin:
         self._set_line_text("lineEdit_agl_threshold_spacing", self.AGL_DEFAULTS["threshold_spacing_m"])
         self._set_line_text("lineEdit_agl_threshold_inset", self.AGL_DEFAULTS["threshold_inset_m"])
         self._set_line_text("lineEdit_agl_approach_spacing", self.AGL_DEFAULTS["approach_spacing_m"])
-        self._set_line_text("lineEdit_agl_centreline_offset", "0")
-        self.checkBox_agl_threshold_wing_bars.setChecked(False)
-        self.checkBox_agl_rtil.setChecked(False)
-        self.checkBox_agl_centreline_lights.setChecked(True)
-        self.checkBox_agl_centreline_low_visibility.setChecked(False)
-        self.checkBox_agl_cat_i_centreline_lights.setChecked(False)
-        self.checkBox_agl_cat_i_tdz_lights.setChecked(False)
         if hasattr(self, "table_agl_approach"):
             self.table_agl_approach.setRowCount(0)
         self._on_agl_option_changed()
@@ -445,24 +362,11 @@ class AglOptionsMixin:
         table = getattr(self, "table_agl_approach", None)
         if table is not None and table.rowCount() > 0:
             return True
-        defaults = {
-            "threshold_wing_bars": False,
-            "rtil": False,
-            "centreline_lights": True,
-            "centreline_low_visibility": False,
-            "cat_i_centreline_lights": False,
-            "cat_i_tdz_lights": False,
-        }
-        for option_name, default in defaults.items():
-            widget = getattr(self, f"checkBox_agl_{option_name}", None)
-            if widget is not None and widget.isChecked() != default:
-                return True
         for widget_name, default in [
             ("lineEdit_agl_edge_spacing", self.AGL_DEFAULTS["edge_spacing_m"]),
             ("lineEdit_agl_threshold_spacing", self.AGL_DEFAULTS["threshold_spacing_m"]),
             ("lineEdit_agl_threshold_inset", self.AGL_DEFAULTS["threshold_inset_m"]),
             ("lineEdit_agl_approach_spacing", self.AGL_DEFAULTS["approach_spacing_m"]),
-            ("lineEdit_agl_centreline_offset", "0"),
         ]:
             widget = self._line_edit(widget_name)
             if widget and widget.text().strip() != default:
@@ -550,43 +454,6 @@ class AglOptionsMixin:
         if errors is not None:
             errors.append(message)
 
-    def _agl_checkbox_widgets(self) -> List[QtWidgets.QCheckBox]:
-        return [
-            self.checkBox_agl_threshold_wing_bars,
-            self.checkBox_agl_rtil,
-            self.checkBox_agl_centreline_lights,
-            self.checkBox_agl_centreline_low_visibility,
-            self.checkBox_agl_cat_i_centreline_lights,
-            self.checkBox_agl_cat_i_tdz_lights,
-        ]
-
-    def _get_agl_element_options(self) -> Dict[str, bool]:
-        options = {
-            "threshold_wing_bars": self.checkBox_agl_threshold_wing_bars.isChecked(),
-            "rtil": self.checkBox_agl_rtil.isChecked(),
-            "centreline_lights": self.checkBox_agl_centreline_lights.isChecked(),
-            "centreline_low_visibility": self.checkBox_agl_centreline_low_visibility.isChecked(),
-            "cat_i_centreline_lights": self.checkBox_agl_cat_i_centreline_lights.isChecked(),
-            "cat_i_tdz_lights": self.checkBox_agl_cat_i_tdz_lights.isChecked(),
-        }
-        if self._agl_ruleset().id == self.EASA_RULESET_ID:
-            options["rtil"] = False
-        return options
-
-    def _set_agl_element_options(self, options) -> None:
-        defaults = {
-            "threshold_wing_bars": False,
-            "rtil": False,
-            "centreline_lights": True,
-            "centreline_low_visibility": False,
-            "cat_i_centreline_lights": False,
-            "cat_i_tdz_lights": False,
-        }
-        for option_name, default in defaults.items():
-            widget = getattr(self, f"checkBox_agl_{option_name}", None)
-            if widget is not None:
-                widget.setChecked(bool(options.get(option_name, default)))
-
     def _agl_runway_end_type(self, runway_index: int, end_role: str) -> str:
         group = self._runway_groups.get(runway_index)
         if group is None:
@@ -604,7 +471,6 @@ class AglOptionsMixin:
         enabled = self.checkBox_agl_enabled.isChecked()
         for group_name in [
             "groupBox_agl_generated",
-            "groupBox_agl_elements",
             "groupBox_agl_approach",
         ]:
             group = getattr(self, group_name, None)
@@ -616,54 +482,24 @@ class AglOptionsMixin:
             self.update_dialog_status()
 
     def _update_agl_ruleset_view(self, *_args) -> None:
-        """Present AGL controls and caveats for the selected design standard."""
-        if not hasattr(self, "groupBox_agl_elements"):
-            return
-
+        """Present source context for the selected design standard."""
         profile = self._agl_ruleset()
         is_easa = profile.id == self.EASA_RULESET_ID
         is_mos139 = profile.id == self.MOS139_RULESET_ID
         is_cap168 = profile.id == self.CAP168_RULESET_ID
 
         if is_easa:
-            self.groupBox_agl_elements.setTitle("EASA visual-aid options")
             self.groupBox_agl_approach.setTitle(
                 "Approach Centreline / Crossbar / Barrettes (EASA source profile)"
             )
             self.label_agl_edge_spacing.setText("EASA instrument runway edge spacing (m)")
             self.label_agl_threshold_spacing.setText("EASA precision threshold max spacing (m)")
-            self.checkBox_agl_threshold_wing_bars.setText(
-                "Threshold wing bars for precision ends (conditional)"
-            )
-            self.checkBox_agl_rtil.setText(
-                "RETIL / displaced-threshold identifier (compatibility only)"
-            )
-            self.checkBox_agl_centreline_lights.setText(
-                "Runway centreline lights (CAT II/III; CAT I conditional)"
-            )
-            self.checkBox_agl_centreline_low_visibility.setText(
-                "Centreline spacing for RVR <350 m"
-            )
-            self.checkBox_agl_cat_i_centreline_lights.setText(
-                "Recommended centreline lights for CAT I / runway width >50 m"
-            )
-            self.checkBox_agl_cat_i_tdz_lights.setText("Optional TDZ lights for CAT I")
             self.label_agl_ruleset_caveat.setText(
                 "EASA CS-ADR-DSN Issue 7: approach, edge, threshold, end, centreline, "
-                "TDZ, and stopway generation is source-backed. CAT I and low-visibility "
-                "selections remain conditional on the declared operation. RETIL is "
-                "compatibility-only and is disabled for EASA."
+                "TDZ, and stopway generation uses the current source-backed profile. "
+                "Optional lighting customisation is deferred to the planned lighting audit."
             )
-            for widget in (self.checkBox_agl_rtil,):
-                widget.setChecked(False)
-                widget.setEnabled(False)
-                widget.setToolTip(
-                    "Compatibility-only control; no EASA source-backed implementation."
-                )
         else:
-            self.groupBox_agl_elements.setTitle(
-                "MOS optional elements" if is_mos139 else f"{profile.display_name} lighting options"
-            )
             self.groupBox_agl_approach.setTitle(
                 "Approach Centreline / Crossbar / Barrettes"
             )
@@ -675,25 +511,13 @@ class AglOptionsMixin:
                 if is_mos139
                 else "Precision threshold max spacing (m)"
             )
-            self.checkBox_agl_threshold_wing_bars.setText("Threshold wing bars for precision ends")
-            self.checkBox_agl_rtil.setText("RTIL for displaced thresholds")
-            self.checkBox_agl_centreline_lights.setText("Runway centreline lights for CAT II/III")
-            self.checkBox_agl_centreline_low_visibility.setText("RVR below 350 m operations")
-            self.checkBox_agl_cat_i_centreline_lights.setText(
-                "Recommended centreline lights for CAT I >50 m"
-            )
-            self.checkBox_agl_cat_i_tdz_lights.setText("Optional TDZ lights for CAT I")
             self.label_agl_ruleset_caveat.setText(
-                f"{profile.display_name}: lighting options are ruleset-specific; "
-                "confirm applicability against the selected standard and declared "
-                "operating conditions before generation."
+                f"{profile.display_name}: standard lighting elements are generated from "
+                "the runway parameters. Optional lighting customisation is deferred to "
+                "the planned lighting audit."
             )
-            for widget in (self.checkBox_agl_rtil,):
-                widget.setEnabled(True)
-                widget.setToolTip("")
 
             if is_cap168:
-                self.groupBox_agl_elements.setTitle("CAP 168 source-backed options")
                 self.groupBox_agl_approach.setTitle(
                     "Approach Centreline / Crossbar / Barrettes (CAP 168 profile)"
                 )
@@ -701,34 +525,10 @@ class AglOptionsMixin:
                 self.label_agl_threshold_spacing.setText(
                     "CAP 168 precision threshold max spacing (m)"
                 )
-                self.checkBox_agl_threshold_wing_bars.setText(
-                    "Threshold wing bars (L1/L2 required; L3/L4 recommended)"
-                )
-                self.checkBox_agl_rtil.setText(
-                    "RTIL for displaced thresholds (operational review)"
-                )
-                self.checkBox_agl_centreline_lights.setText(
-                    "Runway centreline lights (CAT II/III and low-RVR take-off)"
-                )
-                self.checkBox_agl_centreline_low_visibility.setText(
-                    "Low-RVR operations: RVR <300 m / CAP 168 spacing condition"
-                )
-                self.checkBox_agl_cat_i_centreline_lights.setText(
-                    "Centreline review for CAT I / runway width >50 m"
-                )
-                self.checkBox_agl_cat_i_tdz_lights.setText(
-                    "Optional TDZ lights for CAT I (operational review)"
-                )
                 self.label_agl_ruleset_caveat.setText(
                     "CAP 168 Edition 13, Chapter 6: core runway and approach arrays are "
-                    "source-backed. The 30 m centreline spacing case depends on RVR ≥300 m "
-                    "and maintenance objectives; CAT II/III and low-RVR take-off cases need "
-                    "centreline lighting. Runways wider than 50 m require CAA review. "
-                    "Low-RVR is an operator declaration; this dialog does not capture RVR "
-                    "or maintenance evidence. Starter-extension lighting, strobe alternatives, "
-                    "and intensity-balance checks are documented in the CAP168 profile but are "
-                    "not generated or validated here. Wing-bar applicability by runway scale "
-                    "also remains a review item."
+                    "source-backed. Optional operational cases and customisation are deferred "
+                    "to the planned lighting audit."
                 )
 
     def _update_agl_view_state(self) -> None:

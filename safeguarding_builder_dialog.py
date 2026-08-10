@@ -1462,18 +1462,9 @@ class SafeguardingBuilderDialog(
             ("lineEdit_agl_threshold_spacing", "threshold spacing", 0.01),
             ("lineEdit_agl_threshold_inset", "threshold inset", 0.0),
             ("lineEdit_agl_approach_spacing", "approach spacing", 0.01),
-            ("lineEdit_agl_centreline_offset", "centreline offset", 0.0),
         ]:
             if self._parse_status_float(self._line_value(widget_name), minimum=minimum) is None:
                 errors.append(label)
-        try:
-            centreline_max_offset_m = self._agl_ruleset().agl_value("RUNWAY_CENTRELINE_MAX_OFFSET_M")
-            centreline_offset = self._parse_status_float(self._line_value("lineEdit_agl_centreline_offset"), minimum=0.0)
-            if centreline_offset is not None and centreline_offset > centreline_max_offset_m:
-                errors.append("centreline offset exceeds ruleset maximum")
-        except Exception:
-            pass
-
         valid_rows = 0
         incomplete_rows = 0
         invalid_rows = 0
@@ -1504,14 +1495,10 @@ class SafeguardingBuilderDialog(
                     continue
                 valid_rows += 1
 
-        element_options = self._get_agl_element_options() if hasattr(self, "_get_agl_element_options") else {}
-        any_element_enabled = any(bool(value) for value in element_options.values())
         if errors:
             return {"enabled": True, "ready": False, "state": "warning", "summary": "Lighting numeric fields need review: " + ", ".join(errors) + ".", "rows": rows}
         if invalid_rows:
             return {"enabled": True, "ready": False, "state": "warning", "summary": f"{invalid_rows} invalid approach-light row(s).", "rows": rows}
-        if not any_element_enabled and valid_rows == 0:
-            return {"enabled": True, "ready": False, "state": "warning", "summary": "Lighting is enabled but no lighting outputs are selected.", "rows": rows}
         if incomplete_rows and valid_rows == 0:
             return {"enabled": True, "ready": True, "state": "ready", "summary": "Lighting ready; blank approach rows will be ignored.", "rows": rows}
         if incomplete_rows:
@@ -1924,14 +1911,9 @@ class SafeguardingBuilderDialog(
             "groupBox_AirportMap",
             "groupBox_agl_options",
             "groupBox_agl_generated",
-            "groupBox_agl_elements",
             "groupBox_agl_approach",
             "groupBox_agl_layer_runway_edge",
             "groupBox_agl_layer_threshold",
-            "groupBox_agl_layer_threshold_wing_bar",
-            "groupBox_agl_layer_rtil",
-            "groupBox_agl_layer_runway_centreline",
-            "groupBox_agl_layer_tdz_barrette",
         ]
         for name in panel_names:
             group = getattr(self, name, self.findChild(QtWidgets.QGroupBox, name))

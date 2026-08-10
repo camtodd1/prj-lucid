@@ -47,21 +47,8 @@ class AirfieldGroundLightingMixin:
             return False
 
         threshold_inset_m = float(agl_options.get("threshold_inset_m") or 0.0)
-        centreline_offset_m = min(
-            float(agl_options.get("centreline_offset_m") or 0.0),
-            self._agl_rule_value("RUNWAY_CENTRELINE_MAX_OFFSET_M"),
-        )
         default_approach_spacing_m = float(agl_options.get("approach_spacing_m") or 30.0)
         approach_rows = self._agl_rows_by_runway_end(agl_options.get("approach_lighting", []))
-        for option_name in [
-            "threshold_wing_bars",
-            "rtil",
-            "centreline_lights",
-            "centreline_low_visibility",
-            "cat_i_centreline_lights",
-            "cat_i_tdz_lights",
-        ]:
-            approach_rows[("__options__", option_name)] = bool(agl_options.get(option_name, False))
 
         overall_success = False
         for runway_data in processed_runway_data_list:
@@ -71,7 +58,6 @@ class AirfieldGroundLightingMixin:
                     processed_runway_data_list,
                     layer_group,
                     threshold_inset_m,
-                    centreline_offset_m,
                     default_approach_spacing_m,
                     approach_rows,
                 )
@@ -91,7 +77,6 @@ class AirfieldGroundLightingMixin:
         processed_runway_data_list: List[dict],
         layer_group: QgsLayerTreeGroup,
         threshold_inset_m: float,
-        centreline_offset_m: float,
         default_approach_spacing_m: float,
         approach_rows: Dict[tuple, Dict[str, object]],
     ) -> bool:
@@ -149,12 +134,11 @@ class AirfieldGroundLightingMixin:
             else 0.0
         )
         precision_runway = any(ruleset.runway_is_precision(runway_type) for runway_type in supported_runway_types)
-        low_visibility_operations = bool(approach_rows.get(("__options__", "centreline_low_visibility")))
         primary_precision_edge_characteristics = primary_type_supported and (
-            ruleset.runway_is_precision(primary_type) or low_visibility_operations
+            ruleset.runway_is_precision(primary_type)
         )
         reciprocal_precision_edge_characteristics = reciprocal_type_supported and (
-            ruleset.runway_is_precision(reciprocal_type) or low_visibility_operations
+            ruleset.runway_is_precision(reciprocal_type)
         )
         edge_start_offset_m = edge_spacing_m if precision_runway else 0.0
         edge_end_offset_m = edge_spacing_m if precision_runway else 0.0
@@ -224,41 +208,39 @@ class AirfieldGroundLightingMixin:
                 lit_half_width,
             )
 
-        if approach_rows.get(("__options__", "threshold_wing_bars")):
-            for end_desig, runway_type, point, observable_azimuth in [
-                (primary_desig, primary_type, thr_point, params["azimuth_r_p"]),
-                (reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_p_r"]),
-            ]:
-                if ruleset.runway_type_supports_agl(runway_type) and ruleset.runway_is_precision(runway_type):
-                    self._append_threshold_wing_bars(
-                        features,
-                        fields,
-                        runway_name,
-                        end_desig,
-                        point,
-                        params["azimuth_perp_l"],
-                        params["azimuth_perp_r"],
-                        observable_azimuth,
-                        lit_half_width,
-                    )
+        for end_desig, runway_type, point, observable_azimuth in [
+            (primary_desig, primary_type, thr_point, params["azimuth_r_p"]),
+            (reciprocal_desig, reciprocal_type, rec_thr_point, params["azimuth_p_r"]),
+        ]:
+            if ruleset.runway_type_supports_agl(runway_type) and ruleset.runway_is_precision(runway_type):
+                self._append_threshold_wing_bars(
+                    features,
+                    fields,
+                    runway_name,
+                    end_desig,
+                    point,
+                    params["azimuth_perp_l"],
+                    params["azimuth_perp_r"],
+                    observable_azimuth,
+                    lit_half_width,
+                )
 
-        if approach_rows.get(("__options__", "rtil")):
-            for end_desig, point, displacement_m, observable_azimuth in [
-                (primary_desig, thr_point, disp_primary, params["azimuth_r_p"]),
-                (reciprocal_desig, rec_thr_point, disp_reciprocal, params["azimuth_p_r"]),
-            ]:
-                if displacement_m > 0:
-                    self._append_rtil(
-                        features,
-                        fields,
-                        runway_name,
-                        end_desig,
-                        point,
-                        params["azimuth_perp_l"],
-                        params["azimuth_perp_r"],
-                        observable_azimuth,
-                        lit_half_width,
-                    )
+        for end_desig, point, displacement_m, observable_azimuth in [
+            (primary_desig, thr_point, disp_primary, params["azimuth_r_p"]),
+            (reciprocal_desig, rec_thr_point, disp_reciprocal, params["azimuth_p_r"]),
+        ]:
+            if displacement_m > 0:
+                self._append_rtil(
+                    features,
+                    fields,
+                    runway_name,
+                    end_desig,
+                    point,
+                    params["azimuth_perp_l"],
+                    params["azimuth_perp_r"],
+                    observable_azimuth,
+                    lit_half_width,
+                )
 
         if supported_runway_types:
             self._append_stopway_lights(
@@ -288,16 +270,11 @@ class AirfieldGroundLightingMixin:
                 edge_spacing_m,
             )
 
-        centreline_low_visibility = bool(approach_rows.get(("__options__", "centreline_low_visibility")))
-        centreline_required = bool(supported_runway_types) and ruleset.runway_centreline_required(
-            primary_type,
-            reciprocal_type,
-            centreline_low_visibility,
+        centreline_required = any(
+            "Precision Approach CAT II/III" in (runway_type or "")
+            for runway_type in (primary_type, reciprocal_type)
         )
-        centreline_recommended = bool(approach_rows.get(("__options__", "cat_i_centreline_lights"))) and (
-            ruleset.runway_centreline_recommended(primary_type, reciprocal_type, lit_half_width * 2.0)
-        )
-        if approach_rows.get(("__options__", "centreline_lights")) and (centreline_required or centreline_recommended):
+        if centreline_required:
             self._append_runway_centreline_lights(
                 features,
                 fields,
@@ -306,8 +283,8 @@ class AirfieldGroundLightingMixin:
                 params["azimuth_p_r"],
                 params["azimuth_perp_l"],
                 physical_length,
-                ruleset.runway_centreline_spacing(centreline_low_visibility),
-                centreline_offset_m,
+                ruleset.runway_centreline_spacing(False),
+                0.0,
             )
 
         for end_role, end_desig, runway_type, origin, azimuth in [
@@ -317,10 +294,7 @@ class AirfieldGroundLightingMixin:
             if not ruleset.runway_type_supports_agl(runway_type):
                 continue
             cat_ii_iii = "Precision Approach CAT II/III" in (runway_type or "")
-            cat_i_optional = "Precision Approach CAT I" in (runway_type or "") and approach_rows.get(
-                ("__options__", "cat_i_tdz_lights")
-            )
-            if cat_ii_iii or cat_i_optional:
+            if cat_ii_iii:
                 self._append_tdz_lights(
                     features,
                     fields,

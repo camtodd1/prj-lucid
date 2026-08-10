@@ -42,11 +42,13 @@ class EasaVisualAidsQgisTests(unittest.TestCase):
         }
         options = {
             ("__options__", "runway_end_lights"): False,
-            ("__options__", "threshold_wing_bars"): True,
+            ("__options__", "threshold_wing_bars"): False,
+            ("__options__", "rtil"): False,
             ("__options__", "temp_displaced_threshold"): True,
             ("__options__", "stopway_lights"): False,
-            ("__options__", "centreline_lights"): True,
-            ("__options__", "centreline_low_visibility"): True,
+            ("__options__", "centreline_lights"): False,
+            ("__options__", "centreline_low_visibility"): False,
+            ("__options__", "cat_i_centreline_lights"): False,
             ("__options__", "tdz_lights"): False,
             ("__options__", "cat_i_tdz_lights"): False,
             (1, "primary"): {"length_m": 900.0, "spacing_m": 30.0},
@@ -63,7 +65,6 @@ class EasaVisualAidsQgisTests(unittest.TestCase):
                 [runway],
                 None,
                 threshold_inset_m=0.0,
-                centreline_offset_m=0.0,
                 default_approach_spacing_m=30.0,
                 approach_rows=options,
             )
@@ -78,7 +79,15 @@ class EasaVisualAidsQgisTests(unittest.TestCase):
         self.assertTrue(any(ref.startswith("CS ADR-DSN.M.675") for ref in refs), refs)
         self.assertTrue(all("Part 139 MOS" not in ref for ref in refs))
         self.assertTrue(
-            {"Runway End", "Stopway Edge", "Stopway End", "TDZ Barrette"}
+            {
+                "Runway End",
+                "Threshold Wing Bar",
+                "RTIL",
+                "Stopway Edge",
+                "Stopway End",
+                "Runway Centreline",
+                "TDZ Barrette",
+            }
             <= light_types,
             light_types,
         )

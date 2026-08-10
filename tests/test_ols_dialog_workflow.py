@@ -217,32 +217,18 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.dialog.checkBox_agl_enabled.setChecked(True)
         design_standard.setCurrentIndex(easa_index)
-        self.assertEqual(
-            self.dialog.groupBox_agl_elements.title(),
-            "EASA visual-aid options",
-        )
         self.assertIn("EASA CS-ADR-DSN Issue 7", self.dialog.label_agl_ruleset_caveat.text())
-        self.assertFalse(self.dialog.checkBox_agl_rtil.isEnabled())
-        self.assertFalse(self.dialog._get_agl_element_options()["rtil"])
+        self.assertIn("EASA source profile", self.dialog.groupBox_agl_approach.title())
 
         design_standard.setCurrentIndex(mos_index)
-        self.assertEqual(self.dialog.groupBox_agl_elements.title(), "MOS optional elements")
-        self.assertTrue(self.dialog.checkBox_agl_rtil.isEnabled())
         self.assertEqual(
             self.dialog.label_agl_edge_spacing.text(),
             "MOS edge spacing baseline (m)",
         )
 
         design_standard.setCurrentIndex(cap168_index)
-        self.assertEqual(
-            self.dialog.groupBox_agl_elements.title(),
-            "CAP 168 source-backed options",
-        )
-        self.assertIn("RVR ≥300 m", self.dialog.label_agl_ruleset_caveat.text())
-        self.assertIn("wider than 50 m", self.dialog.label_agl_ruleset_caveat.text())
-        self.assertIn("not generated or validated", self.dialog.label_agl_ruleset_caveat.text())
-        self.assertIn("RVR <300 m", self.dialog.checkBox_agl_centreline_low_visibility.text())
-        self.assertIn(">50 m", self.dialog.checkBox_agl_cat_i_centreline_lights.text())
+        self.assertIn("CAP 168 profile", self.dialog.groupBox_agl_approach.title())
+        self.assertIn("planned lighting audit", self.dialog.label_agl_ruleset_caveat.text())
 
     def test_agl_controls_are_grouped_by_generated_light_type_layer(self):
         expected_groups = {
@@ -250,19 +236,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "groupBox_agl_layer_threshold": [
                 self.dialog.lineEdit_agl_threshold_spacing,
                 self.dialog.lineEdit_agl_threshold_inset,
-            ],
-            "groupBox_agl_layer_threshold_wing_bar": [
-                self.dialog.checkBox_agl_threshold_wing_bars,
-            ],
-            "groupBox_agl_layer_rtil": [self.dialog.checkBox_agl_rtil],
-            "groupBox_agl_layer_runway_centreline": [
-                self.dialog.checkBox_agl_centreline_lights,
-                self.dialog.checkBox_agl_centreline_low_visibility,
-                self.dialog.checkBox_agl_cat_i_centreline_lights,
-                self.dialog.lineEdit_agl_centreline_offset,
-            ],
-            "groupBox_agl_layer_tdz_barrette": [
-                self.dialog.checkBox_agl_cat_i_tdz_lights,
             ],
             "groupBox_agl_approach": [
                 self.dialog.lineEdit_agl_approach_spacing,
@@ -287,16 +260,28 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "temp_displaced_threshold",
             "stopway_lights",
             "tdz_lights",
+            "threshold_wing_bars",
+            "rtil",
+            "centreline_lights",
+            "centreline_low_visibility",
+            "cat_i_centreline_lights",
+            "centreline_offset_m",
+            "cat_i_tdz_lights",
         }
         for object_name in (
             "checkBox_agl_runway_end_lights",
             "checkBox_agl_temp_displaced_threshold",
             "checkBox_agl_stopway_lights",
             "checkBox_agl_tdz_lights",
+            "checkBox_agl_threshold_wing_bars",
+            "checkBox_agl_rtil",
+            "checkBox_agl_centreline_lights",
+            "checkBox_agl_centreline_low_visibility",
+            "checkBox_agl_cat_i_centreline_lights",
+            "lineEdit_agl_centreline_offset",
+            "checkBox_agl_cat_i_tdz_lights",
         ):
-            self.assertIsNone(
-                self.dialog.findChild(QtWidgets.QCheckBox, object_name)
-            )
+            self.assertIsNone(self.dialog.findChild(QtWidgets.QWidget, object_name))
         self.assertTrue(
             removed_option_keys.isdisjoint(self.dialog._get_agl_save_options())
         )

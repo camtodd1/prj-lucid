@@ -187,6 +187,9 @@ class FamilyGenerationCommitTests(unittest.TestCase):
             "enabled": True,
             "runway_end_lights": True,
             "threshold_wing_bars": True,
+            "centreline_low_visibility": True,
+            "cat_i_centreline_lights": True,
+            "cat_i_tdz_lights": True,
             "approach_lighting": [],
         }
 
@@ -201,6 +204,10 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         runway_group = staged_agl.findGroup("Runway 09/27")
         self.assertIsNotNone(runway_group)
         self.assertGreater(len(runway_group.findLayers()), 1)
+        generated_light_types = {node.name() for node in runway_group.findLayers()}
+        self.assertIn("Threshold Wing Bar", generated_light_types)
+        self.assertNotIn("Runway Centreline", generated_light_types)
+        self.assertNotIn("TDZ Barrette", generated_light_types)
         for layer_node in runway_group.findLayers():
             light_types = {
                 str(feature.attribute("light_type"))
