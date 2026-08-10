@@ -50,8 +50,10 @@ class EasaVisualAidsQgisTests(unittest.TestCase):
             (1, "primary"): {"length_m": 900.0, "spacing_m": 30.0},
             (1, "reciprocal"): {"length_m": 900.0, "spacing_m": 30.0},
         }
-        captured = {}
-        builder._create_and_add_layer = lambda *args, **kwargs: captured.update(features=args[4]) or True
+        captured = {"features": []}
+        builder._create_and_add_layer = (
+            lambda *args, **kwargs: captured["features"].extend(args[4]) or True
+        )
 
         self.assertTrue(
             builder._create_agl_layer_for_runway(

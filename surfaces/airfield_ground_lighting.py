@@ -1,6 +1,7 @@
 """Optional Airfield Ground Lighting point generation."""
 
 import math
+import re
 import traceback
 from typing import Dict, List
 
@@ -401,16 +402,31 @@ class AirfieldGroundLightingMixin:
             )
 
         features = self._resolve_overlapping_agl_features(features, fields)
-        layer = self._create_and_add_layer(
-            "Point",
-            f"AGL_{runway_name.replace('/', '_')}",
-            f"{self.tr('AGL Lights')} {runway_name}",
-            fields,
-            features,
-            layer_group,
-            "AGL Light",
+        runway_group = (
+            self._ensure_layer_group(layer_group, f"{self.tr('Runway')} {runway_name}")
+            if layer_group is not None
+            else None
         )
-        return layer is not None
+        features_by_type: Dict[str, List[QgsFeature]] = {}
+        for feature in features:
+            light_type = str(feature.attribute("light_type") or self.tr("Other Lights"))
+            features_by_type.setdefault(light_type, []).append(feature)
+
+        created = False
+        runway_key = runway_name.replace("/", "_")
+        for light_type, light_features in features_by_type.items():
+            light_type_key = re.sub(r"[^A-Za-z0-9]+", "_", light_type).strip("_")
+            layer = self._create_and_add_layer(
+                "Point",
+                f"AGL_{runway_key}_{light_type_key}",
+                light_type,
+                fields,
+                light_features,
+                runway_group,
+                "AGL Light",
+            )
+            created = layer is not None or created
+        return created
 
     def _append_runway_edge_lights(
         self,

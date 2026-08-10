@@ -49,6 +49,32 @@ class LayerStyleTests(unittest.TestCase):
     def tearDown(self):
         QgsProject.instance().clear()
 
+    def test_split_agl_layer_keeps_only_populated_style_categories(self):
+        layer = QgsVectorLayer(
+            "Point?field=style_key:string&field=symbol_ang:double",
+            "Runway Edge",
+            "memory",
+        )
+        for index, style_key in enumerate(
+            ("variable white|bidirectional", "yellow|unidirectional")
+        ):
+            feature = QgsFeature(layer.fields())
+            feature.setAttributes([style_key, 45.0])
+            feature.setGeometry(QgsGeometry.fromPointXY(QgsPointXY(index, 0.0)))
+            layer.dataProvider().addFeature(feature)
+        layer.setCustomProperty("safeguarding_style_key", "AGL Light")
+
+        harness = LayerMixin()
+        harness.plugin_dir = str(Path(__file__).resolve().parents[1])
+        harness._apply_style(layer, dict(DEFAULT_STYLE_MAP))
+
+        renderer = layer.renderer()
+        self.assertEqual(renderer.type(), "categorizedSymbol")
+        self.assertEqual(
+            {str(category.value()) for category in renderer.categories()},
+            {"variable white|bidirectional", "yellow|unidirectional"},
+        )
+
     def test_conventional_ols_uses_the_modernised_surface_palette(self):
         polygon_keys = {
             "OLS Approach",

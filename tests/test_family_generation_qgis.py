@@ -197,6 +197,16 @@ class FamilyGenerationCommitTests(unittest.TestCase):
                 {"runways": [runway], "agl_options": options},
             )
         )
+        staged_agl = first_stage.findGroup(output_structure.AIRFIELD_GROUND_LIGHTING)
+        runway_group = staged_agl.findGroup("Runway 09/27")
+        self.assertIsNotNone(runway_group)
+        self.assertGreater(len(runway_group.findLayers()), 1)
+        for layer_node in runway_group.findLayers():
+            light_types = {
+                str(feature.attribute("light_type"))
+                for feature in layer_node.layer().getFeatures()
+            }
+            self.assertEqual(light_types, {layer_node.name()})
         first_count = self.builder._commit_family_stage(
             first_stage,
             main,

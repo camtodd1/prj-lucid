@@ -86,14 +86,6 @@ class AglOptionsMixin:
         control_layout.addWidget(self.label_agl_status)
         group_layout.addLayout(control_layout)
 
-        spacing_group = QtWidgets.QGroupBox("Generated runway lighting")
-        spacing_group.setObjectName("groupBox_agl_generated")
-        self.groupBox_agl_generated = spacing_group
-        spacing_layout = QtWidgets.QGridLayout(spacing_group)
-        spacing_layout.setHorizontalSpacing(12)
-        spacing_layout.setVerticalSpacing(6)
-        spacing_layout.setColumnStretch(0, 1)
-
         self.lineEdit_agl_edge_spacing = self._agl_line_edit("lineEdit_agl_edge_spacing", "60")
         self.lineEdit_agl_threshold_spacing = self._agl_line_edit("lineEdit_agl_threshold_spacing", "3")
         self.lineEdit_agl_threshold_inset = self._agl_line_edit("lineEdit_agl_threshold_inset", "0")
@@ -111,24 +103,49 @@ class AglOptionsMixin:
             "Default approach light spacing (m)"
         )
         self.label_agl_centreline_offset = QtWidgets.QLabel(
-            "Centreline light offset left of approach (m)"
+            "Centreline light lateral offset (m)"
         )
         self.label_agl_edge_spacing.setObjectName("label_agl_edge_spacing")
         self.label_agl_threshold_spacing.setObjectName("label_agl_threshold_spacing")
         self.label_agl_threshold_inset.setObjectName("label_agl_threshold_inset")
         self.label_agl_approach_spacing.setObjectName("label_agl_approach_spacing")
         self.label_agl_centreline_offset.setObjectName("label_agl_centreline_offset")
-        for row, (label, widget) in enumerate(
-            [
-                (self.label_agl_edge_spacing, self.lineEdit_agl_edge_spacing),
-                (self.label_agl_threshold_spacing, self.lineEdit_agl_threshold_spacing),
-                (self.label_agl_threshold_inset, self.lineEdit_agl_threshold_inset),
-                (self.label_agl_approach_spacing, self.lineEdit_agl_approach_spacing),
-                (self.label_agl_centreline_offset, self.lineEdit_agl_centreline_offset),
-            ]
-        ):
-            spacing_layout.addWidget(label, row, 0)
-            spacing_layout.addWidget(widget, row, 1)
+
+        def light_type_group(title: str, object_name: str):
+            layer_group = QtWidgets.QGroupBox(title)
+            layer_group.setObjectName(object_name)
+            layer_layout = QtWidgets.QGridLayout(layer_group)
+            layer_layout.setHorizontalSpacing(8)
+            layer_layout.setVerticalSpacing(6)
+            layer_layout.setColumnStretch(0, 1)
+            setattr(self, object_name, layer_group)
+            return layer_group, layer_layout
+
+        spacing_group = QtWidgets.QGroupBox("Generated light type layers")
+        spacing_group.setObjectName("groupBox_agl_generated")
+        self.groupBox_agl_generated = spacing_group
+        spacing_layout = QtWidgets.QGridLayout(spacing_group)
+        spacing_layout.setHorizontalSpacing(12)
+        spacing_layout.setVerticalSpacing(8)
+        spacing_layout.setColumnStretch(0, 1)
+        spacing_layout.setColumnStretch(1, 1)
+
+        edge_group, edge_layout = light_type_group(
+            "Runway Edge", "groupBox_agl_layer_runway_edge"
+        )
+        edge_layout.addWidget(self.label_agl_edge_spacing, 0, 0)
+        edge_layout.addWidget(self.lineEdit_agl_edge_spacing, 0, 1)
+
+        threshold_group, threshold_layout = light_type_group(
+            "Threshold", "groupBox_agl_layer_threshold"
+        )
+        threshold_layout.addWidget(self.label_agl_threshold_spacing, 0, 0)
+        threshold_layout.addWidget(self.lineEdit_agl_threshold_spacing, 0, 1)
+        threshold_layout.addWidget(self.label_agl_threshold_inset, 1, 0)
+        threshold_layout.addWidget(self.lineEdit_agl_threshold_inset, 1, 1)
+
+        spacing_layout.addWidget(edge_group, 0, 0)
+        spacing_layout.addWidget(threshold_group, 0, 1)
 
         group_layout.addWidget(spacing_group)
 
@@ -136,8 +153,10 @@ class AglOptionsMixin:
         elements_group.setObjectName("groupBox_agl_elements")
         self.groupBox_agl_elements = elements_group
         elements_layout = QtWidgets.QGridLayout(elements_group)
-        elements_layout.setHorizontalSpacing(18)
-        elements_layout.setVerticalSpacing(6)
+        elements_layout.setHorizontalSpacing(12)
+        elements_layout.setVerticalSpacing(8)
+        elements_layout.setColumnStretch(0, 1)
+        elements_layout.setColumnStretch(1, 1)
         self.checkBox_agl_runway_end_lights = QtWidgets.QCheckBox("Runway end lights")
         self.checkBox_agl_runway_end_lights.setObjectName("checkBox_agl_runway_end_lights")
         self.checkBox_agl_runway_end_lights.setChecked(True)
@@ -162,21 +181,52 @@ class AglOptionsMixin:
         self.checkBox_agl_tdz_lights.setChecked(True)
         self.checkBox_agl_cat_i_tdz_lights = QtWidgets.QCheckBox("Optional TDZ lights for CAT I")
         self.checkBox_agl_cat_i_tdz_lights.setObjectName("checkBox_agl_cat_i_tdz_lights")
-        for row, widget in enumerate(
-            [
-                self.checkBox_agl_runway_end_lights,
-                self.checkBox_agl_threshold_wing_bars,
-                self.checkBox_agl_rtil,
-                self.checkBox_agl_temp_displaced_threshold,
-                self.checkBox_agl_stopway_lights,
-                self.checkBox_agl_centreline_lights,
-                self.checkBox_agl_centreline_low_visibility,
-                self.checkBox_agl_cat_i_centreline_lights,
-                self.checkBox_agl_tdz_lights,
-                self.checkBox_agl_cat_i_tdz_lights,
-            ]
-        ):
-            elements_layout.addWidget(widget, row // 2, row % 2)
+        layer_sections = [
+            (
+                "Runway End",
+                "groupBox_agl_layer_runway_end",
+                [self.checkBox_agl_runway_end_lights],
+            ),
+            (
+                "Threshold Wing Bar",
+                "groupBox_agl_layer_threshold_wing_bar",
+                [self.checkBox_agl_threshold_wing_bars],
+            ),
+            ("RTIL", "groupBox_agl_layer_rtil", [self.checkBox_agl_rtil]),
+            (
+                "Temporary Displaced Threshold",
+                "groupBox_agl_layer_temp_displaced_threshold",
+                [self.checkBox_agl_temp_displaced_threshold],
+            ),
+            (
+                "Stopway Edge / Stopway End",
+                "groupBox_agl_layer_stopway",
+                [self.checkBox_agl_stopway_lights],
+            ),
+            (
+                "Runway Centreline",
+                "groupBox_agl_layer_runway_centreline",
+                [
+                    self.checkBox_agl_centreline_lights,
+                    self.checkBox_agl_centreline_low_visibility,
+                    self.checkBox_agl_cat_i_centreline_lights,
+                ],
+            ),
+            (
+                "TDZ Barrette",
+                "groupBox_agl_layer_tdz_barrette",
+                [self.checkBox_agl_tdz_lights, self.checkBox_agl_cat_i_tdz_lights],
+            ),
+        ]
+        for index, (title, object_name, widgets) in enumerate(layer_sections):
+            layer_box, layer_layout = light_type_group(title, object_name)
+            for row, widget in enumerate(widgets):
+                layer_layout.addWidget(widget, row, 0, 1, 2)
+            if object_name == "groupBox_agl_layer_runway_centreline":
+                row = len(widgets)
+                layer_layout.addWidget(self.label_agl_centreline_offset, row, 0)
+                layer_layout.addWidget(self.lineEdit_agl_centreline_offset, row, 1)
+            elements_layout.addWidget(layer_box, index, 0, 1, 2)
         group_layout.addWidget(elements_group)
 
         self.label_agl_ruleset_caveat = QtWidgets.QLabel()
@@ -185,10 +235,18 @@ class AglOptionsMixin:
         self.label_agl_ruleset_caveat.setTextFormat(QtCore.Qt.TextFormat.PlainText)
         group_layout.addWidget(self.label_agl_ruleset_caveat)
 
-        approach_group = QtWidgets.QGroupBox("Per-end approach lighting")
+        approach_group = QtWidgets.QGroupBox(
+            "Approach Centreline / Crossbar / Barrettes"
+        )
         approach_group.setObjectName("groupBox_agl_approach")
         self.groupBox_agl_approach = approach_group
         approach_layout = QtWidgets.QVBoxLayout(approach_group)
+
+        approach_parameters = QtWidgets.QGridLayout()
+        approach_parameters.setColumnStretch(0, 1)
+        approach_parameters.addWidget(self.label_agl_approach_spacing, 0, 0)
+        approach_parameters.addWidget(self.lineEdit_agl_approach_spacing, 0, 1)
+        approach_layout.addLayout(approach_parameters)
 
         self.table_agl_approach = QtWidgets.QTableWidget()
         self.table_agl_approach.setObjectName("table_agl_approach")
@@ -616,7 +674,9 @@ class AglOptionsMixin:
 
         if is_easa:
             self.groupBox_agl_elements.setTitle("EASA visual-aid options")
-            self.groupBox_agl_approach.setTitle("Per-end approach lighting (EASA source profile)")
+            self.groupBox_agl_approach.setTitle(
+                "Approach Centreline / Crossbar / Barrettes (EASA source profile)"
+            )
             self.label_agl_edge_spacing.setText("EASA instrument runway edge spacing (m)")
             self.label_agl_threshold_spacing.setText("EASA precision threshold max spacing (m)")
             self.checkBox_agl_runway_end_lights.setText("Runway end lights")
@@ -665,7 +725,9 @@ class AglOptionsMixin:
             self.groupBox_agl_elements.setTitle(
                 "MOS optional elements" if is_mos139 else f"{profile.display_name} lighting options"
             )
-            self.groupBox_agl_approach.setTitle("Per-end approach lighting")
+            self.groupBox_agl_approach.setTitle(
+                "Approach Centreline / Crossbar / Barrettes"
+            )
             self.label_agl_edge_spacing.setText(
                 "MOS edge spacing baseline (m)" if is_mos139 else "Edge spacing baseline (m)"
             )
@@ -700,7 +762,9 @@ class AglOptionsMixin:
 
             if is_cap168:
                 self.groupBox_agl_elements.setTitle("CAP 168 source-backed options")
-                self.groupBox_agl_approach.setTitle("Per-end approach lighting (CAP 168 profile)")
+                self.groupBox_agl_approach.setTitle(
+                    "Approach Centreline / Crossbar / Barrettes (CAP 168 profile)"
+                )
                 self.label_agl_edge_spacing.setText("CAP 168 runway edge spacing baseline (m)")
                 self.label_agl_threshold_spacing.setText(
                     "CAP 168 precision threshold max spacing (m)"

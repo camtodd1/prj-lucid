@@ -515,6 +515,7 @@ class LayerMixin:
                             )
                             return
                     if str(style_key) == "AGL Light":
+                        self._prune_agl_renderer_categories(layer)
                         self._apply_agl_rotation_field(layer)
                     if str(style_key) in {
                         "Annex 14 OFS Surface",
@@ -1364,3 +1365,17 @@ class LayerMixin:
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
+
+    def _prune_agl_renderer_categories(self, layer: QgsVectorLayer) -> None:
+        """Keep the existing AGL symbols while hiding categories absent from a split layer."""
+        renderer = layer.renderer()
+        if renderer is None or renderer.type() != "categorizedSymbol":
+            return
+        present_values = {
+            str(feature.attribute("style_key") or "")
+            for feature in layer.getFeatures()
+        }
+        for index in reversed(range(len(renderer.categories()))):
+            if str(renderer.categories()[index].value()) not in present_values:
+                renderer.deleteCategory(index)
+        layer.setRenderer(renderer)

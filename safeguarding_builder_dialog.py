@@ -936,7 +936,7 @@ class SafeguardingBuilderDialog(
         self._workflow_tab_labels = [
             ("tab_airport", "Aerodrome"),
             ("tab_runways", "RWY Infra"),
-            ("tab_runway_protection", "Runway Protection"),
+            ("tab_runway_protection", "RWY Protect"),
             ("tab_ols", "OLS"),
             ("tab_cns", "CNS/MET"),
             ("tab_lighting", "AGL"),
@@ -961,7 +961,7 @@ class SafeguardingBuilderDialog(
         if tab_widget is not None:
             tab_bar = tab_widget.tabBar()
             tab_bar.setUsesScrollButtons(False)
-            tab_bar.setExpanding(True)
+            tab_bar.setExpanding(False)
             for target_index, (tab_name, tab_text) in enumerate(self._workflow_tab_labels):
                 tab_page = getattr(self, tab_name, None)
                 index = tab_widget.indexOf(tab_page) if tab_page is not None else -1
@@ -1874,8 +1874,9 @@ class SafeguardingBuilderDialog(
                     top: -1px;
                 }
                 QTabBar::tab {
-                    min-width: 0px;
-                    padding: 6px 5px;
+                    min-width: 75px;
+                    max-width: 75px;
+                    padding: 6px 0px;
                     margin-right: 1px;
                     background: #eeeeee;
                     border: 1px solid #bcbcbc;
@@ -1925,6 +1926,15 @@ class SafeguardingBuilderDialog(
             "groupBox_agl_generated",
             "groupBox_agl_elements",
             "groupBox_agl_approach",
+            "groupBox_agl_layer_runway_edge",
+            "groupBox_agl_layer_threshold",
+            "groupBox_agl_layer_runway_end",
+            "groupBox_agl_layer_threshold_wing_bar",
+            "groupBox_agl_layer_rtil",
+            "groupBox_agl_layer_temp_displaced_threshold",
+            "groupBox_agl_layer_stopway",
+            "groupBox_agl_layer_runway_centreline",
+            "groupBox_agl_layer_tdz_barrette",
         ]
         for name in panel_names:
             group = getattr(self, name, self.findChild(QtWidgets.QGroupBox, name))

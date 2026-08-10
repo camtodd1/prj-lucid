@@ -135,7 +135,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             [
                 "Aerodrome",
                 "RWY Infra",
-                "Runway Protection",
+                "RWY Protect",
                 "OLS",
                 "CNS/MET",
                 "AGL",
@@ -147,12 +147,15 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         tab_bar = tabs.tabBar()
         self.assertFalse(tab_bar.usesScrollButtons())
-        self.assertTrue(tab_bar.expanding())
+        self.assertFalse(tab_bar.expanding())
         self.dialog.resize(800, 760)
         self.dialog.show()
         self.app.processEvents()
+        tab_widths = [tab_bar.tabRect(index).width() for index in range(tabs.count())]
+        self.assertEqual(len(set(tab_widths)), 1)
         self.assertLessEqual(tab_bar.tabRect(tabs.count() - 1).right(), tab_bar.width())
         self.assertTrue(tabs.tabToolTip(1).startswith("Runway Infrastructure"))
+        self.assertTrue(tabs.tabToolTip(2).startswith("Runway Protection"))
 
     def test_airport_family_validation_does_not_require_runway_inputs(self):
         self.dialog.lineEdit_airport_name.setText("YTST")
@@ -245,6 +248,51 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertIn("not generated or validated", self.dialog.label_agl_ruleset_caveat.text())
         self.assertIn("RVR <300 m", self.dialog.checkBox_agl_centreline_low_visibility.text())
         self.assertIn(">50 m", self.dialog.checkBox_agl_cat_i_centreline_lights.text())
+
+    def test_agl_controls_are_grouped_by_generated_light_type_layer(self):
+        expected_groups = {
+            "groupBox_agl_layer_runway_edge": [self.dialog.lineEdit_agl_edge_spacing],
+            "groupBox_agl_layer_threshold": [
+                self.dialog.lineEdit_agl_threshold_spacing,
+                self.dialog.lineEdit_agl_threshold_inset,
+            ],
+            "groupBox_agl_layer_runway_end": [
+                self.dialog.checkBox_agl_runway_end_lights,
+            ],
+            "groupBox_agl_layer_threshold_wing_bar": [
+                self.dialog.checkBox_agl_threshold_wing_bars,
+            ],
+            "groupBox_agl_layer_rtil": [self.dialog.checkBox_agl_rtil],
+            "groupBox_agl_layer_temp_displaced_threshold": [
+                self.dialog.checkBox_agl_temp_displaced_threshold,
+            ],
+            "groupBox_agl_layer_stopway": [self.dialog.checkBox_agl_stopway_lights],
+            "groupBox_agl_layer_runway_centreline": [
+                self.dialog.checkBox_agl_centreline_lights,
+                self.dialog.checkBox_agl_centreline_low_visibility,
+                self.dialog.checkBox_agl_cat_i_centreline_lights,
+                self.dialog.lineEdit_agl_centreline_offset,
+            ],
+            "groupBox_agl_layer_tdz_barrette": [
+                self.dialog.checkBox_agl_tdz_lights,
+                self.dialog.checkBox_agl_cat_i_tdz_lights,
+            ],
+            "groupBox_agl_approach": [
+                self.dialog.lineEdit_agl_approach_spacing,
+                self.dialog.table_agl_approach,
+            ],
+        }
+        for group_name, controls in expected_groups.items():
+            group = getattr(self.dialog, group_name)
+            for control in controls:
+                self.assertTrue(group.isAncestorOf(control), (group_name, control.objectName()))
+        self.dialog.resize(800, 760)
+        self.dialog.tabWidget_workflow.setCurrentWidget(self.dialog.tab_lighting)
+        self.dialog.show()
+        self.app.processEvents()
+        self.assertFalse(
+            self.dialog.scrollArea_agl_options.horizontalScrollBar().isVisible()
+        )
 
     def test_legacy_modernised_design_standard_loads_as_current_annex(self):
         self.dialog._apply_loaded_payload(
