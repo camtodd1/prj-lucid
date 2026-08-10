@@ -10,6 +10,7 @@ FAMILY_RUNWAYS = "runways"
 FAMILY_CNS = "cns"
 FAMILY_OLS = "ols"
 FAMILY_LIGHTING = "lighting"
+FAMILY_EXTERNAL = "external"
 
 GENERATABLE_FAMILIES: Tuple[str, ...] = (
     FAMILY_AIRPORT,
@@ -17,14 +18,16 @@ GENERATABLE_FAMILIES: Tuple[str, ...] = (
     FAMILY_CNS,
     FAMILY_OLS,
     FAMILY_LIGHTING,
+    FAMILY_EXTERNAL,
 )
 
 FAMILY_LABELS = {
-    FAMILY_AIRPORT: "Airport",
-    FAMILY_RUNWAYS: "Runways",
+    FAMILY_AIRPORT: "Aerodrome",
+    FAMILY_RUNWAYS: "Runway Infrastructure",
     FAMILY_CNS: "CNS",
     FAMILY_OLS: "OLS",
-    FAMILY_LIGHTING: "Lighting",
+    FAMILY_LIGHTING: "AGL",
+    FAMILY_EXTERNAL: "External Safeguarding",
 }
 
 FAMILY_INPUT_KEYS = {
@@ -75,6 +78,15 @@ FAMILY_INPUT_KEYS = {
         "runways",
         "agl_options",
     ),
+    FAMILY_EXTERNAL: (
+        "icao_code",
+        "arp_easting",
+        "arp_northing",
+        "safeguarding_framework",
+        "safeguarding_options",
+        "runway_configuration",
+        "runways",
+    ),
 }
 
 
@@ -98,6 +110,7 @@ def family_input_signature(
 __all__ = [
     "FAMILY_AIRPORT",
     "FAMILY_CNS",
+    "FAMILY_EXTERNAL",
     "FAMILY_INPUT_KEYS",
     "FAMILY_LABELS",
     "FAMILY_LIGHTING",

@@ -3,6 +3,7 @@ import unittest
 from core.family_modules import (
     FAMILY_AIRPORT,
     FAMILY_CNS,
+    FAMILY_EXTERNAL,
     FAMILY_LIGHTING,
     FAMILY_OLS,
     family_input_signature,
@@ -74,6 +75,20 @@ class FamilyModuleSignatureTests(unittest.TestCase):
         self.assertNotEqual(
             family_input_signature(inputs, FAMILY_OLS, "EPSG:28355"),
             family_input_signature(inputs, FAMILY_OLS, "EPSG:7855"),
+        )
+
+    def test_external_family_tracks_shared_arp_and_runway_inputs(self):
+        baseline = {
+            "icao_code": "YTEST",
+            "arp_easting": 500000.0,
+            "arp_northing": 7000000.0,
+            "runways": [{"width": 30.0}],
+        }
+        changed = {**baseline, "arp_easting": 500010.0}
+
+        self.assertNotEqual(
+            family_input_signature(baseline, FAMILY_EXTERNAL, "EPSG:28355"),
+            family_input_signature(changed, FAMILY_EXTERNAL, "EPSG:28355"),
         )
 
 

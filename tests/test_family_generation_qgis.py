@@ -18,6 +18,7 @@ sys.path.insert(0, str(WORKSPACE.parent))
 from safeguarding_builder.core.family_modules import (
     FAMILY_AIRPORT,
     FAMILY_CNS,
+    FAMILY_EXTERNAL,
     FAMILY_LIGHTING,
     FAMILY_RUNWAYS,
 )
@@ -62,8 +63,7 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         physical.addLayer(unrelated)
 
         stage = root.addGroup("stage")
-        stage_infrastructure = stage.addGroup("02 Aerodrome Infrastructure")
-        stage_agl = stage_infrastructure.addGroup("Airfield Ground Lighting")
+        stage_agl = stage.addGroup(output_structure.AIRFIELD_GROUND_LIGHTING)
         new_agl = self.layer("New AGL", FAMILY_LIGHTING)
         stage_agl.addLayer(new_agl)
 
@@ -79,7 +79,7 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         self.assertIsNone(QgsProject.instance().mapLayer(old_agl_id))
         self.assertIs(QgsProject.instance().mapLayer(unrelated.id()), unrelated)
         self.assertIs(QgsProject.instance().mapLayer(new_agl.id()), new_agl)
-        committed_agl = main.findGroup("Airfield Ground Lighting")
+        committed_agl = main.findGroup(output_structure.AIRFIELD_GROUND_LIGHTING)
         self.assertIsNotNone(committed_agl.findLayer(new_agl.id()))
 
     def test_empty_stage_keeps_previous_family_outputs(self):
@@ -101,6 +101,43 @@ class FamilyGenerationCommitTests(unittest.TestCase):
 
         self.assertEqual(moved, 0)
         self.assertIs(QgsProject.instance().mapLayer(old_agl.id()), old_agl)
+
+    def test_family_run_migrates_legacy_reference_group_name(self):
+        root = QgsProject.instance().layerTreeRoot()
+        main = root.addGroup("YBAS Safeguarding Builder")
+        legacy = main.addGroup(output_structure.LEGACY_REFERENCE_DATA)
+        legacy_layer = self.layer("YBAS ARP")
+        legacy.addLayer(legacy_layer)
+        legacy_infrastructure = main.addGroup(
+            output_structure.LEGACY_AERODROME_INFRASTRUCTURE
+        )
+        legacy_agl = legacy_infrastructure.addGroup("Airfield Ground Lighting")
+        agl_layer = self.layer("YBAS AGL")
+        legacy_agl.addLayer(agl_layer)
+        main.addGroup(output_structure.LEGACY_RUNWAY_PROTECTION)
+        main.addGroup(output_structure.LEGACY_CNS_TECHNICAL_SAFEGUARDING)
+        main.addGroup(output_structure.LEGACY_EXTERNAL_SAFEGUARDING)
+
+        resolved = self.builder._family_main_group(root, "YBAS")
+
+        self.assertIs(resolved, main)
+        self.assertIsNone(main.findGroup(output_structure.LEGACY_REFERENCE_DATA))
+        renamed = main.findGroup(output_structure.REFERENCE_DATA)
+        self.assertIsNotNone(renamed)
+        self.assertIsNotNone(renamed.findLayer(legacy_layer.id()))
+        for legacy_name in (
+            output_structure.LEGACY_AERODROME_INFRASTRUCTURE,
+            output_structure.LEGACY_RUNWAY_PROTECTION,
+            output_structure.LEGACY_CNS_TECHNICAL_SAFEGUARDING,
+            output_structure.LEGACY_EXTERNAL_SAFEGUARDING,
+        ):
+            self.assertIsNone(main.findGroup(legacy_name))
+        self.assertIsNotNone(main.findGroup(output_structure.AERODROME_INFRASTRUCTURE))
+        self.assertIsNotNone(main.findGroup(output_structure.RUNWAY_PROTECTION_AND_SEPARATION))
+        self.assertIsNotNone(main.findGroup(output_structure.CNS_TECHNICAL_SAFEGUARDING))
+        self.assertIsNotNone(main.findGroup(output_structure.EXTERNAL_SAFEGUARDING))
+        promoted_agl = main.findGroup(output_structure.AIRFIELD_GROUND_LIGHTING)
+        self.assertIsNotNone(promoted_agl.findLayer(agl_layer.id()))
 
     def test_lighting_family_generates_owned_layers_and_replaces_prior_run(self):
         project = QgsProject.instance()
@@ -235,6 +272,10 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         self.assertIsNotNone(physical)
         self.assertIn("YBAS Runway Pavement", {node.name() for node in physical.findLayers()})
         self.assertEqual(
+            stage.findGroup(output_structure.EXTERNAL_SAFEGUARDING).findLayers(),
+            [],
+        )
+        self.assertEqual(
             {
                 str(node.layer().customProperty("safeguarding_builder/module_id") or "")
                 for node in physical.findLayers()
@@ -299,6 +340,10 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         technical = stage.findGroup(output_structure.CNS_TECHNICAL_SAFEGUARDING)
         station = technical.findGroup(output_structure.METEOROLOGICAL_STATION)
         self.assertIsNone(station)
+        self.assertEqual(
+            stage.findGroup(output_structure.EXTERNAL_SAFEGUARDING).findLayers(),
+            [],
+        )
 
     def test_cns_family_routes_source_facilities_to_technical_safeguarding(self):
         project = QgsProject.instance()
@@ -394,6 +439,87 @@ class FamilyGenerationCommitTests(unittest.TestCase):
 
         self.assertIsNone(QgsProject.instance().mapLayer(met_layer_id))
         self.assertIsNone(technical.findGroup(output_structure.METEOROLOGICAL_STATION))
+
+    def test_external_family_generates_only_external_safeguarding_layers(self):
+        fixture_path = WORKSPACE / "tests" / "fixtures" / "ols" / "ybas_1rwy_single.json"
+        payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+        project = QgsProject.instance()
+        project.setCrs(QgsCoordinateReferenceSystem("EPSG:28353"))
+        dialog = SafeguardingBuilderDialog()
+        self.addCleanup(dialog.deleteLater)
+        dialog._airport_lookup_timer.stop()
+        dialog._apply_loaded_payload(payload)
+        dialog._airport_lookup_timer.stop()
+        input_data = dialog.get_all_input_data(FAMILY_EXTERNAL)
+        self.assertIsNotNone(input_data)
+
+        self.builder.plugin_dir = str(WORKSPACE)
+        self.builder._run_log = None
+        self.builder.tr = lambda value: value
+        self.builder.successfully_generated_layers = []
+        self.builder._active_generation_module_id = FAMILY_EXTERNAL
+        self.builder._active_generation_signature = "signature"
+        self.builder._active_generation_run_id = "run-id"
+        self.builder.output_filename_prefix = ""
+        self.builder._configure_family_generation_context(input_data)
+        stage = project.layerTreeRoot().addGroup("external-stage")
+
+        self.assertTrue(
+            self.builder._run_external_family(stage, input_data, project.crs())
+        )
+        external = stage.findGroup(output_structure.EXTERNAL_SAFEGUARDING)
+        self.assertGreater(len(external.findLayers()), 0)
+        self.assertTrue(
+            all(
+                node.layer().customProperty("safeguarding_builder/module_id")
+                == FAMILY_EXTERNAL
+                for node in external.findLayers()
+            )
+        )
+        for group_name in (
+            output_structure.REFERENCE_DATA,
+            output_structure.AERODROME_INFRASTRUCTURE,
+            output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
+        ):
+            self.assertEqual(stage.findGroup(group_name).findLayers(), [])
+
+    def test_generate_all_setup_preserves_terrain_and_airport_map_groups(self):
+        project = QgsProject.instance()
+        root = project.layerTreeRoot()
+        main = root.addGroup("YBAS Safeguarding Builder")
+        terrain = main.addGroup(output_structure.TERRAIN_ANALYSIS)
+        terrain_layer = self.layer("Terrain clearance")
+        terrain.addLayer(terrain_layer)
+        airport_map = main.addGroup(output_structure.IMPORTED_AIRPORT_MAP)
+        map_layer = self.layer("Runways")
+        airport_map.addLayer(map_layer)
+
+        rebuilt = self.builder._setup_main_group(
+            root,
+            "YBAS Safeguarding Builder",
+            project,
+        )
+        self.builder.framework = get_framework_profile()
+        self.builder.baseline_ols_ruleset = EASA_PROFILE
+        self.builder.comparison_ols_ruleset = None
+        self.builder.protected_airspace_ruleset = EASA_PROFILE
+        self.builder.protected_airspace_policy = "ruleset_aligned"
+        self.builder._create_output_layer_groups(rebuilt, agl_enabled=True)
+
+        self.assertEqual(
+            [child.name() for child in rebuilt.children()],
+            list(output_structure.SECTION_ORDER[:-1]),
+        )
+        self.assertIsNotNone(
+            rebuilt.findGroup(output_structure.TERRAIN_ANALYSIS).findLayer(
+                terrain_layer.id()
+            )
+        )
+        self.assertIsNotNone(
+            rebuilt.findGroup(output_structure.IMPORTED_AIRPORT_MAP).findLayer(
+                map_layer.id()
+            )
+        )
 
 
 if __name__ == "__main__":

@@ -224,6 +224,8 @@ class SafeguardingBuilderDialog(
         self._setup_cns_manual_entry()
         self._setup_ils_bra_inputs()
         self._setup_agl_options_ui()
+        self._setup_runway_protection_tab()
+        self._setup_external_safeguarding_tab()
         self._setup_dem_tools_ui()
         self._setup_airport_map_tab()
 
@@ -632,6 +634,54 @@ class SafeguardingBuilderDialog(
         self.verticalLayout_airportMapTab.addStretch(1)
         tab_widget.addTab(self.tab_airport_map, "Airport Map")
 
+    def _setup_runway_protection_tab(self) -> None:
+        """Add the planned Runway Protection family as a placeholder tab."""
+        tab_widget = getattr(self, "tabWidget_workflow", None)
+        if tab_widget is None or getattr(self, "tab_runway_protection", None) is not None:
+            return
+        self.tab_runway_protection = QtWidgets.QWidget()
+        self.tab_runway_protection.setObjectName("tab_runway_protection")
+        self.verticalLayout_runwayProtectionTab = QtWidgets.QVBoxLayout(
+            self.tab_runway_protection
+        )
+        self.verticalLayout_runwayProtectionTab.setContentsMargins(8, 8, 8, 8)
+        self.verticalLayout_runwayProtectionTab.setSpacing(8)
+        notice = QtWidgets.QGroupBox("Runway Protection", self.tab_runway_protection)
+        notice_layout = QtWidgets.QVBoxLayout(notice)
+        message = QtWidgets.QLabel(
+            "Runway protection inputs and independent generation will be added here. "
+            "For now, these layers remain part of Runway Infrastructure generation.",
+            notice,
+        )
+        message.setWordWrap(True)
+        notice_layout.addWidget(message)
+        self.verticalLayout_runwayProtectionTab.addWidget(notice)
+        self.verticalLayout_runwayProtectionTab.addStretch(1)
+        tab_widget.addTab(self.tab_runway_protection, "Runway Protection")
+
+    def _setup_external_safeguarding_tab(self) -> None:
+        """Add the independently generated External Safeguarding family tab."""
+        tab_widget = getattr(self, "tabWidget_workflow", None)
+        if tab_widget is None or getattr(self, "tab_external", None) is not None:
+            return
+        self.tab_external = QtWidgets.QWidget()
+        self.tab_external.setObjectName("tab_external")
+        self.verticalLayout_externalTab = QtWidgets.QVBoxLayout(self.tab_external)
+        self.verticalLayout_externalTab.setContentsMargins(8, 8, 8, 8)
+        self.verticalLayout_externalTab.setSpacing(8)
+        notice = QtWidgets.QGroupBox("External Safeguarding", self.tab_external)
+        notice_layout = QtWidgets.QVBoxLayout(notice)
+        message = QtWidgets.QLabel(
+            "Generate planning and consultation layers from the configured aerodrome, "
+            "runways and safeguarding framework.",
+            notice,
+        )
+        message.setWordWrap(True)
+        notice_layout.addWidget(message)
+        self.verticalLayout_externalTab.addWidget(notice)
+        self.verticalLayout_externalTab.addStretch(1)
+        tab_widget.addTab(self.tab_external, "External Safeguarding")
+
     def _style_global_context_groupbox(self, groupbox: Optional[QtWidgets.QGroupBox]) -> None:
         """Apply identical title and border geometry to the top setup cards."""
         if groupbox is None:
@@ -884,11 +934,13 @@ class SafeguardingBuilderDialog(
     def _setup_workflow_tab_state(self) -> None:
         """Prepare plain workflow tabs; readiness is shown in the summary strip."""
         self._workflow_tab_labels = [
-            ("tab_airport", "Airport"),
-            ("tab_runways", "Runways"),
-            ("tab_cns", "CNS"),
+            ("tab_airport", "Aerodrome"),
+            ("tab_runways", "Runway Infrastructure"),
+            ("tab_runway_protection", "Runway Protection"),
             ("tab_ols", "OLS"),
-            ("tab_lighting", "Lighting"),
+            ("tab_cns", "CNS & MET"),
+            ("tab_lighting", "AGL"),
+            ("tab_external", "External Safeguarding"),
             ("tab_terrain", "Terrain"),
             ("tab_airport_map", "Airport Map"),
             ("tab_output", "Output"),
@@ -917,16 +969,24 @@ class SafeguardingBuilderDialog(
                 "summary": "Define each runway and its operating distances.",
             },
             {
-                "tab": "tab_cns",
-                "summary": "Add CNS facilities, ILS safeguarding and the optional weather station.",
+                "tab": "tab_runway_protection",
+                "summary": "Configure runway protection and safeguarding layers.",
             },
             {
                 "tab": "tab_ols",
                 "summary": "Choose which protected-airspace layers to create.",
             },
             {
+                "tab": "tab_cns",
+                "summary": "Add CNS facilities, ILS safeguarding and the optional weather station.",
+            },
+            {
                 "tab": "tab_lighting",
                 "summary": "Add airfield and approach lighting when needed.",
+            },
+            {
+                "tab": "tab_external",
+                "summary": "Create external planning and consultation safeguards.",
             },
             {
                 "tab": "tab_terrain",
@@ -946,11 +1006,13 @@ class SafeguardingBuilderDialog(
         explicit_layout_names = {
             "tab_airport": "verticalLayout_airportTab",
             "tab_runways": "verticalLayout_runwaysTab",
+            "tab_runway_protection": "verticalLayout_runwayProtectionTab",
             "tab_cns": "verticalLayout_cnsTab",
             "tab_ols": "verticalLayout_olsTab",
             "tab_output": "verticalLayout_outputTab",
             "tab_terrain": "verticalLayout_terrainTab",
             "tab_airport_map": "verticalLayout_airportMapTab",
+            "tab_external": "verticalLayout_externalTab",
         }
         layout_name = explicit_layout_names.get(tab_name)
         layout = getattr(self, layout_name, None) if layout_name else None
@@ -1011,6 +1073,7 @@ class SafeguardingBuilderDialog(
             "tab_cns": "cns",
             "tab_ols": "ols",
             "tab_lighting": "lighting",
+            "tab_external": "external",
         }
         self._family_generation_buttons = {}
         for tab_name, family_id in tab_families.items():
@@ -1813,11 +1876,13 @@ class SafeguardingBuilderDialog(
         for layout_name in [
             "verticalLayout_airportTab",
             "verticalLayout_runwaysTab",
+            "verticalLayout_runwayProtectionTab",
             "verticalLayout_cnsTab",
             "verticalLayout_olsTab",
             "verticalLayout_outputTab",
             "verticalLayout_terrainTab",
             "verticalLayout_airportMapTab",
+            "verticalLayout_externalTab",
         ]:
             layout = getattr(self, layout_name, None)
             if isinstance(layout, QtWidgets.QVBoxLayout):
@@ -2830,6 +2895,11 @@ class SafeguardingBuilderDialog(
             runway_tab_state = "warning"
             runway_tab_tip = "No runways defined."
         self._set_workflow_tab_state("tab_runways", runway_tab_state, runway_tab_tip)
+        self._set_workflow_tab_state(
+            "tab_runway_protection",
+            "optional",
+            "Placeholder — independent runway-protection generation is planned.",
+        )
 
         self._set_workflow_tab_state(
             "tab_cns",
@@ -2844,6 +2914,17 @@ class SafeguardingBuilderDialog(
             agl_dependencies["state"],
             agl_dependencies["summary"],
         )
+        external_state = (
+            "ready"
+            if runway_ready and airport_dependencies["arp_pair_ready"]
+            else "blocked"
+        )
+        external_tip = (
+            "Aerodrome and runway inputs are ready for external safeguarding."
+            if external_state == "ready"
+            else "Complete the ARP and runway inputs before generating external safeguards."
+        )
+        self._set_workflow_tab_state("tab_external", external_state, external_tip)
 
         if not identity_generation_ready:
             output_tab_state = "blocked"
@@ -2906,11 +2987,16 @@ class SafeguardingBuilderDialog(
             {
                 "tab_airport": (airport_context_text, airport_tab_state),
                 "tab_runways": (runway_context_text, runway_tab_state),
+                "tab_runway_protection": ("Planned", "optional"),
                 "tab_cns": (cns_context_text, cns_dependencies["state"]),
                 "tab_ols": (ols_context_text, ols_dependencies["state"]),
                 "tab_lighting": (
                     "Enabled" if agl_dependencies["enabled"] else "Off",
                     agl_dependencies["state"],
+                ),
+                "tab_external": (
+                    "Ready" if external_state == "ready" else "Needs inputs",
+                    external_state,
                 ),
                 "tab_output": (output_context_text, output_tab_state),
                 "tab_airport_map": (
@@ -3279,6 +3365,7 @@ class SafeguardingBuilderDialog(
             "cns",
             "ols",
             "lighting",
+            "external",
         }
         validate_ols = family_id is None or family_id == "ols"
         validate_agl = family_id is None or family_id == "lighting"
@@ -3286,6 +3373,7 @@ class SafeguardingBuilderDialog(
         validate_external_options = family_id is None or family_id in {
             "airport",
             "runways",
+            "external",
         }
         final_data = {}
         validation_ok = True

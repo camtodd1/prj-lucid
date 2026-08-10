@@ -150,18 +150,33 @@ class OlsLayerGroupingTests(unittest.TestCase):
         self.assertEqual(
             [child.name() for child in main_group.children()],
             [
-                "01 Reference Data",
-                "02 Aerodrome Infrastructure",
-                "03 Runway Protection and Separation",
+                "01 Aerodrome Reference Data",
+                "02 Runway Infrastructure",
+                "03 Runway Protection and Safeguarding",
                 "04 Obstacle Limitation Surfaces",
-                "05 CNS / Technical Safeguarding",
-                "06 External Safeguarding",
+                "05 CNS / Technical Facilities",
+                "07 External Safeguarding",
             ],
         )
         self.assertIs(
             groups["cns_technical_safeguarding"],
-            self.direct_group(main_group, "05 CNS / Technical Safeguarding"),
+            self.direct_group(main_group, "05 CNS / Technical Facilities"),
         )
+
+    def test_agl_is_a_top_level_group_before_external_safeguarding(self):
+        self.builder.framework = get_framework_profile()
+        self.builder.baseline_ols_ruleset = get_ruleset_profile("mos139_2019")
+        self.builder.protected_airspace_ruleset = self.builder.baseline_ols_ruleset
+        self.builder.comparison_ols_ruleset = None
+        main_group = QgsLayerTreeGroup("TEST")
+
+        groups = self.builder._create_output_layer_groups(main_group, agl_enabled=True)
+
+        self.assertEqual(
+            [child.name() for child in main_group.children()][5:],
+            ["06 Airfield Ground Lighting", "07 External Safeguarding"],
+        )
+        self.assertIs(groups["airfield_ground_lighting"].parent(), main_group)
 
     def test_debug_development_group_can_be_enabled_for_diagnostics(self):
         self.builder.framework = get_framework_profile()
@@ -178,7 +193,7 @@ class OlsLayerGroupingTests(unittest.TestCase):
 
     def test_generated_layer_groups_are_collapsed_and_unchecked_recursively(self):
         main_group = QgsLayerTreeGroup("TEST")
-        cns_group = main_group.addGroup("05 CNS / Technical Safeguarding")
+        cns_group = main_group.addGroup("05 CNS / Technical Facilities")
         cns_group.addGroup("Radio Link")
         for group in (main_group, cns_group):
             group.setExpanded(True)

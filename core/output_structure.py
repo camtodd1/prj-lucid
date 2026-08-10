@@ -1,19 +1,27 @@
 # -*- coding: utf-8 -*-
 """Generated layer tree labels for Safeguarding Builder outputs."""
 
-REFERENCE_DATA = "01 Reference Data"
-AERODROME_INFRASTRUCTURE = "02 Aerodrome Infrastructure"
-RUNWAY_PROTECTION_AND_SEPARATION = "03 Runway Protection and Separation"
+REFERENCE_DATA = "01 Aerodrome Reference Data"
+LEGACY_REFERENCE_DATA = "01 Reference Data"
+AERODROME_INFRASTRUCTURE = "02 Runway Infrastructure"
+RUNWAY_PROTECTION_AND_SEPARATION = "03 Runway Protection and Safeguarding"
 PROTECTED_AIRSPACE = "04 Obstacle Limitation Surfaces"
-CNS_TECHNICAL_SAFEGUARDING = "05 CNS / Technical Safeguarding"
-EXTERNAL_SAFEGUARDING = "06 External Safeguarding"
+CNS_TECHNICAL_SAFEGUARDING = "05 CNS / Technical Facilities"
+AIRFIELD_GROUND_LIGHTING = "06 Airfield Ground Lighting"
+EXTERNAL_SAFEGUARDING = "07 External Safeguarding"
+TERRAIN_ANALYSIS = "08 Terrain Analysis"
+IMPORTED_AIRPORT_MAP = "09 Imported Airport Map"
 DEBUG_DEVELOPMENT = "99 Debug / Development"
+
+LEGACY_AERODROME_INFRASTRUCTURE = "02 Aerodrome Infrastructure"
+LEGACY_RUNWAY_PROTECTION = "03 Runway Protection and Separation"
+LEGACY_CNS_TECHNICAL_SAFEGUARDING = "05 CNS / Technical Safeguarding"
+LEGACY_EXTERNAL_SAFEGUARDING = "06 External Safeguarding"
 
 RUNWAY_CENTRE_LINES = "Runway Centrelines"
 CNS_TECHNICAL_FACILITIES = "CNS / Technical Facilities"
 METEOROLOGICAL_STATION = "Meteorological Instrument Station"
 
-AIRFIELD_GROUND_LIGHTING = "Airfield Ground Lighting"
 MARKINGS = "Markings"
 PHYSICAL_GEOMETRY = "Physical Geometry"
 
@@ -37,7 +45,10 @@ SECTION_ORDER = [
     RUNWAY_PROTECTION_AND_SEPARATION,
     PROTECTED_AIRSPACE,
     CNS_TECHNICAL_SAFEGUARDING,
+    AIRFIELD_GROUND_LIGHTING,
     EXTERNAL_SAFEGUARDING,
+    TERRAIN_ANALYSIS,
+    IMPORTED_AIRPORT_MAP,
     DEBUG_DEVELOPMENT,
 ]
 
@@ -52,6 +63,12 @@ __all__ = [
     "CONTROLLING_SURFACES",
     "DEBUG_DEVELOPMENT",
     "EXTERNAL_SAFEGUARDING",
+    "IMPORTED_AIRPORT_MAP",
+    "LEGACY_AERODROME_INFRASTRUCTURE",
+    "LEGACY_CNS_TECHNICAL_SAFEGUARDING",
+    "LEGACY_EXTERNAL_SAFEGUARDING",
+    "LEGACY_REFERENCE_DATA",
+    "LEGACY_RUNWAY_PROTECTION",
     "MARKINGS",
     "METEOROLOGICAL_STATION",
     "OBSTACLE_FREE_ZONE",
@@ -67,4 +84,5 @@ __all__ = [
     "SECONDARY_SURFACES",
     "SECTION_ORDER",
     "SPECIALISED_RUNWAY_SAFEGUARDING",
+    "TERRAIN_ANALYSIS",
 ]

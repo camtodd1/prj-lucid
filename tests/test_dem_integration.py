@@ -397,13 +397,10 @@ class DemIntegrationTests(unittest.TestCase):
 
         mixin = TestTerrainMixin()
         group = mixin._terrain_output_group()
-        matching_groups = [
-            child
-            for child in root.children()
-            if isinstance(child, QgsLayerTreeGroup)
-            and child.name() == "TEST Terrain Analysis"
-        ]
-        self.assertEqual(matching_groups, [group])
+        main_group = root.findGroup("TEST Safeguarding Builder")
+        self.assertIsNotNone(main_group)
+        self.assertIs(main_group.findGroup("08 Terrain Analysis"), group)
+        self.assertIsNone(root.findGroup("TEST Terrain Analysis"))
         self.assertEqual(
             {node.layerId() for node in group.findLayers()},
             {dem_layer.id(), old_analysis_id},
@@ -498,7 +495,7 @@ class DemIntegrationTests(unittest.TestCase):
             ):
                 TestTerrainMixin().create_terrain_analysis_layers()
 
-            group = project.layerTreeRoot().findGroup("TEST Terrain Analysis")
+            group = project.layerTreeRoot().findGroup("08 Terrain Analysis")
             self.assertIsNotNone(group)
             self.assertEqual(
                 {node.layer().name() for node in group.findLayers()},

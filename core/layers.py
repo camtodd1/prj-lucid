@@ -33,6 +33,7 @@ from qgis.core import (  # type: ignore
 )
 
 from .constants import LAYER_FEATURE_BATCH_SIZE
+from . import output_structure
 from .run_log import QgsMessageLog
 
 PLUGIN_TAG = "SafeguardingBuilder"
@@ -89,8 +90,39 @@ class LayerMixin:
     ) -> Optional[QgsLayerTreeGroup]:
         """Finds and clears or creates the main layer group."""
         existing_group = root_node.findGroup(group_name)
+        preserved_groups = []
+
+        def snapshot_group(group):
+            contents = []
+            for node in group.children():
+                if isinstance(node, QgsLayerTreeGroup):
+                    contents.append(("group", node.name(), snapshot_group(node)))
+                elif isinstance(node, QgsLayerTreeLayer) and node.layer() is not None:
+                    contents.append(("layer", node.layer()))
+            return contents
+
+        def restore_group(group, contents):
+            for item in contents:
+                if item[0] == "group":
+                    child_group = group.addGroup(item[1])
+                    restore_group(child_group, item[2])
+                else:
+                    group.addLayer(item[1])
+
         if existing_group is not None:
             QgsMessageLog.logMessage(f"Removing existing group: {group_name}", PLUGIN_TAG, level=Qgis.Info)
+            for child in list(existing_group.children()):
+                if (
+                    isinstance(child, QgsLayerTreeGroup)
+                    and child.name()
+                    in {
+                        output_structure.TERRAIN_ANALYSIS,
+                        output_structure.IMPORTED_AIRPORT_MAP,
+                    }
+                ):
+                    preserved_groups.append((child.name(), snapshot_group(child)))
+                    if existing_group.takeChild(child):
+                        child.deleteLater()
             self._remove_group_recursively(existing_group, project)
             parent_node = existing_group.parent()
             if parent_node is not None:
@@ -99,6 +131,9 @@ class LayerMixin:
         if main_group is None:
             QgsMessageLog.logMessage(f"Failed create group: {group_name}", PLUGIN_TAG, level=Qgis.Critical)
             return None
+        for preserved_name, preserved_contents in preserved_groups:
+            restored_group = main_group.addGroup(preserved_name)
+            restore_group(restored_group, preserved_contents)
         self._stage_layer_tree_node(main_group)
         return main_group
 

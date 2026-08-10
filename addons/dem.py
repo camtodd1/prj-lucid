@@ -29,6 +29,7 @@ from ..core.dem_integration import (
     open_topography_dialog,
     raster_has_terrain_values,
 )
+from ..core import output_structure
 from ..guidelines.controlling_ols_engine import PlanarControllingOlsEngine
 
 
@@ -474,10 +475,56 @@ class DemIntegrationMixin:
     def _terrain_output_group(self) -> QgsLayerTreeGroup:
         root = QgsProject.instance().layerTreeRoot()
         airport = self._terrain_airport_code()
-        group_name = f"{airport} Terrain Analysis" if airport else "Terrain Analysis"
-        group = self._consolidate_terrain_group(root, group_name)
+        main_name = f"{airport} Safeguarding Builder" if airport else "Safeguarding Builder"
+        main_group = next(
+            (
+                child
+                for child in root.children()
+                if isinstance(child, QgsLayerTreeGroup) and child.name() == main_name
+            ),
+            None,
+        )
+        if main_group is None:
+            main_group = root.addGroup(main_name)
+        group = next(
+            (
+                child
+                for child in main_group.children()
+                if isinstance(child, QgsLayerTreeGroup)
+                and child.name() == output_structure.TERRAIN_ANALYSIS
+            ),
+            None,
+        )
         if group is None:
-            group = root.addGroup(group_name)
+            insert_index = len(main_group.children())
+            for index, child in enumerate(main_group.children()):
+                if isinstance(child, QgsLayerTreeGroup) and child.name() in {
+                    output_structure.IMPORTED_AIRPORT_MAP,
+                    output_structure.DEBUG_DEVELOPMENT,
+                }:
+                    insert_index = index
+                    break
+            group = main_group.insertGroup(
+                insert_index,
+                output_structure.TERRAIN_ANALYSIS,
+            )
+
+        legacy_names = {
+            "Terrain Analysis",
+            f"{airport} Terrain Analysis" if airport else "Terrain Analysis",
+        }
+        existing_layer_ids = {node.layerId() for node in group.findLayers()}
+        for legacy_group in list(root.children()):
+            if not isinstance(legacy_group, QgsLayerTreeGroup):
+                continue
+            if legacy_group.name() not in legacy_names:
+                continue
+            for layer_node in legacy_group.findLayers():
+                layer = layer_node.layer()
+                if layer is not None and layer.id() not in existing_layer_ids:
+                    group.addLayer(layer)
+                    existing_layer_ids.add(layer.id())
+            root.removeChildNode(legacy_group)
         group.setItemVisibilityChecked(True)
         group.setExpanded(True)
         return group

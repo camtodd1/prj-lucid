@@ -99,7 +99,14 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         emitted = []
         self.dialog.familyGenerationRequested.connect(emitted.append)
 
-        for family in ("airport", "runways", "cns", "ols", "lighting"):
+        for family in (
+            "airport",
+            "runways",
+            "cns",
+            "ols",
+            "lighting",
+            "external",
+        ):
             button = self.dialog.findChild(
                 QtWidgets.QPushButton,
                 f"pushButton_generate_{family}_family",
@@ -113,6 +120,31 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         ).click()
         self.assertEqual(emitted, ["lighting"])
         self.assertEqual(self.dialog.pushButton_Generate.text(), "Generate all layers")
+        self.assertIsNone(
+            self.dialog.findChild(
+                QtWidgets.QPushButton,
+                "pushButton_generate_runway_protection_family",
+            )
+        )
+
+    def test_workflow_tabs_place_ols_before_cns(self):
+        tabs = self.dialog.tabWidget_workflow
+
+        self.assertEqual(
+            [tabs.tabText(index) for index in range(tabs.count())],
+            [
+                "Aerodrome",
+                "Runway Infrastructure",
+                "Runway Protection",
+                "OLS",
+                "CNS & MET",
+                "AGL",
+                "External Safeguarding",
+                "Terrain",
+                "Airport Map",
+                "Output",
+            ],
+        )
 
     def test_airport_family_validation_does_not_require_runway_inputs(self):
         self.dialog.lineEdit_airport_name.setText("YTST")

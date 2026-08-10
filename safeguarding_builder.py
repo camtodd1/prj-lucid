@@ -58,6 +58,7 @@ from .core import output_structure
 from .core.family_modules import (
     FAMILY_AIRPORT,
     FAMILY_CNS,
+    FAMILY_EXTERNAL,
     FAMILY_LABELS,
     FAMILY_LIGHTING,
     FAMILY_OLS,
@@ -850,6 +851,24 @@ class SafeguardingBuilder(
             prepared.append(runway_data)
         return prepared
 
+    def _merge_group_contents(
+        self,
+        source_group: QgsLayerTreeGroup,
+        destination_group: QgsLayerTreeGroup,
+    ) -> None:
+        """Merge a legacy group into its renamed replacement without losing layers."""
+        for child in list(source_group.children()):
+            if isinstance(child, QgsLayerTreeGroup):
+                existing = self._find_direct_child_group(
+                    destination_group,
+                    child.name(),
+                )
+                if existing is not None:
+                    self._merge_group_contents(child, existing)
+                    source_group.removeChildNode(child)
+                    continue
+            self._move_layer_tree_node(child, destination_group)
+
     def _family_main_group(
         self,
         root: QgsLayerTreeGroup,
@@ -860,6 +879,77 @@ class SafeguardingBuilder(
         if group is None:
             group = root.addGroup(group_name)
             self._stage_layer_tree_node(group)
+        legacy_reference = self._find_direct_child_group(
+            group,
+            self.tr(output_structure.LEGACY_REFERENCE_DATA),
+        )
+        if legacy_reference is not None:
+            reference_group = self._find_direct_child_group(
+                group,
+                self.tr(output_structure.REFERENCE_DATA),
+            )
+            if reference_group is None:
+                legacy_reference.setName(self.tr(output_structure.REFERENCE_DATA))
+            else:
+                self._merge_group_contents(legacy_reference, reference_group)
+                group.removeChildNode(legacy_reference)
+        for legacy_name, current_name in (
+            (
+                output_structure.LEGACY_AERODROME_INFRASTRUCTURE,
+                output_structure.AERODROME_INFRASTRUCTURE,
+            ),
+            (
+                output_structure.LEGACY_RUNWAY_PROTECTION,
+                output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
+            ),
+            (
+                output_structure.LEGACY_CNS_TECHNICAL_SAFEGUARDING,
+                output_structure.CNS_TECHNICAL_SAFEGUARDING,
+            ),
+            (
+                output_structure.LEGACY_EXTERNAL_SAFEGUARDING,
+                output_structure.EXTERNAL_SAFEGUARDING,
+            ),
+        ):
+            legacy_group = self._find_direct_child_group(
+                group,
+                self.tr(legacy_name),
+            )
+            if legacy_group is None:
+                continue
+            current_group = self._find_direct_child_group(
+                group,
+                self.tr(current_name),
+            )
+            if current_group is None:
+                legacy_group.setName(self.tr(current_name))
+            else:
+                self._merge_group_contents(legacy_group, current_group)
+                group.removeChildNode(legacy_group)
+
+        infrastructure_group = self._find_direct_child_group(
+            group,
+            self.tr(output_structure.AERODROME_INFRASTRUCTURE),
+        )
+        nested_agl = (
+            self._find_direct_child_group(
+                infrastructure_group,
+                self.tr("Airfield Ground Lighting"),
+            )
+            if infrastructure_group is not None
+            else None
+        )
+        if nested_agl is not None:
+            top_level_agl = self._find_direct_child_group(
+                group,
+                self.tr(output_structure.AIRFIELD_GROUND_LIGHTING),
+            )
+            if top_level_agl is None:
+                nested_agl.setName(self.tr(output_structure.AIRFIELD_GROUND_LIGHTING))
+                self._move_layer_tree_node(nested_agl, group)
+            else:
+                self._merge_group_contents(nested_agl, top_level_agl)
+                infrastructure_group.removeChildNode(nested_agl)
         return group
 
     def _remove_group_path(
@@ -898,22 +988,12 @@ class SafeguardingBuilder(
             project.removeMapLayers(owned_layer_ids)
 
         legacy_paths = {
-            FAMILY_AIRPORT: (
-                (output_structure.EXTERNAL_SAFEGUARDING, "Wildlife Hazard Management"),
-                (output_structure.EXTERNAL_SAFEGUARDING, "Wildlife Consultation"),
-                (output_structure.EXTERNAL_SAFEGUARDING, "Wind Turbines and Renewable Energy"),
-                (output_structure.EXTERNAL_SAFEGUARDING, "Wind Turbine Safeguarding"),
-                (output_structure.EXTERNAL_SAFEGUARDING, "Crane Notification Zone"),
-            ),
+            FAMILY_AIRPORT: (),
             FAMILY_RUNWAYS: (
                 (output_structure.REFERENCE_DATA, output_structure.RUNWAY_CENTRE_LINES),
                 (output_structure.AERODROME_INFRASTRUCTURE, output_structure.MARKINGS),
                 (output_structure.AERODROME_INFRASTRUCTURE, output_structure.PHYSICAL_GEOMETRY),
                 (output_structure.RUNWAY_PROTECTION_AND_SEPARATION,),
-                (output_structure.EXTERNAL_SAFEGUARDING, "Building-Induced Windshear / Turbulence"),
-                (output_structure.EXTERNAL_SAFEGUARDING, "Lighting and Glare Control"),
-                (output_structure.EXTERNAL_SAFEGUARDING, "Public Safety Areas"),
-                (output_structure.EXTERNAL_SAFEGUARDING, "Public Safety Zones"),
             ),
             FAMILY_CNS: (
                 (output_structure.AERODROME_INFRASTRUCTURE, output_structure.METEOROLOGICAL_STATION),
@@ -923,7 +1003,16 @@ class SafeguardingBuilder(
             ),
             FAMILY_OLS: ((output_structure.PROTECTED_AIRSPACE,),),
             FAMILY_LIGHTING: (
-                (output_structure.AERODROME_INFRASTRUCTURE, output_structure.AIRFIELD_GROUND_LIGHTING),
+                (
+                    output_structure.LEGACY_AERODROME_INFRASTRUCTURE,
+                    "Airfield Ground Lighting",
+                ),
+                (output_structure.AERODROME_INFRASTRUCTURE, "Airfield Ground Lighting"),
+                (output_structure.AIRFIELD_GROUND_LIGHTING,),
+            ),
+            FAMILY_EXTERNAL: (
+                (output_structure.LEGACY_EXTERNAL_SAFEGUARDING,),
+                (output_structure.EXTERNAL_SAFEGUARDING,),
             ),
         }
         for path in legacy_paths.get(family_id, ()):
@@ -1046,7 +1135,6 @@ class SafeguardingBuilder(
     ) -> bool:
         groups = self._create_output_layer_groups(stage_group, False)
         reference_group = groups["reference_data"]
-        external_group = groups["external_safeguarding"]
         created = False
         arp_point = input_data.get("arp_point")
         if arp_point is not None:
@@ -1061,18 +1149,7 @@ class SafeguardingBuilder(
                     input_data.get("arp_elevation"),
                 )
             ) or created
-        guideline_groups = self._create_guideline_groups(external_group, False)
-        wildlife, turbines, _ = self._process_airport_safeguarding(
-            arp_point,
-            [],
-            [],
-            self.icao_code,
-            target_crs,
-            guideline_groups,
-        )
-        return created or wildlife or turbines or bool(
-            self.successfully_generated_layers
-        )
+        return created or bool(self.successfully_generated_layers)
 
     def _run_runways_family(
         self,
@@ -1105,17 +1182,44 @@ class SafeguardingBuilder(
                 "specialised_safeguarding": groups.get("specialised_safeguarding"),
             },
         )
-        guideline_groups = self._create_guideline_groups(
-            groups["external_safeguarding"],
-            False,
-        )
         runway_safeguarding_ok = self._process_runways_part2(
             processed,
-            guideline_groups,
+            {},
             specialised,
             None,
         )
         return base_ok or physical_ok or runway_safeguarding_ok
+
+    def _run_external_family(
+        self,
+        stage_group: QgsLayerTreeGroup,
+        input_data: Dict[str, Any],
+        target_crs: QgsCoordinateReferenceSystem,
+    ) -> bool:
+        groups = self._create_output_layer_groups(stage_group, False)
+        guideline_groups = self._create_guideline_groups(
+            groups["external_safeguarding"],
+            False,
+        )
+        airport_results = self._process_airport_safeguarding(
+            input_data.get("arp_point"),
+            [],
+            [],
+            self.icao_code,
+            target_crs,
+            guideline_groups,
+        )
+        processed = self._prepare_runway_data_for_family(
+            input_data.get("runways", [])
+        )
+        runway_ok = self._process_runways_part2(
+            processed,
+            guideline_groups,
+            None,
+            None,
+            process_specialised=False,
+        )
+        return any(airport_results) or runway_ok
 
     def _run_cns_family(
         self,
@@ -1349,6 +1453,12 @@ class SafeguardingBuilder(
                 )
             elif family_id == FAMILY_OLS:
                 generated = self._run_ols_family(stage_group, input_data)
+            elif family_id == FAMILY_EXTERNAL:
+                generated = self._run_external_family(
+                    stage_group,
+                    input_data,
+                    target_crs,
+                )
             else:
                 generated = self._run_lighting_family(stage_group, input_data)
 
@@ -1609,7 +1719,29 @@ class SafeguardingBuilder(
         project = QgsProject.instance()
         target_crs = project.crs()
         root = project.layerTreeRoot()
-        group = root.addGroup(self.tr("Airport Layout Elements"))
+        airport = str(getattr(self, "icao_code", "") or "").strip().upper()
+        dialog = getattr(self, "dlg", None)
+        if not airport and dialog is not None:
+            airport = dialog.lineEdit_airport_name.text().strip().upper()
+        main_name = (
+            f"{airport} {self.tr('Safeguarding Builder')}"
+            if airport
+            else self.tr("Safeguarding Builder")
+        )
+        main_group = self._find_direct_child_group(root, main_name)
+        if main_group is None:
+            main_group = root.addGroup(main_name)
+        group = self._ensure_layer_group(
+            main_group,
+            output_structure.IMPORTED_AIRPORT_MAP,
+        )
+        legacy_group = self._find_direct_child_group(
+            root,
+            self.tr("Airport Layout Elements"),
+        )
+        if legacy_group is not None:
+            self._merge_group_contents(legacy_group, group)
+            root.removeChildNode(legacy_group)
         category_sources: Dict[
             str,
             List[
@@ -3489,7 +3621,23 @@ class SafeguardingBuilder(
             return None
         group = self._find_direct_child_group(parent_group, self.tr(name))
         if group is None:
-            group = parent_group.addGroup(self.tr(name))
+            translated_name = self.tr(name)
+            if name in output_structure.SECTION_ORDER:
+                order_index = output_structure.SECTION_ORDER.index(name)
+                insert_index = len(parent_group.children())
+                for index, child in enumerate(parent_group.children()):
+                    if not isinstance(child, QgsLayerTreeGroup):
+                        continue
+                    child_name = child.name()
+                    if child_name in output_structure.SECTION_ORDER and (
+                        output_structure.SECTION_ORDER.index(child_name)
+                        > order_index
+                    ):
+                        insert_index = index
+                        break
+                group = parent_group.insertGroup(insert_index, translated_name)
+            else:
+                group = parent_group.addGroup(translated_name)
         self._stage_layer_tree_node(group)
         return group
 
@@ -3530,6 +3678,14 @@ class SafeguardingBuilder(
         groups["cns_technical_safeguarding"] = self._ensure_layer_group(
             main_group, output_structure.CNS_TECHNICAL_SAFEGUARDING
         )
+        groups["airfield_ground_lighting"] = (
+            self._ensure_layer_group(
+                main_group,
+                output_structure.AIRFIELD_GROUND_LIGHTING,
+            )
+            if agl_enabled
+            else None
+        )
         groups["external_safeguarding"] = self._ensure_layer_group(
             main_group, self.get_active_framework().safeguarding_group_name()
         )
@@ -3542,10 +3698,6 @@ class SafeguardingBuilder(
 
         infrastructure_group = groups["aerodrome_infrastructure"]
         if infrastructure_group is not None:
-            if agl_enabled:
-                groups["airfield_ground_lighting"] = self._ensure_layer_group(
-                    infrastructure_group, output_structure.AIRFIELD_GROUND_LIGHTING
-                )
             groups["markings"] = self._ensure_layer_group(infrastructure_group, output_structure.MARKINGS)
             groups["physical_geometry"] = self._ensure_layer_group(
                 infrastructure_group, output_structure.PHYSICAL_GEOMETRY
@@ -4091,9 +4243,36 @@ class SafeguardingBuilder(
             elif "Centreline" in layer_name and runway_centreline_group is not None:
                 self._move_layer_tree_node(child, runway_centreline_group)
 
+        agl_group = self._find_direct_child_group(
+            main_group,
+            self.tr(output_structure.AIRFIELD_GROUND_LIGHTING),
+        )
+        for source_parent in (main_group, infrastructure_group):
+            for legacy_agl_name in (
+                "Airfield Ground Lighting (AGL)",
+                "Airfield Ground Lighting",
+            ):
+                legacy_agl = self._find_direct_child_group(
+                    source_parent,
+                    self.tr(legacy_agl_name),
+                )
+                if legacy_agl is None or legacy_agl == agl_group:
+                    continue
+                if agl_group is None:
+                    legacy_agl.setName(
+                        self.tr(output_structure.AIRFIELD_GROUND_LIGHTING)
+                    )
+                    if source_parent != main_group:
+                        self._move_layer_tree_node(legacy_agl, main_group)
+                    agl_group = self._find_direct_child_group(
+                        main_group,
+                        self.tr(output_structure.AIRFIELD_GROUND_LIGHTING),
+                    )
+                else:
+                    self._merge_group_contents(legacy_agl, agl_group)
+                    source_parent.removeChildNode(legacy_agl)
+
         for group_name in [
-            "Airfield Ground Lighting (AGL)",
-            output_structure.AIRFIELD_GROUND_LIGHTING,
             output_structure.MARKINGS,
             output_structure.PHYSICAL_GEOMETRY,
         ]:
@@ -4466,6 +4645,7 @@ class SafeguardingBuilder(
         runway_ols_group: Optional[QgsLayerTreeGroup] = None,
         airport_wide_ols_group: Optional[QgsLayerTreeGroup] = None,
         ols_runway_data_list: Optional[List[dict]] = None,
+        process_specialised: bool = True,
     ) -> bool:
         """Generate runway-specific safeguarding outputs."""
         any_guideline_processed_ok = False
@@ -4516,10 +4696,10 @@ class SafeguardingBuilder(
                 # Add calls for other safeguarding generators as they are implemented.
 
                 # Specialised Surfaces
-                if specialised_group_node is not None:
+                if process_specialised and specialised_group_node is not None:
                     run_success_flags.append(self.process_raoa(runway_data, specialised_group_node))
                     run_success_flags.append(self.process_taxiway_separation(runway_data, specialised_group_node))
-                else:
+                elif process_specialised:
                     QgsMessageLog.logMessage(
                         f"Skipping Specialised surfaces for {rwy_name}: Group missing.",
                         PLUGIN_TAG,
