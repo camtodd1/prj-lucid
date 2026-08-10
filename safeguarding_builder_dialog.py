@@ -935,19 +935,33 @@ class SafeguardingBuilderDialog(
         """Prepare plain workflow tabs; readiness is shown in the summary strip."""
         self._workflow_tab_labels = [
             ("tab_airport", "Aerodrome"),
-            ("tab_runways", "Runway Infrastructure"),
+            ("tab_runways", "RWY Infra"),
             ("tab_runway_protection", "Runway Protection"),
             ("tab_ols", "OLS"),
-            ("tab_cns", "CNS & MET"),
+            ("tab_cns", "CNS/MET"),
             ("tab_lighting", "AGL"),
-            ("tab_external", "External Safeguarding"),
+            ("tab_external", "External"),
             ("tab_terrain", "Terrain"),
-            ("tab_airport_map", "Airport Map"),
+            ("tab_airport_map", "Map"),
             ("tab_output", "Output"),
         ]
+        self._workflow_tab_titles = {
+            "tab_airport": "Aerodrome",
+            "tab_runways": "Runway Infrastructure",
+            "tab_runway_protection": "Runway Protection",
+            "tab_ols": "OLS",
+            "tab_cns": "CNS & MET",
+            "tab_lighting": "AGL",
+            "tab_external": "External Safeguarding",
+            "tab_terrain": "Terrain",
+            "tab_airport_map": "Airport Map",
+            "tab_output": "Output",
+        }
         tab_widget = getattr(self, "tabWidget_workflow", None)
         if tab_widget is not None:
             tab_bar = tab_widget.tabBar()
+            tab_bar.setUsesScrollButtons(False)
+            tab_bar.setExpanding(True)
             for target_index, (tab_name, tab_text) in enumerate(self._workflow_tab_labels):
                 tab_page = getattr(self, tab_name, None)
                 index = tab_widget.indexOf(tab_page) if tab_page is not None else -1
@@ -955,6 +969,10 @@ class SafeguardingBuilderDialog(
                     if index != target_index:
                         tab_bar.moveTab(index, target_index)
                     tab_widget.setTabText(target_index, tab_text)
+                    tab_widget.setTabToolTip(
+                        target_index,
+                        self._workflow_tab_titles[tab_name],
+                    )
             tab_widget.currentChanged.connect(self._sync_workflow_context)
 
     def _workflow_tab_specs(self) -> List[Dict[str, Any]]:
@@ -1141,7 +1159,11 @@ class SafeguardingBuilderDialog(
             return
         tab_widget.setTabIcon(index, QtGui.QIcon())
         tab_widget.tabBar().setTabTextColor(index, QtGui.QColor("#333333"))
-        tab_widget.setTabToolTip(index, tooltip)
+        title = getattr(self, "_workflow_tab_titles", {}).get(tab_name, "")
+        tab_widget.setTabToolTip(
+            index,
+            f"{title}\n\n{tooltip}" if title else tooltip,
+        )
 
     def _set_readiness_strip_state(
         self,
@@ -1852,8 +1874,8 @@ class SafeguardingBuilderDialog(
                     top: -1px;
                 }
                 QTabBar::tab {
-                    min-width: 82px;
-                    padding: 6px 12px;
+                    min-width: 0px;
+                    padding: 6px 5px;
                     margin-right: 1px;
                     background: #eeeeee;
                     border: 1px solid #bcbcbc;

@@ -134,17 +134,25 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             [tabs.tabText(index) for index in range(tabs.count())],
             [
                 "Aerodrome",
-                "Runway Infrastructure",
+                "RWY Infra",
                 "Runway Protection",
                 "OLS",
-                "CNS & MET",
+                "CNS/MET",
                 "AGL",
-                "External Safeguarding",
+                "External",
                 "Terrain",
-                "Airport Map",
+                "Map",
                 "Output",
             ],
         )
+        tab_bar = tabs.tabBar()
+        self.assertFalse(tab_bar.usesScrollButtons())
+        self.assertTrue(tab_bar.expanding())
+        self.dialog.resize(800, 760)
+        self.dialog.show()
+        self.app.processEvents()
+        self.assertLessEqual(tab_bar.tabRect(tabs.count() - 1).right(), tab_bar.width())
+        self.assertTrue(tabs.tabToolTip(1).startswith("Runway Infrastructure"))
 
     def test_airport_family_validation_does_not_require_runway_inputs(self):
         self.dialog.lineEdit_airport_name.setText("YTST")

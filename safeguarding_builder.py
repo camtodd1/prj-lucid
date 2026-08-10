@@ -28,6 +28,8 @@ from qgis.PyQt.QtWidgets import (  # type: ignore
     QPushButton,
 )
 
+DOCK_FIXED_WIDTH = 800
+
 # --- QGIS Imports ---
 from qgis.core import (  # type: ignore
     QgsApplication,
@@ -687,6 +689,7 @@ class SafeguardingBuilder(
             try:
                 self.dock = QDockWidget(self.tr("Safeguarding Builder"), parent_window)
                 self.dock.setObjectName("SafeguardingBuilderDock")
+                self.dock.setFixedWidth(DOCK_FIXED_WIDTH)
                 self.dock.setAllowedAreas(
                     Qt.DockWidgetArea.LeftDockWidgetArea
                     | Qt.DockWidgetArea.RightDockWidgetArea
