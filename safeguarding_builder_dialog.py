@@ -236,6 +236,7 @@ class SafeguardingBuilderDialog(
         self._setup_workflow_tab_state()
         self._setup_workflow_context_strips()
         self._setup_family_generation_controls()
+        self._setup_workflow_scroll_areas()
         self._style_workflow_panels()
 
         if self.scroll_area_layout is not None:
@@ -1082,6 +1083,59 @@ class SafeguardingBuilderDialog(
             setattr(self, f"_workflow_context_ready_{tab_name}", True)
 
         self._sync_workflow_context()
+
+    def _setup_workflow_scroll_areas(self) -> None:
+        """Give direct-layout workflow pages a bounded vertical viewport."""
+        self._workflow_scroll_areas: Dict[str, QtWidgets.QScrollArea] = {}
+        internally_scrolled_tabs = {"tab_runways", "tab_lighting"}
+
+        for spec in self._workflow_tab_specs():
+            tab_name = str(spec["tab"])
+            if tab_name in internally_scrolled_tabs:
+                continue
+
+            page = getattr(self, tab_name, None)
+            content_layout = self._workflow_tab_layout(tab_name)
+            context = getattr(self, "_workflow_context_widgets", {}).get(tab_name, {}).get("frame")
+            if page is None or content_layout is None or context is None:
+                continue
+
+            margins = content_layout.contentsMargins()
+            spacing = content_layout.spacing()
+            content_layout.removeWidget(context)
+
+            # Move the existing named layout intact so code that adds or locates
+            # controls through verticalLayout_* continues to work.
+            layout_holder = QtWidgets.QWidget()
+            layout_holder.setLayout(content_layout)
+            scroll_content = QtWidgets.QWidget()
+            scroll_content.setObjectName(f"widget_workflow_scroll_content_{tab_name}")
+            scroll_content.setLayout(content_layout)
+            content_layout.setContentsMargins(0, 0, 0, 0)
+            content_layout.setSpacing(spacing)
+            content_layout.setSizeConstraint(QtWidgets.QLayout.SizeConstraint.SetMinimumSize)
+
+            page_layout = QtWidgets.QVBoxLayout(page)
+            page_layout.setObjectName(f"verticalLayout_workflow_viewport_{tab_name}")
+            page_layout.setContentsMargins(
+                margins.left(), margins.top(), margins.right(), margins.bottom()
+            )
+            page_layout.setSpacing(spacing)
+            page_layout.addWidget(context)
+
+            scroll_area = QtWidgets.QScrollArea(page)
+            scroll_area.setObjectName(f"scrollArea_workflow_{tab_name}")
+            scroll_area.setWidgetResizable(True)
+            scroll_area.setFrameShape(QtWidgets.QFrame.Shape.NoFrame)
+            scroll_area.setHorizontalScrollBarPolicy(
+                QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+            )
+            scroll_area.setVerticalScrollBarPolicy(
+                QtCore.Qt.ScrollBarPolicy.ScrollBarAsNeeded
+            )
+            scroll_area.setWidget(scroll_content)
+            page_layout.addWidget(scroll_area, 1)
+            self._workflow_scroll_areas[tab_name] = scroll_area
 
     def _setup_family_generation_controls(self) -> None:
         """Add one scoped generate/update action to each output-family tab."""

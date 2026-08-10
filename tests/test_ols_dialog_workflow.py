@@ -1401,6 +1401,19 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
         self.assertLess(self.dialog.minimumSizeHint().height(), 700)
 
+    def test_long_workflow_tabs_scroll_instead_of_compressing_controls(self):
+        self.dialog.resize(800, 650)
+        self.dialog.show()
+        for tab_name in ("tab_cns", "tab_ols", "tab_terrain"):
+            with self.subTest(tab=tab_name):
+                page = getattr(self.dialog, tab_name)
+                self.dialog.tabWidget_workflow.setCurrentWidget(page)
+                self.app.processEvents()
+                scroll_area = self.dialog._workflow_scroll_areas[tab_name]
+                self.assertGreater(scroll_area.verticalScrollBar().maximum(), 0)
+                context = self.dialog._workflow_context_widgets[tab_name]["frame"]
+                self.assertFalse(scroll_area.isAncestorOf(context))
+
     def test_builder_checkpoint_updates_progress_without_cancel_branch(self):
         builder = object.__new__(SafeguardingBuilder)
         builder._runtime_run_recorder = None
