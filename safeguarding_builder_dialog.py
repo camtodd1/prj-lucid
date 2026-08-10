@@ -3366,24 +3366,41 @@ class SafeguardingBuilderDialog(
             return
 
         def _apply_size():
-            self.adjustSize()
-            preferred_height = 760
-            screen = self.screen() or QtWidgets.QApplication.primaryScreen()
-            if screen is not None:
-                preferred_height = min(preferred_height, int(screen.availableGeometry().height() * 0.86))
-            target_width = 824
-            target_height = min(self.height(), preferred_height)
-            self.resize(target_width, target_height)
+            try:
+                self.adjustSize()
+                preferred_height = 760
+                screen = self.screen() or QtWidgets.QApplication.primaryScreen()
+                if screen is not None:
+                    preferred_height = min(preferred_height, int(screen.availableGeometry().height() * 0.86))
+                target_width = 824
+                target_height = min(self.height(), preferred_height)
+                self.resize(target_width, target_height)
+            except RuntimeError:
+                # The queued initial-size callback can outlive a short-lived
+                # dialog instance used by tests or rapid plugin reloads.
+                return
         QtCore.QTimer.singleShot(0, _apply_size)
 
     def _focus_runway_group(self, group_widget: RunwayWidgetGroup) -> None:
         """Scroll to and focus the first runway field in a group."""
         scroll_area = self.findChild(QtWidgets.QScrollArea, "scrollArea_runways")
         if scroll_area:
-            QtCore.QTimer.singleShot(0, lambda: scroll_area.ensureWidgetVisible(group_widget))
+            def _ensure_visible():
+                try:
+                    scroll_area.ensureWidgetVisible(group_widget)
+                except RuntimeError:
+                    return
+
+            QtCore.QTimer.singleShot(0, _ensure_visible)
         runway_name = getattr(group_widget, "desig_le", None)
         if runway_name:
-            QtCore.QTimer.singleShot(0, runway_name.setFocus)
+            def _set_focus():
+                try:
+                    runway_name.setFocus()
+                except RuntimeError:
+                    return
+
+            QtCore.QTimer.singleShot(0, _set_focus)
 
     # --- Data Gathering Methods ---
     def get_all_input_data(

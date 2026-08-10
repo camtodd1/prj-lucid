@@ -50,6 +50,21 @@ CNS_FACILITY_TYPES = [
 
 CNS_CONTOUR_DEFAULT_PRIMARY_INTERVAL = 10.0
 CNS_CONTOUR_DEFAULT_INTERMEDIATE_INTERVAL = 5.0
+CNS_ENTRY_TABLE_STYLE = """
+QTableWidget {
+    border: 1px solid #e2e2e2;
+    border-radius: 4px;
+    gridline-color: #ececec;
+    background: #ffffff;
+}
+QHeaderView::section {
+    background: #fafafa;
+    padding: 5px 8px;
+    border: 0px;
+    border-bottom: 1px solid #d5d5d5;
+    font-weight: 600;
+}
+"""
 
 
 class CnsTableMixin:
@@ -219,23 +234,7 @@ class CnsTableMixin:
 
         table = getattr(self, "table_cns_facility", self.findChild(QtWidgets.QTableWidget, "table_cns_facility"))
         if table:
-            table.setStyleSheet(
-                """
-                QTableWidget {
-                    border: 1px solid #e2e2e2;
-                    border-radius: 4px;
-                    gridline-color: #ececec;
-                    background: #ffffff;
-                }
-                QHeaderView::section {
-                    background: #fafafa;
-                    padding: 5px 8px;
-                    border: 0px;
-                    border-bottom: 1px solid #d5d5d5;
-                    font-weight: 600;
-                }
-                """
-            )
+            table.setStyleSheet(CNS_ENTRY_TABLE_STYLE)
 
     def _update_cns_view_state(self):
         cns_table = getattr(self, "table_cns_facility", self.findChild(QtWidgets.QTableWidget, "table_cns_facility"))

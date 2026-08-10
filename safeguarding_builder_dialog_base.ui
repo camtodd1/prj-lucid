@@ -587,17 +587,7 @@
         </property>
         <layout class="QVBoxLayout" name="verticalLayout_ilsBra">
          <item>
-          <layout class="QHBoxLayout" name="horizontalLayout_ilsBraIntro">
-           <item>
-            <widget class="QLabel" name="label_ils_bra_description">
-             <property name="text">
-              <string>Provisional glide-path and localiser BRA construction from runway-relative antenna positions.</string>
-             </property>
-             <property name="wordWrap">
-              <bool>true</bool>
-             </property>
-            </widget>
-           </item>
+         <layout class="QHBoxLayout" name="horizontalLayout_ilsBraIntro">
            <item>
             <spacer name="horizontalSpacer_ilsBraIntro">
              <property name="orientation">

@@ -54,6 +54,27 @@ class IlsBraInputsQgisTests(unittest.TestCase):
         self.dialog.close()
         self.dialog.deleteLater()
 
+    def test_ils_table_matches_cns_table_presentation(self):
+        self.assertIsNone(
+            self.dialog.findChild(QtWidgets.QLabel, "label_ils_bra_description")
+        )
+        self.assertEqual(
+            self.dialog.table_ils_bra.styleSheet(),
+            self.dialog.table_cns_facility.styleSheet(),
+        )
+        self.assertEqual(
+            self.dialog.table_ils_bra.height(),
+            self.dialog.table_cns_facility.height(),
+        )
+
+        self.dialog.add_ils_bra_row()
+        self.dialog.add_cns_row()
+        self.app.processEvents()
+        self.assertEqual(
+            self.dialog.table_ils_bra.height(),
+            self.dialog.table_cns_facility.height(),
+        )
+
     def test_derived_glide_path_position_captures_generation_inputs(self):
         self.dialog.add_ils_bra_row(
             {

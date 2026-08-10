@@ -8,6 +8,8 @@ from qgis.PyQt import QtWidgets  # type: ignore
 from qgis.PyQt.QtCore import Qt  # type: ignore
 from qgis.PyQt.QtWidgets import QAbstractItemView, QComboBox, QTableWidgetItem  # type: ignore
 
+from .cns_table import CNS_ENTRY_TABLE_STYLE
+
 
 ILS_BRA_COMPONENTS: List[Tuple[str, str]] = [
     ("Glide path", "glide_path"),
@@ -57,12 +59,13 @@ class IlsBraInputsMixin:
                 header.setSectionResizeMode(column, QtWidgets.QHeaderView.ResizeMode.Interactive)
         for column, width in enumerate([115, 170, 175, 125, 125, 170, 190, 135]):
             table.setColumnWidth(column, width)
-        table.setMinimumHeight(150)
-        table.setMaximumHeight(260)
+        table.setMinimumHeight(168)
+        table.setMaximumHeight(168)
         table.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
+        table.setStyleSheet(CNS_ENTRY_TABLE_STYLE)
         table.setToolTip(
             "For glide path, distance from threshold is measured into the runway and centreline "
             "distance is right-positive looking into the runway. For localiser, distance from "
@@ -74,19 +77,16 @@ class IlsBraInputsMixin:
         remove_button.clicked.connect(self.remove_ils_bra_rows)
         add_button.setToolTip("Add a provisional glide-path or localiser installation.")
         remove_button.setToolTip("Remove the selected ILS installation row(s).")
+        add_button.setMinimumWidth(130)
+        add_button.setMaximumWidth(170)
+        remove_button.setMinimumWidth(140)
+        remove_button.setMaximumWidth(180)
         remove_button.setEnabled(False)
         table.itemSelectionChanged.connect(self._update_ils_bra_view_state)
         if table.model() is not None:
             table.model().rowsInserted.connect(lambda *_: self._update_ils_bra_view_state())
             table.model().rowsRemoved.connect(lambda *_: self._update_ils_bra_view_state())
 
-        description = getattr(self, "label_ils_bra_description", None)
-        if description:
-            description.setText(
-                "Provisional ILS BRA: derive glide-path position from threshold distance and "
-                "offset, or localiser position from its setback beyond the opposite runway end."
-            )
-            description.setStyleSheet("color: #666666; font-size: 11px;")
         self._update_ils_bra_view_state()
 
     @staticmethod
@@ -244,6 +244,16 @@ class IlsBraInputsMixin:
             status = getattr(self, "label_ils_bra_status", None)
             if status:
                 status.setText(f"ILS installations: {row_count}" if row_count else "ILS installations: none")
+
+        header_height = table.horizontalHeader().height() if table.horizontalHeader() else 28
+        row_heights = sum(table.rowHeight(row) for row in range(row_count))
+        target_height = header_height + row_heights + 10
+        if row_count == 0:
+            target_height = 168
+        else:
+            target_height = min(max(target_height, 168), 320)
+        table.setMinimumHeight(target_height)
+        table.setMaximumHeight(target_height)
 
     @staticmethod
     def _set_ils_bra_item_enabled(table, row: int, column: int, enabled: bool) -> None:
