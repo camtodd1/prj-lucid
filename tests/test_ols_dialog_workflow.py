@@ -1433,6 +1433,38 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             scroll_area.viewport().width(),
         )
 
+    def test_expanded_runway_rows_follow_dimensions_width_template(self):
+        self.dialog.resize(800, 900)
+        self.dialog.tabWidget_workflow.setCurrentWidget(self.dialog.tab_runways)
+        runway = self.dialog._runway_groups[1]
+        runway.expand_button.setChecked(True)
+        self.dialog.show()
+        self.app.processEvents()
+
+        single_width = runway.width_le.width()
+        dual_width = runway.clearway1_len_le.width()
+        for control in (
+            runway.shoulder_le,
+            runway.arc_num_combo,
+            runway.arc_let_combo,
+            runway.adg_combo,
+            runway.surface_category_combo,
+            runway.surface_material_combo,
+        ):
+            self.assertAlmostEqual(control.width(), single_width, delta=1)
+        for control in (
+            runway.clearway2_len_le,
+            runway.stopway1_len_le,
+            runway.stopway2_len_le,
+            runway.thr_east_le,
+            runway.rec_east_le,
+            runway.type1_combo,
+            runway.type2_combo,
+            runway.tora_override_1_le,
+            runway.tora_override_2_le,
+        ):
+            self.assertAlmostEqual(control.width(), dual_width, delta=1)
+
     def test_builder_checkpoint_updates_progress_without_cancel_branch(self):
         builder = object.__new__(SafeguardingBuilder)
         builder._runtime_run_recorder = None

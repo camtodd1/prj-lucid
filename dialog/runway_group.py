@@ -18,12 +18,9 @@ from .dialog_constants import (
 )
 
 
-RUNWAY_FORM_LABEL_WIDTH = 230
-RUNWAY_FORM_FIELD_WIDTH = 240
 RUNWAY_FORM_LABEL_MIN_WIDTH = 190
 RUNWAY_FORM_FIELD_MIN_WIDTH = 180
 RUNWAY_FORM_COLUMN_GAP = 12
-RUNWAY_FORM_WIDE_FIELD_WIDTH = RUNWAY_FORM_FIELD_WIDTH * 2 + RUNWAY_FORM_COLUMN_GAP
 RUNWAY_FORM_ROW_HEIGHT = 28
 RUNWAY_FORM_VERTICAL_GAP = 6
 
@@ -221,7 +218,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.desig_le.setToolTip("Enter 2-digit primary designation (01-36).")
         self.desig_le.setValidator(QtGui.QIntValidator(1, 36, self))
         self.desig_le.setMinimumWidth(60)
-        self.desig_le.setMaximumWidth(RUNWAY_FORM_FIELD_WIDTH - 86)
+        self.desig_le.setMaximumWidth(16777215)
         self.desig_le.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
             QtWidgets.QSizePolicy.Policy.Fixed,
@@ -448,10 +445,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _set_control_width(
         self,
         widget: QtWidgets.QWidget,
-        width: int = RUNWAY_FORM_FIELD_WIDTH,
     ) -> None:
         widget.setMinimumWidth(0)
-        widget.setMaximumWidth(width)
+        widget.setMaximumWidth(16777215)
         widget.setSizePolicy(
             QtWidgets.QSizePolicy.Policy.Expanding,
             widget.sizePolicy().verticalPolicy(),
@@ -462,9 +458,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         layout.setHorizontalSpacing(RUNWAY_FORM_COLUMN_GAP)
         layout.setVerticalSpacing(RUNWAY_FORM_VERTICAL_GAP)
         layout.setColumnStretch(0, 0)
-        layout.setColumnStretch(1, 0)
-        layout.setColumnStretch(2, 0)
-        layout.setColumnStretch(3, 1)
+        layout.setColumnStretch(1, 1)
+        layout.setColumnStretch(2, 1)
+        layout.setColumnStretch(3, 0)
         layout.setColumnMinimumWidth(0, RUNWAY_FORM_LABEL_MIN_WIDTH)
         layout.setColumnMinimumWidth(1, RUNWAY_FORM_FIELD_MIN_WIDTH)
         layout.setColumnMinimumWidth(2, RUNWAY_FORM_FIELD_MIN_WIDTH)
@@ -481,7 +477,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         label_col: int = 0,
         input_col: int = 1,
         input_col_span: int = 1,
-        input_width: int = RUNWAY_FORM_FIELD_WIDTH,
     ) -> None:
         label_arc_num = QtWidgets.QLabel("ARC Number:")
         label_arc_num.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -497,7 +492,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.arc_num_combo.addItem(label, userData=value)
         self.arc_num_combo.setToolTip("Select Aerodrome Reference Code Number")
         self.arc_num_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.arc_num_combo, input_width)
+        self._set_control_width(self.arc_num_combo)
         layout.addWidget(label_arc_num, row, label_col)
         layout.addWidget(self.arc_num_combo, row, input_col, 1, input_col_span)
 
@@ -517,7 +512,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.arc_let_combo.addItem(label, userData=value)
         self.arc_let_combo.setToolTip("Select Aerodrome Reference Code Letter")
         self.arc_let_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.arc_let_combo, input_width)
+        self._set_control_width(self.arc_let_combo)
         layout.addWidget(label_arc_let, row + 1, label_col)
         layout.addWidget(self.arc_let_combo, row + 1, input_col, 1, input_col_span)
 
@@ -528,7 +523,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         label_col: int = 0,
         input_col: int = 1,
         input_col_span: int = 1,
-        input_width: int = RUNWAY_FORM_FIELD_WIDTH,
     ) -> None:
         label_surface_category = QtWidgets.QLabel("Surface Category:")
         label_surface_category.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -537,7 +531,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.surface_category_combo.addItems([""] + list(RUNWAY_SURFACE_MATERIALS))
         self.surface_category_combo.setToolTip("Select runway surface category.")
         self.surface_category_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.surface_category_combo, input_width)
+        self._set_control_width(self.surface_category_combo)
         layout.addWidget(label_surface_category, row, label_col)
         layout.addWidget(self.surface_category_combo, row, input_col, 1, input_col_span)
 
@@ -547,7 +541,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.surface_material_combo.setObjectName(f"comboBox_surface_material_{self.index}")
         self.surface_material_combo.setToolTip("Select runway surface material for the chosen category.")
         self.surface_material_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.surface_material_combo, input_width)
+        self._set_control_width(self.surface_material_combo)
         self._refresh_surface_material_options("")
         layout.addWidget(label_surface_material, row + 1, label_col)
         layout.addWidget(self.surface_material_combo, row + 1, input_col, 1, input_col_span)
@@ -559,7 +553,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         label_col: int = 0,
         input_col: int = 1,
         input_col_span: int = 1,
-        input_width: int = RUNWAY_FORM_FIELD_WIDTH,
     ) -> None:
         label_adg = QtWidgets.QLabel("ADG:")
         label_adg.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
@@ -580,7 +573,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             f"Select Aeroplane Design Group for {MODERNISED_DISPLAY_NAME} generation."
         )
         self.adg_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
-        self._set_control_width(self.adg_combo, input_width)
+        self._set_control_width(self.adg_combo)
         layout.addWidget(label_adg, row, label_col)
         layout.addWidget(self.adg_combo, row, input_col, 1, input_col_span)
 
@@ -688,10 +681,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._configure_runway_form_grid(dimensions_layout)
 
         dimensions_layout.addWidget(label_runway_width, 0, 0)
-        self._set_control_width(self.width_le, RUNWAY_FORM_WIDE_FIELD_WIDTH)
+        self._set_control_width(self.width_le)
         dimensions_layout.addWidget(self.width_le, 0, 1, 1, 2)
         dimensions_layout.addWidget(label_runway_shoulder, 1, 0)
-        self._set_control_width(self.shoulder_le, RUNWAY_FORM_WIDE_FIELD_WIDTH)
+        self._set_control_width(self.shoulder_le)
         dimensions_layout.addWidget(self.shoulder_le, 1, 1, 1, 2)
 
         clearway_label = QtWidgets.QLabel("Clearway (m):")
@@ -852,19 +845,16 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             classification_layout,
             0,
             input_col_span=2,
-            input_width=RUNWAY_FORM_WIDE_FIELD_WIDTH,
         )
         self._add_adg_controls(
             classification_layout,
             2,
             input_col_span=2,
-            input_width=RUNWAY_FORM_WIDE_FIELD_WIDTH,
         )
         self._add_surface_controls(
             classification_layout,
             3,
             input_col_span=2,
-            input_width=RUNWAY_FORM_WIDE_FIELD_WIDTH,
         )
         self._standardize_form_rows(classification_layout, 5)
 
