@@ -1449,61 +1449,23 @@ class SafeguardingBuilderDialog(
 
     def _agl_dependency_status(self, runway_status: Dict[str, Any]) -> Dict[str, Any]:
         enabled = bool(getattr(self, "checkBox_agl_enabled", None) and self.checkBox_agl_enabled.isChecked())
-        table = getattr(self, "table_agl_approach", None)
-        rows = table.rowCount() if table is not None else 0
         if not enabled:
-            return {"enabled": False, "ready": True, "state": "optional", "summary": "Optional: lighting generation is disabled.", "rows": rows}
+            return {"enabled": False, "ready": True, "state": "optional", "summary": "Optional: lighting generation is disabled."}
         if not runway_status.get("ready"):
-            return {"enabled": True, "ready": False, "state": "blocked", "summary": "Lighting needs complete runway geometry.", "rows": rows}
+            return {"enabled": True, "ready": False, "state": "blocked", "summary": "Lighting needs complete runway geometry."}
 
         errors: List[str] = []
         for widget_name, label, minimum in [
             ("lineEdit_agl_edge_spacing", "edge spacing", 0.01),
             ("lineEdit_agl_threshold_spacing", "threshold spacing", 0.01),
             ("lineEdit_agl_threshold_inset", "threshold inset", 0.0),
-            ("lineEdit_agl_approach_spacing", "approach spacing", 0.01),
         ]:
             if self._parse_status_float(self._line_value(widget_name), minimum=minimum) is None:
                 errors.append(label)
-        valid_rows = 0
-        incomplete_rows = 0
-        invalid_rows = 0
-        if table is not None:
-            for row in range(table.rowCount()):
-                runway_combo = table.cellWidget(row, 0)
-                end_combo = table.cellWidget(row, 1)
-                runway_index = runway_combo.currentData() if isinstance(runway_combo, QtWidgets.QComboBox) else None
-                end_role = end_combo.currentData() if isinstance(end_combo, QtWidgets.QComboBox) else "primary"
-                length_text = self._table_text(table, row, 2).strip() if hasattr(self, "_table_text") else ""
-                spacing_text = self._table_text(table, row, 3).strip() if hasattr(self, "_table_text") else ""
-                if not runway_index and not length_text and not spacing_text:
-                    incomplete_rows += 1
-                    continue
-                if not runway_index or int(runway_index) not in self._runway_groups:
-                    invalid_rows += 1
-                    continue
-                runway_type = self._agl_runway_end_type(int(runway_index), str(end_role))
-                profile = self._agl_ruleset().approach_profile_for_end(runway_type)
-                if length_text and self._parse_status_float(length_text, minimum=0.01) is None:
-                    invalid_rows += 1
-                    continue
-                if spacing_text and self._parse_status_float(spacing_text, minimum=0.01) is None:
-                    invalid_rows += 1
-                    continue
-                if not length_text and float(profile.get("length_m") or 0.0) <= 0:
-                    invalid_rows += 1
-                    continue
-                valid_rows += 1
 
         if errors:
-            return {"enabled": True, "ready": False, "state": "warning", "summary": "Lighting numeric fields need review: " + ", ".join(errors) + ".", "rows": rows}
-        if invalid_rows:
-            return {"enabled": True, "ready": False, "state": "warning", "summary": f"{invalid_rows} invalid approach-light row(s).", "rows": rows}
-        if incomplete_rows and valid_rows == 0:
-            return {"enabled": True, "ready": True, "state": "ready", "summary": "Lighting ready; blank approach rows will be ignored.", "rows": rows}
-        if incomplete_rows:
-            return {"enabled": True, "ready": True, "state": "warning", "summary": f"Lighting ready; {incomplete_rows} blank approach row(s) will be ignored.", "rows": rows}
-        return {"enabled": True, "ready": True, "state": "ready", "summary": f"Lighting ready: {valid_rows} approach row(s).", "rows": rows}
+            return {"enabled": True, "ready": False, "state": "warning", "summary": "Lighting numeric fields need review: " + ", ".join(errors) + "."}
+        return {"enabled": True, "ready": True, "state": "ready", "summary": "Lighting ready; standard elements are ruleset-derived."}
 
     def _ols_dependency_status(
         self,
@@ -1911,7 +1873,6 @@ class SafeguardingBuilderDialog(
             "groupBox_AirportMap",
             "groupBox_agl_options",
             "groupBox_agl_generated",
-            "groupBox_agl_approach",
             "groupBox_agl_layer_runway_edge",
             "groupBox_agl_layer_threshold",
         ]
@@ -1944,7 +1905,6 @@ class SafeguardingBuilderDialog(
             "pushButton_add_runway",
             "pushButton_add_CNS",
             "pushButton_add_ILS_BRA",
-            "pushButton_add_agl_approach",
         ]:
             button = getattr(self, name, self.findChild(QtWidgets.QPushButton, name))
             if button:
@@ -1967,7 +1927,6 @@ class SafeguardingBuilderDialog(
         for name in [
             "pushButton_remove_CNS",
             "pushButton_remove_ILS_BRA",
-            "pushButton_remove_agl_approach",
         ]:
             button = getattr(self, name, self.findChild(QtWidgets.QPushButton, name))
             if button:
@@ -2807,7 +2766,6 @@ class SafeguardingBuilderDialog(
                 "neutral" if cns_dependencies["state"] == "optional" else cns_dependencies["state"],
             )
 
-        agl_rows = self.table_agl_approach.rowCount() if hasattr(self, "table_agl_approach") else 0
         agl_dependencies = self._agl_dependency_status(runway_dependencies)
         agl_enabled = bool(agl_dependencies["enabled"])
         if hasattr(self, "label_agl_status"):

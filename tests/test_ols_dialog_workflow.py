@@ -217,8 +217,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.dialog.checkBox_agl_enabled.setChecked(True)
         design_standard.setCurrentIndex(easa_index)
-        self.assertIn("EASA CS-ADR-DSN Issue 7", self.dialog.label_agl_ruleset_caveat.text())
-        self.assertIn("EASA source profile", self.dialog.groupBox_agl_approach.title())
+        self.assertEqual(
+            self.dialog.label_agl_edge_spacing.text(),
+            "EASA instrument runway edge spacing (m)",
+        )
 
         design_standard.setCurrentIndex(mos_index)
         self.assertEqual(
@@ -227,8 +229,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         )
 
         design_standard.setCurrentIndex(cap168_index)
-        self.assertIn("CAP 168 profile", self.dialog.groupBox_agl_approach.title())
-        self.assertIn("planned lighting audit", self.dialog.label_agl_ruleset_caveat.text())
+        self.assertEqual(
+            self.dialog.label_agl_edge_spacing.text(),
+            "CAP 168 runway edge spacing baseline (m)",
+        )
 
     def test_agl_controls_are_grouped_by_generated_light_type_layer(self):
         expected_groups = {
@@ -236,10 +240,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "groupBox_agl_layer_threshold": [
                 self.dialog.lineEdit_agl_threshold_spacing,
                 self.dialog.lineEdit_agl_threshold_inset,
-            ],
-            "groupBox_agl_approach": [
-                self.dialog.lineEdit_agl_approach_spacing,
-                self.dialog.table_agl_approach,
             ],
         }
         for group_name, controls in expected_groups.items():
@@ -267,6 +267,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "cat_i_centreline_lights",
             "centreline_offset_m",
             "cat_i_tdz_lights",
+            "approach_spacing_m",
+            "approach_lighting",
         }
         for object_name in (
             "checkBox_agl_runway_end_lights",
@@ -280,6 +282,12 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "checkBox_agl_cat_i_centreline_lights",
             "lineEdit_agl_centreline_offset",
             "checkBox_agl_cat_i_tdz_lights",
+            "label_agl_ruleset_caveat",
+            "groupBox_agl_approach",
+            "lineEdit_agl_approach_spacing",
+            "table_agl_approach",
+            "pushButton_add_agl_approach",
+            "pushButton_remove_agl_approach",
         ):
             self.assertIsNone(self.dialog.findChild(QtWidgets.QWidget, object_name))
         self.assertTrue(
@@ -536,8 +544,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             {"type", "easting_x", "northing_y", "elevation"},
         )
         self.assertEqual(
-            set(payload["agl_options"]["approach_lighting"][0]),
-            {"runway_index", "end", "length_m", "spacing_m"},
+            set(payload["agl_options"]),
+            {"enabled", "edge_spacing_m", "threshold_spacing_m", "threshold_inset_m"},
         )
 
     def test_loaded_scenario_must_match_runway_count(self):

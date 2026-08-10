@@ -7,7 +7,7 @@
             "Use coordinates in one projected CRS with metre units; record that CRS in manifest_case.project_crs.",
             "Use metres AMSL for elevations and metres for distances.",
             "Modernised Annex 14 strip dimensions and standard straight-in operations are derived automatically; do not add operation-specific configuration.",
-            "Set cns_facilities, ils_bra_installations, or agl_options.approach_lighting to an empty array when none are sourced.",
+            "Set cns_facilities or ils_bra_installations to an empty array when none are sourced.",
             "Provisional glide-path inputs use distance inside the served threshold plus signed offset; localiser inputs use antenna setback beyond the opposite runway end and are anchored to the extended centreline.",
             "Retain official source URLs, publication dates, and any assumptions in source_references."
         ],
@@ -230,16 +230,7 @@
         "enabled": false,
         "edge_spacing_m": "60",
         "threshold_spacing_m": "3",
-        "threshold_inset_m": "0",
-        "approach_spacing_m": "30",
-        "approach_lighting": [
-            {
-                "runway_index": 1,
-                "end": "primary",
-                "length_m": "REPLACE_APPROACH_LIGHT_LENGTH_M",
-                "spacing_m": "30"
-            }
-        ]
+        "threshold_inset_m": "0"
     },
     "output_options": {
         "mode": "memory",

@@ -190,7 +190,6 @@ class FamilyGenerationCommitTests(unittest.TestCase):
             "centreline_low_visibility": True,
             "cat_i_centreline_lights": True,
             "cat_i_tdz_lights": True,
-            "approach_lighting": [],
         }
 
         first_stage = root.addGroup("first-stage")

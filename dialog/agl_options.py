@@ -3,7 +3,6 @@
 from typing import Dict, List, Optional
 
 from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
-from qgis.PyQt.QtWidgets import QComboBox, QTableWidgetItem  # type: ignore
 
 try:
     from ..rulesets.registry import DEFAULT_RULESET_ID, get_ruleset_profile
@@ -22,7 +21,6 @@ class AglOptionsMixin:
         "edge_spacing_m": "60",
         "threshold_spacing_m": "3",
         "threshold_inset_m": "0",
-        "approach_spacing_m": "30",
     }
 
     def _agl_ruleset(self):
@@ -89,7 +87,6 @@ class AglOptionsMixin:
         self.lineEdit_agl_edge_spacing = self._agl_line_edit("lineEdit_agl_edge_spacing", "60")
         self.lineEdit_agl_threshold_spacing = self._agl_line_edit("lineEdit_agl_threshold_spacing", "3")
         self.lineEdit_agl_threshold_inset = self._agl_line_edit("lineEdit_agl_threshold_inset", "0")
-        self.lineEdit_agl_approach_spacing = self._agl_line_edit("lineEdit_agl_approach_spacing", "30")
         self.lineEdit_agl_edge_spacing.setReadOnly(True)
         self.lineEdit_agl_threshold_spacing.setReadOnly(True)
 
@@ -98,13 +95,9 @@ class AglOptionsMixin:
         self.label_agl_threshold_inset = QtWidgets.QLabel(
             "Threshold bar inset from runway edge (m)"
         )
-        self.label_agl_approach_spacing = QtWidgets.QLabel(
-            "Default approach light spacing (m)"
-        )
         self.label_agl_edge_spacing.setObjectName("label_agl_edge_spacing")
         self.label_agl_threshold_spacing.setObjectName("label_agl_threshold_spacing")
         self.label_agl_threshold_inset.setObjectName("label_agl_threshold_inset")
-        self.label_agl_approach_spacing.setObjectName("label_agl_approach_spacing")
 
         def light_type_group(title: str, object_name: str):
             layer_group = QtWidgets.QGroupBox(title)
@@ -144,55 +137,6 @@ class AglOptionsMixin:
 
         group_layout.addWidget(spacing_group)
 
-        self.label_agl_ruleset_caveat = QtWidgets.QLabel()
-        self.label_agl_ruleset_caveat.setObjectName("label_agl_ruleset_caveat")
-        self.label_agl_ruleset_caveat.setWordWrap(True)
-        self.label_agl_ruleset_caveat.setTextFormat(QtCore.Qt.TextFormat.PlainText)
-        group_layout.addWidget(self.label_agl_ruleset_caveat)
-
-        approach_group = QtWidgets.QGroupBox(
-            "Approach Centreline / Crossbar / Barrettes"
-        )
-        approach_group.setObjectName("groupBox_agl_approach")
-        self.groupBox_agl_approach = approach_group
-        approach_layout = QtWidgets.QVBoxLayout(approach_group)
-
-        approach_parameters = QtWidgets.QGridLayout()
-        approach_parameters.setColumnStretch(0, 1)
-        approach_parameters.addWidget(self.label_agl_approach_spacing, 0, 0)
-        approach_parameters.addWidget(self.lineEdit_agl_approach_spacing, 0, 1)
-        approach_layout.addLayout(approach_parameters)
-
-        self.table_agl_approach = QtWidgets.QTableWidget()
-        self.table_agl_approach.setObjectName("table_agl_approach")
-        self.table_agl_approach.setColumnCount(4)
-        self.table_agl_approach.setHorizontalHeaderLabels(
-            ["Runway", "End", "Approach length (m)", "Spacing override (m)"]
-        )
-        self.table_agl_approach.setAlternatingRowColors(True)
-        self.table_agl_approach.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table_agl_approach.setSelectionMode(QtWidgets.QAbstractItemView.SelectionMode.ExtendedSelection)
-        self.table_agl_approach.verticalHeader().setVisible(False)
-        self.table_agl_approach.horizontalHeader().setStretchLastSection(True)
-        self.table_agl_approach.setMinimumHeight(120)
-        self.table_agl_approach.setMaximumHeight(180)
-        approach_layout.addWidget(self.table_agl_approach)
-
-        button_layout = QtWidgets.QHBoxLayout()
-        self.pushButton_add_agl_approach = QtWidgets.QPushButton("Add Approach Row")
-        self.pushButton_add_agl_approach.setObjectName("pushButton_add_agl_approach")
-        self.pushButton_remove_agl_approach = QtWidgets.QPushButton("Remove Selected")
-        self.pushButton_remove_agl_approach.setObjectName("pushButton_remove_agl_approach")
-        self.pushButton_add_agl_approach.setToolTip("Add per-end approach lighting overrides.")
-        self.pushButton_remove_agl_approach.setToolTip("Remove the selected approach lighting rows.")
-        self.pushButton_add_agl_approach.setMaximumWidth(180)
-        self.pushButton_remove_agl_approach.setMaximumWidth(180)
-        button_layout.addStretch(1)
-        button_layout.addWidget(self.pushButton_add_agl_approach)
-        button_layout.addWidget(self.pushButton_remove_agl_approach)
-        approach_layout.addLayout(button_layout)
-        group_layout.addWidget(approach_group)
-
         content_layout.addWidget(group)
         content_layout.addStretch(1)
         scroll_area.setWidget(scroll_content)
@@ -211,13 +155,8 @@ class AglOptionsMixin:
             self.lineEdit_agl_edge_spacing,
             self.lineEdit_agl_threshold_spacing,
             self.lineEdit_agl_threshold_inset,
-            self.lineEdit_agl_approach_spacing,
         ]:
             widget.textChanged.connect(self._on_agl_option_changed)
-        self.table_agl_approach.itemChanged.connect(self._on_agl_option_changed)
-        self.table_agl_approach.itemSelectionChanged.connect(self._update_agl_view_state)
-        self.pushButton_add_agl_approach.clicked.connect(self._add_agl_approach_row)
-        self.pushButton_remove_agl_approach.clicked.connect(self._remove_selected_agl_approach_rows)
         ruleset_combo = self._ruleset_combo_widget()
         if ruleset_combo is not None:
             ruleset_combo.currentIndexChanged.connect(self._update_agl_ruleset_view)
@@ -233,55 +172,9 @@ class AglOptionsMixin:
         widget.setMaximumWidth(120)
         return widget
 
-    def _add_agl_approach_row(self, row_data: Optional[Dict[str, str]] = None) -> None:
-        if not hasattr(self, "table_agl_approach"):
-            return
-        table = self.table_agl_approach
-        row = table.rowCount()
-        table.insertRow(row)
-
-        runway_combo = QComboBox()
-        runway_combo.setObjectName(f"comboBox_agl_runway_{row}")
-        runway_combo.addItem("", userData="")
-        for index in sorted(self._runway_groups.keys()):
-            group = self._runway_groups[index]
-            label = group.rwy_name_lbl.text() if hasattr(group, "rwy_name_lbl") else f"Runway {index}"
-            runway_combo.addItem(f"{index}: {label}", userData=index)
-        runway_combo.currentIndexChanged.connect(self._on_agl_option_changed)
-
-        end_combo = QComboBox()
-        end_combo.setObjectName(f"comboBox_agl_end_{row}")
-        end_combo.addItem("Primary", userData="primary")
-        end_combo.addItem("Reciprocal", userData="reciprocal")
-        end_combo.currentIndexChanged.connect(self._on_agl_option_changed)
-
-        table.setCellWidget(row, 0, runway_combo)
-        table.setCellWidget(row, 1, end_combo)
-        if hasattr(self, "_apply_workflow_control_heights"):
-            self._apply_workflow_control_heights(table)
-        table.setItem(row, 2, QTableWidgetItem(""))
-        table.setItem(row, 3, QTableWidgetItem(""))
-
-        if row_data:
-            self._set_combo_data(runway_combo, row_data.get("runway_index", ""))
-            self._set_combo_data(end_combo, row_data.get("end", "primary"))
-            table.item(row, 2).setText(str(row_data.get("length_m", "")))
-            table.item(row, 3).setText(str(row_data.get("spacing_m", "")))
-
-        self._on_agl_option_changed()
-
-    def _remove_selected_agl_approach_rows(self) -> None:
-        table = getattr(self, "table_agl_approach", None)
-        if table is None:
-            return
-        selected_rows = sorted({index.row() for index in table.selectedIndexes()}, reverse=True)
-        for row in selected_rows:
-            table.removeRow(row)
-        self._on_agl_option_changed()
-
     def _get_agl_options(self, errors: Optional[List[str]] = None) -> Dict[str, object]:
         enabled = bool(getattr(self, "checkBox_agl_enabled", None) and self.checkBox_agl_enabled.isChecked())
-        options: Dict[str, object] = {"enabled": enabled, "approach_lighting": []}
+        options: Dict[str, object] = {"enabled": enabled}
         if not enabled:
             return options
 
@@ -294,10 +187,6 @@ class AglOptionsMixin:
         options["threshold_inset_m"] = self._agl_float(
             "lineEdit_agl_threshold_inset", "AGL threshold bar inset", errors, minimum=0.0
         )
-        options["approach_spacing_m"] = self._agl_float(
-            "lineEdit_agl_approach_spacing", "AGL default approach light spacing", errors, minimum=0.01
-        )
-        options["approach_lighting"] = self._get_agl_approach_rows(errors)
         return options
 
     def _get_agl_save_options(self) -> Dict[str, object]:
@@ -306,24 +195,7 @@ class AglOptionsMixin:
             "edge_spacing_m": self._line_text("lineEdit_agl_edge_spacing"),
             "threshold_spacing_m": self._line_text("lineEdit_agl_threshold_spacing"),
             "threshold_inset_m": self._line_text("lineEdit_agl_threshold_inset"),
-            "approach_spacing_m": self._line_text("lineEdit_agl_approach_spacing"),
-            "approach_lighting": [],
         }
-        rows = []
-        table = getattr(self, "table_agl_approach", None)
-        if table is not None:
-            for row in range(table.rowCount()):
-                runway_combo = table.cellWidget(row, 0)
-                end_combo = table.cellWidget(row, 1)
-                rows.append(
-                    {
-                        "runway_index": runway_combo.currentData() if isinstance(runway_combo, QComboBox) else "",
-                        "end": end_combo.currentData() if isinstance(end_combo, QComboBox) else "primary",
-                        "length_m": self._table_text(table, row, 2),
-                        "spacing_m": self._table_text(table, row, 3),
-                    }
-                )
-        options["approach_lighting"] = rows
         return options
 
     def _load_agl_options(self, agl_options) -> None:
@@ -333,13 +205,6 @@ class AglOptionsMixin:
         self._set_line_text("lineEdit_agl_edge_spacing", str(agl_options.get("edge_spacing_m", "60")))
         self._set_line_text("lineEdit_agl_threshold_spacing", str(agl_options.get("threshold_spacing_m", "3")))
         self._set_line_text("lineEdit_agl_threshold_inset", str(agl_options.get("threshold_inset_m", "0")))
-        self._set_line_text("lineEdit_agl_approach_spacing", str(agl_options.get("approach_spacing_m", "30")))
-        table = getattr(self, "table_agl_approach", None)
-        if table is not None:
-            table.setRowCount(0)
-            for row_data in agl_options.get("approach_lighting", []):
-                if isinstance(row_data, dict):
-                    self._add_agl_approach_row(row_data)
         self._on_agl_option_changed()
 
     def _reset_agl_options(self) -> None:
@@ -349,9 +214,6 @@ class AglOptionsMixin:
         self._set_line_text("lineEdit_agl_edge_spacing", self.AGL_DEFAULTS["edge_spacing_m"])
         self._set_line_text("lineEdit_agl_threshold_spacing", self.AGL_DEFAULTS["threshold_spacing_m"])
         self._set_line_text("lineEdit_agl_threshold_inset", self.AGL_DEFAULTS["threshold_inset_m"])
-        self._set_line_text("lineEdit_agl_approach_spacing", self.AGL_DEFAULTS["approach_spacing_m"])
-        if hasattr(self, "table_agl_approach"):
-            self.table_agl_approach.setRowCount(0)
         self._on_agl_option_changed()
 
     def _agl_options_changed(self) -> bool:
@@ -359,80 +221,15 @@ class AglOptionsMixin:
             return False
         if self.checkBox_agl_enabled.isChecked():
             return True
-        table = getattr(self, "table_agl_approach", None)
-        if table is not None and table.rowCount() > 0:
-            return True
         for widget_name, default in [
             ("lineEdit_agl_edge_spacing", self.AGL_DEFAULTS["edge_spacing_m"]),
             ("lineEdit_agl_threshold_spacing", self.AGL_DEFAULTS["threshold_spacing_m"]),
             ("lineEdit_agl_threshold_inset", self.AGL_DEFAULTS["threshold_inset_m"]),
-            ("lineEdit_agl_approach_spacing", self.AGL_DEFAULTS["approach_spacing_m"]),
         ]:
             widget = self._line_edit(widget_name)
             if widget and widget.text().strip() != default:
                 return True
         return False
-
-    def _get_agl_approach_rows(self, errors: Optional[List[str]]) -> List[Dict[str, object]]:
-        rows = []
-        table = getattr(self, "table_agl_approach", None)
-        if table is None:
-            return rows
-        ruleset = self._agl_ruleset()
-        default_spacing = self._parse_agl_number(self._line_text("lineEdit_agl_approach_spacing"), minimum=0.01) or 30.0
-        for row in range(table.rowCount()):
-            runway_combo = table.cellWidget(row, 0)
-            end_combo = table.cellWidget(row, 1)
-            runway_index = runway_combo.currentData() if isinstance(runway_combo, QComboBox) else None
-            end_role = end_combo.currentData() if isinstance(end_combo, QComboBox) else "primary"
-            length_text = self._table_text(table, row, 2).strip()
-            spacing_text = self._table_text(table, row, 3).strip()
-            if not runway_index and not length_text and not spacing_text:
-                continue
-            if not runway_index:
-                self._agl_error(errors, f"AGL approach row {row + 1}: runway is required.")
-                continue
-            try:
-                runway_index_int = int(runway_index)
-            except (TypeError, ValueError):
-                self._agl_error(errors, f"AGL approach row {row + 1}: runway is invalid.")
-                continue
-            if runway_index_int not in self._runway_groups:
-                self._agl_error(errors, f"AGL approach row {row + 1}: selected runway no longer exists.")
-                continue
-            runway_type = self._agl_runway_end_type(runway_index_int, str(end_role))
-            profile = ruleset.approach_profile_for_end(runway_type)
-            length_m = (
-                self._parse_agl_number(length_text, minimum=0.01)
-                if length_text
-                else float(profile.get("length_m") or 0.0)
-            )
-            if length_m is None:
-                self._agl_error(errors, f"AGL approach row {row + 1}: approach length must be positive.")
-                continue
-            spacing_m = (
-                self._parse_agl_number(spacing_text, minimum=0.01)
-                if spacing_text
-                else float(profile.get("spacing_m") or default_spacing)
-            )
-            if spacing_m is None:
-                self._agl_error(errors, f"AGL approach row {row + 1}: spacing override must be positive.")
-                continue
-            if length_m <= 0:
-                self._agl_error(
-                    errors,
-                    f"AGL approach row {row + 1}: no {ruleset.display_name} approach-light profile exists for this runway end; enter a positive length.",
-                )
-                continue
-            rows.append(
-                {
-                    "runway_index": runway_index_int,
-                    "end": str(end_role),
-                    "length_m": float(length_m),
-                    "spacing_m": float(spacing_m),
-                }
-            )
-        return rows
 
     def _agl_float(self, widget_name: str, label: str, errors: Optional[List[str]], minimum: float) -> float:
         value = self._parse_agl_number(self._line_text(widget_name), minimum=minimum)
@@ -454,25 +251,9 @@ class AglOptionsMixin:
         if errors is not None:
             errors.append(message)
 
-    def _agl_runway_end_type(self, runway_index: int, end_role: str) -> str:
-        group = self._runway_groups.get(runway_index)
-        if group is None:
-            return ""
-        data = group.get_input_data()
-        return str(data.get("type1" if end_role == "primary" else "type2", "") or "")
-
-    def _set_combo_data(self, combo: QComboBox, value) -> None:
-        idx = combo.findData(value)
-        if idx < 0:
-            idx = combo.findData(str(value))
-        combo.setCurrentIndex(idx if idx >= 0 else 0)
-
     def _on_agl_option_changed(self) -> None:
         enabled = self.checkBox_agl_enabled.isChecked()
-        for group_name in [
-            "groupBox_agl_generated",
-            "groupBox_agl_approach",
-        ]:
+        for group_name in ["groupBox_agl_generated"]:
             group = getattr(self, group_name, None)
             if group is not None:
                 group.setEnabled(enabled)
@@ -489,20 +270,9 @@ class AglOptionsMixin:
         is_cap168 = profile.id == self.CAP168_RULESET_ID
 
         if is_easa:
-            self.groupBox_agl_approach.setTitle(
-                "Approach Centreline / Crossbar / Barrettes (EASA source profile)"
-            )
             self.label_agl_edge_spacing.setText("EASA instrument runway edge spacing (m)")
             self.label_agl_threshold_spacing.setText("EASA precision threshold max spacing (m)")
-            self.label_agl_ruleset_caveat.setText(
-                "EASA CS-ADR-DSN Issue 7: approach, edge, threshold, end, centreline, "
-                "TDZ, and stopway generation uses the current source-backed profile. "
-                "Optional lighting customisation is deferred to the planned lighting audit."
-            )
         else:
-            self.groupBox_agl_approach.setTitle(
-                "Approach Centreline / Crossbar / Barrettes"
-            )
             self.label_agl_edge_spacing.setText(
                 "MOS edge spacing baseline (m)" if is_mos139 else "Edge spacing baseline (m)"
             )
@@ -511,39 +281,20 @@ class AglOptionsMixin:
                 if is_mos139
                 else "Precision threshold max spacing (m)"
             )
-            self.label_agl_ruleset_caveat.setText(
-                f"{profile.display_name}: standard lighting elements are generated from "
-                "the runway parameters. Optional lighting customisation is deferred to "
-                "the planned lighting audit."
-            )
 
             if is_cap168:
-                self.groupBox_agl_approach.setTitle(
-                    "Approach Centreline / Crossbar / Barrettes (CAP 168 profile)"
-                )
                 self.label_agl_edge_spacing.setText("CAP 168 runway edge spacing baseline (m)")
                 self.label_agl_threshold_spacing.setText(
                     "CAP 168 precision threshold max spacing (m)"
                 )
-                self.label_agl_ruleset_caveat.setText(
-                    "CAP 168 Edition 13, Chapter 6: core runway and approach arrays are "
-                    "source-backed. Optional operational cases and customisation are deferred "
-                    "to the planned lighting audit."
-                )
 
     def _update_agl_view_state(self) -> None:
-        """Keep optional AGL controls and actions visually aligned with their state."""
-        table = getattr(self, "table_agl_approach", None)
+        """Keep the AGL status visually aligned with its state."""
         enabled = bool(getattr(self, "checkBox_agl_enabled", None) and self.checkBox_agl_enabled.isChecked())
-        rows = table.rowCount() if table is not None else 0
-        selected_rows = table.selectionModel().selectedRows() if table is not None and table.selectionModel() else []
-        remove_button = getattr(self, "pushButton_remove_agl_approach", None)
-        if remove_button is not None:
-            remove_button.setEnabled(enabled and bool(selected_rows))
         status_helper = getattr(self, "_set_small_status_chip", None)
         if callable(status_helper):
             status_helper(
                 "label_agl_status",
-                f"AGL enabled: {rows} approach row(s)" if enabled else "AGL disabled",
+                "AGL enabled" if enabled else "AGL disabled",
                 "ready" if enabled else "neutral",
             )

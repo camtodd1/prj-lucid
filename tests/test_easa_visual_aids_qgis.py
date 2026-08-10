@@ -40,20 +40,6 @@ class EasaVisualAidsQgisTests(unittest.TestCase):
             "stopway1_len": 100.0,
             "stopway2_len": 100.0,
         }
-        options = {
-            ("__options__", "runway_end_lights"): False,
-            ("__options__", "threshold_wing_bars"): False,
-            ("__options__", "rtil"): False,
-            ("__options__", "temp_displaced_threshold"): True,
-            ("__options__", "stopway_lights"): False,
-            ("__options__", "centreline_lights"): False,
-            ("__options__", "centreline_low_visibility"): False,
-            ("__options__", "cat_i_centreline_lights"): False,
-            ("__options__", "tdz_lights"): False,
-            ("__options__", "cat_i_tdz_lights"): False,
-            (1, "primary"): {"length_m": 900.0, "spacing_m": 30.0},
-            (1, "reciprocal"): {"length_m": 900.0, "spacing_m": 30.0},
-        }
         captured = {"features": []}
         builder._create_and_add_layer = (
             lambda *args, **kwargs: captured["features"].extend(args[4]) or True
@@ -65,8 +51,6 @@ class EasaVisualAidsQgisTests(unittest.TestCase):
                 [runway],
                 None,
                 threshold_inset_m=0.0,
-                default_approach_spacing_m=30.0,
-                approach_rows=options,
             )
         )
 

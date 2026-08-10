@@ -47,8 +47,6 @@ class AirfieldGroundLightingMixin:
             return False
 
         threshold_inset_m = float(agl_options.get("threshold_inset_m") or 0.0)
-        default_approach_spacing_m = float(agl_options.get("approach_spacing_m") or 30.0)
-        approach_rows = self._agl_rows_by_runway_end(agl_options.get("approach_lighting", []))
 
         overall_success = False
         for runway_data in processed_runway_data_list:
@@ -58,8 +56,6 @@ class AirfieldGroundLightingMixin:
                     processed_runway_data_list,
                     layer_group,
                     threshold_inset_m,
-                    default_approach_spacing_m,
-                    approach_rows,
                 )
                 overall_success = overall_success or runway_success
             except Exception as e:
@@ -77,11 +73,8 @@ class AirfieldGroundLightingMixin:
         processed_runway_data_list: List[dict],
         layer_group: QgsLayerTreeGroup,
         threshold_inset_m: float,
-        default_approach_spacing_m: float,
-        approach_rows: Dict[tuple, Dict[str, object]],
     ) -> bool:
         runway_name = runway_data.get("short_name", f"RWY_{runway_data.get('original_index', '?')}")
-        runway_index = runway_data.get("original_index")
         thr_point = runway_data.get("thr_point")
         rec_thr_point = runway_data.get("rec_thr_point")
         runway_width = runway_data.get("width")
@@ -333,12 +326,11 @@ class AirfieldGroundLightingMixin:
         ]:
             if not ruleset.runway_type_supports_agl(runway_type):
                 continue
-            row = approach_rows.get((runway_index, end_role))
             profile = ruleset.approach_profile_for_end(runway_type)
-            if not row and not profile.get("length_m"):
+            if not profile.get("length_m"):
                 continue
-            length_m = float(row.get("length_m") if row else profile.get("length_m") or 0.0)
-            spacing_m = float(row.get("spacing_m") if row else profile.get("spacing_m") or default_approach_spacing_m)
+            length_m = float(profile.get("length_m") or 0.0)
+            spacing_m = float(profile.get("spacing_m") or 30.0)
             self._append_approach_lights(
                 features,
                 fields,
@@ -1491,19 +1483,6 @@ class AirfieldGroundLightingMixin:
                 QgsField("source", QVariant.String, self.tr("Source"), 80),
             ]
         )
-
-    def _agl_rows_by_runway_end(self, approach_rows) -> Dict[tuple, Dict[str, object]]:
-        rows = {}
-        if not isinstance(approach_rows, list):
-            return rows
-        for row in approach_rows:
-            if not isinstance(row, dict):
-                continue
-            try:
-                rows[(int(row.get("runway_index")), str(row.get("end", "primary")))] = row
-            except (TypeError, ValueError):
-                continue
-        return rows
 
     def _agl_option_enabled(self, rows: Dict[tuple, object], option_name: str) -> bool:
         return bool(rows.get(("__options__", option_name)))
