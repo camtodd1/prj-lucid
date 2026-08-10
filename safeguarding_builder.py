@@ -55,6 +55,16 @@ from qgis.core import (  # type: ignore
 # --- Local Imports ---
 from .core.layers import LayerMixin
 from .core import output_structure
+from .core.family_modules import (
+    FAMILY_AIRPORT,
+    FAMILY_CNS,
+    FAMILY_LABELS,
+    FAMILY_LIGHTING,
+    FAMILY_OLS,
+    FAMILY_RUNWAYS,
+    GENERATABLE_FAMILIES,
+    family_input_signature,
+)
 from .core.run_log import (
     GenerationOutcome,
     OutcomeStatus,
@@ -232,6 +242,10 @@ class SafeguardingBuilder(
         self.reference_elevation_datum: Optional[float] = None
         self.arp_elevation_amsl: Optional[float] = None
         self._terrain_ols_engines: Dict[str, Any] = {}
+        self._active_generation_module_id: Optional[str] = None
+        self._active_generation_signature: str = ""
+        self._active_generation_run_id: str = ""
+        self.output_filename_prefix: str = ""
 
         self.output_mode: str = "memory"
         self.output_path: Optional[str] = None
@@ -722,6 +736,10 @@ class SafeguardingBuilder(
                 self.dlg = None
                 return
 
+            self.dlg.familyGenerationRequested.connect(
+                self.run_feature_family
+            )
+
             osm_button = self.dlg.findChild(QPushButton, "pushButton_DownloadOsmAeroway")
             if osm_button:
                 osm_button.clicked.connect(self.download_osm_aeroway)
@@ -748,6 +766,614 @@ class SafeguardingBuilder(
         self.dlg.refresh_dem_tool_state()
         self.dock.show()
         self.dock.raise_()
+
+    def _configure_family_generation_context(
+        self,
+        input_data: Dict[str, Any],
+    ) -> None:
+        """Install shared policy and output context for one family run."""
+        self.output_mode = input_data.get("output_mode", "memory")
+        self.output_path = input_data.get("output_path")
+        self.output_format_driver = input_data.get("output_format_driver")
+        self.output_format_extension = input_data.get("output_format_extension")
+        self.contour_intervals = input_data.get("contour_intervals", {})
+        self.cns_contour_intervals = input_data.get("cns_contour_intervals", {})
+        self.icao_code = input_data.get("icao_code", "UNKNOWN")
+        self.arp_elevation_amsl = input_data.get("arp_elevation")
+        self.ruleset = get_ruleset_profile(
+            input_data.get("design_standard") or input_data.get("ruleset")
+        )
+        self.protected_airspace_policy = input_data.get(
+            "protected_airspace_policy",
+            "ruleset_aligned",
+        )
+        baseline_id = input_data.get("baseline_ols_ruleset") or self.ruleset.id
+        comparison_id = input_data.get("comparison_ols_ruleset")
+        self.baseline_ols_ruleset = get_ruleset_profile(baseline_id)
+        self.comparison_ols_ruleset = (
+            get_ruleset_profile(comparison_id) if comparison_id else None
+        )
+        self.protected_airspace_ruleset = self.baseline_ols_ruleset
+        self.framework = get_framework_profile(
+            input_data.get("safeguarding_framework")
+        )
+        raw_options = input_data.get("safeguarding_options", {})
+        self.safeguarding_options = (
+            dict(raw_options) if isinstance(raw_options, dict) else {}
+        )
+        self.ruleset_context = RulesetContext(
+            design_standard=self.ruleset,
+            safeguarding_framework=self.framework,
+        )
+        self.style_map = dict(DEFAULT_STYLE_MAP)
+
+    def _prepare_runway_data_for_family(
+        self,
+        runway_input_list: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """Derive shared runway values without creating reference layers."""
+        prepared: List[Dict[str, Any]] = []
+        for raw_runway in runway_input_list:
+            runway_data = dict(raw_runway)
+            designator_num = runway_data.get("designator_num")
+            suffix = runway_data.get("suffix", "")
+            if (
+                designator_num is None
+                or runway_data.get("thr_point") is None
+                or runway_data.get("rec_thr_point") is None
+            ):
+                continue
+            primary = f"{int(designator_num):02d}{suffix}"
+            reciprocal_number = (
+                int(designator_num) + 18
+                if int(designator_num) <= 18
+                else int(designator_num) - 18
+            )
+            reciprocal_suffix = {
+                "L": "R",
+                "R": "L",
+                "C": "C",
+                "": "",
+            }.get(suffix, "")
+            runway_data["short_name"] = (
+                f"{primary}/{reciprocal_number:02d}{reciprocal_suffix}"
+            )
+            runway_data["declared_distances"] = self._calculate_declared_distances(
+                runway_data
+            )
+            runway_data["generated_feature_counts"] = {
+                **dict(runway_data.get("generated_feature_counts") or {}),
+                "DeclaredDistance": len(
+                    runway_data.get("declared_distances") or []
+                ),
+            }
+            prepared.append(runway_data)
+        return prepared
+
+    def _family_main_group(
+        self,
+        root: QgsLayerTreeGroup,
+        icao_code: str,
+    ) -> QgsLayerTreeGroup:
+        group_name = f"{icao_code} {self.tr('Safeguarding Builder')}"
+        group = self._find_direct_child_group(root, group_name)
+        if group is None:
+            group = root.addGroup(group_name)
+            self._stage_layer_tree_node(group)
+        return group
+
+    def _remove_group_path(
+        self,
+        main_group: QgsLayerTreeGroup,
+        path: Tuple[str, ...],
+    ) -> None:
+        if not path:
+            return
+        parent = main_group
+        for name in path[:-1]:
+            parent = self._find_direct_child_group(parent, self.tr(name))
+            if parent is None:
+                return
+        target = self._find_direct_child_group(parent, self.tr(path[-1]))
+        if target is None:
+            return
+        self._remove_group_recursively(target, QgsProject.instance())
+        parent.removeChildNode(target)
+
+    def _remove_family_outputs(
+        self,
+        main_group: QgsLayerTreeGroup,
+        family_id: str,
+    ) -> None:
+        """Remove owned and legacy outputs for one family only."""
+        project = QgsProject.instance()
+        owned_layer_ids = []
+        for layer_node in main_group.findLayers():
+            layer = layer_node.layer()
+            if layer is not None and str(
+                layer.customProperty("safeguarding_builder/module_id") or ""
+            ) == family_id:
+                owned_layer_ids.append(layer.id())
+        if owned_layer_ids:
+            project.removeMapLayers(owned_layer_ids)
+
+        legacy_paths = {
+            FAMILY_AIRPORT: (
+                (output_structure.AERODROME_INFRASTRUCTURE, output_structure.METEOROLOGICAL_STATION),
+                (output_structure.EXTERNAL_SAFEGUARDING, "Wildlife Hazard Management"),
+                (output_structure.EXTERNAL_SAFEGUARDING, "Wildlife Consultation"),
+                (output_structure.EXTERNAL_SAFEGUARDING, "Wind Turbines and Renewable Energy"),
+                (output_structure.EXTERNAL_SAFEGUARDING, "Wind Turbine Safeguarding"),
+                (output_structure.EXTERNAL_SAFEGUARDING, "Crane Notification Zone"),
+            ),
+            FAMILY_RUNWAYS: (
+                (output_structure.REFERENCE_DATA, output_structure.RUNWAY_CENTRE_LINES),
+                (output_structure.AERODROME_INFRASTRUCTURE, output_structure.MARKINGS),
+                (output_structure.AERODROME_INFRASTRUCTURE, output_structure.PHYSICAL_GEOMETRY),
+                (output_structure.RUNWAY_PROTECTION_AND_SEPARATION,),
+                (output_structure.EXTERNAL_SAFEGUARDING, "Building-Induced Windshear / Turbulence"),
+                (output_structure.EXTERNAL_SAFEGUARDING, "Lighting and Glare Control"),
+                (output_structure.EXTERNAL_SAFEGUARDING, "Public Safety Areas"),
+                (output_structure.EXTERNAL_SAFEGUARDING, "Public Safety Zones"),
+            ),
+            FAMILY_CNS: (
+                (output_structure.REFERENCE_DATA, output_structure.CNS_TECHNICAL_FACILITIES),
+                (output_structure.CNS_TECHNICAL_SAFEGUARDING,),
+            ),
+            FAMILY_OLS: ((output_structure.PROTECTED_AIRSPACE,),),
+            FAMILY_LIGHTING: (
+                (output_structure.AERODROME_INFRASTRUCTURE, output_structure.AIRFIELD_GROUND_LIGHTING),
+            ),
+        }
+        for path in legacy_paths.get(family_id, ()):
+            self._remove_group_path(main_group, path)
+
+        if family_id == FAMILY_AIRPORT:
+            reference_group = self._find_direct_child_group(
+                main_group,
+                self.tr(output_structure.REFERENCE_DATA),
+            )
+            if reference_group is not None:
+                arp_ids = []
+                for child in reference_group.children():
+                    if not isinstance(child, QgsLayerTreeLayer):
+                        continue
+                    layer = child.layer()
+                    if layer is not None and str(
+                        layer.customProperty("safeguarding_style_key") or ""
+                    ) == "ARP":
+                        arp_ids.append(layer.id())
+                if arp_ids:
+                    project.removeMapLayers(arp_ids)
+
+    def _ensure_family_destination_group(
+        self,
+        main_group: QgsLayerTreeGroup,
+        path: Tuple[str, ...],
+    ) -> QgsLayerTreeGroup:
+        group = main_group
+        for name in path:
+            child = self._find_direct_child_group(group, name)
+            if child is None:
+                child = group.addGroup(name)
+                self._stage_layer_tree_node(child)
+            group = child
+        return group
+
+    def _commit_family_stage(
+        self,
+        stage_group: QgsLayerTreeGroup,
+        main_group: QgsLayerTreeGroup,
+        family_id: str,
+        signature: str,
+        run_id: str,
+    ) -> int:
+        """Replace one family's existing outputs with successfully staged layers."""
+        staged_nodes: List[Tuple[QgsLayerTreeLayer, Tuple[str, ...]]] = []
+
+        def collect(group: QgsLayerTreeGroup, path: Tuple[str, ...]) -> None:
+            for child in list(group.children()):
+                if isinstance(child, QgsLayerTreeGroup):
+                    collect(child, (*path, child.name()))
+                elif isinstance(child, QgsLayerTreeLayer):
+                    layer = child.layer()
+                    if layer is not None and str(
+                        layer.customProperty("safeguarding_builder/module_id") or ""
+                    ) == family_id:
+                        staged_nodes.append((child, path))
+
+        collect(stage_group, ())
+        if not staged_nodes:
+            return 0
+
+        self._remove_family_outputs(main_group, family_id)
+        moved = 0
+        for node, path in staged_nodes:
+            destination = self._ensure_family_destination_group(main_group, path)
+            if self._move_layer_tree_node(node, destination):
+                moved += 1
+        main_group.setCustomProperty(
+            f"safeguarding_builder/modules/{family_id}/signature",
+            signature,
+        )
+        main_group.setCustomProperty(
+            f"safeguarding_builder/modules/{family_id}/run_id",
+            run_id,
+        )
+        return moved
+
+    def _run_airport_family(
+        self,
+        stage_group: QgsLayerTreeGroup,
+        input_data: Dict[str, Any],
+        target_crs: QgsCoordinateReferenceSystem,
+    ) -> bool:
+        groups = self._create_output_layer_groups(stage_group, False)
+        reference_group = groups["reference_data"]
+        infrastructure_group = groups["aerodrome_infrastructure"]
+        external_group = groups["external_safeguarding"]
+        created = False
+        arp_point = input_data.get("arp_point")
+        if arp_point is not None:
+            created = bool(
+                self.create_arp_layer(
+                    arp_point,
+                    input_data.get("arp_easting"),
+                    input_data.get("arp_northing"),
+                    self.icao_code,
+                    target_crs,
+                    reference_group,
+                    input_data.get("arp_elevation"),
+                )
+            ) or created
+        met_point = input_data.get("met_point")
+        if met_point is not None:
+            met_group = self._ensure_layer_group(
+                infrastructure_group,
+                output_structure.METEOROLOGICAL_STATION,
+            )
+            met_ok, _ = self.process_met_station_surfaces(
+                met_point,
+                self.icao_code,
+                target_crs,
+                reference_group,
+                met_group,
+            )
+            created = met_ok or created
+        guideline_groups = self._create_guideline_groups(external_group, False)
+        wildlife, turbines, _ = self._process_airport_safeguarding(
+            arp_point,
+            [],
+            [],
+            self.icao_code,
+            target_crs,
+            guideline_groups,
+        )
+        return created or wildlife or turbines or bool(
+            self.successfully_generated_layers
+        )
+
+    def _run_runways_family(
+        self,
+        stage_group: QgsLayerTreeGroup,
+        input_data: Dict[str, Any],
+        target_crs: QgsCoordinateReferenceSystem,
+    ) -> bool:
+        groups = self._create_output_layer_groups(stage_group, False)
+        reference_group = groups["reference_data"]
+        centreline_group = self._ensure_layer_group(
+            reference_group,
+            output_structure.RUNWAY_CENTRE_LINES,
+        )
+        processed, base_ok = self._process_runways_part1(
+            centreline_group,
+            QgsProject.instance(),
+            target_crs,
+            self.icao_code,
+            input_data.get("runways", []),
+        )
+        specialised, physical_ok = self._process_physical_and_protection_layers(
+            stage_group,
+            self.icao_code,
+            processed,
+            base_ok,
+            {
+                "markings": groups.get("markings"),
+                "physical_geometry": groups.get("physical_geometry"),
+                "runway_protection_areas": groups.get("runway_protection_areas"),
+                "specialised_safeguarding": groups.get("specialised_safeguarding"),
+            },
+        )
+        guideline_groups = self._create_guideline_groups(
+            groups["external_safeguarding"],
+            False,
+        )
+        runway_safeguarding_ok = self._process_runways_part2(
+            processed,
+            guideline_groups,
+            specialised,
+            None,
+        )
+        return base_ok or physical_ok or runway_safeguarding_ok
+
+    def _run_cns_family(
+        self,
+        stage_group: QgsLayerTreeGroup,
+        input_data: Dict[str, Any],
+        target_crs: QgsCoordinateReferenceSystem,
+    ) -> bool:
+        groups = self._create_output_layer_groups(stage_group, False)
+        cns_data = input_data.get("cns_facilities", [])
+        ils_data = input_data.get("ils_bra_installations", [])
+        created = False
+        if cns_data:
+            source_group = self._ensure_layer_group(
+                groups["reference_data"],
+                output_structure.CNS_TECHNICAL_FACILITIES,
+            )
+            created = bool(
+                self.create_cns_source_facility_layer(
+                    cns_data,
+                    self.icao_code,
+                    source_group,
+                )
+            )
+            if callable(getattr(self.framework, "cns_spec", None)):
+                created = self.process_cns_building_restricted_areas(
+                    cns_data,
+                    self.icao_code,
+                    target_crs,
+                    groups["cns_technical_safeguarding"],
+                ) or created
+        if ils_data:
+            created = self.process_ils_building_restricted_areas(
+                ils_data,
+                self.icao_code,
+                groups["cns_technical_safeguarding"],
+            ) or created
+        return created
+
+    def _run_lighting_family(
+        self,
+        stage_group: QgsLayerTreeGroup,
+        input_data: Dict[str, Any],
+    ) -> bool:
+        agl_options = input_data.get("agl_options", {})
+        if not agl_options.get("enabled"):
+            raise ValueError("Enable Airfield Ground Lighting before generating this family.")
+        processed = self._prepare_runway_data_for_family(
+            input_data.get("runways", [])
+        )
+        groups = self._create_output_layer_groups(stage_group, True)
+        return self.process_airfield_ground_lighting(
+            processed,
+            agl_options,
+            groups["airfield_ground_lighting"],
+        )
+
+    def _run_ols_family(
+        self,
+        stage_group: QgsLayerTreeGroup,
+        input_data: Dict[str, Any],
+    ) -> bool:
+        processed = self._prepare_runway_data_for_family(
+            input_data.get("runways", [])
+        )
+        if not processed:
+            return False
+        groups = self._create_output_layer_groups(stage_group, False)
+        self.reference_elevation_datum = self._calculate_reference_elevation_datum(
+            self.arp_elevation_amsl,
+            input_data.get("runways", []),
+        )
+        self._apply_shared_design_strips(processed)
+        self._ols_source_runways = processed
+        self._ols_arp_point = input_data.get("arp_point")
+        self._reset_controlling_ols_engine()
+        baseline_context = self._build_ols_construction_context(
+            self.baseline_ols_ruleset,
+            processed,
+            arp_point=input_data.get("arp_point"),
+        )
+        self._ols_construction_contexts = {
+            self.baseline_ols_ruleset.id: baseline_context,
+        }
+        context_ready = self._activate_ols_construction_context(
+            self.baseline_ols_ruleset,
+            baseline_context,
+        )
+        ols_data = (
+            processed
+            if getattr(
+                self.baseline_ols_ruleset,
+                "protected_airspace_model",
+                "",
+            )
+            == "annex14_modernised_ofs_oes"
+            else baseline_context.generation_runways()
+            if context_ready
+            else []
+        )
+        guideline_groups = {"F": groups.get("ols_surfaces")}
+        created = self._process_runways_part2(
+            processed,
+            guideline_groups,
+            None,
+            groups.get("obstacle_free_zone"),
+            groups.get("ols_surfaces"),
+            groups.get("airport_wide_ols"),
+            ols_runway_data_list=ols_data,
+        )
+        created = self._process_airport_wide_ols_if_possible(
+            guideline_groups,
+            processed,
+            self.icao_code,
+            created,
+            groups.get("airport_wide_ols"),
+        ) or created
+        solved_engines: Dict[str, Any] = {}
+        if guideline_groups.get("F") is not None:
+            if self._is_future_annex14_protected_airspace():
+                controlling_ok = self._create_annex14_controlling_surface_layers(
+                    self.icao_code,
+                    groups.get("ols_surfaces"),
+                    groups.get("airport_wide_ols"),
+                    groups.get("debug_development"),
+                    solved_engines=solved_engines,
+                )
+            else:
+                controlling_ok = self._create_controlling_ols_layers(
+                    self.icao_code,
+                    groups.get("debug_development"),
+                    groups.get("controlling_ols_surfaces"),
+                    groups.get("controlling_contours"),
+                    solved_engines=solved_engines,
+                )
+            created = controlling_ok or created
+            self._terrain_ols_engines = dict(solved_engines)
+            if self.comparison_ols_ruleset is not None:
+                created = self._run_ols_ruleset_comparison(
+                    self.icao_code,
+                    processed,
+                    groups,
+                    groups.get("debug_development"),
+                    solved_baseline_engines=solved_engines,
+                ) or created
+        self._write_ols_table_report(self.icao_code)
+        return created
+
+    def run_feature_family(self, family_id: str) -> None:
+        """Generate one dock feature family and replace only its prior outputs."""
+        family_id = str(family_id or "").strip().lower()
+        if family_id not in GENERATABLE_FAMILIES or self.dlg is None:
+            return
+        project = QgsProject.instance()
+        target_crs = project.crs()
+        if (
+            target_crs is None
+            or not target_crs.isValid()
+            or self._crs_is_geographic(target_crs)
+        ):
+            QMessageBox.warning(
+                self.dlg,
+                self.tr("Projected CRS required"),
+                self.tr("Set a valid projected project CRS in metres before generating layers."),
+            )
+            return
+        input_data = self.dlg.get_all_input_data(family_id)
+        if input_data is None:
+            return
+
+        label = FAMILY_LABELS[family_id]
+        signature = family_input_signature(
+            input_data,
+            family_id,
+            target_crs.authid(),
+        )
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S%fZ")
+        root = project.layerTreeRoot()
+        stage_group = root.addGroup(
+            f"__Safeguarding Builder Stage {family_id} {run_id}"
+        )
+        self._stage_layer_tree_node(stage_group)
+        previous_module = self._active_generation_module_id
+        previous_signature = self._active_generation_signature
+        previous_run_id = self._active_generation_run_id
+        previous_prefix = self.output_filename_prefix
+        self.successfully_generated_layers = []
+        self._active_generation_module_id = family_id
+        self._active_generation_signature = signature
+        self._active_generation_run_id = run_id
+        self.output_filename_prefix = f"{family_id}_{run_id}"
+        committed = 0
+        try:
+            self._configure_family_generation_context(input_data)
+            self.dlg.begin_processing(1)
+            self._set_processing_status(
+                self.tr(f"Generating {label} layers..."),
+                step=0,
+                total_steps=1,
+            )
+            if family_id == FAMILY_AIRPORT:
+                generated = self._run_airport_family(
+                    stage_group,
+                    input_data,
+                    target_crs,
+                )
+            elif family_id == FAMILY_RUNWAYS:
+                generated = self._run_runways_family(
+                    stage_group,
+                    input_data,
+                    target_crs,
+                )
+            elif family_id == FAMILY_CNS:
+                generated = self._run_cns_family(
+                    stage_group,
+                    input_data,
+                    target_crs,
+                )
+            elif family_id == FAMILY_OLS:
+                generated = self._run_ols_family(stage_group, input_data)
+            else:
+                generated = self._run_lighting_family(stage_group, input_data)
+
+            if generated:
+                main_group = self._family_main_group(root, self.icao_code)
+                committed = self._commit_family_stage(
+                    stage_group,
+                    main_group,
+                    family_id,
+                    signature,
+                    run_id,
+                )
+            if committed <= 0:
+                raise ValueError(
+                    f"{label} generation produced no layers; existing outputs were retained."
+                )
+            feature_count = sum(
+                max(0, int(layer.featureCount()))
+                for layer in self.successfully_generated_layers
+                if layer is not None and layer.isValid()
+            )
+            self.iface.messageBar().pushMessage(
+                self.tr(label),
+                self.tr(
+                    f"{label} layers updated: {committed} layer(s), {feature_count} feature(s)."
+                ),
+                level=Qgis.Success,
+                duration=8,
+            )
+            self._clear_processing_status(
+                final_message=self.tr(f"{label} generation complete.")
+            )
+        except ValueError as exc:
+            QMessageBox.warning(
+                self.dlg,
+                self.tr(f"{label} layers not updated"),
+                str(exc),
+            )
+            self._clear_processing_status()
+        except Exception as exc:
+            QgsMessageLog.logMessage(
+                f"{label} family generation failed: {exc}\n{traceback.format_exc()}",
+                PLUGIN_TAG,
+                level=Qgis.Critical,
+            )
+            QMessageBox.critical(
+                self.dlg,
+                self.tr(f"{label} generation failed"),
+                self.tr("The previous family outputs were retained. Check the QGIS log."),
+            )
+            self._clear_processing_status()
+        finally:
+            if root.findGroup(stage_group.name()) is not None:
+                self._remove_group_recursively(stage_group, project)
+                if stage_group.parent() is not None:
+                    stage_group.parent().removeChildNode(stage_group)
+            self._active_generation_module_id = previous_module
+            self._active_generation_signature = previous_signature
+            self._active_generation_run_id = previous_run_id
+            self.output_filename_prefix = previous_prefix
 
     def download_osm_aeroway(self):
         """Download aeroway-tagged OSM elements within 5 km of the entered ARP."""

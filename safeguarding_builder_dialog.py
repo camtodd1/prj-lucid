@@ -118,6 +118,8 @@ class SafeguardingBuilderDialog(
 ):
     """Safeguarding Builder form, suitable for hosting in a QGIS dock."""
 
+    familyGenerationRequested = QtCore.pyqtSignal(str)
+
     def __init__(self, parent=None):
         """Constructor."""
         super().__init__(parent)
@@ -231,6 +233,7 @@ class SafeguardingBuilderDialog(
         self._setup_readiness_strip()
         self._setup_workflow_tab_state()
         self._setup_workflow_context_strips()
+        self._setup_family_generation_controls()
         self._style_workflow_panels()
 
         if self.scroll_area_layout is not None:
@@ -312,6 +315,9 @@ class SafeguardingBuilderDialog(
             self._processing_progress_bar.setRange(0, max(1, int(total_steps)))
             self._processing_progress_bar.setValue(0)
             self._processing_progress_bar.setVisible(True)
+        for button in getattr(self, "_family_generation_buttons", {}).values():
+            button.setEnabled(False)
+
     def set_processing_status(
         self,
         message: str,
@@ -354,8 +360,10 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QPushButton, "pushButton_Generate"),
         )
         if generate_button:
-            generate_button.setText("Generate layers")
+            generate_button.setText("Generate all layers")
         self.update_dialog_status()
+        for button in getattr(self, "_family_generation_buttons", {}).values():
+            button.setEnabled(True)
         if final_message and hasattr(self, "label_footer_status"):
             self._set_footer_status(final_message)
 
@@ -994,6 +1002,38 @@ class SafeguardingBuilderDialog(
             setattr(self, f"_workflow_context_ready_{tab_name}", True)
 
         self._sync_workflow_context()
+
+    def _setup_family_generation_controls(self) -> None:
+        """Add one scoped generate/update action to each output-family tab."""
+        tab_families = {
+            "tab_airport": "airport",
+            "tab_runways": "runways",
+            "tab_cns": "cns",
+            "tab_ols": "ols",
+            "tab_lighting": "lighting",
+        }
+        self._family_generation_buttons = {}
+        for tab_name, family_id in tab_families.items():
+            widgets = getattr(self, "_workflow_context_widgets", {}).get(
+                tab_name,
+                {},
+            )
+            frame = widgets.get("frame")
+            row = frame.layout() if isinstance(frame, QtWidgets.QFrame) else None
+            if not isinstance(row, QtWidgets.QHBoxLayout):
+                continue
+            button = QtWidgets.QPushButton("Generate / update", frame)
+            button.setObjectName(f"pushButton_generate_{family_id}_family")
+            button.setToolTip(
+                "Generate this feature family, replacing only its previous outputs."
+            )
+            button.clicked.connect(
+                lambda _checked=False, value=family_id: self.familyGenerationRequested.emit(
+                    value
+                )
+            )
+            row.addWidget(button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
+            self._family_generation_buttons[family_id] = button
 
     def _style_workflow_context_frame(self, frame: QtWidgets.QFrame, active: bool) -> None:
         background = "#f5f7f9" if active else "#fafafa"
@@ -1877,6 +1917,7 @@ class SafeguardingBuilderDialog(
 
         generate_button = getattr(self, "pushButton_Generate", None)
         if generate_button:
+            generate_button.setText("Generate all layers")
             generate_button.setStyleSheet(
                 """
                 QPushButton {
@@ -3221,11 +3262,31 @@ class SafeguardingBuilderDialog(
             QtCore.QTimer.singleShot(0, runway_name.setFocus)
 
     # --- Data Gathering Methods ---
-    def get_all_input_data(self) -> Optional[Dict[str, Any]]:
+    def get_all_input_data(
+        self,
+        family_id: Optional[str] = None,
+    ) -> Optional[Dict[str, Any]]:
         """
-        Gathers all validated inputs (global, runways, CNS).
+        Gather validated inputs for a full or feature-family generation run.
+
+        A family run validates only the optional inputs that can affect that
+        family. Shared airport, ruleset and output context is always collected.
         Returns dict or None if critical validation fails.
         """
+        family_id = str(family_id or "").strip().lower() or None
+        validate_runways = family_id is None or family_id in {
+            "runways",
+            "cns",
+            "ols",
+            "lighting",
+        }
+        validate_ols = family_id is None or family_id == "ols"
+        validate_agl = family_id is None or family_id == "lighting"
+        validate_cns = family_id is None or family_id == "cns"
+        validate_external_options = family_id is None or family_id in {
+            "airport",
+            "runways",
+        }
         final_data = {}
         validation_ok = True
         error_messages = []
@@ -3267,7 +3328,8 @@ class SafeguardingBuilderDialog(
         safeguarding_framework = framework_combo.currentData() if framework_combo else DEFAULT_FRAMEWORK_ID
         safeguarding_options = self._get_safeguarding_options()
         if (
-            safeguarding_framework == "uk_caa_safeguarding"
+            validate_external_options
+            and safeguarding_framework == "uk_caa_safeguarding"
             and safeguarding_options.get("psz_applicable")
             and safeguarding_options.get("pscz_length_m") not in {1000.0, 1500.0}
         ):
@@ -3284,13 +3346,18 @@ class SafeguardingBuilderDialog(
             if hasattr(self, "_legacy_ols_policy_for_selection")
             else "ruleset_aligned"
         )
-        if comparison_ols_ruleset and comparison_ols_ruleset == baseline_ols_ruleset:
+        if (
+            validate_ols
+            and comparison_ols_ruleset
+            and comparison_ols_ruleset == baseline_ols_ruleset
+        ):
             validation_ok = False
             error_messages.append(
                 "Baseline and comparison OLS rulesets must be different."
             )
         elif (
-            comparison_ols_ruleset
+            validate_ols
+            and comparison_ols_ruleset
             and hasattr(self, "_ols_pair_available")
             and not self._ols_pair_available(
                 str(baseline_ols_ruleset),
@@ -3309,6 +3376,8 @@ class SafeguardingBuilderDialog(
                 "arp_northing": arp_n,
                 "arp_elevation": arp_elev,
                 "met_point": met_pt,
+                "met_easting": met_pt.x() if met_pt is not None else None,
+                "met_northing": met_pt.y() if met_pt is not None else None,
                 "met_elevation": met_elev,
                 "design_standard": design_standard,
                 "ruleset": design_standard,
@@ -3322,10 +3391,10 @@ class SafeguardingBuilderDialog(
 
         # --- Runway Inputs ---
         runway_data_list = []
-        if not self._runway_groups:
+        if validate_runways and not self._runway_groups:
             validation_ok = False
             error_messages.append("At least one runway definition is required.")
-        else:
+        elif validate_runways:
             for index, group_widget in sorted(self._runway_groups.items()):
                 runway_inputs = group_widget.get_input_data()
                 validated_runway = self._validate_runway_data(
@@ -3355,18 +3424,24 @@ class SafeguardingBuilderDialog(
             )
             return None
         final_data["runways"] = runway_data_list
-        final_data["runway_configuration"] = classify_runway_configuration(
-            runway_data_list
+        final_data["runway_configuration"] = (
+            classify_runway_configuration(runway_data_list)
+            if runway_data_list
+            else None
         )
 
         # --- Airfield Ground Lighting Inputs ---
-        agl_options = self._get_agl_options(error_messages)
+        agl_options = (
+            self._get_agl_options(error_messages)
+            if validate_agl
+            else {"enabled": False}
+        )
         final_data["agl_options"] = agl_options
         if agl_options.get("enabled") and len(error_messages) > 0:
             validation_ok = False
 
         # --- CNS Inputs ---
-        cns_data = self._get_cns_manual_data()
+        cns_data = self._get_cns_manual_data() if validate_cns else []
         if cns_data is None:
             return None
         final_data["cns_facilities"] = cns_data
@@ -3377,13 +3452,16 @@ class SafeguardingBuilderDialog(
         )
 
         # --- ILS Building Restricted Area Inputs ---
-        ils_bra_errors_before = len(error_messages)
-        final_data["ils_bra_installations"] = self.get_ils_bra_input_data(
-            runway_data_list,
-            error_messages,
-        )
-        if len(error_messages) > ils_bra_errors_before:
-            validation_ok = False
+        if validate_cns:
+            ils_bra_errors_before = len(error_messages)
+            final_data["ils_bra_installations"] = self.get_ils_bra_input_data(
+                runway_data_list,
+                error_messages,
+            )
+            if len(error_messages) > ils_bra_errors_before:
+                validation_ok = False
+        else:
+            final_data["ils_bra_installations"] = []
 
         # --- Output Options ---
         if self.radioMemoryOutput.isChecked():

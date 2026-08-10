@@ -39,6 +39,37 @@ PLUGIN_TAG = "SafeguardingBuilder"
 
 
 class LayerMixin:
+    def _apply_generation_metadata(
+        self,
+        layer: QgsVectorLayer,
+        output_key: str,
+    ) -> None:
+        """Stamp a generated layer with optional feature-family ownership."""
+        if layer is None:
+            return
+        module_id = str(
+            getattr(self, "_active_generation_module_id", "") or ""
+        ).strip()
+        if not module_id:
+            return
+        layer.setCustomProperty("safeguarding_builder/module_id", module_id)
+        layer.setCustomProperty(
+            "safeguarding_builder/output_key",
+            str(output_key or "").strip(),
+        )
+        layer.setCustomProperty(
+            "safeguarding_builder/input_signature",
+            str(getattr(self, "_active_generation_signature", "") or ""),
+        )
+        layer.setCustomProperty(
+            "safeguarding_builder/run_id",
+            str(getattr(self, "_active_generation_run_id", "") or ""),
+        )
+        layer.setCustomProperty(
+            "safeguarding_builder/airport",
+            str(getattr(self, "icao_code", "") or ""),
+        )
+
     def _surface_layer_display_name(
         self,
         surface: str,
@@ -287,6 +318,7 @@ class LayerMixin:
 
             if style_key:
                 layer.setCustomProperty("safeguarding_style_key", style_key)
+            self._apply_generation_metadata(layer, internal_name_base)
 
             if self.output_mode == "file":
                 if not all(
@@ -319,6 +351,11 @@ class LayerMixin:
                     or "baseline"
                 ).casefold() == "comparison":
                     output_name = f"Comparison_{output_name}"
+                filename_prefix = str(
+                    getattr(self, "output_filename_prefix", "") or ""
+                ).strip()
+                if filename_prefix:
+                    output_name = f"{filename_prefix}_{output_name}"
                 safe_name = self._sanitize_filename(output_name)
                 full_path = os.path.join(self.output_path, f"{safe_name}{self.output_format_extension}")
 
@@ -339,6 +376,10 @@ class LayerMixin:
                     loaded_layer = QgsVectorLayer(full_path, display_name, "ogr")
                     if loaded_layer is not None and loaded_layer.isValid():
                         loaded_layer.setCustomProperty("safeguarding_style_key", style_key)
+                        self._apply_generation_metadata(
+                            loaded_layer,
+                            internal_name_base,
+                        )
                         self._apply_style(loaded_layer, self.style_map)
                         project.addMapLayer(loaded_layer, False)
                         loaded_node = layer_group.insertLayer(0, loaded_layer)

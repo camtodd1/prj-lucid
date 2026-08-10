@@ -95,6 +95,34 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             )
         )
 
+    def test_output_family_tabs_expose_scoped_generation_actions(self):
+        emitted = []
+        self.dialog.familyGenerationRequested.connect(emitted.append)
+
+        for family in ("airport", "runways", "cns", "ols", "lighting"):
+            button = self.dialog.findChild(
+                QtWidgets.QPushButton,
+                f"pushButton_generate_{family}_family",
+            )
+            self.assertIsNotNone(button)
+            self.assertEqual(button.text(), "Generate / update")
+
+        self.dialog.findChild(
+            QtWidgets.QPushButton,
+            "pushButton_generate_lighting_family",
+        ).click()
+        self.assertEqual(emitted, ["lighting"])
+        self.assertEqual(self.dialog.pushButton_Generate.text(), "Generate all layers")
+
+    def test_airport_family_validation_does_not_require_runway_inputs(self):
+        self.dialog.lineEdit_airport_name.setText("YTST")
+
+        result = self.dialog.get_all_input_data("airport")
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result["icao_code"], "YTST")
+        self.assertEqual(result["runways"], [])
+
     def test_baseline_follows_design_standard_and_shows_pairing_label(self):
         design = self.dialog.ruleset_combo
         cap168_index = design.findData("uk_caa_cap168_edition_13")

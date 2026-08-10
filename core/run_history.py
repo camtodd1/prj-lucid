@@ -225,6 +225,21 @@ def _fingerprint_value(value: object) -> object:
     return str(value)
 
 
+def input_mapping_fingerprint(
+    input_data: Mapping[str, object],
+    relevant_keys: Optional[Iterable[str]] = None,
+) -> str:
+    """Fingerprint a canonical subset of an input mapping."""
+    keys = tuple(relevant_keys) if relevant_keys is not None else tuple(input_data)
+    payload = {
+        key: _fingerprint_value(input_data.get(key))
+        for key in keys
+        if key in input_data
+    }
+    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
+
+
 def runtime_input_fingerprint(input_data: Mapping[str, object]) -> str:
     """Fingerprint inputs that can materially change a safeguarding runtime."""
     relevant_keys = (
@@ -244,13 +259,7 @@ def runtime_input_fingerprint(input_data: Mapping[str, object]) -> str:
         "output_mode",
         "output_format_driver",
     )
-    payload = {
-        key: _fingerprint_value(input_data.get(key))
-        for key in relevant_keys
-        if key in input_data
-    }
-    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:12]
+    return input_mapping_fingerprint(input_data, relevant_keys)
 
 
 def _module_timings(record: Mapping[str, object]) -> Dict[str, Dict[str, object]]:
@@ -663,6 +672,7 @@ __all__ = [
     "default_history_path",
     "detect_run_agent",
     "git_revision",
+    "input_mapping_fingerprint",
     "migrate_history_file",
     "plugin_version",
     "runtime_input_fingerprint",
