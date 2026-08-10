@@ -1,6 +1,7 @@
 import unittest
 
 from core.family_modules import (
+    FAMILY_AIRPORT,
     FAMILY_CNS,
     FAMILY_LIGHTING,
     FAMILY_OLS,
@@ -47,6 +48,24 @@ class FamilyModuleSignatureTests(unittest.TestCase):
         self.assertEqual(
             family_input_signature(baseline, FAMILY_LIGHTING, "EPSG:28355"),
             family_input_signature(changed, FAMILY_LIGHTING, "EPSG:28355"),
+        )
+
+    def test_met_changes_only_invalidate_cns_family(self):
+        baseline = {
+            "icao_code": "YTEST",
+            "met_easting": 500000.0,
+            "met_northing": 7000000.0,
+            "met_elevation": 95.0,
+        }
+        changed = {**baseline, "met_easting": 500010.0}
+
+        self.assertNotEqual(
+            family_input_signature(baseline, FAMILY_CNS, "EPSG:28355"),
+            family_input_signature(changed, FAMILY_CNS, "EPSG:28355"),
+        )
+        self.assertEqual(
+            family_input_signature(baseline, FAMILY_AIRPORT, "EPSG:28355"),
+            family_input_signature(changed, FAMILY_AIRPORT, "EPSG:28355"),
         )
 
     def test_project_crs_invalidates_geometry_family(self):

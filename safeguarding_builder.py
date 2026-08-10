@@ -899,8 +899,6 @@ class SafeguardingBuilder(
 
         legacy_paths = {
             FAMILY_AIRPORT: (
-                (output_structure.AERODROME_INFRASTRUCTURE, output_structure.METEOROLOGICAL_STATION),
-                (output_structure.CNS_TECHNICAL_SAFEGUARDING, output_structure.METEOROLOGICAL_STATION),
                 (output_structure.EXTERNAL_SAFEGUARDING, "Wildlife Hazard Management"),
                 (output_structure.EXTERNAL_SAFEGUARDING, "Wildlife Consultation"),
                 (output_structure.EXTERNAL_SAFEGUARDING, "Wind Turbines and Renewable Energy"),
@@ -918,7 +916,9 @@ class SafeguardingBuilder(
                 (output_structure.EXTERNAL_SAFEGUARDING, "Public Safety Zones"),
             ),
             FAMILY_CNS: (
+                (output_structure.AERODROME_INFRASTRUCTURE, output_structure.METEOROLOGICAL_STATION),
                 (output_structure.REFERENCE_DATA, output_structure.CNS_TECHNICAL_FACILITIES),
+                (output_structure.CNS_TECHNICAL_SAFEGUARDING, output_structure.METEOROLOGICAL_STATION),
                 (output_structure.CNS_TECHNICAL_SAFEGUARDING, output_structure.CNS_TECHNICAL_FACILITIES),
             ),
             FAMILY_OLS: ((output_structure.PROTECTED_AIRSPACE,),),
@@ -1061,21 +1061,6 @@ class SafeguardingBuilder(
                     input_data.get("arp_elevation"),
                 )
             ) or created
-        met_point = input_data.get("met_point")
-        if met_point is not None:
-            technical_group = groups["cns_technical_safeguarding"]
-            met_group = self._ensure_layer_group(
-                technical_group,
-                output_structure.METEOROLOGICAL_STATION,
-            )
-            met_ok, _ = self.process_met_station_surfaces(
-                met_point,
-                self.icao_code,
-                target_crs,
-                met_group,
-                met_group,
-            )
-            created = met_ok or created
         guideline_groups = self._create_guideline_groups(external_group, False)
         wildlife, turbines, _ = self._process_airport_safeguarding(
             arp_point,
@@ -1142,6 +1127,20 @@ class SafeguardingBuilder(
         cns_data = input_data.get("cns_facilities", [])
         ils_data = input_data.get("ils_bra_installations", [])
         created = False
+        met_point = input_data.get("met_point")
+        if met_point is not None:
+            met_group = self._ensure_layer_group(
+                groups["cns_technical_safeguarding"],
+                output_structure.METEOROLOGICAL_STATION,
+            )
+            met_ok, _ = self.process_met_station_surfaces(
+                met_point,
+                self.icao_code,
+                target_crs,
+                met_group,
+                met_group,
+            )
+            created = met_ok or created
         if cns_data:
             source_group = self._ensure_layer_group(
                 groups["cns_technical_safeguarding"],

@@ -258,7 +258,7 @@ class FamilyGenerationCommitTests(unittest.TestCase):
             {node.name() for node in committed_physical.findLayers()},
         )
 
-    def test_airport_family_routes_all_met_layers_to_technical_safeguarding(self):
+    def test_airport_family_does_not_generate_met_layers(self):
         project = QgsProject.instance()
         project.setCrs(QgsCoordinateReferenceSystem("EPSG:28353"))
         self.builder.tr = lambda value: value
@@ -298,26 +298,19 @@ class FamilyGenerationCommitTests(unittest.TestCase):
 
         technical = stage.findGroup(output_structure.CNS_TECHNICAL_SAFEGUARDING)
         station = technical.findGroup(output_structure.METEOROLOGICAL_STATION)
-        self.assertIsNotNone(station)
-        self.assertEqual(
-            {node.name() for node in station.findLayers()},
-            {
-                "MET Station Location",
-                "MET Instrument Enclosure",
-                "MET Buffer Zone",
-                "MET Obstacle Buffer Zone",
-            },
-        )
-        reference = stage.findGroup(output_structure.REFERENCE_DATA)
-        infrastructure = stage.findGroup(output_structure.AERODROME_INFRASTRUCTURE)
-        self.assertIsNone(reference.findGroup(output_structure.METEOROLOGICAL_STATION))
-        self.assertIsNone(infrastructure.findGroup(output_structure.METEOROLOGICAL_STATION))
+        self.assertIsNone(station)
 
     def test_cns_family_routes_source_facilities_to_technical_safeguarding(self):
         project = QgsProject.instance()
         project.setCrs(QgsCoordinateReferenceSystem("EPSG:28353"))
         self.builder.tr = lambda value: value
         self.builder.icao_code = "YBAS"
+        self.builder._run_log = None
+        self.builder.output_mode = "memory"
+        self.builder.style_map = {}
+        self.builder._active_generation_module_id = FAMILY_CNS
+        self.builder._active_generation_signature = "signature"
+        self.builder._active_generation_run_id = "run-id"
         self.builder.framework = get_framework_profile()
         self.builder.baseline_ols_ruleset = EASA_PROFILE
         self.builder.comparison_ols_ruleset = None
@@ -337,7 +330,11 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         self.assertTrue(
             self.builder._run_cns_family(
                 stage,
-                {"cns_facilities": [{"id": "VOR-1"}], "ils_bra_installations": []},
+                {
+                    "met_point": QgsPointXY(500100.0, 7000100.0),
+                    "cns_facilities": [{"id": "VOR-1"}],
+                    "ils_bra_installations": [],
+                },
                 project.crs(),
             )
         )
@@ -348,8 +345,25 @@ class FamilyGenerationCommitTests(unittest.TestCase):
             source_group.parent().name(),
             output_structure.CNS_TECHNICAL_SAFEGUARDING,
         )
+        station = stage.findGroup(output_structure.METEOROLOGICAL_STATION)
+        self.assertEqual(
+            {node.name() for node in station.findLayers()},
+            {
+                "MET Station Location",
+                "MET Instrument Enclosure",
+                "MET Buffer Zone",
+                "MET Obstacle Buffer Zone",
+            },
+        )
+        self.assertTrue(
+            all(
+                node.layer().customProperty("safeguarding_builder/module_id")
+                == FAMILY_CNS
+                for node in station.findLayers()
+            )
+        )
 
-    def test_cns_replacement_preserves_relocated_met_outputs(self):
+    def test_airport_replacement_preserves_cns_owned_met_outputs(self):
         main = QgsProject.instance().layerTreeRoot().addGroup(
             "YBAS Safeguarding Builder"
         )
@@ -361,18 +375,25 @@ class FamilyGenerationCommitTests(unittest.TestCase):
             "MET Station Location",
         )
         met_group.addLayer(met_layer)
-        dme_group = technical.addGroup("Distance Measuring Equipment (DME)")
-        dme_layer = self.layer("DME BRA")
-        dme_layer_id = dme_layer.id()
-        dme_layer.setCustomProperty("safeguarding_style_key", "CNS Circle Zone")
-        dme_group.addLayer(dme_layer)
-
-        self.builder._remove_family_outputs(main, FAMILY_CNS)
+        self.builder._remove_family_outputs(main, FAMILY_AIRPORT)
 
         self.assertIs(QgsProject.instance().mapLayer(met_layer.id()), met_layer)
         self.assertIsNotNone(technical.findGroup(output_structure.METEOROLOGICAL_STATION))
-        self.assertIsNone(QgsProject.instance().mapLayer(dme_layer_id))
-        self.assertIsNone(technical.findGroup("Distance Measuring Equipment (DME)"))
+
+    def test_cns_replacement_removes_legacy_met_outputs(self):
+        main = QgsProject.instance().layerTreeRoot().addGroup(
+            "YBAS Safeguarding Builder"
+        )
+        technical = main.addGroup(output_structure.CNS_TECHNICAL_SAFEGUARDING)
+        met_group = technical.addGroup(output_structure.METEOROLOGICAL_STATION)
+        met_layer = self.layer("MET Station Location")
+        met_layer_id = met_layer.id()
+        met_group.addLayer(met_layer)
+
+        self.builder._remove_family_outputs(main, FAMILY_CNS)
+
+        self.assertIsNone(QgsProject.instance().mapLayer(met_layer_id))
+        self.assertIsNone(technical.findGroup(output_structure.METEOROLOGICAL_STATION))
 
 
 if __name__ == "__main__":
