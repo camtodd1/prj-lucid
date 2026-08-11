@@ -1692,6 +1692,10 @@ class PhysicalGeometryMixin:
         centreline_width = self._centreline_marking_width(arc_num, type_primary, type_reciprocal)
         surface_markings_applicable = self._is_marking_surface_applicable(runway_data)
         threshold_marking_ref = self._threshold_marking_ref("MOS 8.17(2); Table 8.17(2)")
+        starter_extension_lengths = {
+            primary_desig: non_negative_number(runway_data.get("starter_extension_length_1"), 0.0),
+            reciprocal_desig: non_negative_number(runway_data.get("starter_extension_length_2"), 0.0),
+        }
 
         end_specs = [
             (
@@ -2116,6 +2120,11 @@ class PhysicalGeometryMixin:
                 qa_records[end_desig]["assumptions"].add(
                     "Pre-threshold area entered in dialog is assumed sealed and not suitable for normal aircraft usage."
                 )
+                starter_length = starter_extension_lengths[end_desig]
+                if starter_length > 1e-6:
+                    pre_area_start = pre_area_start.project(
+                        starter_length, pre_area_outward_azimuth
+                    )
                 chevron_leg_run = max(15.0, runway_width / 2.0 - 7.5)
                 pre_area_clip = self._create_rectangle_from_start(
                     pre_area_start,
@@ -2844,8 +2853,15 @@ class PhysicalGeometryMixin:
 
             if pre_area_len_1 > 1e-6:
                 try:
-                    area_start_point = phys_p_start
                     outward_azimuth = rwy_params["azimuth_r_p"]
+                    starter_length = self._non_negative_float(
+                        runway_data.get("starter_extension_length_1"), 0.0
+                    )
+                    area_start_point = (
+                        phys_p_start.project(starter_length, outward_azimuth)
+                        if starter_length > 1e-6
+                        else phys_p_start
+                    )
                     geom = self._create_rectangle_from_start(
                         area_start_point,
                         outward_azimuth,
@@ -2873,8 +2889,15 @@ class PhysicalGeometryMixin:
 
             if pre_area_len_2 > 1e-6:
                 try:
-                    area_start_point = phys_p_end
                     outward_azimuth = rwy_params["azimuth_p_r"]
+                    starter_length = self._non_negative_float(
+                        runway_data.get("starter_extension_length_2"), 0.0
+                    )
+                    area_start_point = (
+                        phys_p_end.project(starter_length, outward_azimuth)
+                        if starter_length > 1e-6
+                        else phys_p_end
+                    )
                     geom = self._create_rectangle_from_start(
                         area_start_point,
                         outward_azimuth,

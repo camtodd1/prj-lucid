@@ -802,6 +802,8 @@ to the `Pavement` feature.
 
 If the same runway end has a displaced threshold, the starter extension and
 its shoulders begin at the outer end of that displaced-threshold pavement.
+Any pre-threshold area and its chevrons then begin at the outer end of the
+starter extension.
 
 | Field | Value |
 | --- | --- |

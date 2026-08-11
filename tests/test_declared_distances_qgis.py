@@ -96,7 +96,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         self.assertEqual(by_direction["primary"]["tora_m"], 1250.0)
         self.assertEqual(by_direction["reciprocal"]["tora_m"], 1100.0)
 
-    def test_starter_extension_generates_pre_threshold_styled_polygon(self):
+    def test_pre_threshold_geometry_is_chained_after_starter_extension(self):
         runway = {
             "short_name": "09/27",
             "thr_point": QgsPointXY(0.0, 0.0),
@@ -105,6 +105,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             "thr_displaced_2": 0.0,
             "starter_extension_length_1": 150.0,
             "starter_extension_width_1": 45.0,
+            "thr_pre_area_1": 60.0,
             "width": 45.0,
         }
 
@@ -119,12 +120,20 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             for kind, geometry, _attrs in generated
             if kind == "PreThresholdRunway"
         )
+        pre_threshold_area = next(
+            geometry
+            for kind, geometry, _attrs in generated
+            if kind == "PreThresholdArea"
+        )
 
         geometry, attrs = extension
         self.assertAlmostEqual(geometry.area(), 150.0 * 45.0, places=6)
         self.assertAlmostEqual(geometry.centroid().asPoint().x(), -175.0, places=6)
         self.assertAlmostEqual(geometry.boundingBox().xMaximum(), -100.0, places=6)
         self.assertAlmostEqual(geometry.intersection(pre_threshold).area(), 0.0, places=6)
+        self.assertAlmostEqual(pre_threshold_area.boundingBox().xMaximum(), -250.0, places=6)
+        self.assertAlmostEqual(pre_threshold_area.boundingBox().xMinimum(), -310.0, places=6)
+        self.assertAlmostEqual(pre_threshold_area.intersection(geometry).area(), 0.0, places=6)
         self.assertEqual(attrs["end_desig"], "09")
         self.assertEqual(attrs["len_m"], 150.0)
         self.assertEqual(attrs["wid_m"], 45.0)
@@ -145,12 +154,18 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             "starter_extension_width_1": 45.0,
             "starter_extension_shoulder_1": 7.5,
             "thr_displaced_1": 100.0,
+            "thr_pre_area_1": 60.0,
         }
 
         markings = [
             (geometry, attrs)
             for kind, geometry, attrs in builder.generate_detailed_runway_markings(runway)
             if kind == "DetailedStarterExtensionMarking"
+        ]
+        pre_threshold_area_markings = [
+            geometry
+            for kind, geometry, _attrs in builder.generate_detailed_runway_markings(runway)
+            if kind == "DetailedPreThresholdAreaMarking"
         ]
         extension_features = [
             (geometry, attrs)
@@ -207,6 +222,14 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
                 geometry.boundingBox().xMinimum() >= -250.0 - 1e-6
                 and geometry.boundingBox().xMaximum() <= -100.0 + 1e-6
                 for geometry, _attrs in markings
+            )
+        )
+        self.assertTrue(pre_threshold_area_markings)
+        self.assertTrue(
+            all(
+                geometry.boundingBox().xMinimum() >= -310.0 - 1e-6
+                and geometry.boundingBox().xMaximum() <= -250.0 + 1e-6
+                for geometry in pre_threshold_area_markings
             )
         )
 
