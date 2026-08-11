@@ -51,11 +51,19 @@ physical length = threshold distance
                 + primary displaced threshold
                 + reciprocal displaced threshold
 
-TORA = physical length
+starter extension beyond runway end
+     = max(extension length - displacement distance, 0)
+
+TORA = physical length + starter extension beyond runway end
 TODA = TORA + departure-end clearway
 ASDA = TORA + departure-end stopway
 LDA  = landing-threshold distance available in that direction
 ```
+
+Starter-extension length and displacement distance are both measured outward
+from the threshold. Their overlapping length is therefore counted once rather
+than added twice. Starter extensions do not change LDA or the physical runway
+length.
 
 The active ruleset supplies clearway policy. A default or entered clearway may
 be capped by that ruleset, including the common half-`TORA` limit. Published

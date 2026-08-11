@@ -203,12 +203,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         label_threshold_elevation_row.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
-        label_displaced_row = QtWidgets.QLabel("Displaced Threshold (m):")
+        label_displaced_row = QtWidgets.QLabel("Displacement Distance (m):")
         label_displaced_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        label_pre_threshold_area_row = QtWidgets.QLabel("Pre-threshold Area (m):")
-        label_pre_threshold_area_row.setAlignment(
-            QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
-        )
         h_layout_desig_inputs = QtWidgets.QHBoxLayout()
         h_layout_desig_inputs.setContentsMargins(0, 0, 0, 0)
         h_layout_desig_inputs.setSpacing(6)
@@ -297,25 +293,25 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         self.threshold_elev_1_le = QtWidgets.QLineEdit()
         self.threshold_elev_1_le.setObjectName(f"lineEdit_threshold_elev_1_{self.index}")
-        self.threshold_elev_1_le.setPlaceholderText("blank = runway end elev.")
+        self.threshold_elev_1_le.setPlaceholderText("Required")
         self.threshold_elev_1_le.setToolTip(
-            "Elevation (AMSL) of the primary landing threshold. Leave blank to use the runway-end elevation."
+            "Required elevation (AMSL) of the primary landing threshold."
         )
         self.threshold_elev_1_le.setValidator(self.numeric_validator)
         self._set_control_width(self.threshold_elev_1_le)
 
         self.threshold_elev_2_le = QtWidgets.QLineEdit()
         self.threshold_elev_2_le.setObjectName(f"lineEdit_threshold_elev_2_{self.index}")
-        self.threshold_elev_2_le.setPlaceholderText("blank = runway end elev.")
+        self.threshold_elev_2_le.setPlaceholderText("Required")
         self.threshold_elev_2_le.setToolTip(
-            "Elevation (AMSL) of the reciprocal landing threshold. Leave blank to use the runway-end elevation."
+            "Required elevation (AMSL) of the reciprocal landing threshold."
         )
         self.threshold_elev_2_le.setValidator(self.numeric_validator)
         self._set_control_width(self.threshold_elev_2_le)
 
         self.thr_displaced_1_le = QtWidgets.QLineEdit()
         self.thr_displaced_1_le.setObjectName(f"lineEdit_thr_displaced_1_{self.index}")
-        self.thr_displaced_1_le.setPlaceholderText("e.g., 300")
+        self.thr_displaced_1_le.setPlaceholderText("blank = not displaced")
         self.thr_displaced_1_le.setToolTip(
             "Displaced threshold distance for primary end (meters). Leave blank if none."
         )
@@ -324,7 +320,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         self.thr_displaced_2_le = QtWidgets.QLineEdit()
         self.thr_displaced_2_le.setObjectName(f"lineEdit_thr_displaced_2_{self.index}")
-        self.thr_displaced_2_le.setPlaceholderText("e.g., 0")
+        self.thr_displaced_2_le.setPlaceholderText("blank = not displaced")
         self.thr_displaced_2_le.setToolTip(
             "Displaced threshold distance for reciprocal end (meters). Leave blank if none."
         )
@@ -394,16 +390,13 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         threshold_layout.addWidget(label_threshold_elevation_row, 2, 0)
         threshold_layout.addWidget(self.threshold_elev_1_le, 2, 1)
         threshold_layout.addWidget(self.threshold_elev_2_le, 2, 2)
-        threshold_layout.addWidget(label_runway_end_elevation_row, 3, 0)
-        threshold_layout.addWidget(self.runway_end_elev_1_le, 3, 1)
-        threshold_layout.addWidget(self.runway_end_elev_2_le, 3, 2)
-        threshold_layout.addWidget(label_displaced_row, 4, 0)
-        threshold_layout.addWidget(self.thr_displaced_1_le, 4, 1)
-        threshold_layout.addWidget(self.thr_displaced_2_le, 4, 2)
-        threshold_layout.addWidget(label_pre_threshold_area_row, 5, 0)
-        threshold_layout.addWidget(self.thr_pre_area_1_le, 5, 1)
-        threshold_layout.addWidget(self.thr_pre_area_2_le, 5, 2)
-        self._standardize_form_rows(threshold_layout, 6)
+        threshold_layout.addWidget(label_displaced_row, 3, 0)
+        threshold_layout.addWidget(self.thr_displaced_1_le, 3, 1)
+        threshold_layout.addWidget(self.thr_displaced_2_le, 3, 2)
+        threshold_layout.addWidget(label_runway_end_elevation_row, 4, 0)
+        threshold_layout.addWidget(self.runway_end_elev_1_le, 4, 1)
+        threshold_layout.addWidget(self.runway_end_elev_2_le, 4, 2)
+        self._standardize_form_rows(threshold_layout, 5)
 
         self.dist_lbl = QtWidgets.QLabel(CALC_PLACEHOLDER)
         self.dist_lbl.setObjectName(f"label_rwy_distance_{self.index}")
@@ -422,6 +415,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._set_control_width(self.shoulder_le)
 
         advanced_body_layout.addWidget(threshold_group)
+        self._add_starter_extension_controls(advanced_body_layout)
+        self._add_pre_threshold_area_controls(advanced_body_layout)
         self._add_runway_dimensions_controls(advanced_body_layout, label_runway_width, label_runway_shoulder)
         self._add_runway_operations_controls(advanced_body_layout)
         self._add_runway_characteristics_controls(advanced_body_layout)
@@ -430,6 +425,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         advanced_layout.addWidget(advanced_body)
         groupBox_layout.addWidget(self.advanced_widget, 0, QtCore.Qt.AlignmentFlag.AlignTop)
 
+        self._update_threshold_dependencies()
+        self._update_starter_extension_dependencies()
         self._update_status_chip()
         self._set_advanced_visible(False)
 
@@ -667,6 +664,80 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         layout.addWidget(lahso_label, row, 0)
         layout.addWidget(self.lahso_applied_1_cb, row, 1)
         layout.addWidget(self.lahso_applied_2_cb, row, 2)
+
+    def _add_starter_extension_controls(
+        self, parent_layout: QtWidgets.QVBoxLayout
+    ) -> None:
+        group = QtWidgets.QGroupBox("Runway Starter Extension")
+        group.setObjectName(f"groupBox_starter_extension_{self.index}")
+        self._style_section_groupbox(group)
+        layout = QtWidgets.QGridLayout(group)
+        self._configure_runway_form_grid(layout)
+        layout.addWidget(self._column_header_label("Primary End"), 0, 1)
+        layout.addWidget(self._column_header_label("Reciprocal End"), 0, 2)
+
+        def extension_edit(suffix: str, tooltip: str) -> QtWidgets.QLineEdit:
+            line_edit = QtWidgets.QLineEdit()
+            line_edit.setObjectName(f"lineEdit_starter_extension_{suffix}_{self.index}")
+            line_edit.setValidator(self.distance_validator)
+            line_edit.setToolTip(tooltip)
+            self._set_control_width(line_edit)
+            return line_edit
+
+        self.starter_extension_length_1_le = extension_edit(
+            "length_1", "Length outward from the primary threshold; blank means no starter extension."
+        )
+        self.starter_extension_length_2_le = extension_edit(
+            "length_2", "Length outward from the reciprocal threshold; blank means no starter extension."
+        )
+        self.starter_extension_width_1_le = extension_edit(
+            "width_1", "Paved width of the primary-end starter extension."
+        )
+        self.starter_extension_width_2_le = extension_edit(
+            "width_2", "Paved width of the reciprocal-end starter extension."
+        )
+        self.starter_extension_shoulder_1_le = extension_edit(
+            "shoulder_1", "Starter-extension shoulder width on each side."
+        )
+        self.starter_extension_shoulder_2_le = extension_edit(
+            "shoulder_2", "Starter-extension shoulder width on each side."
+        )
+        self.starter_extension_outer_elev_1_le = extension_edit(
+            "outer_elev_1", "Elevation at the outer end of the primary-end starter extension."
+        )
+        self.starter_extension_outer_elev_2_le = extension_edit(
+            "outer_elev_2", "Elevation at the outer end of the reciprocal-end starter extension."
+        )
+        self.starter_extension_outer_elev_1_le.setValidator(self.numeric_validator)
+        self.starter_extension_outer_elev_2_le.setValidator(self.numeric_validator)
+
+        rows = (
+            ("Extension Length (m):", self.starter_extension_length_1_le, self.starter_extension_length_2_le),
+            ("Extension Width (m):", self.starter_extension_width_1_le, self.starter_extension_width_2_le),
+            ("Shoulder Width (m):", self.starter_extension_shoulder_1_le, self.starter_extension_shoulder_2_le),
+            ("Outer-End Elevation (m AHD):", self.starter_extension_outer_elev_1_le, self.starter_extension_outer_elev_2_le),
+        )
+        for row, (label, primary, reciprocal) in enumerate(rows, start=1):
+            layout.addWidget(QtWidgets.QLabel(label), row, 0)
+            layout.addWidget(primary, row, 1)
+            layout.addWidget(reciprocal, row, 2)
+        self._standardize_form_rows(layout, 5)
+        self._update_starter_extension_dependencies()
+        parent_layout.addWidget(group)
+
+    def _add_pre_threshold_area_controls(
+        self, parent_layout: QtWidgets.QVBoxLayout
+    ) -> None:
+        group = QtWidgets.QGroupBox("Unusable Pre-threshold Area")
+        group.setObjectName(f"groupBox_pre_threshold_area_{self.index}")
+        self._style_section_groupbox(group)
+        layout = QtWidgets.QGridLayout(group)
+        self._configure_runway_form_grid(layout)
+        layout.addWidget(QtWidgets.QLabel("Area Length (m):"), 0, 0)
+        layout.addWidget(self.thr_pre_area_1_le, 0, 1)
+        layout.addWidget(self.thr_pre_area_2_le, 0, 2)
+        self._standardize_form_rows(layout, 1)
+        parent_layout.addWidget(group)
 
     def _add_runway_dimensions_controls(
         self,
@@ -1208,6 +1279,77 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._set_control_width(line_edit)
         return line_edit
 
+    @staticmethod
+    def _positive_line_value(line_edit: QtWidgets.QLineEdit) -> Optional[float]:
+        try:
+            value = float(line_edit.text())
+        except (TypeError, ValueError):
+            return None
+        return value if value > 0.0 else None
+
+    def _update_threshold_dependencies(self, *_args) -> None:
+        for threshold, displacement, runway_end in (
+            (self.threshold_elev_1_le, self.thr_displaced_1_le, self.runway_end_elev_1_le),
+            (self.threshold_elev_2_le, self.thr_displaced_2_le, self.runway_end_elev_2_le),
+        ):
+            displaced = self._positive_line_value(displacement) is not None
+            runway_end.setReadOnly(not displaced)
+            if displaced:
+                runway_end.setPlaceholderText("Required when displaced")
+            else:
+                derived = threshold.text().strip()
+                if runway_end.text() != derived:
+                    runway_end.setText(derived)
+                runway_end.setPlaceholderText("Derived from threshold elevation")
+        if hasattr(self, "starter_extension_length_1_le"):
+            self._update_starter_extension_dependencies()
+
+    def _update_starter_extension_dependencies(self, *_args) -> None:
+        if not hasattr(self, "starter_extension_length_1_le"):
+            return
+        for length, width, shoulder, outer_elevation, displacement, runway_end in (
+            (
+                self.starter_extension_length_1_le,
+                self.starter_extension_width_1_le,
+                self.starter_extension_shoulder_1_le,
+                self.starter_extension_outer_elev_1_le,
+                self.thr_displaced_1_le,
+                self.runway_end_elev_1_le,
+            ),
+            (
+                self.starter_extension_length_2_le,
+                self.starter_extension_width_2_le,
+                self.starter_extension_shoulder_2_le,
+                self.starter_extension_outer_elev_2_le,
+                self.thr_displaced_2_le,
+                self.runway_end_elev_2_le,
+            ),
+        ):
+            extension_length = self._positive_line_value(length)
+            active = extension_length is not None
+            width.setReadOnly(not active)
+            shoulder.setReadOnly(not active)
+            if not active:
+                for dependent in (width, shoulder, outer_elevation):
+                    if dependent.text():
+                        dependent.clear()
+                    dependent.setReadOnly(True)
+                    dependent.setPlaceholderText("Not applicable")
+                continue
+
+            width.setPlaceholderText("Required")
+            shoulder.setPlaceholderText("Optional; blank = 0")
+            displacement_value = self._positive_line_value(displacement) or 0.0
+            outer_is_runway_end = abs(extension_length - displacement_value) <= 1e-6
+            outer_elevation.setReadOnly(outer_is_runway_end)
+            if outer_is_runway_end:
+                derived = runway_end.text().strip()
+                if outer_elevation.text() != derived:
+                    outer_elevation.setText(derived)
+                outer_elevation.setPlaceholderText("Derived from runway-end elevation")
+            else:
+                outer_elevation.setPlaceholderText("Required")
+
     def _declared_distance_edits(self):
         return (
             self.tora_override_1_le,
@@ -1243,13 +1385,19 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             displaced_1 = value(self.thr_displaced_1_le)
             displaced_2 = value(self.thr_displaced_2_le)
             physical_length = threshold_length + displaced_1 + displaced_2
+            primary_tora = physical_length + max(
+                value(self.starter_extension_length_1_le) - displaced_1, 0.0
+            )
+            reciprocal_tora = physical_length + max(
+                value(self.starter_extension_length_2_le) - displaced_2, 0.0
+            )
             calculated = [
-                physical_length,
-                physical_length,
-                physical_length + value(self.clearway2_len_le),
-                physical_length + value(self.clearway1_len_le),
-                physical_length + value(self.stopway2_len_le),
-                physical_length + value(self.stopway1_len_le),
+                primary_tora,
+                reciprocal_tora,
+                primary_tora + value(self.clearway2_len_le),
+                reciprocal_tora + value(self.clearway1_len_le),
+                primary_tora + value(self.stopway2_len_le),
+                reciprocal_tora + value(self.stopway1_len_le),
                 threshold_length + displaced_2,
                 threshold_length + displaced_1,
             ]
@@ -1280,6 +1428,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.thr_displaced_2_le,
             self.thr_pre_area_1_le,
             self.thr_pre_area_2_le,
+            self.starter_extension_length_1_le,
+            self.starter_extension_length_2_le,
+            self.starter_extension_width_1_le,
+            self.starter_extension_width_2_le,
+            self.starter_extension_shoulder_1_le,
+            self.starter_extension_shoulder_2_le,
+            self.starter_extension_outer_elev_1_le,
+            self.starter_extension_outer_elev_2_le,
             self.width_le,
             self.shoulder_le,
             self.clearway1_len_le,
@@ -1300,6 +1456,20 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.takeoff_track_wkt_2_le,
         ]:
             widget.textChanged.connect(self.inputChanged.emit)
+        for widget in (
+            self.threshold_elev_1_le,
+            self.threshold_elev_2_le,
+            self.thr_displaced_1_le,
+            self.thr_displaced_2_le,
+        ):
+            widget.textChanged.connect(self._update_threshold_dependencies)
+        for widget in (
+            self.starter_extension_length_1_le,
+            self.starter_extension_length_2_le,
+            self.runway_end_elev_1_le,
+            self.runway_end_elev_2_le,
+        ):
+            widget.textChanged.connect(self._update_starter_extension_dependencies)
         for checkbox in [
             self.takeoff_available_1_cb,
             self.takeoff_available_2_cb,
@@ -1387,6 +1557,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "thr_displaced_2": self.thr_displaced_2_le.text(),
             "thr_pre_area_1": self.thr_pre_area_1_le.text(),
             "thr_pre_area_2": self.thr_pre_area_2_le.text(),
+            "starter_extension_length_1": self.starter_extension_length_1_le.text(),
+            "starter_extension_length_2": self.starter_extension_length_2_le.text(),
+            "starter_extension_width_1": self.starter_extension_width_1_le.text(),
+            "starter_extension_width_2": self.starter_extension_width_2_le.text(),
+            "starter_extension_shoulder_1": self.starter_extension_shoulder_1_le.text(),
+            "starter_extension_shoulder_2": self.starter_extension_shoulder_2_le.text(),
+            "starter_extension_outer_elev_1": self.starter_extension_outer_elev_1_le.text(),
+            "starter_extension_outer_elev_2": self.starter_extension_outer_elev_2_le.text(),
             "width": self.width_le.text(),
             "shoulder": self.shoulder_le.text(),
             "clearway1_len": self.clearway1_len_le.text(),
@@ -1447,6 +1625,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.thr_displaced_2_le.setText(data.get("thr_displaced_2", ""))
             self.thr_pre_area_1_le.setText(data.get("thr_pre_area_1", ""))
             self.thr_pre_area_2_le.setText(data.get("thr_pre_area_2", ""))
+            self.starter_extension_length_1_le.setText(data.get("starter_extension_length_1", ""))
+            self.starter_extension_length_2_le.setText(data.get("starter_extension_length_2", ""))
+            self.starter_extension_width_1_le.setText(data.get("starter_extension_width_1", ""))
+            self.starter_extension_width_2_le.setText(data.get("starter_extension_width_2", ""))
+            self.starter_extension_shoulder_1_le.setText(data.get("starter_extension_shoulder_1", ""))
+            self.starter_extension_shoulder_2_le.setText(data.get("starter_extension_shoulder_2", ""))
+            self.starter_extension_outer_elev_1_le.setText(data.get("starter_extension_outer_elev_1", ""))
+            self.starter_extension_outer_elev_2_le.setText(data.get("starter_extension_outer_elev_2", ""))
             self.width_le.setText(data.get("width", ""))
             self.shoulder_le.setText(data.get("shoulder", ""))
             self.clearway1_len_le.setText(data.get("clearway1_len", ""))
@@ -1509,6 +1695,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         finally:
             for widget in widgets_to_block:
                 widget.blockSignals(False)
+            self._update_threshold_dependencies()
+            self._update_starter_extension_dependencies()
             self._update_declared_distance_mode()
             self.inputChanged.emit()
 
@@ -1550,6 +1738,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.thr_displaced_2_le,
             self.thr_pre_area_1_le,
             self.thr_pre_area_2_le,
+            self.starter_extension_length_1_le,
+            self.starter_extension_length_2_le,
+            self.starter_extension_width_1_le,
+            self.starter_extension_width_2_le,
+            self.starter_extension_shoulder_1_le,
+            self.starter_extension_shoulder_2_le,
+            self.starter_extension_outer_elev_1_le,
+            self.starter_extension_outer_elev_2_le,
             self.width_le,
             self.shoulder_le,
             self.clearway1_len_le,

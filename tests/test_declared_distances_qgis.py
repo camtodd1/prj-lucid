@@ -67,6 +67,26 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         self.assertEqual(checkpoint["source"]["clearway"], CLEARWAY_CAP168_REF)
         self.assertEqual(checkpoint["source"]["stopway"], STOPWAY_CAP168_REF)
 
+    def test_starter_extension_only_adds_length_beyond_displaced_runway_end(self):
+        runway = {
+            "short_name": "09/27",
+            "thr_point": QgsPointXY(0.0, 0.0),
+            "rec_thr_point": QgsPointXY(1000.0, 0.0),
+            "thr_displaced_1": 100.0,
+            "thr_displaced_2": 0.0,
+            "starter_extension_length_1": 150.0,
+            "starter_extension_length_2": 0.0,
+        }
+
+        records = self._builder()._calculate_declared_distances(
+            runway, ruleset=CAP168_PROFILE
+        )
+        by_direction = {record["direction"]: record for record in records}
+
+        self.assertEqual(by_direction["primary"]["physical_len_m"], 1100.0)
+        self.assertEqual(by_direction["primary"]["tora_m"], 1150.0)
+        self.assertEqual(by_direction["reciprocal"]["tora_m"], 1100.0)
+
     def test_declared_distances_and_stopways_match_source_checkpoints(self):
         checkpoint = json.loads(CHECKPOINT_PATH.read_text(encoding="utf-8"))
         for case in checkpoint["cases"]:

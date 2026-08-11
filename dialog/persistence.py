@@ -728,10 +728,17 @@ class PersistenceMixin:
             # boundary so the rest of the application only sees canonical keys.
             if runway_data.get(runway_end_key) in (None, ""):
                 runway_data[runway_end_key] = legacy_elevation
-            if threshold_key not in runway_data:
-                runway_data[threshold_key] = legacy_elevation
+            if runway_data.get(threshold_key) in (None, ""):
+                runway_data[threshold_key] = (
+                    legacy_elevation or runway_data.get(runway_end_key, "")
+                )
         runway_data.setdefault("thr_pre_area_1", "")
         runway_data.setdefault("thr_pre_area_2", "")
+        for end_number in (1, 2):
+            runway_data.setdefault(f"starter_extension_length_{end_number}", "")
+            runway_data.setdefault(f"starter_extension_width_{end_number}", "")
+            runway_data.setdefault(f"starter_extension_shoulder_{end_number}", "")
+            runway_data.setdefault(f"starter_extension_outer_elev_{end_number}", "")
         runway_data.setdefault("thr_displaced_1", "")
         runway_data.setdefault("thr_displaced_2", "")
         runway_data.setdefault("clearway1_len", "")

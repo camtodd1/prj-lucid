@@ -1404,6 +1404,34 @@ class SafeguardingBuilderDialog(
                 self._parse_status_float(data.get("runway_end_elev_1")),
                 self._parse_status_float(data.get("runway_end_elev_2")),
             ]
+            threshold_elevations = [
+                self._parse_status_float(data.get("threshold_elev_1")),
+                self._parse_status_float(data.get("threshold_elev_2")),
+            ]
+            if any(value is None for value in threshold_elevations):
+                missing_required = True
+            for end_number, end_elevation in enumerate(end_elevations, start=1):
+                displacement = self._parse_status_float(
+                    data.get(f"thr_displaced_{end_number}"), minimum=0.0
+                ) or 0.0
+                if displacement > 0.0 and end_elevation is None:
+                    missing_required = True
+                extension_length = self._parse_status_float(
+                    data.get(f"starter_extension_length_{end_number}"), minimum=0.0
+                ) or 0.0
+                if extension_length <= 0.0:
+                    continue
+                if self._parse_status_float(
+                    data.get(f"starter_extension_width_{end_number}"), minimum=0.01
+                ) is None:
+                    missing_required = True
+                if (
+                    not math.isclose(extension_length, displacement, abs_tol=1e-6)
+                    and self._parse_status_float(
+                        data.get(f"starter_extension_outer_elev_{end_number}")
+                    ) is None
+                ):
+                    missing_required = True
             runway_end_elevation_count += sum(1 for value in end_elevations if value is not None)
             if any(value is None for value in end_elevations):
                 missing_elevations += 1
@@ -3724,7 +3752,7 @@ class SafeguardingBuilderDialog(
             errors.append(f"Rwy {index}: Threshold coordinates are identical.")
             current_errors += 1
 
-        # Elevations (Optional)
+        # Elevations
         try:  # Primary runway end elevation
             end_elev1_raw = inputs.get("runway_end_elev_1", "")
             end_elev1_str = str(end_elev1_raw).strip()
@@ -3748,24 +3776,22 @@ class SafeguardingBuilderDialog(
 
         try:  # Primary threshold elevation
             threshold_elev1_str = inputs.get("threshold_elev_1", "").strip()
-            validated["threshold_elev_1"] = (
-                float(threshold_elev1_str) if threshold_elev1_str else validated["runway_end_elev_1"]
-            )
-        except ValueError:
-            errors.append(f"Rwy {index}: Invalid primary threshold elevation '{inputs.get('threshold_elev_1', '')}'.")
+            if not threshold_elev1_str:
+                raise ValueError("Value is required")
+            validated["threshold_elev_1"] = float(threshold_elev1_str)
+        except (TypeError, ValueError):
+            errors.append(f"Rwy {index}: Primary threshold elevation is required and must be numeric.")
             current_errors += 1
-            validated["threshold_elev_1"] = validated.get("runway_end_elev_1")
+            validated["threshold_elev_1"] = None
         try:  # Reciprocal threshold elevation
             threshold_elev2_str = inputs.get("threshold_elev_2", "").strip()
-            validated["threshold_elev_2"] = (
-                float(threshold_elev2_str) if threshold_elev2_str else validated["runway_end_elev_2"]
-            )
-        except ValueError:
-            errors.append(
-                f"Rwy {index}: Invalid reciprocal threshold elevation '{inputs.get('threshold_elev_2', '')}'."
-            )
+            if not threshold_elev2_str:
+                raise ValueError("Value is required")
+            validated["threshold_elev_2"] = float(threshold_elev2_str)
+        except (TypeError, ValueError):
+            errors.append(f"Rwy {index}: Reciprocal threshold elevation is required and must be numeric.")
             current_errors += 1
-            validated["threshold_elev_2"] = validated.get("runway_end_elev_2")
+            validated["threshold_elev_2"] = None
 
         # Displaced Thresholds (Optional, non-negative)
         try:  # Primary Displaced
@@ -3774,7 +3800,7 @@ class SafeguardingBuilderDialog(
                 disp1_val = float(disp1_str)
                 if disp1_val < 0:
                     raise ValueError("Cannot be negative")
-                validated["thr_displaced_1"] = disp1_val
+                validated["thr_displaced_1"] = disp1_val or None
             else:
                 validated["thr_displaced_1"] = None
         except ValueError:
@@ -3789,7 +3815,7 @@ class SafeguardingBuilderDialog(
                 disp2_val = float(disp2_str)
                 if disp2_val < 0:
                     raise ValueError("Cannot be negative")
-                validated["thr_displaced_2"] = disp2_val
+                validated["thr_displaced_2"] = disp2_val or None
             else:
                 validated["thr_displaced_2"] = None
         except ValueError:
@@ -3798,6 +3824,85 @@ class SafeguardingBuilderDialog(
             )
             current_errors += 1
             validated["thr_displaced_2"] = None
+
+        for end_number, direction in ((1, "primary"), (2, "reciprocal")):
+            displacement = validated.get(f"thr_displaced_{end_number}")
+            threshold_elevation = validated.get(f"threshold_elev_{end_number}")
+            runway_end_key = f"runway_end_elev_{end_number}"
+            if displacement:
+                if validated.get(runway_end_key) is None:
+                    errors.append(
+                        f"Rwy {index}: {direction.title()} runway-end elevation is required when the threshold is displaced."
+                    )
+                    current_errors += 1
+            else:
+                validated[runway_end_key] = threshold_elevation
+
+        for end_number, direction in ((1, "primary"), (2, "reciprocal")):
+            length_key = f"starter_extension_length_{end_number}"
+            width_key = f"starter_extension_width_{end_number}"
+            shoulder_key = f"starter_extension_shoulder_{end_number}"
+            outer_elev_key = f"starter_extension_outer_elev_{end_number}"
+
+            def optional_number(
+                key: str,
+                *,
+                positive: bool = False,
+                non_negative: bool = True,
+                zero_is_blank: bool = False,
+            ):
+                raw_value = str(inputs.get(key, "") or "").strip()
+                if not raw_value:
+                    return None
+                try:
+                    number = float(raw_value)
+                except (TypeError, ValueError):
+                    errors.append(
+                        f"Rwy {index}: Invalid {direction} {key.replace('_', ' ')} '{raw_value}'."
+                    )
+                    nonlocal_error[0] += 1
+                    return None
+                if zero_is_blank and math.isclose(number, 0.0, abs_tol=1e-9):
+                    return None
+                if (non_negative and number < 0.0) or (positive and number <= 0.0):
+                    errors.append(
+                        f"Rwy {index}: Invalid {direction} {key.replace('_', ' ')} '{raw_value}'."
+                    )
+                    nonlocal_error[0] += 1
+                    return None
+                return number
+
+            nonlocal_error = [0]
+            length = optional_number(length_key, positive=True, zero_is_blank=True)
+            validated[length_key] = length
+            if length is None:
+                validated[width_key] = None
+                validated[shoulder_key] = None
+                validated[outer_elev_key] = None
+                current_errors += nonlocal_error[0]
+                continue
+
+            width = optional_number(width_key, positive=True)
+            if width is None and not str(inputs.get(width_key, "") or "").strip():
+                errors.append(
+                    f"Rwy {index}: {direction.title()} starter-extension width is required."
+                )
+                nonlocal_error[0] += 1
+            validated[width_key] = width
+            validated[shoulder_key] = optional_number(shoulder_key)
+
+            displacement = validated.get(f"thr_displaced_{end_number}") or 0.0
+            if math.isclose(length, displacement, abs_tol=1e-6):
+                validated[outer_elev_key] = validated.get(f"runway_end_elev_{end_number}")
+            else:
+                outer_elevation = optional_number(outer_elev_key, non_negative=False)
+                if outer_elevation is None and not str(inputs.get(outer_elev_key, "") or "").strip():
+                    errors.append(
+                        f"Rwy {index}: {direction.title()} starter-extension outer-end elevation is required."
+                    )
+                    nonlocal_error[0] += 1
+                validated[outer_elev_key] = outer_elevation
+            current_errors += nonlocal_error[0]
 
         # Pre-threshold Area validation (Optional, non-negative)
         try:  # Primary Pre-threshold Area

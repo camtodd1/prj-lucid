@@ -562,6 +562,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
     def test_save_payload_uses_only_canonical_runway_elevation_fields(self):
         group = self.dialog._runway_groups[1]
+        group.thr_displaced_1_le.setText("10")
+        group.thr_displaced_2_le.setText("20")
         group.runway_end_elev_1_le.setText("3.3")
         group.runway_end_elev_2_le.setText("3.8")
         group.threshold_elev_1_le.setText("3.6")
@@ -575,6 +577,93 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(runway["threshold_elev_2"], "0")
         self.assertNotIn("thr_elev_1", runway)
         self.assertNotIn("thr_elev_2", runway)
+
+    def test_runway_end_elevation_is_derived_until_threshold_is_displaced(self):
+        group = self.dialog._runway_groups[1]
+
+        group.threshold_elev_1_le.setText("12.5")
+        self.assertTrue(group.runway_end_elev_1_le.isReadOnly())
+        self.assertEqual(group.runway_end_elev_1_le.text(), "12.5")
+
+        group.thr_displaced_1_le.setText("100")
+        self.assertFalse(group.runway_end_elev_1_le.isReadOnly())
+
+        group.runway_end_elev_1_le.setText("11.8")
+        group.thr_displaced_1_le.clear()
+        self.assertTrue(group.runway_end_elev_1_le.isReadOnly())
+        self.assertEqual(group.runway_end_elev_1_le.text(), "12.5")
+
+    def test_starter_extension_fields_follow_extension_length(self):
+        group = self.dialog._runway_groups[1]
+
+        self.assertTrue(group.starter_extension_width_1_le.isReadOnly())
+        self.assertTrue(group.starter_extension_outer_elev_1_le.isReadOnly())
+
+        group.starter_extension_length_1_le.setText("80")
+        self.assertFalse(group.starter_extension_width_1_le.isReadOnly())
+        self.assertFalse(group.starter_extension_shoulder_1_le.isReadOnly())
+        self.assertFalse(group.starter_extension_outer_elev_1_le.isReadOnly())
+
+        group.threshold_elev_1_le.setText("12.5")
+        group.thr_displaced_1_le.setText("80")
+        group.runway_end_elev_1_le.setText("11.8")
+        self.assertTrue(group.starter_extension_outer_elev_1_le.isReadOnly())
+        self.assertEqual(group.starter_extension_outer_elev_1_le.text(), "11.8")
+
+        group.starter_extension_length_1_le.clear()
+        self.assertTrue(group.starter_extension_width_1_le.isReadOnly())
+        self.assertEqual(group.starter_extension_width_1_le.text(), "")
+
+    def test_runway_validation_derives_elevations_at_coincident_ends(self):
+        inputs = self.dialog._runway_groups[1].get_input_data()
+        inputs.update(
+            {
+                "designator_str": "09",
+                "thr_easting": "0",
+                "thr_northing": "0",
+                "rec_easting": "1000",
+                "rec_northing": "0",
+                "threshold_elev_1": "12.5",
+                "threshold_elev_2": "13.0",
+                "runway_end_elev_1": "",
+                "runway_end_elev_2": "",
+                "width": "45",
+            }
+        )
+        errors = []
+
+        result = self.dialog._validate_runway_data(1, inputs, errors)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(result["runway_end_elev_1"], 12.5)
+        self.assertEqual(result["runway_end_elev_2"], 13.0)
+
+    def test_starter_extension_validation_derives_shared_outer_end_elevation(self):
+        inputs = self.dialog._runway_groups[1].get_input_data()
+        inputs.update(
+            {
+                "designator_str": "09",
+                "thr_easting": "0",
+                "thr_northing": "0",
+                "rec_easting": "1000",
+                "rec_northing": "0",
+                "threshold_elev_1": "12.5",
+                "threshold_elev_2": "13.0",
+                "thr_displaced_1": "80",
+                "runway_end_elev_1": "11.8",
+                "runway_end_elev_2": "13.0",
+                "starter_extension_length_1": "80",
+                "starter_extension_width_1": "45",
+                "starter_extension_outer_elev_1": "",
+                "width": "45",
+            }
+        )
+        errors = []
+
+        result = self.dialog._validate_runway_data(1, inputs, errors)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(result["starter_extension_outer_elev_1"], 11.8)
 
     def test_save_payload_uses_only_canonical_adg_field(self):
         group = self.dialog._runway_groups[1]

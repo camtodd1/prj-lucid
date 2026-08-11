@@ -3371,8 +3371,22 @@ class SafeguardingBuilder(
         primary_landing_available = self._bool_from_runway_data(runway_data.get("landing_available_1", True))
         reciprocal_landing_available = self._bool_from_runway_data(runway_data.get("landing_available_2", True))
 
-        primary_tora = physical_length if primary_takeoff_available else None
-        reciprocal_tora = physical_length if reciprocal_takeoff_available else None
+        starter_primary = self._non_negative_float(
+            runway_data.get("starter_extension_length_1"), 0.0
+        )
+        starter_reciprocal = self._non_negative_float(
+            runway_data.get("starter_extension_length_2"), 0.0
+        )
+        primary_tora = (
+            physical_length + max(starter_primary - disp_primary, 0.0)
+            if primary_takeoff_available
+            else None
+        )
+        reciprocal_tora = (
+            physical_length + max(starter_reciprocal - disp_reciprocal, 0.0)
+            if reciprocal_takeoff_available
+            else None
+        )
         primary_lda = threshold_length + disp_reciprocal if primary_landing_available else None
         reciprocal_lda = threshold_length + disp_primary if reciprocal_landing_available else None
 
