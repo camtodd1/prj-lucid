@@ -110,8 +110,10 @@ class PhysicalGeometryMixin:
                 pre_threshold_fields = common_fields + [
                     QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
-                starter_extension_fields = pre_threshold_fields + [
-                    QgsField("mark_w_m", QVariant.Double, self.tr("Marking Width (m)"), 12, 3),
+                pre_threshold_runway_fields = pre_threshold_fields + [
+                    QgsField("mark_w_m", QVariant.Double, self.tr("Marking Width (m)"), 12, 3)
+                ]
+                starter_extension_fields = pre_threshold_runway_fields + [
                     QgsField("component", QVariant.String, self.tr("Component"), 20),
                     QgsField("side", QVariant.String, self.tr("Side"), 10),
                 ]
@@ -279,7 +281,7 @@ class PhysicalGeometryMixin:
                     },
                     "PreThresholdRunway": {
                         "name": self.tr("Pre-Threshold Runway"),
-                        "fields": pre_threshold_fields,
+                        "fields": pre_threshold_runway_fields,
                         "group": physical_geom_group,
                     },
                     "StarterExtension": {
@@ -661,8 +663,8 @@ class PhysicalGeometryMixin:
                         if final_layer is not None:
                             if element_type == "DetailedDesignationMarking":
                                 self._style_runway_designation_layer(final_layer)
-                            elif element_type == "StarterExtension":
-                                self._style_starter_extension_layer(final_layer)
+                            elif element_type in {"PreThresholdRunway", "StarterExtension"}:
+                                self._style_pre_threshold_pavement_layer(final_layer)
                             any_physical_or_protection_ok = True
                             any_layer_successfully_processed_in_this_block = True
                         features_to_write.clear()
@@ -1024,8 +1026,8 @@ class PhysicalGeometryMixin:
                 level=Qgis.Warning,
             )
 
-    def _style_starter_extension_layer(self, layer: QgsVectorLayer) -> None:
-        """Use the MOS side-stripe width for the starter-extension polygon outline."""
+    def _style_pre_threshold_pavement_layer(self, layer: QgsVectorLayer) -> None:
+        """Render the full side-stripe width inside a pre-threshold pavement edge."""
         if layer is None or not layer.isValid():
             return
         try:
@@ -1044,14 +1046,15 @@ class PhysicalGeometryMixin:
                         QgsSymbolLayer.PropertyStrokeWidth,
                         QgsProperty.fromExpression('2 * coalesce("mark_w_m", 0.5)'),
                     )
-                    symbol_layer.dataDefinedProperties().setProperty(
-                        QgsSymbolLayer.PropertyLayerEnabled,
-                        QgsProperty.fromExpression('"component" = \'Pavement\''),
-                    )
+                    if layer.fields().indexFromName("component") >= 0:
+                        symbol_layer.dataDefinedProperties().setProperty(
+                            QgsSymbolLayer.PropertyLayerEnabled,
+                            QgsProperty.fromExpression('"component" = \'Pavement\''),
+                        )
             layer.triggerRepaint()
         except Exception as style_error:
             QgsMessageLog.logMessage(
-                f"Warning: Could not apply starter-extension boundary styling: {style_error}",
+                f"Warning: Could not apply pre-threshold pavement boundary styling: {style_error}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
@@ -2202,11 +2205,12 @@ class PhysicalGeometryMixin:
         starter_extension_rule = self._starter_extension_marking_rule(
             arc_num, type_primary, type_reciprocal
         )
-        for end_desig, origin, outward_azimuth, length_key, width_key in (
+        for end_desig, origin, outward_azimuth, displaced_len, length_key, width_key in (
             (
                 primary_desig,
                 thr_point,
                 rwy_params["azimuth_r_p"],
+                disp_primary,
                 "starter_extension_length_1",
                 "starter_extension_width_1",
             ),
@@ -2214,6 +2218,7 @@ class PhysicalGeometryMixin:
                 reciprocal_desig,
                 rec_thr_point,
                 rwy_params["azimuth_p_r"],
+                disp_reciprocal,
                 "starter_extension_length_2",
                 "starter_extension_width_2",
             ),
@@ -2235,7 +2240,12 @@ class PhysicalGeometryMixin:
 
             stripe_width = starter_extension_rule[0]
             inward_azimuth = (outward_azimuth + 180.0) % 360.0
-            outer_end = origin.project(extension_length, outward_azimuth)
+            extension_start = (
+                origin.project(displaced_len, outward_azimuth)
+                if displaced_len > 1e-6
+                else origin
+            )
+            outer_end = extension_start.project(extension_length, outward_azimuth)
             arrow_tip_offset = extension_length + 7.2 - 20.0
             arrow_no = 1
             while outer_end and arrow_tip_offset - 30.0 >= -1e-6:
@@ -2537,6 +2547,16 @@ class PhysicalGeometryMixin:
             )
             return None
 
+        try:
+            arc_num = int(float(runway_data.get("arc_num") or 0))
+        except (TypeError, ValueError):
+            arc_num = 0
+        side_stripe_width = self._centreline_marking_width(
+            arc_num,
+            runway_data.get("type1", ""),
+            runway_data.get("type2", ""),
+        )
+
         rwy_params = self._get_runway_parameters(thr_point, rec_thr_point)
         if rwy_params is None:
             QgsMessageLog.logMessage(
@@ -2635,6 +2655,7 @@ class PhysicalGeometryMixin:
                                 "desc": f"Pre-Threshold Pavement ({primary_desig})",
                                 "wid_m": runway_width,
                                 "len_m": round(disp_thr_1, 3),
+                                "mark_w_m": side_stripe_width,
                                 "ref_mos": pavement_ref,
                                 "end_desig": primary_desig,
                             }
@@ -2674,6 +2695,7 @@ class PhysicalGeometryMixin:
                                 "desc": f"Pre-Threshold Pavement ({reciprocal_desig})",
                                 "wid_m": runway_width,
                                 "len_m": round(disp_thr_2, 3),
+                                "mark_w_m": side_stripe_width,
                                 "ref_mos": pavement_ref,
                                 "end_desig": reciprocal_desig,
                             }
@@ -2697,22 +2719,22 @@ class PhysicalGeometryMixin:
         starter_extension_features = []
         primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
         reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
-        try:
-            arc_num = int(float(runway_data.get("arc_num") or 0))
-        except (TypeError, ValueError):
-            arc_num = 0
-        starter_extension_rule = self._starter_extension_marking_rule(
-            arc_num,
-            runway_data.get("type1", ""),
-            runway_data.get("type2", ""),
-        )
-        marking_width = starter_extension_rule[0] if starter_extension_rule else 0.5
+        marking_width = side_stripe_width
         shoulder_ref = self.get_active_ruleset().physical_refs().get("shoulder", "MOS 6.11-6.13")
-        for end_desig, threshold, outward_azimuth, length_key, width_key, shoulder_key in (
+        for (
+            end_desig,
+            threshold,
+            outward_azimuth,
+            displaced_len,
+            length_key,
+            width_key,
+            shoulder_key,
+        ) in (
             (
                 primary_desig,
                 thr_point,
                 rwy_params["azimuth_r_p"],
+                disp_thr_1,
                 "starter_extension_length_1",
                 "starter_extension_width_1",
                 "starter_extension_shoulder_1",
@@ -2721,6 +2743,7 @@ class PhysicalGeometryMixin:
                 reciprocal_desig,
                 rec_thr_point,
                 rwy_params["azimuth_p_r"],
+                disp_thr_2,
                 "starter_extension_length_2",
                 "starter_extension_width_2",
                 "starter_extension_shoulder_2",
@@ -2739,8 +2762,13 @@ class PhysicalGeometryMixin:
                 )
                 continue
             try:
+                extension_start = (
+                    threshold.project(displaced_len, outward_azimuth)
+                    if displaced_len > 1e-6
+                    else threshold
+                )
                 geom = self._create_rectangle_from_start(
-                    threshold,
+                    extension_start,
                     outward_azimuth,
                     extension_length,
                     extension_width / 2.0,
@@ -2771,7 +2799,7 @@ class PhysicalGeometryMixin:
                         ("R", extension_width / 2.0 + extension_shoulder / 2.0),
                     ):
                         shoulder_geom = self._create_runway_marking_rectangle(
-                            threshold,
+                            extension_start,
                             outward_azimuth,
                             0.0,
                             extension_length,

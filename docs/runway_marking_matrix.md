@@ -800,6 +800,9 @@ contains separate left and right `Shoulder` features. They use the runway
 shoulder grey fill without a stroke; the white boundary remains attached only
 to the `Pavement` feature.
 
+If the same runway end has a displaced threshold, the starter extension and
+its shoulders begin at the outer end of that displaced-threshold pavement.
+
 | Field | Value |
 | --- | --- |
 | Layer name | `{ICAO} Runway Starter Extension Markings` |

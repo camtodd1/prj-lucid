@@ -3378,12 +3378,12 @@ class SafeguardingBuilder(
             runway_data.get("starter_extension_length_2"), 0.0
         )
         primary_tora = (
-            physical_length + max(starter_primary - disp_primary, 0.0)
+            physical_length + starter_primary
             if primary_takeoff_available
             else None
         )
         reciprocal_tora = (
-            physical_length + max(starter_reciprocal - disp_reciprocal, 0.0)
+            physical_length + starter_reciprocal
             if reciprocal_takeoff_available
             else None
         )

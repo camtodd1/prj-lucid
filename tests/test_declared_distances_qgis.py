@@ -76,7 +76,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         self.assertEqual(checkpoint["source"]["clearway"], CLEARWAY_CAP168_REF)
         self.assertEqual(checkpoint["source"]["stopway"], STOPWAY_CAP168_REF)
 
-    def test_starter_extension_only_adds_length_beyond_displaced_runway_end(self):
+    def test_starter_extension_adds_full_length_after_displaced_runway_end(self):
         runway = {
             "short_name": "09/27",
             "thr_point": QgsPointXY(0.0, 0.0),
@@ -93,7 +93,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         by_direction = {record["direction"]: record for record in records}
 
         self.assertEqual(by_direction["primary"]["physical_len_m"], 1100.0)
-        self.assertEqual(by_direction["primary"]["tora_m"], 1150.0)
+        self.assertEqual(by_direction["primary"]["tora_m"], 1250.0)
         self.assertEqual(by_direction["reciprocal"]["tora_m"], 1100.0)
 
     def test_starter_extension_generates_pre_threshold_styled_polygon(self):
@@ -122,10 +122,9 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
 
         geometry, attrs = extension
         self.assertAlmostEqual(geometry.area(), 150.0 * 45.0, places=6)
-        self.assertAlmostEqual(geometry.centroid().asPoint().x(), -75.0, places=6)
-        self.assertAlmostEqual(
-            geometry.intersection(pre_threshold).area(), 100.0 * 45.0, places=6
-        )
+        self.assertAlmostEqual(geometry.centroid().asPoint().x(), -175.0, places=6)
+        self.assertAlmostEqual(geometry.boundingBox().xMaximum(), -100.0, places=6)
+        self.assertAlmostEqual(geometry.intersection(pre_threshold).area(), 0.0, places=6)
         self.assertEqual(attrs["end_desig"], "09")
         self.assertEqual(attrs["len_m"], 150.0)
         self.assertEqual(attrs["wid_m"], 45.0)
@@ -145,6 +144,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             "starter_extension_length_1": 150.0,
             "starter_extension_width_1": 45.0,
             "starter_extension_shoulder_1": 7.5,
+            "thr_displaced_1": 100.0,
         }
 
         markings = [
@@ -157,6 +157,11 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             for kind, geometry, attrs in builder.generate_physical_geometry(runway)
             if kind == "StarterExtension"
         ]
+        pre_threshold_attrs = next(
+            attrs
+            for kind, _geometry, attrs in builder.generate_physical_geometry(runway)
+            if kind == "PreThresholdRunway"
+        )
         extension_geometry, extension_attrs = next(
             (geometry, attrs)
             for geometry, attrs in extension_features
@@ -169,6 +174,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         ]
 
         self.assertEqual(extension_attrs["mark_w_m"], 0.45)
+        self.assertEqual(pre_threshold_attrs["mark_w_m"], 0.45)
         self.assertEqual(len(shoulders), 2)
         self.assertEqual({attrs["side"] for _geometry, attrs in shoulders}, {"L", "R"})
         self.assertTrue(
@@ -198,8 +204,8 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         self.assertTrue(all(not attrs["mandatory"] for _geometry, attrs in markings))
         self.assertTrue(
             all(
-                geometry.boundingBox().xMinimum() >= -150.0 - 1e-6
-                and geometry.boundingBox().xMaximum() <= 1e-6
+                geometry.boundingBox().xMinimum() >= -250.0 - 1e-6
+                and geometry.boundingBox().xMaximum() <= -100.0 + 1e-6
                 for geometry, _attrs in markings
             )
         )
@@ -213,7 +219,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         )
         layer.loadNamedStyle(str(WORKSPACE / "styles" / "physical_prethreshold_runway.qml"))
 
-        builder._style_starter_extension_layer(layer)
+        builder._style_pre_threshold_pavement_layer(layer)
 
         line_layer = layer.renderer().symbol().symbolLayer(1)
         width_property = line_layer.dataDefinedProperties().property(
