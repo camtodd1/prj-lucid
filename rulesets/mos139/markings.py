@@ -34,6 +34,7 @@ RUNWAY_HOLDING_POSITION_TABLE = {
     4: {"NI": 75.0, "NPA": 75.0, "PA_I": 90.0, "PA_II_III": 90.0},
 }
 RUNWAY_HOLDING_POSITION_REF = "MOS 8.39(7); Table 6.56(1)"
+STARTER_EXTENSION_MARKING_REF = "MOS 8.34(2)-(3); MOS 8.21"
 
 
 def threshold_marking_params(runway_width: float) -> Optional[Tuple[int, float]]:
@@ -54,6 +55,16 @@ def centreline_marking_width(arc_num: int, type_primary: str, type_reciprocal: s
         else:
             widths.append(0.3)
     return max(widths) if widths else 0.3
+
+
+def starter_extension_marking_rule(
+    arc_num: int, type_primary: str, type_reciprocal: str
+) -> Tuple[float, str]:
+    """Return the stripe width and source for a non-bypass-pad starter extension."""
+    return (
+        centreline_marking_width(arc_num, type_primary, type_reciprocal),
+        STARTER_EXTENSION_MARKING_REF,
+    )
 
 
 def aiming_point_rule(
@@ -94,6 +105,7 @@ def runway_holding_position_rule(runway_code_num: int, runway_type: str) -> Opti
 __all__ = [
     "threshold_marking_params",
     "centreline_marking_width",
+    "starter_extension_marking_rule",
     "aiming_point_rule",
     "touchdown_zone_offsets",
     "runway_holding_position_rule",

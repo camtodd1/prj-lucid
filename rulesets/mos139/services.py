@@ -83,6 +83,9 @@ class MarkingService:
     def threshold_marking_params(self, runway_width: float):
         return marking_policy.threshold_marking_params(runway_width)
 
+    def starter_extension_marking_rule(self, arc_num: int, type_primary: str, type_reciprocal: str):
+        return marking_policy.starter_extension_marking_rule(arc_num, type_primary, type_reciprocal)
+
     def aiming_point_rule(self, runway_width: float, lda_m: float, runway_type: str):
         return marking_policy.aiming_point_rule(runway_width, lda_m, runway_type)
 

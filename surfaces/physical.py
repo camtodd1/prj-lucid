@@ -329,6 +329,11 @@ class PhysicalGeometryMixin:
                         "fields": detailed_marking_fields,
                         "group": detailed_marking_group,
                     },
+                    "DetailedStarterExtensionMarking": {
+                        "name": self.tr("Runway Starter Extension Markings"),
+                        "fields": detailed_marking_fields,
+                        "group": detailed_marking_group,
+                    },
                     "DetailedPreThresholdAreaMarking": {
                         "name": self.tr("Pre-Threshold Area Markings"),
                         "fields": detailed_marking_fields,
@@ -394,6 +399,7 @@ class PhysicalGeometryMixin:
                     "DetailedAimingPointMarking": "Runway Marking White",
                     "DetailedTouchdownZoneMarking": "Runway Marking White",
                     "DetailedDisplacedThresholdMarking": "Runway Marking White",
+                    "DetailedStarterExtensionMarking": "Runway Marking White",
                     "DetailedPreThresholdAreaMarking": "Runway Marking Yellow",
                     "DetailedRunwayHoldingPositionMarking": "Runway Marking Yellow",
                     "DetailedSideStripeMarking": "Runway Marking White",
@@ -418,6 +424,7 @@ class PhysicalGeometryMixin:
                     "DetailedAimingPointMarking",
                     "DetailedTouchdownZoneMarking",
                     "DetailedDisplacedThresholdMarking",
+                    "DetailedStarterExtensionMarking",
                     "DetailedPreThresholdAreaMarking",
                     "DetailedRunwayHoldingPositionMarking",
                     "DetailedSideStripeMarking",
@@ -1343,7 +1350,7 @@ class PhysicalGeometryMixin:
             "optional": "; ".join(sorted(set(optional))) or "None",
             "assumptions": "; ".join(sorted(set(assumptions))) or "None",
             "skipped": "; ".join(skipped) or "None",
-            "ref_mos": "MOS 8.15; MOS 8.17-8.25",
+            "ref_mos": "MOS 8.15; MOS 8.17-8.25; MOS 8.34",
             "notes": "Generated from detailed runway marking pass.",
         }
 
@@ -1361,6 +1368,7 @@ class PhysicalGeometryMixin:
             "DetailedAimingPointMarking": "Aiming point markings",
             "DetailedTouchdownZoneMarking": "Touchdown zone markings",
             "DetailedDisplacedThresholdMarking": "Displaced threshold markings",
+            "DetailedStarterExtensionMarking": "Starter-extension markings",
             "DetailedPreThresholdAreaMarking": "Pre-threshold area markings",
             "DetailedCentrelineMarking": "Centreline markings",
             "DetailedSideStripeMarking": "Side-stripe markings",
@@ -1417,6 +1425,12 @@ class PhysicalGeometryMixin:
 
     def _centreline_marking_width(self, arc_num: int, type_primary: str, type_reciprocal: str) -> float:
         return self.get_active_ruleset().centreline_marking_width(arc_num, type_primary, type_reciprocal)
+
+    def _starter_extension_marking_rule(
+        self, arc_num: int, type_primary: str, type_reciprocal: str
+    ) -> Optional[Tuple[float, str]]:
+        getter = getattr(self.get_active_ruleset(), "starter_extension_marking_rule", None)
+        return getter(arc_num, type_primary, type_reciprocal) if callable(getter) else None
 
     def _declared_lda_for_end(self, runway_data: dict, end_desig: str, fallback_length: float) -> float:
         for record in runway_data.get("declared_distances", []):
@@ -2145,6 +2159,109 @@ class PhysicalGeometryMixin:
                     chevron_no += 1
             elif pre_area_len > 1e-6:
                 skipped.append("Pre-threshold area markings: area length is less than 30 m.")
+
+        starter_extension_rule = self._starter_extension_marking_rule(
+            arc_num, type_primary, type_reciprocal
+        )
+        for end_desig, origin, outward_azimuth, length_key, width_key in (
+            (
+                primary_desig,
+                thr_point,
+                rwy_params["azimuth_r_p"],
+                "starter_extension_length_1",
+                "starter_extension_width_1",
+            ),
+            (
+                reciprocal_desig,
+                rec_thr_point,
+                rwy_params["azimuth_p_r"],
+                "starter_extension_length_2",
+                "starter_extension_width_2",
+            ),
+        ):
+            extension_length = non_negative_number(runway_data.get(length_key), 0.0)
+            extension_width = non_negative_number(runway_data.get(width_key), 0.0)
+            if extension_length <= 1e-6:
+                continue
+            if starter_extension_rule is None:
+                qa_records[end_desig]["skipped"].append(
+                    "Starter-extension markings: not implemented by the active ruleset."
+                )
+                continue
+            if extension_width <= 1e-6:
+                qa_records[end_desig]["skipped"].append(
+                    "Starter-extension markings: extension width is missing."
+                )
+                continue
+
+            stripe_width, starter_ref = starter_extension_rule
+            note = "Assumed not incorporated into a runway bypass pad; the dialog has no bypass-pad input."
+            for side_name, lateral_center in (
+                ("L", -extension_width / 2.0 + stripe_width / 2.0),
+                ("R", extension_width / 2.0 - stripe_width / 2.0),
+            ):
+                geom = self._create_runway_marking_rectangle(
+                    origin,
+                    outward_azimuth,
+                    0.0,
+                    extension_length,
+                    lateral_center,
+                    stripe_width,
+                    f"Starter extension side stripe {runway_name} {end_desig} {side_name}",
+                )
+                if geom:
+                    generated.append(
+                        (
+                            "DetailedStarterExtensionMarking",
+                            geom,
+                            self._detail_marking_attrs(
+                                runway_name,
+                                end_desig,
+                                "Starter Extension",
+                                "Side Stripe",
+                                extension_length,
+                                stripe_width,
+                                starter_ref,
+                                side=side_name,
+                                mandatory=True,
+                                notes=note,
+                            ),
+                        )
+                    )
+
+            transverse_length = min(stripe_width, extension_length)
+            for sub_type, offset_m in (
+                ("Start Transverse Line", 0.0),
+                ("Runway End", extension_length - transverse_length),
+            ):
+                geom = self._create_runway_marking_rectangle(
+                    origin,
+                    outward_azimuth,
+                    offset_m,
+                    transverse_length,
+                    0.0,
+                    extension_width,
+                    f"Starter extension {sub_type} {runway_name} {end_desig}",
+                )
+                if geom:
+                    generated.append(
+                        (
+                            "DetailedStarterExtensionMarking",
+                            geom,
+                            self._detail_marking_attrs(
+                                runway_name,
+                                end_desig,
+                                "Starter Extension",
+                                sub_type,
+                                transverse_length,
+                                extension_width,
+                                starter_ref,
+                                offset_m=offset_m,
+                                mandatory=True,
+                                notes=note,
+                            ),
+                        )
+                    )
 
         # One centreline stripe set for the whole runway, measured primary to
         # reciprocal, with the last stripe truncated if needed.

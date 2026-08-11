@@ -728,7 +728,7 @@ Status: implemented as detailed generated polygon geometry.
 | Reference | Requirement summary | Notes |
 | --- | --- | --- |
 | MOS 8.16(1) | If an area before the non-displaced threshold, or the runway end in the reciprocal direction, is sealed concrete/asphalt, is 30 m or more in length, and is not suitable for normal aircraft usage, pre-threshold area markings must be used. | Current dialog has pre-threshold area length but does not yet collect surface/suitability. |
-| MOS 8.16(1) Note | This does not apply to runway starter extensions. | Starter-extension dimensions and footprints are generated separately; dedicated starter-extension markings remain to be generated. |
+| MOS 8.16(1) Note | This does not apply to runway starter extensions. | Starter-extension dimensions, footprints, and dedicated white markings are generated separately. |
 | MOS 8.16(2)(a) | Markings consist of yellow chevrons with 0.9 m wide lines angled 45 degrees to the runway centreline. | Generated as yellow polygon legs. |
 | MOS 8.16(2)(b) | Chevrons are spaced 30 m apart, apex to apex. | Stored as `spacing_m = 30`. |
 | MOS 8.16(2)(c) | Chevrons are 15 m tall from apex to base. | Extended where needed so line ends target the runway-edge clearance rule. |
@@ -743,7 +743,7 @@ Status: implemented as detailed generated polygon geometry.
 | Pre-threshold area length >= 30 m | Yes | Uses dialog `thr_pre_area_1` / `thr_pre_area_2`. |
 | Sealed concrete/asphalt surface | Uses runway surface category | Current implementation generates when category is `Sealed`. |
 | Not suitable for normal aircraft usage | Assumed yes when pre-threshold area length is entered | Suitability input does not exist yet. |
-| Runway starter extension | Input and footprint modelled; marking generation pending | Generated in the Physical Geometry group and not treated as an unusable pre-threshold area. |
+| Runway starter extension | No | Generated separately and not treated as an unusable pre-threshold area. |
 
 ### Geometry Parameters
 
@@ -783,7 +783,28 @@ Status: implemented as detailed generated polygon geometry.
 - Legacy symbolic pre-threshold area line markings are no longer generated in
   the normal physical geometry pass.
 
-## 9. Runway Holding Position Markings
+## 9. Runway Starter Extension Markings
+
+Status: implemented as detailed generated polygon geometry.
+
+MOS 8.34 requires continuous side stripes, an outer runway-end stripe, and a
+transverse stripe immediately before the threshold for an extension that is
+not incorporated into a runway bypass pad. All four components are white and
+use the applicable MOS 8.21 runway side-stripe width.
+
+| Field | Value |
+| --- | --- |
+| Layer name | `{ICAO} Runway Starter Extension Markings` |
+| Geometry type | Polygon |
+| Feature granularity | Two side stripes and two transverse stripes per extension |
+| Group | Detailed Runway Markings |
+| Style | White fill with no outline |
+| MOS reference | MOS 8.34(2)-(3); MOS 8.21 |
+
+The current dialog does not model runway bypass pads, so an entered starter
+extension is treated as the non-bypass-pad type covered by MOS 8.34(2)-(3).
+
+## 10. Runway Holding Position Markings
 
 Status: drafting requirements. MOS 8.39 received; the supplied extract now includes Table 6.56(1) minimum-distance geometry. Note b is disregarded for this builder; note a is recorded for later use but is not yet applied in geometry.
 

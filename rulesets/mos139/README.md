@@ -69,7 +69,8 @@ surfaces, and IHS base height.
 
 `markings.py`
 : Runway marking policy including threshold bars, centreline widths, aiming
-points, touchdown-zone marking offsets, and runway holding positions.
+points, touchdown-zone marking offsets, starter extensions, and runway holding
+positions.
 
 `lighting.py`
 : Airfield Ground Lighting references, dimensions, colours, approach profiles,

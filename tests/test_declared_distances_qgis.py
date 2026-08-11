@@ -19,6 +19,7 @@ from safeguarding_builder.rulesets.cap168.physical_data import (  # noqa: E402
     STOPWAY_CAP168_REF,
 )
 from safeguarding_builder.rulesets.cap168.profile import CAP168_PROFILE  # noqa: E402
+from safeguarding_builder.rulesets.mos139.profile import MOS139_PROFILE  # noqa: E402
 
 
 FIXTURE_DIR = WORKSPACE / "tests" / "fixtures" / "ols"
@@ -32,6 +33,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         builder.ruleset = CAP168_PROFILE
         builder.translator = None
         builder._run_log = None
+        builder.plugin_dir = str(WORKSPACE)
         return builder
 
     @staticmethod
@@ -120,6 +122,40 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         self.assertEqual(attrs["end_desig"], "09")
         self.assertEqual(attrs["len_m"], 150.0)
         self.assertEqual(attrs["wid_m"], 45.0)
+
+    def test_mos139_starter_extension_generates_four_white_marking_components(self):
+        builder = self._builder()
+        builder.ruleset = MOS139_PROFILE
+        runway = {
+            "short_name": "09/27",
+            "thr_point": QgsPointXY(0.0, 0.0),
+            "rec_thr_point": QgsPointXY(1000.0, 0.0),
+            "width": 45.0,
+            "surface_category": "Sealed",
+            "arc_num": 4,
+            "type1": "Precision Approach CAT II/III",
+            "type2": "Non-Instrument (NI)",
+            "starter_extension_length_1": 150.0,
+            "starter_extension_width_1": 45.0,
+        }
+
+        markings = [
+            (geometry, attrs)
+            for kind, geometry, attrs in builder.generate_detailed_runway_markings(runway)
+            if kind == "DetailedStarterExtensionMarking"
+        ]
+
+        self.assertEqual(len(markings), 4)
+        self.assertEqual(
+            sorted(attrs["sub_type"] for _geometry, attrs in markings),
+            ["Runway End", "Side Stripe", "Side Stripe", "Start Transverse Line"],
+        )
+        self.assertTrue(all(attrs["end_desig"] == "09" for _geometry, attrs in markings))
+        side_stripes = [geometry for geometry, attrs in markings if attrs["sub_type"] == "Side Stripe"]
+        transverse = [geometry for geometry, attrs in markings if attrs["sub_type"] != "Side Stripe"]
+        self.assertTrue(all(abs(geometry.area() - 150.0 * 0.9) < 1e-6 for geometry in side_stripes))
+        self.assertTrue(all(abs(geometry.area() - 45.0 * 0.9) < 1e-6 for geometry in transverse))
+        self.assertTrue(all(geometry.boundingBox().xMaximum() <= 1e-6 for geometry, _attrs in markings))
 
     def test_declared_distances_and_stopways_match_source_checkpoints(self):
         checkpoint = json.loads(CHECKPOINT_PATH.read_text(encoding="utf-8"))

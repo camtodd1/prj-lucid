@@ -2,10 +2,20 @@
 
 import unittest
 
+from rulesets.mos139.markings import (
+    STARTER_EXTENSION_MARKING_REF,
+    starter_extension_marking_rule,
+)
 from rulesets.mos139.physical_data import get_strip_params
 
 
 class Mos139PhysicalDataTests(unittest.TestCase):
+    def test_starter_extension_markings_use_the_runway_side_stripe_width(self):
+        self.assertEqual(
+            starter_extension_marking_rule(4, "Precision Approach CAT II/III", "Non-Instrument (NI)"),
+            (0.9, STARTER_EXTENSION_MARKING_REF),
+        )
+
     def test_non_instrument_overall_width_is_the_graded_strip_width(self):
         cases = {
             (1, 18.0): 60.0,
