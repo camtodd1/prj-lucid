@@ -7,7 +7,7 @@ import sys
 import unittest
 from pathlib import Path
 
-from qgis.core import QgsPointXY
+from qgis.core import QgsPointXY, QgsSymbolLayer, QgsVectorLayer
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE.parent))
@@ -123,7 +123,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         self.assertEqual(attrs["len_m"], 150.0)
         self.assertEqual(attrs["wid_m"], 45.0)
 
-    def test_mos139_starter_extension_generates_four_white_marking_components(self):
+    def test_mos139_starter_extension_attaches_boundary_width_and_generates_arrows(self):
         builder = self._builder()
         builder.ruleset = MOS139_PROFILE
         runway = {
@@ -144,18 +144,46 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             for kind, geometry, attrs in builder.generate_detailed_runway_markings(runway)
             if kind == "DetailedStarterExtensionMarking"
         ]
-
-        self.assertEqual(len(markings), 4)
-        self.assertEqual(
-            sorted(attrs["sub_type"] for _geometry, attrs in markings),
-            ["Runway End", "Side Stripe", "Side Stripe", "Start Transverse Line"],
+        extension_attrs = next(
+            attrs
+            for kind, _geometry, attrs in builder.generate_physical_geometry(runway)
+            if kind == "StarterExtension"
         )
+
+        self.assertEqual(extension_attrs["mark_w_m"], 0.9)
+        self.assertEqual(len(markings), 3)
+        self.assertTrue(all(attrs["sub_type"] == "Arrow" for _geometry, attrs in markings))
         self.assertTrue(all(attrs["end_desig"] == "09" for _geometry, attrs in markings))
-        side_stripes = [geometry for geometry, attrs in markings if attrs["sub_type"] == "Side Stripe"]
-        transverse = [geometry for geometry, attrs in markings if attrs["sub_type"] != "Side Stripe"]
-        self.assertTrue(all(abs(geometry.area() - 150.0 * 0.9) < 1e-6 for geometry in side_stripes))
-        self.assertTrue(all(abs(geometry.area() - 45.0 * 0.9) < 1e-6 for geometry in transverse))
-        self.assertTrue(all(geometry.boundingBox().xMaximum() <= 1e-6 for geometry, _attrs in markings))
+        self.assertEqual(
+            sorted(attrs["offset_m"] for _geometry, attrs in markings),
+            [37.2, 87.2, 137.2],
+        )
+        self.assertTrue(all(not attrs["mandatory"] for _geometry, attrs in markings))
+        self.assertTrue(
+            all(
+                geometry.boundingBox().xMinimum() >= -150.0 - 1e-6
+                and geometry.boundingBox().xMaximum() <= 1e-6
+                for geometry, _attrs in markings
+            )
+        )
+
+    def test_starter_extension_polygon_outline_uses_marking_width_field(self):
+        builder = self._builder()
+        layer = QgsVectorLayer(
+            "Polygon?crs=EPSG:3857&field=mark_w_m:double",
+            "Starter Extension",
+            "memory",
+        )
+        layer.loadNamedStyle(str(WORKSPACE / "styles" / "physical_prethreshold_runway.qml"))
+
+        builder._style_starter_extension_layer(layer)
+
+        line_layer = layer.renderer().symbol().symbolLayer(1)
+        width_property = line_layer.dataDefinedProperties().property(
+            QgsSymbolLayer.PropertyStrokeWidth
+        )
+        self.assertTrue(width_property.isActive())
+        self.assertEqual(width_property.expressionString(), 'coalesce("mark_w_m", 0.5)')
 
     def test_declared_distances_and_stopways_match_source_checkpoints(self):
         checkpoint = json.loads(CHECKPOINT_PATH.read_text(encoding="utf-8"))

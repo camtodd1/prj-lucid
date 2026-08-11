@@ -110,6 +110,9 @@ class PhysicalGeometryMixin:
                 pre_threshold_fields = common_fields + [
                     QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
+                starter_extension_fields = pre_threshold_fields + [
+                    QgsField("mark_w_m", QVariant.Double, self.tr("Marking Width (m)"), 12, 3)
+                ]
                 declared_distance_fields = [
                     QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
                     QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10),
@@ -279,7 +282,7 @@ class PhysicalGeometryMixin:
                     },
                     "StarterExtension": {
                         "name": self.tr("Runway Starter Extensions"),
-                        "fields": pre_threshold_fields,
+                        "fields": starter_extension_fields,
                         "group": physical_geom_group,
                     },
                     "PreThresholdArea": {
@@ -389,7 +392,7 @@ class PhysicalGeometryMixin:
                 style_key_map = {
                     "rwy": "Runway Pavement",
                     "PreThresholdRunway": "PreThreshold Runway",
-                    "StarterExtension": "PreThreshold Runway",
+                    "StarterExtension": "Runway Starter Extension",
                     "PreThresholdArea": "PreThreshold Area",
                     "Shoulder": "Runway Shoulders",
                     "DeclaredDistance": "Default Point",
@@ -656,6 +659,8 @@ class PhysicalGeometryMixin:
                         if final_layer is not None:
                             if element_type == "DetailedDesignationMarking":
                                 self._style_runway_designation_layer(final_layer)
+                            elif element_type == "StarterExtension":
+                                self._style_starter_extension_layer(final_layer)
                             any_physical_or_protection_ok = True
                             any_layer_successfully_processed_in_this_block = True
                         features_to_write.clear()
@@ -1013,6 +1018,32 @@ class PhysicalGeometryMixin:
         except Exception as style_error:
             QgsMessageLog.logMessage(
                 f"Warning: Could not apply runway designation SVG styling: {style_error}",
+                PLUGIN_TAG,
+                level=Qgis.Warning,
+            )
+
+    def _style_starter_extension_layer(self, layer: QgsVectorLayer) -> None:
+        """Use the MOS side-stripe width for the starter-extension polygon outline."""
+        if layer is None or not layer.isValid():
+            return
+        try:
+            from qgis.core import QgsProperty, QgsSymbolLayer  # type: ignore
+
+            renderer = layer.renderer()
+            symbol = renderer.symbol() if renderer is not None else None
+            if symbol is None:
+                return
+            for index in range(symbol.symbolLayerCount()):
+                symbol_layer = symbol.symbolLayer(index)
+                if symbol_layer.layerType() == "SimpleLine":
+                    symbol_layer.dataDefinedProperties().setProperty(
+                        QgsSymbolLayer.PropertyStrokeWidth,
+                        QgsProperty.fromExpression('coalesce("mark_w_m", 0.5)'),
+                    )
+            layer.triggerRepaint()
+        except Exception as style_error:
+            QgsMessageLog.logMessage(
+                f"Warning: Could not apply starter-extension boundary styling: {style_error}",
                 PLUGIN_TAG,
                 level=Qgis.Warning,
             )
@@ -2194,20 +2225,18 @@ class PhysicalGeometryMixin:
                 )
                 continue
 
-            stripe_width, starter_ref = starter_extension_rule
-            note = "Assumed not incorporated into a runway bypass pad; the dialog has no bypass-pad input."
-            for side_name, lateral_center in (
-                ("L", -extension_width / 2.0 + stripe_width / 2.0),
-                ("R", extension_width / 2.0 - stripe_width / 2.0),
-            ):
-                geom = self._create_runway_marking_rectangle(
-                    origin,
-                    outward_azimuth,
-                    0.0,
-                    extension_length,
-                    lateral_center,
+            stripe_width = starter_extension_rule[0]
+            inward_azimuth = (outward_azimuth + 180.0) % 360.0
+            outer_end = origin.project(extension_length, outward_azimuth)
+            arrow_tip_offset = extension_length + 7.2 - 20.0
+            arrow_no = 1
+            while outer_end and arrow_tip_offset - 30.0 >= -1e-6:
+                geom = self._create_displaced_threshold_arrow_polygon(
+                    outer_end,
+                    inward_azimuth,
+                    arrow_tip_offset,
                     stripe_width,
-                    f"Starter extension side stripe {runway_name} {end_desig} {side_name}",
+                    f"Starter extension arrow {runway_name} {end_desig} {arrow_no}",
                 )
                 if geom:
                     generated.append(
@@ -2218,50 +2247,24 @@ class PhysicalGeometryMixin:
                                 runway_name,
                                 end_desig,
                                 "Starter Extension",
-                                "Side Stripe",
-                                extension_length,
-                                stripe_width,
-                                starter_ref,
-                                side=side_name,
-                                mandatory=True,
-                                notes=note,
+                                "Arrow",
+                                30.0,
+                                3.5,
+                                "MOS 8.34 Note; MOS 8.26",
+                                stripe_no=arrow_no,
+                                offset_m=arrow_tip_offset,
+                                spacing_m=50.0,
+                                mandatory=False,
+                                notes=(
+                                    "White arrow points from the outer end toward the runway threshold; "
+                                    "MOS 8.34 note says starter-extension markings will likely resemble "
+                                    "a permanently displaced threshold."
+                                ),
                             ),
                         )
                     )
-
-            transverse_length = min(stripe_width, extension_length)
-            for sub_type, offset_m in (
-                ("Start Transverse Line", 0.0),
-                ("Runway End", extension_length - transverse_length),
-            ):
-                geom = self._create_runway_marking_rectangle(
-                    origin,
-                    outward_azimuth,
-                    offset_m,
-                    transverse_length,
-                    0.0,
-                    extension_width,
-                    f"Starter extension {sub_type} {runway_name} {end_desig}",
-                )
-                if geom:
-                    generated.append(
-                        (
-                            "DetailedStarterExtensionMarking",
-                            geom,
-                            self._detail_marking_attrs(
-                                runway_name,
-                                end_desig,
-                                "Starter Extension",
-                                sub_type,
-                                transverse_length,
-                                extension_width,
-                                starter_ref,
-                                offset_m=offset_m,
-                                mandatory=True,
-                                notes=note,
-                            ),
-                        )
-                    )
+                arrow_tip_offset -= 50.0
+                arrow_no += 1
 
         # One centreline stripe set for the whole runway, measured primary to
         # reciprocal, with the last stripe truncated if needed.
@@ -2686,6 +2689,16 @@ class PhysicalGeometryMixin:
         starter_extension_features = []
         primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
         reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
+        try:
+            arc_num = int(float(runway_data.get("arc_num") or 0))
+        except (TypeError, ValueError):
+            arc_num = 0
+        starter_extension_rule = self._starter_extension_marking_rule(
+            arc_num,
+            runway_data.get("type1", ""),
+            runway_data.get("type2", ""),
+        )
+        marking_width = starter_extension_rule[0] if starter_extension_rule else 0.5
         for end_desig, threshold, outward_azimuth, length_key, width_key in (
             (
                 primary_desig,
@@ -2733,7 +2746,8 @@ class PhysicalGeometryMixin:
                                 "surf_mat": runway_data.get("surface_material") or "",
                                 "wid_m": extension_width,
                                 "len_m": round(extension_length, 3),
-                                "ref_mos": "MOS 6.04; MOS 8.34",
+                                "mark_w_m": marking_width,
+                                "ref_mos": "MOS 6.04; MOS 8.34(2)-(3); MOS 8.21",
                                 "end_desig": end_desig,
                             },
                         )

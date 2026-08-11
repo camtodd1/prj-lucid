@@ -11,6 +11,7 @@ DEFAULT_STYLE_MAP = {
     "MET Obstacle Buffer Zone": "default_zone_polygon.qml",
     "Runway Pavement": "physical_runway.qml",
     "PreThreshold Runway": "physical_prethreshold_runway.qml",
+    "Runway Starter Extension": "physical_prethreshold_runway.qml",
     "PreThreshold Area": "physical_prethreshold_area.qml",
     "Runway Marking White": "runway_marking_white.qml",
     "Runway Marking Yellow": "runway_marking_yellow.qml",

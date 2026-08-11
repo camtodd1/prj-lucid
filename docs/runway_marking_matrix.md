@@ -785,24 +785,32 @@ Status: implemented as detailed generated polygon geometry.
 
 ## 9. Runway Starter Extension Markings
 
-Status: implemented as detailed generated polygon geometry.
+Status: implemented on the physical starter-extension polygon plus detailed
+arrow geometry.
 
 MOS 8.34 requires continuous side stripes, an outer runway-end stripe, and a
 transverse stripe immediately before the threshold for an extension that is
 not incorporated into a runway bypass pad. All four components are white and
-use the applicable MOS 8.21 runway side-stripe width.
+use the applicable MOS 8.21 runway side-stripe width. They are rendered as the
+inside white outline of the `{ICAO} Runway Starter Extensions` polygon, whose
+`mark_w_m` attribute holds the applicable width.
 
 | Field | Value |
 | --- | --- |
 | Layer name | `{ICAO} Runway Starter Extension Markings` |
 | Geometry type | Polygon |
-| Feature granularity | Two side stripes and two transverse stripes per extension |
+| Feature granularity | One polygon per directional arrow |
 | Group | Detailed Runway Markings |
 | Style | White fill with no outline |
-| MOS reference | MOS 8.34(2)-(3); MOS 8.21 |
+| Boundary MOS reference | MOS 8.34(2)-(3); MOS 8.21 |
+| Arrow reference | MOS 8.34 Note; MOS 8.26 |
 
 The current dialog does not model runway bypass pads, so an entered starter
 extension is treated as the non-bypass-pad type covered by MOS 8.34(2)-(3).
+The dedicated markings layer contains only the white arrows that point toward
+the runway threshold, using the same geometry pattern as displaced-threshold
+arrows. These arrows implement the non-mandatory resemblance described by the
+note to MOS 8.34.
 
 ## 10. Runway Holding Position Markings
 
