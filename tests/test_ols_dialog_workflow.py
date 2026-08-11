@@ -1465,6 +1465,49 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         ):
             self.assertAlmostEqual(control.width(), dual_width, delta=1)
 
+    def test_declared_distance_mode_switches_between_calculated_and_published(self):
+        runway = self.dialog._runway_groups[1]
+
+        self.assertEqual(
+            runway.declared_distance_mode_combo.currentData(), "calculated"
+        )
+        self.assertTrue(runway.tora_override_1_le.isReadOnly())
+
+        runway._set_combo_data(runway.declared_distance_mode_combo, "published")
+
+        self.assertFalse(runway.tora_override_1_le.isReadOnly())
+        self.assertEqual(
+            runway.get_input_data()["declared_distance_mode"], "published"
+        )
+
+    def test_legacy_declared_distance_overrides_load_as_published(self):
+        normalized = self.dialog._with_runway_defaults(
+            {"tora_override_1": "3700"}
+        )
+
+        self.assertEqual(normalized["declared_distance_mode"], "published")
+
+    def test_published_mode_requires_applicable_declared_distances(self):
+        runway = self.dialog._runway_groups[1]
+        inputs = runway.get_input_data()
+        inputs.update(
+            {
+                "designator_str": "09",
+                "thr_easting": "0",
+                "thr_northing": "0",
+                "rec_easting": "3704.653",
+                "rec_northing": "0",
+                "width": "45",
+                "declared_distance_mode": "published",
+            }
+        )
+        errors = []
+
+        result = self.dialog._validate_runway_data(1, inputs, errors)
+
+        self.assertIsNone(result)
+        self.assertIn("Rwy 1: Published primary TORA is required.", errors)
+
     def test_builder_checkpoint_updates_progress_without_cancel_branch(self):
         builder = object.__new__(SafeguardingBuilder)
         builder._runtime_run_recorder = None

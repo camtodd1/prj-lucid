@@ -3902,6 +3902,35 @@ class SafeguardingBuilderDialog(
                 current_errors += 1
                 validated[field_name] = None
 
+        declared_distance_mode = str(
+            inputs.get("declared_distance_mode") or "calculated"
+        ).strip().lower()
+        if declared_distance_mode not in {"calculated", "published"}:
+            errors.append(
+                f"Rwy {index}: Invalid declared distance source '{declared_distance_mode}'."
+            )
+            current_errors += 1
+            declared_distance_mode = "calculated"
+        validated["declared_distance_mode"] = declared_distance_mode
+        if declared_distance_mode == "published":
+            required_distances = []
+            for end_number in (1, 2):
+                if self._bool_from_input(inputs.get(f"takeoff_available_{end_number}", True)):
+                    required_distances.extend(
+                        f"{distance}_override_{end_number}"
+                        for distance in ("tora", "toda", "asda")
+                    )
+                if self._bool_from_input(inputs.get(f"landing_available_{end_number}", True)):
+                    required_distances.append(f"lda_override_{end_number}")
+            for field_name in required_distances:
+                if not str(inputs.get(field_name, "") or "").strip():
+                    label = field_name.split("_", 1)[0].upper()
+                    direction = "primary" if field_name.endswith("_1") else "reciprocal"
+                    errors.append(
+                        f"Rwy {index}: Published {direction} {label} is required."
+                    )
+                    current_errors += 1
+
         for field_name in [
             "takeoff_available_1",
             "takeoff_available_2",

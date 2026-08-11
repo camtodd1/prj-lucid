@@ -195,15 +195,15 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         label_easting_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         label_northing_row = QtWidgets.QLabel("Northing:")
         label_northing_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        label_runway_end_elevation_row = QtWidgets.QLabel("Runway End Elev. (m):")
+        label_runway_end_elevation_row = QtWidgets.QLabel("Runway End Elevation (m):")
         label_runway_end_elevation_row.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
-        label_threshold_elevation_row = QtWidgets.QLabel("Threshold Elev. (m):")
+        label_threshold_elevation_row = QtWidgets.QLabel("Threshold Elevation (m):")
         label_threshold_elevation_row.setAlignment(
             QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter
         )
-        label_displaced_row = QtWidgets.QLabel("Displaced (m):")
+        label_displaced_row = QtWidgets.QLabel("Displaced Threshold (m):")
         label_displaced_row.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         label_pre_threshold_area_row = QtWidgets.QLabel("Pre-threshold Area (m):")
         label_pre_threshold_area_row.setAlignment(
@@ -867,30 +867,50 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         declared_layout = QtWidgets.QGridLayout(declared_group)
         self._configure_runway_form_grid(declared_layout)
 
-        self.tora_override_1_le = self._declared_override_line_edit("tora_override_1", "Primary TORA override.")
-        self.tora_override_2_le = self._declared_override_line_edit("tora_override_2", "Reciprocal TORA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("TORA:"), 0, 0)
-        declared_layout.addWidget(self.tora_override_1_le, 0, 1)
-        declared_layout.addWidget(self.tora_override_2_le, 0, 2)
+        self.declared_distance_mode_combo = NoWheelComboBox()
+        self.declared_distance_mode_combo.setObjectName(
+            f"comboBox_declared_distance_mode_{self.index}"
+        )
+        self.declared_distance_mode_combo.addItem(
+            "Calculated (planning)", "calculated"
+        )
+        self.declared_distance_mode_combo.addItem(
+            "Published (existing runway)", "published"
+        )
+        self.declared_distance_mode_combo.setToolTip(
+            "Use calculated distances for planning, or enter published TORA, TODA, ASDA and LDA values for an existing runway."
+        )
+        self._set_control_width(self.declared_distance_mode_combo)
+        declared_layout.addWidget(QtWidgets.QLabel("Distance source:"), 0, 0)
+        declared_layout.addWidget(self.declared_distance_mode_combo, 0, 1, 1, 2)
+        declared_layout.addWidget(self._column_header_label("Primary End"), 1, 1)
+        declared_layout.addWidget(self._column_header_label("Reciprocal End"), 1, 2)
 
-        self.toda_override_1_le = self._declared_override_line_edit("toda_override_1", "Primary TODA override.")
-        self.toda_override_2_le = self._declared_override_line_edit("toda_override_2", "Reciprocal TODA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("TODA:"), 1, 0)
-        declared_layout.addWidget(self.toda_override_1_le, 1, 1)
-        declared_layout.addWidget(self.toda_override_2_le, 1, 2)
+        self.tora_override_1_le = self._declared_override_line_edit("tora_override_1", "Published primary TORA.")
+        self.tora_override_2_le = self._declared_override_line_edit("tora_override_2", "Published reciprocal TORA.")
+        declared_layout.addWidget(QtWidgets.QLabel("TORA (m):"), 2, 0)
+        declared_layout.addWidget(self.tora_override_1_le, 2, 1)
+        declared_layout.addWidget(self.tora_override_2_le, 2, 2)
 
-        self.asda_override_1_le = self._declared_override_line_edit("asda_override_1", "Primary ASDA override.")
-        self.asda_override_2_le = self._declared_override_line_edit("asda_override_2", "Reciprocal ASDA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("ASDA:"), 2, 0)
-        declared_layout.addWidget(self.asda_override_1_le, 2, 1)
-        declared_layout.addWidget(self.asda_override_2_le, 2, 2)
+        self.toda_override_1_le = self._declared_override_line_edit("toda_override_1", "Published primary TODA.")
+        self.toda_override_2_le = self._declared_override_line_edit("toda_override_2", "Published reciprocal TODA.")
+        declared_layout.addWidget(QtWidgets.QLabel("TODA (m):"), 3, 0)
+        declared_layout.addWidget(self.toda_override_1_le, 3, 1)
+        declared_layout.addWidget(self.toda_override_2_le, 3, 2)
 
-        self.lda_override_1_le = self._declared_override_line_edit("lda_override_1", "Primary LDA override.")
-        self.lda_override_2_le = self._declared_override_line_edit("lda_override_2", "Reciprocal LDA override.")
-        declared_layout.addWidget(QtWidgets.QLabel("LDA:"), 3, 0)
-        declared_layout.addWidget(self.lda_override_1_le, 3, 1)
-        declared_layout.addWidget(self.lda_override_2_le, 3, 2)
-        self._standardize_form_rows(declared_layout, 4)
+        self.asda_override_1_le = self._declared_override_line_edit("asda_override_1", "Published primary ASDA.")
+        self.asda_override_2_le = self._declared_override_line_edit("asda_override_2", "Published reciprocal ASDA.")
+        declared_layout.addWidget(QtWidgets.QLabel("ASDA (m):"), 4, 0)
+        declared_layout.addWidget(self.asda_override_1_le, 4, 1)
+        declared_layout.addWidget(self.asda_override_2_le, 4, 2)
+
+        self.lda_override_1_le = self._declared_override_line_edit("lda_override_1", "Published primary LDA.")
+        self.lda_override_2_le = self._declared_override_line_edit("lda_override_2", "Published reciprocal LDA.")
+        declared_layout.addWidget(QtWidgets.QLabel("LDA (m):"), 5, 0)
+        declared_layout.addWidget(self.lda_override_1_le, 5, 1)
+        declared_layout.addWidget(self.lda_override_2_le, 5, 2)
+        self._standardize_form_rows(declared_layout, 6)
+        self._update_declared_distance_mode()
 
         parent_layout.addWidget(declared_group)
 
@@ -1183,11 +1203,67 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _declared_override_line_edit(self, suffix: str, tooltip: str) -> QtWidgets.QLineEdit:
         line_edit = QtWidgets.QLineEdit()
         line_edit.setObjectName(f"lineEdit_{suffix}_{self.index}")
-        line_edit.setPlaceholderText("(calc)")
         line_edit.setToolTip(tooltip)
         line_edit.setValidator(self.distance_validator)
         self._set_control_width(line_edit)
         return line_edit
+
+    def _declared_distance_edits(self):
+        return (
+            self.tora_override_1_le,
+            self.tora_override_2_le,
+            self.toda_override_1_le,
+            self.toda_override_2_le,
+            self.asda_override_1_le,
+            self.asda_override_2_le,
+            self.lda_override_1_le,
+            self.lda_override_2_le,
+        )
+
+    def _update_declared_distance_mode(self, _index: int = -1) -> None:
+        published = self.declared_distance_mode_combo.currentData() == "published"
+        for line_edit in self._declared_distance_edits():
+            line_edit.setReadOnly(not published)
+        self._update_declared_distance_placeholders()
+
+    def _update_declared_distance_placeholders(self) -> None:
+        try:
+            threshold_length = float(self.dist_lbl.text())
+        except (TypeError, ValueError):
+            threshold_length = None
+
+        def value(line_edit: QtWidgets.QLineEdit) -> float:
+            try:
+                return max(float(line_edit.text() or 0.0), 0.0)
+            except (TypeError, ValueError):
+                return 0.0
+
+        calculated = [None] * 8
+        if threshold_length is not None:
+            displaced_1 = value(self.thr_displaced_1_le)
+            displaced_2 = value(self.thr_displaced_2_le)
+            physical_length = threshold_length + displaced_1 + displaced_2
+            calculated = [
+                physical_length,
+                physical_length,
+                physical_length + value(self.clearway2_len_le),
+                physical_length + value(self.clearway1_len_le),
+                physical_length + value(self.stopway2_len_le),
+                physical_length + value(self.stopway1_len_le),
+                threshold_length + displaced_2,
+                threshold_length + displaced_1,
+            ]
+
+        published = self.declared_distance_mode_combo.currentData() == "published"
+        for line_edit, calculated_value in zip(
+            self._declared_distance_edits(), calculated
+        ):
+            if calculated_value is None:
+                placeholder = "Enter published value" if published else "Awaiting geometry"
+            else:
+                label = "Calculated" if published else "Calculated value"
+                placeholder = f"{label}: {calculated_value:.3f} m"
+            line_edit.setPlaceholderText(placeholder)
 
     def _connect_signals(self):
         for widget in [
@@ -1259,6 +1335,12 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.annex14_strip_source_combo,
         ]:
             combo.currentIndexChanged.connect(self.inputChanged.emit)
+        self.declared_distance_mode_combo.currentIndexChanged.connect(
+            self._update_declared_distance_mode
+        )
+        self.declared_distance_mode_combo.currentIndexChanged.connect(
+            self.inputChanged.emit
+        )
         for line_edit in [
             self.annex14_strip_width_le,
             self.annex14_strip_extension_le,
@@ -1311,6 +1393,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "clearway2_len": self.clearway2_len_le.text(),
             "stopway1_len": self.stopway1_len_le.text(),
             "stopway2_len": self.stopway2_len_le.text(),
+            "declared_distance_mode": self.declared_distance_mode_combo.currentData(),
             "tora_override_1": self.tora_override_1_le.text(),
             "tora_override_2": self.tora_override_2_le.text(),
             "toda_override_1": self.toda_override_1_le.text(),
@@ -1370,6 +1453,18 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.clearway2_len_le.setText(data.get("clearway2_len", ""))
             self.stopway1_len_le.setText(data.get("stopway1_len", ""))
             self.stopway2_len_le.setText(data.get("stopway2_len", ""))
+            mode = data.get("declared_distance_mode")
+            if mode not in {"calculated", "published"}:
+                mode = "published" if any(
+                    data.get(key)
+                    for key in (
+                        "tora_override_1", "tora_override_2",
+                        "toda_override_1", "toda_override_2",
+                        "asda_override_1", "asda_override_2",
+                        "lda_override_1", "lda_override_2",
+                    )
+                ) else "calculated"
+            self._set_combo_data(self.declared_distance_mode_combo, mode)
             self.tora_override_1_le.setText(data.get("tora_override_1", ""))
             self.tora_override_2_le.setText(data.get("tora_override_2", ""))
             self.toda_override_1_le.setText(data.get("toda_override_1", ""))
@@ -1414,6 +1509,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         finally:
             for widget in widgets_to_block:
                 widget.blockSignals(False)
+            self._update_declared_distance_mode()
             self.inputChanged.emit()
 
     def update_display_labels(self, results: Dict[str, str]):
@@ -1435,6 +1531,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.header_summary_lbl.setText(
             f"ARC: {arc_code} | ADG: {adg} | Length: {self.dist_lbl.text()} | Azimuth: {self.azim_lbl.text()}"
         )
+        self._update_declared_distance_placeholders()
         self._update_status_chip()
 
     def _input_widgets(self):
@@ -1459,6 +1556,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.clearway2_len_le,
             self.stopway1_len_le,
             self.stopway2_len_le,
+            self.declared_distance_mode_combo,
             self.tora_override_1_le,
             self.tora_override_2_le,
             self.toda_override_1_le,

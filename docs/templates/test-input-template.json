@@ -92,6 +92,10 @@
                 "curved",
                 "curved_gt_15"
             ],
+            "declared_distance_mode": [
+                "calculated",
+                "published"
+            ],
             "ils_bra_component": [
                 "glide_path",
                 "localiser"
@@ -165,6 +169,7 @@
             "clearway2_len": "REPLACE_RECIPROCAL_CLEARWAY_M_OR_EMPTY",
             "stopway1_len": "REPLACE_PRIMARY_STOPWAY_M_OR_EMPTY",
             "stopway2_len": "REPLACE_RECIPROCAL_STOPWAY_M_OR_EMPTY",
+            "declared_distance_mode": "calculated",
             "tora_override_1": "REPLACE_PRIMARY_TORA_M_OR_EMPTY",
             "tora_override_2": "REPLACE_RECIPROCAL_TORA_M_OR_EMPTY",
             "toda_override_1": "REPLACE_PRIMARY_TODA_M_OR_EMPTY",

@@ -20,6 +20,12 @@ def apply_declared_distance_overrides(
 ) -> List[Dict[str, Any]]:
     """Apply optional published declared-distance overrides to calculated records."""
     record_list = list(records)
+    if runway_data.get("declared_distance_mode") == "calculated":
+        for record in record_list:
+            for distance_key in DISTANCE_KEYS:
+                record[f"calc_{distance_key}"] = record.get(distance_key)
+            record.setdefault("calc_src", "calculated")
+        return record_list
 
     for record in record_list:
         direction_suffix = _direction_suffix(record)

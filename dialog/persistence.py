@@ -738,6 +738,19 @@ class PersistenceMixin:
         runway_data.setdefault("clearway2_len", "")
         runway_data.setdefault("stopway1_len", "")
         runway_data.setdefault("stopway2_len", "")
+        if runway_data.get("declared_distance_mode") not in {
+            "calculated",
+            "published",
+        }:
+            runway_data["declared_distance_mode"] = "published" if any(
+                runway_data.get(key)
+                for key in (
+                    "tora_override_1", "tora_override_2",
+                    "toda_override_1", "toda_override_2",
+                    "asda_override_1", "asda_override_2",
+                    "lda_override_1", "lda_override_2",
+                )
+            ) else "calculated"
         runway_data.setdefault("tora_override_1", "")
         runway_data.setdefault("tora_override_2", "")
         runway_data.setdefault("toda_override_1", "")

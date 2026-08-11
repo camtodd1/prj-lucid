@@ -5,7 +5,7 @@
 **Last reviewed:** 16 July 2026
 
 Safeguarding Builder calculates declared distances for each runway direction
-and accepts optional published-value overrides. The generated records are used
+or accepts published values for an existing runway. The generated records are used
 by physical outputs, reports, runway-centreline attributes, and take-off climb
 surface construction.
 
@@ -23,16 +23,24 @@ Each runway produces one record per direction, such as `07` and `25` for runway
 
 ## Inputs
 
-Threshold coordinates and displaced-threshold lengths establish the physical
-runway length and landing threshold positions. Each runway end also accepts:
+Threshold coordinates and displaced-threshold lengths always establish the
+physical runway geometry and landing threshold positions. Declared distances
+use one of two modes:
+
+- **Calculated (planning):** derives the distances from the proposed geometry;
+- **Published (existing runway):** uses entered TORA, TODA, ASDA and LDA values
+  while retaining the calculated values for comparison.
+
+Each runway end also accepts:
 
 - clearway and stopway lengths;
 - take-off and landing availability;
-- optional published overrides for `TORA`, `TODA`, `ASDA`, and `LDA`; and
+- published `TORA`, `TODA`, `ASDA`, and `LDA` values; and
 - source notes.
 
 Blank clearway and stopway values are treated as zero. Operation availability
-defaults to enabled. Blank published values use the calculated result.
+defaults to enabled. Published mode requires all distances applicable to the
+enabled take-off and landing operations.
 
 ## Baseline Calculation
 
