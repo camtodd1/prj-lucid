@@ -137,6 +137,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             "type2": "Non-Instrument (NI)",
             "starter_extension_length_1": 150.0,
             "starter_extension_width_1": 45.0,
+            "starter_extension_shoulder_1": 7.5,
         }
 
         markings = [
@@ -144,13 +145,42 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             for kind, geometry, attrs in builder.generate_detailed_runway_markings(runway)
             if kind == "DetailedStarterExtensionMarking"
         ]
-        extension_attrs = next(
-            attrs
-            for kind, _geometry, attrs in builder.generate_physical_geometry(runway)
+        extension_features = [
+            (geometry, attrs)
+            for kind, geometry, attrs in builder.generate_physical_geometry(runway)
             if kind == "StarterExtension"
+        ]
+        extension_geometry, extension_attrs = next(
+            (geometry, attrs)
+            for geometry, attrs in extension_features
+            if attrs["component"] == "Pavement"
         )
+        shoulders = [
+            (geometry, attrs)
+            for geometry, attrs in extension_features
+            if attrs["component"] == "Shoulder"
+        ]
 
         self.assertEqual(extension_attrs["mark_w_m"], 0.9)
+        self.assertEqual(len(shoulders), 2)
+        self.assertEqual({attrs["side"] for _geometry, attrs in shoulders}, {"L", "R"})
+        self.assertTrue(
+            all(abs(geometry.area() - 150.0 * 7.5) < 1e-6 for geometry, _attrs in shoulders)
+        )
+        self.assertTrue(
+            all(
+                geometry.intersection(extension_geometry).area() < 1e-6
+                for geometry, _attrs in shoulders
+            )
+        )
+        self.assertAlmostEqual(
+            min(geometry.boundingBox().yMinimum() for geometry, _attrs in shoulders),
+            -30.0,
+        )
+        self.assertAlmostEqual(
+            max(geometry.boundingBox().yMaximum() for geometry, _attrs in shoulders),
+            30.0,
+        )
         self.assertEqual(len(markings), 3)
         self.assertTrue(all(attrs["sub_type"] == "Arrow" for _geometry, attrs in markings))
         self.assertTrue(all(attrs["end_desig"] == "09" for _geometry, attrs in markings))
@@ -170,7 +200,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
     def test_starter_extension_polygon_outline_uses_marking_width_field(self):
         builder = self._builder()
         layer = QgsVectorLayer(
-            "Polygon?crs=EPSG:3857&field=mark_w_m:double",
+            "Polygon?crs=EPSG:3857&field=mark_w_m:double&field=component:string",
             "Starter Extension",
             "memory",
         )
@@ -182,8 +212,13 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         width_property = line_layer.dataDefinedProperties().property(
             QgsSymbolLayer.PropertyStrokeWidth
         )
+        enabled_property = line_layer.dataDefinedProperties().property(
+            QgsSymbolLayer.PropertyLayerEnabled
+        )
         self.assertTrue(width_property.isActive())
         self.assertEqual(width_property.expressionString(), 'coalesce("mark_w_m", 0.5)')
+        self.assertTrue(enabled_property.isActive())
+        self.assertEqual(enabled_property.expressionString(), '"component" = \'Pavement\'')
 
     def test_declared_distances_and_stopways_match_source_checkpoints(self):
         checkpoint = json.loads(CHECKPOINT_PATH.read_text(encoding="utf-8"))

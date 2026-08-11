@@ -111,7 +111,9 @@ class PhysicalGeometryMixin:
                     QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
                 starter_extension_fields = pre_threshold_fields + [
-                    QgsField("mark_w_m", QVariant.Double, self.tr("Marking Width (m)"), 12, 3)
+                    QgsField("mark_w_m", QVariant.Double, self.tr("Marking Width (m)"), 12, 3),
+                    QgsField("component", QVariant.String, self.tr("Component"), 20),
+                    QgsField("side", QVariant.String, self.tr("Side"), 10),
                 ]
                 declared_distance_fields = [
                     QgsField("rwy", QVariant.String, self.tr("Runway Name"), 30),
@@ -1039,6 +1041,10 @@ class PhysicalGeometryMixin:
                     symbol_layer.dataDefinedProperties().setProperty(
                         QgsSymbolLayer.PropertyStrokeWidth,
                         QgsProperty.fromExpression('coalesce("mark_w_m", 0.5)'),
+                    )
+                    symbol_layer.dataDefinedProperties().setProperty(
+                        QgsSymbolLayer.PropertyLayerEnabled,
+                        QgsProperty.fromExpression('"component" = \'Pavement\''),
                     )
             layer.triggerRepaint()
         except Exception as style_error:
@@ -2699,13 +2705,15 @@ class PhysicalGeometryMixin:
             runway_data.get("type2", ""),
         )
         marking_width = starter_extension_rule[0] if starter_extension_rule else 0.5
-        for end_desig, threshold, outward_azimuth, length_key, width_key in (
+        shoulder_ref = self.get_active_ruleset().physical_refs().get("shoulder", "MOS 6.11-6.13")
+        for end_desig, threshold, outward_azimuth, length_key, width_key, shoulder_key in (
             (
                 primary_desig,
                 thr_point,
                 rwy_params["azimuth_r_p"],
                 "starter_extension_length_1",
                 "starter_extension_width_1",
+                "starter_extension_shoulder_1",
             ),
             (
                 reciprocal_desig,
@@ -2713,10 +2721,12 @@ class PhysicalGeometryMixin:
                 rwy_params["azimuth_p_r"],
                 "starter_extension_length_2",
                 "starter_extension_width_2",
+                "starter_extension_shoulder_2",
             ),
         ):
             extension_length = self._non_negative_float(runway_data.get(length_key), 0.0)
             extension_width = self._non_negative_float(runway_data.get(width_key), 0.0)
+            extension_shoulder = self._non_negative_float(runway_data.get(shoulder_key), 0.0)
             if extension_length <= 1e-6:
                 continue
             if extension_width <= 1e-6:
@@ -2747,11 +2757,46 @@ class PhysicalGeometryMixin:
                                 "wid_m": extension_width,
                                 "len_m": round(extension_length, 3),
                                 "mark_w_m": marking_width,
+                                "component": "Pavement",
+                                "side": "",
                                 "ref_mos": "MOS 6.04; MOS 8.34(2)-(3); MOS 8.21",
                                 "end_desig": end_desig,
                             },
                         )
                     )
+                    for side, lateral_center in (
+                        ("L", -extension_width / 2.0 - extension_shoulder / 2.0),
+                        ("R", extension_width / 2.0 + extension_shoulder / 2.0),
+                    ):
+                        shoulder_geom = self._create_runway_marking_rectangle(
+                            threshold,
+                            outward_azimuth,
+                            0.0,
+                            extension_length,
+                            lateral_center,
+                            extension_shoulder,
+                            f"Starter Extension Shoulder {end_desig} {side}",
+                        )
+                        if shoulder_geom:
+                            starter_extension_features.append(
+                                (
+                                    "StarterExtension",
+                                    shoulder_geom,
+                                    {
+                                        "rwy": runway_name,
+                                        "desc": f"Runway Starter Extension Shoulder ({end_desig} {side})",
+                                        "surf_cat": runway_data.get("surface_category") or "",
+                                        "surf_mat": runway_data.get("surface_material") or "",
+                                        "wid_m": extension_shoulder,
+                                        "len_m": round(extension_length, 3),
+                                        "mark_w_m": None,
+                                        "component": "Shoulder",
+                                        "side": side,
+                                        "ref_mos": shoulder_ref,
+                                        "end_desig": end_desig,
+                                    },
+                                )
+                            )
             except Exception as error:
                 QgsMessageLog.logMessage(
                     f"Error generating starter extension for {log_name} {end_desig}: {error}",

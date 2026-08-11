@@ -795,6 +795,11 @@ use the applicable MOS 8.21 runway side-stripe width. They are rendered as the
 inside white outline of the `{ICAO} Runway Starter Extensions` polygon, whose
 `mark_w_m` attribute holds the applicable width.
 
+When a starter-extension shoulder width is supplied, the physical layer also
+contains separate left and right `Shoulder` features. They use the runway
+shoulder grey fill without a stroke; the white boundary remains attached only
+to the `Pavement` feature.
+
 | Field | Value |
 | --- | --- |
 | Layer name | `{ICAO} Runway Starter Extension Markings` |
