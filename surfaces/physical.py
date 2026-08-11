@@ -1038,9 +1038,11 @@ class PhysicalGeometryMixin:
             for index in range(symbol.symbolLayerCount()):
                 symbol_layer = symbol.symbolLayer(index)
                 if symbol_layer.layerType() == "SimpleLine":
+                    # QGIS clips the centred stroke at the polygon edge, so only
+                    # its inside half is visible.
                     symbol_layer.dataDefinedProperties().setProperty(
                         QgsSymbolLayer.PropertyStrokeWidth,
-                        QgsProperty.fromExpression('coalesce("mark_w_m", 0.5)'),
+                        QgsProperty.fromExpression('2 * coalesce("mark_w_m", 0.5)'),
                     )
                     symbol_layer.dataDefinedProperties().setProperty(
                         QgsSymbolLayer.PropertyLayerEnabled,

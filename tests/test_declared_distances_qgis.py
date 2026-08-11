@@ -7,7 +7,14 @@ import sys
 import unittest
 from pathlib import Path
 
-from qgis.core import QgsPointXY, QgsSymbolLayer, QgsVectorLayer
+from qgis.core import (
+    QgsExpressionContext,
+    QgsExpressionContextUtils,
+    QgsFeature,
+    QgsPointXY,
+    QgsSymbolLayer,
+    QgsVectorLayer,
+)
 
 WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE.parent))
@@ -133,7 +140,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             "width": 45.0,
             "surface_category": "Sealed",
             "arc_num": 4,
-            "type1": "Precision Approach CAT II/III",
+            "type1": "Precision Approach CAT I",
             "type2": "Non-Instrument (NI)",
             "starter_extension_length_1": 150.0,
             "starter_extension_width_1": 45.0,
@@ -161,7 +168,7 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             if attrs["component"] == "Shoulder"
         ]
 
-        self.assertEqual(extension_attrs["mark_w_m"], 0.9)
+        self.assertEqual(extension_attrs["mark_w_m"], 0.45)
         self.assertEqual(len(shoulders), 2)
         self.assertEqual({attrs["side"] for _geometry, attrs in shoulders}, {"L", "R"})
         self.assertTrue(
@@ -215,8 +222,18 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         enabled_property = line_layer.dataDefinedProperties().property(
             QgsSymbolLayer.PropertyLayerEnabled
         )
+        self.assertTrue(line_layer.drawInsidePolygon())
         self.assertTrue(width_property.isActive())
-        self.assertEqual(width_property.expressionString(), 'coalesce("mark_w_m", 0.5)')
+        self.assertEqual(
+            width_property.expressionString(),
+            '2 * coalesce("mark_w_m", 0.5)',
+        )
+        cat_i_feature = QgsFeature(layer.fields())
+        cat_i_feature["mark_w_m"] = 0.45
+        context = QgsExpressionContext()
+        context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(layer))
+        context.setFeature(cat_i_feature)
+        self.assertEqual(width_property.value(context), (0.9, True))
         self.assertTrue(enabled_property.isActive())
         self.assertEqual(enabled_property.expressionString(), '"component" = \'Pavement\'')
 
