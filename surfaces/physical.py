@@ -277,6 +277,11 @@ class PhysicalGeometryMixin:
                         "fields": pre_threshold_fields,
                         "group": physical_geom_group,
                     },
+                    "StarterExtension": {
+                        "name": self.tr("Runway Starter Extensions"),
+                        "fields": pre_threshold_fields,
+                        "group": physical_geom_group,
+                    },
                     "PreThresholdArea": {
                         "name": self.tr("Pre-Threshold Area"),
                         "fields": pre_threshold_fields,
@@ -379,6 +384,7 @@ class PhysicalGeometryMixin:
                 style_key_map = {
                     "rwy": "Runway Pavement",
                     "PreThresholdRunway": "PreThreshold Runway",
+                    "StarterExtension": "PreThreshold Runway",
                     "PreThresholdArea": "PreThreshold Area",
                     "Shoulder": "Runway Shoulders",
                     "DeclaredDistance": "Default Point",
@@ -402,6 +408,7 @@ class PhysicalGeometryMixin:
                 layer_creation_order = [
                     "rwy",
                     "PreThresholdRunway",
+                    "StarterExtension",
                     "PreThresholdArea",
                     "Shoulder",
                     "DeclaredDistance",
@@ -2558,7 +2565,71 @@ class PhysicalGeometryMixin:
 
             generated_elements.extend(pre_threshold_features)
 
-        # --- 1c. Pre-Threshold Area (Blast Pad, etc.) ---
+        # --- 1c. Runway Starter Extensions ---
+        starter_extension_features = []
+        primary_desig = runway_name.split("/")[0] if "/" in runway_name else "Primary"
+        reciprocal_desig = runway_name.split("/")[1] if "/" in runway_name else "Reciprocal"
+        for end_desig, threshold, outward_azimuth, length_key, width_key in (
+            (
+                primary_desig,
+                thr_point,
+                rwy_params["azimuth_r_p"],
+                "starter_extension_length_1",
+                "starter_extension_width_1",
+            ),
+            (
+                reciprocal_desig,
+                rec_thr_point,
+                rwy_params["azimuth_p_r"],
+                "starter_extension_length_2",
+                "starter_extension_width_2",
+            ),
+        ):
+            extension_length = self._non_negative_float(runway_data.get(length_key), 0.0)
+            extension_width = self._non_negative_float(runway_data.get(width_key), 0.0)
+            if extension_length <= 1e-6:
+                continue
+            if extension_width <= 1e-6:
+                QgsMessageLog.logMessage(
+                    f"Skipping starter extension for {log_name} {end_desig}: width missing.",
+                    plugin_tag,
+                    level=Qgis.Warning,
+                )
+                continue
+            try:
+                geom = self._create_rectangle_from_start(
+                    threshold,
+                    outward_azimuth,
+                    extension_length,
+                    extension_width / 2.0,
+                    f"Starter Extension {end_desig}",
+                )
+                if geom:
+                    starter_extension_features.append(
+                        (
+                            "StarterExtension",
+                            geom,
+                            {
+                                "rwy": runway_name,
+                                "desc": f"Runway Starter Extension ({end_desig})",
+                                "surf_cat": runway_data.get("surface_category") or "",
+                                "surf_mat": runway_data.get("surface_material") or "",
+                                "wid_m": extension_width,
+                                "len_m": round(extension_length, 3),
+                                "ref_mos": "MOS 6.04; MOS 8.34",
+                                "end_desig": end_desig,
+                            },
+                        )
+                    )
+            except Exception as error:
+                QgsMessageLog.logMessage(
+                    f"Error generating starter extension for {log_name} {end_desig}: {error}",
+                    plugin_tag,
+                    level=Qgis.Warning,
+                )
+        generated_elements.extend(starter_extension_features)
+
+        # --- 1d. Pre-Threshold Area (Blast Pad, etc.) ---
         if runway_width is not None and runway_width > 0:
             pre_threshold_area_features = []
             half_width = runway_width / 2.0

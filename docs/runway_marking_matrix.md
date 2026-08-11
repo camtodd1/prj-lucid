@@ -728,7 +728,7 @@ Status: implemented as detailed generated polygon geometry.
 | Reference | Requirement summary | Notes |
 | --- | --- | --- |
 | MOS 8.16(1) | If an area before the non-displaced threshold, or the runway end in the reciprocal direction, is sealed concrete/asphalt, is 30 m or more in length, and is not suitable for normal aircraft usage, pre-threshold area markings must be used. | Current dialog has pre-threshold area length but does not yet collect surface/suitability. |
-| MOS 8.16(1) Note | This does not apply to runway starter extensions. | Starter-extension dimensions are captured separately; dedicated starter-extension markings remain to be generated. |
+| MOS 8.16(1) Note | This does not apply to runway starter extensions. | Starter-extension dimensions and footprints are generated separately; dedicated starter-extension markings remain to be generated. |
 | MOS 8.16(2)(a) | Markings consist of yellow chevrons with 0.9 m wide lines angled 45 degrees to the runway centreline. | Generated as yellow polygon legs. |
 | MOS 8.16(2)(b) | Chevrons are spaced 30 m apart, apex to apex. | Stored as `spacing_m = 30`. |
 | MOS 8.16(2)(c) | Chevrons are 15 m tall from apex to base. | Extended where needed so line ends target the runway-edge clearance rule. |
@@ -743,7 +743,7 @@ Status: implemented as detailed generated polygon geometry.
 | Pre-threshold area length >= 30 m | Yes | Uses dialog `thr_pre_area_1` / `thr_pre_area_2`. |
 | Sealed concrete/asphalt surface | Uses runway surface category | Current implementation generates when category is `Sealed`. |
 | Not suitable for normal aircraft usage | Assumed yes when pre-threshold area length is entered | Suitability input does not exist yet. |
-| Runway starter extension | Input modelled; marking generation pending | Do not treat entered starter extensions as unusable pre-threshold areas. |
+| Runway starter extension | Input and footprint modelled; marking generation pending | Generated in the Physical Geometry group and not treated as an unusable pre-threshold area. |
 
 ### Geometry Parameters
 

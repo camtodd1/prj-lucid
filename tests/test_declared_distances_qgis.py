@@ -87,6 +87,40 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         self.assertEqual(by_direction["primary"]["tora_m"], 1150.0)
         self.assertEqual(by_direction["reciprocal"]["tora_m"], 1100.0)
 
+    def test_starter_extension_generates_pre_threshold_styled_polygon(self):
+        runway = {
+            "short_name": "09/27",
+            "thr_point": QgsPointXY(0.0, 0.0),
+            "rec_thr_point": QgsPointXY(1000.0, 0.0),
+            "thr_displaced_1": 100.0,
+            "thr_displaced_2": 0.0,
+            "starter_extension_length_1": 150.0,
+            "starter_extension_width_1": 45.0,
+            "width": 45.0,
+        }
+
+        generated = self._builder().generate_physical_geometry(runway)
+        extension = next(
+            (geometry, attrs)
+            for kind, geometry, attrs in generated
+            if kind == "StarterExtension"
+        )
+        pre_threshold = next(
+            geometry
+            for kind, geometry, _attrs in generated
+            if kind == "PreThresholdRunway"
+        )
+
+        geometry, attrs = extension
+        self.assertAlmostEqual(geometry.area(), 150.0 * 45.0, places=6)
+        self.assertAlmostEqual(geometry.centroid().asPoint().x(), -75.0, places=6)
+        self.assertAlmostEqual(
+            geometry.intersection(pre_threshold).area(), 100.0 * 45.0, places=6
+        )
+        self.assertEqual(attrs["end_desig"], "09")
+        self.assertEqual(attrs["len_m"], 150.0)
+        self.assertEqual(attrs["wid_m"], 45.0)
+
     def test_declared_distances_and_stopways_match_source_checkpoints(self):
         checkpoint = json.loads(CHECKPOINT_PATH.read_text(encoding="utf-8"))
         for case in checkpoint["cases"]:
