@@ -246,7 +246,7 @@ MOS reference: 9.63.
 
 - The builder models available pre-threshold edge lighting as split directional edge markers where applicable.
 - The displaced-threshold length input is interpreted as runway pavement before the displaced threshold that remains available for aircraft use, consistent with take-off use and landing from the opposite direction.
-- The separate pre-threshold area input is treated as stopway by default in the declared-distance workflow and does not trigger section 9.63 runway edge-light treatment.
+- A pre-threshold area is not treated as a stopway unless a stopway length is explicitly entered.
 - Starter-extension classification is not currently captured, so the blue opposite-direction starter-extension case is not generated.
 - Closed pre-threshold areas are not inferred automatically. Explicit
   closed-area input support is tracked in [`roadmap.md`](roadmap.md).
@@ -329,7 +329,7 @@ MOS reference: 9.68.
 ### Builder Assumptions
 
 - Generated when stopway lighting is enabled and stopway length is present.
-- A pre-threshold area is treated as a stopway by default in the input workflow.
+- Stopway lights use only the explicitly entered stopway length.
 - Stopway end lights override stopway edge lights where they occupy the same point.
 - Visibility shielding from the approach over the stopway is not modelled.
 

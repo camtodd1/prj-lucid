@@ -631,7 +631,7 @@ class OlsConstructionQgisTests(unittest.TestCase):
             arp_point=QgsPointXY(1000.0, 500.0),
         )
         self.assertEqual(mos.runways[0].generation_data["clearway1_len"], "")
-        self.assertGreater(mos.runways[0].ends[0].clearway_length_m, 0.0)
+        self.assertEqual(mos.runways[0].ends[0].clearway_length_m, 0.0)
 
     def test_modernised_comparison_does_not_substitute_annex14_ni_strip(self):
         builder = object.__new__(SafeguardingBuilder)

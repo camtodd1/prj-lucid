@@ -96,6 +96,32 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         self.assertEqual(by_direction["primary"]["tora_m"], 1250.0)
         self.assertEqual(by_direction["reciprocal"]["tora_m"], 1100.0)
 
+    def test_stopway_and_clearway_geometry_requires_explicit_inputs(self):
+        builder = self._builder()
+        builder.ruleset = MOS139_PROFILE
+        runway = {
+            "short_name": "05/23",
+            "thr_point": QgsPointXY(0.0, 0.0),
+            "rec_thr_point": QgsPointXY(1000.0, 0.0),
+            "width": 45.0,
+            "arc_num": 4,
+            "type1": "Precision Approach CAT I",
+            "type2": "Non-Instrument (NI)",
+            "thr_displaced_1": 60.0,
+            "starter_extension_length_2": 150.0,
+            "starter_extension_width_2": 45.0,
+            "thr_pre_area_1": 60.0,
+            "stopway1_len": 50.0,
+            "clearway2_len": 80.0,
+        }
+
+        generated = builder.generate_physical_geometry(runway)
+        stopways = [attrs for kind, _geometry, attrs in generated if kind == "Stopway"]
+        clearways = [attrs for kind, _geometry, attrs in generated if kind == "Clearway"]
+
+        self.assertEqual([(item["end_desig"], item["len_m"]) for item in stopways], [("05", 50.0)])
+        self.assertEqual([(item["end_desig"], item["len_m"]) for item in clearways], [("23", 80.0)])
+
     def test_pre_threshold_geometry_is_chained_after_starter_extension(self):
         runway = {
             "short_name": "09/27",

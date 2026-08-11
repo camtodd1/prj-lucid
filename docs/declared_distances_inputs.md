@@ -42,6 +42,10 @@ Blank clearway and stopway values are treated as zero. Operation availability
 defaults to enabled. Published mode requires all distances applicable to the
 enabled take-off and landing operations.
 
+Clearway and stopway dimensions are never inferred from displaced thresholds,
+starter extensions, pre-threshold areas, or runway-strip dimensions. Their
+dedicated fields are the sole source for the corresponding physical polygons.
+
 ## Baseline Calculation
 
 For a runway with no operational restriction:
@@ -51,22 +55,18 @@ physical length = threshold distance
                 + primary displaced threshold
                 + reciprocal displaced threshold
 
-starter extension beyond runway end
-     = max(extension length - displacement distance, 0)
-
-TORA = physical length + starter extension beyond runway end
+TORA = physical length + starter extension length
 TODA = TORA + departure-end clearway
 ASDA = TORA + departure-end stopway
 LDA  = landing-threshold distance available in that direction
 ```
 
-Starter-extension length and displacement distance are both measured outward
-from the threshold. Their overlapping length is therefore counted once rather
-than added twice. Starter extensions do not change LDA or the physical runway
-length.
+Starter extensions begin beyond any displaced-threshold pavement, so their full
+length is additional to the physical runway. They do not change LDA or the
+physical runway length.
 
-The active ruleset supplies clearway policy. A default or entered clearway may
-be capped by that ruleset, including the common half-`TORA` limit. Published
+The active ruleset supplies clearway policy. An entered clearway may be capped
+by that ruleset, including the common half-`TORA` limit. Published
 overrides replace calculated values in the effective output while preserving
 the calculated values and recording warnings where the relationship is
 unusual.

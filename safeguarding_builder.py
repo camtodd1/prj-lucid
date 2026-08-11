@@ -3570,19 +3570,10 @@ class SafeguardingBuilder(
         if physical_length is not None and physical_length > 0:
             max_clearway_length = physical_length / 2.0
 
-        def end_spec(end_key: str, input_key: str, stopway_key: str) -> Dict[str, Any]:
+        def end_spec(end_key: str, input_key: str) -> Dict[str, Any]:
             input_length = self._non_negative_float(runway_data.get(input_key), 0.0)
-            default_length = strip_extension + self._non_negative_float(runway_data.get(stopway_key), 0.0)
-            effective_length = max(input_length, default_length)
-            source = "input" if input_length >= default_length and input_length > 1e-6 else "runway-strip default"
-
-            if input_length > 1e-6 and input_length < default_length:
-                QgsMessageLog.logMessage(
-                    f"Clearway input for {runway_name} {end_key} end ({input_length:.3f} m) is shorter than "
-                    f"the default runway-to-strip-end distance ({default_length:.3f} m); using the default.",
-                    PLUGIN_TAG,
-                    level=Qgis.Warning,
-                )
+            effective_length = input_length
+            source = "input" if input_length > 1e-6 else "none"
 
             if max_clearway_length is not None and effective_length > max_clearway_length:
                 QgsMessageLog.logMessage(
@@ -3598,14 +3589,14 @@ class SafeguardingBuilder(
                 "length_m": round(effective_length, 3),
                 "width_m": round(clearway_width, 3),
                 "input_length_m": round(input_length, 3),
-                "default_length_m": round(default_length, 3),
+                "default_length_m": 0.0,
                 "source": source,
                 "ref_mos": "MOS 6.27; MOS 6.28; MOS 6.29",
             }
 
         specs = {
-            "primary": end_spec("primary", "clearway1_len", "stopway1_len"),
-            "reciprocal": end_spec("reciprocal", "clearway2_len", "stopway2_len"),
+            "primary": end_spec("primary", "clearway1_len"),
+            "reciprocal": end_spec("reciprocal", "clearway2_len"),
             "ruleset_id": ruleset_id,
         }
         runway_data["_effective_clearway_specs"] = specs
