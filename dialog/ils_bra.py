@@ -233,18 +233,6 @@ class IlsBraInputsMixin:
                 6,
                 not direct and component_value == "glide_path",
             )
-        status_helper = getattr(self, "_set_small_status_chip", None)
-        if callable(status_helper):
-            status_helper(
-                "label_ils_bra_status",
-                f"ILS installations: {row_count}" if row_count else "ILS installations: none",
-                "ready" if row_count else "neutral",
-            )
-        else:
-            status = getattr(self, "label_ils_bra_status", None)
-            if status:
-                status.setText(f"ILS installations: {row_count}" if row_count else "ILS installations: none")
-
         header_height = table.horizontalHeader().height() if table.horizontalHeader() else 28
         row_heights = sum(table.rowHeight(row) for row in range(row_count))
         target_height = header_height + row_heights + 10

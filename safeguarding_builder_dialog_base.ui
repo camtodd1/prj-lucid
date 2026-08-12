@@ -355,13 +355,6 @@
              </property>
             </spacer>
            </item>
-           <item>
-            <widget class="QLabel" name="label_arp_status">
-             <property name="text">
-              <string/>
-             </property>
-            </widget>
-           </item>
           </layout>
          </item>
           <item row="1" column="0">
@@ -432,13 +425,6 @@
       <layout class="QVBoxLayout" name="verticalLayout_runwaysTab">
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout_runwayActions">
-         <item>
-          <widget class="QLabel" name="label_runway_status">
-           <property name="text">
-            <string/>
-           </property>
-          </widget>
-         </item>
          <item>
           <spacer name="horizontalSpacer_runwayActions">
            <property name="orientation">
@@ -513,13 +499,6 @@
                </size>
               </property>
              </spacer>
-            </item>
-            <item>
-             <widget class="QLabel" name="label_cns_status">
-              <property name="text">
-               <string/>
-              </property>
-             </widget>
             </item>
            </layout>
           </item>
@@ -601,13 +580,6 @@
              </property>
             </spacer>
            </item>
-           <item>
-            <widget class="QLabel" name="label_ils_bra_status">
-             <property name="text">
-              <string/>
-             </property>
-            </widget>
-           </item>
           </layout>
          </item>
          <item>
@@ -688,13 +660,6 @@
              </property>
             </spacer>
            </item>
-           <item>
-            <widget class="QLabel" name="label_met_status">
-             <property name="text">
-              <string/>
-             </property>
-            </widget>
-           </item>
           </layout>
          </item>
          <item row="1" column="0">
@@ -774,13 +739,6 @@
           <string>Output Destination</string>
          </property>
          <layout class="QVBoxLayout" name="verticalLayout_5">
-          <item>
-           <widget class="QLabel" name="label_output_status">
-            <property name="text">
-             <string/>
-            </property>
-           </widget>
-          </item>
           <item>
            <widget class="QRadioButton" name="radioMemoryOutput">
             <property name="text">

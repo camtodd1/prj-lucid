@@ -238,23 +238,12 @@ class CnsTableMixin:
 
     def _update_cns_view_state(self):
         cns_table = getattr(self, "table_cns_facility", self.findChild(QtWidgets.QTableWidget, "table_cns_facility"))
-        status_label = getattr(self, "label_cns_status", self.findChild(QtWidgets.QLabel, "label_cns_status"))
         remove_button = getattr(self, "pushButton_remove_CNS", self.findChild(QtWidgets.QPushButton, "pushButton_remove_CNS"))
         if cns_table is None:
             return
 
         row_count = cns_table.rowCount()
         selected_rows = cns_table.selectionModel().selectedRows() if cns_table.selectionModel() else []
-        status_helper = getattr(self, "_set_small_status_chip", None)
-        if callable(status_helper):
-            status_helper(
-                "label_cns_status",
-                f"CNS facilities: {row_count}" if row_count else "CNS facilities: none",
-                "ready" if row_count else "neutral",
-            )
-        elif status_label:
-            status_label.setText(f"CNS facilities: {row_count}" if row_count else "CNS facilities: none")
-
         if remove_button is not None:
             remove_button.setEnabled(bool(selected_rows))
 

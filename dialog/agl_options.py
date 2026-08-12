@@ -78,10 +78,6 @@ class AglOptionsMixin:
         self.checkBox_agl_enabled.setToolTip("Generate AGL point layers from the runway definitions.")
         control_layout.addWidget(self.checkBox_agl_enabled)
         control_layout.addStretch(1)
-
-        self.label_agl_status = QtWidgets.QLabel("AGL disabled")
-        self.label_agl_status.setObjectName("label_agl_status")
-        control_layout.addWidget(self.label_agl_status)
         group_layout.addLayout(control_layout)
 
         self.lineEdit_agl_edge_spacing = self._agl_line_edit("lineEdit_agl_edge_spacing", "60")
@@ -289,12 +285,6 @@ class AglOptionsMixin:
                 )
 
     def _update_agl_view_state(self) -> None:
-        """Keep the AGL status visually aligned with its state."""
-        enabled = bool(getattr(self, "checkBox_agl_enabled", None) and self.checkBox_agl_enabled.isChecked())
-        status_helper = getattr(self, "_set_small_status_chip", None)
-        if callable(status_helper):
-            status_helper(
-                "label_agl_status",
-                "AGL enabled" if enabled else "AGL disabled",
-                "ready" if enabled else "neutral",
-            )
+        """Refresh the shared tab status after AGL controls change."""
+        if hasattr(self, "update_dialog_status"):
+            self.update_dialog_status()

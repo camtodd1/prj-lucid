@@ -242,6 +242,7 @@ class SafeguardingBuilderDialog(
         self._setup_readiness_strip()
         self._setup_workflow_tab_state()
         self._setup_workflow_context_strips()
+        self.refresh_dem_tool_state()
         self._setup_family_generation_controls()
         self._setup_workflow_scroll_areas()
         self._style_workflow_panels()
@@ -498,7 +499,10 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_status"),
         )
         if airport_status:
-            self._apply_status_chip(airport_status, "ICAO or IATA required", "neutral", prominent=True)
+            self._set_airport_identity_status(
+                "ICAO or IATA required",
+                "neutral",
+            )
 
         airport_lookup = getattr(
             self,
@@ -572,14 +576,6 @@ class SafeguardingBuilderDialog(
                 group.setSizePolicy(
                     QtWidgets.QSizePolicy.Policy.Expanding,
                     QtWidgets.QSizePolicy.Policy.Fixed,
-                )
-        for name in ["label_arp_status", "label_met_status"]:
-            label = getattr(self, name, self.findChild(QtWidgets.QLabel, name))
-            if label:
-                label.setMinimumHeight(24)
-                label.setStyleSheet(
-                    "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; "
-                    "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
                 )
         for name in [
             "label_arp_description",
@@ -1203,6 +1199,19 @@ class SafeguardingBuilderDialog(
             widgets = getattr(self, "_workflow_context_widgets", {}).get(tab_name, {})
             status_label = widgets.get("status")
             if isinstance(status_label, QtWidgets.QLabel):
+                if tab_name == "tab_runway_protection":
+                    status_label._status_chip_signature = None
+                    status_label.setText(text)
+                    status_label.setMinimumHeight(0)
+                    status_label.setMaximumHeight(16777215)
+                    status_label.setSizePolicy(
+                        QtWidgets.QSizePolicy.Policy.Maximum,
+                        QtWidgets.QSizePolicy.Policy.Fixed,
+                    )
+                    status_label.setStyleSheet(
+                        "QLabel { color: #66717d; font-size: 10px; font-weight: 600; }"
+                    )
+                    continue
                 self._apply_status_chip(
                     status_label,
                     text,
@@ -2163,6 +2172,35 @@ class SafeguardingBuilderDialog(
         label.updateGeometry()
         return True
 
+    def _set_airport_identity_status(self, text: str, state: str) -> bool:
+        """Show lookup feedback as inline text rather than another status puck."""
+        label = getattr(self, "label_airport_status", None)
+        if label is None:
+            return False
+        signature = (text, state)
+        if getattr(label, "_airport_identity_status_signature", None) == signature:
+            return False
+        label._airport_identity_status_signature = signature
+        foreground = {
+            "ready": "#1f6b32",
+            "warning": "#8a5200",
+            "info": "#1f4f99",
+            "neutral": "#66717d",
+        }.get(state, "#66717d")
+        label.setText(text)
+        label.setWordWrap(False)
+        label.setMinimumHeight(18)
+        label.setMaximumHeight(18)
+        label.setSizePolicy(
+            QtWidgets.QSizePolicy.Policy.Expanding,
+            QtWidgets.QSizePolicy.Policy.Fixed,
+        )
+        label.setStyleSheet(
+            f"QLabel {{ color: {foreground}; font-size: 11px; font-weight: 600; }}"
+        )
+        label.updateGeometry()
+        return True
+
     def _setup_project_crs_status_monitor(self) -> None:
         """Refresh the suggested CRS field when the QGIS project CRS changes."""
         try:
@@ -2385,7 +2423,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_status"),
         )
         if airport_status:
-            self._apply_status_chip(airport_status, "Resolving airport...", "warning", prominent=True)
+            self._set_airport_identity_status("Resolving airport...", "warning")
         self._airport_lookup_timer.start(350)
 
     def queue_current_airport_lookup(self) -> None:
@@ -2472,7 +2510,7 @@ class SafeguardingBuilderDialog(
                 self.findChild(QtWidgets.QLabel, "label_airport_status"),
             )
             if airport_status:
-                self._apply_status_chip(airport_status, "Airport not found", "warning", prominent=True)
+                self._set_airport_identity_status("Airport not found", "warning")
             self._update_airport_crs_display(None)
 
     def _fetch_airport_metadata_by_iata(self, iata_code: str) -> Optional[Dict[str, str]]:
@@ -2652,7 +2690,7 @@ class SafeguardingBuilderDialog(
             self.findChild(QtWidgets.QLabel, "label_airport_status"),
         )
         if airport_status:
-            self._apply_status_chip(airport_status, summary, "ready", prominent=True)
+            self._set_airport_identity_status(summary, "ready")
             airport_status.setToolTip(" | ".join(tooltip_parts))
         self._resize_airport_identity_card()
         self.update_dialog_status()
@@ -2779,13 +2817,6 @@ class SafeguardingBuilderDialog(
             elif hasattr(widget, "fileChanged"):
                 widget.fileChanged.connect(self.update_dialog_status)
 
-    def _set_small_status_chip(self, label_name: str, text: str, state: str) -> None:
-        """Apply a compact status-chip style to section-level labels."""
-        label = getattr(self, label_name, self.findChild(QtWidgets.QLabel, label_name))
-        if not label:
-            return
-        self._apply_status_chip(label, text, state)
-
     def update_dialog_status(self):
         """Updates compact workflow status labels."""
         self._update_airport_crs_status()
@@ -2814,72 +2845,28 @@ class SafeguardingBuilderDialog(
             else:
                 airport_status_text = "ICAO or IATA required"
                 airport_status_state = "neutral"
-            airport_status_changed = self._apply_status_chip(
-                self.label_airport_status,
+            airport_status_changed = self._set_airport_identity_status(
                 airport_status_text,
                 airport_status_state,
-                prominent=True,
             )
             if airport_status_changed:
                 self._resize_airport_identity_card()
-
-        arp_values = airport_dependencies["arp_values"]
-        self._set_small_status_chip(
-            "label_arp_status",
-            "Location set" if all(arp_values[:2]) else "Location incomplete" if any(arp_values) else "Not set",
-            "ready" if all(arp_values[:2]) else "warning" if any(arp_values) else "neutral",
-        )
-
-        met_values = airport_dependencies["met_values"]
-        self._set_small_status_chip(
-            "label_met_status",
-            "Location set" if all(met_values[:2]) else "Location incomplete" if any(met_values) else "Not added",
-            "ready" if all(met_values[:2]) else "warning" if any(met_values) else "neutral",
-        )
 
         active_ruleset_id, protected_airspace_policy = self._current_policy_ids()
         runway_dependencies = self._runway_dependency_status(active_ruleset_id, protected_airspace_policy)
         runway_count = runway_dependencies["total"]
         incomplete = runway_dependencies["incomplete"]
-        if hasattr(self, "label_runway_status"):
-            if runway_count == 0:
-                runway_status = "Runways: none defined"
-                runway_state = "neutral"
-            elif incomplete:
-                runway_status = f"Runways: {runway_count} defined, {incomplete} incomplete"
-                runway_state = "warning"
-            else:
-                runway_status = f"Runways: {runway_count} ready"
-                runway_state = "ready"
-            self._set_small_status_chip("label_runway_status", runway_status, runway_state)
 
         if hasattr(self, "_update_cns_view_state"):
             self._update_cns_view_state()
         cns_dependencies = self._cns_dependency_status()
-        cns_count = cns_dependencies["valid"]
-        if hasattr(self, "label_cns_status"):
-            self._set_small_status_chip(
-                "label_cns_status",
-                cns_dependencies["summary"],
-                "neutral" if cns_dependencies["state"] == "optional" else cns_dependencies["state"],
-            )
 
         agl_dependencies = self._agl_dependency_status(runway_dependencies)
         agl_enabled = bool(agl_dependencies["enabled"])
-        if hasattr(self, "label_agl_status"):
-            self._set_small_status_chip(
-                "label_agl_status",
-                agl_dependencies["summary"],
-                "neutral" if agl_dependencies["state"] == "optional" else agl_dependencies["state"],
-            )
 
         output_dependencies = self._output_dependency_status()
         output_text = output_dependencies["summary"]
         output_state = output_dependencies["state"]
-        output_path = output_dependencies["path"]
-        if hasattr(self, "label_output_status"):
-            self._set_small_status_chip("label_output_status", output_text, output_state)
-            self.label_output_status.setToolTip(output_path)
 
         ols_dependencies = self._ols_dependency_status(
             airport_dependencies,
@@ -2948,7 +2935,7 @@ class SafeguardingBuilderDialog(
             airport_tab_state = "warning"
             airport_tab_tip = "Review airport setup: " + ", ".join(airport_dependencies["review_items"] or ["resolved ICAO"])
         else:
-            airport_tab_state = "warning"
+            airport_tab_state = "blocked"
             airport_tab_tip = "Airport identifier is required."
         self._set_workflow_tab_state("tab_airport", airport_tab_state, airport_tab_tip)
 
@@ -2959,7 +2946,7 @@ class SafeguardingBuilderDialog(
             runway_tab_state = "warning"
             runway_tab_tip = "; ".join(runway_dependencies["issues"] or [f"{incomplete} incomplete runway(s)"])
         else:
-            runway_tab_state = "warning"
+            runway_tab_state = "blocked"
             runway_tab_tip = "No runways defined."
         self._set_workflow_tab_state("tab_runways", runway_tab_state, runway_tab_tip)
         self._set_workflow_tab_state(
@@ -2993,15 +2980,8 @@ class SafeguardingBuilderDialog(
         )
         self._set_workflow_tab_state("tab_external", external_state, external_tip)
 
-        if not identity_generation_ready:
-            output_tab_state = "blocked"
-            output_tab_tip = "Waiting for airport identity."
-        elif output_ready:
-            output_tab_state = "ready"
-            output_tab_tip = output_text
-        else:
-            output_tab_state = "warning"
-            output_tab_tip = output_text
+        output_tab_state = output_state
+        output_tab_tip = output_text
         self._set_workflow_tab_state("tab_output", output_tab_state, output_tab_tip)
 
         airport_map_state = (
@@ -3023,31 +3003,41 @@ class SafeguardingBuilderDialog(
             if airport_tab_state == "ready"
             else "Review"
             if airport_dependencies["identity_present"]
-            else "Needed"
+            else "Needs inputs"
         )
         runway_context_text = (
-            f"{runway_count} ready" if runway_ready else f"{incomplete} incomplete" if runway_count else "Needed"
+            "Ready" if runway_ready else "Review" if runway_count else "Needs inputs"
         )
         cns_context_text = (
-            f"{cns_count} ready"
+            "Ready"
             if cns_dependencies["state"] == "ready"
             else "Optional"
             if cns_dependencies["state"] == "optional"
+            else "Needs inputs"
+            if cns_dependencies["state"] == "blocked"
             else "Review"
         )
         ols_context_text = (
             "Ready"
             if ols_dependencies["state"] == "ready"
-            else "Needed"
+            else "Needs inputs"
             if ols_dependencies["state"] == "blocked"
             else "Review"
         )
         output_context_text = (
-            "Memory"
-            if output_ready
-            and bool(getattr(self, "radioMemoryOutput", None) and self.radioMemoryOutput.isChecked())
-            else "Files"
-            if output_ready
+            "Ready"
+            if output_state == "ready"
+            else "Needs inputs"
+            if output_state == "blocked"
+            else "Review"
+        )
+        lighting_context_text = (
+            "Off"
+            if not agl_dependencies["enabled"]
+            else "Ready"
+            if agl_dependencies["state"] == "ready"
+            else "Needs inputs"
+            if agl_dependencies["state"] == "blocked"
             else "Review"
         )
         self._update_workflow_context_statuses(
@@ -3057,10 +3047,7 @@ class SafeguardingBuilderDialog(
                 "tab_runway_protection": ("Planned", "optional"),
                 "tab_cns": (cns_context_text, cns_dependencies["state"]),
                 "tab_ols": (ols_context_text, ols_dependencies["state"]),
-                "tab_lighting": (
-                    "Enabled" if agl_dependencies["enabled"] else "Off",
-                    agl_dependencies["state"],
-                ),
+                "tab_lighting": (lighting_context_text, agl_dependencies["state"]),
                 "tab_external": (
                     "Ready" if external_state == "ready" else "Needs inputs",
                     external_state,

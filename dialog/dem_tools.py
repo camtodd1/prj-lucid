@@ -385,8 +385,8 @@ class DemToolsMixin:
             button.setEnabled(False)
             button.setToolTip("Choose a custom extent layer or use the automatic extent.")
             self._set_dem_workflow_state(
-                "Select extent",
-                "optional",
+                "Review",
+                "warning",
                 "Choose a custom extent layer or return to the automatic OLS extent.",
             )
             return

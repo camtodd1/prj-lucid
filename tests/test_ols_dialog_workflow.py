@@ -127,6 +127,48 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             )
         )
 
+    def test_status_pucks_are_limited_to_global_tab_and_runway_states(self):
+        self.dialog.update_dialog_status()
+
+        chip_names = {
+            label.objectName()
+            for label in self.dialog.findChildren(QtWidgets.QLabel)
+            if getattr(label, "_status_chip_signature", None)
+        }
+        self.assertEqual(
+            chip_names,
+            {
+                "label_generation_readiness_badge",
+                "label_workflow_context_status_tab_airport",
+                "label_workflow_context_status_tab_runways",
+                "label_workflow_context_status_tab_ols",
+                "label_workflow_context_status_tab_cns",
+                "label_workflow_context_status_tab_lighting",
+                "label_workflow_context_status_tab_external",
+                "label_workflow_context_status_tab_terrain",
+                "label_workflow_context_status_tab_airport_map",
+                "label_workflow_context_status_tab_output",
+            },
+        )
+        self.assertEqual(self.dialog.label_airport_status.text(), "ICAO or IATA required")
+        self.assertFalse(
+            getattr(self.dialog.label_airport_status, "_status_chip_signature", None)
+        )
+        planned = self.dialog.findChild(
+            QtWidgets.QLabel,
+            "label_workflow_context_status_tab_runway_protection",
+        )
+        self.assertEqual(planned.text(), "Planned")
+        self.assertFalse(getattr(planned, "_status_chip_signature", None))
+        self.assertEqual(
+            self.dialog._workflow_context_widgets["tab_terrain"]["status"].text(),
+            "Ready",
+        )
+        output = self.dialog._workflow_context_widgets["tab_output"]["status"]
+        self.assertEqual(output.text(), "Ready")
+        self.assertEqual(output._status_chip_signature[1], "ready")
+        self.assertEqual(self.dialog._runway_groups[1].status_chip_lbl.text(), "Incomplete")
+
     def test_workflow_tabs_place_ols_before_cns(self):
         tabs = self.dialog.tabWidget_workflow
 
