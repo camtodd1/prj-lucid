@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """Dynamic runway input widget used by the main dialog."""
 
-from typing import Any, Dict, Optional
+from typing import Any, Callable, Dict, Optional
 
 from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
 
@@ -51,10 +51,12 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         index: int,
         coord_validator: QtGui.QValidator,
         parent: QtWidgets.QWidget = None,
+        status_chip_styler: Optional[Callable[..., bool]] = None,
     ):
         super().__init__(parent)
 
         self.index = index
+        self._status_chip_styler = status_chip_styler
         self.numeric_validator = QtGui.QDoubleValidator()
         self.numeric_validator.setNotation(QtGui.QDoubleValidator.Notation.StandardNotation)
         self.coord_validator = coord_validator
@@ -137,17 +139,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
         self.status_chip_lbl = QtWidgets.QLabel("Incomplete")
         self.status_chip_lbl.setObjectName(f"label_rwy_status_{self.index}")
-        self.status_chip_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        self.status_chip_lbl.setMinimumHeight(24)
-        self.status_chip_lbl.setMaximumHeight(24)
-        self.status_chip_lbl.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Maximum,
-            QtWidgets.QSizePolicy.Policy.Fixed,
-        )
-        self.status_chip_lbl.setStyleSheet(
-            "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; "
-            "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
-        )
         header_layout.addWidget(self.status_chip_lbl)
 
         self.expand_button = QtWidgets.QToolButton()
@@ -1891,6 +1882,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         if getattr(self, "_last_status_chip_text", None) == status:
             return
         self._last_status_chip_text = status
+        state = "ready" if status == "Ready" else "warning" if status == "Needs attention" else "neutral"
+        if self._status_chip_styler is not None:
+            self._status_chip_styler(self.status_chip_lbl, status, state)
+            return
         self.status_chip_lbl.setText(status)
         if status == "Ready":
             self.status_chip_lbl.setStyleSheet(

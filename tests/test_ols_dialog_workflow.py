@@ -139,6 +139,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             chip_names,
             {
                 "label_generation_readiness_badge",
+                "label_rwy_status_1",
                 "label_workflow_context_status_tab_airport",
                 "label_workflow_context_status_tab_runways",
                 "label_workflow_context_status_tab_ols",
@@ -169,6 +170,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(output._status_chip_signature[1], "ready")
         runway_puck = self.dialog._runway_groups[1].status_chip_lbl
         self.assertEqual(runway_puck.text(), "Incomplete")
+        self.assertEqual(runway_puck._status_chip_signature, ("Incomplete", "neutral", False))
         self.assertEqual(runway_puck.minimumHeight(), 24)
         self.assertEqual(runway_puck.maximumHeight(), 24)
         self.assertEqual(
@@ -176,6 +178,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             QtWidgets.QSizePolicy.Policy.Maximum,
         )
         self.assertEqual(runway_puck.minimumWidth(), 0)
+        context_puck = self.dialog._workflow_context_widgets["tab_runways"]["status"]
+        self.dialog._apply_status_chip(context_puck, "Ready", "ready")
+        self.dialog._apply_status_chip(runway_puck, "Ready", "ready")
+        self.assertEqual(runway_puck.sizeHint(), context_puck.sizeHint())
 
     def test_workflow_context_strips_match_arp_geometry(self):
         self.dialog.resize(920, 680)

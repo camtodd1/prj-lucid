@@ -3472,8 +3472,12 @@ class SafeguardingBuilderDialog(
             QMessageBox.critical(self, "Layout Error", "Scroll area content widget missing.")
             return
 
-        # Pass all arguments positionally
-        new_group = RunwayWidgetGroup(runway_index, self.coord_validator, scroll_content_widget)
+        new_group = RunwayWidgetGroup(
+            runway_index,
+            self.coord_validator,
+            scroll_content_widget,
+            self._apply_status_chip,
+        )
 
         self._runway_groups[runway_index] = new_group
         self._add_strip_editor(runway_index, new_group)
