@@ -820,39 +820,66 @@ class SafeguardingBuilder(
         for raw_runway in runway_input_list:
             runway_data = dict(raw_runway)
             designator_num = runway_data.get("designator_num")
-            suffix = runway_data.get("suffix", "")
             if (
                 designator_num is None
                 or runway_data.get("thr_point") is None
                 or runway_data.get("rec_thr_point") is None
             ):
                 continue
-            primary = f"{int(designator_num):02d}{suffix}"
-            reciprocal_number = (
-                int(designator_num) + 18
-                if int(designator_num) <= 18
-                else int(designator_num) - 18
-            )
-            reciprocal_suffix = {
-                "L": "R",
-                "R": "L",
-                "C": "C",
-                "": "",
-            }.get(suffix, "")
-            runway_data["short_name"] = (
-                f"{primary}/{reciprocal_number:02d}{reciprocal_suffix}"
-            )
-            runway_data["declared_distances"] = self._calculate_declared_distances(
-                runway_data
-            )
-            runway_data["generated_feature_counts"] = {
-                **dict(runway_data.get("generated_feature_counts") or {}),
-                "DeclaredDistance": len(
-                    runway_data.get("declared_distances") or []
-                ),
-            }
+            self._enrich_runway_data(runway_data)
             prepared.append(runway_data)
         return prepared
+
+    def _enrich_runway_data(self, runway_data: Dict[str, Any]) -> str:
+        """Apply values shared by full and per-family runway generation."""
+        designator_num = int(runway_data["designator_num"])
+        suffix = runway_data.get("suffix", "")
+        reciprocal_number = (
+            designator_num + 18 if designator_num <= 18 else designator_num - 18
+        )
+        reciprocal_suffix = {"L": "R", "R": "L", "C": "C", "": ""}.get(
+            suffix,
+            "",
+        )
+        short_name = (
+            f"{designator_num:02d}{suffix}/{reciprocal_number:02d}{reciprocal_suffix}"
+        )
+        runway_data["short_name"] = short_name
+        runway_data["declared_distances"] = self._calculate_declared_distances(
+            runway_data
+        )
+        runway_data["generated_feature_counts"] = {
+            **dict(runway_data.get("generated_feature_counts") or {}),
+            "DeclaredDistance": len(runway_data.get("declared_distances") or []),
+        }
+        return short_name
+
+    def _prepare_ols_generation_context(
+        self,
+        processed_runways: List[Dict[str, Any]],
+        source_runways: List[Dict[str, Any]],
+        arp_point: Optional[QgsPointXY],
+    ) -> Tuple[OlsConstructionContext, bool]:
+        """Install the shared baseline OLS context for any generation entry point."""
+        self.reference_elevation_datum = self._calculate_reference_elevation_datum(
+            self.arp_elevation_amsl,
+            source_runways,
+        )
+        self._apply_shared_design_strips(processed_runways)
+        self._ols_source_runways = processed_runways
+        self._ols_arp_point = arp_point
+        context = self._build_ols_construction_context(
+            self.baseline_ols_ruleset,
+            processed_runways,
+            arp_point=arp_point,
+        )
+        self._ols_construction_contexts = {
+            self.baseline_ols_ruleset.id: context,
+        }
+        return context, self._activate_ols_construction_context(
+            self.baseline_ols_ruleset,
+            context,
+        )
 
     def _merge_group_contents(
         self,
@@ -1134,7 +1161,11 @@ class SafeguardingBuilder(
         input_data: Dict[str, Any],
         target_crs: QgsCoordinateReferenceSystem,
     ) -> bool:
-        groups = self._create_output_layer_groups(stage_group, False)
+        groups = self._create_output_layer_groups(
+            stage_group,
+            False,
+            sections={"reference_data"},
+        )
         reference_group = groups["reference_data"]
         created = False
         arp_point = input_data.get("arp_point")
@@ -1158,7 +1189,15 @@ class SafeguardingBuilder(
         input_data: Dict[str, Any],
         target_crs: QgsCoordinateReferenceSystem,
     ) -> bool:
-        groups = self._create_output_layer_groups(stage_group, False)
+        groups = self._create_output_layer_groups(
+            stage_group,
+            False,
+            sections={
+                "reference_data",
+                "aerodrome_infrastructure",
+                "runway_protection_and_separation",
+            },
+        )
         reference_group = groups["reference_data"]
         centreline_group = self._ensure_layer_group(
             reference_group,
@@ -1197,7 +1236,11 @@ class SafeguardingBuilder(
         input_data: Dict[str, Any],
         target_crs: QgsCoordinateReferenceSystem,
     ) -> bool:
-        groups = self._create_output_layer_groups(stage_group, False)
+        groups = self._create_output_layer_groups(
+            stage_group,
+            False,
+            sections={"external_safeguarding"},
+        )
         guideline_groups = self._create_guideline_groups(
             groups["external_safeguarding"],
             False,
@@ -1228,7 +1271,11 @@ class SafeguardingBuilder(
         input_data: Dict[str, Any],
         target_crs: QgsCoordinateReferenceSystem,
     ) -> bool:
-        groups = self._create_output_layer_groups(stage_group, False)
+        groups = self._create_output_layer_groups(
+            stage_group,
+            False,
+            sections={"cns_technical_safeguarding"},
+        )
         cns_data = input_data.get("cns_facilities", [])
         ils_data = input_data.get("ils_bra_installations", [])
         created = False
@@ -1284,7 +1331,11 @@ class SafeguardingBuilder(
         processed = self._prepare_runway_data_for_family(
             input_data.get("runways", [])
         )
-        groups = self._create_output_layer_groups(stage_group, True)
+        groups = self._create_output_layer_groups(
+            stage_group,
+            True,
+            sections={"airfield_ground_lighting"},
+        )
         return self.process_airfield_ground_lighting(
             processed,
             agl_options,
@@ -1301,26 +1352,16 @@ class SafeguardingBuilder(
         )
         if not processed:
             return False
-        groups = self._create_output_layer_groups(stage_group, False)
-        self.reference_elevation_datum = self._calculate_reference_elevation_datum(
-            self.arp_elevation_amsl,
-            input_data.get("runways", []),
+        groups = self._create_output_layer_groups(
+            stage_group,
+            False,
+            sections={"protected_airspace"},
         )
-        self._apply_shared_design_strips(processed)
-        self._ols_source_runways = processed
-        self._ols_arp_point = input_data.get("arp_point")
         self._reset_controlling_ols_engine()
-        baseline_context = self._build_ols_construction_context(
-            self.baseline_ols_ruleset,
+        baseline_context, context_ready = self._prepare_ols_generation_context(
             processed,
-            arp_point=input_data.get("arp_point"),
-        )
-        self._ols_construction_contexts = {
-            self.baseline_ols_ruleset.id: baseline_context,
-        }
-        context_ready = self._activate_ols_construction_context(
-            self.baseline_ols_ruleset,
-            baseline_context,
+            input_data.get("runways", []),
+            input_data.get("arp_point"),
         )
         ols_data = (
             processed
@@ -2627,23 +2668,13 @@ class SafeguardingBuilder(
                 runway_ols_group = guideline_groups["F"]
                 airport_wide_ols_group = output_groups.get("airport_wide_ols")
 
-            self.reference_elevation_datum = self._calculate_reference_elevation_datum(
-                self.arp_elevation_amsl, runway_input_list
-            )
-            self._apply_shared_design_strips(processed_runway_data_list)
-            self._ols_source_runways = processed_runway_data_list
-            self._ols_arp_point = arp_point
-            baseline_ols_context = self._build_ols_construction_context(
-                self.baseline_ols_ruleset,
-                processed_runway_data_list,
-                arp_point=arp_point,
-            )
-            self._ols_construction_contexts = {
-                self.baseline_ols_ruleset.id: baseline_ols_context,
-            }
-            baseline_ols_context_ready = self._activate_ols_construction_context(
-                self.baseline_ols_ruleset,
+            (
                 baseline_ols_context,
+                baseline_ols_context_ready,
+            ) = self._prepare_ols_generation_context(
+                processed_runway_data_list,
+                runway_input_list,
+                arp_point,
             )
             baseline_airport_spec = self.baseline_ols_ruleset.ols_construction_policy().airport_wide_spec(
                 self.baseline_ols_ruleset,
@@ -3096,7 +3127,6 @@ class SafeguardingBuilder(
             runway_processed_ok = False
             try:
                 designator_num = runway_data.get("designator_num")
-                suffix = runway_data.get("suffix", "")
                 thr_point = runway_data.get("thr_point")
                 rec_thr_point = runway_data.get("rec_thr_point")
                 arc_num_val = runway_data.get("arc_num")
@@ -3109,19 +3139,7 @@ class SafeguardingBuilder(
                     )
                     continue
 
-                # Generate runway name (keep this logic)
-                primary_desig = f"{designator_num:02d}{suffix}"
-                reciprocal_num = (designator_num + 18) if designator_num <= 18 else (designator_num - 18)
-                reciprocal_suffix_map = {"L": "R", "R": "L", "C": "C", "": ""}
-                reciprocal_suffix = reciprocal_suffix_map.get(suffix, "")
-                reciprocal_desig = f"{reciprocal_num:02d}{reciprocal_suffix}"
-                short_runway_name = f"{primary_desig}/{reciprocal_desig}"
-                runway_data["short_name"] = short_runway_name
-                runway_data["declared_distances"] = self._calculate_declared_distances(runway_data)
-                runway_data["generated_feature_counts"] = {
-                    **runway_data.get("generated_feature_counts", {}),
-                    "DeclaredDistance": len(runway_data.get("declared_distances") or []),
-                }
+                short_runway_name = self._enrich_runway_data(runway_data)
 
                 centreline_layer = self.create_runway_centreline_layer(
                     thr_point,
@@ -3670,35 +3688,69 @@ class SafeguardingBuilder(
         self,
         main_group: QgsLayerTreeGroup,
         agl_enabled: bool,
+        sections=None,
     ) -> Dict[str, Optional[QgsLayerTreeGroup]]:
         """Create the main generated layer tree sections in display order."""
         groups: Dict[str, Optional[QgsLayerTreeGroup]] = {}
-        groups["reference_data"] = self._ensure_layer_group(main_group, output_structure.REFERENCE_DATA)
-        groups["aerodrome_infrastructure"] = self._ensure_layer_group(
-            main_group, output_structure.AERODROME_INFRASTRUCTURE
+
+        def enabled(key):
+            return sections is None or key in sections
+
+        groups["reference_data"] = (
+            self._ensure_layer_group(main_group, output_structure.REFERENCE_DATA)
+            if enabled("reference_data")
+            else None
         )
-        groups["runway_protection_and_separation"] = self._ensure_layer_group(
-            main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION
+        groups["aerodrome_infrastructure"] = (
+            self._ensure_layer_group(
+                main_group,
+                output_structure.AERODROME_INFRASTRUCTURE,
+            )
+            if enabled("aerodrome_infrastructure")
+            else None
         )
-        groups["protected_airspace"] = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
-        groups["cns_technical_safeguarding"] = self._ensure_layer_group(
-            main_group, output_structure.CNS_TECHNICAL_SAFEGUARDING
+        groups["runway_protection_and_separation"] = (
+            self._ensure_layer_group(
+                main_group,
+                output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
+            )
+            if enabled("runway_protection_and_separation")
+            else None
+        )
+        groups["protected_airspace"] = (
+            self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
+            if enabled("protected_airspace")
+            else None
+        )
+        groups["cns_technical_safeguarding"] = (
+            self._ensure_layer_group(
+                main_group,
+                output_structure.CNS_TECHNICAL_SAFEGUARDING,
+            )
+            if enabled("cns_technical_safeguarding")
+            else None
         )
         groups["airfield_ground_lighting"] = (
             self._ensure_layer_group(
                 main_group,
                 output_structure.AIRFIELD_GROUND_LIGHTING,
             )
-            if agl_enabled
+            if agl_enabled and enabled("airfield_ground_lighting")
             else None
         )
-        groups["external_safeguarding"] = self._ensure_layer_group(
-            main_group, self.get_active_framework().safeguarding_group_name()
+        groups["external_safeguarding"] = (
+            self._ensure_layer_group(
+                main_group,
+                self.get_active_framework().safeguarding_group_name(),
+            )
+            if enabled("external_safeguarding")
+            else None
         )
         groups["nasf_guidelines"] = groups["external_safeguarding"]
         groups["debug_development"] = (
             self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
             if self._debug_development_outputs_enabled()
+            and enabled("protected_airspace")
             else None
         )
 

@@ -27,10 +27,8 @@ from .controlling_ols_engine import (
 
 try:
     from ..core.run_log import QgsMessageLog
-    from ..rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
 except ImportError:
     from core.run_log import QgsMessageLog  # type: ignore
-    from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
 COMPARISON_TOLERANCE_M = 0.01
@@ -74,6 +72,14 @@ ComparisonPart = Tuple[
     ControllingOlsCandidate,
     QgsGeometry,
 ]
+ComparisonContourPart = Tuple[
+    ControllingOlsCandidate,
+    ControllingOlsCandidate,
+    QgsGeometry,
+    float,
+    str,
+    int,
+]
 
 
 @dataclass(frozen=True)
@@ -84,6 +90,7 @@ class ComparisonFinalizationResult:
     loss: Tuple[ComparisonPart, ...]
     no_change: Tuple[ComparisonPart, ...]
     transitions: Tuple[ComparisonPart, ...]
+    transition_contours: Tuple[ComparisonContourPart, ...]
     diagnostics: Dict[str, object]
     recovery: Dict[str, object]
     invariants: Dict[str, object]
@@ -194,7 +201,7 @@ class OlsEnvelopeComparisonEngine:
             future_regions,
             clean_spikes=False,
         )
-        self._finalize_comparison_partition(
+        transition_contours = self._finalize_comparison_partition(
             result,
             baseline_regions,
             future_regions,
@@ -222,6 +229,7 @@ class OlsEnvelopeComparisonEngine:
             loss=tuple(result["loss"]),
             no_change=tuple(result["no_change"]),
             transitions=tuple(result["transition"]),
+            transition_contours=tuple(transition_contours),
             diagnostics=diagnostics,
             recovery={
                 "exceptional": dict(diagnostics["exceptional_recovery"]),
@@ -237,7 +245,7 @@ class OlsEnvelopeComparisonEngine:
         result: Dict[str, List[ComparisonPart]],
         baseline_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
         future_regions: Sequence[Tuple[ControllingOlsCandidate, QgsGeometry]],
-    ) -> None:
+    ) -> List[ComparisonContourPart]:
         """Finalize one partition; no caller may mutate geometry after this pass."""
         # Every controller-pair domain is completed during the initial shared
         # arrangement.  Finalization must preserve that coverage rather than
@@ -258,7 +266,7 @@ class OlsEnvelopeComparisonEngine:
         self._partition_classified_parts(result)
         self._remove_final_boundary_backtracks(result)
         self._dissolve_congruous_classified_parts(result)
-        self._derive_final_transition_parts(result)
+        return self._derive_final_transition_parts(result)
 
     def _raw_comparison_parts(
         self,
@@ -368,13 +376,15 @@ class OlsEnvelopeComparisonEngine:
     def _derive_final_transition_parts(
         self,
         result: Dict[str, List[ComparisonPart]],
-    ) -> None:
+    ) -> List[ComparisonContourPart]:
         """Derive verified transitions once from finalized gain/loss adjacency."""
+        transition_contours = self.zero_change_contour_parts(result)
         result["transition"] = [
             (baseline, future, geometry)
             for baseline, future, geometry, _delta, _contour_class, _sequence
-            in self.zero_change_contour_parts(result)
+            in transition_contours
         ]
+        return transition_contours
 
     def _audit_comparison_invariants(
         self,
@@ -4081,17 +4091,6 @@ class OlsModernisationComparisonMixin:
             contour_interval_m, primary_contour_interval_m = (
                 self._modernisation_change_contour_intervals(family)
             )
-            created = self._create_modernisation_wireframe_layer(
-                icao_code, baseline_ruleset_id, family, "baseline",
-                "Baseline OLS Wireframe", baseline_engine._controlling_region_geometries(),
-                family_group, comparison_ruleset_id=comparison_ruleset_id,
-            ) or created
-            created = self._create_modernisation_wireframe_layer(
-                icao_code, baseline_ruleset_id, family, "future",
-                f"{MODERNISED_DISPLAY_NAME} — Wireframe",
-                future_engine._controlling_region_geometries(),
-                family_group, comparison_ruleset_id=comparison_ruleset_id,
-            ) or created
             gain_name = "Height Gain" if family == "OFS" else "Trigger Height Raised"
             loss_name = "Height Loss" if family == "OFS" else "Trigger Height Lowered"
             no_change_name = "No Height Change" if family == "OFS" else "Trigger Height Unchanged"
@@ -4127,7 +4126,7 @@ class OlsModernisationComparisonMixin:
                 )
             contour_parts.extend(
                 ("transition", *contour_part)
-                for contour_part in comparison.zero_change_contour_parts(parts)
+                for contour_part in finalization.transition_contours
             )
             if not self._modernisation_subphase(
                 f"Modernisation {family}: finalising transitions and baseline-only areas..."
@@ -4258,27 +4257,6 @@ class OlsModernisationComparisonMixin:
             contour_interval_m, primary_contour_interval_m = (
                 self._modernisation_change_contour_intervals(family)
             )
-            created = self._create_modernisation_wireframe_layer(
-                icao_code,
-                baseline_ruleset_id,
-                family,
-                "baseline",
-                "Baseline OLS Wireframe",
-                baseline_engine._controlling_region_geometries(),
-                output_group,
-                comparison_ruleset_id=comparison_ruleset_id,
-            ) or created
-            created = self._create_modernisation_wireframe_layer(
-                icao_code,
-                baseline_ruleset_id,
-                family,
-                "comparison",
-                "Comparison OLS Wireframe",
-                comparison_engine._controlling_region_geometries(),
-                output_group,
-                comparison_ruleset_id=comparison_ruleset_id,
-            ) or created
-
             if family == "OES":
                 names = {
                     "gain": "Trigger Height Raised",
@@ -4317,7 +4295,7 @@ class OlsModernisationComparisonMixin:
                 )
             contour_parts.extend(
                 ("transition", *contour_part)
-                for contour_part in comparison.zero_change_contour_parts(parts)
+                for contour_part in finalization.transition_contours
             )
             created = self._create_modernisation_change_contour_layer(
                 icao_code,
@@ -4599,79 +4577,6 @@ class OlsModernisationComparisonMixin:
             "OLS Modernisation Change Contour",
         )
         return layer is not None
-
-    def _create_modernisation_wireframe_layer(
-        self,
-        icao_code,
-        baseline_ruleset_id,
-        family,
-        source_kind,
-        display_name,
-        candidate_regions,
-        output_group,
-        comparison_ruleset_id="",
-    ) -> bool:
-        fields = QgsFields([
-            QgsField("comparison_id", QVariant.String, self.tr("Comparison Feature ID"), 48),
-            QgsField("source", QVariant.String, self.tr("Source"), 24),
-            QgsField("family", QVariant.String, self.tr("Family"), 8),
-            QgsField("baseline_ruleset", QVariant.String, self.tr("Baseline Ruleset"), 80),
-            QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
-            QgsField("surface", QVariant.String, self.tr("Surface"), 50),
-            QgsField("comparison_ruleset", QVariant.String, self.tr("Comparison Ruleset"), 80),
-            QgsField("ruleset_id", QVariant.String, self.tr("Ruleset ID"), 80),
-        ])
-        features: List[QgsFeature] = []
-        sequence = 0
-        for candidate, geometry in candidate_regions:
-            for part in self._modernisation_polygon_parts(geometry):
-                if not OlsEnvelopeComparisonEngine._has_area(part):
-                    continue
-                sequence += 1
-                feature = QgsFeature(fields)
-                feature.setGeometry(part)
-                feature.setAttributes([
-                    self._modernisation_feature_id(family, f"{source_kind}_wireframe", sequence),
-                    source_kind,
-                    family,
-                    baseline_ruleset_id,
-                    candidate.surface_id,
-                    candidate.surface_type,
-                    comparison_ruleset_id,
-                    baseline_ruleset_id if source_kind == "baseline" else comparison_ruleset_id,
-                ])
-                features.append(feature)
-        layer = self._create_and_add_layer(
-            "MultiPolygon",
-            f"OLS_Modernisation_{family}_{source_kind}_wireframe_{icao_code}",
-            display_name,
-            fields,
-            features,
-            output_group,
-            "OLS Modernisation Baseline Wireframe"
-            if source_kind == "baseline"
-            else "OLS Modernisation Future Wireframe",
-        )
-        return layer is not None
-
-    def _modernisation_polygon_parts(self, geometry: QgsGeometry) -> List[QgsGeometry]:
-        if geometry is None or geometry.isEmpty():
-            return []
-        try:
-            if QgsWkbTypes.geometryType(geometry.wkbType()) != Qgis.GeometryType.Polygon:
-                return []
-        except Exception:
-            return [geometry]
-        if not geometry.isMultipart():
-            return [QgsGeometry(geometry)]
-        parts: List[QgsGeometry] = []
-        try:
-            for polygon in geometry.asMultiPolygon():
-                if polygon:
-                    parts.append(QgsGeometry.fromPolygonXY(polygon))
-        except Exception:
-            pass
-        return parts
 
     def _create_modernisation_transition_layer(
         self,

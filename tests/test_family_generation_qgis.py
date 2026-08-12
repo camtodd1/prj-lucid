@@ -129,6 +129,49 @@ class FamilyGenerationCommitTests(unittest.TestCase):
             list(output_structure.SECTION_ORDER[:7]),
         )
 
+    def test_family_output_setup_creates_only_requested_sections(self):
+        main = QgsProject.instance().layerTreeRoot().addGroup("stage")
+        self.builder.framework = get_framework_profile()
+        self.builder.baseline_ols_ruleset = EASA_PROFILE
+        self.builder.comparison_ols_ruleset = None
+        self.builder.protected_airspace_ruleset = EASA_PROFILE
+        self.builder.protected_airspace_policy = "ruleset_aligned"
+
+        groups = self.builder._create_output_layer_groups(
+            main,
+            agl_enabled=False,
+            sections={"protected_airspace"},
+        )
+
+        self.assertEqual(
+            [child.name() for child in main.children()],
+            [output_structure.PROTECTED_AIRSPACE],
+        )
+        self.assertIsNotNone(groups["protected_airspace"])
+        self.assertIsNone(groups["reference_data"])
+        self.assertIsNone(groups["external_safeguarding"])
+
+    def test_family_and_full_runs_share_runway_enrichment(self):
+        self.builder._calculate_declared_distances = lambda _runway: [{"tora_m": 1.0}]
+        raw = {
+            "designator_num": 1,
+            "suffix": "L",
+            "thr_point": QgsPointXY(0.0, 0.0),
+            "rec_thr_point": QgsPointXY(1000.0, 0.0),
+            "generated_feature_counts": {"Existing": 2},
+        }
+
+        family_runway = self.builder._prepare_runway_data_for_family([raw])[0]
+        full_runway = dict(raw)
+        self.builder._enrich_runway_data(full_runway)
+
+        self.assertEqual(family_runway, full_runway)
+        self.assertEqual(full_runway["short_name"], "01L/19R")
+        self.assertEqual(
+            full_runway["generated_feature_counts"],
+            {"Existing": 2, "DeclaredDistance": 1},
+        )
+
     def test_family_run_migrates_legacy_reference_group_name(self):
         root = QgsProject.instance().layerTreeRoot()
         main = root.addGroup("YBAS Safeguarding Builder")
@@ -314,10 +357,7 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         physical = stage.findGroup(output_structure.PHYSICAL_GEOMETRY)
         self.assertIsNotNone(physical)
         self.assertIn("YBAS Runway Pavement", {node.name() for node in physical.findLayers()})
-        self.assertEqual(
-            stage.findGroup(output_structure.EXTERNAL_SAFEGUARDING).findLayers(),
-            [],
-        )
+        self.assertIsNone(stage.findGroup(output_structure.EXTERNAL_SAFEGUARDING))
         self.assertEqual(
             {
                 str(node.layer().customProperty("safeguarding_builder/module_id") or "")
@@ -381,12 +421,8 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         )
 
         technical = stage.findGroup(output_structure.CNS_TECHNICAL_SAFEGUARDING)
-        station = technical.findGroup(output_structure.METEOROLOGICAL_STATION)
-        self.assertIsNone(station)
-        self.assertEqual(
-            stage.findGroup(output_structure.EXTERNAL_SAFEGUARDING).findLayers(),
-            [],
-        )
+        self.assertIsNone(technical)
+        self.assertIsNone(stage.findGroup(output_structure.EXTERNAL_SAFEGUARDING))
 
     def test_cns_family_routes_source_facilities_to_technical_safeguarding(self):
         project = QgsProject.instance()
@@ -524,7 +560,7 @@ class FamilyGenerationCommitTests(unittest.TestCase):
             output_structure.AERODROME_INFRASTRUCTURE,
             output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
         ):
-            self.assertEqual(stage.findGroup(group_name).findLayers(), [])
+            self.assertIsNone(stage.findGroup(group_name))
 
     def test_generate_all_setup_preserves_terrain_and_airport_map_groups(self):
         project = QgsProject.instance()

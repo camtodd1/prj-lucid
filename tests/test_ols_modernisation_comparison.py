@@ -154,11 +154,24 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             PlanarControllingOlsEngine([future]),
         )
 
-        finalization = comparison.finalize_comparison()
+        with patch.object(
+            comparison,
+            "zero_change_contour_parts",
+            wraps=comparison.zero_change_contour_parts,
+        ) as zero_contours:
+            finalization = comparison.finalize_comparison()
 
         self.assertTrue(finalization.gain)
         self.assertTrue(finalization.loss)
         self.assertTrue(finalization.transitions)
+        self.assertEqual(zero_contours.call_count, 1)
+        self.assertEqual(len(finalization.transition_contours), 1)
+        self.assertLessEqual(
+            finalization.transitions[0][2].hausdorffDistance(
+                finalization.transition_contours[0][2]
+            ),
+            1e-6,
+        )
         self.assertTrue(finalization.invariants["passed"])
         self.assertEqual(
             finalization.invariants["transitions"][
@@ -3461,6 +3474,9 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(zero_feature["contour_class"], "primary")
         self.assertEqual(zero_feature["label_txt"], "0.0 m")
         self.assertEqual(zero_feature["parent_id"], "")
+        self.assertFalse(
+            any("wireframe" in layer_args[1].lower() for layer_args in capture.layers)
+        )
 
         transition_layer_args = next(
             layer_args for layer_args in capture.layers
@@ -3505,6 +3521,9 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(feature["comparison_ruleset"], "mos")
         self.assertEqual(feature["change"], "loss")
         self.assertEqual(feature["delta_sample_m"], -10.0)
+        self.assertFalse(
+            any("wireframe" in layer_args[1].lower() for layer_args in capture.layers)
+        )
 
     def test_generic_ruleset_adapter_compares_two_conventional_ols_envelopes(self):
         capture = _ComparisonLayerCapture()
@@ -3543,10 +3562,6 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         capture._create_modernisation_change_layer(
             "TEST", "baseline-rules", "OFS", "gain", "Height Gain",
             change_parts, comparison, object(),
-        )
-        capture._create_modernisation_wireframe_layer(
-            "TEST", "baseline-rules", "OFS", "baseline", "Baseline OLS Wireframe",
-            [(baseline, self.domain)], object(),
         )
         contour_geometry = QgsGeometry.fromPolylineXY(
             [QgsPointXY(0.0, 50.0), QgsPointXY(100.0, 50.0)]
@@ -3610,8 +3625,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             and layer_args[4][0]["comparison_id"] == "OFS-TRANSITION-000001"
         )
         self.assertNotIn("label_txt", transition_layer_args[3].names())
-        self.assertEqual(len(comparison_ids), 6)
-        self.assertEqual(len(set(comparison_ids)), 6)
+        self.assertEqual(len(comparison_ids), 5)
+        self.assertEqual(len(set(comparison_ids)), 5)
         self.assertIn("OFS-GAIN-000001", comparison_ids)
 
 
