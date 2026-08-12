@@ -1297,15 +1297,16 @@ class SafeguardingBuilderDialog(
     def _setup_family_generation_controls(self) -> None:
         """Add one scoped generate/update action to each output-family tab."""
         tab_families = {
-            "tab_airport": "airport",
-            "tab_runways": "runways",
-            "tab_cns": "cns",
-            "tab_ols": "ols",
-            "tab_lighting": "lighting",
-            "tab_external": "external",
+            "tab_airport": ("airport", "airport"),
+            "tab_runways": ("runways", "runways"),
+            "tab_runway_protection": ("runway_protection", "runways"),
+            "tab_cns": ("cns", "cns"),
+            "tab_ols": ("ols", "ols"),
+            "tab_lighting": ("lighting", "lighting"),
+            "tab_external": ("external", "external"),
         }
         self._family_generation_buttons = {}
-        for tab_name, family_id in tab_families.items():
+        for tab_name, (control_id, family_id) in tab_families.items():
             widgets = getattr(self, "_workflow_context_widgets", {}).get(
                 tab_name,
                 {},
@@ -1315,7 +1316,7 @@ class SafeguardingBuilderDialog(
             if not isinstance(row, QtWidgets.QHBoxLayout):
                 continue
             button = QtWidgets.QPushButton("Generate / update", frame)
-            button.setObjectName(f"pushButton_generate_{family_id}_family")
+            button.setObjectName(f"pushButton_generate_{control_id}_family")
             button.setToolTip(
                 "Generate this feature family, replacing only its previous outputs."
             )
@@ -1325,7 +1326,7 @@ class SafeguardingBuilderDialog(
                 )
             )
             row.addWidget(button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
-            self._family_generation_buttons[family_id] = button
+            self._family_generation_buttons[control_id] = button
 
     def _normalize_workflow_context_strips(self) -> None:
         """Match every context strip to the ARP strip's geometry."""
@@ -1372,19 +1373,6 @@ class SafeguardingBuilderDialog(
             widgets = getattr(self, "_workflow_context_widgets", {}).get(tab_name, {})
             status_label = widgets.get("status")
             if isinstance(status_label, QtWidgets.QLabel):
-                if tab_name == "tab_runway_protection":
-                    status_label._status_chip_signature = None
-                    status_label.setText(text)
-                    status_label.setMinimumHeight(0)
-                    status_label.setMaximumHeight(16777215)
-                    status_label.setSizePolicy(
-                        QtWidgets.QSizePolicy.Policy.Maximum,
-                        QtWidgets.QSizePolicy.Policy.Fixed,
-                    )
-                    status_label.setStyleSheet(
-                        "QLabel { color: #66717d; font-size: 10px; font-weight: 600; }"
-                    )
-                    continue
                 self._apply_status_chip(
                     status_label,
                     text,

@@ -120,12 +120,13 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         ).click()
         self.assertEqual(emitted, ["lighting"])
         self.assertEqual(self.dialog.pushButton_Generate.text(), "Generate all layers")
-        self.assertIsNone(
-            self.dialog.findChild(
-                QtWidgets.QPushButton,
-                "pushButton_generate_runway_protection_family",
-            )
+        strip_button = self.dialog.findChild(
+            QtWidgets.QPushButton,
+            "pushButton_generate_runway_protection_family",
         )
+        self.assertIsNotNone(strip_button)
+        strip_button.click()
+        self.assertEqual(emitted, ["lighting", "runways"])
 
     def test_status_pucks_are_limited_to_global_tab_and_runway_states(self):
         self.dialog.update_dialog_status()
@@ -142,6 +143,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 "label_rwy_status_1",
                 "label_workflow_context_status_tab_airport",
                 "label_workflow_context_status_tab_runways",
+                "label_workflow_context_status_tab_runway_protection",
                 "label_workflow_context_status_tab_ols",
                 "label_workflow_context_status_tab_cns",
                 "label_workflow_context_status_tab_lighting",
@@ -160,7 +162,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "label_workflow_context_status_tab_runway_protection",
         )
         self.assertEqual(strip_status.text(), "Review")
-        self.assertFalse(getattr(strip_status, "_status_chip_signature", None))
+        self.assertEqual(strip_status._status_chip_signature[1], "warning")
         self.assertEqual(
             self.dialog._workflow_context_widgets["tab_terrain"]["status"].text(),
             "Ready",
