@@ -1081,10 +1081,8 @@ class SafeguardingBuilder(
     ) -> QgsLayerTreeGroup:
         group = main_group
         for name in path:
-            child = self._find_direct_child_group(group, name)
-            if child is None:
-                child = group.addGroup(name)
-                self._stage_layer_tree_node(child)
+            child = self._ensure_layer_group(group, name)
+            assert child is not None
             group = child
         return group
 
@@ -3630,17 +3628,17 @@ class SafeguardingBuilder(
         group = self._find_direct_child_group(parent_group, self.tr(name))
         if group is None:
             translated_name = self.tr(name)
-            if name in output_structure.SECTION_ORDER:
-                order_index = output_structure.SECTION_ORDER.index(name)
+            section_order = [self.tr(item) for item in output_structure.SECTION_ORDER]
+            if translated_name in section_order:
+                order_index = section_order.index(translated_name)
                 insert_index = len(parent_group.children())
                 for index, child in enumerate(parent_group.children()):
                     if not isinstance(child, QgsLayerTreeGroup):
                         continue
                     child_name = child.name()
-                    if child_name in output_structure.SECTION_ORDER and (
-                        output_structure.SECTION_ORDER.index(child_name)
-                        > order_index
-                    ):
+                    if child_name in section_order and section_order.index(
+                        child_name
+                    ) > order_index:
                         insert_index = index
                         break
                 group = parent_group.insertGroup(insert_index, translated_name)

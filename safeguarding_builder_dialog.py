@@ -942,13 +942,13 @@ class SafeguardingBuilderDialog(
     def _setup_workflow_tab_state(self) -> None:
         """Prepare plain workflow tabs; readiness is shown in the summary strip."""
         self._workflow_tab_labels = [
-            ("tab_airport", "Aerodrome"),
-            ("tab_runways", "RWY Infra"),
-            ("tab_runway_protection", "RWY Protect"),
+            ("tab_airport", "ARP"),
+            ("tab_runways", "Runway"),
+            ("tab_runway_protection", "Strip"),
             ("tab_ols", "OLS"),
             ("tab_cns", "CNS/MET"),
             ("tab_lighting", "AGL"),
-            ("tab_external", "External"),
+            ("tab_external", "Safeguarding"),
             ("tab_terrain", "Terrain"),
             ("tab_airport_map", "Map"),
             ("tab_output", "Output"),
@@ -1904,6 +1904,7 @@ class SafeguardingBuilderDialog(
 
         tab_widget = getattr(self, "tabWidget_workflow", self.findChild(QtWidgets.QTabWidget, "tabWidget_workflow"))
         if tab_widget:
+            self.verticalLayout.setStretchFactor(tab_widget, 1)
             # A QTabWidget normally contributes the largest page's minimum size.
             # In a dock that can force the QGIS main window taller than the screen;
             # let the tab viewport absorb the available height instead.

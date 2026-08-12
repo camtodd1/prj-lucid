@@ -133,13 +133,13 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(
             [tabs.tabText(index) for index in range(tabs.count())],
             [
-                "Aerodrome",
-                "RWY Infra",
-                "RWY Protect",
+                "ARP",
+                "Runway",
+                "Strip",
                 "OLS",
                 "CNS/MET",
                 "AGL",
-                "External",
+                "Safeguarding",
                 "Terrain",
                 "Map",
                 "Output",
@@ -1489,6 +1489,16 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             QtWidgets.QSizePolicy.Policy.Ignored,
         )
         self.assertLess(self.dialog.minimumSizeHint().height(), 700)
+
+    def test_workflow_tabs_receive_extra_dock_height(self):
+        self.dialog.resize(920, 1200)
+        self.dialog.show()
+        self.app.processEvents()
+
+        self.assertGreater(
+            self.dialog.tabWidget_workflow.height(),
+            self.dialog.frame_dialog_header.height(),
+        )
 
     def test_long_workflow_tabs_scroll_instead_of_compressing_controls(self):
         self.dialog.resize(800, 650)

@@ -102,6 +102,33 @@ class FamilyGenerationCommitTests(unittest.TestCase):
         self.assertEqual(moved, 0)
         self.assertIs(QgsProject.instance().mapLayer(old_agl.id()), old_agl)
 
+    def test_incremental_family_groups_use_canonical_section_order(self):
+        main = QgsProject.instance().layerTreeRoot().addGroup(
+            "YTEST Safeguarding Builder"
+        )
+        for name in (
+            output_structure.REFERENCE_DATA,
+            output_structure.AERODROME_INFRASTRUCTURE,
+            output_structure.PROTECTED_AIRSPACE,
+            output_structure.CNS_TECHNICAL_SAFEGUARDING,
+            output_structure.EXTERNAL_SAFEGUARDING,
+        ):
+            main.addGroup(name)
+
+        self.builder._ensure_family_destination_group(
+            main,
+            (output_structure.AIRFIELD_GROUND_LIGHTING,),
+        )
+        self.builder._ensure_family_destination_group(
+            main,
+            (output_structure.RUNWAY_PROTECTION_AND_SEPARATION,),
+        )
+
+        self.assertEqual(
+            [child.name() for child in main.children()],
+            list(output_structure.SECTION_ORDER[:7]),
+        )
+
     def test_family_run_migrates_legacy_reference_group_name(self):
         root = QgsProject.instance().layerTreeRoot()
         main = root.addGroup("YBAS Safeguarding Builder")
