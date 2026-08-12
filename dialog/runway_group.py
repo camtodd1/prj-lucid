@@ -1542,7 +1542,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.removeRequested.emit(self.index)
 
     def get_input_data(self) -> Dict[str, Any]:
-        return {
+        data = {
             "designator_str": self.desig_le.text(),
             "suffix": self.suffix_combo.currentText(),
             "thr_easting": self.thr_east_le.text(),
@@ -1604,6 +1604,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "takeoff_track_wkt_2": self.takeoff_track_wkt_2_le.text().strip(),
             "annex14_modernised": self._annex14_modernised_input_data(),
         }
+        strip_edits = getattr(self, "runway_strip_edits", None)
+        strip_provision = getattr(self, "runway_strip_provision_combo", None)
+        if strip_edits and strip_provision is not None:
+            data["runway_strip"] = {
+                key: edit.text().strip() for key, edit in strip_edits.items()
+            }
+            data["runway_strip"]["provision"] = strip_provision.currentData()
+        return data
 
     def set_input_data(self, data: Dict[str, Any]):
         widgets_to_block = self._input_widgets()
@@ -1692,6 +1700,14 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self._set_annex14_modernised_input_data(
                 data.get("annex14_modernised")
             )
+            strip = data.get("runway_strip")
+            if isinstance(strip, dict) and hasattr(self, "runway_strip_edits"):
+                for key, edit in self.runway_strip_edits.items():
+                    edit.setText(str(strip.get(key, "") or ""))
+                self._set_combo_data(
+                    self.runway_strip_provision_combo,
+                    strip.get("provision", "standard"),
+                )
         finally:
             for widget in widgets_to_block:
                 widget.blockSignals(False)
@@ -1723,7 +1739,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._update_status_chip()
 
     def _input_widgets(self):
-        return [
+        widgets = [
             self.desig_le,
             self.suffix_combo,
             self.thr_east_le,
@@ -1800,6 +1816,11 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
                 )
             ],
         ]
+        widgets.extend(getattr(self, "runway_strip_edits", {}).values())
+        provision = getattr(self, "runway_strip_provision_combo", None)
+        if provision is not None:
+            widgets.append(provision)
+        return widgets
 
     def _handle_surface_category_changed(self):
         self._refresh_surface_material_options(self.surface_category_combo.currentText())

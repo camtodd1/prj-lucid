@@ -127,6 +127,7 @@ class SafeguardingBuilderDialog(
 
         self._runway_id_counter = 0
         self._runway_groups: Dict[int, RunwayWidgetGroup] = {}
+        self._strip_editors: Dict[int, Dict[str, Any]] = {}
         self.scroll_area_layout: Optional[QtWidgets.QVBoxLayout] = None
         self._processing_status_active = False
         self._processing_progress_bar: Optional[QtWidgets.QProgressBar] = None
@@ -245,6 +246,7 @@ class SafeguardingBuilderDialog(
         self.refresh_dem_tool_state()
         self._setup_family_generation_controls()
         self._setup_workflow_scroll_areas()
+        self._normalize_workflow_context_strips()
         self._style_workflow_panels()
 
         if self.scroll_area_layout is not None:
@@ -639,7 +641,7 @@ class SafeguardingBuilderDialog(
         tab_widget.addTab(self.tab_airport_map, "Airport Map")
 
     def _setup_runway_protection_tab(self) -> None:
-        """Add the planned Runway Protection family as a placeholder tab."""
+        """Add editable runway-strip dimensions derived from each runway."""
         tab_widget = getattr(self, "tabWidget_workflow", None)
         if tab_widget is None or getattr(self, "tab_runway_protection", None) is not None:
             return
@@ -650,18 +652,170 @@ class SafeguardingBuilderDialog(
         )
         self.verticalLayout_runwayProtectionTab.setContentsMargins(8, 8, 8, 8)
         self.verticalLayout_runwayProtectionTab.setSpacing(8)
-        notice = QtWidgets.QGroupBox("Runway Protection", self.tab_runway_protection)
+        notice = QtWidgets.QGroupBox("Runway Strips", self.tab_runway_protection)
+        notice.setObjectName("groupBox_runway_strips")
         notice_layout = QtWidgets.QVBoxLayout(notice)
         message = QtWidgets.QLabel(
-            "Runway protection inputs and independent generation will be added here. "
-            "For now, these layers remain part of Runway Infrastructure generation.",
+            "Strip dimensions are derived from each Runway entry and the selected "
+            "design standard. Edit a value only where an existing or modified "
+            "provision applies.",
             notice,
         )
         message.setWordWrap(True)
         notice_layout.addWidget(message)
         self.verticalLayout_runwayProtectionTab.addWidget(notice)
+        self._strip_cards_layout = QtWidgets.QVBoxLayout()
+        self._strip_cards_layout.setSpacing(8)
+        self._strip_cards_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        self.verticalLayout_runwayProtectionTab.addLayout(self._strip_cards_layout)
         self.verticalLayout_runwayProtectionTab.addStretch(1)
         tab_widget.addTab(self.tab_runway_protection, "Runway Protection")
+
+    def _add_strip_editor(self, runway_index: int, group: RunwayWidgetGroup) -> None:
+        card = QtWidgets.QGroupBox(f"Runway {runway_index}")
+        card.setObjectName(f"groupBox_runway_strip_{runway_index}")
+        grid = QtWidgets.QGridLayout(card)
+        grid.setColumnStretch(1, 1)
+
+        edits: Dict[str, QtWidgets.QLineEdit] = {}
+        for row, (key, label) in enumerate(
+            (
+                ("overall_width", "Overall strip width (m):"),
+                ("graded_width", "Graded strip width (m):"),
+                ("extension_length", "Extension beyond each end (m):"),
+            )
+        ):
+            edit = QtWidgets.QLineEdit(card)
+            edit.setObjectName(f"lineEdit_strip_{key}_{runway_index}")
+            edit.setValidator(QtGui.QDoubleValidator(0.001, 99999.0, 3, edit))
+            edit.setToolTip(
+                "Derived from the Runway entry and design standard. Enter a "
+                "different value to record an override."
+            )
+            grid.addWidget(QtWidgets.QLabel(label), row, 0)
+            grid.addWidget(edit, row, 1)
+            edits[key] = edit
+
+        standard = QtWidgets.QLabel("Awaiting complete runway inputs", card)
+        standard.setObjectName(f"label_strip_standard_{runway_index}")
+        standard.setStyleSheet("color: #66717d; font-size: 11px;")
+        standard.setWordWrap(True)
+        grid.addWidget(standard, 3, 0, 1, 2)
+
+        provision = QtWidgets.QComboBox(card)
+        provision.setObjectName(f"comboBox_strip_provision_{runway_index}")
+        provision.addItem("Standard", "standard")
+        provision.addItem("Modified", "modified")
+        provision.addItem("Grandfathered", "grandfathered")
+        provision.setEnabled(False)
+        grid.addWidget(QtWidgets.QLabel("Provision:"), 4, 0)
+        grid.addWidget(provision, 4, 1)
+
+        editor = {
+            "card": card,
+            "edits": edits,
+            "standard_label": standard,
+            "provision": provision,
+        }
+        self._strip_editors[runway_index] = editor
+        group.runway_strip_edits = edits
+        group.runway_strip_provision_combo = provision
+        self._strip_cards_layout.addWidget(card)
+
+        for edit in edits.values():
+            edit.textChanged.connect(
+                lambda _text, idx=runway_index: self._strip_value_changed(idx)
+            )
+        provision.currentIndexChanged.connect(group.inputChanged.emit)
+
+    @staticmethod
+    def _strip_number(value: Any) -> Optional[float]:
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _strip_value_changed(self, runway_index: int) -> None:
+        editor = self._strip_editors.get(runway_index)
+        group = self._runway_groups.get(runway_index)
+        if editor is None or group is None:
+            return
+        changed = any(
+            self._strip_number(edit.text()) != self._strip_number(edit.property("standardValue"))
+            for edit in editor["edits"].values()
+        )
+        provision = editor["provision"]
+        provision.setEnabled(changed)
+        if changed and provision.currentData() == "standard":
+            blocked = provision.blockSignals(True)
+            provision.setCurrentIndex(provision.findData("modified"))
+            provision.blockSignals(blocked)
+        elif not changed and provision.currentData() != "standard":
+            blocked = provision.blockSignals(True)
+            provision.setCurrentIndex(provision.findData("standard"))
+            provision.blockSignals(blocked)
+        group.inputChanged.emit()
+
+    def _update_strip_editor(self, runway_index: int) -> None:
+        editor = self._strip_editors.get(runway_index)
+        group = self._runway_groups.get(runway_index)
+        if editor is None or group is None:
+            return
+        inputs = group.get_input_data()
+        params: Dict[str, Any] = {}
+        try:
+            profile = get_ruleset_profile(
+                self.ruleset_combo.currentData() or DEFAULT_RULESET_ID
+            )
+            params = profile.strip_parameters(
+                int(inputs.get("arc_num") or 0),
+                profile.classify_runway_type(inputs.get("type1")),
+                float(inputs.get("width") or 0.0) or None,
+            ) or {}
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+        labels = {
+            "overall_width": "overall",
+            "graded_width": "graded",
+            "extension_length": "end extension",
+        }
+        summary = []
+        for key, edit in editor["edits"].items():
+            old_standard = edit.property("standardValue")
+            new_standard = params.get(key)
+            current = edit.text().strip()
+            if new_standard is not None and (
+                not current
+                or self._strip_number(current) == self._strip_number(old_standard)
+            ):
+                blocked = edit.blockSignals(True)
+                edit.setText(f"{float(new_standard):g}")
+                edit.blockSignals(blocked)
+            edit.setProperty("standardValue", new_standard)
+            if new_standard is not None:
+                summary.append(f"{labels[key]} {float(new_standard):g} m")
+
+        editor["card"].setTitle(group.rwy_name_lbl.text() or f"Runway {runway_index}")
+        editor["standard_label"].setText(
+            "Standard: " + " · ".join(summary)
+            if len(summary) == 3
+            else "Awaiting complete runway inputs"
+        )
+        provision = editor["provision"]
+        changed = any(
+            self._strip_number(edit.text()) != self._strip_number(edit.property("standardValue"))
+            for edit in editor["edits"].values()
+        )
+        provision.setEnabled(changed)
+        if changed and provision.currentData() == "standard":
+            blocked = provision.blockSignals(True)
+            provision.setCurrentIndex(provision.findData("modified"))
+            provision.blockSignals(blocked)
+        elif not changed:
+            blocked = provision.blockSignals(True)
+            provision.setCurrentIndex(provision.findData("standard"))
+            provision.blockSignals(blocked)
 
     def _setup_external_safeguarding_tab(self) -> None:
         """Add the independently generated External Safeguarding family tab."""
@@ -1172,6 +1326,25 @@ class SafeguardingBuilderDialog(
             )
             row.addWidget(button, 0, QtCore.Qt.AlignmentFlag.AlignVCenter)
             self._family_generation_buttons[family_id] = button
+
+    def _normalize_workflow_context_strips(self) -> None:
+        """Match every context strip to the ARP strip's geometry."""
+        reference = self._workflow_context_widgets["tab_airport"]["frame"]
+        reference_row = reference.layout()
+        reference_page = self.tab_airport.layout()
+        height = reference.sizeHint().height()
+        row_margins = reference_row.contentsMargins()
+        page_margins = reference_page.contentsMargins()
+
+        for tab_name, widgets in self._workflow_context_widgets.items():
+            frame = widgets["frame"]
+            frame.setMinimumHeight(height)
+            row = frame.layout()
+            row.setContentsMargins(row_margins)
+            row.setSpacing(reference_row.spacing())
+            page = getattr(self, tab_name)
+            page.layout().setContentsMargins(page_margins)
+            page.layout().setSpacing(reference_page.spacing())
 
     def _style_workflow_context_frame(self, frame: QtWidgets.QFrame, active: bool) -> None:
         background = "#f5f7f9" if active else "#fafafa"
@@ -1779,6 +1952,9 @@ class SafeguardingBuilderDialog(
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.ruleset_combo.currentIndexChanged.connect(
             self._on_design_ruleset_selection_changed
+        )
+        self.ruleset_combo.currentIndexChanged.connect(
+            self.update_all_runway_calculations
         )
         self.protected_airspace_policy_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.framework_combo.currentIndexChanged.connect(self._on_framework_changed)
@@ -2951,8 +3127,8 @@ class SafeguardingBuilderDialog(
         self._set_workflow_tab_state("tab_runways", runway_tab_state, runway_tab_tip)
         self._set_workflow_tab_state(
             "tab_runway_protection",
-            "optional",
-            "Placeholder — independent runway-protection generation is planned.",
+            runway_tab_state,
+            "Review the derived runway-strip dimensions and any overrides.",
         )
 
         self._set_workflow_tab_state(
@@ -3044,7 +3220,7 @@ class SafeguardingBuilderDialog(
             {
                 "tab_airport": (airport_context_text, airport_tab_state),
                 "tab_runways": (runway_context_text, runway_tab_state),
-                "tab_runway_protection": ("Planned", "optional"),
+                "tab_runway_protection": (runway_context_text, runway_tab_state),
                 "tab_cns": (cns_context_text, cns_dependencies["state"]),
                 "tab_ols": (ols_context_text, ols_dependencies["state"]),
                 "tab_lighting": (lighting_context_text, agl_dependencies["state"]),
@@ -3235,6 +3411,7 @@ class SafeguardingBuilderDialog(
         # --- Update the group's display labels ---
         group_widget.update_display_labels(calculation_results)
         self._prefill_annex14_strip_controls(group_widget)
+        self._update_strip_editor(runway_index)
         self.update_dialog_status()
 
     def _prefill_annex14_strip_controls(
@@ -3298,6 +3475,9 @@ class SafeguardingBuilderDialog(
         # Pass all arguments positionally
         new_group = RunwayWidgetGroup(runway_index, self.coord_validator, scroll_content_widget)
 
+        self._runway_groups[runway_index] = new_group
+        self._add_strip_editor(runway_index, new_group)
+
         new_group.inputChanged.connect(lambda idx=runway_index: self.update_runway_calculations(idx))
         new_group.inputChanged.connect(self.refresh_ils_bra_runway_options)
         new_group.removeRequested.connect(self.remove_runway_group)
@@ -3305,7 +3485,6 @@ class SafeguardingBuilderDialog(
         # Add to the end of the layout
         self.scroll_area_layout.addWidget(new_group)
 
-        self._runway_groups[runway_index] = new_group
         self._apply_workflow_control_heights(new_group)
         self._update_dialog_height()
         self.update_runway_calculations(runway_index)  # Update placeholders
@@ -3357,6 +3536,9 @@ class SafeguardingBuilderDialog(
     def _remove_runway_group_internal(self, runway_index: int):
         """Internal helper to remove a group without user confirmation."""
         group_to_remove = self._runway_groups.pop(runway_index, None)
+        strip_editor = self._strip_editors.pop(runway_index, None)
+        if strip_editor is not None:
+            strip_editor["card"].deleteLater()
         if group_to_remove and self.scroll_area_layout is not None:
             group_to_remove.hide()
             self.scroll_area_layout.removeWidget(group_to_remove)
@@ -4094,6 +4276,78 @@ class SafeguardingBuilderDialog(
         validated["cap168_wide_runway"] = self._bool_from_input(
             inputs.get("cap168_wide_runway", False)
         )
+
+        strip_input = inputs.get("runway_strip")
+        strip_input = strip_input if isinstance(strip_input, dict) else {}
+        standard_strip: Dict[str, Any] = {}
+        try:
+            profile = get_ruleset_profile(
+                self.ruleset_combo.currentData() or DEFAULT_RULESET_ID
+            )
+            standard_strip = profile.strip_parameters(
+                int(validated.get("arc_num") or 0),
+                profile.classify_runway_type(validated.get("type1")),
+                validated.get("width"),
+            ) or {}
+        except (AttributeError, TypeError, ValueError):
+            pass
+
+        effective_strip: Dict[str, Optional[float]] = {}
+        strip_labels = {
+            "overall_width": "overall strip width",
+            "graded_width": "graded strip width",
+            "extension_length": "strip end extension",
+        }
+        strip_required = any(standard_strip.get(key) is not None for key in strip_labels) or any(
+            str(strip_input.get(key, "") or "").strip() for key in strip_labels
+        )
+        for key, label in strip_labels.items():
+            raw_value = str(strip_input.get(key, "") or "").strip()
+            value = raw_value if raw_value else standard_strip.get(key)
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                number = 0.0
+            if number <= 0.0 and strip_required:
+                errors.append(f"Rwy {index}: {label.title()} must be greater than zero.")
+                current_errors += 1
+                effective_strip[key] = None
+            elif number <= 0.0:
+                effective_strip[key] = None
+            else:
+                effective_strip[key] = number
+
+        overall = effective_strip.get("overall_width")
+        graded = effective_strip.get("graded_width")
+        if overall is not None and graded is not None and overall < graded:
+            errors.append(
+                f"Rwy {index}: Overall strip width cannot be less than graded strip width."
+            )
+            current_errors += 1
+
+        overridden = any(
+            effective_strip.get(key) is not None
+            and standard_strip.get(key) is not None
+            and not math.isclose(
+                float(effective_strip[key]),
+                float(standard_strip[key]),
+                abs_tol=1e-6,
+            )
+            for key in strip_labels
+        )
+        provision = str(strip_input.get("provision") or "standard").strip().lower()
+        if overridden and provision not in {"grandfathered", "modified"}:
+            provision = "modified"
+        elif not overridden:
+            provision = "standard"
+        validated["runway_strip"] = {
+            **effective_strip,
+            "provision": provision,
+            **{
+                f"standard_{key}": standard_strip.get(key)
+                for key in strip_labels
+            },
+        }
 
         valid_track_types = {"aligned", "offset", "curved", "curved_gt_15"}
         for family in ("approach", "takeoff"):

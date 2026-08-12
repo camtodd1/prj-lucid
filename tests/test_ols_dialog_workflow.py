@@ -154,12 +154,12 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertFalse(
             getattr(self.dialog.label_airport_status, "_status_chip_signature", None)
         )
-        planned = self.dialog.findChild(
+        strip_status = self.dialog.findChild(
             QtWidgets.QLabel,
             "label_workflow_context_status_tab_runway_protection",
         )
-        self.assertEqual(planned.text(), "Planned")
-        self.assertFalse(getattr(planned, "_status_chip_signature", None))
+        self.assertEqual(strip_status.text(), "Review")
+        self.assertFalse(getattr(strip_status, "_status_chip_signature", None))
         self.assertEqual(
             self.dialog._workflow_context_widgets["tab_terrain"]["status"].text(),
             "Ready",
@@ -168,6 +168,28 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(output.text(), "Ready")
         self.assertEqual(output._status_chip_signature[1], "ready")
         self.assertEqual(self.dialog._runway_groups[1].status_chip_lbl.text(), "Incomplete")
+
+    def test_workflow_context_strips_match_arp_geometry(self):
+        self.dialog.resize(920, 680)
+        self.dialog.show()
+        self.app.processEvents()
+
+        reference = self.dialog._workflow_context_widgets["tab_airport"]["frame"]
+        reference_row = reference.layout()
+        reference_page = self.dialog.tab_airport.layout()
+        for tab_name, widgets in self.dialog._workflow_context_widgets.items():
+            with self.subTest(tab=tab_name):
+                frame = widgets["frame"]
+                row = frame.layout()
+                page = getattr(self.dialog, tab_name)
+                self.assertEqual(frame.height(), reference.height())
+                self.assertEqual(row.contentsMargins(), reference_row.contentsMargins())
+                self.assertEqual(row.spacing(), reference_row.spacing())
+                self.assertEqual(
+                    page.layout().contentsMargins(),
+                    reference_page.contentsMargins(),
+                )
+                self.assertEqual(page.layout().spacing(), reference_page.spacing())
 
     def test_workflow_tabs_place_ols_before_cns(self):
         tabs = self.dialog.tabWidget_workflow
@@ -715,6 +737,71 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.assertEqual(runway["adg"], "V")
         self.assertNotIn("design_group", runway)
+
+    def test_strip_tab_exposes_derived_values_and_saves_grandfathered_override(self):
+        group = self.dialog._runway_groups[1]
+        group._set_combo_data(group.arc_num_combo, "4")
+        group.width_le.setText("45")
+        group._set_combo_text(group.type1_combo, "Precision Approach CAT I")
+        self.dialog.update_runway_calculations(1)
+
+        editor = self.dialog._strip_editors[1]
+        self.assertEqual(
+            {key: edit.text() for key, edit in editor["edits"].items()},
+            {
+                "overall_width": "280",
+                "graded_width": "150",
+                "extension_length": "60",
+            },
+        )
+        self.assertFalse(editor["provision"].isEnabled())
+
+        editor["edits"]["overall_width"].setText("260")
+        self.assertTrue(editor["provision"].isEnabled())
+        self.assertEqual(editor["provision"].currentData(), "modified")
+        editor["provision"].setCurrentIndex(
+            editor["provision"].findData("grandfathered")
+        )
+
+        saved = self.dialog._build_save_payload("TEST")["runways"][0]
+        self.assertEqual(saved["runway_strip"]["overall_width"], "260")
+        self.assertEqual(saved["runway_strip"]["provision"], "grandfathered")
+
+        self.dialog._load_runway_rows([saved])
+        reloaded = self.dialog._build_save_payload("TEST")["runways"][0]
+        self.assertEqual(reloaded["runway_strip"]["overall_width"], "260")
+        self.assertEqual(reloaded["runway_strip"]["provision"], "grandfathered")
+
+    def test_runway_validation_records_strip_standard_and_override(self):
+        inputs = self.dialog._runway_groups[1].get_input_data()
+        inputs.update(
+            {
+                "designator_str": "09",
+                "thr_easting": "0",
+                "thr_northing": "0",
+                "rec_easting": "1000",
+                "rec_northing": "0",
+                "threshold_elev_1": "12.5",
+                "threshold_elev_2": "13.0",
+                "width": "45",
+                "arc_num": "4",
+                "type1": "Precision Approach CAT I",
+                "runway_strip": {
+                    "overall_width": "260",
+                    "graded_width": "150",
+                    "extension_length": "60",
+                    "provision": "grandfathered",
+                },
+            }
+        )
+        errors = []
+
+        result = self.dialog._validate_runway_data(1, inputs, errors)
+
+        self.assertEqual(errors, [])
+        self.assertEqual(result["runway_strip"]["overall_width"], 260.0)
+        self.assertEqual(result["runway_strip"]["standard_overall_width"], 280.0)
+        self.assertEqual(result["runway_strip"]["provision"], "grandfathered")
 
     def test_legacy_design_group_is_normalized_at_load_boundary(self):
         legacy = {"design_group": "III"}

@@ -122,6 +122,40 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         self.assertEqual([(item["end_desig"], item["len_m"]) for item in stopways], [("05", 50.0)])
         self.assertEqual([(item["end_desig"], item["len_m"]) for item in clearways], [("23", 80.0)])
 
+    def test_strip_geometry_uses_override_and_records_grandfathered_provision(self):
+        builder = self._builder()
+        builder.ruleset = MOS139_PROFILE
+        runway = {
+            "short_name": "05/23",
+            "thr_point": QgsPointXY(0.0, 0.0),
+            "rec_thr_point": QgsPointXY(1000.0, 0.0),
+            "width": 45.0,
+            "arc_num": 4,
+            "type1": "Precision Approach CAT I",
+            "type2": "Non-Instrument (NI)",
+            "runway_strip": {
+                "overall_width": 260.0,
+                "graded_width": 140.0,
+                "extension_length": 50.0,
+                "provision": "grandfathered",
+                "standard_overall_width": 280.0,
+                "standard_graded_width": 150.0,
+                "standard_extension_length": 60.0,
+            },
+        }
+
+        strips = {
+            kind: attrs
+            for kind, _geometry, attrs in builder.generate_physical_geometry(runway)
+            if kind in {"GradedStrip", "OverallStrip"}
+        }
+
+        self.assertEqual(strips["GradedStrip"]["wid_m"], 140.0)
+        self.assertEqual(strips["OverallStrip"]["wid_m"], 260.0)
+        self.assertEqual(strips["OverallStrip"]["len_m"], 1100.0)
+        self.assertEqual(strips["OverallStrip"]["provision"], "grandfathered")
+        self.assertIn("Standard: overall width 280 m", strips["OverallStrip"]["notes"])
+
     def test_pre_threshold_geometry_is_chained_after_starter_extension(self):
         runway = {
             "short_name": "09/27",

@@ -786,6 +786,14 @@ class PersistenceMixin:
         runway_data.setdefault("takeoff_track_type_2", "aligned")
         runway_data.setdefault("takeoff_track_wkt_1", "")
         runway_data.setdefault("takeoff_track_wkt_2", "")
+        runway_strip = runway_data.get("runway_strip")
+        if not isinstance(runway_strip, dict):
+            runway_strip = {}
+        runway_strip.setdefault("overall_width", "")
+        runway_strip.setdefault("graded_width", "")
+        runway_strip.setdefault("extension_length", "")
+        runway_strip.setdefault("provision", "standard")
+        runway_data["runway_strip"] = runway_strip
         modernised = runway_data.get("annex14_modernised")
         if not isinstance(modernised, dict):
             modernised = {

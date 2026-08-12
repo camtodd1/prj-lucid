@@ -208,6 +208,12 @@
             "takeoff_track_type_2": "aligned",
             "takeoff_track_wkt_1": "",
             "takeoff_track_wkt_2": "",
+            "runway_strip": {
+                "overall_width": "REPLACE_DERIVED_OR_OVERRIDE_OVERALL_WIDTH_M",
+                "graded_width": "REPLACE_DERIVED_OR_OVERRIDE_GRADED_WIDTH_M",
+                "extension_length": "REPLACE_DERIVED_OR_OVERRIDE_END_EXTENSION_M",
+                "provision": "standard"
+            },
             "annex14_modernised": {
                 "schema_version": 1,
                 "operation_basis": "automatic_conservative_straight_in"

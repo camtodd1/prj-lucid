@@ -104,6 +104,15 @@ class PhysicalGeometryMixin:
                     QgsField("wid_m", QVariant.Double, self.tr("wid_m"), 12, 3),
                     QgsField("ref_mos", QVariant.String, self.tr("MOS Reference"), 250),
                 ]
+                strip_fields = common_fields + [
+                    QgsField(
+                        "provision",
+                        QVariant.String,
+                        self.tr("Strip Provision"),
+                        20,
+                    ),
+                    QgsField("notes", QVariant.String, self.tr("Notes"), 500),
+                ]
                 stopway_resa_fields = common_fields + [
                     QgsField("end_desig", QVariant.String, self.tr("End Designator"), 10)
                 ]
@@ -374,17 +383,17 @@ class PhysicalGeometryMixin:
                     },
                     "GradedStrip": {
                         "name": self.tr("Runway Graded Strip"),
-                        "fields": common_fields,
+                        "fields": strip_fields,
                         "group": protection_area_group,
                     },
                     "FlyoverStrip": {
                         "name": self.tr("Runway Strip Flyover Area"),
-                        "fields": common_fields,
+                        "fields": strip_fields,
                         "group": protection_area_group,
                     },
                     "OverallStrip": {
                         "name": self.tr("Runway Overall Strip"),
-                        "fields": common_fields,
+                        "fields": strip_fields,
                         "group": protection_area_group,
                     },
                     "RESA": {
@@ -3012,6 +3021,17 @@ class PhysicalGeometryMixin:
             runway_width_for_strip = runway_data.get("width")
 
             strip_dims = ruleset.strip_parameters(arc_num, type1_abbr, runway_width_for_strip)
+            strip_input = runway_data.get("runway_strip")
+            strip_input = strip_input if isinstance(strip_input, dict) else {}
+            if strip_dims and strip_input:
+                strip_dims = dict(strip_dims)
+                for dim in ("overall_width", "graded_width", "extension_length"):
+                    try:
+                        override = float(strip_input.get(dim))
+                    except (TypeError, ValueError):
+                        continue
+                    if override > 0.0:
+                        strip_dims[dim] = override
             runway_data["calculated_strip_dims"] = strip_dims
 
             if strip_dims is None:
@@ -3029,6 +3049,26 @@ class PhysicalGeometryMixin:
                 extension = strip_dims["extension_length"]
                 graded_width = strip_dims["graded_width"]
                 overall_width = strip_dims["overall_width"]
+                strip_provision = str(
+                    (strip_input or {}).get("provision") or "standard"
+                ).strip().lower()
+                if strip_provision not in {"grandfathered", "modified"}:
+                    strip_provision = "standard"
+                strip_notes = ""
+                if strip_provision != "standard":
+                    standard_values = []
+                    for dim, label in (
+                        ("overall_width", "overall width"),
+                        ("graded_width", "graded width"),
+                        ("extension_length", "end extension"),
+                    ):
+                        value = (strip_input or {}).get(f"standard_{dim}")
+                        if value is not None:
+                            standard_values.append(f"{label} {float(value):g} m")
+                    strip_notes = (
+                        f"{strip_provision.title()} runway-strip provision."
+                        + (" Standard: " + ", ".join(standard_values) + "." if standard_values else "")
+                    )
                 graded_half_width = graded_width / 2.0
                 overall_half_width = overall_width / 2.0
                 stopway_primary_end = self._non_negative_float(runway_data.get("stopway1_len"), 0.0)
@@ -3073,6 +3113,8 @@ class PhysicalGeometryMixin:
                             "wid_m": graded_width,
                             "len_m": round(strip_length, 3),
                             "ref_mos": graded_ref,
+                            "provision": strip_provision,
+                            "notes": strip_notes,
                         }
                         generated_elements.append(("GradedStrip", graded_strip_geom, graded_attrs))
 
@@ -3105,6 +3147,8 @@ class PhysicalGeometryMixin:
                             "wid_m": overall_width,
                             "len_m": round(strip_length, 3),
                             "ref_mos": overall_ref,
+                            "provision": strip_provision,
+                            "notes": strip_notes,
                         }
                         generated_elements.append(("OverallStrip", overall_strip_geom, overall_attrs))
 
@@ -3136,6 +3180,8 @@ class PhysicalGeometryMixin:
                             "wid_m": flyover_width,
                             "len_m": round(strip_length, 3),
                             "ref_mos": flyover_ref,
+                            "provision": strip_provision,
+                            "notes": strip_notes,
                         }
 
                         left_inner_p = strip_end_center_p.project(graded_half_width, rwy_params["azimuth_perp_l"])
