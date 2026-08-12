@@ -5,7 +5,6 @@ from pathlib import Path
 WORKSPACE = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(WORKSPACE.parent))
 
-from safeguarding_builder.core.run_log import OutcomeStatus, RunLog  # noqa: E402
 from safeguarding_builder.safeguarding_builder import SafeguardingBuilder  # noqa: E402
 
 
@@ -21,7 +20,7 @@ class GenerationOutcomeTests(unittest.TestCase):
     def builder(self):
         builder = SafeguardingBuilder.__new__(SafeguardingBuilder)
         builder._generation_outcomes = []
-        builder._run_log = RunLog(lambda *_args: None)
+        builder._run_log = None
         builder.successfully_generated_layers = []
         return builder
 
@@ -30,13 +29,13 @@ class GenerationOutcomeTests(unittest.TestCase):
 
         outcome = builder._record_generation_outcome(
             "OLS ruleset comparison",
-            OutcomeStatus.GENERATED,
+            "generated",
             layers=8,
             features=120,
             facts={"baseline_ruleset": "baseline", "comparison_ruleset": "future"},
         )
 
-        self.assertEqual(builder._run_log.outcomes, [outcome])
+        self.assertEqual(builder._generation_outcomes, [outcome])
         self.assertEqual(
             builder.generation_outcome_snapshot(),
             [

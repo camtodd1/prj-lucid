@@ -111,27 +111,6 @@ class OlsLayerGroupingTests(unittest.TestCase):
             "Take-off Climb 01L - Contours",
         )
 
-    def test_legacy_nested_ofz_is_promoted_beside_primary_surfaces(self):
-        primary_group = QgsLayerTreeGroup("Primary Surfaces")
-        secondary_group = QgsLayerTreeGroup("Secondary Surfaces")
-        ofz_group = QgsLayerTreeGroup("Obstacle Free Zone")
-        primary_runway = primary_group.addGroup("RWY 01L")
-        nested_ofz = primary_runway.addGroup("Obstacle Free Zone")
-        nested_ofz.addGroup("OLS Inner Approach RWY 01L")
-
-        self.builder._repair_guideline_f_layer_tree(
-            primary_group,
-            secondary_group,
-            ofz_group,
-        )
-
-        promoted_runway = self.direct_group(ofz_group, "RWY 01L")
-        self.assertIsNotNone(promoted_runway)
-        self.assertIsNotNone(
-            self.direct_group(promoted_runway, "OLS Inner Approach RWY 01L")
-        )
-        self.assertIsNone(self.direct_group(primary_runway, "Obstacle Free Zone"))
-
     def test_baseline_and_comparison_rulesets_are_parallel_first_order_groups(self):
         self.builder.framework = get_framework_profile()
         self.builder.baseline_ols_ruleset = get_ruleset_profile("mos139_2019")
@@ -161,18 +140,6 @@ class OlsLayerGroupingTests(unittest.TestCase):
         self.assertIs(groups["controlling_surfaces"].parent(), baseline)
         self.assertIs(groups["comparison_ols_surfaces"].parent(), comparison)
         self.assertIs(groups["comparison_airport_wide_ols"].parent(), comparison)
-
-    def test_debug_development_group_is_suppressed_by_default(self):
-        self.builder.framework = get_framework_profile()
-        self.builder.baseline_ols_ruleset = get_ruleset_profile("mos139_2019")
-        self.builder.protected_airspace_ruleset = self.builder.baseline_ols_ruleset
-        self.builder.comparison_ols_ruleset = None
-        main_group = QgsLayerTreeGroup("TEST")
-
-        groups = self.builder._create_output_layer_groups(main_group, agl_enabled=False)
-
-        self.assertIsNone(groups["debug_development"])
-        self.assertIsNone(self.direct_group(main_group, "99 Debug / Development"))
 
     def test_top_level_sections_include_promoted_cns_group_in_numbered_order(self):
         self.builder.framework = get_framework_profile()
@@ -213,19 +180,6 @@ class OlsLayerGroupingTests(unittest.TestCase):
             ["06 Airfield Ground Lighting", "07 External Safeguarding"],
         )
         self.assertIs(groups["airfield_ground_lighting"].parent(), main_group)
-
-    def test_debug_development_group_can_be_enabled_for_diagnostics(self):
-        self.builder.framework = get_framework_profile()
-        self.builder.baseline_ols_ruleset = get_ruleset_profile("mos139_2019")
-        self.builder.protected_airspace_ruleset = self.builder.baseline_ols_ruleset
-        self.builder.comparison_ols_ruleset = None
-        self.builder._debug_development_outputs_enabled = lambda: True
-        main_group = QgsLayerTreeGroup("TEST")
-
-        groups = self.builder._create_output_layer_groups(main_group, agl_enabled=False)
-
-        self.assertIsNotNone(groups["debug_development"])
-        self.assertIsNotNone(self.direct_group(main_group, "99 Debug / Development"))
 
     def test_generated_layer_groups_are_collapsed_and_unchecked_recursively(self):
         main_group = QgsLayerTreeGroup("TEST")

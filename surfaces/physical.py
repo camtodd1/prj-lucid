@@ -2007,117 +2007,85 @@ class PhysicalGeometryMixin:
                         )
 
                 type_abbr = self.get_active_ruleset().classify_runway_type(runway_type)
+                touchdown_specs = []
                 if type_abbr in {"PA_I", "PA_II_III"}:
-                    touchdown_offsets = self._touchdown_zone_offsets(lda_m)
                     midpoint_zone_start = runway_length / 2.0 - 275.0
                     midpoint_zone_end = runway_length / 2.0 + 275.0
-                    for offset in touchdown_offsets:
+                    for offset in self._touchdown_zone_offsets(lda_m):
                         if abs(offset - aim_offset) <= 50.0:
                             skipped.append(
                                 "ICAO A touchdown zone pair " f"at {offset:g} m: within 50 m of aiming point."
                             )
                             continue
-                        block_start = offset
-                        block_end = offset + 22.5
-                        if block_start < midpoint_zone_end and block_end > midpoint_zone_start:
+                        if offset < midpoint_zone_end and offset + 22.5 > midpoint_zone_start:
                             skipped.append(
                                 "ICAO A touchdown zone pair "
                                 f"at {offset:g} m: intersects 550 m midpoint exclusion zone."
                             )
                             continue
-                        for side_name, sign in (("L", -1.0), ("R", 1.0)):
-                            lateral_center = sign * (aim_spacing / 2.0 + 1.5)
-                            geom = self._create_runway_marking_rectangle(
-                                origin,
-                                azimuth,
+                        touchdown_specs.append(
+                            (
                                 offset,
-                                22.5,
-                                lateral_center,
-                                3.0,
-                                f"TDZ ICAO A {runway_name} {end_desig} {offset}",
+                                "ICAO A",
+                                "MOS 8.23; MOS 8.24",
+                                self._surface_trigger_note("MOS 8.23", runway_data)
+                                + " Table 8.24 selection uses LDA for this initial implementation.",
                             )
-                            if geom:
-                                rendered_extent = offset + 22.5
-                                runway_data["tdz_marking_extents"][end_desig] = max(
-                                    runway_data["tdz_marking_extents"].get(end_desig, 0.0),
-                                    rendered_extent,
-                                )
-                                generated.append(
-                                    (
-                                        "DetailedTouchdownZoneMarking",
-                                        geom,
-                                        self._detail_marking_attrs(
-                                            runway_name,
-                                            end_desig,
-                                            "Touchdown Zone",
-                                            "ICAO A",
-                                            22.5,
-                                            3.0,
-                                            "MOS 8.23; MOS 8.24",
-                                            side=side_name,
-                                            offset_m=offset,
-                                            spacing_m=aim_spacing,
-                                            lda_m=lda_m,
-                                            mandatory=(
-                                                surface_markings_applicable
-                                                and runway_width >= 30.0
-                                                and runway_length >= 1500.0
-                                            ),
-                                            notes=(
-                                                self._surface_trigger_note("MOS 8.23", runway_data)
-                                                + " Table 8.24 selection uses LDA for this initial implementation."
-                                            ),
-                                        ),
-                                    )
-                                )
+                        )
                 else:
-                    for offset in (150.0, 450.0):
-                        for side_name, sign in (("L", -1.0), ("R", 1.0)):
-                            lateral_center = sign * (aim_spacing / 2.0 + 1.5)
-                            geom = self._create_runway_marking_rectangle(
-                                origin,
-                                azimuth,
-                                offset,
-                                22.5,
-                                lateral_center,
-                                3.0,
-                                f"TDZ simple {runway_name} {end_desig} {offset}",
+                    touchdown_specs = [
+                        (
+                            offset,
+                            "Simple",
+                            "MOS 8.23; MOS 8.25",
+                            self._surface_trigger_note("MOS 8.23", runway_data)
+                            + " 450 m pair generated by default even when runway length is under 1500 m.",
+                        )
+                        for offset in (150.0, 450.0)
+                    ]
+
+                for offset, subtype, reference, note in touchdown_specs:
+                    for side_name, sign in (("L", -1.0), ("R", 1.0)):
+                        geometry = self._create_runway_marking_rectangle(
+                            origin,
+                            azimuth,
+                            offset,
+                            22.5,
+                            sign * (aim_spacing / 2.0 + 1.5),
+                            3.0,
+                            f"TDZ {subtype} {runway_name} {end_desig} {offset}",
+                        )
+                        if not geometry:
+                            continue
+                        runway_data["tdz_marking_extents"][end_desig] = max(
+                            runway_data["tdz_marking_extents"].get(end_desig, 0.0),
+                            offset + 22.5,
+                        )
+                        generated.append(
+                            (
+                                "DetailedTouchdownZoneMarking",
+                                geometry,
+                                self._detail_marking_attrs(
+                                    runway_name,
+                                    end_desig,
+                                    "Touchdown Zone",
+                                    subtype,
+                                    22.5,
+                                    3.0,
+                                    reference,
+                                    side=side_name,
+                                    offset_m=offset,
+                                    spacing_m=aim_spacing,
+                                    lda_m=lda_m,
+                                    mandatory=(
+                                        surface_markings_applicable
+                                        and runway_width >= 30.0
+                                        and runway_length >= 1500.0
+                                    ),
+                                    notes=note,
+                                ),
                             )
-                            if geom:
-                                rendered_extent = offset + 22.5
-                                runway_data["tdz_marking_extents"][end_desig] = max(
-                                    runway_data["tdz_marking_extents"].get(end_desig, 0.0),
-                                    rendered_extent,
-                                )
-                                generated.append(
-                                    (
-                                        "DetailedTouchdownZoneMarking",
-                                        geom,
-                                        self._detail_marking_attrs(
-                                            runway_name,
-                                            end_desig,
-                                            "Touchdown Zone",
-                                            "Simple",
-                                            22.5,
-                                            3.0,
-                                            "MOS 8.23; MOS 8.25",
-                                            side=side_name,
-                                            offset_m=offset,
-                                            spacing_m=aim_spacing,
-                                            lda_m=lda_m,
-                                            mandatory=(
-                                                surface_markings_applicable
-                                                and runway_width >= 30.0
-                                                and runway_length >= 1500.0
-                                            ),
-                                            notes=(
-                                                self._surface_trigger_note("MOS 8.23", runway_data)
-                                                + " 450 m pair generated by default "
-                                                "even when runway length is under 1500 m."
-                                            ),
-                                        ),
-                                    )
-                                )
+                        )
             else:
                 if landing_available:
                     skipped.append(

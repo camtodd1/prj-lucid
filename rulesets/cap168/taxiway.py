@@ -138,66 +138,6 @@ PARALLEL_RUNWAY_SEPARATION_PARAMS: Dict[tuple, Dict[str, Any]] = {
     },
 }
 
-TAXIWAY_TRACEABILITY = {
-    "source_publication": SOURCE_PUBLICATION,
-    "source_url": SOURCE_URL,
-    "items": {
-        "taxiway_runway_separation": {
-            "source": CAP168_TAXIWAY_RUNWAY_SEPARATION_REF,
-            "status": "operational_verified",
-            "implementation": "TAXIWAY_RUNWAY_SEPARATION_PARAMS",
-            "notes": "Table 3.4(a)-(b), keyed by runway code number, code letter, and runway instrument group.",
-        },
-        "taxiway_to_taxiway_separation": {
-            "source": CAP168_TAXIWAY_MINIMUM_SEPARATION_REF,
-            "status": "operational_verified",
-            "implementation": "TAXIWAY_TO_TAXIWAY_SEPARATION_PARAMS",
-            "notes": "Table 3.4(c) taxiway centreline to taxiway centreline values.",
-        },
-        "taxiway_object_separation": {
-            "source": CAP168_TAXIWAY_MINIMUM_SEPARATION_REF,
-            "status": "operational_verified",
-            "implementation": "TAXIWAY_OBJECT_SEPARATION_PARAMS",
-            "notes": "Table 3.4(c) taxiway/apron taxiway centreline to object values.",
-        },
-        "stand_taxilane_to_stand_taxilane_separation": {
-            "source": CAP168_TAXIWAY_MINIMUM_SEPARATION_REF,
-            "status": "operational_verified",
-            "implementation": "STAND_TAXILANE_TO_STAND_TAXILANE_SEPARATION_PARAMS",
-            "notes": "Table 3.4(c) aircraft stand taxilane centreline values.",
-        },
-        "stand_taxilane_object_separation": {
-            "source": CAP168_TAXIWAY_MINIMUM_SEPARATION_REF,
-            "status": "operational_verified",
-            "implementation": "STAND_TAXILANE_OBJECT_SEPARATION_PARAMS",
-            "notes": "Table 3.4(c) aircraft stand taxilane centreline to object values.",
-        },
-        "taxiway_object_height_restrictions": {
-            "source": "CAP 168 3.164-3.167",
-            "status": "operational_verified",
-            "implementation": "TAXIWAY_OBJECT_HEIGHT_RESTRICTION_PARAMS",
-            "notes": "Object-height restrictions near taxiway edges and temporary-obstacle wingtip clearance.",
-        },
-        "parallel_non_instrument_runways": {
-            "source": CAP168_PARALLEL_NON_INSTRUMENT_RUNWAY_REF,
-            "status": "operational_verified",
-            "implementation": "PARALLEL_RUNWAY_SEPARATION_PARAMS[NI_SIMULTANEOUS]",
-            "notes": "Minimum distance is selected by the higher code number.",
-        },
-        "parallel_instrument_runways": {
-            "source": CAP168_PARALLEL_INSTRUMENT_RUNWAY_REF,
-            "status": "operational_verified",
-            "implementation": "PARALLEL_RUNWAY_SEPARATION_PARAMS[INSTR_*]",
-            "notes": "Minimum distance is selected by simultaneous operation type. Segregated operations apply threshold stagger adjustments.",
-        },
-    }
-}
-
-
-def get_taxiway_traceability() -> Dict[str, Any]:
-    return TAXIWAY_TRACEABILITY.copy()
-
-
 def get_taxiway_separation_offset(arc_num: int, arc_let: Optional[str], runway_type_str: Optional[str]):
     if not isinstance(arc_num, int) or arc_num not in [1, 2, 3, 4]:
         return None
@@ -333,8 +273,6 @@ __all__ = [
     "STAND_TAXILANE_OBJECT_SEPARATION_PARAMS",
     "TAXIWAY_OBJECT_HEIGHT_RESTRICTION_PARAMS",
     "PARALLEL_RUNWAY_SEPARATION_PARAMS",
-    "TAXIWAY_TRACEABILITY",
-    "get_taxiway_traceability",
     "get_taxiway_separation_offset",
     "get_taxiway_to_taxiway_separation",
     "get_taxiway_object_separation",

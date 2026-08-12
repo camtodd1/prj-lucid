@@ -25,11 +25,9 @@ from qgis.core import (  # type: ignore
 )
 
 try:
-    from ..core import output_structure
     from ..core.run_log import QgsMessageLog
     from ..rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
 except ImportError:
-    from core import output_structure
     from core.run_log import QgsMessageLog  # type: ignore
     from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
 
@@ -7236,7 +7234,6 @@ class ControllingOlsEngineMixin:
     def _create_controlling_ols_layers(
         self,
         icao_code: str,
-        debug_group: Optional[QgsLayerTreeGroup],
         controlling_surfaces_group: Optional[QgsLayerTreeGroup] = None,
         controlling_contours_group: Optional[QgsLayerTreeGroup] = None,
         solved_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
@@ -7258,13 +7255,8 @@ class ControllingOlsEngineMixin:
             )
             return False
 
-        diagnostic_group = (
-            self._controlling_ols_diagnostic_group(debug_group)
-            if debug_group is not None
-            else None
-        )
-        region_output_group = controlling_surfaces_group if controlling_surfaces_group is not None else diagnostic_group
-        contour_output_group = controlling_contours_group if controlling_contours_group is not None else diagnostic_group
+        region_output_group = controlling_surfaces_group
+        contour_output_group = controlling_contours_group
         active_ruleset_getter = getattr(
             self,
             "get_active_protected_airspace_ruleset",
@@ -7284,22 +7276,8 @@ class ControllingOlsEngineMixin:
             solved_engines["baseline"] = engine
         timing_splits: Dict[str, float] = {}
 
-        if not self._controlling_ols_subphase("Controlling OLS: preparing candidate surfaces..."):
-            return False
-        step_start = time.perf_counter()
-        candidate_layer_ok = (
-            self._create_controlling_candidate_layer(
-                icao_code,
-                diagnostic_group,
-                planar_candidates,
-            )
-            if diagnostic_group is not None
-            else False
-        )
-        timing_splits["candidates"] = time.perf_counter() - step_start
-
         if not self._controlling_ols_subphase("Controlling OLS: solving lower-envelope regions..."):
-            return candidate_layer_ok
+            return False
         step_start = time.perf_counter()
         region_layer_ok = self._create_controlling_region_layer(
             icao_code,
@@ -7311,22 +7289,8 @@ class ControllingOlsEngineMixin:
         )
         timing_splits["regions"] = time.perf_counter() - step_start
 
-        if not self._controlling_ols_subphase("Controlling OLS: constructing transition boundaries..."):
-            return candidate_layer_ok or region_layer_ok
-        step_start = time.perf_counter()
-        transition_layer_ok = (
-            self._create_controlling_transition_layer(
-                icao_code,
-                diagnostic_group,
-                engine,
-            )
-            if diagnostic_group is not None
-            else False
-        )
-        timing_splits["transitions"] = time.perf_counter() - step_start
-
         if not self._controlling_ols_subphase("Controlling OLS: clipping source contours..."):
-            return candidate_layer_ok or region_layer_ok or transition_layer_ok
+            return region_layer_ok
         step_start = time.perf_counter()
         contour_layer_ok = self._create_controlling_contour_layer(
             icao_code,
@@ -7345,9 +7309,7 @@ class ControllingOlsEngineMixin:
 
         QgsMessageLog.logMessage(
             "[done] Controlling OLS summary: "
-            f"candidates={timing_splits['candidates']:.2f}s, "
             f"regions={timing_splits['regions']:.2f}s, "
-            f"transitions={timing_splits['transitions']:.2f}s, "
             f"contours={timing_splits['contours']:.2f}s, "
             f"total={total_elapsed:.2f}s; "
             f"inputs={len(planar_candidates)} candidates, {len(exclusion_geometries)} exclusion masks, "
@@ -7355,14 +7317,13 @@ class ControllingOlsEngineMixin:
             PLUGIN_TAG,
             Qgis.Info,
         )
-        return candidate_layer_ok or region_layer_ok or transition_layer_ok or contour_layer_ok
+        return region_layer_ok or contour_layer_ok
 
     def _create_annex14_controlling_surface_layers(
         self,
         icao_code: str,
         ofs_group: QgsLayerTreeGroup,
         oes_group: QgsLayerTreeGroup,
-        debug_group: Optional[QgsLayerTreeGroup],
         solved_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
     ) -> bool:
         """Create independent modernised Annex 14 OFS and OES lower envelopes."""
@@ -7387,35 +7348,10 @@ class ControllingOlsEngineMixin:
             engine = PlanarControllingOlsEngine(family_candidates)
             if solved_engines is not None:
                 solved_engines[family] = engine
-            family_debug_group = (
-                self._ensure_layer_group(
-                    debug_group,
-                    f"{MODERNISED_DISPLAY_NAME} — {family} Controlling",
-                )
-                if debug_group is not None
-                else None
-            )
             if not self._controlling_ols_subphase(
-                f"Controlling {family}: preparing candidates and transition boundaries..."
+                f"Controlling {family}: preparing candidate surfaces..."
             ):
                 return created
-            if family_debug_group is not None:
-                self._create_controlling_candidate_layer(
-                    icao_code,
-                    family_debug_group,
-                    family_candidates,
-                    internal_name=f"Annex14_{family}_Planar_Candidates_{icao_code}",
-                    display_name=f"{family} — Planar Candidates",
-                    style_key=f"Annex 14 Candidate {family}",
-                )
-                self._create_controlling_transition_layer(
-                    icao_code,
-                    family_debug_group,
-                    engine,
-                    internal_name=f"Annex14_{family}_Planar_Transitions_{icao_code}",
-                    display_name=f"{family} — Planar Transitions",
-                    style_key=f"Annex 14 Transition {family}",
-                )
             if not self._controlling_ols_subphase(f"Controlling {family}: writing solved regions..."):
                 return created
             region_created = self._create_controlling_region_layer(
@@ -7449,122 +7385,6 @@ class ControllingOlsEngineMixin:
             )
             created = region_created or contour_created or created
         return created
-
-    def _controlling_ols_diagnostic_group(self, layer_group: QgsLayerTreeGroup) -> QgsLayerTreeGroup:
-        """Return the dedicated diagnostic group for non-user-facing solver products."""
-        group_name = self.tr(output_structure.DEBUG_DEVELOPMENT)
-        if layer_group is not None and layer_group.name() == group_name:
-            return layer_group
-        return self._ensure_controlling_ols_diagnostic_group(layer_group, group_name) or layer_group
-
-    def _ensure_controlling_ols_diagnostic_group(
-        self,
-        parent_group: QgsLayerTreeGroup,
-        group_name: str,
-    ) -> Optional[QgsLayerTreeGroup]:
-        """Keep the diagnostic group at the end of generated outputs."""
-        if parent_group is None:
-            return None
-
-        existing_group = self._find_direct_child_group(parent_group, group_name)
-        children = list(parent_group.children())
-        target_index = len(children)
-
-        if existing_group is None:
-            try:
-                output_group = parent_group.insertGroup(target_index, group_name)
-            except AttributeError:
-                output_group = parent_group.addGroup(group_name)
-            self._stage_layer_tree_node(output_group)
-            return output_group
-
-        try:
-            current_index = children.index(existing_group)
-        except ValueError:
-            return existing_group
-        if current_index == target_index:
-            return existing_group
-
-        cloned_group = existing_group.clone()
-        self._stage_layer_tree_node(cloned_group)
-        parent_group.insertChildNode(target_index, cloned_group)
-        parent_group.removeChildNode(existing_group)
-        return cloned_group
-
-    def _create_controlling_candidate_layer(
-        self,
-        icao_code: str,
-        output_group: QgsLayerTreeGroup,
-        candidates: Sequence[ControllingOlsCandidate],
-        internal_name: Optional[str] = None,
-        display_name: Optional[str] = None,
-        style_key: str = "Default Polygon",
-    ) -> bool:
-        start_time = time.perf_counter()
-        fields = QgsFields(
-            [
-                QgsField("surface_id", QVariant.String, self.tr("Surface ID"), 160),
-                QgsField("surface", QVariant.String, self.tr("Surface Type"), 50),
-                QgsField("model", QVariant.String, self.tr("Model"), 30),
-                QgsField("elev_min", QVariant.Double, self.tr("Min Elev AMSL"), 12, 3),
-                QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
-                QgsField("vertical_model", QVariant.String, self.tr("Vertical Model"), 40),
-                QgsField("height_ref", QVariant.String, self.tr("Height Reference"), 30),
-                QgsField("lower_role", QVariant.String, self.tr("Lower Edge Role"), 40),
-                QgsField("lower_z_m", QVariant.Double, self.tr("Lower Edge Elev (m)"), 12, 3),
-                QgsField("upper_role", QVariant.String, self.tr("Upper Edge Role"), 40),
-                QgsField("upper_z_m", QVariant.Double, self.tr("Upper Edge Elev (m)"), 12, 3),
-                QgsField("surface_axis", QVariant.String, self.tr("Surface Axis"), 60),
-                QgsField("edge_src", QVariant.String, self.tr("Edge Elevation Source"), 80),
-            ]
-        )
-        for field in self._controlling_provenance_fields():
-            fields.append(field)
-        features: List[QgsFeature] = []
-        for candidate in candidates:
-            feature = QgsFeature(fields)
-            feature.setGeometry(QgsGeometry(candidate.footprint))
-            min_elev, max_elev = self._candidate_elevation_range(candidate)
-            metadata = candidate.metadata or {}
-            provenance = self._controlling_candidate_provenance(candidate)
-            feature.setAttributes(
-                [
-                    candidate.surface_id,
-                    candidate.surface_type,
-                    candidate.model,
-                    min_elev,
-                    max_elev,
-                    metadata.get("vertical_model"),
-                    metadata.get("height_reference"),
-                    metadata.get("lower_edge_role"),
-                    metadata.get("lower_edge_z_m"),
-                    metadata.get("upper_edge_role"),
-                    metadata.get("upper_edge_z_m"),
-                    metadata.get("surface_axis"),
-                    metadata.get("edge_elevation_source"),
-                    *[provenance[field_name] for field_name in CONTROLLING_PROVENANCE_FIELD_NAMES],
-                ]
-            )
-            features.append(feature)
-
-        layer = self._create_and_add_layer(
-            "Polygon",
-            internal_name or f"OLS_Controlling_Planar_Candidates_{icao_code}",
-            display_name or f"{self.tr('OLS')} Controlling Candidate Surfaces {icao_code}",
-            fields,
-            features,
-            output_group,
-            style_key,
-        )
-        if layer is not None:
-            QgsMessageLog.logMessage(
-                f"[done] Controlling OLS candidates layer: {len(candidates)} surfaces "
-                f"({time.perf_counter() - start_time:.2f}s).",
-                PLUGIN_TAG,
-                Qgis.Info,
-            )
-            return True
-        return False
 
     def _create_controlling_region_layer(
         self,
@@ -8110,57 +7930,6 @@ class ControllingOlsEngineMixin:
             feature.setAttribute("region_id", region_id)
         return valid_features
 
-    def _create_controlling_transition_layer(
-        self,
-        icao_code: str,
-        output_group: QgsLayerTreeGroup,
-        engine: PlanarControllingOlsEngine,
-        internal_name: Optional[str] = None,
-        display_name: Optional[str] = None,
-        style_key: str = "Default Line",
-    ) -> bool:
-        start_time = time.perf_counter()
-        fields = QgsFields(
-            [
-                QgsField("transition_id", QVariant.String, self.tr("Transition ID"), 160),
-                QgsField("surface", QVariant.String, self.tr("Surface"), 50),
-                QgsField("elev_min", QVariant.Double, self.tr("Min Elev AMSL"), 12, 3),
-                QgsField("elev_max", QVariant.Double, self.tr("Max Elev AMSL"), 12, 3),
-                QgsField("adjacent", QVariant.String, self.tr("Adjacent Surfaces"), 254),
-                QgsField("method", QVariant.String, self.tr("Method"), 50),
-                QgsField("eq_res_max", QVariant.Double, self.tr("Max Equality Residual"), 12, 6),
-            ]
-        )
-        features = engine.region_boundary_features(fields)
-        features = self._deduplicate_controlling_transition_features(features)
-        if not features:
-            QgsMessageLog.logMessage(
-                "[skip] Controlling OLS transitions layer: no region boundary transition edges were produced "
-                f"({time.perf_counter() - start_time:.2f}s).",
-                PLUGIN_TAG,
-                Qgis.Info,
-            )
-            return False
-        feature_count = len(features)
-        layer = self._create_and_add_layer(
-            "LineStringZ",
-            internal_name or f"OLS_Controlling_Planar_Transitions_{icao_code}",
-            display_name or f"{self.tr('OLS')} Controlling Transition Boundaries {icao_code}",
-            fields,
-            features,
-            output_group,
-            style_key,
-        )
-        if layer is not None:
-            QgsMessageLog.logMessage(
-                f"[done] Controlling OLS transitions layer: {feature_count} region boundary edges "
-                f"({time.perf_counter() - start_time:.2f}s).",
-                PLUGIN_TAG,
-                Qgis.Info,
-            )
-            return True
-        return False
-
     def _create_controlling_contour_layer(
         self,
         icao_code: str,
@@ -8516,73 +8285,6 @@ class ControllingOlsEngineMixin:
         rounded_points = tuple((int(round(point.x() * 1000.0)), int(round(point.y() * 1000.0))) for point in line_points)
         reversed_points = tuple(reversed(rounded_points))
         return rounded_points if rounded_points <= reversed_points else reversed_points
-
-    def _deduplicate_controlling_transition_features(self, features: List[QgsFeature]) -> List[QgsFeature]:
-        deduplicated: List[QgsFeature] = []
-        seen = set()
-        for feature in features:
-            geom = feature.geometry()
-            if geom is None or geom.isEmpty():
-                continue
-            try:
-                key = geom.asWkt(3)
-            except Exception:
-                key = str(id(feature))
-            adjacent = feature.attribute("adjacent") if feature.fields().indexFromName("adjacent") != -1 else None
-            compound_key = (adjacent, key)
-            if compound_key in seen:
-                continue
-            seen.add(compound_key)
-            deduplicated.append(feature)
-        return deduplicated
-
-    def _candidate_elevation_range(self, candidate: ControllingOlsCandidate) -> Tuple[Optional[float], Optional[float]]:
-        if candidate.model == "constant":
-            try:
-                elevation = float(candidate.metadata["elevation_m"])
-                return elevation, elevation
-            except (KeyError, TypeError, ValueError):
-                return None, None
-        if candidate.model == "axis":
-            try:
-                origin_elevation = float(candidate.metadata["origin_elevation_m"])
-                slope = float(candidate.metadata["slope"])
-                max_distance = float(candidate.metadata["max_distance_m"])
-                end_elevation = origin_elevation + (slope * max_distance)
-                return min(origin_elevation, end_elevation), max(origin_elevation, end_elevation)
-            except (KeyError, TypeError, ValueError):
-                return None, None
-        sample_points: List[QgsPointXY] = []
-        try:
-            point_on_surface = candidate.footprint.pointOnSurface()
-            if point_on_surface is not None and not point_on_surface.isEmpty():
-                point = point_on_surface.asPoint()
-                sample_points.append(QgsPointXY(point.x(), point.y()))
-            if candidate.footprint.type() == QgsWkbTypes.PolygonGeometry:
-                polygons = candidate.footprint.asMultiPolygon() if candidate.footprint.isMultipart() else [candidate.footprint.asPolygon()]
-                for polygon in polygons:
-                    if polygon and polygon[0]:
-                        sample_points.extend(QgsPointXY(point.x(), point.y()) for point in polygon[0])
-            bbox = candidate.footprint.boundingBox()
-            sample_points.extend(
-                [
-                    QgsPointXY(bbox.xMinimum(), bbox.yMinimum()),
-                    QgsPointXY(bbox.xMinimum(), bbox.yMaximum()),
-                    QgsPointXY(bbox.xMaximum(), bbox.yMinimum()),
-                    QgsPointXY(bbox.xMaximum(), bbox.yMaximum()),
-                    QgsPointXY((bbox.xMinimum() + bbox.xMaximum()) / 2.0, (bbox.yMinimum() + bbox.yMaximum()) / 2.0),
-                ]
-            )
-        except Exception:
-            return None, None
-        values = []
-        for point_xy in sample_points:
-            if not candidate.contains_xy(point_xy):
-                continue
-            elevation = candidate.elevation_at_xy(point_xy)
-            if elevation is not None and math.isfinite(elevation):
-                values.append(float(elevation))
-        return (min(values), max(values)) if values else (None, None)
 
     def _controlling_ols_subphase(self, message: str) -> bool:
         """Report an internal OLS phase and return false after a queued cancellation."""

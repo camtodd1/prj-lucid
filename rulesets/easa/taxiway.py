@@ -88,39 +88,6 @@ STAND_TAXILANE_OBJECT_SEPARATION_PARAMS: Dict[str, Dict[str, Any]] = {
     "F": {"offset_m": 47.5, "ref": EASA_TAXIWAY_SEPARATION_REF},
 }
 
-TABLE_D1_TRACEABILITY_ITEMS = {
-    "taxiway_runway_separation": {
-        "source": EASA_TAXIWAY_SEPARATION_REF,
-        "status": "operational_verified",
-        "implementation": "TAXIWAY_RUNWAY_SEPARATION_PARAMS",
-        "notes": "Table D-1 columns 2-9. Keyed by code number, code letter, and runway instrument group.",
-    },
-    "taxiway_to_taxiway_separation": {
-        "source": EASA_TAXIWAY_SEPARATION_REF,
-        "status": "operational_verified",
-        "implementation": "TAXIWAY_TO_TAXIWAY_SEPARATION_PARAMS",
-        "notes": "Table D-1 column 10.",
-    },
-    "taxiway_object_separation": {
-        "source": EASA_TAXIWAY_SEPARATION_REF,
-        "status": "operational_verified",
-        "implementation": "TAXIWAY_OBJECT_SEPARATION_PARAMS",
-        "notes": "Table D-1 column 11.",
-    },
-    "stand_taxilane_to_stand_taxilane_separation": {
-        "source": EASA_TAXIWAY_SEPARATION_REF,
-        "status": "operational_verified",
-        "implementation": "STAND_TAXILANE_TO_STAND_TAXILANE_SEPARATION_PARAMS",
-        "notes": "Table D-1 column 12.",
-    },
-    "stand_taxilane_object_separation": {
-        "source": EASA_TAXIWAY_SEPARATION_REF,
-        "status": "operational_verified",
-        "implementation": "STAND_TAXILANE_OBJECT_SEPARATION_PARAMS",
-        "notes": "Table D-1 column 13.",
-    },
-}
-
 PARALLEL_RUNWAY_SEPARATION_PARAMS: Dict[Tuple[str, int], Dict[str, Any]] = {
     ("NI_SIMULTANEOUS", 1): {
         "distance_m": 120.0,
@@ -163,31 +130,6 @@ PARALLEL_RUNWAY_SEPARATION_PARAMS: Dict[Tuple[str, int], Dict[str, Any]] = {
         "condition": "Parallel instrument runways intended for segregated parallel operations.",
     },
 }
-
-PARALLEL_RUNWAY_TRACEABILITY_ITEMS = {
-    "parallel_non_instrument_runways": {
-        "source": EASA_PARALLEL_NON_INSTRUMENT_RUNWAY_REF,
-        "status": "operational_verified",
-        "implementation": "PARALLEL_RUNWAY_SEPARATION_PARAMS[NI_SIMULTANEOUS]",
-        "notes": "Minimum distance is selected by the higher code number of the two non-instrument runways.",
-    },
-    "parallel_instrument_runways": {
-        "source": EASA_PARALLEL_INSTRUMENT_RUNWAY_REF,
-        "status": "operational_verified",
-        "implementation": "PARALLEL_RUNWAY_SEPARATION_PARAMS[INSTR_*]",
-        "notes": "Minimum distance is selected by parallel operation type. Segregated operations apply threshold stagger adjustments.",
-    },
-}
-
-TAXIWAY_TRACEABILITY = {
-    "source_publication": SOURCE_PUBLICATION,
-    "source_url": SOURCE_URL,
-    "items": {
-        **TABLE_D1_TRACEABILITY_ITEMS,
-        **PARALLEL_RUNWAY_TRACEABILITY_ITEMS,
-    },
-}
-
 
 def _arc_letter(arc_let: Optional[str]) -> str:
     return arc_let.strip().upper() if arc_let else ""
@@ -250,11 +192,6 @@ def _segregated_parallel_distance(base_distance_m: float, arrival_threshold_stag
 def _copy_by_letter(params_by_letter: Dict[str, Dict[str, Any]], arc_let: Optional[str]) -> Optional[Dict[str, Any]]:
     params = params_by_letter.get(_arc_letter(arc_let))
     return params.copy() if params else None
-
-
-def get_taxiway_traceability() -> Dict[str, Any]:
-    """Return source traceability metadata for EASA taxiway/separation rules."""
-    return TAXIWAY_TRACEABILITY.copy()
 
 
 def get_taxiway_separation_offset(
@@ -362,10 +299,6 @@ __all__ = [
     "STAND_TAXILANE_TO_STAND_TAXILANE_SEPARATION_PARAMS",
     "STAND_TAXILANE_OBJECT_SEPARATION_PARAMS",
     "PARALLEL_RUNWAY_SEPARATION_PARAMS",
-    "TAXIWAY_TRACEABILITY",
-    "TABLE_D1_TRACEABILITY_ITEMS",
-    "PARALLEL_RUNWAY_TRACEABILITY_ITEMS",
-    "get_taxiway_traceability",
     "get_taxiway_separation_offset",
     "get_taxiway_to_taxiway_separation",
     "get_taxiway_object_separation",

@@ -68,8 +68,6 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         self.assertIs(baseline.parentWidget(), self.dialog.groupBox_olsWorkflow)
         self.assertIs(comparison.parentWidget(), self.dialog.groupBox_olsWorkflow)
-        self.assertTrue(self.dialog.label_protected_airspace_policy.isHidden())
-        self.assertTrue(self.dialog.protected_airspace_policy_combo.isHidden())
         self.assertEqual(self.dialog.groupBox_olsWorkflow.title(), "OLS rulesets")
         self.assertEqual(
             self.dialog.label_baselineOlsRuleset.text(),
@@ -458,7 +456,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.select_mode("modernisation_comparison")
 
         self.assertEqual(
-            self.dialog.protected_airspace_policy_combo.currentData(),
+            self.dialog._legacy_ols_policy_for_selection(),
             "modernisation_comparison",
         )
         self.assertEqual(
@@ -477,7 +475,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             ("icao_annex14_vol1_modernised_ofs_oes", "mos139_2019"),
         )
         self.assertEqual(
-            self.dialog.protected_airspace_policy_combo.currentData(),
+            self.dialog._legacy_ols_policy_for_selection(),
             "ruleset_comparison",
         )
         self.dialog.toolButtonContourOverrides.setChecked(True)

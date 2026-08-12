@@ -3,7 +3,6 @@
 
 import os.path
 import math
-import re
 import traceback
 from datetime import datetime, timezone
 from pathlib import Path
@@ -69,8 +68,6 @@ from .core.family_modules import (
     family_input_signature,
 )
 from .core.run_log import (
-    GenerationOutcome,
-    OutcomeStatus,
     QgsMessageLog,
     RunLog,
     set_active_run_log,
@@ -258,7 +255,7 @@ class SafeguardingBuilder(
         self.cns_contour_intervals: Dict[str, float] = {}
         self.protected_airspace_policy: str = "ruleset_aligned"
         self._run_log: Optional[RunLog] = None
-        self._generation_outcomes: List[GenerationOutcome] = []
+        self._generation_outcomes: List[Dict[str, Any]] = []
         self.ruleset = get_ruleset_profile()
         self.baseline_ols_ruleset = self.ruleset
         self.comparison_ols_ruleset = None
@@ -326,10 +323,6 @@ class SafeguardingBuilder(
         run_log = getattr(self, "_run_log", None)
         if run_log is not None:
             run_log.diagnostic(topic or "generation", message)
-
-    def _debug_development_outputs_enabled(self) -> bool:
-        """Return whether development-only layer-tree outputs should be generated."""
-        return False
 
     def _crs_is_geographic(self, crs: QgsCoordinateReferenceSystem) -> bool:
         """Return True when a CRS uses angular units and is unsuitable for metre buffers."""
@@ -458,7 +451,7 @@ class SafeguardingBuilder(
             runway_data["calculated_strip_dims"] = strip_parameters
             runway_data["_calculated_strip_ruleset_id"] = self.ruleset.id
             runway_data["_shared_design_strip_dims"] = dict(strip_parameters)
-            clearway_specs = self._calculate_effective_clearway_specs(
+            self._calculate_effective_clearway_specs(
                 runway_data,
                 physical_length,
                 ruleset=ruleset,
@@ -1285,10 +1278,9 @@ class SafeguardingBuilder(
                 groups["cns_technical_safeguarding"],
                 output_structure.METEOROLOGICAL_STATION,
             )
-            met_ok, _ = self.process_met_station_surfaces(
+            met_ok = self.process_met_station_surfaces(
                 met_point,
                 self.icao_code,
-                target_crs,
                 met_group,
                 met_group,
             )
@@ -1399,13 +1391,11 @@ class SafeguardingBuilder(
                     self.icao_code,
                     groups.get("ols_surfaces"),
                     groups.get("airport_wide_ols"),
-                    groups.get("debug_development"),
                     solved_engines=solved_engines,
                 )
             else:
                 controlling_ok = self._create_controlling_ols_layers(
                     self.icao_code,
-                    groups.get("debug_development"),
                     groups.get("controlling_ols_surfaces"),
                     groups.get("controlling_contours"),
                     solved_engines=solved_engines,
@@ -1417,7 +1407,6 @@ class SafeguardingBuilder(
                     self.icao_code,
                     processed,
                     groups,
-                    groups.get("debug_development"),
                     solved_baseline_engines=solved_engines,
                 ) or created
         self._write_ols_table_report(self.icao_code)
@@ -2170,40 +2159,28 @@ class SafeguardingBuilder(
     def _record_generation_outcome(
         self,
         scope: str,
-        status: OutcomeStatus,
+        status: str,
         *,
         reason: Optional[str] = None,
         layers: Optional[int] = None,
         features: Optional[int] = None,
         facts: Optional[Dict[str, Any]] = None,
-    ) -> GenerationOutcome:
+    ) -> Dict[str, Any]:
         """Retain a machine-readable build result without duplicating run-log events."""
-        outcome = GenerationOutcome(
-            scope=scope,
-            status=status,
-            reason=reason,
-            layers=layers,
-            features=features,
-            facts=dict(facts or {}),
-        )
+        outcome = {
+            "scope": scope,
+            "status": status,
+            "reason": reason,
+            "layers": layers,
+            "features": features,
+            "facts": dict(facts or {}),
+        }
         self._generation_outcomes.append(outcome)
-        if self._run_log is not None:
-            self._run_log.record_outcome(outcome, emit=False)
         return outcome
 
     def generation_outcome_snapshot(self) -> List[Dict[str, Any]]:
         """Return JSON-safe outcomes for runtime tests and external callers."""
-        return [
-            {
-                "scope": outcome.scope,
-                "status": outcome.status.value,
-                "reason": outcome.reason,
-                "layers": outcome.layers,
-                "features": outcome.features,
-                "facts": dict(outcome.facts),
-            }
-            for outcome in self._generation_outcomes
-        ]
+        return [dict(outcome) for outcome in self._generation_outcomes]
 
     def _generated_output_delta(self, start_index: int) -> Tuple[int, int]:
         """Count layers and features added after a construction stage began."""
@@ -2504,7 +2481,6 @@ class SafeguardingBuilder(
             ols_surfaces_group = output_groups.get("ols_surfaces")
             if ols_surfaces_group is None:
                 ols_surfaces_group = main_group
-            debug_group = output_groups.get("debug_development")
             controlling_ols_surfaces_group = output_groups.get("controlling_ols_surfaces")
             if controlling_ols_surfaces_group is None:
                 controlling_ols_surfaces_group = ols_surfaces_group
@@ -2512,7 +2488,6 @@ class SafeguardingBuilder(
             if controlling_contours_group is None:
                 controlling_contours_group = controlling_ols_surfaces_group
 
-            arp_layer_created = False
             if arp_point is not None:
                 arp_layer = self.create_arp_layer(
                     arp_point,
@@ -2523,8 +2498,6 @@ class SafeguardingBuilder(
                     reference_group,
                     self.arp_elevation_amsl,
                 )
-                if arp_layer is not None:
-                    arp_layer_created = True
                 if self.arp_elevation_amsl is None and arp_layer is not None:
                     fetched_elev = self._try_get_arp_elevation_from_layer(arp_layer)
                     if fetched_elev is not None:
@@ -2538,17 +2511,15 @@ class SafeguardingBuilder(
                 self._ensure_layer_group(reference_group, output_structure.RUNWAY_CENTRE_LINES) or reference_group
             )
 
-            met_layers_created_ok = False
             if met_point is not None:
                 met_group = self._ensure_layer_group(
                     cns_safeguarding_group,
                     output_structure.METEOROLOGICAL_STATION,
                 )
                 if met_group is not None:
-                    met_layers_created_ok, _ = self.process_met_station_surfaces(
+                    self.process_met_station_surfaces(
                         met_point,
                         icao_code,
-                        target_crs,
                         met_group,
                         met_group,
                     )
@@ -2772,7 +2743,6 @@ class SafeguardingBuilder(
                         icao_code,
                         runway_ols_group,
                         airport_wide_ols_group,
-                        debug_group,
                         solved_engines=solved_ols_engines,
                     )
                 else:
@@ -2783,7 +2753,6 @@ class SafeguardingBuilder(
                     )
                     controlling_ols_ok = self._create_controlling_ols_layers(
                         icao_code,
-                        debug_group,
                         controlling_ols_surfaces_group,
                         controlling_contours_group,
                         solved_engines=solved_ols_engines,
@@ -2795,9 +2764,9 @@ class SafeguardingBuilder(
                 self._record_generation_outcome(
                     "controlling protected-airspace envelope",
                     (
-                        OutcomeStatus.GENERATED
+                        "generated"
                         if controlling_ols_ok
-                        else OutcomeStatus.FAILED
+                        else "failed"
                     ),
                     reason=(
                         None
@@ -2825,7 +2794,6 @@ class SafeguardingBuilder(
                         icao_code,
                         processed_runway_data_list,
                         output_groups,
-                        debug_group,
                         solved_baseline_engines=solved_ols_engines,
                     )
                     comparison_layers, comparison_features = self._generated_output_delta(
@@ -2834,9 +2802,9 @@ class SafeguardingBuilder(
                     self._record_generation_outcome(
                         "OLS ruleset comparison",
                         (
-                            OutcomeStatus.GENERATED
+                            "generated"
                             if comparison_ok
-                            else OutcomeStatus.FAILED
+                            else "failed"
                         ),
                         reason=(
                             None
@@ -2870,7 +2838,6 @@ class SafeguardingBuilder(
                 return
             self._write_ols_table_report(icao_code)
             self._write_runway_summary_report(icao_code, processed_runway_data_list)
-            self._repair_output_layer_tree(main_group)
             self._remove_empty_generated_groups(main_group)
             self._collapse_layer_tree_groups(main_group)
 
@@ -3749,13 +3716,6 @@ class SafeguardingBuilder(
             else None
         )
         groups["nasf_guidelines"] = groups["external_safeguarding"]
-        groups["debug_development"] = (
-            self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
-            if self._debug_development_outputs_enabled()
-            and enabled("protected_airspace")
-            else None
-        )
-
         infrastructure_group = groups["aerodrome_infrastructure"]
         if infrastructure_group is not None:
             groups["markings"] = self._ensure_layer_group(infrastructure_group, output_structure.MARKINGS)
@@ -3877,7 +3837,6 @@ class SafeguardingBuilder(
         icao_code: str,
         processed_runway_data_list: List[dict],
         output_groups: Dict[str, Optional[QgsLayerTreeGroup]],
-        debug_group: Optional[QgsLayerTreeGroup],
         solved_baseline_engines: Optional[Dict[str, Any]] = None,
     ) -> bool:
         """Generate the selected comparison ruleset and compare solved envelopes."""
@@ -3889,7 +3848,6 @@ class SafeguardingBuilder(
                 icao_code,
                 processed_runway_data_list,
                 output_groups,
-                debug_group,
                 solved_baseline_engine=(solved_baseline_engines or {}).get("baseline"),
             )
 
@@ -3992,13 +3950,11 @@ class SafeguardingBuilder(
                     icao_code,
                     comparison_primary_group,
                     comparison_secondary_group,
-                    debug_group,
                     solved_engines=solved_comparison_engines,
                 )
             else:
                 controlling_created = self._create_controlling_ols_layers(
                     icao_code,
-                    debug_group,
                     comparison_controlling_group,
                     comparison_controlling_group,
                     solved_engines=solved_comparison_engines,
@@ -4041,7 +3997,6 @@ class SafeguardingBuilder(
         icao_code: str,
         processed_runway_data_list: List[dict],
         output_groups: Dict[str, Optional[QgsLayerTreeGroup]],
-        debug_group: Optional[QgsLayerTreeGroup],
         solved_baseline_engine=None,
     ) -> bool:
         """Generate future OFS/OES beside the selected baseline and compare envelopes."""
@@ -4099,7 +4054,6 @@ class SafeguardingBuilder(
                 icao_code,
                 future_ofs_group,
                 future_oes_group,
-                debug_group,
                 solved_engines=solved_future_engines,
             )
             comparison_created = self._create_ols_modernisation_comparison_layers(
@@ -4150,456 +4104,6 @@ class SafeguardingBuilder(
                 level=Qgis.Warning,
             )
             return False
-
-    def _merge_or_move_direct_group(
-        self,
-        parent_group: QgsLayerTreeGroup,
-        source_group_name: str,
-        destination_group: QgsLayerTreeGroup,
-    ) -> bool:
-        """Move a direct child group into a destination, merging with an existing child group if present."""
-        source_group = self._find_direct_child_group(parent_group, source_group_name)
-        if source_group is None or destination_group is None or source_group == destination_group:
-            return False
-
-        existing_destination_child = self._find_direct_child_group(destination_group, source_group_name)
-        if existing_destination_child is None:
-            return self._move_layer_tree_node(source_group, destination_group)
-
-        moved_any = False
-        for child in list(source_group.children()):
-            moved_any = self._move_layer_tree_node(child, existing_destination_child) or moved_any
-        try:
-            parent_group.removeChildNode(source_group)
-        except Exception as e:
-            QgsMessageLog.logMessage(
-                f"Warning: Failed to remove empty duplicate group '{source_group_name}': {e}",
-                PLUGIN_TAG,
-                level=Qgis.Warning,
-            )
-        return moved_any
-
-    def _repair_output_layer_tree(self, main_group: QgsLayerTreeGroup) -> None:
-        """Move known generated nodes into the reviewed layer hierarchy if QGIS added them at root level."""
-        if main_group is None:
-            return
-
-        reference_group = self._ensure_layer_group(main_group, output_structure.REFERENCE_DATA)
-        infrastructure_group = self._ensure_layer_group(main_group, output_structure.AERODROME_INFRASTRUCTURE)
-        protection_group = self._ensure_layer_group(main_group, output_structure.RUNWAY_PROTECTION_AND_SEPARATION)
-        protected_airspace_group = self._ensure_layer_group(main_group, output_structure.PROTECTED_AIRSPACE)
-        cns_safeguarding_group = self._ensure_layer_group(
-            main_group, output_structure.CNS_TECHNICAL_SAFEGUARDING
-        )
-        baseline_surface_group = self._ensure_layer_group(
-            protected_airspace_group,
-            self._baseline_ols_group_name(),
-        )
-        if self._is_future_annex14_protected_airspace():
-            obstacle_free_zone_group = None
-            primary_surfaces_group = self._ensure_layer_group(baseline_surface_group, "OFS")
-            secondary_surfaces_group = self._ensure_layer_group(baseline_surface_group, "OES")
-            controlling_surfaces_group = baseline_surface_group
-        else:
-            obstacle_free_zone_group = self._ensure_layer_group(
-                baseline_surface_group,
-                output_structure.OBSTACLE_FREE_ZONE,
-            )
-            primary_surfaces_group = (
-                self._ensure_layer_group(baseline_surface_group, output_structure.PRIMARY_SURFACES)
-                if baseline_surface_group is not None
-                else None
-            )
-            secondary_surfaces_group = self._ensure_layer_group(
-                baseline_surface_group,
-                output_structure.SECONDARY_SURFACES,
-            )
-            controlling_surfaces_group = self._ensure_layer_group(
-                baseline_surface_group,
-                output_structure.CONTROLLING_SURFACES,
-            )
-        framework = self.get_active_framework()
-        external_group = self._ensure_layer_group(main_group, framework.safeguarding_group_name())
-        debug_outputs_enabled = self._debug_development_outputs_enabled()
-        debug_group = (
-            self._ensure_layer_group(main_group, output_structure.DEBUG_DEVELOPMENT)
-            if debug_outputs_enabled
-            else None
-        )
-        if (
-            reference_group is None
-            or infrastructure_group is None
-            or protection_group is None
-            or protected_airspace_group is None
-            or cns_safeguarding_group is None
-            or baseline_surface_group is None
-            or (
-                not self._is_future_annex14_protected_airspace()
-                and obstacle_free_zone_group is None
-            )
-            or primary_surfaces_group is None
-            or secondary_surfaces_group is None
-            or controlling_surfaces_group is None
-            or external_group is None
-        ):
-            return
-
-        baseline_child_names = (
-            output_structure.OBSTACLE_FREE_ZONE,
-            output_structure.PRIMARY_SURFACES,
-            output_structure.SECONDARY_SURFACES,
-            output_structure.CONTROLLING_SURFACES,
-            "OFS",
-            "OES",
-        )
-        for child_name in baseline_child_names:
-            self._merge_or_move_direct_group(
-                protected_airspace_group,
-                self.tr(child_name),
-                baseline_surface_group,
-            )
-
-        if debug_group is not None:
-            for child in list(debug_group.children()):
-                if not isinstance(child, QgsLayerTreeLayer):
-                    continue
-                layer = child.layer()
-                layer_name = layer.name() if layer is not None else child.name()
-                style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
-                if style_key == "OLS Controlling Planar Region" or "OLS Controlling Planar Regions" in layer_name:
-                    self._move_layer_tree_node(child, controlling_surfaces_group)
-                elif style_key == "OLS Controlling Contour" or "OLS Controlling Contours" in layer_name:
-                    self._move_layer_tree_node(child, controlling_surfaces_group)
-
-        runway_centreline_group = self._ensure_layer_group(reference_group, output_structure.RUNWAY_CENTRE_LINES)
-        self._merge_or_move_direct_group(main_group, self.tr("Runway Centrelines"), reference_group)
-        self._merge_or_move_direct_group(main_group, self.tr(output_structure.RUNWAY_CENTRE_LINES), reference_group)
-        for source_group in (main_group, reference_group, infrastructure_group):
-            self._merge_or_move_direct_group(
-                source_group,
-                self.tr(output_structure.METEOROLOGICAL_STATION),
-                cns_safeguarding_group,
-            )
-        for source_group in (main_group, reference_group):
-            self._merge_or_move_direct_group(
-                source_group,
-                self.tr("CNS Facilities / Source Facilities"),
-                cns_safeguarding_group,
-            )
-            self._merge_or_move_direct_group(
-                source_group,
-                self.tr(output_structure.CNS_TECHNICAL_FACILITIES),
-                cns_safeguarding_group,
-            )
-
-        for child in list(main_group.children()):
-            if not isinstance(child, QgsLayerTreeLayer):
-                continue
-            layer = child.layer()
-            layer_name = layer.name() if layer is not None else child.name()
-            style_key = layer.customProperty("safeguarding_style_key") if layer is not None else None
-            if style_key == "ARP" or layer_name.endswith(f" {self.tr('ARP')}"):
-                self._move_layer_tree_node(child, reference_group)
-            elif "Centreline" in layer_name and runway_centreline_group is not None:
-                self._move_layer_tree_node(child, runway_centreline_group)
-
-        agl_group = self._find_direct_child_group(
-            main_group,
-            self.tr(output_structure.AIRFIELD_GROUND_LIGHTING),
-        )
-        for source_parent in (main_group, infrastructure_group):
-            for legacy_agl_name in (
-                "Airfield Ground Lighting (AGL)",
-                "Airfield Ground Lighting",
-            ):
-                legacy_agl = self._find_direct_child_group(
-                    source_parent,
-                    self.tr(legacy_agl_name),
-                )
-                if legacy_agl is None or legacy_agl == agl_group:
-                    continue
-                if agl_group is None:
-                    legacy_agl.setName(
-                        self.tr(output_structure.AIRFIELD_GROUND_LIGHTING)
-                    )
-                    if source_parent != main_group:
-                        self._move_layer_tree_node(legacy_agl, main_group)
-                    agl_group = self._find_direct_child_group(
-                        main_group,
-                        self.tr(output_structure.AIRFIELD_GROUND_LIGHTING),
-                    )
-                else:
-                    self._merge_group_contents(legacy_agl, agl_group)
-                    source_parent.removeChildNode(legacy_agl)
-
-        for group_name in [
-            output_structure.MARKINGS,
-            output_structure.PHYSICAL_GEOMETRY,
-        ]:
-            self._merge_or_move_direct_group(main_group, self.tr(group_name), infrastructure_group)
-
-        physical_geometry_group = self._find_group_by_path(
-            main_group, [output_structure.AERODROME_INFRASTRUCTURE, output_structure.PHYSICAL_GEOMETRY]
-        )
-        if physical_geometry_group is not None and runway_centreline_group is not None:
-            for child in list(physical_geometry_group.children()):
-                if not isinstance(child, QgsLayerTreeLayer):
-                    continue
-                layer = child.layer()
-                layer_name = layer.name() if layer is not None else child.name()
-                style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
-                if style_key == "Runway Centreline" or (
-                    "Centreline" in layer_name and "Marking" not in layer_name
-                ):
-                    self._move_layer_tree_node(child, runway_centreline_group)
-
-        for group_name in [
-            output_structure.RUNWAY_PROTECTION_AREAS,
-            output_structure.SPECIALISED_RUNWAY_SAFEGUARDING,
-        ]:
-            self._merge_or_move_direct_group(main_group, self.tr(group_name), protection_group)
-
-        legacy_cns_name = self.tr("CNS / Technical Safeguarding")
-        for legacy_parent in (main_group, external_group):
-            legacy_cns_group = self._find_direct_child_group(
-                legacy_parent, legacy_cns_name
-            )
-            if legacy_cns_group is None or legacy_cns_group == cns_safeguarding_group:
-                continue
-            for child in list(legacy_cns_group.children()):
-                self._move_layer_tree_node(child, cns_safeguarding_group)
-            if not legacy_cns_group.children():
-                legacy_parent.removeChildNode(legacy_cns_group)
-
-        for group_name in framework.guideline_group_names(include_cns=False):
-            self._merge_or_move_direct_group(main_group, self.tr(group_name), external_group)
-
-        self._repair_debug_development_layer_tree(main_group, debug_group)
-
-        legacy_guideline_f_name = self.tr("Guideline F - Airspace / OLS")
-        self._merge_or_move_direct_group(main_group, legacy_guideline_f_name, primary_surfaces_group)
-        legacy_guideline_f_group = self._find_direct_child_group(
-            primary_surfaces_group, legacy_guideline_f_name
-        )
-        if legacy_guideline_f_group is not None:
-            for child in list(legacy_guideline_f_group.children()):
-                self._move_layer_tree_node(child, primary_surfaces_group)
-            if not legacy_guideline_f_group.children():
-                primary_surfaces_group.removeChildNode(legacy_guideline_f_group)
-        for child in list(main_group.children()):
-            if isinstance(child, QgsLayerTreeGroup) and re.fullmatch(r"RWY\s+\S+", child.name() or ""):
-                self._merge_or_move_direct_group(main_group, child.name(), primary_surfaces_group)
-
-        # Migrate the former OLS hierarchy and any legacy category groups into the
-        # three reviewed folders without retaining extra wrapper levels.
-        legacy_ols_names = [output_structure.OLS_SURFACES, "Annex 14 Future OLS Standard"]
-        legacy_primary_names = [
-            self.get_active_framework().guideline_f_subgroup_names()["runway"],
-            "Future Annex 14 OLS Surfaces",
-        ]
-        legacy_ofz_names = [
-            self.get_active_framework().guideline_f_subgroup_names()["ofz"],
-        ]
-        airport_wide_legacy_name = self.get_active_framework().guideline_f_subgroup_names()["airport_wide"]
-        for legacy_name, destination in [
-            (airport_wide_legacy_name, secondary_surfaces_group),
-            *((name, primary_surfaces_group) for name in legacy_primary_names),
-            *((name, obstacle_free_zone_group) for name in legacy_ofz_names),
-        ]:
-            if destination is None:
-                continue
-            legacy_group = self._find_direct_child_group(main_group, self.tr(legacy_name))
-            if legacy_group is not None:
-                for child in list(legacy_group.children()):
-                    self._move_layer_tree_node(child, destination)
-                if not legacy_group.children():
-                    main_group.removeChildNode(legacy_group)
-        for legacy_name in legacy_ols_names:
-            legacy_group = self._find_direct_child_group(protected_airspace_group, self.tr(legacy_name))
-            if legacy_group is None:
-                continue
-            airport_wide_name = self.tr(airport_wide_legacy_name)
-            airport_wide_group = self._find_direct_child_group(legacy_group, airport_wide_name)
-            if airport_wide_group is not None:
-                for child in list(airport_wide_group.children()):
-                    self._move_layer_tree_node(child, secondary_surfaces_group)
-                if not airport_wide_group.children():
-                    legacy_group.removeChildNode(airport_wide_group)
-            for primary_name in legacy_primary_names:
-                primary_group = self._find_direct_child_group(legacy_group, self.tr(primary_name))
-                if primary_group is not None:
-                    for child in list(primary_group.children()):
-                        self._move_layer_tree_node(child, primary_surfaces_group)
-                    if not primary_group.children():
-                        legacy_group.removeChildNode(primary_group)
-            for ofz_name in legacy_ofz_names:
-                ofz_legacy_group = self._find_direct_child_group(
-                    legacy_group, self.tr(ofz_name)
-                )
-                if ofz_legacy_group is not None and obstacle_free_zone_group is not None:
-                    for child in list(ofz_legacy_group.children()):
-                        self._move_layer_tree_node(child, obstacle_free_zone_group)
-                    if not ofz_legacy_group.children():
-                        legacy_group.removeChildNode(ofz_legacy_group)
-            for child in list(legacy_group.children()):
-                self._move_layer_tree_node(child, primary_surfaces_group)
-            if not legacy_group.children():
-                protected_airspace_group.removeChildNode(legacy_group)
-
-        for legacy_name in [output_structure.CONTROLLING_OLS_SURFACES, output_structure.CONTROLLING_CONTOURS]:
-            legacy_group = self._find_direct_child_group(protected_airspace_group, self.tr(legacy_name))
-            if legacy_group is not None:
-                for child in list(legacy_group.children()):
-                    self._move_layer_tree_node(child, controlling_surfaces_group)
-                if not legacy_group.children():
-                    protected_airspace_group.removeChildNode(legacy_group)
-
-        self._repair_guideline_f_layer_tree(
-            primary_surfaces_group,
-            secondary_surfaces_group,
-            obstacle_free_zone_group,
-            extra_source_groups=[main_group],
-        )
-        self._repair_debug_development_layer_tree(main_group, debug_group)
-
-    def _is_legacy_diagnostic_layer(self, node: QgsLayerTreeLayer) -> bool:
-        """Return True for legacy proof-of-concept layers that still need migration."""
-        layer = node.layer()
-        layer_name = layer.name() if layer is not None else node.name()
-        style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
-        if style_key in {"OLS Controlling Planar Region", "OLS Controlling Contour"} or any(
-            production_name in layer_name
-            for production_name in ["OLS Controlling Planar Regions", "OLS Controlling Contours"]
-        ):
-            return False
-        return "POC" in layer_name
-
-    def _repair_debug_development_layer_tree(
-        self,
-        root_group: QgsLayerTreeGroup,
-        debug_group: Optional[QgsLayerTreeGroup],
-    ) -> None:
-        """Move legacy proof-of-concept layers into the diagnostic group."""
-        if root_group is None or debug_group is None:
-            return
-
-        def visit(group: QgsLayerTreeGroup) -> None:
-            for child in list(group.children()):
-                if isinstance(child, QgsLayerTreeLayer):
-                    if group != debug_group and self._is_legacy_diagnostic_layer(child):
-                        self._move_layer_tree_node(child, debug_group)
-                elif isinstance(child, QgsLayerTreeGroup) and child != debug_group:
-                    visit(child)
-
-        visit(root_group)
-
-    def _repair_guideline_f_layer_tree(
-        self,
-        primary_surfaces_group: QgsLayerTreeGroup,
-        secondary_surfaces_group: QgsLayerTreeGroup,
-        obstacle_free_zone_group: Optional[QgsLayerTreeGroup] = None,
-        extra_source_groups: Optional[List[QgsLayerTreeGroup]] = None,
-    ) -> None:
-        """Move direct OLS layers into the reviewed primary/secondary folders."""
-        if primary_surfaces_group is None or secondary_surfaces_group is None:
-            return
-
-        airport_wide_style_keys = {
-            "OLS IHS",
-            "OLS Conical",
-            "OLS Conical Contour",
-            "OLS OHS",
-            "OLS Transitional",
-            "OLS Transitional Contour",
-        }
-        runway_style_keys = {
-            "OLS Approach",
-            "OLS Approach Contour",
-            "OLS TOCS",
-            "OLS TOCS Contour",
-        }
-        ofz_style_keys = {
-            "OLS Inner Approach",
-            "OLS Inner Transitional",
-            "OLS Baulked Landing",
-            "OLS OFZ Contour",
-        }
-
-        def ols_destination_for_node(node: QgsLayerTreeLayer) -> Optional[QgsLayerTreeGroup]:
-            if self._is_legacy_diagnostic_layer(node):
-                return None
-            layer = node.layer()
-            layer_name = layer.name() if layer is not None else node.name()
-            style_key = str(layer.customProperty("safeguarding_style_key") or "") if layer is not None else ""
-
-            if style_key in ofz_style_keys or any(
-                label in layer_name
-                for label in [
-                    "OLS Inner Approach",
-                    "OLS Inner Transitional",
-                    "OLS Baulked Landing",
-                ]
-            ):
-                if obstacle_free_zone_group is not None:
-                    runway_match = re.search(
-                        r"^.+?\s+(\S+)\s+-\s+(?:Surface|Contours)$",
-                        layer_name,
-                    ) or re.search(r"\bRWY\s+(\S+)$", layer_name)
-                    if runway_match:
-                        return self._ensure_layer_group(
-                            obstacle_free_zone_group,
-                            f"RWY {runway_match.group(1)}",
-                        )
-                    return obstacle_free_zone_group
-                return primary_surfaces_group
-            if style_key in airport_wide_style_keys or any(
-                label in layer_name
-                for label in [
-                    "OLS IHS",
-                    "OLS Conical",
-                    "OLS OHS",
-                    "OLS Transitional",
-                ]
-            ):
-                return secondary_surfaces_group
-            if style_key in runway_style_keys or any(
-                label in layer_name
-                for label in [
-                    "OLS Approach",
-                    "OLS TOCS",
-                ]
-            ):
-                return primary_surfaces_group
-            return None
-
-        if obstacle_free_zone_group is not None:
-            for runway_group in list(primary_surfaces_group.children()):
-                if not isinstance(runway_group, QgsLayerTreeGroup):
-                    continue
-                nested_ofz = self._find_direct_child_group(
-                    runway_group, self.tr(output_structure.OBSTACLE_FREE_ZONE)
-                )
-                if nested_ofz is None:
-                    continue
-                destination_runway = self._ensure_layer_group(
-                    obstacle_free_zone_group, runway_group.name()
-                )
-                for child in list(nested_ofz.children()):
-                    self._move_layer_tree_node(child, destination_runway)
-                if not nested_ofz.children():
-                    runway_group.removeChildNode(nested_ofz)
-
-        source_groups = [primary_surfaces_group, secondary_surfaces_group]
-        if obstacle_free_zone_group is not None:
-            source_groups.append(obstacle_free_zone_group)
-        source_groups.extend(group for group in (extra_source_groups or []) if group is not None)
-        for group in source_groups:
-            for child in list(group.children()):
-                if not isinstance(child, QgsLayerTreeLayer):
-                    continue
-                destination_group = ols_destination_for_node(child)
-                if destination_group is not None and destination_group != group:
-                    self._move_layer_tree_node(child, destination_group)
 
     def _create_guideline_groups(
         self,
@@ -4976,11 +4480,8 @@ class SafeguardingBuilder(
         """Emit one concise output line per populated user-facing section."""
         if main_group is None or self._run_log is None:
             return
-        debug_name = self.tr(output_structure.DEBUG_DEVELOPMENT)
         for child in main_group.children():
             if isinstance(child, QgsLayerTreeGroup):
-                if child.name() == debug_name:
-                    continue
                 layers, features, _ = self._count_layer_tree_contents(child)
                 if layers > 0 and features > 0:
                     self._run_log.output(

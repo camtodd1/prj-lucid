@@ -90,23 +90,6 @@ class PersistenceMixin:
                 return None
         return None
 
-    def _protected_airspace_policy_combo_widget(self):
-        combo = getattr(self, "protected_airspace_policy_combo", None)
-        try:
-            if isinstance(combo, QComboBox):
-                _ = combo.currentIndex()
-                return combo
-        except RuntimeError:
-            pass
-        combo = self.findChild(QComboBox, "comboBox_protected_airspace_policy") if hasattr(self, "findChild") else None
-        if isinstance(combo, QComboBox):
-            try:
-                _ = combo.currentIndex()
-                return combo
-            except RuntimeError:
-                return None
-        return None
-
     def _pick_json_file(self, title: str, accept_mode: QFileDialog.AcceptMode, initial_path: str = "") -> str:
         """Use a Qt file dialog that behaves reliably inside the plugin shell."""
         file_filter = self.tr("JSON Files (*.json)")
@@ -172,10 +155,6 @@ class PersistenceMixin:
             framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
         if hasattr(self, "_reset_safeguarding_options"):
             self._reset_safeguarding_options()
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
-        if isinstance(protected_airspace_combo, QComboBox):
-            idx = protected_airspace_combo.findData("ruleset_aligned")
-            protected_airspace_combo.setCurrentIndex(idx if idx >= 0 else 0)
         if hasattr(self, "_set_ols_ruleset_selection"):
             self._set_ols_ruleset_selection(DEFAULT_RULESET_ID, "")
 
@@ -320,10 +299,11 @@ class PersistenceMixin:
     def _build_save_payload(self, icao_code: str):
         ruleset_combo = self._ruleset_combo_widget()
         framework_combo = self._framework_combo_widget()
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
         design_standard = ruleset_combo.currentData() if ruleset_combo else DEFAULT_RULESET_ID
         protected_airspace_policy = (
-            protected_airspace_combo.currentData() if protected_airspace_combo else "ruleset_aligned"
+            self._legacy_ols_policy_for_selection()
+            if hasattr(self, "_legacy_ols_policy_for_selection")
+            else "ruleset_aligned"
         )
         baseline_ols_ruleset = design_standard
         comparison_ols_ruleset = ""
@@ -435,12 +415,6 @@ class PersistenceMixin:
         framework_combo = self._framework_combo_widget()
         if isinstance(framework_combo, QComboBox) and framework_combo.currentData() not in {None, DEFAULT_FRAMEWORK_ID}:
             return True
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
-        if (
-            isinstance(protected_airspace_combo, QComboBox)
-            and protected_airspace_combo.currentData() not in {None, "ruleset_aligned"}
-        ):
-            return True
         if hasattr(self, "_current_ols_ruleset_ids"):
             baseline_ols_ruleset, comparison_ols_ruleset = self._current_ols_ruleset_ids()
             if baseline_ols_ruleset != DEFAULT_RULESET_ID or comparison_ols_ruleset:
@@ -515,11 +489,6 @@ class PersistenceMixin:
             framework_combo.setCurrentIndex(idx if idx >= 0 else 0)
         if hasattr(self, "_apply_safeguarding_options"):
             self._apply_safeguarding_options(loaded_data.get("safeguarding_options", {}))
-        protected_airspace_combo = self._protected_airspace_policy_combo_widget()
-        if isinstance(protected_airspace_combo, QComboBox):
-            policy_id = loaded_data.get("protected_airspace_policy", "ruleset_aligned")
-            idx = protected_airspace_combo.findData(policy_id)
-            protected_airspace_combo.setCurrentIndex(idx if idx >= 0 else 0)
         if hasattr(self, "_set_ols_ruleset_selection"):
             baseline_ols_ruleset = loaded_data.get("baseline_ols_ruleset")
             comparison_ols_ruleset = loaded_data.get("comparison_ols_ruleset")

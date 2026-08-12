@@ -6,7 +6,6 @@ import argparse
 import hashlib
 import json
 import math
-import os
 import statistics
 import subprocess
 import sys
@@ -656,7 +655,7 @@ def _comparison_metrics(
 
 def _layer_metrics(
     project: QgsProject,
-    controlling_engines: Optional[Iterable[object]] = None,
+    controlling_engines: Iterable[object],
 ) -> Dict[str, object]:
     style_counts: Dict[str, int] = defaultdict(int)
     styles_to_geometries: Dict[str, List[QgsGeometry]] = defaultdict(list)
@@ -771,39 +770,13 @@ def _layer_metrics(
                 "overlap_pairs": overlap_pairs,
             })
 
-    if controlling_engines is not None:
-        controlling = _controlling_metrics_from_engines(
-            controlling_engines,
-            {
-                family: styles_to_geometries[f"Annex 14 Controlling {family}"]
-                for family in ("OFS", "OES")
-            },
-        )
-    else:
-        controlling = {}
-        for family in ("OFS", "OES"):
-            candidate_style = f"Annex 14 Candidate {family}"
-            controlling_style = f"Annex 14 Controlling {family}"
-            candidate_union = _geometry_union(styles_to_geometries[candidate_style])
-            controlling_geometries = styles_to_geometries[controlling_style]
-            controlling_union = _geometry_union(controlling_geometries)
-            if candidate_union.isEmpty():
-                coverage_difference = QgsGeometry(controlling_union)
-            elif controlling_union.isEmpty():
-                coverage_difference = QgsGeometry(candidate_union)
-            else:
-                coverage_difference = candidate_union.symDifference(controlling_union)
-            controlling[family] = {
-                "source": "published_layers",
-                "candidate_area_m2": _area(candidate_union),
-                "controlling_area_m2": _area(controlling_union),
-                "coverage_difference_m2": _area(coverage_difference),
-                "region_overlap_m2": max(
-                    0.0,
-                    sum(_area(geometry) for geometry in controlling_geometries)
-                    - _area(controlling_union),
-                ),
-            }
+    controlling = _controlling_metrics_from_engines(
+        controlling_engines,
+        {
+            family: styles_to_geometries[f"Annex 14 Controlling {family}"]
+            for family in ("OFS", "OES")
+        },
+    )
 
     missing_interior_contours = []
     for parent_id, region in comparison_regions.items():

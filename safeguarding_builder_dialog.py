@@ -14,7 +14,6 @@ import os
 import re
 from typing import List, Optional, Dict, Any, Tuple
 from html import unescape
-from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 # --- QGIS Imports ---
@@ -1864,29 +1863,6 @@ class SafeguardingBuilderDialog(
         self.framework_combo.setMinimumHeight(28)
         self.framework_combo.setMaximumHeight(28)
 
-        self.protected_airspace_policy_combo = QtWidgets.QComboBox()
-        self.protected_airspace_policy_combo.setObjectName("comboBox_protected_airspace_policy")
-        self.protected_airspace_policy_combo.addItem("Ruleset aligned", userData="ruleset_aligned")
-        self.protected_airspace_policy_combo.addItem(
-            MODERNISED_DISPLAY_NAME,
-            userData="future_annex14_ofs_oes",
-        )
-        self.protected_airspace_policy_combo.addItem(
-            "OLS modernisation comparison",
-            userData="modernisation_comparison",
-        )
-        self.protected_airspace_policy_combo.addItem(
-            "Ruleset comparison",
-            userData="ruleset_comparison",
-        )
-        self.protected_airspace_policy_combo.setToolTip(
-            "Protected airspace/OLS policy. Use Ruleset aligned for the selected design standard, "
-            f"overlay {MODERNISED_DISPLAY_NAME}, or compare both against the selected baseline."
-        )
-        self.protected_airspace_policy_combo.setMinimumWidth(190)
-        self.protected_airspace_policy_combo.setMinimumHeight(28)
-        self.protected_airspace_policy_combo.setMaximumHeight(28)
-
         ruleset_group = QtWidgets.QGroupBox("Policy Settings")
         ruleset_group.setObjectName("groupBox_ruleset")
         ruleset_layout = QtWidgets.QGridLayout(ruleset_group)
@@ -1905,12 +1881,6 @@ class SafeguardingBuilderDialog(
         framework_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         ruleset_layout.addWidget(framework_label, 1, 0)
         ruleset_layout.addWidget(self.framework_combo, 1, 1)
-        protected_airspace_label = QtWidgets.QLabel("OLS / Airspace:")
-        protected_airspace_label.setObjectName("label_protected_airspace_policy")
-        protected_airspace_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
-        ruleset_layout.addWidget(protected_airspace_label, 2, 0)
-        ruleset_layout.addWidget(self.protected_airspace_policy_combo, 2, 1)
-
         self.uk_framework_options = QtWidgets.QFrame()
         self.uk_framework_options.setObjectName("frame_uk_safeguarding_options")
         uk_layout = QtWidgets.QGridLayout(self.uk_framework_options)
@@ -1935,10 +1905,9 @@ class SafeguardingBuilderDialog(
             "the published policy does not state the equality case."
         )
         uk_layout.addWidget(self.uk_pscz_length, 0, 1)
-        ruleset_layout.addWidget(self.uk_framework_options, 3, 0, 1, 2)
+        ruleset_layout.addWidget(self.uk_framework_options, 2, 0, 1, 2)
 
         self.groupBox_ruleset = ruleset_group
-        self.label_protected_airspace_policy = protected_airspace_label
         self.ruleset_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.ruleset_combo.currentIndexChanged.connect(
             self._on_design_ruleset_selection_changed
@@ -1946,7 +1915,6 @@ class SafeguardingBuilderDialog(
         self.ruleset_combo.currentIndexChanged.connect(
             self.update_all_runway_calculations
         )
-        self.protected_airspace_policy_combo.currentIndexChanged.connect(self.update_dialog_status)
         self.framework_combo.currentIndexChanged.connect(self._on_framework_changed)
         self.uk_psz_applicable.toggled.connect(self._on_uk_psz_toggled)
         self.uk_pscz_length.currentIndexChanged.connect(self.update_dialog_status)

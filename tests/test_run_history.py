@@ -16,7 +16,7 @@ from core.run_history import (
     RuntimeRunRecorder,
     classify_runway_configuration,
     detect_run_agent,
-    migrate_history_file,
+    _append_record,
     runtime_input_fingerprint,
     validate_runway_configuration,
     _new_run_id,
@@ -149,8 +149,7 @@ class RunHistoryTests(unittest.TestCase):
             }
             history_path.write_text(json.dumps(legacy) + "\n", encoding="utf-8")
 
-            self.assertTrue(migrate_history_file(history_path))
-            self.assertFalse(migrate_history_file(history_path))
+            _append_record(history_path, {"schema_version": "1", "run_id": "new"})
             stored = _rows(history_path)[0]
             self.assertEqual(stored["schema_version"], "1")
             self.assertEqual(stored["airport"], "YMML")

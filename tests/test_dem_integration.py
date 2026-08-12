@@ -3,7 +3,6 @@ import tempfile
 import types
 import unittest
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
 from unittest.mock import patch
 
 from osgeo import gdal, osr
@@ -13,7 +12,6 @@ from qgis.core import (
     QgsFeature,
     QgsField,
     QgsGeometry,
-    QgsLayerTreeGroup,
     QgsPointXY,
     QgsProject,
     QgsRasterLayer,
@@ -31,7 +29,6 @@ from safeguarding_builder.core.dem_integration import (  # noqa: E402
     apply_headroom_style,
     apply_penetration_boundary_style,
     apply_terrain_clearance_style,
-    build_ga_wcs_url,
     build_ga_wcs_urls,
     create_elevation_polygons,
     create_ols_square_extent_layer,
@@ -120,27 +117,6 @@ class DemIntegrationTests(unittest.TestCase):
 
             dialog.close()
             dialog.deleteLater()
-
-    def test_ga_wcs_request_uses_layer_extent_and_native_resolution(self):
-        layer = QgsVectorLayer("Polygon?crs=EPSG:4326", "DEM extent", "memory")
-        feature = QgsFeature(layer.fields())
-        feature.setGeometry(
-            QgsGeometry.fromWkt(
-                "POLYGON ((138.50 -34.97, 138.57 -34.97, "
-                "138.57 -34.91, 138.50 -34.91, 138.50 -34.97))"
-            )
-        )
-        layer.dataProvider().addFeature(feature)
-        layer.updateExtents()
-
-        url = build_ga_wcs_url(layer, "ga_lidar_5m")
-        query = parse_qs(urlparse(url).query)
-
-        self.assertIn("DEM_LiDAR_5m_2025", url)
-        self.assertEqual(query["coverage"], ["1"])
-        self.assertEqual(query["format"], ["GeoTIFF"])
-        self.assertEqual(query["crs"], ["EPSG:4283"])
-        self.assertEqual(query["bbox"], ["138.500000000000,-34.970000000000,138.570000000000,-34.910000000000"])
 
     def test_automatic_ols_extent_is_the_smallest_enclosing_square(self):
         project = QgsProject.instance()

@@ -1,6 +1,6 @@
 """UK CAA CAP 168 runway marking policy."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from .classification import get_runway_type_abbr
 
@@ -67,29 +67,6 @@ AIMING_POINT_RULES = (
     (None, 400.0, 45.0, 6.0, 18.0, CAP168_AIMING_POINT_MARKING_REF),
 )
 
-AIMING_POINT_RANGE_PARAMS = {
-    "stripe_length_ranges_m": {
-        "lt_800": (30.0, 45.0),
-        "ge_800_lt_1200": (30.0, 45.0),
-        "ge_1200_lt_2400": (45.0, 60.0),
-        "ge_2400": (45.0, 60.0),
-    },
-    "stripe_width_ranges_m": {
-        "lt_800": (4.0, 4.0),
-        "ge_800_lt_1200": (6.0, 6.0),
-        "ge_1200_lt_2400": (6.0, 10.0),
-        "ge_2400": (6.0, 10.0),
-    },
-    "lateral_spacing_ranges_m": {
-        "lt_800": (6.0, 6.0),
-        "ge_800_lt_1200": (9.0, 9.0),
-        "ge_1200_lt_2400": (18.0, 22.5),
-        "ge_2400": (18.0, 22.5),
-    },
-    "papi_alignment": "beginning_of_marking_coincident_with_visual_approach_slope_origin",
-    "ref": CAP168_AIMING_POINT_MARKING_REF,
-}
-
 TOUCHDOWN_ZONE_OFFSET_RULES = (
     (900.0, [300.0]),
     (1200.0, [150.0, 450.0]),
@@ -98,107 +75,12 @@ TOUCHDOWN_ZONE_OFFSET_RULES = (
     (None, [150.0, 300.0, 600.0, 750.0, 900.0, 1050.0]),
 )
 
-TOUCHDOWN_ZONE_MARKING_PARAMS = {
-    "pair_counts": (
-        (900.0, 1),
-        (1200.0, 2),
-        (1500.0, 3),
-        (2400.0, 4),
-        (None, 6),
-    ),
-    "pattern_a": {"min_length_m": 22.5, "min_width_m": 3.0},
-    "pattern_b": {"min_length_m": 22.5, "stripe_width_m": 1.8, "stripe_spacing_m": 1.5},
-    "longitudinal_spacing_m": 150.0,
-    "delete_if_within_aiming_point_m": 50.0,
-    "minimum_opposing_last_pair_spacing_m": 300.0,
-    "ref": CAP168_TOUCHDOWN_ZONE_MARKING_REF,
-}
-
-RUNWAY_SIDE_STRIPE_PARAMS = {
-    "required_for_precision": True,
-    "required_when_lack_of_contrast": True,
-    "width_ge_30_m": 0.9,
-    "width_lt_30_m": 0.45,
-    "runway_width_threshold_m": 30.0,
-    "offset_from_centreline_when_runway_gt_60_m": 30.0,
-    "ref": CAP168_RUNWAY_SIDE_STRIPE_MARKING_REF,
-}
-
-DASHED_RUNWAY_SIDE_STRIPE_PARAMS = {
-    60.0: {"length_m": 15.0, "width_m": 0.45, "ref": "CAP 168 7.229 Table 7.26"},
-    45.0: {"length_m": 15.0, "width_m": 0.45, "ref": "CAP 168 7.229 Table 7.26"},
-    30.0: {"length_m": 10.0, "width_m": 0.45, "ref": "CAP 168 7.229 Table 7.26"},
-    23.0: {"length_m": 6.0, "width_m": 0.25, "ref": "CAP 168 7.229 Table 7.26"},
-    18.0: {"length_m": 4.0, "width_m": 0.25, "ref": "CAP 168 7.229 Table 7.26"},
-}
-
 RUNWAY_HOLDING_POSITION_TABLE = {
     1: {"NI": 30.0, "NPA": 30.0, "TAKEOFF": 30.0, "PA_I": 60.0, "PA_II_III": None},
     2: {"NI": 40.0, "NPA": 40.0, "TAKEOFF": 40.0, "PA_I": 60.0, "PA_II_III": None},
     3: {"NI": 55.0, "NPA": 75.0, "TAKEOFF": 55.0, "PA_I": 90.0, "PA_II_III": 90.0},
     4: {"NI": 75.0, "NPA": 75.0, "TAKEOFF": 75.0, "PA_I": 90.0, "PA_II_III": 90.0},
 }
-
-RUNWAY_HOLDING_POSITION_PARAMS = {
-    "marking_ref": CAP168_RUNWAY_HOLDING_POSITION_MARKING_REF,
-    "location_ref": CAP168_RUNWAY_HOLDING_POSITION_LOCATION_REF,
-    "pattern_a": "non-instrument, non-precision, take-off runway, and closest precision holding position",
-    "pattern_b": "farther precision CAT I/II/III holding positions when two or three positions are provided",
-    "code_f_precision_distance_m": 107.5,
-    "elevation_adjustment_m_per_m": 5.0,
-    "mandatory_instruction_repeat_interval_m": 45.0,
-    "mandatory_instruction_min_character_height_m": 1.8,
-}
-
-MARKING_TRACEABILITY_ITEMS = {
-    "runway_centreline_marking": {
-        "source": CAP168_RUNWAY_CENTRELINE_MARKING_REF,
-        "status": "operational_verified",
-        "implementation": "RUNWAY_CENTRELINE_MARKING_PARAMS and centreline_marking_width",
-        "notes": "Minimum stripe widths by runway type and code number.",
-    },
-    "threshold_marking": {
-        "source": CAP168_THRESHOLD_MARKING_REF,
-        "status": "operational_verified",
-        "implementation": "THRESHOLD_MARKING_PARAMS_BY_WIDTH",
-        "notes": "Table 7.3 precision and non-precision threshold stripe counts and gaps.",
-    },
-    "aiming_point_marking": {
-        "source": CAP168_AIMING_POINT_MARKING_REF,
-        "status": "operational_verified",
-        "implementation": "AIMING_POINT_RULES and AIMING_POINT_RANGE_PARAMS",
-        "notes": "Representative minimum values are returned by the public tuple helper; ranges remain available in data.",
-    },
-    "touchdown_zone_marking": {
-        "source": CAP168_TOUCHDOWN_ZONE_MARKING_REF,
-        "status": "operational_verified",
-        "implementation": "TOUCHDOWN_ZONE_OFFSET_RULES and TOUCHDOWN_ZONE_MARKING_PARAMS",
-        "notes": "Offsets are derived from 150 m spacing with aiming-point conflict omissions.",
-    },
-    "runway_side_stripe_marking": {
-        "source": CAP168_RUNWAY_SIDE_STRIPE_MARKING_REF,
-        "status": "operational_verified",
-        "implementation": "RUNWAY_SIDE_STRIPE_PARAMS and DASHED_RUNWAY_SIDE_STRIPE_PARAMS",
-        "notes": "Includes normal side stripe and dashed displaced-threshold/backtrack table values.",
-    },
-    "runway_holding_position_marking": {
-        "source": f"{CAP168_RUNWAY_HOLDING_POSITION_MARKING_REF}, {CAP168_RUNWAY_HOLDING_POSITION_LOCATION_REF}",
-        "status": "operational_verified",
-        "implementation": "RUNWAY_HOLDING_POSITION_TABLE and RUNWAY_HOLDING_POSITION_PARAMS",
-        "notes": "Marking patterns come from Chapter 7 and minimum distances from Table 3.3.",
-    },
-}
-
-MARKING_TRACEABILITY = {
-    "source_publication": SOURCE_PUBLICATION,
-    "source_url": SOURCE_URL,
-    "items": MARKING_TRACEABILITY_ITEMS,
-}
-
-
-def get_marking_traceability() -> Dict[str, Any]:
-    return MARKING_TRACEABILITY.copy()
-
 
 def threshold_marking_params(
     runway_width: float, runway_type: Optional[str] = None
@@ -267,23 +149,6 @@ def touchdown_zone_offsets(lda_m: float) -> List[float]:
     return []
 
 
-def runway_side_stripe_params(runway_width: float):
-    stripe_width = (
-        RUNWAY_SIDE_STRIPE_PARAMS["width_ge_30_m"]
-        if runway_width >= RUNWAY_SIDE_STRIPE_PARAMS["runway_width_threshold_m"]
-        else RUNWAY_SIDE_STRIPE_PARAMS["width_lt_30_m"]
-    )
-    offset = RUNWAY_SIDE_STRIPE_PARAMS["offset_from_centreline_when_runway_gt_60_m"] if runway_width > 60.0 else None
-    return {"width_m": stripe_width, "offset_from_centreline_m": offset, "ref": CAP168_RUNWAY_SIDE_STRIPE_MARKING_REF}
-
-
-def dashed_runway_side_stripe_params(runway_width: float):
-    for width_m, params in DASHED_RUNWAY_SIDE_STRIPE_PARAMS.items():
-        if abs(float(runway_width) - width_m) <= 0.01:
-            return params.copy()
-    return None
-
-
 def runway_holding_position_rule(runway_code_num: int, runway_type: str) -> Optional[Tuple[float, str]]:
     type_abbr = get_runway_type_abbr(runway_type)
     if runway_code_num not in RUNWAY_HOLDING_POSITION_TABLE:
@@ -316,23 +181,13 @@ __all__ = [
     "RUNWAY_CENTRELINE_MARKING_PARAMS",
     "THRESHOLD_MARKING_PARAMS_BY_WIDTH",
     "AIMING_POINT_RULES",
-    "AIMING_POINT_RANGE_PARAMS",
     "TOUCHDOWN_ZONE_OFFSET_RULES",
-    "TOUCHDOWN_ZONE_MARKING_PARAMS",
-    "RUNWAY_SIDE_STRIPE_PARAMS",
-    "DASHED_RUNWAY_SIDE_STRIPE_PARAMS",
     "RUNWAY_HOLDING_POSITION_TABLE",
-    "RUNWAY_HOLDING_POSITION_PARAMS",
-    "MARKING_TRACEABILITY",
-    "MARKING_TRACEABILITY_ITEMS",
-    "get_marking_traceability",
     "threshold_marking_params",
     "threshold_marking_ref",
     "threshold_marking_params_for_type",
     "centreline_marking_width",
     "aiming_point_rule",
     "touchdown_zone_offsets",
-    "runway_side_stripe_params",
-    "dashed_runway_side_stripe_params",
     "runway_holding_position_rule",
 ]

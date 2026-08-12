@@ -370,8 +370,6 @@ class SpecialisedSurfacesMixin:
         rec_thr_point = runway_data.get("rec_thr_point")
         arc_num_str = runway_data.get("arc_num")
         arc_let_raw = runway_data.get("arc_let")
-        type1_str = runway_data.get("type1", "")
-        type2_str = runway_data.get("type2", "")
 
         # Essential Checks
         if thr_point is None or rec_thr_point is None or layer_group is None or not arc_num_str:
@@ -410,17 +408,7 @@ class SpecialisedSurfacesMixin:
             )
             return False
 
-        # Determine Governing Type (keep logic)
-        type_order = [
-            "",
-            "Non-Instrument (NI)",
-            "Non-Precision Approach (NPA)",
-            "Precision Approach CAT I",
-            "Precision Approach CAT II/III",
-        ]
-        idx1 = type_order.index(type1_str) if type1_str in type_order else 1
-        idx2 = type_order.index(type2_str) if type2_str in type_order else 1
-        governing_type_str = type_order[max(idx1, idx2)]
+        governing_type_str = self._governing_runway_type(runway_data)
 
         # Get Offset Parameter
         offset_params = self.get_active_ruleset().taxiway_separation_offset(arc_num, arc_let, governing_type_str)
@@ -463,95 +451,37 @@ class SpecialisedSurfacesMixin:
         attr_app_type = governing_type_str if governing_type_str and governing_type_str.strip() else "N/A"
         attr_arc_num_str = str(arc_num)
         attr_arc_let = arc_let if arc_let and arc_let.strip() else "N/A"
-
-        # Left Line
-        try:
-            pt_start_l = line_start_cl.project(offset_m, rwy_params["azimuth_perp_l"])
-            pt_end_l = line_end_cl.project(offset_m, rwy_params["azimuth_perp_l"])
-            if pt_start_l and pt_end_l:
-                geom_l = QgsGeometry.fromPolylineXY([pt_start_l, pt_end_l])
-                if geom_l and not geom_l.isEmpty():
-                    fields = self._get_taxiway_separation_fields()
-                    feat_l = QgsFeature(fields)
-                    feat_l.setGeometry(geom_l)
-
-                    attr_map = {
-                        "rwy": attr_runway_name,
-                        "desc": attr_surface_description,
-                        "offset_m": offset_m,
-                        "ref_mos": attr_mos_ref,
-                        "appr_type": attr_app_type,
-                        "arc_num": attr_arc_num_str,
-                        "arc_let": attr_arc_let,
-                        "side": "L",
-                    }
-                    for name, value in attr_map.items():
-                        idx = fields.indexFromName(name)
-                        if idx != -1:
-                            feat_l.setAttribute(idx, value)
-                        else:
-                            QgsMessageLog.logMessage(
-                                f"Warning: Field '{name}' not found in layer for Taxiway Separation (Left Line).",
-                                plugin_tag,
-                                level=Qgis.Warning,
-                            )
-                    features_to_add.append(feat_l)
-                else:
+        fields = self._get_taxiway_separation_fields()
+        for side, azimuth in (("L", rwy_params["azimuth_perp_l"]), ("R", rwy_params["azimuth_perp_r"])):
+            try:
+                start = line_start_cl.project(offset_m, azimuth)
+                end = line_end_cl.project(offset_m, azimuth)
+                geometry = QgsGeometry.fromPolylineXY([start, end]) if start and end else None
+                if geometry is None or geometry.isEmpty():
                     geom_ok = False
-            else:
+                    continue
+                feature = QgsFeature(fields)
+                feature.setGeometry(geometry)
+                feature.setAttributes(
+                    [
+                        attr_runway_name,
+                        attr_surface_description,
+                        offset_m,
+                        attr_mos_ref,
+                        attr_app_type,
+                        attr_arc_num_str,
+                        attr_arc_let,
+                        side,
+                    ]
+                )
+                features_to_add.append(feature)
+            except Exception as e:
                 geom_ok = False
-        except Exception as e:
-            geom_ok = False
-            QgsMessageLog.logMessage(
-                f"Warning: Error generating Left Taxi Sep line for {runway_name}: {e}\n{traceback.format_exc()}",
-                plugin_tag,
-                level=Qgis.Warning,
-            )
-
-        # Right Line (similar try-except block and attribute setting)
-        try:
-            pt_start_r = line_start_cl.project(offset_m, rwy_params["azimuth_perp_r"])
-            pt_end_r = line_end_cl.project(offset_m, rwy_params["azimuth_perp_r"])
-            if pt_start_r and pt_end_r:
-                geom_r = QgsGeometry.fromPolylineXY([pt_start_r, pt_end_r])
-                if geom_r and not geom_r.isEmpty():
-                    fields = self._get_taxiway_separation_fields()
-                    feat_r = QgsFeature(fields)
-                    feat_r.setGeometry(geom_r)
-
-                    # Reuse defensively prepared variables from the Left Line section as they are identical for the Right Line
-                    attr_map_right = {
-                        "rwy": attr_runway_name,
-                        "desc": attr_surface_description,
-                        "offset_m": offset_m,
-                        "ref_mos": attr_mos_ref,
-                        "appr_type": attr_app_type,
-                        "arc_num": attr_arc_num_str,
-                        "arc_let": attr_arc_let,
-                        "side": "R",
-                    }
-                    for name, value in attr_map_right.items():
-                        idx = fields.indexFromName(name)
-                        if idx != -1:
-                            feat_r.setAttribute(idx, value)
-                        else:
-                            QgsMessageLog.logMessage(
-                                f"Warning: Field '{name}' not found in layer for Taxiway Separation (Right Line).",
-                                plugin_tag,
-                                level=Qgis.Warning,
-                            )
-                    features_to_add.append(feat_r)
-                else:
-                    geom_ok = False
-            else:
-                geom_ok = False
-        except Exception as e:
-            geom_ok = False
-            QgsMessageLog.logMessage(
-                f"Warning: Error generating Right Taxi Sep line for {runway_name}: {e}\n{traceback.format_exc()}",
-                plugin_tag,
-                level=Qgis.Warning,
-            )
+                QgsMessageLog.logMessage(
+                    f"Warning: Error generating {side} Taxi Sep line for {runway_name}: {e}\n{traceback.format_exc()}",
+                    plugin_tag,
+                    level=Qgis.Warning,
+                )
 
         if not geom_ok and not features_to_add:  # If geometry failed AND no features were added
             QgsMessageLog.logMessage(
@@ -565,7 +495,6 @@ class SpecialisedSurfacesMixin:
         if features_to_add:
             layer_name_display = f"Taxiway Separation {runway_name}"
             internal_name_base = f"TaxiwaySep_{runway_name.replace('/', '_')}"
-            fields = self._get_taxiway_separation_fields()
             style_key = "Taxiway Separation Line"
             layer_created = self._create_and_add_layer(
                 "LineString",

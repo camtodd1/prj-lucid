@@ -498,10 +498,10 @@ class DemIntegrationMixin:
         if group is None:
             insert_index = len(main_group.children())
             for index, child in enumerate(main_group.children()):
-                if isinstance(child, QgsLayerTreeGroup) and child.name() in {
-                    output_structure.IMPORTED_AIRPORT_MAP,
-                    output_structure.DEBUG_DEVELOPMENT,
-                }:
+                if (
+                    isinstance(child, QgsLayerTreeGroup)
+                    and child.name() == output_structure.IMPORTED_AIRPORT_MAP
+                ):
                     insert_index = index
                     break
             group = main_group.insertGroup(

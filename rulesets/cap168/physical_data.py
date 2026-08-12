@@ -152,68 +152,8 @@ STRIP_SLOPE_PARAMS = {
     4: {"max_longitudinal_slope": 0.015, "max_transverse_slope": 0.025, "ref": STRIP_SLOPES_CAP168_REF},
 }
 
-PHYSICAL_TRACEABILITY = {
-    "source_publication": SOURCE_PUBLICATION,
-    "source_url": SOURCE_URL,
-    "items": {
-        "runway_width": {
-            "source": RUNWAY_WIDTH_CAP168_REF,
-            "status": "operational_verified",
-            "implementation": "RUNWAY_WIDTH_PARAMS and runway_minimum_width",
-            "notes": "Selected by code number and outer main gear wheel span band.",
-        },
-        "strip_length": {
-            "source": STRIP_LENGTH_CAP168_REF,
-            "status": "operational_verified",
-            "implementation": "STRIP_EXTENSION_PARAMS",
-            "notes": "Stores strip extension before threshold and beyond runway/stopway end.",
-        },
-        "strip_width": {
-            "source": STRIP_WIDTH_CAP168_REF,
-            "status": "operational_verified",
-            "implementation": "VISUAL_STRIP_LATERAL_PARAMS and INSTRUMENT_STRIP_LATERAL_PARAMS",
-            "notes": "CAP168 gives lateral distances each side; returned widths are total widths.",
-        },
-        "strip_graded_area": {
-            "source": STRIP_GRADED_AREA_CAP168_REF,
-            "status": "operational_verified",
-            "implementation": "GRADED_AREA_LATERAL_PARAMS",
-            "notes": "Cleared-and-graded widths are returned as total widths.",
-        },
-        "strip_construction_variations": {
-            "source": f"{STRIP_CONSTRUCTION_CAP168_REF}, {STRIP_STRENGTH_CAP168_REF}, {STRIP_SLOPES_CAP168_REF}",
-            "status": "operational_verified",
-            "implementation": "STRIP_VARIATION_PARAMS, STRIP_CONSTRUCTION_PARAMS, STRIP_SLOPE_PARAMS",
-            "notes": "Captures starter-extension, wide non-instrument runway, Code 3 RNP APCH, graded-area, construction, strength, and slope variations.",
-        },
-        "declared_distances": {
-            "source": DECLARED_DISTANCE_CAP168_REF,
-            "status": "operational_verified",
-            "implementation": "DECLARED_DISTANCE_PARAMS",
-            "notes": "TORA, TODA, ASDA, and LDA are declared for each runway direction and approved/promulgated by the CAA.",
-        },
-        "clearway": {
-            "source": CLEARWAY_CAP168_REF,
-            "status": "operational_verified",
-            "implementation": "CLEARWAY_PARAMS and get_clearway_params",
-            "notes": "Clearway length is capped at 50% TORA; width is selected conservatively from the end-of-TODA width by code number.",
-        },
-        "stopway": {
-            "source": STOPWAY_CAP168_REF,
-            "status": "operational_verified",
-            "implementation": "STOPWAY_PARAMS and get_stopway_params",
-            "notes": "Stopway width follows the associated runway width; entered length contributes to ASDA.",
-        },
-    },
-}
-
-
 def get_physical_refs() -> dict:
     return {"pavement": PAVEMENT_CAP168_REF, "shoulder": SHOULDER_CAP168_REF}
-
-
-def get_physical_traceability() -> dict:
-    return PHYSICAL_TRACEABILITY.copy()
 
 
 def runway_minimum_width(
@@ -548,9 +488,7 @@ __all__ = [
     "DECLARED_DISTANCE_PARAMS",
     "CLEARWAY_PARAMS",
     "STOPWAY_PARAMS",
-    "PHYSICAL_TRACEABILITY",
     "get_physical_refs",
-    "get_physical_traceability",
     "runway_minimum_width",
     "get_strip_params",
     "get_resa_params",

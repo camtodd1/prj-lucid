@@ -1,6 +1,6 @@
 """EASA CS-ADR-DSN airfield ground lighting dimensions and policy."""
 
-from typing import Any, Dict
+from typing import Dict
 
 CS_ADR_DSN = "CS-ADR-DSN Issue 7"
 SOURCE_PUBLICATION = "EASA Easy Access Rules for Aerodromes, CS-ADR-DSN Issue 7"
@@ -181,82 +181,6 @@ APPROACH_PROFILES = (
     ),
 )
 
-LIGHTING_TRACEABILITY_ITEMS = {
-    "runway_edge_lights": {
-        "source": EASA_REF_RUNWAY_EDGE,
-        "status": "operational_verified",
-        "implementation": "RUNWAY_EDGE_INSTRUMENT_SPACING_M / RUNWAY_EDGE_NON_INSTRUMENT_SPACING_M",
-        "notes": "Maximum longitudinal interval is 60 m for instrument runways and 100 m for non-instrument runways.",
-    },
-    "threshold_lights": {
-        "source": EASA_REF_THRESHOLD,
-        "status": "operational_verified_with_interpretive_width_floor",
-        "implementation": "threshold_light_count_for_end",
-        "notes": "Six-light non-instrument/NPA minimum and precision 3 m spacing are source-backed. The 30 m minimum lit width floor remains a compatibility assumption.",
-    },
-    "threshold_wing_bar_lights": {
-        "source": EASA_REF_THRESHOLD,
-        "status": "operational_verified",
-        "implementation": "THRESHOLD_WING_BAR_*",
-        "notes": "At least five lights per side extending at least 10 m outward from the runway edge light line.",
-    },
-    "runway_end_lights": {
-        "source": EASA_REF_RUNWAY_END,
-        "status": "operational_verified_with_interpretive_width_floor",
-        "implementation": "runway_end_light_count_for_end",
-        "notes": "Six-light minimum and CAT III 6 m maximum spacing are source-backed. The 30 m minimum lit width floor remains a compatibility assumption.",
-    },
-    "simple_approach_lighting": {
-        "source": EASA_REF_SIMPLE_APPROACH,
-        "status": "operational_verified",
-        "implementation": "SALS_* / APPROACH_PROFILES[sals]",
-        "notes": "Preferred 420 m length, 60 m or 30 m spacing, 300 m crossbar, and 18 m or 30 m crossbar lengths.",
-    },
-    "precision_approach_cat_i_lighting": {
-        "source": EASA_REF_APPROACH_CAT_I,
-        "status": "operational_verified",
-        "implementation": "PRECISION_APPROACH_* / APPROACH_PROFILES[cat_i]",
-        "notes": "900 m design length, approach centre line stations, crossbars, and 30 m crossbar length.",
-    },
-    "precision_approach_cat_ii_iii_lighting": {
-        "source": EASA_REF_APPROACH_CAT_II_III,
-        "status": "operational_verified",
-        "implementation": "CAT_II_III_* / APPROACH_PROFILES[cat_ii_iii]",
-        "notes": "900 m design length, centre line stations, side rows, 300 m crossbar geometry, and crossbar spacing limit.",
-    },
-    "runway_centreline_lights": {
-        "source": EASA_REF_RUNWAY_CENTRELINE,
-        "status": "operational_verified_with_applicability_policy",
-        "implementation": "RUNWAY_CENTRELINE_* / runway_centreline_*",
-        "notes": "Spacing, lateral offset, and colour zones are source-backed. Requirement/recommendation helpers expose simplified applicability policy.",
-    },
-    "touchdown_zone_lights": {
-        "source": EASA_REF_TDZ,
-        "status": "operational_verified_with_nominal_gauge",
-        "implementation": "TDZ_*",
-        "notes": "900 m extent, 30/60 m row spacing, barrette light count/spacing/length are source-backed. The nominal 9 m inner offset reflects the selected 18 m gauge.",
-    },
-    "temporary_displaced_threshold_lights": {
-        "source": "compatibility fallback",
-        "status": "mos_derived_fallback",
-        "implementation": "temp_displaced_threshold_lights_per_side",
-        "notes": "Retained for plugin compatibility; not an EASA-source-verified value.",
-    },
-    "approach_profile_selection": {
-        "source": f"{EASA_REF_SIMPLE_APPROACH}; {EASA_REF_APPROACH_CAT_I}; {EASA_REF_APPROACH_CAT_II_III}",
-        "status": "interpretive",
-        "implementation": "approach_profile_for_runway",
-        "notes": "Profile geometry is source-backed; selecting SALS for all non-instrument/NPA labels is a simplified planning default.",
-    },
-}
-
-LIGHTING_TRACEABILITY = {
-    "source_publication": SOURCE_PUBLICATION,
-    "source_url": SOURCE_URL,
-    "items": LIGHTING_TRACEABILITY_ITEMS,
-}
-
-
 def agl_value(name: str):
     """Return the value of a constant defined in this module.
 
@@ -265,11 +189,6 @@ def agl_value(name: str):
     return its value.  A KeyError is raised if the name is unknown.
     """
     return globals()[name]
-
-
-def get_lighting_traceability() -> Dict[str, Any]:
-    """Return source traceability metadata for EASA AGL rules."""
-    return LIGHTING_TRACEABILITY.copy()
 
 
 def runway_is_precision(runway_type: str) -> bool:
@@ -449,10 +368,7 @@ __all__ = [
     "EASA_REF_SIMPLE_APPROACH",
     "EASA_REF_APPROACH_CAT_I",
     "EASA_REF_APPROACH_CAT_II_III",
-    "LIGHTING_TRACEABILITY",
-    "LIGHTING_TRACEABILITY_ITEMS",
     "agl_value",
-    "get_lighting_traceability",
     "runway_is_precision",
     "runway_type_supports_agl",
     "runway_is_instrument",

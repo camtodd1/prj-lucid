@@ -155,69 +155,8 @@ STOPWAY_PARAMS = {
 }
 
 
-PHYSICAL_TRACEABILITY = {
-    "source_publication": SOURCE_PUBLICATION,
-    "source_url": SOURCE_URL,
-    "items": {
-        "strip_length": {
-            "source": "CS ADR-DSN.B.155",
-            "status": "operational_verified",
-            "implementation": "STRIP_EXTENSION_PARAMS",
-            "notes": "Stores runway-strip extension before threshold and beyond runway/stopway end.",
-        },
-        "strip_overall_width": {
-            "source": "CS ADR-DSN.B.160",
-            "status": "operational_verified",
-            "implementation": "STRIP_WIDTH_PARAMS[*].overall_widths",
-            "notes": "Stored as total strip width; EASA source gives lateral distance on each side.",
-        },
-        "strip_graded_width": {
-            "source": "CS ADR-DSN.B.175",
-            "status": "operational_verified",
-            "implementation": "STRIP_WIDTH_PARAMS[*].graded_widths",
-            "notes": "Stored as total graded width; EASA source gives lateral distance on each side.",
-        },
-        "resa_applicability": {
-            "source": "CS ADR-DSN.C.210",
-            "status": "operational_verified",
-            "implementation": "RESA_PARAMS.applicability_refs",
-            "notes": "Determines whether RESA is required by code number and runway type.",
-        },
-        "resa_dimensions": {
-            "source": "CS ADR-DSN.C.215",
-            "status": "operational_verified",
-            "implementation": "RESA_PARAMS.length_rules and width_ref",
-            "notes": "Stores recommended RESA lengths and width basis.",
-        },
-        "declared_distances": {
-            "source": DECLARED_DISTANCE_EASA_REF,
-            "status": "operational_verified",
-            "implementation": "DECLARED_DISTANCE_PARAMS",
-            "notes": "TORA, TODA, ASDA, and LDA are calculated for each runway direction.",
-        },
-        "clearway": {
-            "source": CLEARWAY_EASA_REF,
-            "status": "operational_verified",
-            "implementation": "CLEARWAY_PARAMS and get_clearway_params",
-            "notes": "Clearways are optional; width is 150 m total and length is capped at half TORA.",
-        },
-        "stopway": {
-            "source": STOPWAY_EASA_REF,
-            "status": "operational_verified",
-            "implementation": "STOPWAY_PARAMS and get_stopway_params",
-            "notes": "Stopway width follows the associated runway width; entered length contributes to ASDA.",
-        },
-    },
-}
-
-
 def get_physical_refs() -> dict:
     return {"pavement": PAVEMENT_EASA_REF, "shoulder": SHOULDER_EASA_REF}
-
-
-def get_physical_traceability() -> dict:
-    """Return source traceability metadata for EASA physical rules."""
-    return PHYSICAL_TRACEABILITY.copy()
 
 
 def _overall_width_ref_key(type_abbr: str) -> str:
@@ -416,7 +355,6 @@ __all__ = [
     "STOPWAY_EASA_REF",
     "SOURCE_PUBLICATION",
     "SOURCE_URL",
-    "PHYSICAL_TRACEABILITY",
     "STRIP_WIDTH_PARAMS",
     "STRIP_EXTENSION_PARAMS",
     "RESA_PARAMS",
@@ -424,7 +362,6 @@ __all__ = [
     "CLEARWAY_PARAMS",
     "STOPWAY_PARAMS",
     "get_physical_refs",
-    "get_physical_traceability",
     "get_strip_params",
     "get_resa_params",
     "get_declared_distance_params",

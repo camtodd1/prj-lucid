@@ -1,6 +1,6 @@
 """UK CAA CAP 168 aeronautical ground lighting policy."""
 
-from typing import Any, Dict
+from typing import Dict
 
 SOURCE_PUBLICATION = "UK CAA CAP 168 Licensing of Aerodromes, Edition 13"
 SOURCE_URL = "https://www.caa.co.uk/CAP168"
@@ -228,76 +228,8 @@ STROBE_APPROACH_PARAMS = {
     "ref": "CAP 168 6.49-6.53",
 }
 
-LIGHTING_TRACEABILITY_ITEMS = {
-    "approach_lighting": {
-        "source": CAP168_REF_APPROACH,
-        "status": "operational_verified",
-        "implementation": "APPROACH_PROFILES[cat_i/cat_ii_iii]",
-        "notes": "900 m high-intensity coded centreline and five crossbars at 150 m intervals.",
-    },
-    "simple_approach_lighting": {
-        "source": CAP168_REF_SIMPLE_APPROACH,
-        "status": "operational_verified",
-        "implementation": "APPROACH_PROFILES[sals] and STROBE_APPROACH_PARAMS",
-        "notes": "Simple approach row at 60 m intervals to at least 420 m, 300 m crossbar, and strobe alternative.",
-    },
-    "runway_edge_lights": {
-        "source": CAP168_REF_RUNWAY_EDGE,
-        "status": "operational_verified",
-        "implementation": "RUNWAY_EDGE_LIGHTING_PARAMS / runway_edge_spacing_for_end",
-        "notes": "60 m +/- 6 m spacing for runways up to 50 m wide; wider runways may require closer CAA-agreed spacing.",
-    },
-    "threshold_lights": {
-        "source": CAP168_REF_THRESHOLD_END,
-        "status": "operational_verified",
-        "implementation": "threshold_light_count_for_end and THRESHOLD_WING_BAR_PARAMS",
-        "notes": "Threshold light count is derived from runway width with 3 m maximum spacing.",
-    },
-    "runway_end_lights": {
-        "source": CAP168_REF_THRESHOLD_END,
-        "status": "operational_verified",
-        "implementation": "runway_end_light_count_for_end",
-        "notes": "Runway end lights delineate the manoeuvring extremity; six-light minimum retained as the planning helper.",
-    },
-    "starter_extension_lighting": {
-        "source": CAP168_REF_STARTER_EXTENSION,
-        "status": "operational_verified",
-        "implementation": "STARTER_EXTENSION_LIGHTING_PARAMS",
-        "notes": "Blue edge lights for narrow starter extensions; red/white pre-threshold edge lights for same-width pre-threshold runway.",
-    },
-    "runway_centreline_lights": {
-        "source": CAP168_REF_RUNWAY_CENTRELINE,
-        "status": "operational_verified_with_applicability_policy",
-        "implementation": "RUNWAY_CENTRELINE_* / runway_centreline_*",
-        "notes": "15 m normal spacing, 30 m allowed for RVR >=300 m when maintenance objectives are met; CAT II/III and low-RVR take-off are required cases.",
-    },
-    "touchdown_zone_lights": {
-        "source": CAP168_REF_TDZ,
-        "status": "operational_verified",
-        "implementation": "TDZ_LIGHTING_PARAMS and SIMPLE_TDZ_LIGHTING_PARAMS",
-        "notes": "TDZ barrettes have four lights, 60 m +/- 6 m spacing, and 9-11.5 m inner offset.",
-    },
-    "intensity_balance": {
-        "source": CAP168_REF_INTENSITY_BALANCE,
-        "status": "operational_verified",
-        "implementation": "CAP168_REF_INTENSITY_BALANCE",
-        "notes": "Overall approach/runway lighting pattern should be balanced around 2:1; IRVR requires at least 10% runway edge intensity below 1500 m observed visibility.",
-    },
-}
-
-LIGHTING_TRACEABILITY = {
-    "source_publication": SOURCE_PUBLICATION,
-    "source_url": SOURCE_URL,
-    "items": LIGHTING_TRACEABILITY_ITEMS,
-}
-
-
 def agl_value(name: str):
     return globals()[name]
-
-
-def get_lighting_traceability() -> Dict[str, Any]:
-    return LIGHTING_TRACEABILITY.copy()
 
 
 def runway_is_precision(runway_type: str) -> bool:
@@ -403,10 +335,7 @@ __all__ = [
     "SIMPLE_TDZ_LIGHTING_PARAMS",
     "RUNWAY_EDGE_LIGHTING_PARAMS",
     "STROBE_APPROACH_PARAMS",
-    "LIGHTING_TRACEABILITY",
-    "LIGHTING_TRACEABILITY_ITEMS",
     "agl_value",
-    "get_lighting_traceability",
     "runway_is_precision",
     "runway_type_supports_agl",
     "runway_is_instrument",

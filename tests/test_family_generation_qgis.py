@@ -587,7 +587,7 @@ class FamilyGenerationCommitTests(unittest.TestCase):
 
         self.assertEqual(
             [child.name() for child in rebuilt.children()],
-            list(output_structure.SECTION_ORDER[:-1]),
+            list(output_structure.SECTION_ORDER),
         )
         self.assertIsNotNone(
             rebuilt.findGroup(output_structure.TERRAIN_ANALYSIS).findLayer(

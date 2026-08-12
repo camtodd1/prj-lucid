@@ -8,7 +8,6 @@ import csv
 import errno
 import json
 import re
-import statistics
 import threading
 from datetime import datetime, timezone
 from functools import partial
@@ -285,25 +284,6 @@ def load_runs(ledger_path: Path) -> list[dict[str, object]]:
             }
         )
     return sorted(runs, key=lambda item: (str(item["timestamp"]), int(item["id"])))
-
-
-def recent_window_change(runs: Sequence[Mapping[str, object]]) -> dict[str, Optional[float]]:
-    """Compare the latest five usable runs with the preceding five."""
-    values = [
-        float(run["elapsed"])
-        for run in runs
-        if str(run.get("status", "")).lower() == "completed" and run.get("elapsed") is not None
-    ]
-    if len(values) < 10:
-        return {"recent_median": None, "previous_median": None, "change": None}
-    recent = statistics.median(values[-5:])
-    previous = statistics.median(values[-10:-5])
-    change = None if previous == 0 else (recent - previous) / previous
-    return {
-        "recent_median": round(recent, 3),
-        "previous_median": round(previous, 3),
-        "change": change,
-    }
 
 
 def _json_for_html(value: object) -> str:

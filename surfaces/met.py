@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
 """Meteorological instrument station surface generation."""
 
-from typing import List, Optional, Tuple
+from typing import Optional
 
 from qgis.PyQt.QtCore import QVariant  # type: ignore
 from qgis.core import (  # type: ignore
     Qgis,
-    QgsCoordinateReferenceSystem,
     QgsFeature,
     QgsField,
     QgsFields,
     QgsGeometry,
     QgsLayerTreeGroup,
     QgsPointXY,
-    QgsVectorLayer,
 )
 
 try:
@@ -29,16 +27,15 @@ class MetSurfacesMixin:
         self,
         met_point_proj_crs: QgsPointXY,
         icao_code: str,
-        target_crs: QgsCoordinateReferenceSystem,
         station_location_group: QgsLayerTreeGroup,
         station_surface_group: QgsLayerTreeGroup,
-    ) -> Tuple[bool, List[QgsVectorLayer]]:
+    ) -> bool:
         """Generate the MET source point and its derived technical surfaces."""
         any_layer_ok = False
         enclosure_geom: Optional[QgsGeometry] = None
         met_geom_target_crs = QgsGeometry.fromPointXY(met_point_proj_crs)
         if met_geom_target_crs.isNull():
-            return False, []
+            return False
 
         try:
             fields = QgsFields()
@@ -72,82 +69,44 @@ class MetSurfacesMixin:
         except Exception as e:
             QgsMessageLog.logMessage(f"Error MET Point: {e}", PLUGIN_TAG, level=Qgis.Critical)
 
-        try:
-            side = 16.0
-            name = self.tr("MET Instrument Enclosure")
-            geom = self._create_centered_oriented_square(met_point_proj_crs, side, name)
-            if geom:
-                enclosure_geom = geom
-                fields = QgsFields(
-                    [
-                        QgsField("desc", QVariant.String),
-                        QgsField("coord_east", QVariant.Double),
-                        QgsField("coord_north", QVariant.Double),
-                        QgsField("side_m", QVariant.Double),
-                        QgsField("ref_mos", QVariant.String, "MOS Reference", 20),
-                    ]
+        square_fields = QgsFields(
+            [
+                QgsField("desc", QVariant.String),
+                QgsField("coord_east", QVariant.Double),
+                QgsField("coord_north", QVariant.Double),
+                QgsField("side_m", QVariant.Double),
+                QgsField("ref_mos", QVariant.String, "MOS Reference", 20),
+            ]
+        )
+        for suffix, label, side in (
+            ("enc", "MET Instrument Enclosure", 16.0),
+            ("buf", "MET Buffer Zone", 30.0),
+        ):
+            try:
+                name = self.tr(label)
+                geometry = self._create_centered_oriented_square(met_point_proj_crs, side, name)
+                if not geometry:
+                    continue
+                if suffix == "enc":
+                    enclosure_geom = geometry
+                feature = QgsFeature(square_fields)
+                feature.setGeometry(geometry)
+                feature.setAttributes(
+                    [label, met_point_proj_crs.x(), met_point_proj_crs.y(), side, "MOS 19.18(2)(a)"]
                 )
-                feat = QgsFeature(fields)
-                feat.setGeometry(geom)
-                feat.setAttributes(
-                    [
-                        "MET Instrument Enclosure",
-                        met_point_proj_crs.x(),
-                        met_point_proj_crs.y(),
-                        side,
-                        "MOS 19.18(2)(a)",
-                    ]
-                )
-            if self._create_and_add_layer(
-                "Polygon",
-                f"met_enc_{icao_code}",
-                name,
-                fields,
-                [feat],
-                station_surface_group,
-                "MET Instrument Enclosure",
-            ):
-                any_layer_ok = True
-        except Exception as e:
-            QgsMessageLog.logMessage(f"Error MET Enclosure: {e}", PLUGIN_TAG, level=Qgis.Critical)
-
-        try:
-            side = 30.0
-            name = self.tr("MET Buffer Zone")
-            geom = self._create_centered_oriented_square(met_point_proj_crs, side, name)
-            if geom:
-                fields = QgsFields(
-                    [
-                        QgsField("desc", QVariant.String),
-                        QgsField("coord_east", QVariant.Double),
-                        QgsField("coord_north", QVariant.Double),
-                        QgsField("side_m", QVariant.Double),
-                        QgsField("ref_mos", QVariant.String, "MOS Reference", 20),
-                    ]
-                )
-                feat = QgsFeature(fields)
-                feat.setGeometry(geom)
-                feat.setAttributes(
-                    [
-                        "MET Buffer Zone",
-                        met_point_proj_crs.x(),
-                        met_point_proj_crs.y(),
-                        side,
-                        "MOS 19.18(2)(a)",
-                    ]
-                )
-            if self._create_and_add_layer(
-                "Polygon",
-                f"met_buf_{icao_code}",
-                name,
-                fields,
-                [feat],
-                station_surface_group,
-                "MET Buffer Zone",
-            ):
-                any_layer_ok = True
-        except Exception as e:
-            QgsMessageLog.logMessage(f"Error MET Buffer: {e}", PLUGIN_TAG, level=Qgis.Critical)
+                any_layer_ok = bool(
+                    self._create_and_add_layer(
+                        "Polygon",
+                        f"met_{suffix}_{icao_code}",
+                        name,
+                        square_fields,
+                        [feature],
+                        station_surface_group,
+                        label,
+                    )
+                ) or any_layer_ok
+            except Exception as e:
+                QgsMessageLog.logMessage(f"Error {label}: {e}", PLUGIN_TAG, level=Qgis.Critical)
 
         if enclosure_geom:
             try:
@@ -195,4 +154,4 @@ class MetSurfacesMixin:
                     level=Qgis.Critical,
                 )
 
-        return any_layer_ok, []
+        return any_layer_ok

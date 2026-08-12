@@ -373,32 +373,6 @@ def _unlock(descriptor: int) -> None:
         fcntl.flock(descriptor, fcntl.LOCK_UN)
 
 
-def migrate_history_file(history_path: Path) -> bool:
-    """Convert the former JSON-lines ledger to the tabular schema in place."""
-    path = Path(history_path)
-    if not path.exists():
-        return False
-    descriptor = os.open(path, os.O_RDWR)
-    try:
-        _lock(descriptor)
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        content = os.read(descriptor, os.fstat(descriptor).st_size).decode("utf-8")
-        records = _legacy_records(content)
-        if records is not None:
-            payload = _table_payload(records, header=True)
-        else:
-            payload = _upgrade_tabular_header(content)
-            if payload is None:
-                return False
-        os.ftruncate(descriptor, 0)
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        os.write(descriptor, payload)
-        return True
-    finally:
-        _unlock(descriptor)
-        os.close(descriptor)
-
-
 def _append_record(history_path: Path, record: Mapping[str, object]) -> None:
     descriptor = os.open(history_path, os.O_CREAT | os.O_RDWR, 0o644)
     try:
@@ -673,7 +647,6 @@ __all__ = [
     "detect_run_agent",
     "git_revision",
     "input_mapping_fingerprint",
-    "migrate_history_file",
     "plugin_version",
     "runtime_input_fingerprint",
     "validate_runway_configuration",

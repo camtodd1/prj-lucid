@@ -1,6 +1,6 @@
 """EASA CS-ADR-DSN runway marking policy."""
 
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 from . import ols
 
@@ -44,69 +44,6 @@ TOUCHDOWN_ZONE_OFFSET_RULES = (
     (2400.0, [150.0, 450.0, 600.0, 750.0]),
     (None, [150.0, 300.0, 600.0, 750.0, 900.0, 1050.0]),
 )
-
-MARKING_TRACEABILITY_ITEMS = {
-    "runway_centreline_marking_width": {
-        "source": EASA_RUNWAY_CENTRELINE_MARKING_REF,
-        "status": "operational_verified",
-        "implementation": "centreline_marking_width",
-        "notes": "Minimum stripe widths by runway type and code number.",
-    },
-    "threshold_marking_stripe_count": {
-        "source": EASA_THRESHOLD_MARKING_REF,
-        "status": "operational_verified",
-        "implementation": "THRESHOLD_MARKING_PARAMS_BY_WIDTH",
-        "notes": "Runway width to threshold stripe count table.",
-    },
-    "threshold_marking_representative_stripe_width": {
-        "source": EASA_THRESHOLD_MARKING_REF,
-        "status": "interpretive",
-        "implementation": "THRESHOLD_MARKING_PARAMS_BY_WIDTH",
-        "notes": "Uses the approximately 1.80 m stripe width stated for continued/displaced threshold markings as a representative value.",
-    },
-    "aiming_point_marking_table": {
-        "source": EASA_AIMING_POINT_MARKING_REF,
-        "status": "operational_verified",
-        "implementation": "AIMING_POINT_RULES",
-        "notes": "Table L-1 LDA bands and representative minimum values for permitted ranges.",
-    },
-    "aiming_point_non_instrument_policy": {
-        "source": EASA_RUNWAY_CENTRELINE_MARKING_REF.replace(".L.530", ".L.540"),
-        "status": "interpretive",
-        "implementation": "aiming_point_rule",
-        "notes": "Additional-conspicuity case is exposed using the 1200 m to <2400 m representative dimensions when runway width is at least 30 m.",
-    },
-    "touchdown_zone_pair_counts": {
-        "source": EASA_TOUCHDOWN_ZONE_MARKING_REF,
-        "status": "operational_verified",
-        "implementation": "TOUCHDOWN_ZONE_OFFSET_RULES",
-        "notes": "LDA bands and required pair counts are source verified.",
-    },
-    "touchdown_zone_offsets": {
-        "source": EASA_TOUCHDOWN_ZONE_MARKING_REF,
-        "status": "derived_verified",
-        "implementation": "TOUCHDOWN_ZONE_OFFSET_RULES",
-        "notes": "Offsets are generated at 150 m intervals with pairs coincident with or within 50 m of the aiming point omitted.",
-    },
-    "runway_holding_position_marking": {
-        "source": EASA_RUNWAY_HOLDING_POSITION_MARKING_REF,
-        "status": "accepted_unsupported",
-        "implementation": "runway_holding_position_rule",
-        "notes": "Chapter L defines marking patterns, while fixed holding-position distance is a Chapter D location/design criterion.",
-    },
-}
-
-MARKING_TRACEABILITY = {
-    "source_publication": SOURCE_PUBLICATION,
-    "source_url": SOURCE_URL,
-    "items": MARKING_TRACEABILITY_ITEMS,
-}
-
-
-def get_marking_traceability() -> Dict[str, Any]:
-    """Return source traceability metadata for EASA runway marking rules."""
-    return MARKING_TRACEABILITY.copy()
-
 
 def threshold_marking_params(runway_width: float) -> Optional[Tuple[int, float]]:
     """Return the threshold marking parameters for a given runway width.
@@ -291,9 +228,6 @@ __all__ = [
     "THRESHOLD_MARKING_PARAMS_BY_WIDTH",
     "AIMING_POINT_RULES",
     "TOUCHDOWN_ZONE_OFFSET_RULES",
-    "MARKING_TRACEABILITY",
-    "MARKING_TRACEABILITY_ITEMS",
-    "get_marking_traceability",
     "threshold_marking_params",
     "centreline_marking_width",
     "aiming_point_rule",

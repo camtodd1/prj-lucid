@@ -525,8 +525,6 @@ class LayerMixin:
                         "Annex 14 OES Contour",
                         "Annex 14 Controlling OFS",
                         "Annex 14 Controlling OES",
-                        "Annex 14 Candidate OFS",
-                        "Annex 14 Candidate OES",
                         "OLS Approach",
                         "OLS Inner Approach",
                         "OLS Inner Transitional",
@@ -914,39 +912,6 @@ class LayerMixin:
         # visible in the legend even though the renderer no longer contains
         # matching features.
         layer.setRenderer(renderer.clone())
-
-    def _apply_controlling_region_style(self, layer: QgsVectorLayer):
-        """Apply complementary solid fills for controlling OLS regions."""
-        if layer is None or not layer.isValid():
-            return
-        try:
-            categories = []
-            for surface, fill_color, outline_color in [
-                ("Approach", "42,157,181,115", "22,98,116,230"),
-                ("TOCS", "240,166,76,115", "150,85,31,230"),
-                ("Transitional", "88,178,124,105", "42,105,65,230"),
-                ("Conical", "160,105,194,100", "95,58,125,230"),
-                ("IHS", "236,205,91,100", "145,118,37,230"),
-                ("OHS", "119,135,158,85", "70,84,105,220"),
-            ]:
-                symbol = QgsFillSymbol.createSimple(
-                    {
-                        "color": fill_color,
-                        "outline_color": outline_color,
-                        "outline_width": "0.22",
-                        "outline_width_unit": "MM",
-                        "style": "solid",
-                    }
-                )
-                categories.append(QgsRendererCategory(surface, symbol, surface))
-            layer.setRenderer(QgsCategorizedSymbolRenderer("surface", categories))
-            layer.setLabelsEnabled(False)
-        except Exception as exc:
-            QgsMessageLog.logMessage(
-                f"Warning: failed to apply controlling OLS region style: {exc}",
-                PLUGIN_TAG,
-                level=Qgis.Warning,
-            )
 
     def _apply_controlling_contour_style(self, layer: QgsVectorLayer, palette: str = "default"):
         """Keep controlling contours visually distinct and label-ready."""

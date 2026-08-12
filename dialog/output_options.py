@@ -37,7 +37,6 @@ from .dialog_constants import (
     DIALOG_LOG_TAG,
     MODERNISATION_CHANGE_CONTOUR_KEYS,
     OUTPUT_FORMATS,
-    SURFACE_CONTOUR_KEYS,
 )
 
 
@@ -111,7 +110,6 @@ class OutputOptionsMixin:
     def _setup_ols_workflow_control(self):
         """Create side-by-side baseline and comparison OLS selectors."""
         parent_layout = getattr(self, "verticalLayout_olsTab", None)
-        legacy_combo = getattr(self, "protected_airspace_policy_combo", None)
         if parent_layout is None:
             QgsMessageLog.logMessage(
                 "OLS workflow setup skipped: tab layout missing.",
@@ -135,19 +133,6 @@ class OutputOptionsMixin:
         grid.setVerticalSpacing(8)
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 1)
-
-        if legacy_combo is not None:
-            old_layout = (
-                legacy_combo.parentWidget().layout()
-                if legacy_combo.parentWidget() is not None
-                else None
-            )
-            if old_layout is not None:
-                old_layout.removeWidget(legacy_combo)
-            legacy_combo.hide()
-        old_label = getattr(self, "label_protected_airspace_policy", None)
-        if old_label is not None:
-            old_label.hide()
 
         baseline_label = QtWidgets.QLabel(self.tr("Baseline"))
         baseline_label.setObjectName("label_baselineOlsRuleset")
@@ -290,7 +275,6 @@ class OutputOptionsMixin:
         baseline_combo.currentIndexChanged.connect(self._on_ols_ruleset_selection_changed)
         comparison_combo.currentIndexChanged.connect(self._on_ols_ruleset_selection_changed)
         self._update_comparison_ols_ruleset_items()
-        self._sync_legacy_ols_policy()
 
     def _on_design_ruleset_selection_changed(self, *_args) -> None:
         """Keep the default baseline OLS paired with the selected design standard."""
@@ -306,7 +290,6 @@ class OutputOptionsMixin:
             baseline_combo.setCurrentIndex(baseline_index)
             baseline_combo.blockSignals(blocked)
         self._update_comparison_ols_ruleset_items()
-        self._sync_legacy_ols_policy()
         self._update_ols_workflow_ui()
 
     def _toggle_ols_family_help(self, expanded: bool) -> None:
@@ -373,19 +356,6 @@ class OutputOptionsMixin:
             return "modernisation_comparison"
         return "ruleset_comparison"
 
-    def _sync_legacy_ols_policy(self) -> None:
-        legacy_combo = getattr(self, "protected_airspace_policy_combo", None)
-        if legacy_combo is None:
-            return
-        policy = self._legacy_ols_policy_for_selection()
-        index = legacy_combo.findData(policy)
-        if index < 0:
-            legacy_combo.addItem(policy, userData=policy)
-            index = legacy_combo.count() - 1
-        blocked = legacy_combo.blockSignals(True)
-        legacy_combo.setCurrentIndex(index)
-        legacy_combo.blockSignals(blocked)
-
     def _update_comparison_ols_ruleset_items(self) -> None:
         baseline_id, comparison_id = self._current_ols_ruleset_ids()
         comparison_combo = getattr(self, "comparison_ols_ruleset_combo", None)
@@ -413,7 +383,6 @@ class OutputOptionsMixin:
 
     def _on_ols_ruleset_selection_changed(self, *_args) -> None:
         self._update_comparison_ols_ruleset_items()
-        self._sync_legacy_ols_policy()
         self._update_ols_workflow_ui()
         if hasattr(self, "update_dialog_status"):
             self.update_dialog_status()
@@ -437,7 +406,6 @@ class OutputOptionsMixin:
         baseline_combo.blockSignals(baseline_blocked)
         comparison_combo.blockSignals(comparison_blocked)
         self._update_comparison_ols_ruleset_items()
-        self._sync_legacy_ols_policy()
         self._update_ols_workflow_ui()
 
     def _update_ols_workflow_ui(self, *_args, dependency_status=None, runway_count=None):

@@ -12,9 +12,7 @@ from core.run_log import (
     DIAGNOSTIC_TAG,
     PLUGIN_TAG,
     EventKind,
-    GenerationOutcome,
     LogEvent,
-    OutcomeStatus,
     RunLog,
     render_event,
 )
@@ -105,37 +103,6 @@ class RunLogTests(unittest.TestCase):
         self.assertNotIn("Traceback", self.records[0][0])
         self.assertTrue(self.records[1][0].startswith("SKIP"))
         self.assertEqual(self.records[1][2], int(Qgis.Info))
-
-    def test_generation_outcomes_map_to_scan_friendly_events(self):
-        run_log = RunLog(self.sink, diagnostics_enabled=False)
-        run_log.record_outcome(
-            GenerationOutcome("runway surfaces", OutcomeStatus.GENERATED, layers=3, features=8)
-        )
-        run_log.record_outcome(
-            GenerationOutcome(
-                "lighting",
-                OutcomeStatus.SKIPPED_MISSING_INPUT,
-                reason="no lighting inputs supplied",
-            )
-        )
-        run_log.flush()
-
-        self.assertTrue(self.records[0][0].startswith("OUTPUT"))
-        self.assertTrue(self.records[1][0].startswith("SKIP"))
-
-    def test_generation_outcome_can_be_retained_without_duplicate_event(self):
-        run_log = RunLog(self.sink, diagnostics_enabled=False)
-        outcome = GenerationOutcome(
-            "controlling envelope",
-            OutcomeStatus.GENERATED,
-            layers=2,
-            features=12,
-        )
-
-        run_log.record_outcome(outcome, emit=False)
-
-        self.assertEqual(run_log.outcomes, [outcome])
-        self.assertEqual(self.records, [])
 
     def test_failed_zero_output_terminal_explains_the_omission(self):
         run_log = RunLog(self.sink, diagnostics_enabled=False)

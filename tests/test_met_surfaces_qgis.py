@@ -47,10 +47,9 @@ class MetSurfacesQgisTests(unittest.TestCase):
         harness = _MetHarness()
         station_group = QgsLayerTreeGroup("Meteorological Instrument Station")
 
-        generated, _ = harness.process_met_station_surfaces(
+        generated = harness.process_met_station_surfaces(
             QgsPointXY(500000, 6000000),
             "YTEST",
-            None,
             station_group,
             station_group,
         )

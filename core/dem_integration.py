@@ -291,28 +291,12 @@ def build_ga_wcs_urls(extent_layer: Any, source_key: str) -> Tuple[str, ...]:
     urls = []
     for row in range(row_tiles):
         tile_ymin = ymin + row * GA_WCS_TILE_SIZE * float(source["resy"])
-        tile_ymax = min(
-            ymax,
-            ymin + (row + 1) * GA_WCS_TILE_SIZE * float(source["resy"]),
-        )
+        tile_ymax = min(ymax, ymin + (row + 1) * GA_WCS_TILE_SIZE * float(source["resy"]))
         for column in range(column_tiles):
             tile_xmin = xmin + column * GA_WCS_TILE_SIZE * float(source["resx"])
-            tile_xmax = min(
-                xmax,
-                xmin + (column + 1) * GA_WCS_TILE_SIZE * float(source["resx"]),
-            )
-            urls.append(
-                _build_ga_wcs_url(
-                    source,
-                    (tile_xmin, tile_ymin, tile_xmax, tile_ymax),
-                )
-            )
+            tile_xmax = min(xmax, xmin + (column + 1) * GA_WCS_TILE_SIZE * float(source["resx"]))
+            urls.append(_build_ga_wcs_url(source, (tile_xmin, tile_ymin, tile_xmax, tile_ymax)))
     return tuple(urls)
-
-
-def build_ga_wcs_url(extent_layer: Any, source_key: str) -> str:
-    """Build the first bounded WCS request; retained for API compatibility."""
-    return build_ga_wcs_urls(extent_layer, source_key)[0]
 
 
 def _download_ga_wcs(url: str) -> bytes:
@@ -863,7 +847,6 @@ __all__ = [
     "apply_headroom_style",
     "apply_penetration_boundary_style",
     "apply_terrain_clearance_style",
-    "build_ga_wcs_url",
     "build_ga_wcs_urls",
     "contour_polygon_algorithm",
     "create_elevation_polygons",

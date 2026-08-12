@@ -10,7 +10,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from dashboard.runtime_dashboard import build_html, load_runs, recent_window_change
+from dashboard.runtime_dashboard import build_html, load_runs
 
 
 COLUMNS = (
@@ -233,17 +233,6 @@ class RuntimeDashboardTests(unittest.TestCase):
         self.assertEqual(run["airport"], "YMML")
         self.assertEqual(run["testCase"], "YMML intersecting runway check")
         self.assertEqual(run["runBy"], "User")
-
-    def test_recent_window_compares_last_five_with_previous_five(self):
-        runs = [
-            {"status": "Completed", "elapsed": value}
-            for value in [20, 20, 20, 20, 20, 15, 15, 15, 15, 15]
-        ]
-        summary = recent_window_change(runs)
-        self.assertEqual(summary["previous_median"], 20)
-        self.assertEqual(summary["recent_median"], 15)
-        self.assertEqual(summary["change"], -0.25)
-
 
 if __name__ == "__main__":
     unittest.main()

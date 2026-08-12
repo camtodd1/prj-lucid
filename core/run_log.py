@@ -16,7 +16,7 @@ import traceback
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Dict, Mapping, Optional, Tuple
 
 from qgis.core import Qgis, QgsMessageLog as _QgsMessageLog  # type: ignore
 
@@ -39,14 +39,6 @@ class EventKind(str, Enum):
     DIAG = "DIAG"
 
 
-class OutcomeStatus(str, Enum):
-    GENERATED = "generated"
-    SKIPPED_MISSING_INPUT = "skipped_missing_input"
-    SKIPPED_NOT_APPLICABLE = "skipped_not_applicable"
-    DEGRADED = "degraded"
-    FAILED = "failed"
-
-
 @dataclass(frozen=True)
 class LogEvent:
     kind: EventKind
@@ -59,19 +51,6 @@ class LogEvent:
     phase_key: Optional[str] = None
     title: Optional[str] = None
     facts: Mapping[str, Any] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class GenerationOutcome:
-    scope: str
-    status: OutcomeStatus
-    reason: Optional[str] = None
-    layers: Optional[int] = None
-    features: Optional[int] = None
-    facts: Mapping[str, Any] = field(default_factory=dict)
-
-    def __bool__(self) -> bool:
-        return self.status in {OutcomeStatus.GENERATED, OutcomeStatus.DEGRADED}
 
 
 _FACT_ORDER = (
@@ -192,7 +171,6 @@ class RunLog:
         self.skip_count = 0
         self.warning_count = 0
         self.error_count = 0
-        self.outcomes: List[GenerationOutcome] = []
         configure_standard_logging(self.diagnostics_enabled)
 
     def _emit(self, event: LogEvent, *, diagnostic: bool = False) -> None:
@@ -324,47 +302,6 @@ class RunLog:
             LogEvent(EventKind.DIAG, scope=scope, reason=detail, facts=facts),
             diagnostic=True,
         )
-
-    def record_outcome(
-        self,
-        outcome: GenerationOutcome,
-        *,
-        emit: bool = True,
-    ) -> None:
-        self.outcomes.append(outcome)
-        if not emit:
-            return
-        facts = dict(outcome.facts)
-        if outcome.status == OutcomeStatus.GENERATED:
-            self.output(
-                outcome.scope,
-                layers=outcome.layers,
-                features=outcome.features,
-                **facts,
-            )
-            return
-        if outcome.layers is not None:
-            facts["layers"] = outcome.layers
-        if outcome.features is not None:
-            facts["features"] = outcome.features
-        if outcome.status in {
-            OutcomeStatus.SKIPPED_MISSING_INPUT,
-            OutcomeStatus.SKIPPED_NOT_APPLICABLE,
-        }:
-            self.skip(outcome.scope, outcome.reason or outcome.status.value, **facts)
-        elif outcome.status == OutcomeStatus.DEGRADED:
-            self.warning(
-                outcome.scope,
-                outcome.reason or "output was generated with a recoverable degradation",
-                **facts,
-            )
-        else:
-            self.error(
-                outcome.scope,
-                outcome.reason or "output generation failed",
-                consequence="requested output was not generated",
-                **facts,
-            )
 
     def finish(self, status: str, **facts: Any) -> None:
         if self.terminal:
@@ -565,10 +502,6 @@ def set_active_run_log(run_log: Optional[RunLog]) -> None:
     _active_run_log = run_log
 
 
-def active_run_log() -> Optional[RunLog]:
-    return _active_run_log
-
-
 def emit_legacy(message: Any, level=Qgis.Info) -> None:
     if _active_run_log is not None:
         _active_run_log.legacy(message, level)
@@ -591,13 +524,10 @@ __all__ = [
     "DIAGNOSTIC_TAG",
     "DIAGNOSTICS_ENV_VAR",
     "EventKind",
-    "GenerationOutcome",
     "LogEvent",
-    "OutcomeStatus",
     "PLUGIN_TAG",
     "QgsMessageLog",
     "RunLog",
-    "active_run_log",
     "diagnostics_enabled_from_environment",
     "configure_standard_logging",
     "emit_legacy",
