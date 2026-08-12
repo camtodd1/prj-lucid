@@ -59,6 +59,7 @@ try:
     from .dialog.agl_options import AglOptionsMixin
     from .dialog.dem_tools import DemToolsMixin
     from .dialog.persistence import PersistenceMixin
+    from .core import output_structure
     from .core.run_history import classify_runway_configuration
     from .frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles
     from .rulesets.registry import (
@@ -90,6 +91,7 @@ except ImportError:
     from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.dem_tools import DemToolsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
+    from core import output_structure  # type: ignore
     from core.run_history import classify_runway_configuration  # type: ignore
     from frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles  # type: ignore
     from rulesets.registry import (  # type: ignore
@@ -1138,39 +1140,39 @@ class SafeguardingBuilderDialog(
         return [
             {
                 "tab": "tab_airport",
-                "summary": "Add the airport location and reference point.",
+                "summary": output_structure.REFERENCE_DATA,
             },
             {
                 "tab": "tab_runways",
-                "summary": "Define each runway and its operating distances.",
+                "summary": output_structure.AERODROME_INFRASTRUCTURE,
             },
             {
                 "tab": "tab_runway_protection",
-                "summary": "Configure runway protection and safeguarding layers.",
+                "summary": output_structure.RUNWAY_PROTECTION_AND_SEPARATION,
             },
             {
                 "tab": "tab_ols",
-                "summary": "Choose which protected-airspace layers to create.",
+                "summary": output_structure.PROTECTED_AIRSPACE,
             },
             {
                 "tab": "tab_cns",
-                "summary": "Add CNS facilities, ILS safeguarding and the optional weather station.",
+                "summary": output_structure.CNS_TECHNICAL_SAFEGUARDING,
             },
             {
                 "tab": "tab_lighting",
-                "summary": "Add airfield and approach lighting when needed.",
+                "summary": output_structure.AIRFIELD_GROUND_LIGHTING,
             },
             {
                 "tab": "tab_external",
-                "summary": "Create external planning and consultation safeguards.",
+                "summary": output_structure.EXTERNAL_SAFEGUARDING,
             },
             {
                 "tab": "tab_terrain",
-                "summary": "Download terrain for the OLS area, then create elevation polygons.",
+                "summary": output_structure.TERRAIN_ANALYSIS,
             },
             {
                 "tab": "tab_airport_map",
-                "summary": "Import airport features from OpenStreetMap around the ARP.",
+                "summary": output_structure.IMPORTED_AIRPORT_MAP,
             },
             {
                 "tab": "tab_output",

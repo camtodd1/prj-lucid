@@ -40,6 +40,28 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             runway_count=2,
         )
 
+    def test_workflow_tabs_show_their_generated_layer_groups(self):
+        summaries = {
+            spec["tab"]: spec["summary"]
+            for spec in self.dialog._workflow_tab_specs()
+        }
+
+        self.assertEqual(
+            summaries,
+            {
+                "tab_airport": "01 Aerodrome Reference Data",
+                "tab_runways": "02 Runway Infrastructure",
+                "tab_runway_protection": "03 Runway Protection and Safeguarding",
+                "tab_ols": "04 Obstacle Limitation Surfaces",
+                "tab_cns": "05 CNS / Technical Facilities",
+                "tab_lighting": "06 Airfield Ground Lighting",
+                "tab_external": "07 External Safeguarding",
+                "tab_terrain": "08 Terrain Analysis",
+                "tab_airport_map": "09 Imported Airport Map",
+                "tab_output": "Choose where generated layers will be saved.",
+            },
+        )
+
     def test_two_column_ruleset_selectors_are_presented_on_ols_tab(self):
         baseline = self.dialog.baseline_ols_ruleset_combo
         comparison = self.dialog.comparison_ols_ruleset_combo
@@ -67,7 +89,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 QtWidgets.QLabel,
                 "label_workflow_summary_tab_ols",
             ).text(),
-            "Choose which protected-airspace layers to create.",
+            "04 Obstacle Limitation Surfaces",
         )
         self.assertIsNone(
             self.dialog.findChild(QtWidgets.QLabel, "label_olsInlineStatus")

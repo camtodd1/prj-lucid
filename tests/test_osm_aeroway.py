@@ -277,7 +277,7 @@ class OsmAerowayTests(unittest.TestCase):
             )
             self.assertEqual(
                 context.text(),
-                "Add the airport location and reference point.",
+                "01 Aerodrome Reference Data",
             )
             cns_context = dialog.findChild(
                 QtWidgets.QLabel,
@@ -285,7 +285,7 @@ class OsmAerowayTests(unittest.TestCase):
             )
             self.assertEqual(
                 cns_context.text(),
-                "Add CNS facilities, ILS safeguarding and the optional weather station.",
+                "05 CNS / Technical Facilities",
             )
             map_context = dialog.findChild(
                 QtWidgets.QLabel,
@@ -293,7 +293,7 @@ class OsmAerowayTests(unittest.TestCase):
             )
             self.assertEqual(
                 map_context.text(),
-                "Import airport features from OpenStreetMap around the ARP.",
+                "09 Imported Airport Map",
             )
             self.assertTrue(
                 all(
