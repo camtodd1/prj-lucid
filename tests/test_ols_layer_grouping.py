@@ -1,6 +1,7 @@
 import sys
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from qgis.core import QgsLayerTreeGroup
 
@@ -56,6 +57,41 @@ class OlsLayerGroupingTests(unittest.TestCase):
         self.assertEqual(approach_group.name(), "RWY 01L")
         self.assertIsNone(self.direct_group(approach_group, "Approach"))
         self.assertIsNone(self.direct_group(approach_group, "Take-off Climb"))
+
+    def test_airport_wide_ols_uses_an_empty_secondary_group(self):
+        primary_group = QgsLayerTreeGroup("Primary Surfaces")
+        secondary_group = QgsLayerTreeGroup("Secondary Surfaces")
+        context = SimpleNamespace(generation_runways=lambda: [{}])
+        policy = SimpleNamespace(
+            airport_wide_spec=lambda _ruleset, _context: {
+                "ihs_elevation_amsl": 50.0,
+                "datum_elevation_m": 5.0,
+            }
+        )
+        ruleset = SimpleNamespace(
+            protected_airspace_model="ols_current",
+            ols_construction_policy=lambda: policy,
+        )
+        captured = {}
+        self.builder.get_active_protected_airspace_ruleset = lambda: ruleset
+        self.builder.ols_construction_context = context
+        self.builder.reference_elevation_datum = 5.0
+        self.builder._generate_airport_wide_ols = (
+            lambda _runways, group, _datum, _icao, _runway_group: captured.setdefault(
+                "group", group
+            ) is group
+        )
+
+        created = self.builder._process_airport_wide_ols_if_possible(
+            {"F": primary_group},
+            [{}],
+            "TEST",
+            False,
+            secondary_group,
+        )
+
+        self.assertTrue(created)
+        self.assertIs(captured["group"], secondary_group)
 
     def test_surface_layer_names_use_one_shared_schema(self):
         self.assertEqual(

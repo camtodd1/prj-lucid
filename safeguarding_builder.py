@@ -3065,7 +3065,9 @@ class SafeguardingBuilder(
                 try:
                     airport_wide_ols_processed = self._generate_airport_wide_ols(
                         context_runways,
-                        airport_wide_ols_group or guideline_groups["F"],
+                        airport_wide_ols_group
+                        if airport_wide_ols_group is not None
+                        else guideline_groups["F"],
                         float(airport_wide_datum or 0.0),
                         icao_code,
                         guideline_groups["F"],
@@ -4737,7 +4739,9 @@ class SafeguardingBuilder(
                         run_success_flags.append(
                             self.process_annex14_geometry(
                                 ols_runway_data,
-                                runway_ols_group or guideline_groups["F"],
+                                runway_ols_group
+                                if runway_ols_group is not None
+                                else guideline_groups["F"],
                                 airport_wide_ols_group,
                             )
                         )
@@ -4745,7 +4749,9 @@ class SafeguardingBuilder(
                         run_success_flags.append(
                             self.process_runway_ols_surfaces(
                                 ols_runway_data,
-                                runway_ols_group or guideline_groups["F"],
+                                runway_ols_group
+                                if runway_ols_group is not None
+                                else guideline_groups["F"],
                                 ofz_group,
                             )
                         )  # F = OLS App/TOCS
