@@ -507,11 +507,24 @@ class LayerStyleTests(unittest.TestCase):
             plane_rule.settings().fieldName,
             "'HP' || '\n' || format_number(\"contour_elev_am\", 2) || 'm'",
         )
+        self.assertTrue(plane_rule.settings().geometryGeneratorEnabled)
+        self.assertEqual(
+            plane_rule.settings().geometryGenerator,
+            "centroid($geometry)",
+        )
+        self.assertEqual(
+            plane_rule.settings().geometryGeneratorType,
+            QgsWkbTypes.PointGeometry,
+        )
+        self.assertEqual(
+            plane_rule.settings().placement,
+            Qgis.LabelPlacement.OverPoint,
+        )
         renderer = layer.renderer()
         context = QgsRenderContext()
         renderer.startRender(context, layer.fields())
         try:
-            self.assertFalse(
+            self.assertTrue(
                 renderer.symbolsForFeature(horizontal_plane, context)
             )
         finally:

@@ -20,6 +20,7 @@ from qgis.core import (  # type: ignore
     QgsLineSymbol,
     QgsPalLayerSettings,
     QgsProject,
+    QgsProperty,
     QgsRendererCategory,
     QgsRuleBasedLabeling,
     QgsRuleBasedRenderer,
@@ -999,13 +1000,20 @@ class LayerMixin:
             normal_rule = QgsRuleBasedRenderer.Rule(normal_symbol)
             normal_filter = f"NOT ({index_expression})"
             if has_contour_class:
-                normal_filter += (
-                    f' AND coalesce("{contour_class_field}", \'\') '
-                    "<> 'horizontal_plane'"
+                normal_symbol.setDataDefinedProperty(
+                    normal_symbol.PropertyOpacity,
+                    QgsProperty.fromExpression(
+                        f'CASE WHEN "{contour_class_field}" = \'horizontal_plane\' '
+                        "THEN 0 ELSE 100 END"
+                    ),
                 )
             normal_rule.setFilterExpression(normal_filter)
             normal_rule.setLabel("Intermediate contour")
-            if not contour_classes or "intermediate" in contour_classes:
+            if (
+                not contour_classes
+                or "intermediate" in contour_classes
+                or "horizontal_plane" in contour_classes
+            ):
                 root.appendChild(normal_rule)
 
             layer.setRenderer(QgsRuleBasedRenderer(root))
@@ -1144,7 +1152,10 @@ class LayerMixin:
                     "format_number(\"contour_elev_am\", 2) || 'm'"
                 )
                 plane_settings.isExpression = True
-                plane_settings.placement = QgsPalLayerSettings.Line
+                plane_settings.geometryGeneratorEnabled = True
+                plane_settings.geometryGenerator = "centroid($geometry)"
+                plane_settings.geometryGeneratorType = QgsWkbTypes.PointGeometry
+                plane_settings.placement = Qgis.LabelPlacement.OverPoint
                 plane_settings.priority = 8
                 plane_settings.obstacle = False
 
