@@ -167,7 +167,15 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         output = self.dialog._workflow_context_widgets["tab_output"]["status"]
         self.assertEqual(output.text(), "Ready")
         self.assertEqual(output._status_chip_signature[1], "ready")
-        self.assertEqual(self.dialog._runway_groups[1].status_chip_lbl.text(), "Incomplete")
+        runway_puck = self.dialog._runway_groups[1].status_chip_lbl
+        self.assertEqual(runway_puck.text(), "Incomplete")
+        self.assertEqual(runway_puck.minimumHeight(), 24)
+        self.assertEqual(runway_puck.maximumHeight(), 24)
+        self.assertEqual(
+            runway_puck.sizePolicy().horizontalPolicy(),
+            QtWidgets.QSizePolicy.Policy.Maximum,
+        )
+        self.assertEqual(runway_puck.minimumWidth(), 0)
 
     def test_workflow_context_strips_match_arp_geometry(self):
         self.dialog.resize(920, 680)

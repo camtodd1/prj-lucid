@@ -138,20 +138,16 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self.status_chip_lbl = QtWidgets.QLabel("Incomplete")
         self.status_chip_lbl.setObjectName(f"label_rwy_status_{self.index}")
         self.status_chip_lbl.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.status_chip_lbl.setMinimumHeight(24)
         self.status_chip_lbl.setMaximumHeight(24)
         self.status_chip_lbl.setSizePolicy(
-            QtWidgets.QSizePolicy.Policy.Fixed,
+            QtWidgets.QSizePolicy.Policy.Maximum,
             QtWidgets.QSizePolicy.Policy.Fixed,
         )
         self.status_chip_lbl.setStyleSheet(
             "QLabel { background: #f4f4f4; color: #555; border: 1px solid #d6d6d6; "
             "border-radius: 9px; padding: 3px 9px; font-size: 10px; font-weight: 600; }"
         )
-        status_width = max(
-            self.status_chip_lbl.fontMetrics().horizontalAdvance(text)
-            for text in ["Incomplete", "Needs attention", "Ready"]
-        )
-        self.status_chip_lbl.setFixedWidth(status_width + 24)
         header_layout.addWidget(self.status_chip_lbl)
 
         self.expand_button = QtWidgets.QToolButton()
