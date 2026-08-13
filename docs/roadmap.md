@@ -15,6 +15,9 @@ fixtures.
 
 ## Protected Airspace
 
+- [ ] Clarify and implement MOS139 strip-dimension propagation for OLS lower
+  edges originating from the runway strip: editable graded and overall strip
+  dimensions currently do not adapt the affected transitional surfaces.
 - [ ] Add imported or user-defined specific OES geometry for curved and other
   operations. The automatic modernised workflow remains limited to aligned
   straight-in standard OES and does not expose procedure-specific controls.
@@ -57,7 +60,6 @@ fixtures.
 
 ## Data and Workflow Integration
 
-- [ ] Integrate a digital elevation model (DEM).
 - [ ] Explore an agentic workflow outside QGIS that auto-populates airport
   input files from verified sources such as the AIP. Consider delivering this
   as an external client rather than as part of the plugin.
