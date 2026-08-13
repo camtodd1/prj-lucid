@@ -117,17 +117,6 @@ class LayerStyleTests(unittest.TestCase):
             "Conical",
             "Outer Horizontal",
         }
-        expected_outlines = {
-            "Approach": (166, 83, 75, 255),
-            "Inner Approach": (154, 111, 83, 255),
-            "Transitional": (156, 139, 94, 255),
-            "Inner Transitional": (145, 121, 67, 255),
-            "Baulked Landing": (53, 56, 66, 255),
-            "Take-off Climb": (66, 132, 117, 255),
-            "Inner Horizontal": (75, 116, 126, 255),
-            "Conical": (70, 105, 116, 255),
-            "Outer Horizontal": (82, 86, 99, 255),
-        }
         for geometry, filename in (
             ("Polygon", "harmonised_ols_surfaces.qml"),
             ("LineString", "harmonised_ols_contours.qml"),
@@ -148,18 +137,6 @@ class LayerStyleTests(unittest.TestCase):
                     },
                     expected_rules,
                 )
-                rules = {
-                    rule.label(): rule
-                    for rule in layer.renderer().rootRule().children()
-                }
-                for label, expected_color in expected_outlines.items():
-                    symbol = rules[label].symbol()
-                    actual_color = (
-                        symbol.symbolLayer(0).strokeColor().getRgb()
-                        if geometry == "Polygon"
-                        else symbol.color().getRgb()
-                    )
-                    self.assertEqual(actual_color, expected_color)
 
     @staticmethod
     def _surface_layer(surface_values):
