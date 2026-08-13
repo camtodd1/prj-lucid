@@ -934,8 +934,8 @@ class LayerMixin:
             root = QgsRuleBasedRenderer.Rule(None)
             primary_filter = index_expression
             if palette == "ofs":
-                primary_color = "174,68,45,245"
-                intermediate_color = "190,103,36,185"
+                primary_color = "47,102,122,245"
+                intermediate_color = "57,121,138,185"
             else:
                 primary_color = "18,75,82,240"
                 intermediate_color = "38,111,117,175"

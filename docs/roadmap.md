@@ -2,7 +2,7 @@
 
 **Status:** Roadmap
 
-**Last reviewed:** 31 July 2026
+**Last reviewed:** 13 August 2026
 
 This file is the single project documentation backlog. It lists incomplete
 work only; completed implementation history belongs in Git and regression
@@ -35,10 +35,6 @@ fixtures.
   retain the explicit CAT I guidance and outer-horizontal guidance caveats.
 - [ ] Complete CAP 168 scope outside the supported OLS contract, beginning with
   RESA and approach-adjacent transitional behavior on curved tracks.
-- [x] Add the UK CAA/DfT supplementary safeguarding framework while retaining
-  CAP 168 OLS in the protected-airspace ruleset.
-- [x] Add a fixed 6 km ARP-centred UK crane notification-zone layer without a
-  candidate assessment workflow.
 
 ## Physical, Marking, and Lighting Outputs
 
