@@ -118,15 +118,15 @@ class LayerStyleTests(unittest.TestCase):
             "Outer Horizontal",
         }
         expected_outlines = {
-            "Approach": (47, 102, 122, 255),
-            "Inner Approach": (57, 121, 138, 255),
-            "Transitional": (75, 118, 130, 255),
-            "Inner Transitional": (63, 135, 144, 255),
-            "Baulked Landing": (36, 79, 97, 255),
-            "Take-off Climb": (37, 122, 140, 255),
-            "Inner Horizontal": (86, 111, 120, 255),
-            "Conical": (109, 129, 136, 255),
-            "Outer Horizontal": (126, 139, 144, 255),
+            "Approach": (166, 83, 75, 255),
+            "Inner Approach": (154, 111, 83, 255),
+            "Transitional": (156, 139, 94, 255),
+            "Inner Transitional": (145, 121, 67, 255),
+            "Baulked Landing": (53, 56, 66, 255),
+            "Take-off Climb": (66, 132, 117, 255),
+            "Inner Horizontal": (75, 116, 126, 255),
+            "Conical": (70, 105, 116, 255),
+            "Outer Horizontal": (82, 86, 99, 255),
         }
         for geometry, filename in (
             ("Polygon", "harmonised_ols_surfaces.qml"),
