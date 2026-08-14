@@ -588,20 +588,28 @@ class OlsGuidelineMixin:
 
                 # Check Strip Dimensions Content
                 strip_width = strip_dims.get("overall_width")
-                strip_ext = strip_dims.get("extension_length")
+                strip_ext_p = strip_dims.get(
+                    "extension_length_1", strip_dims.get("extension_length")
+                )
+                strip_ext_r = strip_dims.get(
+                    "extension_length_2", strip_dims.get("extension_length")
+                )
                 is_width_valid = isinstance(strip_width, (int, float)) and strip_width > 0
-                is_ext_valid = isinstance(strip_ext, (int, float)) and strip_ext >= 0
-                if not is_width_valid or not is_ext_valid:
+                are_exts_valid = all(
+                    isinstance(value, (int, float)) and value >= 0
+                    for value in (strip_ext_p, strip_ext_r)
+                )
+                if not is_width_valid or not are_exts_valid:
                     QgsMessageLog.logMessage(
-                        f"Skipping {rwy_name} strip outline - invalid content in strip_dims (W:{strip_width}, E:{strip_ext}).",
+                        f"Skipping {rwy_name} strip outline - invalid content in strip_dims (W:{strip_width}, E1:{strip_ext_p}, E2:{strip_ext_r}).",
                         plugin_tag,
                         level=Qgis.Warning,
                     )
                     continue
 
                 # Check Strip Endpoint Projection
-                strip_end_p = phys_p_start.project(strip_ext, rwy_params["azimuth_r_p"])
-                strip_end_r = phys_p_end.project(strip_ext, rwy_params["azimuth_p_r"])
+                strip_end_p = phys_p_start.project(strip_ext_p, rwy_params["azimuth_r_p"])
+                strip_end_r = phys_p_end.project(strip_ext_r, rwy_params["azimuth_p_r"])
                 if not strip_end_p or not strip_end_r:
                     QgsMessageLog.logMessage(
                         f"Skipping {rwy_name} strip outline - failed strip end point projection.",
@@ -2820,8 +2828,17 @@ class OlsGuidelineMixin:
 
             # --- Strip-Adjacent Sides (original rectangular logic) ---
             strip_overall_width = calculated_strip_dims.get("overall_width")
-            strip_extension = calculated_strip_dims.get("extension_length")
-            if strip_overall_width is None or strip_extension is None:
+            primary_strip_extension = calculated_strip_dims.get(
+                "extension_length_1", calculated_strip_dims.get("extension_length")
+            )
+            reciprocal_strip_extension = calculated_strip_dims.get(
+                "extension_length_2", calculated_strip_dims.get("extension_length")
+            )
+            if (
+                strip_overall_width is None
+                or primary_strip_extension is None
+                or reciprocal_strip_extension is None
+            ):
                 QgsMessageLog.logMessage(
                     f"Skipping Transitional features for {runway_name}: Missing calc strip dims.",
                     plugin_tag,
@@ -2829,8 +2846,8 @@ class OlsGuidelineMixin:
                 )
                 continue
             strip_overall_half_width = strip_overall_width / 2.0
-            strip_end_p = phys_end_p.project(strip_extension, rwy_params["azimuth_r_p"])
-            strip_end_r = phys_end_r.project(strip_extension, rwy_params["azimuth_p_r"])
+            strip_end_p = phys_end_p.project(primary_strip_extension, rwy_params["azimuth_r_p"])
+            strip_end_r = phys_end_r.project(reciprocal_strip_extension, rwy_params["azimuth_p_r"])
             if not strip_end_p or not strip_end_r:
                 QgsMessageLog.logMessage(
                     f"Skipping Transitional features for {runway_name}: Failed strip end points.",
@@ -2839,12 +2856,12 @@ class OlsGuidelineMixin:
                 )
                 continue
             primary_stopway_end = (
-                phys_end_p.project(min(stopway_at_primary_end, strip_extension), rwy_params["azimuth_r_p"])
+                phys_end_p.project(min(stopway_at_primary_end, primary_strip_extension), rwy_params["azimuth_r_p"])
                 if stopway_at_primary_end > 1e-6
                 else None
             )
             reciprocal_stopway_end = (
-                phys_end_r.project(min(stopway_at_reciprocal_end, strip_extension), rwy_params["azimuth_p_r"])
+                phys_end_r.project(min(stopway_at_reciprocal_end, reciprocal_strip_extension), rwy_params["azimuth_p_r"])
                 if stopway_at_reciprocal_end > 1e-6
                 else None
             )
@@ -4992,7 +5009,18 @@ class OlsGuidelineMixin:
                     strip_dims_for_bls = active_ruleset.strip_parameters(
                         arc_num, strip_type_abbr, runway_actual_width
                     )
-                    strip_extension_for_bls = (strip_dims_for_bls or {}).get("extension_length")
+                    calculated_strip_dims = runway_data.get("calculated_strip_dims")
+                    if isinstance(calculated_strip_dims, dict):
+                        strip_dims_for_bls = calculated_strip_dims
+                    opposite_extension_key = (
+                        "extension_length_2"
+                        if config.get("direction") == "primary"
+                        else "extension_length_1"
+                    )
+                    strip_extension_for_bls = (strip_dims_for_bls or {}).get(
+                        opposite_extension_key,
+                        (strip_dims_for_bls or {}).get("extension_length"),
+                    )
                     strip_end_pavement_pt = config.get("baulked_landing_strip_end_pavement_pt")
                     if strip_end_pavement_pt and strip_extension_for_bls is not None:
                         strip_end_pt = strip_end_pavement_pt.project(

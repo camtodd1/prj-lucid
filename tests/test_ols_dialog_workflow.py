@@ -787,12 +787,15 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             {
                 "overall_width": "280",
                 "graded_width": "150",
-                "extension_length": "60",
+                "extension_length_1": "60",
+                "extension_length_2": "60",
             },
         )
         self.assertFalse(editor["provision"].isEnabled())
 
         editor["edits"]["overall_width"].setText("260")
+        editor["edits"]["extension_length_1"].setText("50")
+        editor["edits"]["extension_length_2"].setText("70")
         self.assertTrue(editor["provision"].isEnabled())
         self.assertEqual(editor["provision"].currentData(), "modified")
         editor["provision"].setCurrentIndex(
@@ -801,11 +804,15 @@ class OlsDialogWorkflowTests(unittest.TestCase):
 
         saved = self.dialog._build_save_payload("TEST")["runways"][0]
         self.assertEqual(saved["runway_strip"]["overall_width"], "260")
+        self.assertEqual(saved["runway_strip"]["extension_length_1"], "50")
+        self.assertEqual(saved["runway_strip"]["extension_length_2"], "70")
         self.assertEqual(saved["runway_strip"]["provision"], "grandfathered")
 
         self.dialog._load_runway_rows([saved])
         reloaded = self.dialog._build_save_payload("TEST")["runways"][0]
         self.assertEqual(reloaded["runway_strip"]["overall_width"], "260")
+        self.assertEqual(reloaded["runway_strip"]["extension_length_1"], "50")
+        self.assertEqual(reloaded["runway_strip"]["extension_length_2"], "70")
         self.assertEqual(reloaded["runway_strip"]["provision"], "grandfathered")
 
     def test_runway_validation_records_strip_standard_and_override(self):
@@ -823,9 +830,10 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 "arc_num": "4",
                 "type1": "Precision Approach CAT I",
                 "runway_strip": {
-                    "overall_width": "260",
+                    "overall_width": "280",
                     "graded_width": "150",
-                    "extension_length": "60",
+                    "extension_length_1": "50",
+                    "extension_length_2": "70",
                     "provision": "grandfathered",
                 },
             }
@@ -835,7 +843,9 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         result = self.dialog._validate_runway_data(1, inputs, errors)
 
         self.assertEqual(errors, [])
-        self.assertEqual(result["runway_strip"]["overall_width"], 260.0)
+        self.assertEqual(result["runway_strip"]["overall_width"], 280.0)
+        self.assertEqual(result["runway_strip"]["extension_length_1"], 50.0)
+        self.assertEqual(result["runway_strip"]["extension_length_2"], 70.0)
         self.assertEqual(result["runway_strip"]["standard_overall_width"], 280.0)
         self.assertEqual(result["runway_strip"]["provision"], "grandfathered")
 

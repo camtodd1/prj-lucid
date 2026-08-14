@@ -366,6 +366,21 @@ class SafeguardingBuilder(
             width_m or None,
         ) or {}
         resolved = dict(strip_parameters)
+        strip_input = runway_data.get("runway_strip")
+        if isinstance(strip_input, dict):
+            for key in (
+                "overall_width",
+                "graded_width",
+                "extension_length",
+                "extension_length_1",
+                "extension_length_2",
+            ):
+                try:
+                    value = float(strip_input.get(key))
+                except (TypeError, ValueError):
+                    continue
+                if value > 0.0:
+                    resolved[key] = value
         resolved.update(
             {
                 "source": "design_ruleset",
@@ -401,6 +416,12 @@ class SafeguardingBuilder(
                         "source": "design_ruleset",
                         "overall_width_m": strip_parameters["overall_width"],
                         "end_extension_m": strip_parameters["extension_length"],
+                        "primary_end_extension_m": strip_parameters.get(
+                            "extension_length_1", strip_parameters["extension_length"]
+                        ),
+                        "reciprocal_end_extension_m": strip_parameters.get(
+                            "extension_length_2", strip_parameters["extension_length"]
+                        ),
                         "design_ruleset_id": self.ruleset.id,
                         "design_ruleset_label": self.ruleset.display_name,
                         "governing_runway_type": strip_parameters.get(
@@ -3495,7 +3516,20 @@ class SafeguardingBuilder(
             runway_data["calculated_strip_dims"] = strip_dims
             runway_data["_calculated_strip_ruleset_id"] = ruleset_id
 
-        strip_extension = self._non_negative_float((strip_dims or {}).get("extension_length"), 0.0)
+        strip_extension = max(
+            self._non_negative_float(
+                (strip_dims or {}).get(
+                    "extension_length_1", (strip_dims or {}).get("extension_length")
+                ),
+                0.0,
+            ),
+            self._non_negative_float(
+                (strip_dims or {}).get(
+                    "extension_length_2", (strip_dims or {}).get("extension_length")
+                ),
+                0.0,
+            ),
+        )
         strip_overall_width = self._non_negative_float((strip_dims or {}).get("overall_width"), 0.0)
 
         clearway_parameters = getattr(ruleset, "clearway_parameters", None)

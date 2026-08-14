@@ -560,6 +560,7 @@ class Annex14GeometryMixin:
         reciprocal_config = reciprocal_config if isinstance(reciprocal_config, dict) else {}
         return [
             {
+                "direction": "primary",
                 "end_desig": primary_desig,
                 "threshold": runway_data.get("thr_point"),
                 "opposite_threshold": runway_data.get("rec_thr_point"),
@@ -580,6 +581,7 @@ class Annex14GeometryMixin:
                 "declared_distances": primary_distances,
             },
             {
+                "direction": "reciprocal",
                 "end_desig": reciprocal_desig,
                 "threshold": runway_data.get("rec_thr_point"),
                 "opposite_threshold": runway_data.get("thr_point"),
@@ -1275,6 +1277,12 @@ class Annex14GeometryMixin:
             return {
                 "overall_width": width,
                 "extension_length": extension,
+                "extension_length_1": self._annex14_float_or_none(
+                    strip.get("primary_end_extension_m")
+                ) or extension,
+                "extension_length_2": self._annex14_float_or_none(
+                    strip.get("reciprocal_end_extension_m")
+                ) or extension,
                 "source": str(strip.get("source") or "design_standard_prefill"),
                 "design_ruleset_id": str(strip.get("design_ruleset_id") or ""),
                 "design_ruleset_label": str(
@@ -1293,6 +1301,12 @@ class Annex14GeometryMixin:
                 return {
                     "overall_width": width,
                     "extension_length": extension,
+                    "extension_length_1": self._annex14_float_or_none(
+                        strip_dims.get("extension_length_1")
+                    ) or extension,
+                    "extension_length_2": self._annex14_float_or_none(
+                        strip_dims.get("extension_length_2")
+                    ) or extension,
                     "source": str(strip_dims.get("source") or ""),
                     "design_ruleset_id": str(
                         strip_dims.get("design_ruleset_id") or ""
@@ -1685,7 +1699,12 @@ class Annex14GeometryMixin:
                     "governing_runway_type", ""
                 ),
                 "strip_width_m": (strip_dims or {}).get("overall_width"),
-                "strip_extension_m": (strip_dims or {}).get("extension_length"),
+                "strip_extension_m": (strip_dims or {}).get(
+                    "extension_length_1"
+                    if end_config.get("direction") == "primary"
+                    else "extension_length_2",
+                    (strip_dims or {}).get("extension_length"),
+                ),
                 "mass_class": (
                     "at_or_below_5700_kg"
                     if mass is not None and mass <= 5700.0
@@ -1793,8 +1812,21 @@ class Annex14GeometryMixin:
                 upper_edge_z = (highest_threshold_z + upper_height) if highest_threshold_z is not None else None
                 if strip_dims is not None and not strip_adjacent_transitional_created:
                     opposite_threshold = end_config.get("opposite_threshold")
+                    opposite_extension_key = (
+                        "extension_length_2"
+                        if end_config.get("direction") == "primary"
+                        else "extension_length_1"
+                    )
                     strip_end = (
-                        opposite_threshold.project(float(strip_dims["extension_length"]), takeoff_az)
+                        opposite_threshold.project(
+                            float(
+                                strip_dims.get(
+                                    opposite_extension_key,
+                                    strip_dims["extension_length"],
+                                )
+                            ),
+                            takeoff_az,
+                        )
                         if opposite_threshold is not None
                         else None
                     )

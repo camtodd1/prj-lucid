@@ -136,7 +136,8 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
             "runway_strip": {
                 "overall_width": 260.0,
                 "graded_width": 140.0,
-                "extension_length": 50.0,
+                "extension_length_1": 40.0,
+                "extension_length_2": 60.0,
                 "provision": "grandfathered",
                 "standard_overall_width": 280.0,
                 "standard_graded_width": 150.0,
@@ -145,16 +146,19 @@ class DeclaredDistanceQgisTests(unittest.TestCase):
         }
 
         strips = {
-            kind: attrs
-            for kind, _geometry, attrs in builder.generate_physical_geometry(runway)
+            kind: (geometry, attrs)
+            for kind, geometry, attrs in builder.generate_physical_geometry(runway)
             if kind in {"GradedStrip", "OverallStrip"}
         }
 
-        self.assertEqual(strips["GradedStrip"]["wid_m"], 140.0)
-        self.assertEqual(strips["OverallStrip"]["wid_m"], 260.0)
-        self.assertEqual(strips["OverallStrip"]["len_m"], 1100.0)
-        self.assertEqual(strips["OverallStrip"]["provision"], "grandfathered")
-        self.assertIn("Standard: overall width 280 m", strips["OverallStrip"]["notes"])
+        overall_geometry, overall_attrs = strips["OverallStrip"]
+        self.assertEqual(strips["GradedStrip"][1]["wid_m"], 140.0)
+        self.assertEqual(overall_attrs["wid_m"], 260.0)
+        self.assertEqual(overall_attrs["len_m"], 1100.0)
+        self.assertAlmostEqual(overall_geometry.boundingBox().xMinimum(), -40.0)
+        self.assertAlmostEqual(overall_geometry.boundingBox().xMaximum(), 1060.0)
+        self.assertEqual(overall_attrs["provision"], "grandfathered")
+        self.assertIn("Standard: overall width 280 m", overall_attrs["notes"])
 
     def test_pre_threshold_geometry_is_chained_after_starter_extension(self):
         runway = {

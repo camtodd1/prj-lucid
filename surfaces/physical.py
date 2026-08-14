@@ -2993,7 +2993,13 @@ class PhysicalGeometryMixin:
             strip_input = strip_input if isinstance(strip_input, dict) else {}
             if strip_dims and strip_input:
                 strip_dims = dict(strip_dims)
-                for dim in ("overall_width", "graded_width", "extension_length"):
+                for dim in (
+                    "overall_width",
+                    "graded_width",
+                    "extension_length",
+                    "extension_length_1",
+                    "extension_length_2",
+                ):
                     try:
                         override = float(strip_input.get(dim))
                     except (TypeError, ValueError):
@@ -3014,7 +3020,12 @@ class PhysicalGeometryMixin:
             if strip_dims and all(
                 strip_dims.get(dim) is not None for dim in ["overall_width", "graded_width", "extension_length"]
             ):
-                extension = strip_dims["extension_length"]
+                primary_extension = strip_dims.get(
+                    "extension_length_1", strip_dims["extension_length"]
+                )
+                reciprocal_extension = strip_dims.get(
+                    "extension_length_2", strip_dims["extension_length"]
+                )
                 graded_width = strip_dims["graded_width"]
                 overall_width = strip_dims["overall_width"]
                 strip_provision = str(
@@ -3041,8 +3052,8 @@ class PhysicalGeometryMixin:
                 overall_half_width = overall_width / 2.0
                 stopway_primary_end = self._non_negative_float(runway_data.get("stopway1_len"), 0.0)
                 stopway_reciprocal_end = self._non_negative_float(runway_data.get("stopway2_len"), 0.0)
-                primary_strip_extension = extension + stopway_primary_end
-                reciprocal_strip_extension = extension + stopway_reciprocal_end
+                primary_strip_extension = primary_extension + stopway_primary_end
+                reciprocal_strip_extension = reciprocal_extension + stopway_reciprocal_end
 
                 strip_end_center_p = phys_p_start.project(primary_strip_extension, rwy_params["azimuth_r_p"])
                 strip_end_center_r = phys_p_end.project(reciprocal_strip_extension, rwy_params["azimuth_p_r"])

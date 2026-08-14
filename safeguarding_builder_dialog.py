@@ -677,13 +677,13 @@ class SafeguardingBuilderDialog(
         card.setObjectName(f"groupBox_runway_strip_{runway_index}")
         grid = QtWidgets.QGridLayout(card)
         grid.setColumnStretch(1, 1)
+        grid.setColumnStretch(2, 1)
 
         edits: Dict[str, QtWidgets.QLineEdit] = {}
         for row, (key, label) in enumerate(
             (
                 ("overall_width", "Overall strip width (m):"),
                 ("graded_width", "Graded strip width (m):"),
-                ("extension_length", "Extension beyond each end (m):"),
             )
         ):
             edit = QtWidgets.QLineEdit(card)
@@ -694,8 +694,33 @@ class SafeguardingBuilderDialog(
                 "different value to record an override."
             )
             grid.addWidget(QtWidgets.QLabel(label), row, 0)
-            grid.addWidget(edit, row, 1)
+            grid.addWidget(edit, row, 1, 1, 2)
             edits[key] = edit
+
+        grid.addWidget(QtWidgets.QLabel("Extension beyond runway ends (m):"), 2, 0)
+        end_labels: Dict[str, QtWidgets.QLabel] = {}
+        for column, key, placeholder in (
+            (1, "extension_length_1", "Primary end"),
+            (2, "extension_length_2", "Reciprocal end"),
+        ):
+            field = QtWidgets.QWidget(card)
+            field_layout = QtWidgets.QVBoxLayout(field)
+            field_layout.setContentsMargins(0, 0, 0, 0)
+            field_layout.setSpacing(2)
+            end_label = QtWidgets.QLabel(placeholder, field)
+            edit = QtWidgets.QLineEdit(card)
+            edit.setObjectName(f"lineEdit_strip_{key}_{runway_index}")
+            edit.setValidator(QtGui.QDoubleValidator(0.001, 99999.0, 3, edit))
+            edit.setPlaceholderText(placeholder)
+            edit.setToolTip(
+                "Derived from the Runway entry and design standard. Enter a "
+                "different value to record an override."
+            )
+            field_layout.addWidget(end_label)
+            field_layout.addWidget(edit)
+            grid.addWidget(field, 2, column)
+            edits[key] = edit
+            end_labels[key] = end_label
 
         standard = QtWidgets.QLabel("Awaiting complete runway inputs", card)
         standard.setObjectName(f"label_strip_standard_{runway_index}")
@@ -715,6 +740,7 @@ class SafeguardingBuilderDialog(
         editor = {
             "card": card,
             "edits": edits,
+            "end_labels": end_labels,
             "standard_label": standard,
             "provision": provision,
         }
@@ -779,12 +805,13 @@ class SafeguardingBuilderDialog(
         labels = {
             "overall_width": "overall",
             "graded_width": "graded",
-            "extension_length": "end extension",
+            "extension_length_1": "primary end extension",
+            "extension_length_2": "reciprocal end extension",
         }
         summary = []
         for key, edit in editor["edits"].items():
             old_standard = edit.property("standardValue")
-            new_standard = params.get(key)
+            new_standard = params.get(key, params.get("extension_length"))
             current = edit.text().strip()
             if new_standard is not None and (
                 not current
@@ -798,9 +825,24 @@ class SafeguardingBuilderDialog(
                 summary.append(f"{labels[key]} {float(new_standard):g} m")
 
         editor["card"].setTitle(group.rwy_name_lbl.text() or f"Runway {runway_index}")
+        primary_designator = "".join(
+            (
+                str(inputs.get("designator_str") or "").strip(),
+                str(inputs.get("suffix") or "").strip(),
+            )
+        )
+        reciprocal_designator = group.rec_desig_hdr_lbl.text().replace("RWY", "").strip()
+        editor["end_labels"]["extension_length_1"].setText(
+            f"End {primary_designator}" if primary_designator else "Primary end"
+        )
+        editor["end_labels"]["extension_length_2"].setText(
+            f"End {reciprocal_designator}"
+            if reciprocal_designator and reciprocal_designator != "N/A"
+            else "Reciprocal end"
+        )
         editor["standard_label"].setText(
             "Standard: " + " · ".join(summary)
-            if len(summary) == 3
+            if len(summary) == 4
             else "Awaiting complete runway inputs"
         )
         provision = editor["provision"]
@@ -4258,14 +4300,17 @@ class SafeguardingBuilderDialog(
         strip_labels = {
             "overall_width": "overall strip width",
             "graded_width": "graded strip width",
-            "extension_length": "strip end extension",
+            "extension_length_1": "primary strip end extension",
+            "extension_length_2": "reciprocal strip end extension",
         }
         strip_required = any(standard_strip.get(key) is not None for key in strip_labels) or any(
             str(strip_input.get(key, "") or "").strip() for key in strip_labels
         )
         for key, label in strip_labels.items():
             raw_value = str(strip_input.get(key, "") or "").strip()
-            value = raw_value if raw_value else standard_strip.get(key)
+            value = raw_value if raw_value else standard_strip.get(
+                key, standard_strip.get("extension_length")
+            )
             try:
                 number = float(value)
             except (TypeError, ValueError):
@@ -4289,10 +4334,13 @@ class SafeguardingBuilderDialog(
 
         overridden = any(
             effective_strip.get(key) is not None
-            and standard_strip.get(key) is not None
+            and standard_strip.get(key, standard_strip.get("extension_length"))
+            is not None
             and not math.isclose(
                 float(effective_strip[key]),
-                float(standard_strip[key]),
+                float(
+                    standard_strip.get(key, standard_strip.get("extension_length"))
+                ),
                 abs_tol=1e-6,
             )
             for key in strip_labels
@@ -4307,9 +4355,18 @@ class SafeguardingBuilderDialog(
             "provision": provision,
             **{
                 f"standard_{key}": standard_strip.get(key)
+                if standard_strip.get(key) is not None
+                else standard_strip.get("extension_length")
                 for key in strip_labels
             },
         }
+        # Retain the legacy value for older consumers; end-specific values win.
+        validated["runway_strip"]["extension_length"] = effective_strip.get(
+            "extension_length_1"
+        )
+        validated["runway_strip"]["standard_extension_length"] = standard_strip.get(
+            "extension_length"
+        )
 
         valid_track_types = {"aligned", "offset", "curved", "curved_gt_15"}
         for family in ("approach", "takeoff"):

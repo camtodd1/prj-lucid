@@ -761,6 +761,12 @@ class PersistenceMixin:
         runway_strip.setdefault("overall_width", "")
         runway_strip.setdefault("graded_width", "")
         runway_strip.setdefault("extension_length", "")
+        runway_strip.setdefault(
+            "extension_length_1", runway_strip.get("extension_length", "")
+        )
+        runway_strip.setdefault(
+            "extension_length_2", runway_strip.get("extension_length", "")
+        )
         runway_strip.setdefault("provision", "standard")
         runway_data["runway_strip"] = runway_strip
         modernised = runway_data.get("annex14_modernised")

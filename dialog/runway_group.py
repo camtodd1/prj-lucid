@@ -1690,7 +1690,13 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             strip = data.get("runway_strip")
             if isinstance(strip, dict) and hasattr(self, "runway_strip_edits"):
                 for key, edit in self.runway_strip_edits.items():
-                    edit.setText(str(strip.get(key, "") or ""))
+                    value = strip.get(key)
+                    if value in {None, ""} and key in {
+                        "extension_length_1",
+                        "extension_length_2",
+                    }:
+                        value = strip.get("extension_length", "")
+                    edit.setText(str(value or ""))
                 self._set_combo_data(
                     self.runway_strip_provision_combo,
                     strip.get("provision", "standard"),
