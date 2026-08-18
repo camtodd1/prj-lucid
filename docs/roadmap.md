@@ -2,7 +2,7 @@
 
 **Status:** Roadmap
 
-**Last reviewed:** 13 August 2026
+**Last reviewed:** 18 August 2026
 
 This file is the single project documentation backlog. It lists incomplete
 work only; completed implementation history belongs in Git and regression
@@ -51,6 +51,9 @@ fixtures.
 
 - [ ] Implement specialised glide path and localiser geometry.
 - [ ] Add an aircraft-characteristics registry and design-aircraft nomination.
+- [ ] Add optional engine-out design-aircraft screening surfaces using sourced,
+  condition-specific AFM net flight-path segments for a small nominated fleet;
+  keep these outputs separate from regulatory OLS/OES surfaces.
 - [ ] Implement NASF Guideline A aircraft-noise generation.
 - [ ] Implement NASF Guideline H helicopter-site generation.
 

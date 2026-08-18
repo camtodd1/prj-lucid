@@ -1371,7 +1371,12 @@ class Annex14GeometryMixin:
                 not feature_end
                 and surface in {"transitional", "inner_transitional"}
             ):
-                selected.append(feature)
+                if feature_end:
+                    selected.append(feature)
+                else:
+                    end_feature = QgsFeature(feature)
+                    end_feature.setAttribute("end_desig", end_desig)
+                    selected.append(end_feature)
         return selected
 
     def _annex14_runway_wide_features(self, features: List[QgsFeature]) -> List[QgsFeature]:

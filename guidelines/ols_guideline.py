@@ -3599,8 +3599,12 @@ class OlsGuidelineMixin:
             if str(self._ols_feature_attribute(feature, "rwy_name") or "") != runway_name:
                 continue
             feature_end_desig = self._ols_feature_end_designator(feature)
-            if feature_end_desig == end_desig or (include_runway_wide and not feature_end_desig):
+            if feature_end_desig == end_desig:
                 matching_features.append(feature)
+            elif include_runway_wide and not feature_end_desig:
+                end_feature = QgsFeature(feature)
+                end_feature.setAttribute("end_desig", end_desig)
+                matching_features.append(end_feature)
         return matching_features
 
     def _get_tocs_contour_fields(self) -> QgsFields:

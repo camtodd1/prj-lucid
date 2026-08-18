@@ -145,10 +145,16 @@ class OlsConstructionQgisTests(unittest.TestCase):
         end_16 = builder._annex14_features_for_end(features, "16")
         end_34 = builder._annex14_features_for_end(features, "34")
 
-        self.assertIn(shared_transitional, end_16)
-        self.assertIn(shared_transitional, end_34)
-        self.assertIn(shared_inner_transitional, end_16)
-        self.assertIn(shared_inner_transitional, end_34)
+        self.assertEqual(
+            {item.attribute("end_desig") for item in end_16},
+            {"16"},
+        )
+        self.assertEqual(
+            {item.attribute("end_desig") for item in end_34},
+            {"34"},
+        )
+        self.assertEqual(shared_transitional.attribute("end_desig"), "")
+        self.assertEqual(shared_inner_transitional.attribute("end_desig"), "")
         self.assertIn(end_16_transitional, end_16)
         self.assertNotIn(end_34_transitional, end_16)
         self.assertNotIn(runway_wide_horizontal, end_16)
@@ -160,6 +166,28 @@ class OlsConstructionQgisTests(unittest.TestCase):
             ),
             "16",
         )
+
+    def test_conventional_transition_features_are_attributed_to_each_runway_end(self):
+        builder = object.__new__(SafeguardingBuilder)
+        fields = QgsFields()
+        fields.append(QgsField("rwy_name", QVariant.String))
+        fields.append(QgsField("end_desig", QVariant.String))
+
+        shared = QgsFeature(fields)
+        shared.setAttributes(["08/26", ""])
+        primary = QgsFeature(fields)
+        primary.setAttributes(["08/26", "08"])
+
+        selected = builder._ols_features_for_runway_end(
+            [shared, primary],
+            "08/26",
+            "08",
+            include_runway_wide=True,
+        )
+
+        self.assertEqual(len(selected), 2)
+        self.assertTrue(all(item.attribute("end_desig") == "08" for item in selected))
+        self.assertEqual(shared.attribute("end_desig"), "")
 
     @staticmethod
     def _easa_generation_fixture():
