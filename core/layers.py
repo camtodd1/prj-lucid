@@ -441,7 +441,11 @@ class LayerMixin:
                     )
 
             QgsProject.instance().addMapLayer(layer, False)
-            layer_node = layer_group.addLayer(layer)
+            layer_node = (
+                layer_group.insertLayer(0, layer)
+                if "Contour" in str(style_key or "")
+                else layer_group.addLayer(layer)
+            )
             self._stage_layer_tree_node(layer_node)
             self._apply_style(layer, self.style_map)
             if style_key:

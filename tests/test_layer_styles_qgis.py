@@ -49,6 +49,49 @@ class LayerStyleTests(unittest.TestCase):
     def tearDown(self):
         QgsProject.instance().clear()
 
+    def test_memory_contours_are_stacked_above_surface_polygons(self):
+        harness = _FileLayerHarness("")
+        harness.output_mode = "memory"
+        group = QgsProject.instance().layerTreeRoot().addGroup("Transitional")
+        fields = QgsFields()
+        fields.append(QgsField("surface", QVariant.String))
+
+        surface = QgsFeature(fields)
+        surface.setAttribute("surface", "Transitional")
+        surface.setGeometry(
+            QgsGeometry.fromPolygonXY(
+                [[
+                    QgsPointXY(0.0, 0.0),
+                    QgsPointXY(10.0, 0.0),
+                    QgsPointXY(10.0, 10.0),
+                    QgsPointXY(0.0, 10.0),
+                    QgsPointXY(0.0, 0.0),
+                ]]
+            )
+        )
+        contour = QgsFeature(fields)
+        contour.setAttribute("surface", "Transitional")
+        contour.setGeometry(
+            QgsGeometry.fromPolylineXY(
+                [QgsPointXY(0.0, 5.0), QgsPointXY(10.0, 5.0)]
+            )
+        )
+
+        harness._create_and_add_layer(
+            "Polygon", "surface", "Surface", fields, [surface], group, "OLS Transitional"
+        )
+        harness._create_and_add_layer(
+            "LineString",
+            "contours",
+            "Contours",
+            fields,
+            [contour],
+            group,
+            "OLS Transitional Contour",
+        )
+
+        self.assertEqual([child.layer().name() for child in group.children()], ["Contours", "Surface"])
+
     def test_split_agl_layer_keeps_only_populated_style_categories(self):
         layer = QgsVectorLayer(
             "Point?field=style_key:string&field=symbol_ang:double",
