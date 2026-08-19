@@ -52,6 +52,10 @@ class EasaVisualAidsTests(unittest.TestCase):
         for width, count in self.fixture["markings"]["threshold_stripes_by_width_m"].items():
             self.assertEqual(markings.threshold_marking_params(float(width))[0], count)
 
+        for width, count in ((22.99, 4), (27.0, 6), (44.99, 8), (59.99, 12), (75.0, 16)):
+            self.assertEqual(markings.threshold_marking_params(width)[0], count)
+        self.assertIsNone(markings.threshold_marking_params(17.99))
+
     def test_aiming_point_applicability_and_lda_bands(self):
         expected = self.fixture["markings"]["aiming_point_offsets_by_lda_m"]
         for lda, offset in expected.items():

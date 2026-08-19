@@ -57,11 +57,11 @@ def threshold_marking_params(runway_width: float) -> Optional[Tuple[int, float]]
     -------
     Optional[Tuple[int, float]]
         A tuple containing the number of stripes and the width of each
-        stripe.  Returns ``None`` if the width is not one of the
-        standard values (18, 23, 30, 45 or 60 m).
+        stripe.  The greatest standard width not exceeding the runway
+        width is used; widths below 18 m return ``None``.
     """
-    for width_m, params in THRESHOLD_MARKING_PARAMS_BY_WIDTH.items():
-        if abs(float(runway_width) - width_m) <= 0.01:
+    for width_m, params in reversed(THRESHOLD_MARKING_PARAMS_BY_WIDTH.items()):
+        if float(runway_width) >= width_m:
             return params
     return None
 
