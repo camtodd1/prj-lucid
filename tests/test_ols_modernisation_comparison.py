@@ -16,6 +16,7 @@ from qgis.core import (
 )
 
 from guidelines.controlling_ols_engine import (
+    CONTROLLING_NUMERIC_COVERAGE_TOLERANCE_M2,
     CONTROLLING_ZERO_CONTOUR_SEED_TOLERANCE_M,
     ControllingOlsCandidate,
     ControllingOlsContour,
@@ -1570,6 +1571,55 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             "repair_sliver_suppressed_part_count",
             engine._region_solve_stats,
         )
+
+    def test_final_partition_classifies_disconnected_numeric_gaps_individually(self):
+        fields = QgsFields(
+            [
+                QgsField("region_id", QVariant.Int),
+                QgsField("surface_id", QVariant.String),
+                QgsField("surface", QVariant.String),
+                QgsField("elev_min", QVariant.Double),
+                QgsField("elev_max", QVariant.Double),
+            ]
+        )
+        coverage = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
+        notches = QgsGeometry.unaryUnion(
+            [
+                QgsGeometry.fromRect(QgsRectangle(20.0, 99.99, 21.1, 100.0)),
+                QgsGeometry.fromRect(QgsRectangle(70.0, 99.99, 71.1, 100.0)),
+            ]
+        )
+        solved = coverage.difference(notches)
+        candidate = ControllingOlsCandidate(
+            "surface",
+            "Surface",
+            coverage,
+            constant_elevation_evaluator(90.0),
+            "plane",
+            {"plane_a": 0.0, "plane_b": 0.0, "plane_c": 90.0},
+        )
+        engine = PlanarControllingOlsEngine([candidate])
+        item = QgsFeature(fields)
+        item.setAttributes(
+            [1, candidate.surface_id, candidate.surface_type, 90.0, 90.0]
+        )
+        item.setGeometry(solved)
+
+        repaired = _ControllingLayerCapture()._repair_final_controlling_partition(
+            [item], engine
+        )
+
+        self.assertEqual(len(repaired), 1)
+        self.assertAlmostEqual(repaired[0].geometry().area(), coverage.area(), places=6)
+        self.assertEqual(
+            engine._region_solve_stats["numeric_partition_completion_part_count"],
+            2.0,
+        )
+        self.assertGreater(
+            engine._region_solve_stats["numeric_partition_completion_area_m2"],
+            CONTROLLING_NUMERIC_COVERAGE_TOLERANCE_M2,
+        )
+        self.assertNotIn("final_partition_repair_part_count", engine._region_solve_stats)
 
     def test_one_sided_surface_with_tolerance_edge_is_entirely_gain(self):
         baseline = self.constant("baseline", 100.0)

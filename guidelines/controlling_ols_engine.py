@@ -7754,6 +7754,7 @@ class ControllingOlsEngineMixin:
 
         repaired_count = 0
         repaired_area = 0.0
+        maximum_repaired_part_area = 0.0
         repair_by_surface: Dict[str, Dict[str, object]] = {}
         for gap in engine._polygon_parts(gaps) if has_coverage_gaps else ():
             if gap.area() <= 1e-3:
@@ -7851,15 +7852,20 @@ class ControllingOlsEngineMixin:
                 elev_min, elev_max = engine._geometry_elevation_range(combined, candidate)
                 target.setAttribute("elev_min", elev_min)
                 target.setAttribute("elev_max", elev_max)
+                repair_area = repair.area()
                 repaired_count += 1
-                repaired_area += repair.area()
+                repaired_area += repair_area
+                maximum_repaired_part_area = max(
+                    maximum_repaired_part_area,
+                    repair_area,
+                )
                 surface_key = f"{candidate.surface_type}:{candidate.surface_id}"
                 surface_stats = repair_by_surface.setdefault(
                     surface_key,
                     {"parts": 0, "area_m2": 0.0},
                 )
                 surface_stats["parts"] = int(surface_stats["parts"]) + 1
-                surface_stats["area_m2"] = float(surface_stats["area_m2"]) + repair.area()
+                surface_stats["area_m2"] = float(surface_stats["area_m2"]) + repair_area
 
         if repaired_count:
             numeric_completion_tolerance = CONTROLLING_NUMERIC_COVERAGE_TOLERANCE_M2
@@ -7868,7 +7874,7 @@ class ControllingOlsEngineMixin:
                     numeric_completion_tolerance,
                     coverage.area() * 1e-7,
                 )
-            if repaired_area <= numeric_completion_tolerance:
+            if maximum_repaired_part_area <= numeric_completion_tolerance:
                 engine._region_solve_stats["numeric_partition_completion_part_count"] = (
                     engine._region_solve_stats.get(
                         "numeric_partition_completion_part_count", 0.0

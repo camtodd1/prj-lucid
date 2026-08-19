@@ -47,6 +47,10 @@ OLS_EDGE_ELEVATION_SOURCE = "safeguarding_builder_calculated"
 
 
 class OlsGuidelineMixin:
+    @staticmethod
+    def _is_required_ofz(applicability: Optional[str]) -> bool:
+        return str(applicability or "").strip().lower() == "required"
+
     def _get_ols_ruleset(self):
         """Return the explicitly selected OLS ruleset, with legacy fallback."""
         protected_getter = getattr(self, "get_active_protected_airspace_ruleset", None)
@@ -1871,6 +1875,7 @@ class OlsGuidelineMixin:
         polygon: QgsGeometry,
         ref_mos: Optional[str],
         surface_id: str,
+        applicability: Optional[str] = None,
     ) -> List[QgsFeature]:
         """Generate cross-section contours for a longitudinally sloping OFZ surface."""
         if length <= 1e-6 or polygon is None or polygon.isEmpty():
@@ -1910,6 +1915,15 @@ class OlsGuidelineMixin:
             )
             if feature is not None:
                 contours.append(feature)
+                if self._is_required_ofz(applicability) and hasattr(
+                    self, "_register_controlling_ols_contour"
+                ):
+                    self._register_controlling_ols_contour(
+                        surface_id,
+                        surface_name,
+                        feature,
+                        "OLS OFZ Contour",
+                    )
         return contours
 
     def _generate_inner_transitional_panel_contours(
@@ -1926,6 +1940,7 @@ class OlsGuidelineMixin:
         panel_description: str,
         ref_mos: str,
         panel_geometry: QgsGeometry,
+        applicability: Optional[str] = None,
     ) -> List[QgsFeature]:
         """Generate true planar contours for one Inner Transitional panel."""
         z1 = float(base_p1_3d.z())
@@ -1999,6 +2014,15 @@ class OlsGuidelineMixin:
             )
             if feature is not None:
                 contours.append(feature)
+                if self._is_required_ofz(applicability) and hasattr(
+                    self, "_register_controlling_ols_contour"
+                ):
+                    self._register_controlling_ols_contour(
+                        surface_id,
+                        "Inner Transitional",
+                        feature,
+                        "OLS OFZ Contour",
+                    )
         return contours
 
     def _generate_its_panel_feature(
@@ -2106,6 +2130,40 @@ class OlsGuidelineMixin:
         final_attr_map = {k: v for k, v in attr_map.items() if ols_fields.indexFromName(k) != -1}
         for name, value in final_attr_map.items():
             feature.setAttribute(ols_fields.indexFromName(name), value)
+
+        if self._is_required_ofz(applicability) and hasattr(
+            self, "_register_controlling_ols_candidate"
+        ):
+            plane = self._plane_coefficients_from_points(
+                p1_base_xy,
+                z1_base,
+                p2_base_xy,
+                z2_base,
+                p1_top_xy,
+                IHS_ELEVATION_AMSL,
+            )
+            if plane is not None:
+                surface_id = (
+                    f"OFZ:ITS:{runway_name}:{end_desig}:"
+                    f"{panel_description.replace(' ', '_')}:{side_label}"
+                )
+                self._register_controlling_ols_candidate(
+                    ControllingOlsCandidate(
+                        surface_id=surface_id,
+                        surface_type="Inner Transitional",
+                        footprint=QgsGeometry(panel_geom),
+                        elevation_at_xy=plane_elevation_evaluator(*plane),
+                        model="plane",
+                        metadata={
+                            "runway": runway_name,
+                            "end": end_desig,
+                            "section": panel_description,
+                            "side": side_label,
+                            "applicability": applicability,
+                            "source_ref": ref_mos,
+                        },
+                    )
+                )
 
         return feature
 
@@ -4967,6 +5025,32 @@ class OlsGuidelineMixin:
                                     if fields.indexFromName(n) != -1:
                                         feat.setAttribute(fields.indexFromName(n), v_attr)
                                 inner_approach_features.append(feat)
+                                ia_surface_id = f"OFZ:IA:{runway_name}:{current_desig}"
+                                ia_applicability = ia_params.get("applicability")
+                                if self._is_required_ofz(ia_applicability) and hasattr(
+                                    self, "_register_controlling_ols_candidate"
+                                ):
+                                    self._register_controlling_ols_candidate(
+                                        ControllingOlsCandidate(
+                                            surface_id=ia_surface_id,
+                                            surface_type="Inner Approach",
+                                            footprint=QgsGeometry(ia_geom_for_its),
+                                            elevation_at_xy=axis_elevation_evaluator(
+                                                ia_cl_start_xy,
+                                                config["approach_surface_outward_azimuth"],
+                                                ia_start_elev,
+                                                ia_slope_param,
+                                                ia_length_param_val,
+                                            ),
+                                            model="axis",
+                                            metadata={
+                                                "runway": runway_name,
+                                                "end": current_desig,
+                                                "applicability": ia_applicability,
+                                                "source_ref": ia_ref_param,
+                                            },
+                                        )
+                                    )
                                 inner_approach_contour_features.extend(
                                     self._generate_ofz_axis_contours(
                                         surface_key="inner_approach",
@@ -4982,7 +5066,8 @@ class OlsGuidelineMixin:
                                         end_elevation=ia_end_elev,
                                         polygon=ia_geom_for_its,
                                         ref_mos=ia_ref_param,
-                                        surface_id=f"OFZ:IA:{runway_name}:{current_desig}",
+                                        surface_id=ia_surface_id,
+                                        applicability=ia_applicability,
                                     )
                                 )
 
@@ -5057,6 +5142,32 @@ class OlsGuidelineMixin:
                             )
                         if feat_bls:
                             ofz_bls_features.append(feat_bls)
+                            bls_surface_id = f"OFZ:BLS:{runway_name}:{current_desig}"
+                            bls_applicability = bls_params_dict.get("applicability")
+                            if self._is_required_ofz(bls_applicability) and hasattr(
+                                self, "_register_controlling_ols_candidate"
+                            ):
+                                self._register_controlling_ols_candidate(
+                                    ControllingOlsCandidate(
+                                        surface_id=bls_surface_id,
+                                        surface_type="Baulked Landing",
+                                        footprint=QgsGeometry(bls_geom_for_its),
+                                        elevation_at_xy=axis_elevation_evaluator(
+                                            bls_cl_start_xy,
+                                            config["baulked_landing_flight_path_azimuth"],
+                                            bls_start_elev,
+                                            bls_params_dict.get("slope"),
+                                            bls_len,
+                                        ),
+                                        model="axis",
+                                        metadata={
+                                            "runway": runway_name,
+                                            "end": current_desig,
+                                            "applicability": bls_applicability,
+                                            "source_ref": bls_params_dict.get("ref"),
+                                        },
+                                    )
+                                )
                             ofz_bls_contour_features.extend(
                                 self._generate_ofz_axis_contours(
                                     surface_key="baulked_landing",
@@ -5072,7 +5183,8 @@ class OlsGuidelineMixin:
                                     end_elevation=IHS_ELEVATION_AMSL,
                                     polygon=bls_geom_for_its,
                                     ref_mos=bls_params_dict.get("ref", "MOS (Verify)"),
-                                    surface_id=f"OFZ:BLS:{runway_name}:{current_desig}",
+                                    surface_id=bls_surface_id,
+                                    applicability=bls_applicability,
                                 )
                             )
                         else:
@@ -5224,6 +5336,7 @@ class OlsGuidelineMixin:
                                             panel_description="IA Adjacent",
                                             ref_mos=its_ref_mos,
                                             panel_geometry=panel_feat.geometry(),
+                                            applicability=its_applicability,
                                         )
                                     )
                             else:
@@ -5264,6 +5377,7 @@ class OlsGuidelineMixin:
                                             panel_description="BLS Adjacent",
                                             ref_mos=its_ref_mos,
                                             panel_geometry=panel_feat.geometry(),
+                                            applicability=its_applicability,
                                         )
                                     )
                             else:
@@ -5316,6 +5430,7 @@ class OlsGuidelineMixin:
                                                 panel_description="Strip Adjacent",
                                                 ref_mos=its_ref_mos,
                                                 panel_geometry=panel_feat.geometry(),
+                                                applicability=its_applicability,
                                             )
                                         )
                                 else:

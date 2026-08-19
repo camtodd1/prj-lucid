@@ -247,6 +247,22 @@ class OtherConventionalPolicyTests(unittest.TestCase):
         self.assertEqual(guidance["applicability"], "guidance_only")
         self.assertEqual(guidance["applicability_ref"], "GM1 ADR-DSN.J.480(a)")
 
+        code_f = runway(2, 2841.28308332019, arc=4, arc_letter="F", runway_type="PA_II_III")
+        code_f_context = replace(context(code_f), ruleset_id="easa_cs_adr_dsn_issue_7")
+        for surface_type in ("InnerApproach", "BaulkedLanding"):
+            with self.subTest(surface_type=surface_type):
+                params = EASA_OLS_CONSTRUCTION_POLICY.parameters(
+                    EASA_PROFILE,
+                    code_f_context,
+                    code_f,
+                    code_f.ends[0],
+                    4,
+                    "PA_II_III",
+                    surface_type,
+                )
+                self.assertEqual(params["width"], 140.0)
+                self.assertEqual(params["applicability"], "required")
+
     def test_easa_variable_approach_meets_ihs_then_uses_remaining_length(self):
         item = runway(1, 2200.0, arc=3, runway_type="NPA", elevation=100.0)
         ctx = replace(context(item), ruleset_id="easa_cs_adr_dsn_issue_7")

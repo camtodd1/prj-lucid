@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import unittest
 import sys
 from pathlib import Path
@@ -190,15 +191,16 @@ class OlsConstructionQgisTests(unittest.TestCase):
         self.assertEqual(shared.attribute("end_desig"), "")
 
     @staticmethod
-    def _easa_generation_fixture():
+    def _easa_generation_fixture(approach_type="Non-Precision Approach (NPA)"):
+        classified_type = EASA_PROFILE.classify_runway_type(approach_type)
         primary = OlsRunwayEndContext(
             direction="primary",
             designator="09",
             threshold_point=QgsPointXY(0.0, 0.0),
             threshold_elevation_m=100.0,
             runway_end_elevation_m=100.0,
-            approach_type="Non-Precision Approach (NPA)",
-            classified_type="NPA",
+            approach_type=approach_type,
+            classified_type=classified_type,
             clearway_length_m=200.0,
         )
         reciprocal = OlsRunwayEndContext(
@@ -207,8 +209,8 @@ class OlsConstructionQgisTests(unittest.TestCase):
             threshold_point=QgsPointXY(3000.0, 0.0),
             threshold_elevation_m=101.0,
             runway_end_elevation_m=101.0,
-            approach_type="Non-Precision Approach (NPA)",
-            classified_type="NPA",
+            approach_type=approach_type,
+            classified_type=classified_type,
         )
         runway = OlsRunwayContext(
             runway_id="09/27",
@@ -378,6 +380,254 @@ class OlsConstructionQgisTests(unittest.TestCase):
         self.assertTrue(bls_result[0].geometry().isGeosValid())
         self.assertTrue(str(bls_result[0].attribute("ref_mos")).startswith("CS ADR-DSN.J."))
         self.assertEqual(bls_result[0].attribute("applicability"), "required")
+
+    def test_easa_required_ofz_registers_with_lower_envelope_but_cat_i_guidance_does_not(self):
+        def generated_ofz(approach_type):
+            builder, runway, _primary, _context = self._easa_generation_fixture(approach_type)
+            runway_data = {
+                "short_name": "09/27",
+                "original_index": 1,
+                "arc_num": "3",
+                "arc_let": "C",
+                "type1": approach_type,
+                "type2": approach_type,
+                "thr_point": runway.primary_threshold_point,
+                "rec_thr_point": runway.reciprocal_threshold_point,
+                "thr_displaced_1": 0.0,
+                "thr_displaced_2": 0.0,
+                "threshold_elev_1": 100.0,
+                "threshold_elev_2": 101.0,
+                "runway_end_elev_1": 100.0,
+                "runway_end_elev_2": 101.0,
+                "width": 45.0,
+                "clearway1_len": 200.0,
+                "clearway2_len": 0.0,
+                "calculated_strip_dims": dict(runway.strip_parameters),
+            }
+            builder._create_and_add_layer = MethodType(
+                lambda self, *_args, **_kwargs: object(), builder
+            )
+            builder._reset_controlling_ols_engine()
+            self.assertTrue(
+                builder.process_runway_ols_surfaces(
+                    runway_data,
+                    QgsLayerTreeGroup("EASA OLS"),
+                    QgsLayerTreeGroup("EASA OFZ"),
+                )
+            )
+            return (
+                [
+                    candidate
+                    for candidate in builder._controlling_ols_candidates
+                    if candidate.surface_id.startswith("OFZ:")
+                ],
+                [
+                    contour
+                    for contour in builder._controlling_ols_contours
+                    if contour.surface_id.startswith("OFZ:")
+                ],
+            )
+
+        required_candidates, required_contours = generated_ofz(
+            "Precision Approach CAT II/III"
+        )
+        self.assertEqual(
+            {candidate.surface_type for candidate in required_candidates},
+            {"Inner Approach", "Inner Transitional", "Baulked Landing"},
+        )
+        for candidate in required_candidates:
+            point = candidate.footprint.pointOnSurface().asPoint()
+            self.assertIsNotNone(
+                candidate.elevation_at_xy(QgsPointXY(point.x(), point.y()))
+            )
+        self.assertTrue(required_contours)
+        self.assertTrue(
+            {contour.surface_id for contour in required_contours}
+            <= {candidate.surface_id for candidate in required_candidates}
+        )
+
+        guidance_candidates, guidance_contours = generated_ofz(
+            "Precision Approach CAT I"
+        )
+        self.assertEqual(guidance_candidates, [])
+        self.assertEqual(guidance_contours, [])
+
+    def test_eham_easa_cat23_ofz_candidates_match_independent_checkpoints(self):
+        fixture_dir = Path(__file__).parent / "fixtures" / "ols"
+        with (fixture_dir / "eham_1rwy_single.json").open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        with (fixture_dir / "source_validation_v1.json").open("r", encoding="utf-8") as handle:
+            expected = json.load(handle)["analytical_cases"]["eham_easa_code4f_cat_ii_iii"]
+
+        source = payload["runways"][0]
+        threshold = QgsPointXY(float(source["thr_easting"]), float(source["thr_northing"]))
+        reciprocal = QgsPointXY(float(source["rec_easting"]), float(source["rec_northing"]))
+        threshold_length = threshold.distance(reciprocal)
+        displacement = float(source["thr_displaced_1"])
+        approach_type = source["type1"]
+        classified_type = EASA_PROFILE.classify_runway_type(approach_type)
+        primary = OlsRunwayEndContext(
+            direction="primary",
+            designator="18C",
+            threshold_point=threshold,
+            threshold_elevation_m=float(source["threshold_elev_1"]),
+            runway_end_elevation_m=float(source["runway_end_elev_1"]),
+            approach_type=approach_type,
+            classified_type=classified_type,
+        )
+        reciprocal_end = OlsRunwayEndContext(
+            direction="reciprocal",
+            designator="36C",
+            threshold_point=reciprocal,
+            threshold_elevation_m=float(source["threshold_elev_2"]),
+            runway_end_elevation_m=float(source["runway_end_elev_2"]),
+            approach_type=source["type2"],
+            classified_type=EASA_PROFILE.classify_runway_type(source["type2"]),
+        )
+        strip = {
+            "overall_width": float(source["runway_strip"]["overall_width"]),
+            "graded_width": float(source["runway_strip"]["graded_width"]),
+            "extension_length": 60.0,
+            "extension_length_1": 60.0,
+            "extension_length_2": 60.0,
+        }
+        runway = OlsRunwayContext(
+            runway_id="18C/36C",
+            original_index=1,
+            arc_number=int(source["arc_num"]),
+            arc_letter=source["arc_let"],
+            width_m=float(source["width"]),
+            physical_length_m=threshold_length + displacement,
+            threshold_length_m=threshold_length,
+            primary_threshold_point=threshold,
+            reciprocal_threshold_point=reciprocal,
+            primary_physical_end_point=threshold,
+            reciprocal_physical_end_point=reciprocal,
+            strip_parameters=strip,
+            ends=(primary, reciprocal_end),
+            generation_data={"original_index": 1},
+        )
+        context = OlsConstructionContext(
+            ruleset_id=EASA_PROFILE.id,
+            runways=(runway,),
+            reference_elevation_datum_m=expected["assumptions"]["reference_elevation_datum_m"],
+            arp_point=QgsPointXY(float(payload["arp_easting"]), float(payload["arp_northing"])),
+        )
+        builder = object.__new__(SafeguardingBuilder)
+        builder.ruleset = EASA_PROFILE
+        builder.baseline_ols_ruleset = EASA_PROFILE
+        builder.protected_airspace_ruleset = EASA_PROFILE
+        builder.ols_construction_context = context
+        builder.translator = None
+        builder.contour_intervals = {}
+        builder._contour_interval_ruleset_role = "baseline"
+        builder._create_and_add_layer = MethodType(
+            lambda self, *_args, **_kwargs: object(), builder
+        )
+        builder._reset_controlling_ols_engine()
+        QgsProject.instance().setCrs(QgsCoordinateReferenceSystem("EPSG:32631"))
+        runway_data = {
+            "short_name": "18C/36C",
+            "original_index": 1,
+            "arc_num": source["arc_num"],
+            "arc_let": source["arc_let"],
+            "type1": source["type1"],
+            "type2": source["type2"],
+            "thr_point": threshold,
+            "rec_thr_point": reciprocal,
+            "thr_displaced_1": displacement,
+            "thr_displaced_2": 0.0,
+            "threshold_elev_1": float(source["threshold_elev_1"]),
+            "threshold_elev_2": float(source["threshold_elev_2"]),
+            "runway_end_elev_1": float(source["runway_end_elev_1"]),
+            "runway_end_elev_2": float(source["runway_end_elev_2"]),
+            "width": float(source["width"]),
+            "clearway1_len": 0.0,
+            "clearway2_len": 0.0,
+            "calculated_strip_dims": strip,
+        }
+        self.assertTrue(
+            builder.process_runway_ols_surfaces(
+                runway_data,
+                QgsLayerTreeGroup("EASA OLS"),
+                QgsLayerTreeGroup("EASA OFZ"),
+            )
+        )
+
+        candidates = {
+            candidate.surface_id: candidate
+            for candidate in builder._controlling_ols_candidates
+            if candidate.surface_id.startswith("OFZ:")
+        }
+        runway_parameters = builder._get_runway_parameters(threshold, reciprocal)
+        inner_approach = candidates["OFZ:IA:18C/36C:18C"]
+        inner_expected = expected["inner_approach"]
+        inner_origin = threshold.project(
+            inner_expected["origin_station_m"], runway_parameters["azimuth_r_p"]
+        )
+        for checkpoint in inner_expected["elevation_checkpoints"]:
+            point = inner_origin.project(
+                checkpoint["station_m"], runway_parameters["azimuth_r_p"]
+            )
+            self.assertAlmostEqual(
+                inner_approach.elevation_at_xy(point),
+                checkpoint["expected_elevation_m"],
+                delta=1e-6,
+            )
+        self.assertAlmostEqual(
+            inner_approach.footprint.area(),
+            inner_expected["inner_edge_width_m"] * inner_expected["length_m"],
+            delta=0.01,
+        )
+
+        baulked = candidates["OFZ:BLS:18C/36C:18C"]
+        baulked_expected = expected["baulked_landing"]
+        baulked_origin = threshold.project(
+            baulked_expected["origin_station_m"], runway_parameters["azimuth_p_r"]
+        )
+        for checkpoint in baulked_expected["elevation_checkpoints"]:
+            point = baulked_origin.project(
+                checkpoint["station_m"], runway_parameters["azimuth_p_r"]
+            )
+            self.assertAlmostEqual(
+                baulked.elevation_at_xy(point),
+                checkpoint["expected_elevation_m"],
+                delta=1e-6,
+            )
+        self.assertAlmostEqual(
+            baulked.footprint.area(),
+            baulked_expected["expected_length_to_ihs_m"]
+            * (
+                baulked_expected["inner_edge_width_m"]
+                + baulked_expected["expected_outer_width_m"]
+            )
+            / 2.0,
+            delta=0.1,
+        )
+
+        strip_adjacent = [
+            candidate
+            for candidate in candidates.values()
+            if candidate.surface_type == "Inner Transitional"
+            and candidate.metadata.get("end") == "18C"
+            and candidate.metadata.get("section") == "Strip Adjacent"
+        ]
+        self.assertEqual(len(strip_adjacent), 2)
+        for candidate in strip_adjacent:
+            elevations = [
+                candidate.elevation_at_xy(QgsPointXY(vertex.x(), vertex.y()))
+                for vertex in candidate.footprint.vertices()
+            ]
+            self.assertAlmostEqual(
+                min(elevations),
+                expected["inner_transitional"]["base_elevation_m"],
+                delta=1e-6,
+            )
+            self.assertAlmostEqual(
+                max(elevations),
+                expected["inner_transitional"]["top_elevation_m"],
+                delta=1e-6,
+            )
 
     def test_annex14_elevation_fallback_preserves_zero_threshold(self):
         builder = object.__new__(SafeguardingBuilder)

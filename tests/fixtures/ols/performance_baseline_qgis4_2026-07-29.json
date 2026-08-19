@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "recorded_at": "2026-07-29",
+  "recorded_at": "2026-08-19",
   "source_revision_base": "45eaf94",
-  "working_tree_note": "Three-run medians at the Annex 14 promotion release checkpoint; all 16 manifest fixtures passed strict production gates with deterministic output.",
+  "working_tree_note": "Three-run medians at the Annex 14 promotion release checkpoint, extended with the EHAM, EHRD, and EGLL EASA topology fixtures; all 19 manifest fixtures passed strict production gates with deterministic output.",
   "environment": {
     "qgis_version": "4.0.2-Norrk\u00f6ping",
     "qgis_runtime": "/Applications/QGIS-4.0.app/Contents/MacOS/python",
@@ -428,6 +428,57 @@
           "classified_overlap_area_m2": 0.0
         }
       }
+    },
+    "ehrd_1rwy_single.json": {
+      "runways": 1,
+      "total_seconds": 2.9746069579850882,
+      "stages": {
+        "region_solve": 2.6319579579867423,
+        "boundary_generation": 0.009560332982800901
+      },
+      "output": {
+        "layers": 62,
+        "features": 606,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0,
+        "determinism_digest": "b9a8633c2e0789846e52cdfc3004f1e345f4a1b47e303062975e33e3401a2d26"
+      },
+      "comparisons": {}
+    },
+    "egll_2rwy_parallel.json": {
+      "runways": 2,
+      "total_seconds": 4.1274670420680195,
+      "stages": {
+        "region_solve": 3.64929991599638,
+        "boundary_generation": 0.043886124971322715
+      },
+      "output": {
+        "layers": 103,
+        "features": 1284,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0,
+        "determinism_digest": "28bbfec248a5deb8c9a2214c5dc1d3be8cbfbb17adf044f83590b329ca954942"
+      },
+      "comparisons": {}
+    },
+    "eham_1rwy_single.json": {
+      "runways": 1,
+      "total_seconds": 2.9424624579260126,
+      "stages": {
+        "region_solve": 2.300882250070572,
+        "boundary_generation": 0.0
+      },
+      "output": {
+        "layers": 74,
+        "features": 1601,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0,
+        "determinism_digest": "a7723ba3d883cd7bcaa097350a0e968c0d89f7a89aa520600d3832aa44bd5827"
+      },
+      "comparisons": {}
     },
     "ybsc_1rwy_single_file_output.json": {
       "runways": 1,

@@ -67,7 +67,6 @@
       "project_crs": "EPSG:28355",
       "expected_comparison_families": [],
       "mos139_lock_required": false,
-      "performance_baseline_required": false,
       "maximum_region_overlap_m2": 0.2
     },
     {
@@ -156,6 +155,39 @@
       "runway_configuration": "intersecting",
       "project_crs": "EPSG:28356",
       "expected_comparison_families": ["OLS"],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "ehrd_1rwy_single.json",
+      "description": "EASA Code 4C CAT I runway with displaced thresholds and clearways",
+      "icao_code": "EHRD",
+      "runway_count": 1,
+      "runway_configuration": "single",
+      "project_crs": "EPSG:32631",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "egll_2rwy_parallel.json",
+      "description": "EASA dual-parallel Code 4F CAT II/III runways",
+      "icao_code": "EGLL",
+      "runway_count": 2,
+      "runway_configuration": "parallel",
+      "project_crs": "EPSG:32630",
+      "expected_comparison_families": [],
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
+      "file": "eham_1rwy_single.json",
+      "description": "EASA Code 4F CAT II/III runway with a displaced threshold",
+      "icao_code": "EHAM",
+      "runway_count": 1,
+      "runway_configuration": "single",
+      "project_crs": "EPSG:32631",
+      "expected_comparison_families": [],
       "mos139_lock_required": false,
       "maximum_region_overlap_m2": 0.2
     },

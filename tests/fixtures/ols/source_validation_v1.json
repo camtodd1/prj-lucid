@@ -375,6 +375,39 @@
       "expected": {"width": 120.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.02, "code_letter_f_width": 140.0}
     },
     {
+      "id": "easa-pa-cat23-code4f-inner-approach",
+      "source_ref": "CS ADR-DSN.J.480 Table J-1 (PA CAT II/III Code 3/4, Code letter F)",
+      "production": {
+        "module": "rulesets.easa.ols_surfaces",
+        "symbol": "INNER_APPROACH_PARAMS",
+        "key": [4, "PA_II_III"],
+        "tuple_key": true
+      },
+      "expected": {"width": 120.0, "code_letter_f_width": 140.0, "start_dist_from_thr": 60.0, "length": 900.0, "slope": 0.02}
+    },
+    {
+      "id": "easa-pa-cat23-code4-inner-transitional",
+      "source_ref": "CS ADR-DSN.J.480 Table J-1 (PA CAT II/III Code 3/4)",
+      "production": {
+        "module": "rulesets.easa.ols_surfaces",
+        "symbol": "INNER_TRANSITIONAL_PARAMS",
+        "key": [4, "PA_II_III"],
+        "tuple_key": true
+      },
+      "expected": {"slope": 0.333}
+    },
+    {
+      "id": "easa-pa-cat23-code4f-baulked-landing",
+      "source_ref": "CS ADR-DSN.J.480 Table J-1 (PA CAT II/III Code 3/4, Code letter F)",
+      "production": {
+        "module": "rulesets.easa.ols_surfaces",
+        "symbol": "BALKED_LANDING_PARAMS",
+        "key": [4, "PA_II_III"],
+        "tuple_key": true
+      },
+      "expected": {"width": 120.0, "code_letter_f_width": 140.0, "start_dist_from_thr": 1800.0, "divergence": 0.1, "slope": 0.0333}
+    },
+    {
       "id": "easa-pa-code3-inner-horizontal",
       "source_ref": "CS ADR-DSN.J.480 Table J-1 (PA CAT I Code 3/4)",
       "production": {
@@ -737,6 +770,53 @@
         "expected_elevation_m": 273.0,
         "radius_m": 15000.0,
         "applicability": "guidance_only"
+      }
+    },
+    "eham_easa_code4f_cat_ii_iii": {
+      "input_fixture": "eham_1rwy_single.json",
+      "input_fixture_sha256": "5217cb6f54fefd1d1ecd5e31da223daca46c8abd0af7c0957b49bc2867b36ddd",
+      "source_refs": [
+        "CS ADR-DSN.H.445(a)-(b)",
+        "CS ADR-DSN.J.480 Table J-1 (PA CAT II/III Code 3/4)"
+      ],
+      "assumptions": {
+        "runway_length_m": 2841.28308332019,
+        "runway_width_m": 45.0,
+        "code_number": 4,
+        "code_letter": "F",
+        "threshold_elevation_m": -3.658,
+        "reference_elevation_datum_m": -3.5,
+        "inner_horizontal_elevation_m": 41.5
+      },
+      "inner_approach": {
+        "inner_edge_width_m": 140.0,
+        "origin_station_m": 60.0,
+        "length_m": 900.0,
+        "slope": 0.02,
+        "elevation_checkpoints": [
+          {"station_m": 0.0, "expected_elevation_m": -3.658},
+          {"station_m": 450.0, "expected_elevation_m": 5.342},
+          {"station_m": 900.0, "expected_elevation_m": 14.342}
+        ]
+      },
+      "inner_transitional": {
+        "slope": 0.333,
+        "base_elevation_m": -3.658,
+        "top_elevation_m": 41.5,
+        "expected_top_offset_m": 135.6096096096096
+      },
+      "baulked_landing": {
+        "inner_edge_width_m": 140.0,
+        "origin_station_m": 1800.0,
+        "slope": 0.0333,
+        "divergence": 0.1,
+        "expected_length_to_ihs_m": 1356.096096096096,
+        "expected_outer_width_m": 411.2192192192192,
+        "elevation_checkpoints": [
+          {"station_m": 0.0, "expected_elevation_m": -3.658},
+          {"station_m": 678.048048048048, "expected_elevation_m": 18.921},
+          {"station_m": 1356.096096096096, "expected_elevation_m": 41.5}
+        ]
       }
     },
     "annex14_current_ni_code3": {

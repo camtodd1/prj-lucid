@@ -305,6 +305,21 @@ class EasaOlsConstructionPolicy(ConventionalOlsConstructionPolicy):
             "BAULKEDLANDINGSURFACE",
         } and isinstance(params, Mapping):
             resolved = dict(params)
+            if (
+                runway is not None
+                and runway.arc_letter == "F"
+                and normalized
+                in {
+                    "INNERAPPROACH",
+                    "INNERAPPROACHSURFACE",
+                    "BALKEDLANDING",
+                    "BALKEDLANDINGSURFACE",
+                    "BAULKEDLANDING",
+                    "BAULKEDLANDINGSURFACE",
+                }
+                and resolved.get("code_letter_f_width")
+            ):
+                resolved["width"] = resolved["code_letter_f_width"]
             applicability = self.ofz_applicability(profile.classify_runway_type(runway_type))
             resolved["applicability"] = applicability["status"]
             resolved["applicability_ref"] = applicability["ref"]

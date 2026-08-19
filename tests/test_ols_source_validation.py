@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib
 import json
 import math
@@ -392,6 +393,73 @@ class OlsSourceValidationTests(unittest.TestCase):
             delta=self.elevation_tolerance,
         )
         self.assertEqual(ohs["applicability"], "guidance_only")
+
+    def test_independent_eham_easa_cat23_ofz_checkpoints(self):
+        case = self.manifest["analytical_cases"]["eham_easa_code4f_cat_ii_iii"]
+        input_path = MANIFEST_PATH.parent / case["input_fixture"]
+        self.assertEqual(
+            hashlib.sha256(input_path.read_bytes()).hexdigest(),
+            case["input_fixture_sha256"],
+        )
+        with input_path.open("r", encoding="utf-8") as handle:
+            runway = json.load(handle)["runways"][0]
+
+        assumptions = case["assumptions"]
+        runway_length_m = math.hypot(
+            float(runway["rec_easting"]) - float(runway["thr_easting"]),
+            float(runway["rec_northing"]) - float(runway["thr_northing"]),
+        )
+        self.assertAlmostEqual(
+            runway_length_m,
+            assumptions["runway_length_m"],
+            delta=self.distance_tolerance,
+        )
+        self.assertEqual(int(runway["arc_num"]), assumptions["code_number"])
+        self.assertEqual(runway["arc_let"], assumptions["code_letter"])
+
+        inner_approach = case["inner_approach"]
+        for checkpoint in inner_approach["elevation_checkpoints"]:
+            self.assertAlmostEqual(
+                assumptions["threshold_elevation_m"]
+                + checkpoint["station_m"] * inner_approach["slope"],
+                checkpoint["expected_elevation_m"],
+                delta=self.elevation_tolerance,
+            )
+
+        inner_transitional = case["inner_transitional"]
+        self.assertAlmostEqual(
+            transverse_offset_for_elevation(
+                inner_transitional["base_elevation_m"],
+                inner_transitional["top_elevation_m"],
+                inner_transitional["slope"],
+            ),
+            inner_transitional["expected_top_offset_m"],
+            delta=self.distance_tolerance,
+        )
+
+        baulked = case["baulked_landing"]
+        expected_length_m = (
+            assumptions["inner_horizontal_elevation_m"]
+            - assumptions["threshold_elevation_m"]
+        ) / baulked["slope"]
+        self.assertAlmostEqual(
+            expected_length_m,
+            baulked["expected_length_to_ihs_m"],
+            delta=self.distance_tolerance,
+        )
+        self.assertAlmostEqual(
+            baulked["inner_edge_width_m"]
+            + 2.0 * expected_length_m * baulked["divergence"],
+            baulked["expected_outer_width_m"],
+            delta=self.distance_tolerance,
+        )
+        for checkpoint in baulked["elevation_checkpoints"]:
+            self.assertAlmostEqual(
+                assumptions["threshold_elevation_m"]
+                + checkpoint["station_m"] * baulked["slope"],
+                checkpoint["expected_elevation_m"],
+                delta=self.elevation_tolerance,
+            )
 
     def test_independent_annex14_future_elevations_and_contours(self):
         case = self.manifest["analytical_cases"]["annex14_future"]
