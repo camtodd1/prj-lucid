@@ -30,8 +30,8 @@ fixtures.
 - [ ] Add a ruleset for Airspace Act changes, including the distinction between
   Commonwealth-leased airports and non-Commonwealth airports.
 - [ ] Complete the remaining EASA CS-ADR-DSN Issue 7 scope: pavement/shoulder
-  decision-tree coverage, parallel-runway separation, and controlling-envelope
-  evidence. Chapter H/J airport-wide OLS and Category II/III OFZ are supported;
+  decision-tree coverage and parallel-runway separation. Chapter H/J airport-wide
+  OLS, Category II/III OFZ, and the controlling lower envelope are supported;
   retain the explicit CAT I guidance and outer-horizontal guidance caveats.
 - [ ] Complete CAP 168 scope outside the supported OLS contract, beginning with
   RESA and approach-adjacent transitional behavior on curved tracks.

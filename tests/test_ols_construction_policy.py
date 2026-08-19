@@ -193,6 +193,10 @@ class OtherConventionalPolicyTests(unittest.TestCase):
     def test_easa_approach_and_takeoff_capabilities_are_source_backed(self):
         self.assertEqual(EASA_PROFILE.capability_status("ols.runway_approach"), "supported")
         self.assertEqual(EASA_PROFILE.capability_status("ols.takeoff_climb"), "supported")
+        self.assertEqual(
+            EASA_PROFILE.capability_status("ols.controlling_lower_envelope"),
+            "supported",
+        )
 
         from rulesets.easa.ols_surfaces import OLS_TRACEABILITY_ITEMS
 

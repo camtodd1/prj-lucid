@@ -412,7 +412,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             "icao_annex14_vol1_modernised_ofs_oes",
         )
 
-    def test_cap168_and_current_annex14_are_supported_while_easa_is_preview(self):
+    def test_cap168_easa_and_current_annex14_are_supported(self):
         baseline = self.dialog.baseline_ols_ruleset_combo
         cap168_index = baseline.findData("uk_caa_cap168_edition_13")
         easa_index = baseline.findData("easa_cs_adr_dsn_issue_7")
@@ -423,7 +423,11 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertTrue(baseline.model().item(easa_index).isEnabled())
         self.assertNotIn("partial preview", baseline.itemText(cap168_index).lower())
         self.assertEqual(baseline.itemText(cap168_index), "UK CAA CAP 168 (Edition 13)")
-        self.assertIn("partial preview", baseline.itemText(easa_index).lower())
+        self.assertNotIn("partial preview", baseline.itemText(easa_index).lower())
+        self.assertEqual(
+            baseline.itemText(easa_index),
+            "EASA CS-ADR-DSN (Issue 7)",
+        )
         self.assertEqual(
             baseline.itemText(current_annex_index),
             "ICAO Annex 14 Vol I - Current OLS",

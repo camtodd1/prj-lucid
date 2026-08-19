@@ -5,9 +5,9 @@
 **Profile:** `easa_cs_adr_dsn_issue_7` (`draft`)
 
 This package implements a draft EASA CS-ADR-DSN Issue 7 design-standard
-profile. It is selectable for preview and validation, but its conventional and
-controlling OLS capabilities remain `partial` until the source, topology,
-performance, interpretation, and independent-review gates are complete.
+profile. Its conventional and controlling OLS capabilities are supported.
+The overall profile remains draft while the partial pavement/shoulder and
+parallel-runway-separation capabilities are completed.
 
 ## Capability Summary
 
@@ -28,8 +28,8 @@ Required Category II/III OFZ surfaces participate in the derived controlling low
 envelope. Representative EASA evidence now covers EHTE Code 2B NI/NPA with a
 modernised Annex 14 comparison, EHAM Code 4F CAT II/III, EHRD Code 4C CAT I,
 and EGLL dual-parallel Code 4F CAT II/III workflows under strict topology,
-determinism, and performance gates. The capability remains partial while broader
-configuration evidence and independent review are completed.
+determinism, and performance gates. Independent technical review has passed;
+the controlling lower-envelope capability is supported.
 
 ## Module Ownership
 
