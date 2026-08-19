@@ -140,7 +140,7 @@ tests/run_ols_workflow_regression.py \
 
 `performance_baseline_qgis4_2026-07-29.json` records the current QGIS 4.0.2
 three-run wall-clock medians, key nested-stage timings, output counts, and
-comparison accuracy metrics for all 19 maintained fixtures. Runtime regressions
+comparison accuracy metrics for all 20 maintained fixtures. Runtime regressions
 above 20% and all geometry, coverage, exclusivity, determinism, and ID failures
 are release-gate failures.
 

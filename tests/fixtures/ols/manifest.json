@@ -159,6 +159,21 @@
       "maximum_region_overlap_m2": 0.2
     },
     {
+      "file": "ehte_1rwy_single.json",
+      "description": "EASA Code 2B NI/NPA runway compared with modernised Annex 14 OFS/OES",
+      "icao_code": "EHTE",
+      "runway_count": 1,
+      "runway_configuration": "single",
+      "project_crs": "EPSG:32631",
+      "expected_comparison_families": ["OFS", "OES"],
+      "expected_comparison_feature_counts": {
+        "OFS": {"gain": 19, "loss": 0, "no_change": 13, "transition": 0},
+        "OES": {"gain": 28, "loss": 17, "no_change": 1, "transition": 18}
+      },
+      "mos139_lock_required": false,
+      "maximum_region_overlap_m2": 0.2
+    },
+    {
       "file": "ehrd_1rwy_single.json",
       "description": "EASA Code 4C CAT I runway with displaced thresholds and clearways",
       "icao_code": "EHRD",

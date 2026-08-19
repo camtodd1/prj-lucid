@@ -25,10 +25,11 @@ take-off climb, airport-wide OLS, and the mandatory Category II/III OFZ family a
 supported for the source-backed cases covered by the shared geometry contract.
 Category I inner-surface output is labelled guidance-only under GM1 J.480(a).
 Required Category II/III OFZ surfaces participate in the derived controlling lower
-envelope. Representative EASA evidence now covers EHAM Code 4F CAT II/III,
-EHRD Code 4C CAT I, and EGLL dual-parallel Code 4F CAT II/III workflows under
-strict topology, determinism, and performance gates. The capability remains
-partial while broader configuration evidence and independent review are completed.
+envelope. Representative EASA evidence now covers EHTE Code 2B NI/NPA with a
+modernised Annex 14 comparison, EHAM Code 4F CAT II/III, EHRD Code 4C CAT I,
+and EGLL dual-parallel Code 4F CAT II/III workflows under strict topology,
+determinism, and performance gates. The capability remains partial while broader
+configuration evidence and independent review are completed.
 
 ## Module Ownership
 

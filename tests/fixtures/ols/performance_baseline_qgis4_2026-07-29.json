@@ -2,7 +2,7 @@
   "schema_version": 1,
   "recorded_at": "2026-08-19",
   "source_revision_base": "45eaf94",
-  "working_tree_note": "Three-run medians at the Annex 14 promotion release checkpoint, extended with the EHAM, EHRD, and EGLL EASA topology fixtures; all 19 manifest fixtures passed strict production gates with deterministic output.",
+  "working_tree_note": "Three-run medians at the Annex 14 promotion release checkpoint, extended with the EHAM, EHRD, EGLL, and EHTE EASA topology fixtures; all 20 manifest fixtures passed strict production gates with deterministic output.",
   "environment": {
     "qgis_version": "4.0.2-Norrk\u00f6ping",
     "qgis_runtime": "/Applications/QGIS-4.0.app/Contents/MacOS/python",
@@ -425,6 +425,49 @@
           },
           "common_domain_area_m2": 187823503.202829,
           "unclassified_common_area_m2": 0.0,
+          "classified_overlap_area_m2": 0.0
+        }
+      }
+    },
+    "ehte_1rwy_single.json": {
+      "runways": 1,
+      "total_seconds": 7.858875582925975,
+      "stages": {
+        "region_solve": 1.199416876072064,
+        "boundary_generation": 0.01091970899142325,
+        "comparison": 0.8452120830770582,
+        "change_contours": 5.177829458029009,
+        "modernisation_layers": 6.0272702920483425
+      },
+      "output": {
+        "layers": 89,
+        "features": 2051,
+        "invalid_geometries": 0,
+        "empty_geometries": 0,
+        "duplicate_comparison_ids": 0,
+        "determinism_digest": "bd16e2cfc98dcefdbbfad73e62b5838fa73f6f0030ee6f4e841124a97f23e4ea"
+      },
+      "comparisons": {
+        "OFS": {
+          "feature_counts": {
+            "gain": 19,
+            "loss": 0,
+            "no_change": 13,
+            "transition": 0
+          },
+          "common_domain_area_m2": 5202102.10943804,
+          "unclassified_common_area_m2": 0.00035599246621131897,
+          "classified_overlap_area_m2": 0.000023023225367069244
+        },
+        "OES": {
+          "feature_counts": {
+            "gain": 28,
+            "loss": 17,
+            "no_change": 1,
+            "transition": 18
+          },
+          "common_domain_area_m2": 81598285.47157748,
+          "unclassified_common_area_m2": 0.010938325843885821,
           "classified_overlap_area_m2": 0.0
         }
       }
