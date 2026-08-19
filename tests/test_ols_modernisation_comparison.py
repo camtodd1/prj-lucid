@@ -1593,6 +1593,38 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(len(parts["no_change"]), 1)
         self.assertAlmostEqual(parts["no_change"][0][2].area(), 10000.0, places=3)
 
+    def test_fourteen_millimetre_crossing_residual_is_no_change(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.00028, 0.0, 99.986)
+
+        parts = self.compare(baseline, future)
+
+        self.assertEqual(parts["gain"], [])
+        self.assertEqual(parts["loss"], [])
+        self.assertEqual(len(parts["no_change"]), 1)
+        self.assertAlmostEqual(
+            parts["no_change"][0][2].area(), self.domain.area(), places=3
+        )
+
+    def test_final_sign_enforcement_reclassifies_recovered_near_tie(self):
+        baseline = self.constant("baseline", 100.0)
+        future = self.plane("future", 0.00016, 0.0, 99.986)
+        comparison = OlsEnvelopeComparisonEngine(
+            PlanarControllingOlsEngine([baseline]),
+            PlanarControllingOlsEngine([future]),
+        )
+        result = {
+            "gain": [],
+            "loss": [(baseline, future, QgsGeometry(self.domain))],
+            "no_change": [],
+        }
+
+        comparison._enforce_final_height_signs(result)
+
+        self.assertEqual(result["gain"], [])
+        self.assertEqual(result["loss"], [])
+        self.assertEqual(len(result["no_change"]), 1)
+
     def test_post_cleanup_coverage_repair_restores_trimmed_domain(self):
         baseline = self.constant("baseline", 100.0)
         future = self.constant("future", 110.0)

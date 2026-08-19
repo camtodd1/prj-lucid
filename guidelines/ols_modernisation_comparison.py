@@ -31,7 +31,7 @@ except ImportError:
     from core.run_log import QgsMessageLog  # type: ignore
 
 PLUGIN_TAG = "SafeguardingBuilder"
-COMPARISON_TOLERANCE_M = 0.01
+COMPARISON_TOLERANCE_M = 0.015
 COMPARISON_MIN_AREA_M2 = 0.01
 COMPARISON_NO_OVERLAY_COVERAGE_TOLERANCE_M = 0.5
 COMPARISON_NO_OVERLAY_MIN_AREA_M2 = 5.0
@@ -2359,6 +2359,16 @@ class OlsEnvelopeComparisonEngine:
                     baseline,
                     future,
                 )
+                if (
+                    delta_min is not None
+                    and delta_max is not None
+                    and abs(delta_min) <= self.tolerance_m
+                    and abs(delta_max) <= self.tolerance_m
+                ):
+                    result.setdefault("no_change", []).append(
+                        (baseline, future, geometry)
+                    )
+                    continue
                 potential_wrong_side = (
                     source_change == "gain"
                     and delta_min is not None
