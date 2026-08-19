@@ -4223,6 +4223,28 @@ class SafeguardingBuilderDialog(
         ]:
             validated[field_name] = self._bool_from_input(inputs.get(field_name, False))
 
+        for end_number, runway_type_key in ((1, "type1"), (2, "type2")):
+            field_name = f"departure_type_{end_number}"
+            departure_type = str(inputs.get(field_name) or "").strip().lower()
+            if not departure_type:
+                runway_type = str(inputs.get(runway_type_key) or "")
+                departure_type = (
+                    "instrument"
+                    if "Non-Precision" in runway_type
+                    or (
+                        "Precision Approach" in runway_type
+                        and "Non-Precision" not in runway_type
+                    )
+                    else "non_instrument"
+                )
+            elif departure_type not in {"instrument", "non_instrument"}:
+                errors.append(
+                    f"Rwy {index}: Invalid departure type '{departure_type}'."
+                )
+                current_errors += 1
+                departure_type = "non_instrument"
+            validated[field_name] = departure_type
+
         # Optional fields (just copy text)
         validated["ruleset"] = str(inputs.get("ruleset", DEFAULT_RULESET_ID) or DEFAULT_RULESET_ID).strip()
         validated["arc_num"] = inputs.get("arc_num")
@@ -4514,18 +4536,26 @@ class SafeguardingBuilderDialog(
             "code_f_without_digital_go_around_avionics":
                 str(runway_inputs.get("arc_let") or "").strip().upper() == "F",
         }
-        for end_key, runway_type_key, elevation_keys, takeoff_available_key in (
+        for (
+            end_key,
+            runway_type_key,
+            elevation_keys,
+            takeoff_available_key,
+            departure_type_key,
+        ) in (
             (
                 "primary_end",
                 "type1",
                 ("threshold_elev_1", "runway_end_elev_1"),
                 "takeoff_available_1",
+                "departure_type_1",
             ),
             (
                 "reciprocal_end",
                 "type2",
                 ("threshold_elev_2", "runway_end_elev_2"),
                 "takeoff_available_2",
+                "departure_type_2",
             ),
         ):
             end_raw = config.get(end_key)
@@ -4540,11 +4570,19 @@ class SafeguardingBuilderDialog(
             takeoff_available = selected(
                 runway_inputs.get(takeoff_available_key, True)
             )
+            departure_type = str(
+                runway_inputs.get(departure_type_key) or ""
+            ).strip().lower()
+            instrument_departure = (
+                departure_type == "instrument"
+                if departure_type in {"instrument", "non_instrument"}
+                else is_instrument
+            )
             operations = {
                 "circling_or_visual_circuit": False,
                 "straight_in_non_precision_instrument": is_non_precision,
                 "precision_approach": is_precision,
-                "instrument_departure": is_instrument and takeoff_available,
+                "instrument_departure": instrument_departure and takeoff_available,
                 "take_off": takeoff_available,
             }
             end_label = "primary end" if end_key == "primary_end" else "reciprocal end"

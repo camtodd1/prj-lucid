@@ -633,6 +633,26 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         layout.addWidget(self.landing_available_1_cb, row + 1, 1)
         layout.addWidget(self.landing_available_2_cb, row + 1, 2)
 
+    def _add_departure_type_controls(
+        self, layout: QtWidgets.QGridLayout, row: int
+    ) -> None:
+        layout.addWidget(QtWidgets.QLabel("Departure Type:"), row, 0)
+        self.departure_type_1_combo = NoWheelComboBox()
+        self.departure_type_2_combo = NoWheelComboBox()
+        for combo, suffix in (
+            (self.departure_type_1_combo, "1"),
+            (self.departure_type_2_combo, "2"),
+        ):
+            combo.setObjectName(f"comboBox_departure_type_{suffix}_{self.index}")
+            combo.addItem("Non-Instrument", userData="non_instrument")
+            combo.addItem("Instrument", userData="instrument")
+            combo.setToolTip(
+                "Controls whether the modernised Annex 14 instrument departure surface is required."
+            )
+            self._set_control_width(combo)
+        layout.addWidget(self.departure_type_1_combo, row, 1)
+        layout.addWidget(self.departure_type_2_combo, row, 2)
+
     def _add_lahso_controls(self, layout: QtWidgets.QGridLayout, row: int) -> None:
         lahso_label = QtWidgets.QLabel("LAHSO applied:")
         self.lahso_applied_1_cb = QtWidgets.QCheckBox()
@@ -805,7 +825,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         self._add_lahso_controls(operations_layout, 2)
         self._add_runway_type_controls(operations_layout, 3, 0, 1, reciprocal_input_col=2)
         self._add_ols_track_controls(operations_layout, 4)
-        self._standardize_form_rows(operations_layout, 8)
+        self._add_departure_type_controls(operations_layout, 8)
+        self._standardize_form_rows(operations_layout, 9)
 
         parent_layout.addWidget(operations_group)
 
@@ -1179,25 +1200,28 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "primary_end": (
                 self.type1_combo.currentText(),
                 self.takeoff_available_1_cb.isChecked(),
+                self.departure_type_1_combo.currentData(),
             ),
             "reciprocal_end": (
                 self.type2_combo.currentText(),
                 self.takeoff_available_2_cb.isChecked(),
+                self.departure_type_2_combo.currentData(),
             ),
         }
         for end_key, widgets in self._annex14_end_widgets.items():
-            runway_type, takeoff_available = end_inputs[end_key]
+            runway_type, takeoff_available, departure_type = end_inputs[end_key]
             is_non_precision = "Non-Precision" in runway_type
             is_precision = (
                 "Precision Approach" in runway_type
                 and not is_non_precision
             )
-            is_instrument = is_non_precision or is_precision
             operations = {
                 "circling_or_visual_circuit": False,
                 "straight_in_non_precision_instrument": is_non_precision,
                 "precision_approach": is_precision,
-                "instrument_departure": is_instrument and takeoff_available,
+                "instrument_departure": (
+                    departure_type == "instrument" and takeoff_available
+                ),
                 "take_off": takeoff_available,
             }
             config[end_key] = {
@@ -1489,6 +1513,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.approach_track_2_combo,
             self.takeoff_track_1_combo,
             self.takeoff_track_2_combo,
+            self.departure_type_1_combo,
+            self.departure_type_2_combo,
             self.annex14_strip_source_combo,
         ]:
             combo.currentIndexChanged.connect(self.inputChanged.emit)
@@ -1589,6 +1615,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "takeoff_track_type_2": self.takeoff_track_2_combo.currentData(),
             "takeoff_track_wkt_1": self.takeoff_track_wkt_1_le.text().strip(),
             "takeoff_track_wkt_2": self.takeoff_track_wkt_2_le.text().strip(),
+            "departure_type_1": self.departure_type_1_combo.currentData(),
+            "departure_type_2": self.departure_type_2_combo.currentData(),
             "annex14_modernised": self._annex14_modernised_input_data(),
         }
         strip_edits = getattr(self, "runway_strip_edits", None)
@@ -1676,6 +1704,12 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             )
             self._set_combo_text(self.type1_combo, data.get("type1", ""))
             self._set_combo_text(self.type2_combo, data.get("type2", ""))
+            self._set_combo_data(
+                self.departure_type_1_combo, data.get("departure_type_1")
+            )
+            self._set_combo_data(
+                self.departure_type_2_combo, data.get("departure_type_2")
+            )
             self._set_combo_data(self.approach_track_1_combo, data.get("approach_track_type_1", "aligned"))
             self._set_combo_data(self.approach_track_2_combo, data.get("approach_track_type_2", "aligned"))
             self.approach_track_wkt_1_le.setText(data.get("approach_track_wkt_1", ""))
@@ -1790,6 +1824,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.approach_track_wkt_2_le,
             self.takeoff_track_1_combo,
             self.takeoff_track_2_combo,
+            self.departure_type_1_combo,
+            self.departure_type_2_combo,
             self.takeoff_track_wkt_1_le,
             self.takeoff_track_wkt_2_le,
             self.annex14_confirmed_cb,

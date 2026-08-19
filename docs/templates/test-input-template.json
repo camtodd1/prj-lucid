@@ -200,6 +200,8 @@
             "surface_material": "REPLACE_MATERIAL",
             "type1": "REPLACE_PRIMARY_RUNWAY_TYPE",
             "type2": "REPLACE_RECIPROCAL_RUNWAY_TYPE",
+            "departure_type_1": "non_instrument",
+            "departure_type_2": "non_instrument",
             "approach_track_type_1": "aligned",
             "approach_track_type_2": "aligned",
             "approach_track_wkt_1": "",

@@ -1346,9 +1346,6 @@ class Annex14GeometryMixin:
     def _annex14_is_precision_runway_type(self, runway_type_abbr: str) -> bool:
         return str(runway_type_abbr or "").upper() in {"PA_I", "PA_II_III"}
 
-    def _annex14_is_instrument_runway_type(self, runway_type_abbr: str) -> bool:
-        return str(runway_type_abbr or "").upper() in {"NPA", "PA_I", "PA_II_III"}
-
     def _annex14_feature_attribute(self, feature: QgsFeature, field_name: str):
         try:
             idx = feature.fields().indexFromName(field_name)
@@ -2324,7 +2321,6 @@ class Annex14GeometryMixin:
             if (
                 dep_start is not None
                 and bool(operations.get("instrument_departure"))
-                and self._annex14_is_instrument_runway_type(runway_type_abbr)
             ):
                 departure_start_z = self._annex14_surface_z(
                     takeoff_start_z or opposite_threshold_z,

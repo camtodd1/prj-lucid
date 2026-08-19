@@ -7990,6 +7990,7 @@ class ControllingOlsEngineMixin:
 
         horizontal_surface_types = {
             "approach",
+            "horizontal",
             "ihs",
             "inner_horizontal",
             "ohs",

@@ -1187,8 +1187,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
     def test_controlling_contours_include_horizontal_plane_label_anchor(self):
         region = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 200.0, 200.0))
         candidate = ControllingOlsCandidate(
-            "ihs",
-            "IHS",
+            "horizontal",
+            "Horizontal",
             QgsGeometry(region),
             constant_elevation_evaluator(123.456),
             "constant",

@@ -435,6 +435,8 @@ class PersistenceMixin:
         default_fields = {
             "takeoff_available_1",
             "takeoff_available_2",
+            "departure_type_1",
+            "departure_type_2",
             "landing_available_1",
             "landing_available_2",
             "lahso_applied_1",
@@ -795,6 +797,27 @@ class PersistenceMixin:
             )
             modernised["review_required"] = not bool(modernised.get("confirmed"))
         runway_data["annex14_modernised"] = modernised
+        for end_number, end_key, runway_type_key in (
+            (1, "primary_end", "type1"),
+            (2, "reciprocal_end", "type2"),
+        ):
+            field_name = f"departure_type_{end_number}"
+            if runway_data.get(field_name) in {"instrument", "non_instrument"}:
+                continue
+            end_config = modernised.get(end_key)
+            end_config = end_config if isinstance(end_config, dict) else {}
+            operations = end_config.get("operations")
+            operations = operations if isinstance(operations, dict) else {}
+            instrument_departure = operations.get("instrument_departure")
+            if instrument_departure is None:
+                runway_type = str(runway_data.get(runway_type_key) or "")
+                instrument_departure = "Non-Precision" in runway_type or (
+                    "Precision Approach" in runway_type
+                    and "Non-Precision" not in runway_type
+                )
+            runway_data[field_name] = (
+                "instrument" if instrument_departure else "non_instrument"
+            )
         return runway_data
 
     def _line_edit(self, name: str):

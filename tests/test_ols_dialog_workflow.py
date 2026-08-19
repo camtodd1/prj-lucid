@@ -439,6 +439,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 "approach_track_wkt_1": "LINESTRING (0 0, 100 10, 200 40)",
                 "takeoff_track_type_2": "offset",
                 "takeoff_track_wkt_2": "LINESTRING (1000 0, 2000 100)",
+                "departure_type_1": "instrument",
+                "departure_type_2": "non_instrument",
                 "cap168_wide_runway": True,
             }
         )
@@ -450,6 +452,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(restored["approach_track_wkt_1"], saved["approach_track_wkt_1"])
         self.assertEqual(restored["takeoff_track_type_2"], "offset")
         self.assertEqual(restored["takeoff_track_wkt_2"], saved["takeoff_track_wkt_2"])
+        self.assertEqual(restored["departure_type_1"], "instrument")
+        self.assertEqual(restored["departure_type_2"], "non_instrument")
         self.assertTrue(restored["cap168_wide_runway"])
 
     def test_explicit_selection_keeps_legacy_policy_compatible(self):
@@ -921,6 +925,35 @@ class OlsDialogWorkflowTests(unittest.TestCase):
             normalized["primary_end"]["maximum_certificated_takeoff_mass_kg"]
         )
         self.assertEqual(normalized["strip"]["source"], "manual")
+
+    def test_modernised_departure_type_is_independent_of_approach_type(self):
+        normalized, errors = self.dialog._validate_annex14_modernised_config(
+            1,
+            {
+                "confirmed": True,
+                "strip": {
+                    "source": "manual",
+                    "overall_width_m": "140",
+                    "end_extension_m": "60",
+                },
+            },
+            {
+                "type1": "Non-Instrument (NI)",
+                "type2": "Non-Precision Approach (NPA)",
+                "departure_type_1": "instrument",
+                "departure_type_2": "non_instrument",
+                "threshold_elev_1": "10",
+                "threshold_elev_2": "11",
+            },
+        )
+
+        self.assertEqual(errors, [])
+        self.assertTrue(
+            normalized["primary_end"]["operations"]["instrument_departure"]
+        )
+        self.assertFalse(
+            normalized["reciprocal_end"]["operations"]["instrument_departure"]
+        )
 
     def test_modernised_annex14_ignores_specific_oes_under_straight_in_assumption(self):
         config = {
