@@ -3597,7 +3597,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         )
 
         self.assertTrue(created)
-        loss_layer = next(layer for layer in capture.layers if layer[2] == "Height Loss")
+        loss_layer = next(layer for layer in capture.layers if layer[2] == "Surface Lowered")
         feature = loss_layer[4][0]
         self.assertEqual(feature["baseline_ruleset"], "annex")
         self.assertEqual(feature["comparison_ruleset"], "mos")
@@ -3624,7 +3624,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         )
 
         self.assertTrue(created)
-        gain_layer = next(layer for layer in capture.layers if layer[2] == "Height Gain")
+        gain_layer = next(layer for layer in capture.layers if layer[2] == "Surface Raised")
         feature = gain_layer[4][0]
         self.assertEqual(feature["future_family"], "OLS")
         self.assertEqual(feature["baseline_ruleset"], "cap168")
@@ -3642,7 +3642,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         change_parts = [(baseline, future, self.domain)]
 
         capture._create_modernisation_change_layer(
-            "TEST", "baseline-rules", "OFS", "gain", "Height Gain",
+            "TEST", "baseline-rules", "OFS", "gain", "Surface Raised",
             change_parts, comparison, object(),
         )
         contour_geometry = QgsGeometry.fromPolylineXY(

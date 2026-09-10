@@ -67,8 +67,8 @@ Outputs are grouped as follows:
   - **Baseline OLS Wireframe**: outline-only baseline controlling envelope.
   - **ICAO Annex 14 Vol I - Modernised OLS — Wireframe**: dashed outline-only
     modernised controlling envelope.
-  - **Height Gain** (green): future OFS is higher than the baseline OLS.
-  - **Height Loss** (red): future OFS is lower than the baseline OLS.
+  - **Surface Raised** (green): future OFS is higher than the baseline OLS.
+  - **Surface Lowered** (red): future OFS is lower than the baseline OLS.
   - **No Height Change** (neutral): future OFS and baseline OLS are effectively equal.
   - **Change Contours**: signed `future - baseline` isolines at 1.0 m intervals,
     with primary contours every 5.0 m. Positive values indicate gain and negative

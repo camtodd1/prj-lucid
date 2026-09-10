@@ -4101,8 +4101,8 @@ class OlsModernisationComparisonMixin:
             contour_interval_m, primary_contour_interval_m = (
                 self._modernisation_change_contour_intervals(family)
             )
-            gain_name = "Height Gain" if family == "OFS" else "Trigger Height Raised"
-            loss_name = "Height Loss" if family == "OFS" else "Trigger Height Lowered"
+            gain_name = "Surface Raised" if family == "OFS" else "Trigger Height Raised"
+            loss_name = "Surface Lowered" if family == "OFS" else "Trigger Height Lowered"
             no_change_name = "No Height Change" if family == "OFS" else "Trigger Height Unchanged"
             created = self._create_modernisation_change_layer(
                 icao_code, baseline_ruleset_id, family, "gain", gain_name,
@@ -4275,8 +4275,8 @@ class OlsModernisationComparisonMixin:
                 }
             else:
                 names = {
-                    "gain": "Height Gain",
-                    "loss": "Height Loss",
+                    "gain": "Surface Raised",
+                    "loss": "Surface Lowered",
                     "no_change": "No Height Change",
                 }
             for change in ("gain", "loss", "no_change"):
