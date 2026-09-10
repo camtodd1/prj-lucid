@@ -1,14 +1,15 @@
 """Portable, metre-scale preview of the current solved OLS candidates."""
 import json
 import math
-import struct
 from pathlib import Path
 
-from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle, QgsTessellator
+from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle
 
 
 def candidate_mesh(candidate, origin, spacing=150.0):
     """Clip a display grid to the domain, retaining holes; evaluate every vertex."""
+    if not hasattr(QgsGeometry, 'constrainedDelaunayTriangulation'):
+        raise ValueError('3D export requires QGIS 3.36 or later with GEOS 3.11 or later.')
     footprint = candidate.footprint
     bounds = footprint.boundingBox()
     # Planar models need no interior subdivision. Curved models use a bounded grid.
@@ -24,32 +25,21 @@ def candidate_mesh(candidate, origin, spacing=150.0):
                     pieces.append(part)
     vertices = []
     for piece in pieces:
-        for polygon in piece.constParts():
-            if not hasattr(polygon, 'exteriorRing'):
-                continue
-            tess = QgsTessellator(origin[0], origin[1], False, False, False, True)
-            tess.addPolygon(polygon, 0)
-            if tess.error():
-                raise ValueError(f'{candidate.surface_id}: {tess.error()}')
-            # QGIS returns float32 mesh coordinates. Evaluate heights at the
-            # original double-precision vertices, before that display rounding
-            # can move a boundary point outside a bounded surface evaluator.
-            source_points = {
-                struct.unpack('ff', struct.pack('ff', point.x() - origin[0], origin[1] - point.y())):
-                QgsPointXY(point.x(), point.y())
-                for point in polygon.vertices()
-            }
-            data = tess.data()
-            for i in range(0, len(data), 3):
-                x, north = float(data[i]), -float(data[i + 2])
-                point = source_points.get((x, -north))
-                if point is None:
-                    raise ValueError(f'{candidate.surface_id}: triangulation introduced an unverified vertex')
+        # Use GEOS double-precision constrained triangles, not QGIS's float32
+        # rendering tessellator. Constraints retain the footprint and its holes.
+        triangles = piece.constrainedDelaunayTriangulation()
+        if triangles.isEmpty():
+            raise ValueError(f'{candidate.surface_id}: could not triangulate surface')
+        for triangle in triangles.constParts():
+            ring = triangle.exteriorRing()
+            if ring is None or ring.numPoints() != 4:
+                raise ValueError(f'{candidate.surface_id}: invalid triangle')
+            for index in range(3):
+                point = QgsPointXY(ring.pointN(index))
                 z = candidate.elevation_at_xy(point)
-                x, north = point.x() - origin[0], point.y() - origin[1]
                 if z is None or not math.isfinite(float(z)):
-                    raise ValueError(f'{candidate.surface_id}: missing elevation')
-                vertices.extend((x, float(z), -north))
+                    raise ValueError(f'{candidate.surface_id}: missing elevation at {point.x():.6f}, {point.y():.6f}')
+                vertices.extend((point.x() - origin[0], float(z), origin[1] - point.y()))
     if not vertices:
         raise ValueError(f'{candidate.surface_id}: no triangles generated')
     return vertices

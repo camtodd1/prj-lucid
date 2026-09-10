@@ -67,8 +67,8 @@ class SceneTests(unittest.TestCase):
         self.assertTrue(all(values[i]==12 for i in range(1,len(values),3)))
 
     def test_rotated_bounded_approach_preserves_boundary_coordinates(self):
-        # Tessellator float32 coordinates must not move endpoints outside the
-        # evaluator's micrometre boundary tolerance.
+        # Triangulation must retain endpoints within the evaluator's
+        # micrometre boundary tolerance.
         import sys
         from pathlib import Path
         sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
@@ -86,3 +86,20 @@ class SceneTests(unittest.TestCase):
         self.assertEqual(len(values),18)
         self.assertAlmostEqual(min(values[1::3]),80,places=6)
         self.assertAlmostEqual(max(values[1::3]),140,places=6)
+
+    def test_fractional_coordinates_survive_triangulation_exactly(self):
+        from qgis.core import QgsPointXY
+        for angle in (17.3, 35.1234, 91.777, 179.1):
+            a = math.radians(angle)
+            points = [QgsPointXY(432123.123456 + math.sin(a)*d + math.cos(a)*w,
+                                5812345.654321 + math.cos(a)*d - math.sin(a)*w)
+                      for d,w in ((0,-150),(3000,-600),(3000,600),(0,150))]
+            known = {(p.x(),p.y()) for p in points}
+            def elevation(p):
+                return 123.0 if (p.x(),p.y()) in known else None
+            candidate = SimpleNamespace(
+                footprint=QgsGeometry.fromPolygonXY([points+[points[0]]]),
+                model='axis',surface_id='fractional',elevation_at_xy=elevation)
+            values = candidate_mesh(candidate,(430000.193,5810000.789))
+            self.assertEqual(len(values),18)
+            self.assertEqual(set(values[1::3]),{123.0})
