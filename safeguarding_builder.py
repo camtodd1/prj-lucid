@@ -669,6 +669,18 @@ class SafeguardingBuilder(
             parent=self.iface.mainWindow(),
         )
 
+        self.add_action(
+            icon_path,
+            text=self.tr("Export 3D safeguarding prototype…"),
+            callback=self.export_3d_prototype,
+            add_to_toolbar=False,
+            parent=self.iface.mainWindow(),
+        )
+
+    def export_3d_prototype(self):
+        from .core.web_scene import export_dialog
+        export_dialog(self)
+
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
