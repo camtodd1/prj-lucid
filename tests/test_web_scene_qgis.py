@@ -65,3 +65,24 @@ class SceneTests(unittest.TestCase):
         self.assertTrue(values)
         self.assertTrue(all(values[i]>0 for i in range(0,len(values),3)))
         self.assertTrue(all(values[i]==12 for i in range(1,len(values),3)))
+
+    def test_rotated_bounded_approach_preserves_boundary_coordinates(self):
+        # Tessellator float32 coordinates must not move endpoints outside the
+        # evaluator's micrometre boundary tolerance.
+        import sys
+        from pathlib import Path
+        sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+        from safeguarding_builder.guidelines.controlling_ols_engine import axis_elevation_evaluator
+        from qgis.core import QgsPointXY
+        start = QgsPointXY(432123.123456, 5812345.654321)
+        angle = math.radians(17.3)
+        ux, uy = math.sin(angle), math.cos(angle)
+        points = [QgsPointXY(start.x()+ux*d+uy*w, start.y()+uy*d-ux*w)
+                  for d,w in ((0,-150),(3000,-600),(3000,600),(0,150),(0,-150))]
+        candidate = SimpleNamespace(footprint=QgsGeometry.fromPolygonXY([points]),
+                                    model='axis',surface_id='APP:17:S1',
+                                    elevation_at_xy=axis_elevation_evaluator(start,17.3,80,.02,3000))
+        values = candidate_mesh(candidate,(430000,5810000))
+        self.assertEqual(len(values),18)
+        self.assertAlmostEqual(min(values[1::3]),80,places=6)
+        self.assertAlmostEqual(max(values[1::3]),140,places=6)

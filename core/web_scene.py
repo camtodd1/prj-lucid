@@ -1,6 +1,7 @@
 """Portable, metre-scale preview of the current solved OLS candidates."""
 import json
 import math
+import struct
 from pathlib import Path
 
 from qgis.core import QgsGeometry, QgsPointXY, QgsRectangle, QgsTessellator
@@ -30,10 +31,22 @@ def candidate_mesh(candidate, origin, spacing=150.0):
             tess.addPolygon(polygon, 0)
             if tess.error():
                 raise ValueError(f'{candidate.surface_id}: {tess.error()}')
+            # QGIS returns float32 mesh coordinates. Evaluate heights at the
+            # original double-precision vertices, before that display rounding
+            # can move a boundary point outside a bounded surface evaluator.
+            source_points = {
+                struct.unpack('ff', struct.pack('ff', point.x() - origin[0], origin[1] - point.y())):
+                QgsPointXY(point.x(), point.y())
+                for point in polygon.vertices()
+            }
             data = tess.data()
             for i in range(0, len(data), 3):
                 x, north = float(data[i]), -float(data[i + 2])
-                z = candidate.elevation_at_xy(QgsPointXY(x + origin[0], north + origin[1]))
+                point = source_points.get((x, -north))
+                if point is None:
+                    raise ValueError(f'{candidate.surface_id}: triangulation introduced an unverified vertex')
+                z = candidate.elevation_at_xy(point)
+                x, north = point.x() - origin[0], point.y() - origin[1]
                 if z is None or not math.isfinite(float(z)):
                     raise ValueError(f'{candidate.surface_id}: missing elevation')
                 vertices.extend((x, float(z), -north))
