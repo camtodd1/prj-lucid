@@ -186,6 +186,25 @@ def runway_minimum_width(
     }
 
 
+def is_wide_runway(code_number, runway_width_m, outer_main_gear_wheel_span_m=None, runway_type=None):
+    """Resolve the width criterion, requiring wheel span only when ambiguous."""
+    if outer_main_gear_wheel_span_m not in (None, ""):
+        minimum = runway_minimum_width(code_number, outer_main_gear_wheel_span_m, runway_type)
+        if minimum is None:
+            raise ValueError("Enter a valid outer main gear wheel span for the CAP 168 runway code.")
+        widths = {minimum["width_m"]}
+    else:
+        widths = {
+            minimum["width_m"]
+            for span in (4.0, 5.0, 7.0, 10.0)
+            if (minimum := runway_minimum_width(code_number, span, runway_type)) is not None
+        }
+    outcomes = {float(runway_width_m) / width >= 1.10 for width in widths}
+    if len(outcomes) != 1:
+        raise ValueError("Enter the outer main gear wheel span to determine the CAP 168 wide-runway criterion.")
+    return outcomes.pop()
+
+
 def get_strip_params(
     arc_num: int,
     type_abbr: str,

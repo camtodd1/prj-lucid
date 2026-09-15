@@ -801,15 +801,15 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         dimensions_layout.addWidget(self.stopway1_len_le, 3, 1)
         dimensions_layout.addWidget(self.stopway2_len_le, 3, 2)
 
-        self.cap168_wide_runway_cb = QtWidgets.QCheckBox(
-            "Runway width exceeds the applicable CAP168 Table 3.2 minimum by 10%"
+        self.outer_main_gear_span_le = QtWidgets.QLineEdit()
+        self.outer_main_gear_span_le.setObjectName(f"lineEdit_outer_main_gear_span_{self.index}")
+        self.outer_main_gear_span_le.setValidator(self.distance_validator)
+        self.outer_main_gear_span_le.setToolTip(
+            "Design aircraft outer main gear wheel span, used for CAP 168 runway-width rules."
         )
-        self.cap168_wide_runway_cb.setObjectName(f"checkBox_cap168_wide_runway_{self.index}")
-        self.cap168_wide_runway_cb.setToolTip(
-            "Applies CAP168 4.15/4.24 wide-runway inner-edge rules to approach and take-off climb surfaces."
-        )
-        dimensions_layout.addWidget(QtWidgets.QLabel("CAP168 wide runway:"), 4, 0)
-        dimensions_layout.addWidget(self.cap168_wide_runway_cb, 4, 1, 1, 2)
+        self._set_control_width(self.outer_main_gear_span_le)
+        dimensions_layout.addWidget(QtWidgets.QLabel("Outer main gear span (m):"), 4, 0)
+        dimensions_layout.addWidget(self.outer_main_gear_span_le, 4, 1, 1, 2)
         self._standardize_form_rows(dimensions_layout, 5)
 
         parent_layout.addWidget(dimensions_group)
@@ -1449,6 +1449,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.starter_extension_outer_elev_2_le,
             self.width_le,
             self.shoulder_le,
+            self.outer_main_gear_span_le,
             self.clearway1_len_le,
             self.clearway2_len_le,
             self.stopway1_len_le,
@@ -1488,7 +1489,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.landing_available_2_cb,
             self.lahso_applied_1_cb,
             self.lahso_applied_2_cb,
-            self.cap168_wide_runway_cb,
             self.annex14_confirmed_cb,
             self.annex14_code_f_no_digital_cb,
             *[
@@ -1599,7 +1599,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "landing_available_2": self.landing_available_2_cb.isChecked(),
             "lahso_applied_1": self.lahso_applied_1_cb.isChecked(),
             "lahso_applied_2": self.lahso_applied_2_cb.isChecked(),
-            "cap168_wide_runway": self.cap168_wide_runway_cb.isChecked(),
+            "outer_main_gear_wheel_span_m": self.outer_main_gear_span_le.text(),
             "arc_num": self.arc_num_combo.currentData(),
             "arc_let": self.arc_let_combo.currentData(),
             "adg": self.adg_combo.currentData(),
@@ -1688,8 +1688,8 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.landing_available_2_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_2", True)))
             self.lahso_applied_1_cb.setChecked(self._bool_from_saved_value(data.get("lahso_applied_1", False)))
             self.lahso_applied_2_cb.setChecked(self._bool_from_saved_value(data.get("lahso_applied_2", False)))
-            self.cap168_wide_runway_cb.setChecked(
-                self._bool_from_saved_value(data.get("cap168_wide_runway", False))
+            self.outer_main_gear_span_le.setText(
+                str(data.get("outer_main_gear_wheel_span_m") or "")
             )
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
@@ -1791,6 +1791,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.starter_extension_outer_elev_2_le,
             self.width_le,
             self.shoulder_le,
+            self.outer_main_gear_span_le,
             self.clearway1_len_le,
             self.clearway2_len_le,
             self.stopway1_len_le,
@@ -1810,7 +1811,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.landing_available_2_cb,
             self.lahso_applied_1_cb,
             self.lahso_applied_2_cb,
-            self.cap168_wide_runway_cb,
             self.arc_num_combo,
             self.arc_let_combo,
             self.adg_combo,

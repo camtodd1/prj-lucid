@@ -67,6 +67,8 @@ try:
         iter_design_standard_profiles,
     )
     from .rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
+    from .rulesets.cap168.profile import CAP168_PROFILE
+    from .rulesets.cap168.physical_data import is_wide_runway
 except ImportError:
     from dialog.dialog_constants import (  # type: ignore
         CALC_PLACEHOLDER,
@@ -99,6 +101,8 @@ except ImportError:
         iter_design_standard_profiles,
     )
     from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
+    from rulesets.cap168.profile import CAP168_PROFILE
+    from rulesets.cap168.physical_data import is_wide_runway
 
 # Load the UI class from the .ui file
 FORM_CLASS, _ = uic.loadUiType(os.path.join(os.path.dirname(__file__), "safeguarding_builder_dialog_base.ui"))
@@ -4299,9 +4303,23 @@ class SafeguardingBuilderDialog(
         validated["surface_material"] = surface_material
         validated["type1"] = inputs.get("type1")
         validated["type2"] = inputs.get("type2")
-        validated["cap168_wide_runway"] = self._bool_from_input(
-            inputs.get("cap168_wide_runway", False)
-        )
+        span = inputs.get("outer_main_gear_wheel_span_m")
+        validated["outer_main_gear_wheel_span_m"] = None
+        try:
+            if span not in (None, ""):
+                span = float(span)
+                if not math.isfinite(span) or span <= 0:
+                    raise ValueError("Outer main gear wheel span must be a positive finite number.")
+                validated["outer_main_gear_wheel_span_m"] = span
+            if CAP168_PROFILE.id in {baseline_ols_ruleset, comparison_ols_ruleset} and validated.get("width"):
+                for type_key in ("type1", "type2"):
+                    is_wide_runway(
+                        int(validated.get("arc_num") or 0), validated["width"], span,
+                        CAP168_PROFILE.classify_runway_type(validated.get(type_key)),
+                    )
+        except (ValueError, TypeError) as exc:
+            errors.append(f"Rwy {index}: {exc}")
+            current_errors += 1
 
         strip_input = inputs.get("runway_strip")
         strip_input = strip_input if isinstance(strip_input, dict) else {}

@@ -74,7 +74,6 @@ class OlsRunwayContext:
     reciprocal_physical_end_point: Any
     strip_parameters: Mapping[str, Any]
     ends: Tuple[OlsRunwayEndContext, OlsRunwayEndContext]
-    is_wide_runway: bool = False
     generation_data: Mapping[str, Any] = field(default_factory=dict, compare=False)
 
     def end(self, direction: str) -> Optional[OlsRunwayEndContext]:
@@ -489,9 +488,18 @@ class Cap168OlsConstructionPolicy(ConventionalOlsConstructionPolicy):
         params = ols_surfaces.get_runway_surface_params(arc_number, runway_type, surface_type)
         if not params or runway is None:
             return params
+        wide_runway = False
+        if normalized in {"APPROACH", "APPROACHSURFACE", "TOCS", "TAKEOFFCLIMB", "TAKEOFFCLIMBSURFACE"}:
+            from .cap168.physical_data import is_wide_runway
+
+            wide_runway = is_wide_runway(
+                arc_number, runway.width_m,
+                runway.generation_data.get("outer_main_gear_wheel_span_m"),
+                runway_type,
+            )
         if normalized in {"APPROACH", "APPROACHSURFACE"}:
             resolved_sections = [dict(section) for section in params]
-            if runway.is_wide_runway and resolved_sections:
+            if wide_runway and resolved_sections:
                 strip_width = float((runway.strip_parameters or {}).get("overall_width") or 0.0)
                 resolved_sections[0]["start_width"] = max(
                     strip_width,
@@ -514,7 +522,7 @@ class Cap168OlsConstructionPolicy(ConventionalOlsConstructionPolicy):
                     float(resolved.get("origin_offset") or 0.0),
                     end.clearway_length_m,
                 )
-            if runway.is_wide_runway:
+            if wide_runway:
                 strip_width = float((runway.strip_parameters or {}).get("overall_width") or 0.0)
                 if strip_width > float(resolved.get("inner_edge_width") or 0.0):
                     resolved["inner_edge_width"] = strip_width

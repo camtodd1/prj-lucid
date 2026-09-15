@@ -570,10 +570,6 @@ class SafeguardingBuilder(
                     reciprocal_physical_end_point=physical_reciprocal,
                     strip_parameters=dict(strip_parameters),
                     ends=ends,
-                    is_wide_runway=bool(
-                        runway_data.get("cap168_wide_runway")
-                        or strip_parameters.get("wide_non_instrument_variation")
-                    ),
                     generation_data=runway_data,
                 )
             )

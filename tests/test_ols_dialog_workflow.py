@@ -445,7 +445,8 @@ class OlsDialogWorkflowTests(unittest.TestCase):
                 "takeoff_track_wkt_2": "LINESTRING (1000 0, 2000 100)",
                 "departure_type_1": "instrument",
                 "departure_type_2": "non_instrument",
-                "cap168_wide_runway": True,
+                "cap168_wide_runway": True,  # Legacy input is ignored.
+                "outer_main_gear_wheel_span_m": "7",
             }
         )
 
@@ -458,7 +459,9 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(restored["takeoff_track_wkt_2"], saved["takeoff_track_wkt_2"])
         self.assertEqual(restored["departure_type_1"], "instrument")
         self.assertEqual(restored["departure_type_2"], "non_instrument")
-        self.assertTrue(restored["cap168_wide_runway"])
+        self.assertNotIn("cap168_wide_runway", restored)
+        self.assertEqual(restored["outer_main_gear_wheel_span_m"], "7")
+        self.assertFalse(hasattr(group, "cap168_wide_runway_cb"))
 
     def test_explicit_selection_keeps_legacy_policy_compatible(self):
         self.select_mode("modernisation_comparison")
@@ -745,6 +748,28 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(errors, [])
         self.assertEqual(result["runway_end_elev_1"], 12.5)
         self.assertEqual(result["runway_end_elev_2"], 13.0)
+
+    def test_cap168_wide_runway_requests_span_only_when_ambiguous(self):
+        self.dialog._set_ols_ruleset_selection("uk_caa_cap168_edition_13", "")
+        inputs = self.dialog._runway_groups[1].get_input_data()
+        inputs.update({
+            "designator_str": "09", "thr_easting": "0", "thr_northing": "0",
+            "rec_easting": "1000", "rec_northing": "0",
+            "threshold_elev_1": "12.5", "threshold_elev_2": "13.0",
+            "width": "45", "arc_num": 3,
+        })
+        errors = []
+        self.dialog._validate_runway_data(1, inputs, errors)
+        self.assertTrue(any("outer main gear wheel span" in error for error in errors), errors)
+        inputs["outer_main_gear_wheel_span_m"] = "7"
+        errors = []
+        result = self.dialog._validate_runway_data(1, inputs, errors)
+        self.assertEqual(errors, [])
+        self.assertEqual(result["outer_main_gear_wheel_span_m"], 7.0)
+        inputs.update({"arc_num": 4, "outer_main_gear_wheel_span_m": ""})
+        errors = []
+        self.dialog._validate_runway_data(1, inputs, errors)
+        self.assertEqual(errors, [])
 
     def test_starter_extension_validation_derives_shared_outer_end_elevation(self):
         inputs = self.dialog._runway_groups[1].get_input_data()

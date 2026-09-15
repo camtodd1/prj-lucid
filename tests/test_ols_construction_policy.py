@@ -41,7 +41,7 @@ def runway(
     lda: float | None = None,
     takeoff_track_type: str = "aligned",
     takeoff_track_wkt: str = "",
-    is_wide_runway: bool = False,
+    wheel_span: float = 10.0,
 ) -> OlsRunwayContext:
     primary = OlsRunwayEndContext(
         direction="primary",
@@ -79,8 +79,7 @@ def runway(
         reciprocal_physical_end_point=reciprocal.threshold_point,
         strip_parameters={"overall_width": 300.0, "extension_length": 60.0},
         ends=(primary, reciprocal),
-        is_wide_runway=is_wide_runway,
-        generation_data={"original_index": index},
+        generation_data={"original_index": index, "outer_main_gear_wheel_span_m": wheel_span},
     )
 
 
@@ -151,7 +150,7 @@ class Cap168ConstructionPolicyTests(unittest.TestCase):
             clearway=180.0,
             takeoff_track_type="curved_gt_15",
             takeoff_track_wkt="LINESTRING (0 0, 16000 0)",
-            is_wide_runway=True,
+            wheel_span=7.0,
         )
         ctx = context(item, arp=Point(0, 0))
         params = CAP168_OLS_CONSTRUCTION_POLICY.parameters(
@@ -170,6 +169,33 @@ class Cap168ConstructionPolicyTests(unittest.TestCase):
             CAP168_PROFILE, context(normal, arp=Point(0, 0)), normal, normal.ends[0], 3, "PA_I", "TOCS"
         )
         self.assertEqual(normal_params["inner_edge_width"], 180.0)
+
+    def test_wide_runway_is_derived_and_ambiguous_width_requires_span(self):
+        from rulesets.cap168.physical_data import is_wide_runway
+
+        self.assertFalse(is_wide_runway(4, 45.0))
+        self.assertFalse(is_wide_runway(4, 49.49))
+        self.assertTrue(is_wide_runway(4, 49.5))
+        self.assertTrue(is_wide_runway(3, 45.0, 7.0))
+        self.assertFalse(is_wide_runway(3, 45.0, 10.0))
+        self.assertFalse(is_wide_runway(1, 30.0, 4.0, "PA_I"))
+        with self.assertRaisesRegex(ValueError, "outer main gear wheel span"):
+            is_wide_runway(3, 45.0)
+        for span in (-1, 15, float("nan")):
+            with self.assertRaises(ValueError):
+                is_wide_runway(3, 45.0, span)
+
+        item = replace(runway(1, 2400.0, arc=4), width_m=49.5,
+                       generation_data={"cap168_wide_runway": False})
+        params = CAP168_OLS_CONSTRUCTION_POLICY.parameters(
+            CAP168_PROFILE, context(item), item, item.ends[0], 4, "PA_I", "TOCS"
+        )
+        self.assertEqual(params["inner_edge_width"], 300.0)
+        item = replace(item, width_m=45.0, generation_data={"cap168_wide_runway": True})
+        params = CAP168_OLS_CONSTRUCTION_POLICY.parameters(
+            CAP168_PROFILE, context(item), item, item.ends[0], 4, "PA_I", "TOCS"
+        )
+        self.assertEqual(params["inner_edge_width"], 180.0)
 
     def test_baulked_landing_uses_lda_and_code_f_width(self):
         item = runway(1, 2000.0, arc=1, lda=1700.0)
