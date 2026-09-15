@@ -494,6 +494,71 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.dialog._validate_runway_data(1, group.get_input_data(), errors)
         self.assertTrue(any("unavailable" in error for error in errors), errors)
 
+    def test_aircraft_selection_suggests_editable_arc_letter_at_top_of_characteristics(self):
+        group = self.dialog._runway_groups[1]
+        combo = group.design_aircraft_combo
+        layout = combo.parentWidget().layout()
+        self.assertEqual(combo.parentWidget().title(), "Runway Characteristics")
+        self.assertEqual(layout.getItemPosition(layout.indexOf(combo))[0], 0)
+        original_number = group.arc_num_combo.currentData()
+        for aircraft_id, letter, adg in (("C172", "A", "I"), ("B738", "C", "IIC"), ("B77W", "E", "IV")):
+            combo.setCurrentIndex(combo.findData(aircraft_id))
+            combo.activated.emit(combo.currentIndex())
+            self.assertEqual(group.arc_let_combo.currentData(), letter)
+            self.assertEqual(group.adg_combo.currentData(), adg)
+        group.arc_let_combo.setCurrentIndex(group.arc_let_combo.findData("F"))
+        group.adg_combo.setCurrentIndex(group.adg_combo.findData("V"))
+        saved = group.get_input_data()
+        group.set_input_data(saved)
+        self.assertEqual(group.arc_let_combo.currentData(), "F")
+        combo.setEditText("737")
+        self.assertEqual(group.arc_let_combo.currentData(), "F")
+        combo.setCurrentIndex(0)
+        combo.activated.emit(0)
+        self.assertEqual(group.arc_let_combo.currentData(), "F")
+        self.assertEqual(group.arc_num_combo.currentData(), original_number)
+        self.assertEqual(group.adg_combo.currentData(), "V")
+
+    def test_aircraft_letter_uses_largest_wingspan_and_skips_missing_or_unsupported(self):
+        group = self.dialog._runway_groups[1]
+        combo = group.design_aircraft_combo
+        combo.setCurrentIndex(combo.findData("B738"))
+        with patch("safeguarding_builder.dialog.runway_group.aircraft_registry") as registry:
+            registry.return_value = {"B738": {
+                "wingspan_m_without_winglets_sharklets": "35",
+                "wingspan_m_with_winglets_sharklets": "36",
+            }}
+            combo.activated.emit(combo.currentIndex())
+            self.assertEqual(group.arc_let_combo.currentData(), "D")
+            for values in ({}, {"wingspan_m_without_winglets_sharklets": "80"}):
+                registry.return_value = {"B738": values}
+                combo.activated.emit(combo.currentIndex())
+                self.assertEqual(group.arc_let_combo.currentData(), "D")
+
+    def test_aircraft_adg_uses_maximum_speed_and_requires_both_dimensions(self):
+        group = self.dialog._runway_groups[1]
+        combo = group.design_aircraft_combo
+        combo.setCurrentIndex(combo.findData("B738"))
+        with patch("safeguarding_builder.dialog.runway_group.aircraft_registry") as registry:
+            aircraft = {
+                "wingspan_m_without_winglets_sharklets": "23",
+                "approach_speed_knot": "80",
+                "approach_speed_maximum_knot": "130",
+                "faa_adg": "V",
+            }
+            registry.return_value = {"B738": aircraft}
+            combo.activated.emit(combo.currentIndex())
+            self.assertEqual(group.adg_combo.currentData(), "IIC")
+            for values in (
+                {"approach_speed_knot": "80"},
+                {"wingspan_m_without_winglets_sharklets": "23"},
+                {**aircraft, "approach_speed_maximum_knot": "200"},
+                {**aircraft, "wingspan_m_without_winglets_sharklets": "80"},
+            ):
+                registry.return_value = {"B738": values}
+                combo.activated.emit(combo.currentIndex())
+                self.assertEqual(group.adg_combo.currentData(), "IIC")
+
     def test_explicit_selection_keeps_legacy_policy_compatible(self):
         self.select_mode("modernisation_comparison")
 

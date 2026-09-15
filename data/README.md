@@ -10,7 +10,8 @@ verification. `source_row` identifies each original record.
 
 ## Selection and Storage
 
-Each runway has one editable **Design aircraft** dropdown. Type a code,
+Each runway has one editable **Design aircraft** dropdown at the top of
+**Runway Characteristics**. Type a code,
 manufacturer or model to find an aircraft, then select it. **No design aircraft**
 is valid whenever the calculation does not need aircraft dimensions.
 
@@ -19,9 +20,20 @@ runway inputs as `design_aircraft_id`. Changing the displayed model name does
 not change its ID. Unknown saved IDs remain visible and require a replacement
 selection before generation. Do not reuse IDs for different aircraft.
 
-CAP 168 uses the selected aircraft's `outer_main_gear_wheel_span_m`. Other
-dimensions are retained for later use; selection does not change runway code,
-ADG, approach classification, weights or operating assumptions. FAA `faa_adg`,
+CAP 168 uses the selected aircraft's `outer_main_gear_wheel_span_m`. Selecting an
+aircraft also suggests the ARC letter using the largest listed
+wingspan (including winglets). The letter remains editable; loading saved inputs
+preserves their saved letter. Missing or unsupported wingspans leave the current
+letter unchanged.
+
+Selection also suggests modernised Annex 14 ADG from that wingspan and the higher
+of `approach_speed_knot` and `approach_speed_maximum_knot`, using the existing
+Annex 14 classifier. Both dimensions are required. The workbook's approach speed
+at maximum landing weight is used as a threshold-speed proxy for this editable
+suggestion; confirm the applicable aircraft configuration and threshold speed.
+Missing inputs or values outside the classifier's range leave ADG unchanged.
+Saved ADG overrides are preserved on loading. Selection does not change ARC
+number, approach classification, weights or operating assumptions. FAA `faa_adg`,
 `faa_aac` and `faa_tdg` remain separate source classifications.
 
 Legacy inputs containing only `outer_main_gear_wheel_span_m` appear as a

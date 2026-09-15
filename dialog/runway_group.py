@@ -7,9 +7,11 @@ from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
 
 try:
     from ..core.aircraft import aircraft_registry
+    from ..rulesets.annex14.classification import classify_code_letter, classify_design_group
     from ..rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
 except ImportError:
     from core.aircraft import aircraft_registry
+    from rulesets.annex14.classification import classify_code_letter, classify_design_group
     from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
 
 from .dialog_constants import (
@@ -496,7 +498,10 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             ("F (A380, B747)", "F"),
         ]:
             self.arc_let_combo.addItem(label, userData=value)
-        self.arc_let_combo.setToolTip("Select Aerodrome Reference Code Letter")
+        self.arc_let_combo.setToolTip(
+            "Aircraft selection suggests a letter using its largest listed wingspan, including winglets. "
+            "You can change the letter for the runway's design requirements."
+        )
         self.arc_let_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self._set_control_width(self.arc_let_combo)
         layout.addWidget(label_arc_let, row + 1, label_col)
@@ -556,7 +561,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         ]:
             self.adg_combo.addItem(label, userData=value)
         self.adg_combo.setToolTip(
-            f"Select Aeroplane Design Group for {MODERNISED_DISPLAY_NAME} generation."
+            f"Select Aeroplane Design Group for {MODERNISED_DISPLAY_NAME} generation. "
+            "Aircraft selection suggests ADG from the largest listed wingspan and highest listed "
+            "approach speed. Check the applicable threshold speed and override if needed."
         )
         self.adg_combo.setFocusPolicy(QtCore.Qt.FocusPolicy.StrongFocus)
         self._set_control_width(self.adg_combo)
@@ -803,29 +810,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         dimensions_layout.addWidget(self.stopway1_len_le, 3, 1)
         dimensions_layout.addWidget(self.stopway2_len_le, 3, 2)
 
-        self.design_aircraft_combo = NoWheelComboBox()
-        self.design_aircraft_combo.setObjectName(f"comboBox_design_aircraft_{self.index}")
-        self.design_aircraft_combo.addItem("No design aircraft", "")
-        for aircraft_id, aircraft in sorted(aircraft_registry().items()):
-            label = aircraft["model"]
-            if not label.casefold().startswith(aircraft["manufacturer"].casefold()):
-                label = f"{aircraft['manufacturer']} / {label}"
-            self.design_aircraft_combo.addItem(f"{aircraft_id} — {label}", aircraft_id)
-        self.design_aircraft_combo.setEditable(True)
-        self.design_aircraft_combo.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
-        self.design_aircraft_combo.setSizeAdjustPolicy(
-            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
-        )
-        self.design_aircraft_combo.completer().setFilterMode(QtCore.Qt.MatchFlag.MatchContains)
-        self.design_aircraft_combo.completer().setCompletionMode(
-            QtWidgets.QCompleter.CompletionMode.PopupCompletion
-        )
-        self.design_aircraft_combo.completer().setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
-        self._legacy_gear_span = None
-        self._set_control_width(self.design_aircraft_combo)
-        dimensions_layout.addWidget(QtWidgets.QLabel("Design aircraft:"), 4, 0)
-        dimensions_layout.addWidget(self.design_aircraft_combo, 4, 1, 1, 2)
-        self._standardize_form_rows(dimensions_layout, 5)
+        self._standardize_form_rows(dimensions_layout, 4)
 
         parent_layout.addWidget(dimensions_group)
 
@@ -935,22 +920,45 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         classification_layout = QtWidgets.QGridLayout(classification_group)
         self._configure_runway_form_grid(classification_layout)
 
+        self.design_aircraft_combo = NoWheelComboBox()
+        self.design_aircraft_combo.setObjectName(f"comboBox_design_aircraft_{self.index}")
+        self.design_aircraft_combo.addItem("No design aircraft", "")
+        for aircraft_id, aircraft in sorted(aircraft_registry().items()):
+            label = aircraft["model"]
+            if not label.casefold().startswith(aircraft["manufacturer"].casefold()):
+                label = f"{aircraft['manufacturer']} / {label}"
+            self.design_aircraft_combo.addItem(f"{aircraft_id} — {label}", aircraft_id)
+        self.design_aircraft_combo.setEditable(True)
+        self.design_aircraft_combo.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.design_aircraft_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
+        )
+        self.design_aircraft_combo.completer().setFilterMode(QtCore.Qt.MatchFlag.MatchContains)
+        self.design_aircraft_combo.completer().setCompletionMode(
+            QtWidgets.QCompleter.CompletionMode.PopupCompletion
+        )
+        self.design_aircraft_combo.completer().setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
+        self._legacy_gear_span = None
+        self._set_control_width(self.design_aircraft_combo)
+        classification_layout.addWidget(QtWidgets.QLabel("Design aircraft:"), 0, 0)
+        classification_layout.addWidget(self.design_aircraft_combo, 0, 1, 1, 2)
+
         self._add_arc_controls(
             classification_layout,
-            0,
+            1,
             input_col_span=2,
         )
         self._add_adg_controls(
             classification_layout,
-            2,
+            3,
             input_col_span=2,
         )
         self._add_surface_controls(
             classification_layout,
-            3,
+            4,
             input_col_span=2,
         )
-        self._standardize_form_rows(classification_layout, 5)
+        self._standardize_form_rows(classification_layout, 6)
 
         parent_layout.addWidget(classification_group)
 
@@ -1515,6 +1523,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             ],
         ]:
             checkbox.stateChanged.connect(self.inputChanged.emit)
+        self.design_aircraft_combo.activated.connect(self._suggest_aircraft_classification)
         self.design_aircraft_combo.currentTextChanged.connect(self.inputChanged.emit)
         for combo in [
             self.suffix_combo,
@@ -1568,6 +1577,32 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
 
     def _emit_remove_request(self):
         self.removeRequested.emit(self.index)
+
+    def _suggest_aircraft_classification(self, _index):
+        aircraft = aircraft_registry().get(self.design_aircraft_combo.currentData())
+        if not aircraft:
+            return
+        wingspans = [
+            float(aircraft[key])
+            for key in ("wingspan_m_without_winglets_sharklets", "wingspan_m_with_winglets_sharklets")
+            if aircraft.get(key)
+        ]
+        # Use the larger published configuration; users can override the suggestion.
+        classification = classify_code_letter(max(wingspans)) if wingspans else None
+        if classification:
+            self._set_combo_data(self.arc_let_combo, classification["code_letter"])
+        approach_speeds = [
+            float(aircraft[key])
+            for key in ("approach_speed_knot", "approach_speed_maximum_knot")
+            if aircraft.get(key)
+        ]
+        if wingspans and approach_speeds:
+            design_group = classify_design_group(
+                wingspan_m=max(wingspans),
+                indicated_airspeed_at_threshold_kt=max(approach_speeds),
+            )
+            if design_group:
+                self._set_combo_data(self.adg_combo, design_group["design_group"])
 
     def _design_aircraft_input_data(self):
         combo = self.design_aircraft_combo
