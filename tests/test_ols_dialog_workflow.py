@@ -463,6 +463,37 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(restored["outer_main_gear_wheel_span_m"], "7")
         self.assertFalse(hasattr(group, "cap168_wide_runway_cb"))
 
+    def test_design_aircraft_selector_round_trip_and_legacy_inputs(self):
+        group = self.dialog._runway_groups[1]
+        saved = group.get_input_data()
+        saved.update({"design_aircraft_id": "A320", "outer_main_gear_wheel_span_m": 99})
+        group.set_input_data(saved)
+        restored = group.get_input_data()
+        self.assertEqual(restored["design_aircraft_id"], "A320")
+        self.assertIsNone(restored["outer_main_gear_wheel_span_m"])
+        self.assertFalse(hasattr(group, "outer_main_gear_span_le"))
+        self.assertEqual(restored["arc_num"], saved["arc_num"])
+        self.assertEqual(restored["adg"], saved["adg"])
+
+        group.design_aircraft_combo.setEditText("unknown search")
+        self.assertEqual(group.get_input_data()["design_aircraft_id"], "unknown search")
+        group.design_aircraft_combo.setEditText("")
+        self.assertEqual(group.get_input_data()["design_aircraft_id"], "")
+
+        saved.update({"design_aircraft_id": "", "outer_main_gear_wheel_span_m": "7"})
+        group.set_input_data(saved)
+        self.assertEqual(group.get_input_data()["outer_main_gear_wheel_span_m"], "7")
+        self.assertEqual(group.get_input_data()["design_aircraft_id"], "")
+        group.design_aircraft_combo.setCurrentIndex(0)
+        self.assertIsNone(group.get_input_data()["outer_main_gear_wheel_span_m"])
+
+        saved["design_aircraft_id"] = "REMOVED"
+        group.set_input_data(saved)
+        self.assertEqual(group.get_input_data()["design_aircraft_id"], "REMOVED")
+        errors = []
+        self.dialog._validate_runway_data(1, group.get_input_data(), errors)
+        self.assertTrue(any("unavailable" in error for error in errors), errors)
+
     def test_explicit_selection_keeps_legacy_policy_compatible(self):
         self.select_mode("modernisation_comparison")
 
@@ -749,7 +780,7 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         self.assertEqual(result["runway_end_elev_1"], 12.5)
         self.assertEqual(result["runway_end_elev_2"], 13.0)
 
-    def test_cap168_wide_runway_requests_span_only_when_ambiguous(self):
+    def test_cap168_wide_runway_requests_aircraft_only_when_ambiguous(self):
         self.dialog._set_ols_ruleset_selection("uk_caa_cap168_edition_13", "")
         inputs = self.dialog._runway_groups[1].get_input_data()
         inputs.update({
@@ -760,13 +791,13 @@ class OlsDialogWorkflowTests(unittest.TestCase):
         })
         errors = []
         self.dialog._validate_runway_data(1, inputs, errors)
-        self.assertTrue(any("outer main gear wheel span" in error for error in errors), errors)
-        inputs["outer_main_gear_wheel_span_m"] = "7"
+        self.assertTrue(any("Select a design aircraft" in error for error in errors), errors)
+        inputs["design_aircraft_id"] = "B738"
         errors = []
         result = self.dialog._validate_runway_data(1, inputs, errors)
         self.assertEqual(errors, [])
-        self.assertEqual(result["outer_main_gear_wheel_span_m"], 7.0)
-        inputs.update({"arc_num": 4, "outer_main_gear_wheel_span_m": ""})
+        self.assertAlmostEqual(result["outer_main_gear_wheel_span_m"], 7.0104)
+        inputs.update({"arc_num": 4, "design_aircraft_id": "", "outer_main_gear_wheel_span_m": ""})
         errors = []
         self.dialog._validate_runway_data(1, inputs, errors)
         self.assertEqual(errors, [])

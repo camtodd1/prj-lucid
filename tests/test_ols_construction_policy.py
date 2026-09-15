@@ -197,6 +197,16 @@ class Cap168ConstructionPolicyTests(unittest.TestCase):
         )
         self.assertEqual(params["inner_edge_width"], 180.0)
 
+    def test_design_aircraft_controls_wide_runway_geometry(self):
+        for aircraft_id, expected_width in (("B738", 300.0), ("B77W", 180.0)):
+            item = replace(runway(1, 2400.0, arc=3), generation_data={
+                "design_aircraft_id": aircraft_id, "outer_main_gear_wheel_span_m": 99,
+            })
+            params = CAP168_OLS_CONSTRUCTION_POLICY.parameters(
+                CAP168_PROFILE, context(item), item, item.ends[0], 3, "PA_I", "TOCS"
+            )
+            self.assertEqual(params["inner_edge_width"], expected_width)
+
     def test_baulked_landing_uses_lda_and_code_f_width(self):
         item = runway(1, 2000.0, arc=1, lda=1700.0)
         params = CAP168_OLS_CONSTRUCTION_POLICY.parameters(

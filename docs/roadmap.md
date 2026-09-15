@@ -50,7 +50,6 @@ fixtures.
 ## CNS and Future Generators
 
 - [ ] Implement specialised glide path and localiser geometry.
-- [ ] Add an aircraft-characteristics registry and design-aircraft nomination.
 - [ ] Add optional engine-out design-aircraft screening surfaces using sourced,
   condition-specific AFM net flight-path segments for a small nominated fleet;
   keep these outputs separate from regulatory OLS/OES surfaces.

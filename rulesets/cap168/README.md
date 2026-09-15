@@ -29,10 +29,13 @@ contract.
 ## Wide Runways
 
 Approach and take-off climb inner-edge widths automatically apply the wide-runway
-criterion using the entered runway width and Table 3.2 minimum. Enter
-`outer_main_gear_wheel_span_m` when the runway code and approach type alone do
-not determine whether the 10% threshold is met. The dialog requests this input
-when needed; legacy `cap168_wide_runway` flags no longer override the calculation.
+criterion using the entered runway width and Table 3.2 minimum. Select a
+**Design aircraft** when the runway code and approach type alone do not determine
+whether the 10% threshold is met. Its main-gear width is read from the bundled
+[aircraft registry](../../data/README.md). The selection is saved as
+`design_aircraft_id`; legacy saved `outer_main_gear_wheel_span_m` inputs remain
+usable without guessing an aircraft. Legacy `cap168_wide_runway` flags no longer
+override the calculation.
 
 ## Source and Compatibility
 

@@ -58,6 +58,7 @@ try:
     from .dialog.agl_options import AglOptionsMixin
     from .dialog.dem_tools import DemToolsMixin
     from .dialog.persistence import PersistenceMixin
+    from .core.aircraft import aircraft_gear_span
     from .core import output_structure
     from .core.run_history import classify_runway_configuration
     from .frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles
@@ -92,6 +93,7 @@ except ImportError:
     from dialog.agl_options import AglOptionsMixin  # type: ignore
     from dialog.dem_tools import DemToolsMixin  # type: ignore
     from dialog.persistence import PersistenceMixin  # type: ignore
+    from core.aircraft import aircraft_gear_span
     from core import output_structure  # type: ignore
     from core.run_history import classify_runway_configuration  # type: ignore
     from frameworks.registry import DEFAULT_FRAMEWORK_ID, iter_framework_profiles  # type: ignore
@@ -4303,9 +4305,10 @@ class SafeguardingBuilderDialog(
         validated["surface_material"] = surface_material
         validated["type1"] = inputs.get("type1")
         validated["type2"] = inputs.get("type2")
-        span = inputs.get("outer_main_gear_wheel_span_m")
+        validated["design_aircraft_id"] = str(inputs.get("design_aircraft_id") or "").strip()
         validated["outer_main_gear_wheel_span_m"] = None
         try:
+            span = aircraft_gear_span(inputs)
             if span not in (None, ""):
                 span = float(span)
                 if not math.isfinite(span) or span <= 0:
@@ -4313,10 +4316,17 @@ class SafeguardingBuilderDialog(
                 validated["outer_main_gear_wheel_span_m"] = span
             if CAP168_PROFILE.id in {baseline_ols_ruleset, comparison_ols_ruleset} and validated.get("width"):
                 for type_key in ("type1", "type2"):
-                    is_wide_runway(
-                        int(validated.get("arc_num") or 0), validated["width"], span,
-                        CAP168_PROFILE.classify_runway_type(validated.get(type_key)),
-                    )
+                    try:
+                        is_wide_runway(
+                            int(validated.get("arc_num") or 0), validated["width"], span,
+                            CAP168_PROFILE.classify_runway_type(validated.get(type_key)),
+                        )
+                    except ValueError as exc:
+                        if span is None:
+                            raise ValueError(
+                                "Select a design aircraft with a main gear width to determine the CAP 168 wide-runway criterion."
+                            ) from exc
+                        raise
         except (ValueError, TypeError) as exc:
             errors.append(f"Rwy {index}: {exc}")
             current_errors += 1

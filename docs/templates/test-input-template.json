@@ -192,6 +192,7 @@
             "landing_available_2": true,
             "lahso_applied_1": false,
             "lahso_applied_2": false,
+            "design_aircraft_id": "",
             "outer_main_gear_wheel_span_m": null,
             "arc_num": "REPLACE_1_TO_4_OR_EMPTY",
             "arc_let": "REPLACE_A_TO_F_OR_EMPTY",

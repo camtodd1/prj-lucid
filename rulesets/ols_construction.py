@@ -13,6 +13,12 @@ from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence, Tuple
 
 
+try:
+    from ..core.aircraft import aircraft_gear_span
+except ImportError:
+    from core.aircraft import aircraft_gear_span
+
+
 CAP168_RULESET_ID = "uk_caa_cap168_edition_13"
 EASA_RULESET_ID = "easa_cs_adr_dsn_issue_7"
 MOS139_RULESET_ID = "mos139_2019"
@@ -494,7 +500,7 @@ class Cap168OlsConstructionPolicy(ConventionalOlsConstructionPolicy):
 
             wide_runway = is_wide_runway(
                 arc_number, runway.width_m,
-                runway.generation_data.get("outer_main_gear_wheel_span_m"),
+                aircraft_gear_span(runway.generation_data),
                 runway_type,
             )
         if normalized in {"APPROACH", "APPROACHSURFACE"}:

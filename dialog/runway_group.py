@@ -6,8 +6,10 @@ from typing import Any, Callable, Dict, Optional
 from qgis.PyQt import QtCore, QtGui, QtWidgets  # type: ignore
 
 try:
+    from ..core.aircraft import aircraft_registry
     from ..rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME
 except ImportError:
+    from core.aircraft import aircraft_registry
     from rulesets.annex14.metadata import MODERNISED_DISPLAY_NAME  # type: ignore
 
 from .dialog_constants import (
@@ -801,15 +803,28 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         dimensions_layout.addWidget(self.stopway1_len_le, 3, 1)
         dimensions_layout.addWidget(self.stopway2_len_le, 3, 2)
 
-        self.outer_main_gear_span_le = QtWidgets.QLineEdit()
-        self.outer_main_gear_span_le.setObjectName(f"lineEdit_outer_main_gear_span_{self.index}")
-        self.outer_main_gear_span_le.setValidator(self.distance_validator)
-        self.outer_main_gear_span_le.setToolTip(
-            "Design aircraft outer main gear wheel span, used for CAP 168 runway-width rules."
+        self.design_aircraft_combo = NoWheelComboBox()
+        self.design_aircraft_combo.setObjectName(f"comboBox_design_aircraft_{self.index}")
+        self.design_aircraft_combo.addItem("No design aircraft", "")
+        for aircraft_id, aircraft in sorted(aircraft_registry().items()):
+            label = aircraft["model"]
+            if not label.casefold().startswith(aircraft["manufacturer"].casefold()):
+                label = f"{aircraft['manufacturer']} / {label}"
+            self.design_aircraft_combo.addItem(f"{aircraft_id} — {label}", aircraft_id)
+        self.design_aircraft_combo.setEditable(True)
+        self.design_aircraft_combo.setInsertPolicy(QtWidgets.QComboBox.InsertPolicy.NoInsert)
+        self.design_aircraft_combo.setSizeAdjustPolicy(
+            QtWidgets.QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon
         )
-        self._set_control_width(self.outer_main_gear_span_le)
-        dimensions_layout.addWidget(QtWidgets.QLabel("Outer main gear span (m):"), 4, 0)
-        dimensions_layout.addWidget(self.outer_main_gear_span_le, 4, 1, 1, 2)
+        self.design_aircraft_combo.completer().setFilterMode(QtCore.Qt.MatchFlag.MatchContains)
+        self.design_aircraft_combo.completer().setCompletionMode(
+            QtWidgets.QCompleter.CompletionMode.PopupCompletion
+        )
+        self.design_aircraft_combo.completer().setCaseSensitivity(QtCore.Qt.CaseSensitivity.CaseInsensitive)
+        self._legacy_gear_span = None
+        self._set_control_width(self.design_aircraft_combo)
+        dimensions_layout.addWidget(QtWidgets.QLabel("Design aircraft:"), 4, 0)
+        dimensions_layout.addWidget(self.design_aircraft_combo, 4, 1, 1, 2)
         self._standardize_form_rows(dimensions_layout, 5)
 
         parent_layout.addWidget(dimensions_group)
@@ -1449,7 +1464,6 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.starter_extension_outer_elev_2_le,
             self.width_le,
             self.shoulder_le,
-            self.outer_main_gear_span_le,
             self.clearway1_len_le,
             self.clearway2_len_le,
             self.stopway1_len_le,
@@ -1501,6 +1515,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             ],
         ]:
             checkbox.stateChanged.connect(self.inputChanged.emit)
+        self.design_aircraft_combo.currentTextChanged.connect(self.inputChanged.emit)
         for combo in [
             self.suffix_combo,
             self.arc_num_combo,
@@ -1554,6 +1569,30 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
     def _emit_remove_request(self):
         self.removeRequested.emit(self.index)
 
+    def _design_aircraft_input_data(self):
+        combo = self.design_aircraft_combo
+        # Typed search text must not silently reuse the previously selected aircraft.
+        selected = combo.currentText() == combo.itemText(combo.currentIndex())
+        aircraft_id = combo.currentData() if selected else combo.currentText().strip()
+        legacy = aircraft_id == "__legacy_gear_span__"
+        return {
+            "design_aircraft_id": "" if legacy else (aircraft_id or ""),
+            "outer_main_gear_wheel_span_m": self._legacy_gear_span if legacy else None,
+        }
+
+    def _restore_design_aircraft(self, data):
+        combo = self.design_aircraft_combo
+        while combo.count() > len(aircraft_registry()) + 1:
+            combo.removeItem(combo.count() - 1)
+        aircraft_id = str(data.get("design_aircraft_id") or "").strip()
+        self._legacy_gear_span = data.get("outer_main_gear_wheel_span_m")
+        if aircraft_id and combo.findData(aircraft_id) < 0:
+            combo.addItem(f"Unavailable aircraft ({aircraft_id})", aircraft_id)
+        elif not aircraft_id and self._legacy_gear_span not in (None, ""):
+            aircraft_id = "__legacy_gear_span__"
+            combo.addItem(f"Saved custom gear width ({self._legacy_gear_span} m)", aircraft_id)
+        self._set_combo_data(combo, aircraft_id)
+
     def get_input_data(self) -> Dict[str, Any]:
         data = {
             "designator_str": self.desig_le.text(),
@@ -1599,7 +1638,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             "landing_available_2": self.landing_available_2_cb.isChecked(),
             "lahso_applied_1": self.lahso_applied_1_cb.isChecked(),
             "lahso_applied_2": self.lahso_applied_2_cb.isChecked(),
-            "outer_main_gear_wheel_span_m": self.outer_main_gear_span_le.text(),
+            **self._design_aircraft_input_data(),
             "arc_num": self.arc_num_combo.currentData(),
             "arc_let": self.arc_let_combo.currentData(),
             "adg": self.adg_combo.currentData(),
@@ -1688,9 +1727,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.landing_available_2_cb.setChecked(self._bool_from_saved_value(data.get("landing_available_2", True)))
             self.lahso_applied_1_cb.setChecked(self._bool_from_saved_value(data.get("lahso_applied_1", False)))
             self.lahso_applied_2_cb.setChecked(self._bool_from_saved_value(data.get("lahso_applied_2", False)))
-            self.outer_main_gear_span_le.setText(
-                str(data.get("outer_main_gear_wheel_span_m") or "")
-            )
+            self._restore_design_aircraft(data)
             self._set_combo_data(self.arc_num_combo, data.get("arc_num", ""))
             self._set_combo_data(self.arc_let_combo, data.get("arc_let", ""))
             self._set_combo_data(self.adg_combo, data.get("adg", ""))
@@ -1789,9 +1826,9 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
             self.starter_extension_shoulder_2_le,
             self.starter_extension_outer_elev_1_le,
             self.starter_extension_outer_elev_2_le,
+            self.design_aircraft_combo,
             self.width_le,
             self.shoulder_le,
-            self.outer_main_gear_span_le,
             self.clearway1_len_le,
             self.clearway2_len_le,
             self.stopway1_len_le,
