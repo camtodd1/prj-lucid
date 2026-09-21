@@ -273,7 +273,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "section": "second",
             "variable_length": True,
-            "variable_length_rule": "Length is variable under CS ADR-DSN.J.480(d); horizontal beyond the point where the 2.5% slope intersects the controlling horizontal plane.",
+            "variable_length_rule": "Length is variable under CS ADR-DSN.J.480(d); horizontal beyond the point where the 2.5% slope intersects the higher of 150 m above threshold or the obstacle-clearance-limit plane.",
             "ref": f"{TABLE_J1_REF} (PA CAT I Code 3/4 Second Section)",
         },
         {
@@ -302,7 +302,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "section": "second",
             "variable_length": True,
-            "variable_length_rule": "Length is variable under CS ADR-DSN.J.480(d); horizontal beyond the point where the 2.5% slope intersects the controlling horizontal plane.",
+            "variable_length_rule": "Length is variable under CS ADR-DSN.J.480(d); horizontal beyond the point where the 2.5% slope intersects the higher of 150 m above threshold or the obstacle-clearance-limit plane.",
             "ref": f"{TABLE_J1_REF} (PA CAT I Code 3/4 Second Section)",
         },
         {
@@ -332,7 +332,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "section": "second",
             "variable_length": True,
-            "variable_length_rule": "Length is variable under CS ADR-DSN.J.480(d); horizontal beyond the point where the 2.5% slope intersects the controlling horizontal plane.",
+            "variable_length_rule": "Length is variable under CS ADR-DSN.J.480(d); horizontal beyond the point where the 2.5% slope intersects the higher of 150 m above threshold or the obstacle-clearance-limit plane.",
             "ref": f"{TABLE_J1_REF} (PA CAT II/III Code 3/4 Second Section)",
         },
         {
@@ -361,7 +361,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "section": "second",
             "variable_length": True,
-            "variable_length_rule": "Length is variable under CS ADR-DSN.J.480(d); horizontal beyond the point where the 2.5% slope intersects the controlling horizontal plane.",
+            "variable_length_rule": "Length is variable under CS ADR-DSN.J.480(d); horizontal beyond the point where the 2.5% slope intersects the higher of 150 m above threshold or the obstacle-clearance-limit plane.",
             "ref": f"{TABLE_J1_REF} (PA CAT II/III Code 3/4 Second Section)",
         },
         {

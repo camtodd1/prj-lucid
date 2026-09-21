@@ -349,10 +349,17 @@ class EasaOlsConstructionPolicy(ConventionalOlsConstructionPolicy):
         sections = [dict(section) for section in params]
         if context is None or end is None or not any(section.get("variable_length") for section in sections):
             return sections
-        airport_spec = self.airport_wide_spec(profile, context)
-        horizontal_elevation = airport_spec.get("ihs_elevation_amsl")
-        if horizontal_elevation is None or end.threshold_elevation_m is None:
+        if end.threshold_elevation_m is None:
             return sections
+        if end.classified_type in {"PA_I", "PA_II_III"}:
+            horizontal_elevation = float(end.threshold_elevation_m) + 150.0
+            resolved_against = "threshold_plus_150m_plane"
+        else:
+            airport_spec = self.airport_wide_spec(profile, context)
+            horizontal_elevation = airport_spec.get("ihs_elevation_amsl")
+            resolved_against = "inner_horizontal_surface"
+            if horizontal_elevation is None:
+                return sections
         total_length = max(
             (float(section.get("total_length")) for section in sections if section.get("total_length") is not None),
             default=sum(float(section.get("length") or 0.0) for section in sections),
@@ -365,7 +372,7 @@ class EasaOlsConstructionPolicy(ConventionalOlsConstructionPolicy):
             if section.get("variable_length") and slope > 0:
                 length = max(0.0, (float(horizontal_elevation) - elevation) / slope)
                 section["length"] = length
-                section["resolved_against"] = "inner_horizontal_surface"
+                section["resolved_against"] = resolved_against
             elif section.get("variable_length") and abs(slope) <= 1e-12:
                 length = max(0.0, total_length - consumed)
                 section["length"] = length

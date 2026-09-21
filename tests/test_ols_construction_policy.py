@@ -314,6 +314,24 @@ class OtherConventionalPolicyTests(unittest.TestCase):
         self.assertAlmostEqual(sections[2]["length"], 11680.0, places=6)
         self.assertEqual(sum(section["length"] for section in sections), 15000.0)
 
+    def test_easa_cat_i_second_approach_section_uses_threshold_plus_150m_plane(self):
+        item = runway(1, 3000.0, arc=4, runway_type="PA_I", elevation=33.193)
+        ctx = replace(
+            context(item),
+            ruleset_id="easa_cs_adr_dsn_issue_7",
+            reference_elevation_datum_m=38.1,
+        )
+
+        sections = EASA_OLS_CONSTRUCTION_POLICY.parameters(
+            EASA_PROFILE, ctx, item, item.ends[0], 4, "PA_I", "Approach"
+        )
+
+        self.assertEqual(sections[0]["length"], 3000.0)
+        self.assertAlmostEqual(sections[1]["length"], 3600.0, places=6)
+        self.assertAlmostEqual(sections[2]["length"], 8400.0, places=6)
+        self.assertEqual(sections[1]["slope"], 0.025)
+        self.assertEqual(sections[1]["resolved_against"], "threshold_plus_150m_plane")
+
     def test_current_annex14_uses_source_loaded_tables_and_clearway_tocs(self):
         item = runway(
             1,
