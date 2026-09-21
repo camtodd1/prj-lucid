@@ -351,7 +351,7 @@ class EasaOlsConstructionPolicy(ConventionalOlsConstructionPolicy):
             return sections
         if end.threshold_elevation_m is None:
             return sections
-        if end.classified_type in {"PA_I", "PA_II_III"}:
+        if end.classified_type in {"NPA", "PA_I", "PA_II_III"}:
             horizontal_elevation = float(end.threshold_elevation_m) + 150.0
             resolved_against = "threshold_plus_150m_plane"
         else:

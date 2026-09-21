@@ -303,15 +303,20 @@ class OtherConventionalPolicyTests(unittest.TestCase):
                 self.assertEqual(params["width"], 140.0)
                 self.assertEqual(params["applicability"], "required")
 
-    def test_easa_variable_approach_meets_ihs_then_uses_remaining_length(self):
-        item = runway(1, 2200.0, arc=3, runway_type="NPA", elevation=100.0)
-        ctx = replace(context(item), ruleset_id="easa_cs_adr_dsn_issue_7")
+    def test_easa_npa_second_approach_section_uses_threshold_plus_150m_plane(self):
+        item = runway(1, 3000.0, arc=4, runway_type="NPA", elevation=38.161)
+        ctx = replace(
+            context(item),
+            ruleset_id="easa_cs_adr_dsn_issue_7",
+            reference_elevation_datum_m=38.1,
+        )
         sections = EASA_OLS_CONSTRUCTION_POLICY.parameters(
-            EASA_PROFILE, ctx, item, item.ends[0], 3, "NPA", "Approach"
+            EASA_PROFILE, ctx, item, item.ends[0], 4, "NPA", "Approach"
         )
         self.assertEqual(sections[0]["length"], 3000.0)
-        self.assertAlmostEqual(sections[1]["length"], 320.0, places=6)
-        self.assertAlmostEqual(sections[2]["length"], 11680.0, places=6)
+        self.assertAlmostEqual(sections[1]["length"], 3600.0, places=6)
+        self.assertAlmostEqual(sections[2]["length"], 8400.0, places=6)
+        self.assertEqual(sections[1]["resolved_against"], "threshold_plus_150m_plane")
         self.assertEqual(sum(section["length"] for section in sections), 15000.0)
 
     def test_easa_cat_i_second_approach_section_uses_threshold_plus_150m_plane(self):

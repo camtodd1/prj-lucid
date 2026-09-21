@@ -281,7 +281,7 @@ class OlsConstructionQgisTests(unittest.TestCase):
         )
         self.assertEqual(
             [feature.attribute("len_m") for feature in approach_features],
-            [3000.0, 320.0, 11680.0],
+            [3000.0, 3600.0, 8400.0],
         )
         self.assertTrue(all(feature.geometry().isGeosValid() for feature in approach_features))
         self.assertTrue(

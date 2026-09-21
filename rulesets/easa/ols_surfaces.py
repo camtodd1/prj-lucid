@@ -176,7 +176,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "section": "second",
             "variable_length": True,
-            "variable_length_rule": "Length is variable under CS ADR-DSN.J.475(c); horizontal beyond the point where the 2.5% slope intersects the controlling horizontal plane.",
+            "variable_length_rule": "Length is variable under CS ADR-DSN.J.475(c); horizontal beyond the point where the 2.5% slope intersects the higher of 150 m above threshold or the OCA/H plane.",
             "ref": f"{TABLE_J1_REF} (NPA Code 3 Second Section)",
         },
         {
@@ -205,7 +205,7 @@ APPROACH_PARAMS: Dict[Tuple[int, str], List[Dict[str, Any]]] = {
             "divergence": 0.15,
             "section": "second",
             "variable_length": True,
-            "variable_length_rule": "Length is variable under CS ADR-DSN.J.475(c); horizontal beyond the point where the 2.5% slope intersects the controlling horizontal plane.",
+            "variable_length_rule": "Length is variable under CS ADR-DSN.J.475(c); horizontal beyond the point where the 2.5% slope intersects the higher of 150 m above threshold or the OCA/H plane.",
             "ref": f"{TABLE_J1_REF} (NPA Code 4 Second Section)",
         },
         {
