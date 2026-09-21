@@ -2968,11 +2968,11 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
         self.assertEqual(
             capture._comparison_label("loss", -1.43, 0.0),
-            "-1.4 to 0.0 m loss",
+            "-1.4 to 0.0 m decrease",
         )
         self.assertEqual(
             capture._comparison_label("gain", 0.0, 1.43),
-            "0.0 to +1.4 m gain",
+            "0.0 to +1.4 m increase",
         )
         self.assertEqual(
             capture._comparison_label("no_change", -0.005, 0.005),
@@ -3597,7 +3597,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         )
 
         self.assertTrue(created)
-        loss_layer = next(layer for layer in capture.layers if layer[2] == "Surface Lowered")
+        loss_layer = next(layer for layer in capture.layers if layer[2] == "Surface Decrease")
         feature = loss_layer[4][0]
         self.assertEqual(feature["baseline_ruleset"], "annex")
         self.assertEqual(feature["comparison_ruleset"], "mos")
@@ -3624,7 +3624,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         )
 
         self.assertTrue(created)
-        gain_layer = next(layer for layer in capture.layers if layer[2] == "Surface Raised")
+        gain_layer = next(layer for layer in capture.layers if layer[2] == "Surface Increase")
         feature = gain_layer[4][0]
         self.assertEqual(feature["future_family"], "OLS")
         self.assertEqual(feature["baseline_ruleset"], "cap168")
@@ -3642,7 +3642,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         change_parts = [(baseline, future, self.domain)]
 
         capture._create_modernisation_change_layer(
-            "TEST", "baseline-rules", "OFS", "gain", "Surface Raised",
+            "TEST", "baseline-rules", "OFS", "gain", "Surface Increase",
             change_parts, comparison, object(),
         )
         contour_geometry = QgsGeometry.fromPolylineXY(
@@ -3678,7 +3678,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertIn("delta_sample_m", change_fields.names())
         self.assertNotIn("delta_rep_m", change_fields.names())
         self.assertEqual(change_feature["delta_sample_m"], 10.0)
-        self.assertEqual(change_feature["label_txt"], "+10.0 m gain")
+        self.assertEqual(change_feature["label_txt"], "+10.0 m increase")
         contour_layer_args = next(
             layer_args for layer_args in capture.layers
             if "delta_m" in layer_args[3].names()

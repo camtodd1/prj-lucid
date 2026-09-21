@@ -633,7 +633,7 @@ class LayerMixin:
             )
 
     def _apply_modernisation_comparison_style(self, layer: QgsVectorLayer, style_key: str) -> None:
-        """Apply readable gain/loss/no-overlay comparison symbols and delta labels."""
+        """Apply readable comparison symbols and delta labels."""
         if style_key == "OLS Modernisation Gain":
             fill = QColor(55, 168, 82, 95)
             outline = QColor(27, 112, 52, 230)
@@ -740,10 +740,10 @@ class LayerMixin:
         root = QgsRuleBasedRenderer.Rule(None)
         symbol_definitions = (
             ("transition", "primary", "76,84,88,235", "0.38", "dash", "0.0 m / equal height"),
-            ("gain", "primary", "27,112,52,245", "0.42", "solid", "Raised — primary"),
-            ("gain", "intermediate", "55,168,82,205", "0.22", "solid", "Raised — intermediate"),
-            ("loss", "primary", "155,32,32,245", "0.42", "solid", "Lowered — primary"),
-            ("loss", "intermediate", "214,63,63,205", "0.22", "solid", "Lowered — intermediate"),
+            ("gain", "primary", "27,112,52,245", "0.42", "solid", "Increase — primary"),
+            ("gain", "intermediate", "55,168,82,205", "0.22", "solid", "Increase — intermediate"),
+            ("loss", "primary", "155,32,32,245", "0.42", "solid", "Decrease — primary"),
+            ("loss", "intermediate", "214,63,63,205", "0.22", "solid", "Decrease — intermediate"),
         )
         for change, contour_class, color, width, line_style, label in symbol_definitions:
             symbol = QgsLineSymbol.createSimple(

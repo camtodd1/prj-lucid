@@ -178,7 +178,7 @@ class OsmAerowayTests(unittest.TestCase):
         self.assertTrue(renderer.usingSymbolLevels())
         self.assertEqual(symbol.symbolLayer(0).renderingPass(), 0)
         self.assertEqual(symbol.symbolLayer(1).renderingPass(), 1)
-        self.assertEqual(symbol.symbolLayer(0).width(), 15.0)
+        self.assertEqual(symbol.symbolLayer(0).width(), 23.0)
         self.assertEqual(symbol.symbolLayer(1).width(), 0.45)
         for symbol_layer in (symbol.symbolLayer(0), symbol.symbolLayer(1)):
             self.assertEqual(

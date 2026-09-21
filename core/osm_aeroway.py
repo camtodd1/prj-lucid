@@ -147,7 +147,7 @@ AEROWAY_STYLES = {
     },
     "taxiway": {
         "line_color": "#7C858E",
-        "width": "15.0",
+        "width": "23.0",
         "center_color": "#F2C230",
         "center_width": "0.45",
         "center_style": "solid",

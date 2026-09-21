@@ -4092,7 +4092,7 @@ class OlsModernisationComparisonMixin:
             ):
                 future_engine = PlanarControllingOlsEngine(family_candidates)
             if not self._modernisation_subphase(
-                f"Modernisation {family}: classifying gain, loss, and unchanged regions..."
+                f"Modernisation {family}: classifying increase, decrease, and unchanged regions..."
             ):
                 return created
             comparison = OlsEnvelopeComparisonEngine(baseline_engine, future_engine)
@@ -4101,8 +4101,8 @@ class OlsModernisationComparisonMixin:
             contour_interval_m, primary_contour_interval_m = (
                 self._modernisation_change_contour_intervals(family)
             )
-            gain_name = "Surface Raised" if family == "OFS" else "Trigger Height Raised"
-            loss_name = "Surface Lowered" if family == "OFS" else "Trigger Height Lowered"
+            gain_name = "Surface Increase" if family == "OFS" else "Trigger Height Increase"
+            loss_name = "Surface Decrease" if family == "OFS" else "Trigger Height Decrease"
             no_change_name = "No Height Change" if family == "OFS" else "Trigger Height Unchanged"
             created = self._create_modernisation_change_layer(
                 icao_code, baseline_ruleset_id, family, "gain", gain_name,
@@ -4254,7 +4254,7 @@ class OlsModernisationComparisonMixin:
                 [] if comparison_is_annex else comparison_exclusions,
             )
             if not self._modernisation_subphase(
-                f"Ruleset {family}: classifying gain, loss, and unchanged regions..."
+                f"Ruleset {family}: classifying increase, decrease, and unchanged regions..."
             ):
                 return created
 
@@ -4269,14 +4269,14 @@ class OlsModernisationComparisonMixin:
             )
             if family == "OES":
                 names = {
-                    "gain": "Trigger Height Raised",
-                    "loss": "Trigger Height Lowered",
+                    "gain": "Trigger Height Increase",
+                    "loss": "Trigger Height Decrease",
                     "no_change": "Trigger Height Unchanged",
                 }
             else:
                 names = {
-                    "gain": "Surface Raised",
-                    "loss": "Surface Lowered",
+                    "gain": "Surface Increase",
+                    "loss": "Surface Decrease",
                     "no_change": "No Height Change",
                 }
             for change in ("gain", "loss", "no_change"):
@@ -4404,7 +4404,11 @@ class OlsModernisationComparisonMixin:
     ) -> str:
         if delta_min is None or delta_max is None:
             return ""
-        suffix = "no change" if change == "no_change" else change
+        suffix = {
+            "gain": "increase",
+            "loss": "decrease",
+            "no_change": "no change",
+        }.get(change, change)
         minimum = self._comparison_label_delta(delta_min)
         maximum = self._comparison_label_delta(delta_max)
         if minimum == maximum:
