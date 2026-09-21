@@ -234,6 +234,42 @@ class LayerStyleTests(unittest.TestCase):
             ["Take-off Climb", "Horizontal"],
         )
 
+    def test_modernised_ofs_renders_balked_landing_keys_and_labels(self):
+        styles_dir = Path(__file__).resolve().parents[1] / "styles"
+        for geometry_type, style_file in (
+            ("Polygon", "annex14_ofs_surfaces.qml"),
+            ("LineString", "annex14_ofs_contours.qml"),
+        ):
+            for surface in ("balked_landing", "Balked Landing", "Baulked Landing"):
+                with self.subTest(style=style_file, surface=surface):
+                    layer = QgsVectorLayer(
+                        f"{geometry_type}?field=surface:string",
+                        "Controlling OFS — Surface",
+                        "memory",
+                    )
+                    feature = QgsFeature(layer.fields())
+                    feature.setAttribute("surface", surface)
+                    feature.setGeometry(QgsGeometry.fromWkt(
+                        "POLYGON ((0 0, 10 0, 10 10, 0 0))"
+                        if geometry_type == "Polygon"
+                        else "LINESTRING (0 0, 10 10)"
+                    ))
+                    layer.dataProvider().addFeature(feature)
+                    _, loaded = layer.loadNamedStyle(str(styles_dir / style_file))
+                    self.assertTrue(loaded)
+                    LayerMixin()._prune_annex14_renderer_rules(layer)
+                    renderer = layer.renderer()
+                    self.assertEqual(
+                        [rule.label() for rule in renderer.rootRule().children()],
+                        ["Baulked Landing"],
+                    )
+                    context = QgsRenderContext()
+                    renderer.startRender(context, layer.fields())
+                    try:
+                        self.assertTrue(renderer.symbolsForFeature(feature, context))
+                    finally:
+                        renderer.stopRender(context)
+
     def test_single_represented_surface_remains_a_toggleable_rule(self):
         layer = self._surface_layer(["Take-off Climb"])
         self._set_surface_renderer(layer)

@@ -545,7 +545,7 @@ class RunwayWidgetGroup(QtWidgets.QFrame):
         input_col: int = 1,
         input_col_span: int = 1,
     ) -> None:
-        label_adg = QtWidgets.QLabel("ADG:")
+        label_adg = QtWidgets.QLabel("ADG (Annex 14):")
         label_adg.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft | QtCore.Qt.AlignmentFlag.AlignVCenter)
         self.adg_combo = NoWheelComboBox()
         self.adg_combo.setObjectName(f"comboBox_adg_{self.index}")
