@@ -8002,6 +8002,7 @@ class ControllingOlsEngineMixin:
             "ohs",
             "ohc",
             "outer_horizontal",
+            "straight_in_instrument_approach",
         }
         for candidate, region in region_parts:
             surface_key = (
