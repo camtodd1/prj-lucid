@@ -43,8 +43,9 @@ The comparison engine solves both selected envelopes and calculates:
 
 The selected direction is significant: reversing the two rulesets reverses the
 sign of gain and loss outputs. Conventional OLS rulesets share one comparison
-family. When modernised ICAO Annex 14 is on either side, the conventional OLS
-envelope is compared independently with the Annex 14 OFS and OES families.
+family. When modernised ICAO Annex 14 is on either side, its OFS family is
+compared with the conventional obstacle free zone (OFZ), while its OES family
+is compared with the full conventional OLS envelope.
 
 Both envelopes use one physical runway strip resolved from the selected
 aerodrome design ruleset. An OLS ruleset cannot substitute its own strip width
@@ -64,18 +65,18 @@ The calculation compares the two controlling lower envelopes point by point:
 Outputs are grouped as follows:
 
 - **OFS — Protected Airspace Change**
-  - **Baseline OLS Wireframe**: outline-only baseline controlling envelope.
+  - **Baseline OLS Wireframe**: outline-only baseline controlling OFZ envelope.
   - **ICAO Annex 14 Vol I - Modernised OLS — Wireframe**: dashed outline-only
     modernised controlling envelope.
-  - **Surface Raised** (green): future OFS is higher than the baseline OLS.
-  - **Surface Lowered** (red): future OFS is lower than the baseline OLS.
-  - **No Height Change** (neutral): future OFS and baseline OLS are effectively equal.
+  - **Surface Raised** (green): future OFS is higher than the baseline OFZ.
+  - **Surface Lowered** (red): future OFS is lower than the baseline OFZ.
+  - **No Height Change** (neutral): future OFS and baseline OFZ are effectively equal.
   - **Change Contours**: signed `future - baseline` isolines at 1.0 m intervals,
     with primary contours every 5.0 m. Positive values indicate gain and negative
     values indicate loss.
   - **Planar Transition / Equal Height** (dashed): approximate breakline where
     the two controlling elevations are equal.
-  - **No Comparison OLS Overlay** (grey): baseline controlling OLS area with no
+  - **No Comparison OLS Overlay** (grey): baseline controlling OFZ area with no
     overlapping future Annex 14 comparison surface.
 - **OES — Assessment Trigger Change**
   - **Baseline OLS Wireframe** and

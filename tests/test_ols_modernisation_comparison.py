@@ -3449,7 +3449,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertEqual(controller[0].surface_id, "boundary")
 
     def test_comparison_reuses_supplied_solved_engines(self):
-        baseline = self.constant("baseline", 100.0)
+        baseline = self.constant("OFZ:baseline", 100.0)
         future = ControllingOlsCandidate(
             surface_id="future-ofs",
             surface_type="Future OFS",
@@ -3489,7 +3489,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertNotIn(1, created_engine_sizes)
 
     def test_comparison_generation_uses_selected_ofs_change_contour_intervals(self):
-        baseline = self.constant("baseline", 100.0)
+        baseline = self.constant("OFZ:baseline", 100.0)
         future = ControllingOlsCandidate(
             surface_id="future-ofs",
             surface_type="Future OFS",
@@ -3528,7 +3528,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             self.assertEqual(call.kwargs["primary_interval_m"], 2.0)
 
     def test_comparison_generation_puts_zero_transition_in_change_contours(self):
-        baseline = self.constant("baseline", 100.0)
+        baseline = self.constant("OFZ:baseline", 100.0)
         future = self.plane("future-ofs", 0.2, 0.0, 90.0)
         future.metadata["annex14_family"] = "OFS"
         capture = _ComparisonLayerCapture()
@@ -3582,7 +3582,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             model="constant",
             metadata={"elevation_m": 110.0, "annex14_family": "OFS"},
         )
-        mos_comparison = self.constant("mos-ols", 100.0)
+        mos_comparison = self.constant("OFZ:mos", 100.0)
         capture = _ComparisonLayerCapture()
 
         created = capture._create_ols_ruleset_comparison_layers(
@@ -3608,6 +3608,38 @@ class OlsModernisationComparisonTests(unittest.TestCase):
         self.assertFalse(
             any("wireframe" in layer_args[1].lower() for layer_args in capture.layers)
         )
+
+    def test_annex_ofs_compares_against_conventional_ofz_only(self):
+        annex_ofs = ControllingOlsCandidate(
+            surface_id="annex-ofs",
+            surface_type="Annex OFS",
+            footprint=QgsGeometry(self.domain),
+            elevation_at_xy=constant_elevation_evaluator(110.0),
+            model="constant",
+            metadata={"elevation_m": 110.0, "annex14_family": "OFS"},
+        )
+        conventional_ofz = self.constant("OFZ:inner-approach", 100.0)
+        conventional_ols = self.constant("approach", 80.0)
+        capture = _ComparisonLayerCapture()
+
+        created = capture._create_ols_ruleset_comparison_layers(
+            icao_code="TEST",
+            baseline_ruleset_id="conventional",
+            comparison_ruleset_id="annex",
+            baseline_model="ols_current",
+            comparison_model="annex14_modernised_ofs_oes",
+            baseline_candidates=[conventional_ols, conventional_ofz],
+            baseline_exclusions=[],
+            comparison_candidates=[annex_ofs],
+            comparison_exclusions=[],
+            output_groups={"OFS": object(), "OES": object(), "OLS": None},
+        )
+
+        self.assertTrue(created)
+        gain_layer = next(layer for layer in capture.layers if layer[2] == "Surface Increase")
+        feature = gain_layer[4][0]
+        self.assertEqual(feature["baseline_id"], "OFZ:inner-approach")
+        self.assertEqual(feature["delta_sample_m"], 10.0)
 
     def test_generic_ruleset_adapter_compares_two_conventional_ols_envelopes(self):
         capture = _ComparisonLayerCapture()

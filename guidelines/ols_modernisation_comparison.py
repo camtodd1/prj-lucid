@@ -3984,6 +3984,28 @@ class OlsEnvelopeComparisonEngine:
 class OlsModernisationComparisonMixin:
     """Create user-facing OFS/OES modernisation comparison layers."""
 
+    @staticmethod
+    def _comparison_family_candidates(candidates, is_annex, family):
+        planar = [
+            candidate
+            for candidate in candidates
+            if candidate.model in {"constant", "axis", "plane", "conical"}
+        ]
+        if is_annex:
+            return [
+                candidate
+                for candidate in planar
+                if str((candidate.metadata or {}).get("annex14_family") or "").upper()
+                == family
+            ]
+        if family == "OFS":
+            return [
+                candidate
+                for candidate in planar
+                if str(candidate.surface_id).upper().startswith("OFZ:")
+            ]
+        return planar
+
     def _modernisation_change_contour_intervals(self, family: str) -> Tuple[float, float]:
         """Return intermediate and primary signed-change contour intervals."""
         family_key = str(family or "").strip().upper()
@@ -4047,10 +4069,11 @@ class OlsModernisationComparisonMixin:
         solved_future_engines: Optional[Dict[str, PlanarControllingOlsEngine]] = None,
         comparison_ruleset_id: str = "icao_annex14_vol1_modernised_ofs_oes",
     ) -> bool:
-        baseline_planar = [
-            candidate for candidate in baseline_candidates
-            if candidate.model in {"constant", "axis", "plane", "conical"}
-        ]
+        baseline_planar = self._comparison_family_candidates(
+            baseline_candidates,
+            False,
+            "OES",
+        )
         if not baseline_planar:
             QgsMessageLog.logMessage(
                 "[skip] OLS modernisation comparison: baseline has no controlling candidates.",
@@ -4059,31 +4082,42 @@ class OlsModernisationComparisonMixin:
             )
             return False
 
-        baseline_ids = {candidate.surface_id for candidate in baseline_planar}
-        if (
-            solved_baseline_engine is None
-            or {candidate.surface_id for candidate in solved_baseline_engine.candidates} != baseline_ids
-        ):
-            baseline_engine = PlanarControllingOlsEngine(
-                baseline_planar,
-                exclusion_geometries=list(baseline_exclusions or []),
-            )
-        else:
-            baseline_engine = solved_baseline_engine
         created = False
         for family, family_group in (("OFS", ofs_group), ("OES", oes_group)):
-            family_candidates = [
-                candidate for candidate in future_candidates
-                if candidate.model in {"constant", "axis", "plane", "conical"}
-                and str((candidate.metadata or {}).get("annex14_family") or "").upper() == family
-            ]
-            if not family_candidates or family_group is None:
+            baseline_family_candidates = self._comparison_family_candidates(
+                baseline_candidates,
+                False,
+                family,
+            )
+            family_candidates = self._comparison_family_candidates(
+                future_candidates,
+                True,
+                family,
+            )
+            if not baseline_family_candidates or not family_candidates or family_group is None:
                 QgsMessageLog.logMessage(
-                    f"[skip] OLS modernisation {family} comparison: no future candidates.",
+                    f"[skip] OLS modernisation {family} comparison: candidates unavailable.",
                     PLUGIN_TAG,
                     Qgis.Warning,
                 )
                 continue
+            baseline_ids = {
+                candidate.surface_id for candidate in baseline_family_candidates
+            }
+            if (
+                solved_baseline_engine is None
+                or {
+                    candidate.surface_id
+                    for candidate in solved_baseline_engine.candidates
+                }
+                != baseline_ids
+            ):
+                baseline_engine = PlanarControllingOlsEngine(
+                    baseline_family_candidates,
+                    exclusion_geometries=list(baseline_exclusions or []),
+                )
+            else:
+                baseline_engine = solved_baseline_engine
             future_engine = (solved_future_engines or {}).get(family)
             if (
                 future_engine is None
@@ -4188,21 +4222,6 @@ class OlsModernisationComparisonMixin:
         comparison_is_annex = comparison_model == annex_model
         families = ("OFS", "OES") if baseline_is_annex or comparison_is_annex else ("OLS",)
 
-        def family_candidates(candidates, is_annex, family):
-            planar = [
-                candidate
-                for candidate in candidates
-                if candidate.model in {"constant", "axis", "plane", "conical"}
-            ]
-            if not is_annex:
-                return planar
-            return [
-                candidate
-                for candidate in planar
-                if str((candidate.metadata or {}).get("annex14_family") or "").upper()
-                == family
-            ]
-
         def matching_engine(solved, family, candidates, exclusions):
             engine = (solved or {}).get(family) or (solved or {}).get("baseline")
             candidate_ids = {candidate.surface_id for candidate in candidates}
@@ -4220,12 +4239,12 @@ class OlsModernisationComparisonMixin:
         created = False
         for family in families:
             output_group = output_groups.get(family)
-            baseline_family_candidates = family_candidates(
+            baseline_family_candidates = self._comparison_family_candidates(
                 baseline_candidates,
                 baseline_is_annex,
                 family,
             )
-            comparison_family_candidates = family_candidates(
+            comparison_family_candidates = self._comparison_family_candidates(
                 comparison_candidates,
                 comparison_is_annex,
                 family,
