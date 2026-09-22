@@ -49,7 +49,20 @@ OLS_EDGE_ELEVATION_SOURCE = "safeguarding_builder_calculated"
 class OlsGuidelineMixin:
     @staticmethod
     def _is_required_ofz(applicability: Optional[str]) -> bool:
-        return str(applicability or "").strip().lower() == "required"
+        return str(applicability or "").strip().lower() in {"", "required"}
+
+    def _register_ofz_candidate(
+        self,
+        candidate: ControllingOlsCandidate,
+        applicability: Optional[str],
+    ) -> None:
+        if self._is_required_ofz(applicability):
+            self._register_controlling_ols_candidate(candidate)
+        elif str(applicability or "").strip().lower() == "guidance_only":
+            candidate.metadata["ofz_comparison_only"] = True
+            if not hasattr(self, "_ofz_comparison_candidates"):
+                self._ofz_comparison_candidates = []
+            self._ofz_comparison_candidates.append(candidate)
 
     def _get_ols_ruleset(self):
         """Return the explicitly selected OLS ruleset, with legacy fallback."""
@@ -2131,9 +2144,7 @@ class OlsGuidelineMixin:
         for name, value in final_attr_map.items():
             feature.setAttribute(ols_fields.indexFromName(name), value)
 
-        if self._is_required_ofz(applicability) and hasattr(
-            self, "_register_controlling_ols_candidate"
-        ):
+        if hasattr(self, "_register_controlling_ols_candidate"):
             plane = self._plane_coefficients_from_points(
                 p1_base_xy,
                 z1_base,
@@ -2147,7 +2158,7 @@ class OlsGuidelineMixin:
                     f"OFZ:ITS:{runway_name}:{end_desig}:"
                     f"{panel_description.replace(' ', '_')}:{side_label}"
                 )
-                self._register_controlling_ols_candidate(
+                self._register_ofz_candidate(
                     ControllingOlsCandidate(
                         surface_id=surface_id,
                         surface_type="Inner Transitional",
@@ -2162,7 +2173,8 @@ class OlsGuidelineMixin:
                             "applicability": applicability,
                             "source_ref": ref_mos,
                         },
-                    )
+                    ),
+                    applicability,
                 )
 
         return feature
@@ -5027,10 +5039,8 @@ class OlsGuidelineMixin:
                                 inner_approach_features.append(feat)
                                 ia_surface_id = f"OFZ:IA:{runway_name}:{current_desig}"
                                 ia_applicability = ia_params.get("applicability")
-                                if self._is_required_ofz(ia_applicability) and hasattr(
-                                    self, "_register_controlling_ols_candidate"
-                                ):
-                                    self._register_controlling_ols_candidate(
+                                if hasattr(self, "_register_controlling_ols_candidate"):
+                                    self._register_ofz_candidate(
                                         ControllingOlsCandidate(
                                             surface_id=ia_surface_id,
                                             surface_type="Inner Approach",
@@ -5049,7 +5059,8 @@ class OlsGuidelineMixin:
                                                 "applicability": ia_applicability,
                                                 "source_ref": ia_ref_param,
                                             },
-                                        )
+                                        ),
+                                        ia_applicability,
                                     )
                                 inner_approach_contour_features.extend(
                                     self._generate_ofz_axis_contours(
@@ -5144,10 +5155,8 @@ class OlsGuidelineMixin:
                             ofz_bls_features.append(feat_bls)
                             bls_surface_id = f"OFZ:BLS:{runway_name}:{current_desig}"
                             bls_applicability = bls_params_dict.get("applicability")
-                            if self._is_required_ofz(bls_applicability) and hasattr(
-                                self, "_register_controlling_ols_candidate"
-                            ):
-                                self._register_controlling_ols_candidate(
+                            if hasattr(self, "_register_controlling_ols_candidate"):
+                                self._register_ofz_candidate(
                                     ControllingOlsCandidate(
                                         surface_id=bls_surface_id,
                                         surface_type="Baulked Landing",
@@ -5166,7 +5175,8 @@ class OlsGuidelineMixin:
                                             "applicability": bls_applicability,
                                             "source_ref": bls_params_dict.get("ref"),
                                         },
-                                    )
+                                    ),
+                                    bls_applicability,
                                 )
                             ofz_bls_contour_features.extend(
                                 self._generate_ofz_axis_contours(

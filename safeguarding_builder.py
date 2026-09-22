@@ -3882,6 +3882,9 @@ class SafeguardingBuilder(
             )
 
         baseline_candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+        baseline_candidates.extend(
+            getattr(self, "_ofz_comparison_candidates", []) or []
+        )
         baseline_exclusions = list(
             getattr(self, "_controlling_ols_exclusion_geometries", []) or []
         )
@@ -3965,6 +3968,9 @@ class SafeguardingBuilder(
             comparison_candidates = list(
                 getattr(self, "_controlling_ols_candidates", []) or []
             )
+            comparison_candidates.extend(
+                getattr(self, "_ofz_comparison_candidates", []) or []
+            )
             comparison_exclusions = list(
                 getattr(self, "_controlling_ols_exclusion_geometries", []) or []
             )
@@ -4031,6 +4037,9 @@ class SafeguardingBuilder(
     ) -> bool:
         """Generate future OFS/OES beside the selected baseline and compare envelopes."""
         baseline_candidates = list(getattr(self, "_controlling_ols_candidates", []) or [])
+        baseline_candidates.extend(
+            getattr(self, "_ofz_comparison_candidates", []) or []
+        )
         baseline_exclusions = list(getattr(self, "_controlling_ols_exclusion_geometries", []) or [])
         future_ofs_group = output_groups.get("comparison_ols_surfaces")
         future_oes_group = output_groups.get("comparison_airport_wide_ols")

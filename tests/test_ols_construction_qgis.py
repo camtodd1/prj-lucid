@@ -119,6 +119,11 @@ def cap_context(track_wkt: str) -> OlsConstructionContext:
 
 
 class OlsConstructionQgisTests(unittest.TestCase):
+    def test_ofz_without_explicit_applicability_is_registered(self):
+        self.assertTrue(OlsGuidelineMixin._is_required_ofz(None))
+        self.assertTrue(OlsGuidelineMixin._is_required_ofz("required"))
+        self.assertFalse(OlsGuidelineMixin._is_required_ofz("guidance_only"))
+
     def test_annex14_transition_features_are_repeated_under_each_runway_end(self):
         builder = object.__new__(SafeguardingBuilder)
         fields = QgsFields()
@@ -426,9 +431,10 @@ class OlsConstructionQgisTests(unittest.TestCase):
                     for contour in builder._controlling_ols_contours
                     if contour.surface_id.startswith("OFZ:")
                 ],
+                list(builder._ofz_comparison_candidates),
             )
 
-        required_candidates, required_contours = generated_ofz(
+        required_candidates, required_contours, required_comparison_candidates = generated_ofz(
             "Precision Approach CAT II/III"
         )
         self.assertEqual(
@@ -445,12 +451,17 @@ class OlsConstructionQgisTests(unittest.TestCase):
             {contour.surface_id for contour in required_contours}
             <= {candidate.surface_id for candidate in required_candidates}
         )
+        self.assertEqual(required_comparison_candidates, [])
 
-        guidance_candidates, guidance_contours = generated_ofz(
+        guidance_candidates, guidance_contours, guidance_comparison_candidates = generated_ofz(
             "Precision Approach CAT I"
         )
         self.assertEqual(guidance_candidates, [])
         self.assertEqual(guidance_contours, [])
+        self.assertEqual(
+            {candidate.surface_type for candidate in guidance_comparison_candidates},
+            {"Inner Approach", "Inner Transitional", "Baulked Landing"},
+        )
 
     def test_eham_easa_cat23_ofz_candidates_match_independent_checkpoints(self):
         fixture_dir = Path(__file__).parent / "fixtures" / "ols"

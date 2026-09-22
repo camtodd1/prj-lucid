@@ -7151,6 +7151,7 @@ class ControllingOlsEngineMixin:
 
     def _reset_controlling_ols_engine(self) -> None:
         self._controlling_ols_candidates: List[ControllingOlsCandidate] = []
+        self._ofz_comparison_candidates: List[ControllingOlsCandidate] = []
         self._controlling_ols_exclusion_geometries: List[QgsGeometry] = []
         self._controlling_ols_contours: List[ControllingOlsContour] = []
 

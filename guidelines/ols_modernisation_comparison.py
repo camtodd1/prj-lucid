@@ -4004,7 +4004,11 @@ class OlsModernisationComparisonMixin:
                 for candidate in planar
                 if str(candidate.surface_id).upper().startswith("OFZ:")
             ]
-        return planar
+        return [
+            candidate
+            for candidate in planar
+            if not (candidate.metadata or {}).get("ofz_comparison_only")
+        ]
 
     def _modernisation_change_contour_intervals(self, family: str) -> Tuple[float, float]:
         """Return intermediate and primary signed-change contour intervals."""

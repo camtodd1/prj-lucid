@@ -3619,6 +3619,7 @@ class OlsModernisationComparisonTests(unittest.TestCase):
             metadata={"elevation_m": 110.0, "annex14_family": "OFS"},
         )
         conventional_ofz = self.constant("OFZ:inner-approach", 100.0)
+        conventional_ofz.metadata["ofz_comparison_only"] = True
         conventional_ols = self.constant("approach", 80.0)
         capture = _ComparisonLayerCapture()
 
