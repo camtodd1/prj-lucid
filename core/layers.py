@@ -25,7 +25,6 @@ from qgis.core import (  # type: ignore
     QgsRuleBasedLabeling,
     QgsRuleBasedRenderer,
     QgsSingleSymbolRenderer,
-    QgsSymbolLayer,
     QgsTextBufferSettings,
     QgsTextFormat,
     QgsVectorLayerSimpleLabeling,
@@ -735,13 +734,12 @@ class LayerMixin:
         return requested_name
 
     def _apply_modernisation_change_contour_style(self, layer: QgsVectorLayer) -> None:
-        """Render change contours darker as their distance from zero increases."""
+        """Render signed change contours by direction and primary/intermediate class."""
         change_field = self._persisted_field_name(layer, "change")
         contour_class_field = self._persisted_field_name(layer, "contour_class")
-        delta_field = self._persisted_field_name(layer, "delta_m")
         root = QgsRuleBasedRenderer.Rule(None)
         symbol_definitions = (
-            ("transition", "primary", "205,210,213,235", "0.38", "dash", "0.0 m / equal height"),
+            ("transition", "primary", "76,84,88,235", "0.38", "dash", "0.0 m / equal height"),
             ("gain", "primary", "27,112,52,245", "0.42", "solid", "Increase — primary"),
             ("gain", "intermediate", "55,168,82,205", "0.22", "solid", "Increase — intermediate"),
             ("loss", "primary", "155,32,32,245", "0.42", "solid", "Decrease — primary"),
@@ -756,22 +754,6 @@ class LayerMixin:
                     "line_style": line_style,
                 }
             )
-            if change != "transition":
-                light = (205, 235, 211) if change == "gain" else (247, 211, 211)
-                dark = (27, 112, 52) if change == "gain" else (155, 32, 32)
-                # A 2 m change is halfway to dark in every comparison layer.
-                ratio = f'(abs("{delta_field}") / (abs("{delta_field}") + 2))'
-                channels = [
-                    f'round({start} + ({end - start}) * {ratio})'
-                    for start, end in zip(light, dark)
-                ]
-                alpha = 245 if contour_class == "primary" else 205
-                symbol.symbolLayer(0).dataDefinedProperties().setProperty(
-                    QgsSymbolLayer.PropertyStrokeColor,
-                    QgsProperty.fromExpression(
-                        f'color_rgba({", ".join(channels)}, {alpha})'
-                    ),
-                )
             rule = QgsRuleBasedRenderer.Rule(symbol)
             rule.setFilterExpression(
                 f'"{change_field}" = \'{change}\' AND '
