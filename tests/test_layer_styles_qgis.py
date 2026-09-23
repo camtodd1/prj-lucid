@@ -12,6 +12,8 @@ from qgis.PyQt.QtWidgets import QApplication
 from qgis.core import (
     Qgis,
     QgsCoordinateReferenceSystem,
+    QgsExpression,
+    QgsExpressionContext,
     QgsFeature,
     QgsField,
     QgsFields,
@@ -22,6 +24,7 @@ from qgis.core import (
     QgsRectangle,
     QgsRenderContext,
     QgsRuleBasedRenderer,
+    QgsSymbolLayer,
     QgsVectorLayer,
     QgsWkbTypes,
 )
@@ -442,12 +445,12 @@ class LayerStyleTests(unittest.TestCase):
 
     def test_modernisation_change_contour_style_renders_and_labels_zero_contour(self):
         layer = QgsVectorLayer(
-            "MultiLineString?field=change:string&field=contour_class:string&field=label_txt:string",
+            "MultiLineString?field=change:string&field=contour_class:string&field=label_txt:string&field=delta_m:double",
             "Change Contours",
             "memory",
         )
         feature = QgsFeature(layer.fields())
-        feature.setAttributes(["transition", "primary", "0.0 m"])
+        feature.setAttributes(["transition", "primary", "0.0 m", 0.0])
         feature.setGeometry(QgsGeometry.fromMultiPolylineXY([[
             QgsPointXY(0.0, 0.0),
             QgsPointXY(100.0, 0.0),
@@ -463,7 +466,7 @@ class LayerStyleTests(unittest.TestCase):
             for rule in renderer.rootRule().children()
             if rule.label() == "0.0 m / equal height"
         )
-        self.assertEqual(zero_rule.symbol().color().getRgb(), (76, 84, 88, 235))
+        self.assertEqual(zero_rule.symbol().color().getRgb(), (205, 210, 213, 235))
         render_context = QgsRenderContext()
         renderer.startRender(render_context, layer.fields())
         try:
@@ -475,6 +478,43 @@ class LayerStyleTests(unittest.TestCase):
         label_rules = labeling.rootRule().children()
         self.assertEqual(len(label_rules), 1)
         self.assertEqual(label_rules[0].settings().fieldName, "label_txt")
+
+    def test_modernisation_change_contours_darkens_with_absolute_delta(self):
+        layer = QgsVectorLayer(
+            "LineString?field=change:string&field=contour_class:string&field=delta_m:double",
+            "Change Contours", "memory",
+        )
+        features = []
+        for change, delta in (("gain", 1.0), ("gain", 10.0),
+                              ("loss", -1.0), ("loss", -10.0)):
+            feature = QgsFeature(layer.fields())
+            feature.setAttributes([change, "primary", delta])
+            feature.setGeometry(QgsGeometry.fromPolylineXY([
+                QgsPointXY(0, delta), QgsPointXY(1, delta),
+            ]))
+            features.append(feature)
+        layer.dataProvider().addFeatures(features)
+        LayerMixin()._apply_modernisation_change_contour_style(layer)
+
+        rules = {rule.label(): rule for rule in layer.renderer().rootRule().children()}
+        for label, close_delta, far_delta in (
+            ("Increase — primary", 1.0, 10.0),
+            ("Decrease — primary", -1.0, -10.0),
+        ):
+            prop = rules[label].symbol().symbolLayer(0).dataDefinedProperties().property(
+                QgsSymbolLayer.PropertyStrokeColor
+            )
+            expression = QgsExpression(prop.asExpression())
+            self.assertFalse(expression.hasParserError())
+            colors = []
+            for delta in (close_delta, far_delta):
+                context = QgsExpressionContext()
+                context.setFeature(next(feature for feature in layer.getFeatures()
+                                        if feature.attribute("delta_m") == delta))
+                color = str(expression.evaluate(context))
+                self.assertFalse(expression.hasEvalError())
+                colors.append(tuple(int(part) for part in color.split(",")[:3]))
+            self.assertGreater(sum(colors[0]), sum(colors[1]))
 
     def test_surface_contour_style_preserves_primary_and_mutes_intermediate(self):
         layer = QgsVectorLayer(
