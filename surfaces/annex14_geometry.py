@@ -2033,33 +2033,125 @@ class Annex14GeometryMixin:
                 vertical_height = float(inner_transitional.get("vertical_section_height_m") or 0.0)
                 horizontal_extent = max(0.0, upper_height - vertical_height) / inner_trans_slope if inner_trans_slope > 0 else 0.0
                 upper_edge_z = (highest_threshold_z + upper_height) if highest_threshold_z is not None else None
-                self._annex14_add_side_panels_for_trapezoid(
-                    ofs_features,
-                    fields,
-                    inner_approach_start,
-                    approach_az,
-                    inner_approach_length_m,
-                    inner_approach_width,
-                    inner_approach_width,
-                    horizontal_extent,
-                    runway_name,
-                    "OFS",
-                    "inner_transitional",
-                    "inner_approach_side",
-                    end_desig,
-                    design_group,
-                    inner_trans_slope,
-                    inner_transitional.get("ref", ""),
-                    f"Plan-view inner transitional side panels; vertical section height {vertical_height:g} m.",
-                    lower_start_z=threshold_z,
-                    lower_end_z=inner_approach_end_z,
-                    upper_start_z=upper_edge_z,
-                    upper_end_z=upper_edge_z,
-                    contour_features=ofs_contour_features,
-                    contour_fields=contour_fields,
-                    contour_interval=ofs_inner_transitional_contour_interval,
-                    reverse_side_labels=True,
-                )
+                inclined_start = inner_approach_start
+                inclined_length_m = inner_approach_length_m
+                inclined_start_z = threshold_z
+                vertical_length_m = 0.0
+                if inner_transitional.get("configuration") == "vertical_then_inclined":
+                    approach_slope = float(approach.get("slope") or 0.0)
+                    vertical_length_m = min(
+                        inner_approach_length_m,
+                        vertical_height / approach_slope if approach_slope > 0 else 0.0,
+                    )
+                    inclined_start = inner_approach_start.project(vertical_length_m, approach_az)
+                    inclined_length_m -= vertical_length_m
+                    inclined_start_z = self._annex14_surface_z(
+                        threshold_z, vertical_length_m, approach_slope
+                    )
+                if inclined_start is not None and inclined_length_m > 0:
+                    self._annex14_add_side_panels_for_trapezoid(
+                        ofs_features,
+                        fields,
+                        inclined_start,
+                        approach_az,
+                        inclined_length_m,
+                        inner_approach_width,
+                        inner_approach_width,
+                        horizontal_extent,
+                        runway_name,
+                        "OFS",
+                        "inner_transitional",
+                        "inner_approach_side",
+                        end_desig,
+                        design_group,
+                        inner_trans_slope,
+                        inner_transitional.get("ref", ""),
+                        f"Plan-view inner transitional side panels; vertical section height {vertical_height:g} m.",
+                        lower_start_z=inclined_start_z,
+                        lower_end_z=inner_approach_end_z,
+                        upper_start_z=upper_edge_z,
+                        upper_end_z=upper_edge_z,
+                        contour_features=ofs_contour_features,
+                        contour_fields=contour_fields,
+                        contour_interval=ofs_inner_transitional_contour_interval,
+                        reverse_side_labels=True,
+                    )
+                if inner_transitional.get("configuration") == "vertical_then_inclined":
+                    if inclined_start is not None and vertical_length_m > 0:
+                        self._annex14_add_side_panels_for_trapezoid(
+                            ofs_features,
+                            fields,
+                            inclined_start,
+                            takeoff_az,
+                            vertical_length_m,
+                            inner_approach_width,
+                            inner_approach_width,
+                            horizontal_extent,
+                            runway_name,
+                            "OFS",
+                            "inner_transitional",
+                            "vertical_top",
+                            end_desig,
+                            design_group,
+                            inner_trans_slope,
+                            inner_transitional.get("ref", ""),
+                            f"Inclined section above the {vertical_height:g} m vertical section.",
+                            lower_start_z=inclined_start_z,
+                            lower_end_z=inclined_start_z,
+                            upper_start_z=upper_edge_z,
+                            upper_end_z=upper_edge_z,
+                            contour_features=ofs_contour_features,
+                            contour_fields=contour_fields,
+                            contour_interval=ofs_inner_transitional_contour_interval,
+                        )
+                    if inner_transitional.get("length_rule") == "to_end_of_strip":
+                        opposite_extension_key = (
+                            "extension_length_2"
+                            if end_config.get("direction") == "primary"
+                            else "extension_length_1"
+                        )
+                        end_station_m = (
+                            runway_length_m + float(
+                                strip_dims.get(opposite_extension_key, strip_dims["extension_length"])
+                            )
+                            if strip_dims is not None else None
+                        )
+                    else:
+                        end_station_m = min(runway_length_m, float(inner_transitional["length_m"]))
+                    runway_side_end = (
+                        threshold.project(end_station_m, takeoff_az)
+                        if end_station_m is not None else None
+                    )
+                    if runway_side_end is not None:
+                        runway_side_end_z = self._annex14_runway_axis_z(
+                            threshold_z, opposite_threshold_z, end_station_m, runway_length_m
+                        )
+                        self._annex14_add_side_panels_for_trapezoid(
+                            ofs_features,
+                            fields,
+                            inner_approach_start,
+                            takeoff_az,
+                            inner_approach_start.distance(runway_side_end),
+                            inner_approach_width,
+                            inner_approach_width,
+                            horizontal_extent,
+                            runway_name,
+                            "OFS",
+                            "inner_transitional",
+                            "runway_side",
+                            end_desig,
+                            design_group,
+                            inner_trans_slope,
+                            inner_transitional.get("ref", ""),
+                            f"Inclined section above the {vertical_height:g} m vertical section.",
+                            lower_start_z=threshold_z + vertical_height if threshold_z is not None else None,
+                            lower_end_z=runway_side_end_z + vertical_height if runway_side_end_z is not None else None,
+                            upper_start_z=upper_edge_z,
+                            upper_end_z=upper_edge_z,
+                            contour_features=ofs_contour_features,
+                            contour_fields=contour_fields,
+                            contour_interval=ofs_inner_transitional_contour_interval,
+                        )
                 if balked_start is not None and balked_inner_width is not None:
                     half_width = max(inner_approach_width, balked_inner_width) / 2.0
                     for side, outward_azimuth in {
