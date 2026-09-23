@@ -69,12 +69,15 @@ class OlsModernisationComparisonTests(unittest.TestCase):
     def setUp(self):
         self.domain = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
 
-    def test_annex14_ofs_excludes_only_crossing_runway_cores(self):
+    def test_annex14_ofs_excludes_widest_own_void_and_crossing_runway_cores(self):
         builder = _ControllingLayerCapture()
         builder._annex14_ofs_runway_cores = {
             "A": {
                 "axis": QgsGeometry.fromPolylineXY([QgsPointXY(0, 50), QgsPointXY(100, 50)]),
-                "geometries": [QgsGeometry.fromRect(QgsRectangle(0, 45, 100, 55))],
+                "geometries": [
+                    QgsGeometry.fromRect(QgsRectangle(0, 45, 100, 55)),
+                    QgsGeometry.fromRect(QgsRectangle(0, 40, 100, 60)),
+                ],
             },
             "B": {
                 "axis": QgsGeometry.fromPolylineXY([QgsPointXY(50, 0), QgsPointXY(50, 100)]),
@@ -85,8 +88,8 @@ class OlsModernisationComparisonTests(unittest.TestCase):
                 "geometries": [QgsGeometry.fromRect(QgsRectangle(0, 75, 100, 85))],
             },
         }
-        exclusions = builder._annex14_crossing_runway_exclusions()
-        self.assertEqual(len(exclusions["A"]), 1)
+        exclusions = builder._annex14_runway_void_exclusions()
+        self.assertEqual(len(exclusions["A"]), 3)
 
         def candidate(family):
             return ControllingOlsCandidate(
@@ -100,11 +103,13 @@ class OlsModernisationComparisonTests(unittest.TestCase):
 
         ofs, oes = candidate("OFS"), candidate("OES")
         engine = PlanarControllingOlsEngine(
-            [ofs, oes], annex14_crossing_cores=exclusions
+            [ofs, oes], annex14_runway_voids=exclusions
         )
         ofs_footprint = engine._effective_footprint(ofs)
         self.assertFalse(ofs_footprint.intersects(QgsGeometry.fromPointXY(QgsPointXY(50, 50))))
-        self.assertTrue(ofs_footprint.intersects(QgsGeometry.fromPointXY(QgsPointXY(20, 50))))
+        self.assertFalse(ofs_footprint.intersects(QgsGeometry.fromPointXY(QgsPointXY(20, 42))))
+        self.assertFalse(ofs_footprint.intersects(QgsGeometry.fromPointXY(QgsPointXY(50, 70))))
+        self.assertTrue(ofs_footprint.intersects(QgsGeometry.fromPointXY(QgsPointXY(20, 70))))
         self.assertTrue(ofs_footprint.intersects(QgsGeometry.fromPointXY(QgsPointXY(20, 80))))
         self.assertTrue(engine._effective_footprint(oes).intersects(
             QgsGeometry.fromPointXY(QgsPointXY(50, 50))
