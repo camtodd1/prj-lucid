@@ -1662,6 +1662,13 @@ class Annex14GeometryMixin:
         )
         strip_dims = self._annex14_strip_dimensions(runway_data)
         end_configs = self._annex14_runway_end_configs(runway_data, rwy_params)
+        runway_cores = getattr(self, "_annex14_ofs_runway_cores", None)
+        if runway_cores is None:
+            runway_cores = self._annex14_ofs_runway_cores = {}
+        runway_core = runway_cores[runway_name] = {
+            "axis": QgsGeometry.fromPolylineXY([thr_point, rec_thr_point]),
+            "geometries": [],
+        }
         straight_in_selected = any(
             bool(
                 end.get("operations", {}).get("straight_in_non_precision_instrument")
@@ -1830,6 +1837,16 @@ class Annex14GeometryMixin:
                     )
                     strip_adjacent_length = approach_start.distance(strip_end) if strip_end is not None else 0.0
                     if strip_end is not None and strip_adjacent_length > 1e-3:
+                        core = self._annex14_trapezoid_from_widths(
+                            approach_start,
+                            takeoff_az,
+                            strip_adjacent_length,
+                            approach_inner_width,
+                            approach_inner_width,
+                            f"Annex 14 OFS runway core {runway_name} {end_desig}",
+                        )
+                        if core is not None and not core.isEmpty():
+                            runway_core["geometries"].append(core)
                         self._annex14_add_side_panels_for_trapezoid(
                             ofs_features,
                             fields,

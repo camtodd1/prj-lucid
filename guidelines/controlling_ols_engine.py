@@ -221,6 +221,7 @@ class PlanarControllingOlsEngine:
         tie_tolerance_m: float = 0.01,
         exclusion_geometries: Optional[Sequence[QgsGeometry]] = None,
         ruleset_id: Optional[str] = None,
+        annex14_crossing_cores: Optional[Dict[str, Sequence[QgsGeometry]]] = None,
     ):
         input_candidates = list(candidates)
         self.candidates = [
@@ -235,6 +236,10 @@ class PlanarControllingOlsEngine:
             for geometry in (exclusion_geometries or [])
             if geometry is not None and not geometry.isEmpty()
         ]
+        self.annex14_crossing_cores = {
+            runway: [QgsGeometry(geometry) for geometry in geometries]
+            for runway, geometries in (annex14_crossing_cores or {}).items()
+        }
         self._effective_footprint_cache: Dict[str, QgsGeometry] = {}
         self._conical_buffer_cache: Dict[Tuple[str, int], QgsGeometry] = {}
         self._last_conical_conical_transition: Optional[
@@ -3068,6 +3073,10 @@ class PlanarControllingOlsEngine:
 
     def _exclusions_for_candidate(self, candidate: ControllingOlsCandidate) -> List[QgsGeometry]:
         """Return no-OLS exclusion masks that apply to this candidate surface."""
+        if str((candidate.metadata or {}).get("annex14_family") or "").upper() == "OFS":
+            return self.annex14_crossing_cores.get(
+                str((candidate.metadata or {}).get("runway") or ""), []
+            )
         if candidate.surface_type not in {"Approach", "IHS", "OHS", "TOCS", "Transitional"}:
             return []
         return self.exclusion_geometries
@@ -7153,6 +7162,7 @@ class ControllingOlsEngineMixin:
         self._controlling_ols_candidates: List[ControllingOlsCandidate] = []
         self._ofz_comparison_candidates: List[ControllingOlsCandidate] = []
         self._controlling_ols_exclusion_geometries: List[QgsGeometry] = []
+        self._annex14_ofs_runway_cores: Dict[str, dict] = {}
         self._controlling_ols_contours: List[ControllingOlsContour] = []
 
     def _register_controlling_ols_candidate(self, candidate: ControllingOlsCandidate) -> None:
@@ -7320,6 +7330,20 @@ class ControllingOlsEngineMixin:
         )
         return region_layer_ok or contour_layer_ok
 
+    def _annex14_crossing_runway_exclusions(self) -> Dict[str, List[QgsGeometry]]:
+        """Mask a runway's OFS candidates only within crossing runways' lower-edge corridors."""
+        runway_cores = getattr(self, "_annex14_ofs_runway_cores", {}) or {}
+        exclusions: Dict[str, List[QgsGeometry]] = {}
+        for runway, record in runway_cores.items():
+            axis = record["axis"]
+            exclusions[runway] = [
+                core
+                for other_runway, other in runway_cores.items()
+                if other_runway != runway and axis.crosses(other["axis"])
+                for core in other["geometries"]
+            ]
+        return exclusions
+
     def _create_annex14_controlling_surface_layers(
         self,
         icao_code: str,
@@ -7346,7 +7370,12 @@ class ControllingOlsEngineMixin:
                     Qgis.Info,
                 )
                 continue
-            engine = PlanarControllingOlsEngine(family_candidates)
+            engine = PlanarControllingOlsEngine(
+                family_candidates,
+                annex14_crossing_cores=(
+                    self._annex14_crossing_runway_exclusions() if family == "OFS" else None
+                ),
+            )
             if solved_engines is not None:
                 solved_engines[family] = engine
             if not self._controlling_ols_subphase(

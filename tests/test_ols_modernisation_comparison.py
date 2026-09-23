@@ -69,6 +69,47 @@ class OlsModernisationComparisonTests(unittest.TestCase):
     def setUp(self):
         self.domain = QgsGeometry.fromRect(QgsRectangle(0.0, 0.0, 100.0, 100.0))
 
+    def test_annex14_ofs_excludes_only_crossing_runway_cores(self):
+        builder = _ControllingLayerCapture()
+        builder._annex14_ofs_runway_cores = {
+            "A": {
+                "axis": QgsGeometry.fromPolylineXY([QgsPointXY(0, 50), QgsPointXY(100, 50)]),
+                "geometries": [QgsGeometry.fromRect(QgsRectangle(0, 45, 100, 55))],
+            },
+            "B": {
+                "axis": QgsGeometry.fromPolylineXY([QgsPointXY(50, 0), QgsPointXY(50, 100)]),
+                "geometries": [QgsGeometry.fromRect(QgsRectangle(45, 0, 55, 100))],
+            },
+            "C": {
+                "axis": QgsGeometry.fromPolylineXY([QgsPointXY(0, 80), QgsPointXY(100, 80)]),
+                "geometries": [QgsGeometry.fromRect(QgsRectangle(0, 75, 100, 85))],
+            },
+        }
+        exclusions = builder._annex14_crossing_runway_exclusions()
+        self.assertEqual(len(exclusions["A"]), 1)
+
+        def candidate(family):
+            return ControllingOlsCandidate(
+                surface_id=family,
+                surface_type="Transitional",
+                footprint=QgsGeometry(self.domain),
+                elevation_at_xy=constant_elevation_evaluator(100.0),
+                model="constant",
+                metadata={"annex14_family": family, "runway": "A"},
+            )
+
+        ofs, oes = candidate("OFS"), candidate("OES")
+        engine = PlanarControllingOlsEngine(
+            [ofs, oes], annex14_crossing_cores=exclusions
+        )
+        ofs_footprint = engine._effective_footprint(ofs)
+        self.assertFalse(ofs_footprint.intersects(QgsGeometry.fromPointXY(QgsPointXY(50, 50))))
+        self.assertTrue(ofs_footprint.intersects(QgsGeometry.fromPointXY(QgsPointXY(20, 50))))
+        self.assertTrue(ofs_footprint.intersects(QgsGeometry.fromPointXY(QgsPointXY(20, 80))))
+        self.assertTrue(engine._effective_footprint(oes).intersects(
+            QgsGeometry.fromPointXY(QgsPointXY(50, 50))
+        ))
+
     def constant(self, surface_id, elevation):
         return ControllingOlsCandidate(
             surface_id=surface_id,
