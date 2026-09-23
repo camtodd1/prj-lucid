@@ -742,10 +742,10 @@ class LayerMixin:
         root = QgsRuleBasedRenderer.Rule(None)
         symbol_definitions = (
             ("transition", "primary", "205,210,213,235", "0.38", "dash", "0.0 m / equal height"),
-            ("gain", "primary", "27,112,52,255", "0.55", "solid", "Increase — primary"),
-            ("gain", "intermediate", "55,168,82,150", "0.22", "solid", "Increase — intermediate"),
-            ("loss", "primary", "155,32,32,255", "0.55", "solid", "Decrease — primary"),
-            ("loss", "intermediate", "214,63,63,150", "0.22", "solid", "Decrease — intermediate"),
+            ("gain", "primary", "27,112,52,245", "0.42", "solid", "Increase — primary"),
+            ("gain", "intermediate", "55,168,82,205", "0.22", "solid", "Increase — intermediate"),
+            ("loss", "primary", "155,32,32,245", "0.42", "solid", "Decrease — primary"),
+            ("loss", "intermediate", "214,63,63,205", "0.22", "solid", "Decrease — intermediate"),
         )
         for change, contour_class, color, width, line_style, label in symbol_definitions:
             symbol = QgsLineSymbol.createSimple(
@@ -757,15 +757,15 @@ class LayerMixin:
                 }
             )
             if change != "transition":
-                light = (230, 245, 232) if change == "gain" else (253, 232, 232)
-                dark = (13, 79, 35) if change == "gain" else (114, 13, 22)
-                # The displayed 10-90 m contours span most of the ramp.
-                ratio = f'clamp(abs("{delta_field}") / 100, 0, 1)'
+                light = (205, 235, 211) if change == "gain" else (247, 211, 211)
+                dark = (27, 112, 52) if change == "gain" else (155, 32, 32)
+                # A 2 m change is halfway to dark in every comparison layer.
+                ratio = f'(abs("{delta_field}") / (abs("{delta_field}") + 2))'
                 channels = [
                     f'round({start} + ({end - start}) * {ratio})'
                     for start, end in zip(light, dark)
                 ]
-                alpha = 255 if contour_class == "primary" else 150
+                alpha = 245 if contour_class == "primary" else 205
                 symbol.symbolLayer(0).dataDefinedProperties().setProperty(
                     QgsSymbolLayer.PropertyStrokeColor,
                     QgsProperty.fromExpression(
