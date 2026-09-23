@@ -485,8 +485,8 @@ class LayerStyleTests(unittest.TestCase):
             "Change Contours", "memory",
         )
         features = []
-        for change, delta in (("gain", 1.0), ("gain", 10.0),
-                              ("loss", -1.0), ("loss", -10.0)):
+        for change, delta in (("gain", 10.0), ("gain", 80.0),
+                              ("loss", -10.0), ("loss", -80.0)):
             feature = QgsFeature(layer.fields())
             feature.setAttributes([change, "primary", delta])
             feature.setGeometry(QgsGeometry.fromPolylineXY([
@@ -498,8 +498,8 @@ class LayerStyleTests(unittest.TestCase):
 
         rules = {rule.label(): rule for rule in layer.renderer().rootRule().children()}
         for label, close_delta, far_delta in (
-            ("Increase — primary", 1.0, 10.0),
-            ("Decrease — primary", -1.0, -10.0),
+            ("Increase — primary", 10.0, 80.0),
+            ("Decrease — primary", -10.0, -80.0),
         ):
             prop = rules[label].symbol().symbolLayer(0).dataDefinedProperties().property(
                 QgsSymbolLayer.PropertyStrokeColor
@@ -514,7 +514,7 @@ class LayerStyleTests(unittest.TestCase):
                 color = str(expression.evaluate(context))
                 self.assertFalse(expression.hasEvalError())
                 colors.append(tuple(int(part) for part in color.split(",")[:3]))
-            self.assertGreater(sum(colors[0]), sum(colors[1]))
+            self.assertGreater(sum(colors[0]) - sum(colors[1]), 150)
 
     def test_surface_contour_style_preserves_primary_and_mutes_intermediate(self):
         layer = QgsVectorLayer(
