@@ -1669,7 +1669,6 @@ class Annex14GeometryMixin:
             )
             for end in end_configs
         )
-        strip_adjacent_transitional_created = False
 
         for end_config in end_configs:
             threshold = end_config["threshold"]
@@ -1815,28 +1814,10 @@ class Annex14GeometryMixin:
                 upper_height = float(transitional.get("upper_edge_height_above_highest_threshold_m") or 60.0)
                 horizontal_extent = upper_height / trans_slope if trans_slope > 0 else 0.0
                 upper_edge_z = (highest_threshold_z + upper_height) if highest_threshold_z is not None else None
-                if strip_dims is not None and not strip_adjacent_transitional_created:
-                    opposite_threshold = end_config.get("opposite_threshold")
-                    opposite_extension_key = (
-                        "extension_length_2"
-                        if end_config.get("direction") == "primary"
-                        else "extension_length_1"
-                    )
-                    strip_end = (
-                        opposite_threshold.project(
-                            float(
-                                strip_dims.get(
-                                    opposite_extension_key,
-                                    strip_dims["extension_length"],
-                                )
-                            ),
-                            takeoff_az,
-                        )
-                        if opposite_threshold is not None
-                        else None
-                    )
-                    strip_adjacent_length = approach_start.distance(strip_end) if strip_end is not None else 0.0
-                    if strip_end is not None and strip_adjacent_length > 1e-3:
+                if strip_dims is not None:
+                    midpoint = threshold.project(runway_length_m / 2.0, takeoff_az)
+                    strip_adjacent_length = approach_start.distance(midpoint) if midpoint is not None else 0.0
+                    if midpoint is not None and strip_adjacent_length > 1e-3:
                         self._annex14_add_side_panels_for_trapezoid(
                             ofs_features,
                             fields,
@@ -1850,21 +1831,22 @@ class Annex14GeometryMixin:
                             "OFS",
                             "transitional",
                             "strip_adjacent",
-                            "",
+                            end_desig,
                             design_group,
                             trans_slope,
                             transitional.get("ref", ""),
-                            "Strip-adjacent transitional panels from approach inner edge to strip end.",
+                            "Strip-adjacent transitional panels from approach inner edge to runway midpoint.",
                             lower_start_z=threshold_z,
-                            lower_end_z=opposite_threshold_z,
+                            lower_end_z=(threshold_z + opposite_threshold_z) / 2.0
+                            if threshold_z is not None and opposite_threshold_z is not None
+                            else None,
                             upper_start_z=upper_edge_z,
                             upper_end_z=upper_edge_z,
                             contour_features=ofs_contour_features,
                             contour_fields=contour_fields,
                             contour_interval=ofs_transitional_contour_interval,
                         )
-                        strip_adjacent_transitional_created = True
-                elif strip_dims is None:
+                else:
                     QgsMessageLog.logMessage(
                         f"Annex 14 transitional strip-adjacent panels skipped for {runway_name} {end_desig}: "
                         "strip dimensions unavailable.",
