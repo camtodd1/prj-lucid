@@ -1663,7 +1663,10 @@ class Annex14GeometryMixin:
         strip_dims = self._annex14_strip_dimensions(runway_data)
         end_configs = self._annex14_runway_end_configs(runway_data, rwy_params)
         straight_in_selected = any(
-            bool(end.get("operations", {}).get("straight_in_non_precision_instrument"))
+            bool(
+                end.get("operations", {}).get("straight_in_non_precision_instrument")
+                or end.get("operations", {}).get("precision_approach")
+            )
             for end in end_configs
         )
         strip_adjacent_transitional_created = False

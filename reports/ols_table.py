@@ -342,6 +342,7 @@ def build_modernised_ols_table_values(
 
             straight_in_selected = straight_in_selected or bool(
                 operations.get("straight_in_non_precision_instrument")
+                or operations.get("precision_approach")
             )
             if (
                 operations.get("precision_approach")

@@ -221,6 +221,37 @@ class OlsTableReportTests(unittest.TestCase):
         self.assertIn("10,000", markdown)
         self.assertIn("Above 5700 Kg", markdown)
 
+    def test_modernised_precision_on_either_end_selects_straight_in_oes(self):
+        for direction in ("primary", "reciprocal"):
+            with self.subTest(direction=direction):
+                context = OlsConstructionContext(
+                    ruleset_id=ANNEX14_MODERNISED_OFS_OES_PROFILE.id,
+                    runways=(
+                        runway(
+                            "01L/19R", 0, 3300.0, 60.0, 4.0, 4.0, 4.0, 4.0,
+                            generation_data={
+                                "adg": "V",
+                                "annex14_modernised": {
+                                    "confirmed": True,
+                                    f"{direction}_end": {
+                                        "operations": {"precision_approach": True},
+                                    },
+                                },
+                            },
+                        ),
+                    ),
+                )
+                report = build_modernised_ols_table_values(
+                    "YBBN", ANNEX14_MODERNISED_OFS_OES_PROFILE, context,
+                )
+                self.assertEqual(
+                    sum(
+                        row["surface"] == "Straight-in instrument approach"
+                        for row in report["oes"]
+                    ),
+                    2,
+                )
+
     def test_markdown_writer_creates_utf8_report(self):
         report = build_ols_table_values(
             "YBBN",
